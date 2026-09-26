@@ -88,6 +88,7 @@ const PER_SESSION: Record<string, string> = {
   "flow/registry.ts": "One task registry per session, built from that project's graph.",
   "flow/task-factory.ts": "Builds tasks that dispatch on the context's session bridge.",
   "flow/run-action.ts": "Runs one action on the context's session bridge, for tasks and category handlers alike.",
+  "flow/composite.ts": "Runs a flow-backed action's children on the context's session, under a runner built from its registry.",
   "flow/bridge-task.ts": "Calls the addressed session's bridge.",
   "flow/guard.ts": "One guard registry per session; a project's guards do not veto another's calls.",
   "flow/guarded-bridge.ts": "Wraps one session's bridge in that session's guards.",

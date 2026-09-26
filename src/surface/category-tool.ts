@@ -149,6 +149,25 @@ function boundLimit(limit: z.ZodType | undefined): z.ZodType | undefined {
   return limit.description === undefined ? bounded : bounded.describe(limit.description);
 }
 
+/**
+ * The inputs flow-backed actions declare that the category does not already
+ * declare. A key the category has is the category's, so a flow's inputs never
+ * change a parameter another action shares.
+ */
+function flowInputs(
+  actions: Record<string, ActionSpec>,
+  declared: Record<string, z.ZodType> | undefined,
+): Record<string, z.ZodType> {
+  const out: Record<string, z.ZodType> = {};
+  for (const spec of Object.values(actions)) {
+    if (spec.kind !== "flow") continue;
+    for (const [key, type] of Object.entries(spec.inputs)) {
+      if (!(declared && key in declared) && !(key in out)) out[key] = type;
+    }
+  }
+  return out;
+}
+
 export function categoryTool(
   name: string,
   summary: string,
@@ -168,7 +187,7 @@ export function categoryTool(
 
   // Spread twice: the first sets the order, the last wins, so a category
   // cannot replace a parameter the dispatcher consumes.
-  const schema: Record<string, z.ZodType> = { ...routing, ...extraSchema, ...routing };
+  const schema: Record<string, z.ZodType> = { ...routing, ...extraSchema, ...flowInputs(actions, extraSchema), ...routing };
   if (schema.limit) schema.limit = boundLimit(schema.limit)!;
 
   const def: ToolDef = {
@@ -204,6 +223,7 @@ export function categoryTool(
         spec,
         stripAction(params),
         actionPreparation(options, action, spec),
+        def,
       );
       // A failed run still carries the body that says why (a modal refusal,
       // or a handler's own verdict inside a flow); hand that back as the

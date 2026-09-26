@@ -213,7 +213,7 @@ function declaredItems(tool: ToolDef, action: string): SigItem[] {
 
 /** The structured items of one action's signature, from the best source it has. */
 function signatureItems(tool: ToolDef, action: string, spec: ActionSpec): SigItem[] {
-  if (spec.kind === "bridge" && spec.paramSpec) return specItems(spec.paramSpec, spec.paramChoices);
+  if ((spec.kind === "bridge" || spec.kind === "flow") && spec.paramSpec) return specItems(spec.paramSpec, spec.paramChoices);
   if (spec.kind === "bridge" && spec.epicSchema) return epicItems(spec.epicSchema);
   try {
     return declaredItems(tool, action);

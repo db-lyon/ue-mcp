@@ -63,7 +63,7 @@ describe("every action declares its effect", () => {
   it("is exactly one kind, never both and never neither", () => {
     for (const { tool, action, spec } of everyAction()) {
       const key = `${tool}.${action}`;
-      expect(["bridge", "handler", "registry"], key).toContain(spec.kind);
+      expect(["bridge", "handler", "registry", "flow"], key).toContain(spec.kind);
       if (spec.kind === "bridge") {
         expect(typeof spec.bridge, key).toBe("string");
         expect(spec.handler, key).toBeUndefined();
@@ -71,6 +71,10 @@ describe("every action declares its effect", () => {
       if (spec.kind === "handler") {
         expect(typeof spec.handler, key).toBe("function");
         expect(spec.bridge, key).toBeUndefined();
+      }
+      if (spec.kind === "flow") {
+        expect([typeof spec.compose, typeof spec.result], key).toEqual(["function", "function"]);
+        expect(spec.bridge ?? spec.handler, key).toBeUndefined();
       }
     }
   });

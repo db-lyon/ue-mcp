@@ -5,9 +5,9 @@
  * definitions, so a `tasks:` override (class_path, option defaults) applies to
  * the live call, and `call`/`resolve` inside any task work on this path too.
  */
-import type { BaseTask, TaskDefinition, TaskRegistry } from "@db-lyon/flowkit";
+import type { BaseTask, FlowDefinition, TaskDefinition, TaskRegistry } from "@db-lyon/flowkit";
 import type { FlowContext } from "./context.js";
-import { createConfiguredTask, LIVE_REFERENCES_KEY } from "./task-call.js";
+import { createConfiguredTask, LIVE_FLOWS_KEY, LIVE_REFERENCES_KEY } from "./task-call.js";
 
 export interface LiveTaskSource {
   registry: TaskRegistry;
@@ -15,6 +15,8 @@ export interface LiveTaskSource {
   definitions?: Record<string, TaskDefinition>;
   /** Host namespaces for `${ns.path}` in configured option defaults. */
   namespaces?: Record<string, unknown>;
+  /** The session's merged flows, which a flow-backed action's children may name. */
+  flows?: Record<string, FlowDefinition>;
 }
 
 /** The context every task of one live call runs under. */
@@ -24,6 +26,7 @@ export function liveTaskContext(source: LiveTaskSource, ctx: FlowContext): FlowC
     registry: source.registry,
     taskDefinitions: source.definitions,
     [LIVE_REFERENCES_KEY]: { steps: [], namespaces: source.namespaces },
+    ...(source.flows ? { [LIVE_FLOWS_KEY]: source.flows } : {}),
   };
 }
 

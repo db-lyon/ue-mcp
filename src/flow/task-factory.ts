@@ -3,7 +3,10 @@ import { UeMcpTask } from "../task.js";
 import { stripEditorTarget } from "../surface/target-params.js";
 import type { CallPreparation } from "../dispatch/call-pipeline.js";
 import type { FlowContext } from "./context.js";
-import { runBridge, runHandler } from "./run-action.js";
+import { runBridge, runFlowAction, runHandler } from "./run-action.js";
+import { takeHeldComposite } from "./composite.js";
+import { stripAction } from "../surface/routing-params.js";
+import type { FlowActionSpec } from "../core/types.js";
 
 /**
  * Create a TaskConstructor for a bridge-delegation action.
@@ -55,4 +58,31 @@ export function handlerTaskClass(
   }
   Object.defineProperty(FactoryHandlerTask, "name", { value: `HandlerTask_${name}` });
   return FactoryHandlerTask as unknown as TaskConstructor;
+}
+
+/**
+ * Create a TaskConstructor for a flow-backed action. Its children run through
+ * the runner via `ctx.step`; `expand` lists them for plans when the input
+ * decides them.
+ */
+export function compositeTaskClass(
+  name: string,
+  spec: FlowActionSpec,
+  prep?: CallPreparation,
+): TaskConstructor {
+  class FactoryCompositeTask extends UeMcpTask {
+    static expand = spec.expand
+      ? (options: Record<string, unknown>) => spec.expand!(stripAction(stripEditorTarget(options)))
+      : undefined;
+    get taskName() { return name; }
+    async execute(): Promise<TaskResult> {
+      // The live runner built for this call hands its prepared input over once.
+      const held = takeHeldComposite(this.ctx, name);
+      if (held) return held.settle(this.ctx);
+      const options = stripEditorTarget(this.options as Record<string, unknown>);
+      return runFlowAction(this.ctx, name, spec, options, prep);
+    }
+  }
+  Object.defineProperty(FactoryCompositeTask, "name", { value: `CompositeTask_${name}` });
+  return FactoryCompositeTask as unknown as TaskConstructor;
 }

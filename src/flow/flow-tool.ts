@@ -32,6 +32,7 @@ import {
 import { unappliedRollbackCall } from "./handler-outcome.js";
 import { hostNamespaces, makeConditionEvaluator } from "./condition.js";
 import { gateGraph, gateScope, planPreflight } from "./preflight.js";
+import { keepNestedSteps } from "./composite.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -280,6 +281,7 @@ function makeRunner(
       });
     },
     afterStep: async (step: PlanStep, result: FlowStepResult) => {
+      keepNestedSteps(result);
       emitFlowEvent({
         type: "step_completed",
         runId,

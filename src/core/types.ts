@@ -377,6 +377,45 @@ export interface RegistryActionSpec extends ActionSpecBase {
   mapParams?: never;
 }
 
+/** What a composite child runs: a configured task name, or a flow. */
+export type ChildTarget = string | { task: string } | { flow: string };
+
+/** One child's outcome. A flow child also carries its own step results. */
+export interface ChildOutcome {
+  success: boolean;
+  data?: Record<string, unknown>;
+  error?: Error;
+  /** A flow child's steps, in order, each with its result. */
+  steps?: Array<{ name: string; success: boolean; skipped: boolean; data?: Record<string, unknown>; error?: Error }>;
+}
+
+/** Runs one child through the runner and hands back its outcome. Never throws for a failed child. */
+export type ChildRun = (target: ChildTarget, options?: Record<string, unknown>) => Promise<ChildOutcome>;
+
+/**
+ * Backed by a flow or a composite task: its children run through the runner,
+ * each locked, guarded, recorded and rolled back like a flow step.
+ *
+ * `compose` runs the children and returns what `result` needs; `result` shapes
+ * that into the action's response. `expand` states the children up front when
+ * the input decides them, and returns null when they depend on results.
+ */
+export interface FlowActionSpec<C = unknown> extends ActionSpecBase {
+  kind: "flow";
+  /** Declared inputs. Rendered into the category schema under any key it does not already declare. */
+  inputs: Record<string, z.ZodType>;
+  compose: (run: ChildRun, input: Record<string, unknown>, ctx: ToolContext) => Promise<C>;
+  result: (collected: C, input: Record<string, unknown>) => unknown;
+  expand?: (input: Record<string, unknown>) => Array<{ task: string; options?: Record<string, unknown> } | { flow: string; options?: Record<string, unknown> }> | null;
+  /** A recorded C++ parameter spec the inputs follow, as on a bridge action, and the method it was recorded from. */
+  paramSpec?: readonly ParamSpec[];
+  specMethod?: string;
+  paramChoices?: readonly ParamChoice[];
+  bridge?: never;
+  handler?: never;
+  mapParams?: never;
+}
+
 /**
  * One action.
  *
@@ -385,7 +424,8 @@ export interface RegistryActionSpec extends ActionSpecBase {
  * a bridge method and a handler, and an action with neither that does not say
  * it is a registry action. `{}` no longer type-checks either.
  */
-export type ActionSpec = BridgeActionSpec | HandlerActionSpec | RegistryActionSpec;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ActionSpec = BridgeActionSpec | HandlerActionSpec | RegistryActionSpec | FlowActionSpec<any>;
 
 export interface CategoryOptions {
   /**

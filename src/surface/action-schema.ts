@@ -724,6 +724,8 @@ export function forwardedParams(spec: ActionSpec): string[] {
   if (spec.kind === "bridge" && !spec.mapParams && spec.epicTool) {
     return epicForwardedParams(spec.epicSchema);
   }
+  // A flow-backed action declares what it reads.
+  if (spec.kind === "flow") return Object.keys(spec.inputs);
   // A bridge action maps its parameters through `mapParams`; a local one
   // reads them out of its handler's second argument. Both are the same
   // question - which keys does this action look at - so both are scanned.
@@ -808,7 +810,7 @@ export function actionSchema(tool: ToolDef, action: string): ActionSchema {
   // A spec'd action's parameters are its C++ spec's (#1057). Its clause is
   // generated, so an `(or x)` there is an alias of one parameter, not a
   // choice between two, and each name is required exactly when the spec says.
-  const recorded = spec.kind === "bridge" ? spec.paramSpec : undefined;
+  const recorded = spec.kind === "bridge" || spec.kind === "flow" ? spec.paramSpec : undefined;
   const recordedByName = new Map((recorded ?? []).map((p) => [p.name, p]));
   const recordedAliases = new Set((recorded ?? []).flatMap((p) => p.aliases ?? []));
 
@@ -817,7 +819,7 @@ export function actionSchema(tool: ToolDef, action: string): ActionSchema {
   // A spec's choices are declared, not parsed: each is published with the
   // branches the spec names, and every one of them is required.
   const specGroup = new Map<string, number>();
-  if (recorded) (spec.kind === "bridge" ? spec.paramChoices ?? [] : []).forEach((choice) => {
+  if (recorded) (spec.kind === "bridge" || spec.kind === "flow" ? spec.paramChoices ?? [] : []).forEach((choice) => {
     const index = alternatives.length;
     alternatives.push({ branches: choice.branches.map((b) => [...b]), required: true });
     for (const branch of choice.branches) for (const name of branch) specGroup.set(name, index);

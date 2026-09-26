@@ -33,6 +33,9 @@ const CHAIN_KEY = "__ueMcpTaskChain";
  */
 export const LIVE_REFERENCES_KEY = "__ueMcpLiveReferences";
 
+/** Context key for the flow definitions a live call's composite children may name. */
+export const LIVE_FLOWS_KEY = "__ueMcpLiveFlows";
+
 type TaskClass = abstract new (...args: never[]) => BaseTask<unknown>;
 
 /** A task call that would re-enter a class already on the call path. */

@@ -1,5 +1,5 @@
 import type { TaskResult } from "@db-lyon/flowkit";
-import type { ActionSpec, CategoryOptions } from "../core/types.js";
+import type { ActionSpec, CategoryOptions, FlowActionSpec, ToolDef } from "../core/types.js";
 import { stripAction } from "../surface/routing-params.js";
 import { prepareCall, finishCall, forwardToBridge, type CallPreparation } from "../dispatch/call-pipeline.js";
 import { McpError, ErrorCode } from "../core/errors.js";
@@ -8,6 +8,7 @@ import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
 import { ensureGuard, isDialogRefusal } from "../editor/dialog-guard.js";
 import { paramMapperOf } from "../surface/epic-input.js";
+import { composeAction } from "./composite.js";
 
 /**
  * Refuse a handler-backed call while a modal is up, through the one guard.
@@ -86,7 +87,7 @@ export function actionPreparation(
     normalizeParams: options?.normalizeParams,
     paramGroups: options?.paramGroups,
     nestedParamsKey: options?.nestedParamsKey,
-    paramChoices: spec.kind === "bridge" && spec.paramSpec && spec.paramChoices?.length
+    paramChoices: (spec.kind === "bridge" || spec.kind === "flow") && spec.paramSpec && spec.paramChoices?.length
       ? { params: spec.paramSpec, choices: spec.paramChoices }
       : undefined,
   };
@@ -108,9 +109,11 @@ export async function runAction(
   spec: ActionSpec,
   options: Record<string, unknown>,
   prep?: CallPreparation,
+  home?: ToolDef,
 ): Promise<TaskResult> {
   if (spec.kind === "bridge") return runBridge(ctx, name, spec.bridge, paramMapperOf(spec), spec.timeoutMs, options, prep);
   if (spec.kind === "handler") return runHandler(ctx, name, spec.handler, options, prep);
+  if (spec.kind === "flow") return runFlowAction(ctx, name, spec, options, prep, home);
   throw new McpError(ErrorCode.NO_HANDLER, `Action '${name}' has no handler or bridge method`);
 }
 
@@ -185,6 +188,30 @@ export async function runHandler(
     // forwards its params to the bridge must not turn it into a bridge argument.
     const callCtx = pipeline.timeoutMs === undefined ? lockedCtx : { ...lockedCtx, callTimeoutMs: pipeline.timeoutMs };
     return settleHandler(ctx, fn, callCtx, pipeline);
+  });
+}
+
+/**
+ * A flow-backed action: prepared and gated like a handler, then its children
+ * run through the runner under the same lock scope. `home` is the tool it
+ * belongs to, for a context with no registry to resolve children from.
+ */
+export async function runFlowAction(
+  ctx: FlowContext,
+  name: string,
+  spec: FlowActionSpec,
+  options: Record<string, unknown>,
+  prep?: CallPreparation,
+  home?: ToolDef,
+): Promise<TaskResult> {
+  const pipeline = prepareCall(stripAction(options), prep);
+  const refusal = await refuseIfBlocked(ctx, name);
+  if (refusal) {
+    return { success: false, data: refusal, error: refusalError(name, refusal) };
+  }
+  return withActionLocks(ctx, name, pipeline.params, (lockedCtx) => {
+    const callCtx = pipeline.timeoutMs === undefined ? lockedCtx : { ...lockedCtx, callTimeoutMs: pipeline.timeoutMs };
+    return composeAction(ctx, name, spec, callCtx, pipeline, home);
   });
 }
 

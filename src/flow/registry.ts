@@ -11,7 +11,7 @@ import type {
 import type { ToolDef } from "../core/types.js";
 import type { FlowContext } from "./context.js";
 import { BridgeTask } from "./bridge-task.js";
-import { bridgeTaskClass, handlerTaskClass } from "./task-factory.js";
+import { bridgeTaskClass, compositeTaskClass, handlerTaskClass } from "./task-factory.js";
 import { actionPreparation } from "./run-action.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../surface/context/micro-context.js";
 import { McpError, ErrorCode } from "../core/errors.js";
@@ -91,6 +91,7 @@ class MicroTaskRegistry extends DescribedTaskRegistry {
  *
  * - Bridge actions → factory classes with method + mapParams in closure
  * - Handler actions → factory classes wrapping the existing handler function
+ * - Flow actions → composite classes whose children run through the runner
  *
  * Each is registered by its task name and by its base alias
  * (`ue-mcp.builtin/<category>.<action>`), which the default definitions point
@@ -124,7 +125,13 @@ export function buildFlowRegistry(tools: ToolDef[]): DescribedTaskRegistry {
         continue;
       }
 
-      if (spec.handler) {
+      if (spec.kind === "flow") {
+        // Children run through the runner; see flow/composite.ts.
+        const ctor = compositeTaskClass(taskName, spec, prep);
+        registry.register(taskName, ctor);
+        registry.registerClassPath(builtinClassPath(taskName), ctor);
+        registry.declareOptions(builtinClassPath(taskName), () => actionOptionSpecs(tool, actionName));
+      } else if (spec.handler) {
         // FlowContext is a structural superset of ToolContext (see
         // context.ts), so we pass ctx straight through. Rebuilding it
         // field-by-field used to silently drop new accessors at this

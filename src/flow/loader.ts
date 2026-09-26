@@ -22,7 +22,7 @@ export function buildDefaults(tools: ToolDef[]): Record<string, unknown> {
       // replaces this definition reaches the built-in through the alias
       // instead of resolving back to itself. A registry-kind action's task is
       // registered by its plugin under the task name only.
-      const builtin = spec.kind === "handler" || spec.kind === "bridge";
+      const builtin = spec.kind === "handler" || spec.kind === "bridge" || spec.kind === "flow";
       const taskDef: Record<string, unknown> = {
         class_path: builtin ? builtinClassPath(taskName) : taskName,
         group: tool.name,
@@ -55,6 +55,10 @@ const M_GLOW = `${PKG}/M_Glow`;
 const M_PEDESTAL = `${PKG}/M_Pedestal`;
 
 /** Built-in flows that ship with ue-mcp. */
+export function builtinFlows(): Record<string, unknown> {
+  return defaultFlows();
+}
+
 function defaultFlows(): Record<string, unknown> {
   let s = 0;
   const steps: Record<string, unknown> = {};

@@ -36,7 +36,7 @@ import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
 import { createLiveTask } from "../flow/live-task.js";
 import { hostNamespaces } from "../flow/condition.js";
-import type { TaskDefinition } from "@db-lyon/flowkit";
+import type { FlowDefinition, TaskDefinition } from "@db-lyon/flowkit";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 
 type TextBlock = { type: "text"; text: string };
@@ -182,16 +182,24 @@ export function attribution(sessions: SessionRegistry, session: EditorSession): 
 }
 
 /**
- * The addressed session's task definitions for a live call. A config that does
- * not parse leaves every name resolving to its built-in, so a bad ue-mcp.yml
- * cannot take the category tools down with it; flow calls still report it.
+ * The addressed session's task and flow definitions for a live call. A config
+ * that does not parse leaves every name resolving to its built-in, so a bad
+ * ue-mcp.yml cannot take the category tools down with it; flow calls still
+ * report it.
  */
-function liveDefinitions(loads: SessionLoads, ctx: FlowContext): Record<string, TaskDefinition> | undefined {
+function liveDefinitions(
+  loads: SessionLoads,
+  ctx: FlowContext,
+): { definitions?: Record<string, TaskDefinition>; flows?: Record<string, FlowDefinition> } {
   try {
-    return loads.reloadConfigFor(ctx).tasks as Record<string, TaskDefinition>;
+    const config = loads.reloadConfigFor(ctx);
+    return {
+      definitions: config.tasks as Record<string, TaskDefinition>,
+      flows: config.flows as Record<string, FlowDefinition>,
+    };
   } catch (e) {
     debug("flow", "flow config unreadable; live call runs the built-in task", e);
-    return undefined;
+    return {};
   }
 }
 
@@ -295,7 +303,7 @@ export async function dispatchCategoryCall(
   try {
     // Resolved through the session's `tasks:` definitions, as a flow step is.
     const task = await createLiveTask(
-      { registry: sessionRegistry, definitions: liveDefinitions(loads, flowCtx), namespaces: hostNamespaces(flowCtx) },
+      { registry: sessionRegistry, ...liveDefinitions(loads, flowCtx), namespaces: hostNamespaces(flowCtx) },
       flowCtx,
       taskName,
       taskParams,
