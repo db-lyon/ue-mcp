@@ -323,13 +323,6 @@ public:
 	// Handler function signature: takes params JSON object, returns result JSON value
 	using FHandlerFunction = TFunction<TSharedPtr<FJsonValue>(const TSharedPtr<FJsonObject>& Params)>;
 
-	// Python handler info
-	struct FPythonHandlerInfo
-	{
-		FString ScriptPath;
-		FString HandlerName;
-	};
-
 	FMCPHandlerRegistry();
 	~FMCPHandlerRegistry();
 
@@ -432,9 +425,6 @@ public:
 	// in which case the caller should use its default.
 	float GetHandlerTimeout(const FString& MethodName) const;
 
-	// Register a Python handler
-	void RegisterPythonHandler(const FString& MethodName, const FString& PythonScriptPath);
-
 	// Execute a handler
 	TSharedPtr<FJsonValue> ExecuteHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params);
 
@@ -451,9 +441,6 @@ private:
 	// C++ handlers
 	TMap<FString, FHandlerFunction> CppHandlers;
 
-	// Python handlers
-	TMap<FString, FPythonHandlerInfo> PythonHandlers;
-
 	// Per-handler game-thread timeouts (seconds). Absent = use default.
 	TMap<FString, float> HandlerTimeouts;
 
@@ -466,7 +453,4 @@ private:
 	TMap<FString, FMCPHandlerSpec> HandlerSpecs;
 
 	void TagCategory(const FString& MethodName);
-
-	// Execute Python handler
-	TSharedPtr<FJsonValue> ExecutePythonHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params);
 };
