@@ -759,7 +759,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddRvtVolume(const TSharedPtr<FJsonObj
 	MCPRvtWriteVolume(Result, Volume);
 	Result->SetStringField(TEXT("note"),
 		TEXT("The volume was spawned into the currently loaded level and the level is now dirty; save it with ")
-		TEXT("editor(save_current_level). Its transform is an ordinary actor transform, so level(move_actor) ")
+		TEXT("level(save). Its transform is an ordinary actor transform, so level(move_actor) ")
 		TEXT("can override the fit at any time."));
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
@@ -1536,7 +1536,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AssignRvtToLandscape(const TSharedPtr<
 		TEXT("streaming landscape is many actors and writing only one leaves the rest rendering nothing into the RVT. ")
 		TEXT("VirtualTextureNumLods, VirtualTextureLodBias and VirtualTextureRenderPassType are plain UPROPERTYs on each ")
 		TEXT("proxy: write them with editor(set_property). The levels holding these actors are now dirty; save with ")
-		TEXT("editor(save_current_level)."));
+		TEXT("level(save)."));
 
 	if (ChangedProxies > 0)
 	{
