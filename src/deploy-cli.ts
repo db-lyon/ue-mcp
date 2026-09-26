@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isMainModule, runCli } from "./cli-main.js";
 import * as path from "node:path";
 import { ProjectContext } from "./project.js";
 import { deploy } from "./deployer.js";
@@ -7,7 +8,7 @@ import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "./uproject-path.js";
 import { RESET, BOLD, RED, DIM, CYAN, ok, fail } from "./ui/ansi.js";
 
-async function deployCmd() {
+async function deployCmd(argv: string[]) {
   console.log("");
   console.log(`  ${BOLD}${CYAN}UE-MCP Deploy${RESET}`);
   console.log("");
@@ -15,7 +16,7 @@ async function deployCmd() {
   // Find project: --editor, then CLI arg, then cwd.
   let target: { projectPath?: string; rest: string[] };
   try {
-    target = takeEditorTarget(process.argv.slice(2));
+    target = takeEditorTarget(argv);
   } catch (e) {
     fail(e instanceof EditorFlagError ? e.message : String(e));
     process.exit(1);
@@ -75,9 +76,15 @@ async function deployCmd() {
   console.log("");
 }
 
-export { deployCmd };
+/** Entry point for `ue-mcp deploy [project] [--editor <name-or-path>]`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    await deployCmd(argv);
+  } catch (e) {
+    console.error(`\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`);
+    return 1;
+  }
+}
 
-deployCmd().catch((e) => {
-  console.error(`\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`);
-  process.exit(1);
-});
+// Also a package bin of its own; runs only when executed directly.
+if (isMainModule(import.meta.url)) void runCli(run, process.argv.slice(2));

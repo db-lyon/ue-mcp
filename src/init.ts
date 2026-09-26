@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isMainModule, runCli } from "./cli-main.js";
 import * as fs from "node:fs";
 import { EPIC_CATEGORIES } from "./tools/epic/index.js";
 import * as path from "node:path";
@@ -213,7 +214,7 @@ function askPath(): Promise<string> {
 /*  Main init flow                                                     */
 /* ------------------------------------------------------------------ */
 
-async function init() {
+async function init(argv: string[]) {
   console.log("");
   console.log(`  ${BOLD}${CYAN}UE-MCP Setup${RESET}`);
   console.log("");
@@ -226,7 +227,7 @@ async function init() {
   // 1. Get project path: check --editor, then CLI arg, then cwd, then ask
   let initTarget: { projectPath?: string; rest: string[] };
   try {
-    initTarget = takeEditorTarget(process.argv.slice(2));
+    initTarget = takeEditorTarget(argv);
   } catch (e) {
     fail(e instanceof EditorFlagError ? e.message : String(e));
     process.exit(1);
@@ -680,9 +681,17 @@ async function init() {
   console.log("");
 }
 
-init().catch((e) => {
-  console.error(
-    `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,
-  );
-  process.exit(1);
-});
+/** Entry point for `ue-mcp init [project] [--editor <name-or-path>]`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    await init(argv);
+  } catch (e) {
+    console.error(
+      `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,
+    );
+    return 1;
+  }
+}
+
+// Also a package bin of its own; runs only when executed directly.
+if (isMainModule(import.meta.url)) void runCli(run, process.argv.slice(2));

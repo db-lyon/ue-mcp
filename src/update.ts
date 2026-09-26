@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isMainModule, runCli } from "./cli-main.js";
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 
@@ -59,10 +60,10 @@ function runSelfCli(scriptBase: string, projectArg: string | undefined): boolean
   }
 }
 
-async function update() {
+async function update(argv: string[]) {
   let target: { projectPath?: string; rest: string[] };
   try {
-    target = takeEditorTarget(process.argv.slice(2));
+    target = takeEditorTarget(argv);
   } catch (e) {
     fail(e instanceof EditorFlagError ? e.message : String(e));
     process.exit(1);
@@ -185,7 +186,15 @@ async function update() {
   console.log("");
 }
 
-update().catch((e) => {
-  console.error(`\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`);
-  process.exit(1);
-});
+/** Entry point for `ue-mcp update [project] [--editor <name-or-path>]`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    await update(argv);
+  } catch (e) {
+    console.error(`\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`);
+    return 1;
+  }
+}
+
+// Also a package bin of its own; runs only when executed directly.
+if (isMainModule(import.meta.url)) void runCli(run, process.argv.slice(2));

@@ -128,10 +128,10 @@ function cmdMode(arg: string | undefined, projectRoot: string | null, editorLabe
   }
 }
 
-async function main(): Promise<void> {
+async function main(argv: string[]): Promise<void> {
   let target: { projectPath?: string; rest: string[] };
   try {
-    target = takeEditorTarget(process.argv.slice(2));
+    target = takeEditorTarget(argv);
   } catch (e) {
     fail(e instanceof EditorFlagError ? e.message : String(e));
     process.exit(1);
@@ -159,7 +159,12 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((e) => {
-  console.error(`[ue-mcp] dialog failed: ${e instanceof Error ? e.message : e}`);
-  process.exit(1);
-});
+/** Entry point for `ue-mcp dialog <subcommand>`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    await main(argv);
+  } catch (e) {
+    console.error(`[ue-mcp] dialog failed: ${e instanceof Error ? e.message : e}`);
+    return 1;
+  }
+}

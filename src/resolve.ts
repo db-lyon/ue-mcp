@@ -29,19 +29,19 @@ function hasCommand(cmd: string): boolean {
   }
 }
 
-function run(cmd: string): string {
+function sh(cmd: string): string {
   return execSync(cmd, { encoding: "utf-8" }).trim();
 }
 
 /* ── Main ────────────────────────────────────────────────────────── */
 
-async function resolve() {
+async function resolve(argv: string[]) {
   // --editor picks which of this server's editors the workflow runs in. Every
   // git and gh call below inherits the process cwd, so the target is applied
   // by moving there once, before any of them run.
   let target: { projectPath?: string; rest: string[] };
   try {
-    target = takeEditorTarget(process.argv.slice(3));
+    target = takeEditorTarget(argv);
   } catch (e) {
     fail(e instanceof EditorFlagError ? e.message : String(e));
     return;
@@ -74,7 +74,7 @@ async function resolve() {
   if (!hasCommand("claude")) fail("Claude Code is required. Install: npm i -g @anthropic-ai/claude-code");
 
   try {
-    run("git rev-parse --git-dir");
+    sh("git rev-parse --git-dir");
   } catch {
     fail("Not a git repository. Clone ue-mcp first.");
   }
@@ -83,7 +83,7 @@ async function resolve() {
   // upstream, loudly.
   let repo: string;
   try {
-    const remote = run("git remote get-url origin");
+    const remote = sh("git remote get-url origin");
     const match = remote.match(/[/:]([^/]+\/[^/.]+?)(?:\.git)?$/);
     if (match) {
       repo = match[1];
@@ -103,7 +103,7 @@ async function resolve() {
 
   let issue: { title: string; body: string; labels: { name: string }[] };
   try {
-    const raw = run(
+    const raw = sh(
       `gh issue view ${issueNum} --repo ${repo} --json title,body,labels`,
     );
     issue = JSON.parse(raw);
@@ -192,7 +192,7 @@ async function resolve() {
   // Check if there are commits on this branch beyond main
   let commitCount: number;
   try {
-    const log = run(`git log origin/main..HEAD --oneline`);
+    const log = sh(`git log origin/main..HEAD --oneline`);
     commitCount = log ? log.split("\n").length : 0;
   } catch {
     commitCount = 0;
@@ -223,7 +223,7 @@ async function resolve() {
       `*Automated with \`npx ue-mcp resolve ${issueNum}\`*`,
     ].join("\n");
 
-    const prUrl = run(
+    const prUrl = sh(
       `gh pr create --title "${prTitle.replace(/"/g, '\\"')}" --body "${prBody.replace(/"/g, '\\"')}" --repo ${repo} --head ${branch}`,
     );
     console.log("");
@@ -237,7 +237,12 @@ async function resolve() {
   console.log("");
 }
 
-resolve().catch((e) => {
-  console.error(`\n  ${RED}Fatal: ${e instanceof Error ? e.message : e}${RESET}\n`);
-  process.exit(1);
-});
+/** Entry point for `ue-mcp resolve <issue-number> [--ci]`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    await resolve(argv);
+  } catch (e) {
+    console.error(`\n  ${RED}Fatal: ${e instanceof Error ? e.message : e}${RESET}\n`);
+    return 1;
+  }
+}

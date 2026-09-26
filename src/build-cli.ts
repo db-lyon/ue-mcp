@@ -5,12 +5,12 @@ import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject, isUProjectPath } from "./uproject-path.js";
 import { RESET, BOLD, GREEN, RED, CYAN } from "./ui/ansi.js";
 
-function targetUProject(): string | null {
+function targetUProject(argv: string[]): string | null {
   // --editor names one of the editors this server drives; it wins over the
   // positional, which in turn wins over cwd.
   let arg: string | undefined;
   try {
-    const target = takeEditorTarget(process.argv.slice(2));
+    const target = takeEditorTarget(argv);
     arg = target.projectPath ?? target.rest[0];
   } catch (e) {
     console.log(`  ${RED}${e instanceof EditorFlagError ? e.message : String(e)}${RESET}`);
@@ -22,12 +22,12 @@ function targetUProject(): string | null {
   return (arg && findUProject(arg)) || findUProject(process.cwd());
 }
 
-async function main() {
+async function main(argv: string[]) {
   console.log("");
   console.log(`  ${BOLD}${CYAN}UE-MCP Build${RESET}`);
   console.log("");
 
-  const uprojectPath = targetUProject();
+  const uprojectPath = targetUProject(argv);
   if (!uprojectPath) {
     console.log(`  ${RED}No .uproject found. Run from your project directory or pass the path.${RESET}`);
     process.exit(1);
@@ -49,7 +49,12 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(`\n  ${RED}Unexpected error: ${e instanceof Error ? e.message : String(e)}${RESET}`);
-  process.exit(1);
-});
+/** Entry point for `ue-mcp build [project] [--editor <name-or-path>]`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    await main(argv);
+  } catch (e) {
+    console.error(`\n  ${RED}Unexpected error: ${e instanceof Error ? e.message : String(e)}${RESET}`);
+    return 1;
+  }
+}

@@ -14,8 +14,6 @@ import {
 } from "./registry-auth.js";
 import { registryBase } from "./registry-catalog.js";
 
-const args = process.argv.slice(2);
-
 function log(msg: string): void {
   console.log(msg ? `[ue-mcp] ${msg}` : "");
 }
@@ -32,7 +30,7 @@ device flow, then mints your own publish token and caches it in
 CI: set UE_MCP_PUBLISH_TOKEN instead (mint a token at the registry /account page).
 Override the registry with UE_MCP_REGISTRY.`;
 
-export async function runLogin(): Promise<void> {
+async function login(args: string[]): Promise<void> {
   if (args.includes("--help") || args.includes("-h")) {
     console.log(HELP);
     return;
@@ -48,7 +46,7 @@ export async function runLogin(): Promise<void> {
   }
 }
 
-export async function runLogout(): Promise<void> {
+async function logout(args: string[]): Promise<void> {
   if (args.includes("--help") || args.includes("-h")) {
     console.log(HELP);
     return;
@@ -61,4 +59,14 @@ export async function runLogout(): Promise<void> {
   } else {
     log("Not logged in.");
   }
+}
+
+/** Entry point for `ue-mcp login [--force]`. */
+export async function runLogin(argv: string[]): Promise<number | void> {
+  await login(argv);
+}
+
+/** Entry point for `ue-mcp logout`. */
+export async function runLogout(argv: string[]): Promise<number | void> {
+  await logout(argv);
 }

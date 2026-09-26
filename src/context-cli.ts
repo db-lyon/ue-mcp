@@ -36,8 +36,7 @@ function printHelp(): void {
 `);
 }
 
-function parseArgs(): { action: string; projectArg?: string; help: boolean } {
-  const argv = process.argv.slice(2);
+function parseArgs(argv: string[]): { action: string; projectArg?: string; help: boolean } {
   if (argv.some((a) => a === "-h" || a === "--help" || a === "help")) {
     return { action: "status", help: true };
   }
@@ -84,8 +83,8 @@ function currentStrategy(existing: Record<string, unknown>): "full" | "lean" | "
   return s === "lean" ? "lean" : s === "full" ? "full" : "micro";
 }
 
-function main(): void {
-  const { action, projectArg, help } = parseArgs();
+function main(argv: string[]): void {
+  const { action, projectArg, help } = parseArgs(argv);
   if (help) {
     printHelp();
     return;
@@ -137,4 +136,7 @@ function main(): void {
   console.log("");
 }
 
-main();
+/** Entry point for `ue-mcp context [full|lean|micro|status] [project]`. */
+export async function run(argv: string[]): Promise<number | void> {
+  main(argv);
+}

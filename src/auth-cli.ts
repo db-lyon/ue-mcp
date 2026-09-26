@@ -22,6 +22,7 @@ import {
   warn,
 } from "./ui/ansi.js";
 import { singleSelect } from "./ui/select.js";
+import { isMainModule } from "./cli-main.js";
 
 export async function runFeedbackAuthStep(): Promise<void> {
   console.log("");
@@ -97,10 +98,13 @@ export async function runFeedbackAuthStep(): Promise<void> {
   }
 }
 
-// Only run when invoked as a CLI subcommand (not when imported by init.ts).
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}` ||
-    process.argv[1].endsWith("auth-cli.js") ||
-    process.argv[1].endsWith("auth-cli.ts")) {
+/** Entry point for `ue-mcp auth`. init.ts runs the same step inline. */
+export async function run(): Promise<number | void> {
+  await runFeedbackAuthStep();
+}
+
+// Also runnable as `node dist/auth-cli.js`, only when executed directly.
+if (isMainModule(import.meta.url)) {
   runFeedbackAuthStep().catch((e) => {
     console.error(
       `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,

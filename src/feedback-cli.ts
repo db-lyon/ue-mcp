@@ -438,14 +438,14 @@ function cmdDiscard(id: string): void {
   }
 }
 
-async function main(): Promise<void> {
+async function main(argv: string[]): Promise<void> {
   // --editor scopes the deferred store to entries that originated in one of
   // this server's editors. The store itself is user-scoped (feedback files
   // against the ue-mcp tracker, not the project), so the flag is a filter
   // rather than a different location.
   let target: { projectPath?: string; rest: string[] };
   try {
-    target = takeEditorTarget(process.argv.slice(2));
+    target = takeEditorTarget(argv);
   } catch (e) {
     fail(e instanceof EditorFlagError ? e.message : String(e));
     process.exit(1);
@@ -489,9 +489,14 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((e) => {
-  console.error(
-    `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,
-  );
-  process.exit(1);
-});
+/** Entry point for `ue-mcp feedback <subcommand>`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    await main(argv);
+  } catch (e) {
+    console.error(
+      `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,
+    );
+    return 1;
+  }
+}

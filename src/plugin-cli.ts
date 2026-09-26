@@ -63,13 +63,6 @@ import { ProjectContext } from "./project.js";
 import { registryBase } from "./registry-catalog.js";
 import { findUProject, projectDirOf } from "./uproject-path.js";
 
-// --editor names one of the editors this server drives; every project lookup
-// below starts from it instead of cwd. Taken before the subcommand is shifted
-// off so it can appear anywhere on the line.
-const parsedEditor = parseEditorFlag(process.argv.slice(2));
-const args = parsedEditor.rest;
-const sub = args.shift();
-
 const RESTART_NOTE =
   "Injected actions appear on the next server start. Restart your MCP client (or `ue-mcp restart`).";
 
@@ -92,10 +85,10 @@ interface ProjectInfo {
  * one, cwd otherwise. Resolved lazily so a subcommand that never touches a
  * project (login, publish) does not fail on an unresolvable name.
  */
-function projectStartDir(): string {
-  if (parsedEditor.editor === undefined) return process.cwd();
+function projectStartDir(editor: string | undefined): string {
+  if (editor === undefined) return process.cwd();
   try {
-    const projectPath = resolveEditorFlag(parsedEditor.editor);
+    const projectPath = resolveEditorFlag(editor);
     return projectDirOf(projectPath);
   } catch (e) {
     fail(e instanceof EditorFlagError ? e.message : String(e));
@@ -203,7 +196,7 @@ function resolveFromRegistry(name: string): string | null {
   return res.status === 0 && pkg ? pkg : null;
 }
 
-function cmdInstall(): void {
+function cmdInstall(args: string[], editor: string | undefined): void {
   const requested = args.shift();
   if (!requested) fail("usage: ue-mcp plugin install <name> [--version x.y.z]");
 
@@ -220,7 +213,7 @@ function cmdInstall(): void {
     note(`resolved '${requested}' -> '${name}' via the registry`);
   }
 
-  const proj = findProjectDir(projectStartDir());
+  const proj = findProjectDir(projectStartDir(editor));
 
   // Ensure a package.json exists. npm install will refuse without one.
   if (!fs.existsSync(path.join(proj.projectDir, "package.json"))) {
@@ -373,10 +366,10 @@ function cmdInstall(): void {
   note(RESTART_NOTE);
 }
 
-function cmdUninstall(): void {
+function cmdUninstall(args: string[], editor: string | undefined): void {
   const name = args.shift();
   if (!name) fail("usage: ue-mcp plugin uninstall <name>");
-  const proj = findProjectDir(projectStartDir());
+  const proj = findProjectDir(projectStartDir(editor));
 
   // Remove any deployed native module BEFORE npm uninstall so we can still
   // read the manifest (for diagnostics) and so the state file stays
@@ -402,8 +395,8 @@ function cmdUninstall(): void {
   note(RESTART_NOTE);
 }
 
-function cmdList(): void {
-  const proj = findProjectDir(projectStartDir());
+function cmdList(editor: string | undefined): void {
+  const proj = findProjectDir(projectStartDir(editor));
   const list = readPluginsList(proj.configPath);
   if (list.length === 0) {
     note(`no plugins declared in ${proj.configPath}`);
@@ -437,9 +430,9 @@ function cmdList(): void {
   }
 }
 
-function cmdUpdate(): void {
+function cmdUpdate(args: string[], editor: string | undefined): void {
   const name = args.shift();
-  const proj = findProjectDir(projectStartDir());
+  const proj = findProjectDir(projectStartDir(editor));
   if (name) {
     runNpm(["update", name], proj.projectDir);
   } else {
@@ -460,7 +453,7 @@ function cmdUpdate(): void {
  * counting the ones this plugin adds. Another plugin's category cannot be
  * checked here and is listed as unverified rather than failed.
  */
-function cmdCheckSkills(): void {
+function cmdCheckSkills(args: string[]): void {
   const dir = path.resolve(args.shift() ?? process.cwd());
   const root = path.join(dir, "skills");
   if (listSkills(root).length === 0) fail(`no skills/<name>/SKILL.md under ${dir}`);
@@ -499,7 +492,7 @@ function cmdCheckSkills(): void {
   for (const skill of result.checked) console.log(`  ${skill} -> .claude/skills/${installedSkillName(pkgName, skill)}`);
 }
 
-function cmdCreate(): void {
+function cmdCreate(args: string[]): void {
   const name = args.shift();
   if (!name) fail("usage: ue-mcp plugin create <name> [--dir path]");
   let targetDir = path.resolve(process.cwd(), name);
@@ -581,7 +574,7 @@ async function fetchCatalog(base: string): Promise<RegistryRow[]> {
  * tagline, tags, featured) are preserved by merging over the existing registry
  * row, so a re-publish only refreshes what the package owns.
  */
-async function cmdPublish(): Promise<void> {
+async function cmdPublish(args: string[]): Promise<void> {
   let dir = process.cwd();
   let slugFlag: string | undefined;
   let repoFlag: string | undefined;
@@ -721,7 +714,7 @@ function resolveInstalledPlugin(proj: ProjectInfo, nameArg: string): ResolvedIns
   );
 }
 
-async function cmdConfig(): Promise<void> {
+async function cmdConfig(args: string[], editor: string | undefined): Promise<void> {
   const nameArg = args.shift();
   if (!nameArg) {
     fail(
@@ -744,7 +737,7 @@ async function cmdConfig(): Promise<void> {
     else if (a === "--global") target = "global";
   }
 
-  const proj = findProjectDir(projectStartDir());
+  const proj = findProjectDir(projectStartDir(editor));
   const resolved = resolveInstalledPlugin(proj, nameArg);
   const manifest = loadManifest(resolved.pkgDir).manifest;
   const groups = deriveGroups(manifest.flows);
@@ -823,31 +816,41 @@ function reportConfigWrite(slug: string, target: ConfigTarget, proj: ProjectInfo
   note(CONFIG_RESTART_NOTE);
 }
 
-switch (sub) {
-  case "install": cmdInstall(); break;
-  case "uninstall":
-  case "remove": cmdUninstall(); break;
-  case "list":
-  case "ls": cmdList(); break;
-  case "update":
-  case "upgrade": cmdUpdate(); break;
-  case "check-skills": cmdCheckSkills(); break;
-  case "create":
-  case "new":
-  case "init": cmdCreate(); break;
-  case "publish": cmdPublish().catch((e) => fail(e instanceof Error ? e.message : String(e))); break;
-  case "config": cmdConfig().catch((e) => fail(e instanceof Error ? e.message : String(e))); break;
-  default:
-    console.error(
-      "Usage:\n" +
-      "  ue-mcp plugin install <name> [--version x.y.z]\n" +
-      "  ue-mcp plugin uninstall <name>\n" +
-      "  ue-mcp plugin list\n" +
-      "  ue-mcp plugin update [name]\n" +
-      "  ue-mcp plugin check-skills [dir]\n" +
-      "  ue-mcp plugin config <name> [--enable a,b] [--disable c,d] [--list-groups] [--local|--project]\n" +
-      "  ue-mcp plugin create <name> [--dir path]\n" +
-      "  ue-mcp plugin publish [dir] [--slug s] [--private|--public] [--dry-run]",
-    );
-    process.exit(1);
+/** Entry point for `ue-mcp plugin <subcommand>`. */
+export async function run(argv: string[]): Promise<number | void> {
+  // --editor names one of the editors this server drives; every project lookup
+  // starts from it instead of cwd. Taken before the subcommand is shifted off
+  // so it can appear anywhere on the line.
+  const parsed = parseEditorFlag(argv);
+  const args = parsed.rest;
+  const editor = parsed.editor;
+  const sub = args.shift();
+  switch (sub) {
+    case "install": cmdInstall(args, editor); break;
+    case "uninstall":
+    case "remove": cmdUninstall(args, editor); break;
+    case "list":
+    case "ls": cmdList(editor); break;
+    case "update":
+    case "upgrade": cmdUpdate(args, editor); break;
+    case "check-skills": cmdCheckSkills(args); break;
+    case "create":
+    case "new":
+    case "init": cmdCreate(args); break;
+    case "publish": await cmdPublish(args).catch((e) => fail(e instanceof Error ? e.message : String(e))); break;
+    case "config": await cmdConfig(args, editor).catch((e) => fail(e instanceof Error ? e.message : String(e))); break;
+    default:
+      console.error(
+        "Usage:\n" +
+        "  ue-mcp plugin install <name> [--version x.y.z]\n" +
+        "  ue-mcp plugin uninstall <name>\n" +
+        "  ue-mcp plugin list\n" +
+        "  ue-mcp plugin update [name]\n" +
+        "  ue-mcp plugin check-skills [dir]\n" +
+        "  ue-mcp plugin config <name> [--enable a,b] [--disable c,d] [--list-groups] [--local|--project]\n" +
+        "  ue-mcp plugin create <name> [--dir path]\n" +
+        "  ue-mcp plugin publish [dir] [--slug s] [--private|--public] [--dry-run]",
+      );
+      return 1;
+  }
 }

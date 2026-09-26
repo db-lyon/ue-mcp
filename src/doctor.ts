@@ -414,10 +414,10 @@ export function formatDoctor(d: DoctorReport): string {
 }
 
 /** Entry point for `ue-mcp doctor [project.uproject] [--editor <name-or-path>]`. */
-export function runDoctorCli(): void {
+export async function run(argv: string[]): Promise<number | void> {
   let target: { projectPath?: string; rest: string[] };
   try {
-    target = takeEditorTarget(process.argv.slice(2));
+    target = takeEditorTarget(argv);
   } catch (e) {
     console.error(`  ${RED}${e instanceof EditorFlagError ? e.message : String(e)}${RESET}`);
     process.exit(1);

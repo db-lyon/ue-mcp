@@ -15,13 +15,12 @@ import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/a
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { projectDirOf } from "./uproject-path.js";
 
-function resolveProjectDir(): string | null {
-  // index.ts splices the "uninstall-hooks" arg out before this module loads,
-  // so a user-supplied project dir lands at argv[2]. --editor names one of the
-  // editors this server drives and wins over it.
+function resolveProjectDir(argv: string[]): string | null {
+  // A user-supplied project dir is the first argument. --editor names one of
+  // the editors this server drives and wins over it.
   let arg: string | undefined;
   try {
-    const target = takeEditorTarget(process.argv.slice(2));
+    const target = takeEditorTarget(argv);
     arg = target.projectPath ?? target.rest[0];
   } catch (e) {
     fail(e instanceof EditorFlagError ? e.message : String(e));
@@ -45,12 +44,12 @@ function resolveProjectDir(): string | null {
   return null;
 }
 
-function main(): void {
+function main(argv: string[]): void {
   console.log("");
   console.log(`  ${BOLD}${CYAN}ue-mcp uninstall-hooks${RESET}`);
   console.log("");
 
-  const projectDir = resolveProjectDir();
+  const projectDir = resolveProjectDir(argv);
   if (!projectDir) {
     fail("Could not locate a ue-mcp project. Pass the project directory as an argument:");
     console.log(`    ${DIM}npx ue-mcp uninstall-hooks <path-to-ue-project-dir>${RESET}`);
@@ -74,11 +73,14 @@ function main(): void {
   console.log("");
 }
 
-try {
-  main();
-} catch (e) {
-  console.error(
-    `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,
-  );
-  process.exit(1);
+/** Entry point for `ue-mcp uninstall-hooks [project] [--editor <name-or-path>]`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    main(argv);
+  } catch (e) {
+    console.error(
+      `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,
+    );
+    return 1;
+  }
 }

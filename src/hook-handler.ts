@@ -76,15 +76,13 @@ async function postToolUse(): Promise<void> {
   process.stdout.write(msg);
 }
 
-/* ── Subcommand dispatch ─────────────────────────────────────────── */
-
-const event = process.argv[3]; // argv: [node, script, "hook", event]
-
-switch (event) {
-  case "post-tool-use":
-    postToolUse().catch(() => process.exit(0));
-    break;
-  default:
-    // Unknown event - silent no-op so we never break the agent
-    break;
+/** Entry point for `ue-mcp hook <event>`. An unknown event is a silent no-op. */
+export async function run(argv: string[]): Promise<number | void> {
+  if (argv[0] !== "post-tool-use") return;
+  try {
+    await postToolUse();
+  } catch {
+    // A hook must never break the agent, so a failure still exits cleanly.
+    return 0;
+  }
 }

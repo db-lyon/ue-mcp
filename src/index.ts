@@ -75,6 +75,7 @@ import {
   type SessionSurface,
 } from "./session-surface.js";
 import { packageVersion } from "./package-root.js";
+import { findCliCommand, runCliCommand } from "./cli-commands.js";
 import { readPluginsList } from "./plugin/plugins-list.js";
 
 type TextBlock = { type: "text"; text: string };
@@ -1356,64 +1357,10 @@ function toPluginInfo(rec: PluginRecord, project: ProjectContext): PluginInfo {
 }
 
 
-// Route subcommands
-const subcmd = process.argv[2];
-if (subcmd === "init") {
-  process.argv.splice(2, 1);
-  import("./init.js");
-} else if (subcmd === "update") {
-  process.argv.splice(2, 1);
-  import("./update.js");
-} else if (subcmd === "doctor") {
-  process.argv.splice(2, 1);
-  import("./doctor.js").then((m) => m.runDoctorCli());
-} else if (subcmd === "deploy") {
-  process.argv.splice(2, 1);
-  import("./deploy-cli.js");
-} else if (subcmd === "hook") {
-  import("./hook-handler.js");
-} else if (subcmd === "uninstall-hooks") {
-  process.argv.splice(2, 1);
-  import("./uninstall-hooks.js");
-} else if (subcmd === "auth") {
-  process.argv.splice(2, 1);
-  // #620: invoked via the index.js bin, argv[1] is index.js so auth-cli's
-  // own "am I the entry point" guard never fires. Call the export directly.
-  import("./auth-cli.js").then((m) => m.runFeedbackAuthStep()).catch((e) => {
-    console.error(`[ue-mcp] auth failed: ${e instanceof Error ? e.message : e}`);
-    process.exit(1);
-  });
-} else if (subcmd === "login") {
-  process.argv.splice(2, 1);
-  import("./login-cli.js").then((m) => m.runLogin()).catch((e) => {
-    console.error(`[ue-mcp] login failed: ${e instanceof Error ? e.message : e}`);
-    process.exit(1);
-  });
-} else if (subcmd === "logout") {
-  process.argv.splice(2, 1);
-  import("./login-cli.js").then((m) => m.runLogout()).catch((e) => {
-    console.error(`[ue-mcp] logout failed: ${e instanceof Error ? e.message : e}`);
-    process.exit(1);
-  });
-} else if (subcmd === "feedback") {
-  process.argv.splice(2, 1);
-  import("./feedback-cli.js");
-} else if (subcmd === "dialog") {
-  process.argv.splice(2, 1);
-  import("./dialog-cli.js");
-} else if (subcmd === "resolve") {
-  import("./resolve.js");
-} else if (subcmd === "build") {
-  process.argv.splice(2, 1);
-  import("./build-cli.js");
-} else if (subcmd === "plugin") {
-  process.argv.splice(2, 1);
-  import("./plugin-cli.js");
-} else if (subcmd === "context") {
-  process.argv.splice(2, 1);
-  import("./context-cli.js");
-} else if (subcmd === "version" || subcmd === "--version" || subcmd === "-v") {
-  console.log(packageVersion());
+// A first argument naming a command runs it; anything else starts the server.
+const command = findCliCommand(process.argv[2]);
+if (command) {
+  void runCliCommand(command, process.argv.slice(3));
 } else {
   main().catch((e) => {
     console.error(`[ue-mcp] Fatal error: ${e}`);
