@@ -33,20 +33,6 @@ export type AuthState =
   | { kind: "auth"; auth: UserAuth }
   | { kind: "pending"; pending: PendingDeviceFlow };
 
-export class OAuthClientNotConfiguredError extends Error {
-  constructor() {
-    super(
-      "UE_MCP_OAUTH_CLIENT_ID is not configured. The default placeholder is in place. " +
-        "Set the env var, or update DEFAULT_CLIENT_ID in src/auth.ts.",
-    );
-  }
-}
-
-function assertClientIdConfigured(): void {
-  if (!CLIENT_ID || CLIENT_ID.includes("REPLACE_WITH_REAL") || !CLIENT_ID.startsWith("Iv")) {
-    throw new OAuthClientNotConfiguredError();
-  }
-}
 
 export async function readUserAuth(): Promise<UserAuth | null> {
   try {
@@ -90,7 +76,6 @@ async function clearPending(): Promise<void> {
 }
 
 export async function startDeviceFlow(): Promise<PendingDeviceFlow> {
-  assertClientIdConfigured();
   const res = await fetch("https://github.com/login/device/code", {
     method: "POST",
     headers: {
@@ -130,7 +115,6 @@ export type ExchangeResult =
 export async function tryExchangeDeviceCode(
   pending: PendingDeviceFlow,
 ): Promise<ExchangeResult> {
-  assertClientIdConfigured();
   const res = await fetch("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: {
@@ -184,6 +168,28 @@ export async function tryExchangeDeviceCode(
   await writeUserAuth(auth);
   await clearPending();
   return { kind: "auth", auth };
+}
+
+/** How a polled device flow ended. `timeout` means the code outlived its expiry unanswered. */
+export type DeviceFlowOutcome = Exclude<ExchangeResult, { kind: "pending" }> | { kind: "timeout" };
+
+/**
+ * Poll GitHub at the flow's interval until the code is authorized, denied or
+ * expired. An authorization is already cached by tryExchangeDeviceCode.
+ * `onPending` runs after each poll that is still waiting.
+ */
+export async function pollDeviceFlow(
+  pending: PendingDeviceFlow,
+  onPending?: () => void,
+): Promise<DeviceFlowOutcome> {
+  const deadline = pending.expires_at * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, pending.interval * 1000));
+    const result = await tryExchangeDeviceCode(pending);
+    if (result.kind !== "pending") return result;
+    onPending?.();
+  }
+  return { kind: "timeout" };
 }
 
 /** Resolve user auth, initiating or resuming device flow as needed.

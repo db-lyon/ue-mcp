@@ -9,7 +9,7 @@
  * re-running the full setup wizard.
  */
 
-import { readUserAuth, startDeviceFlow, tryExchangeDeviceCode } from "./auth.js";
+import { pollDeviceFlow, readUserAuth, startDeviceFlow } from "./auth.js";
 import {
   BOLD,
   CYAN,
@@ -74,39 +74,27 @@ export async function runFeedbackAuthStep(): Promise<void> {
   console.log("");
   console.log(`  ${DIM}Polling every ${pending.interval}s. Code expires in ~15 min. Ctrl-C to skip.${RESET}`);
 
-  const deadline = pending.expires_at * 1000;
   process.stdout.write("  ");
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, pending.interval * 1000));
-    let result;
-    try {
-      result = await tryExchangeDeviceCode(pending);
-    } catch (e) {
-      console.log("");
-      warn(`Auth failed: ${e instanceof Error ? e.message : e}`);
-      info(`Submissions will refuse until you re-run \`npx ue-mcp auth\` or call with author="bot".`);
-      return;
-    }
-    if (result.kind === "auth") {
-      console.log("");
-      ok(`Authorized as @${result.auth.login}`);
-      info(`Token cached at ~/.ue-mcp/auth.json (mode 600)`);
-      return;
-    }
-    if (result.kind === "expired") {
-      console.log("");
-      warn("Device code expired. Re-run npx ue-mcp auth to retry.");
-      return;
-    }
-    if (result.kind === "denied") {
-      console.log("");
-      warn(`Authorization denied. Submissions will refuse until you re-run auth or call with author="bot".`);
-      return;
-    }
-    process.stdout.write(".");
+  let result;
+  try {
+    result = await pollDeviceFlow(pending, () => process.stdout.write("."));
+  } catch (e) {
+    console.log("");
+    warn(`Auth failed: ${e instanceof Error ? e.message : e}`);
+    info(`Submissions will refuse until you re-run \`npx ue-mcp auth\` or call with author="bot".`);
+    return;
   }
   console.log("");
-  warn(`Timed out waiting for authorization. Submissions will refuse until you re-run auth or call with author="bot".`);
+  if (result.kind === "auth") {
+    ok(`Authorized as @${result.auth.login}`);
+    info(`Token cached at ~/.ue-mcp/auth.json (mode 600)`);
+  } else if (result.kind === "expired") {
+    warn("Device code expired. Re-run npx ue-mcp auth to retry.");
+  } else if (result.kind === "denied") {
+    warn(`Authorization denied. Submissions will refuse until you re-run auth or call with author="bot".`);
+  } else {
+    warn(`Timed out waiting for authorization. Submissions will refuse until you re-run auth or call with author="bot".`);
+  }
 }
 
 // Only run when invoked as a CLI subcommand (not when imported by init.ts).

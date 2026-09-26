@@ -18,8 +18,7 @@ import {
   authDir,
   readUserAuth,
   startDeviceFlow,
-  tryExchangeDeviceCode,
-  writeUserAuth,
+  pollDeviceFlow,
   type UserAuth,
 } from "./auth.js";
 import { registryBase } from "./registry-catalog.js";
@@ -126,24 +125,14 @@ export async function loginToRegistry(
     log("");
     log("Waiting for GitHub authorization...");
 
-    const deadline = pending.expires_at * 1000;
-    for (;;) {
-      if (Date.now() > deadline) throw new Error("device code expired; run 'ue-mcp login' again");
-      await new Promise((r) => setTimeout(r, pending.interval * 1000));
-      const result = await tryExchangeDeviceCode(pending);
-      if (result.kind === "auth") {
-        gh = result.auth;
-        await writeUserAuth(gh);
-        break;
-      }
-      if (result.kind === "denied") throw new Error("authorization denied on GitHub");
-      if (result.kind === "expired") throw new Error("device code expired; run 'ue-mcp login' again");
-      // pending: keep polling.
-    }
-    log(`Authorized as @${gh!.login}.`);
+    const result = await pollDeviceFlow(pending);
+    if (result.kind === "denied") throw new Error("authorization denied on GitHub");
+    if (result.kind !== "auth") throw new Error("device code expired; run 'ue-mcp login' again");
+    gh = result.auth;
+    log(`Authorized as @${gh.login}.`);
   }
 
-  const { token, login } = await exchange(gh!.token);
+  const { token, login } = await exchange(gh.token);
   const auth: RegistryAuth = {
     token,
     login,
