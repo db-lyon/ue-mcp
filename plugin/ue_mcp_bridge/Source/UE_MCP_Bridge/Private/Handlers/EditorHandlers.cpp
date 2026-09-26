@@ -130,17 +130,6 @@ namespace
 		return Dirty;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> PackageNamesToJson(const TArray<FString>& PackageNames)
-	{
-		TArray<TSharedPtr<FJsonValue>> Values;
-		Values.Reserve(PackageNames.Num());
-		for (const FString& PackageName : PackageNames)
-		{
-			Values.Add(MakeShared<FJsonValueString>(PackageName));
-		}
-		return Values;
-	}
-
 	bool ResolveEditorObjectFromPath(const FString& ObjectPath, UObject*& OutObject, FString& OutResolvedKind, FString& OutError)
 	{
 		UObject* Object = LoadObject<UObject>(nullptr, *ObjectPath);
@@ -3265,8 +3254,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 	Result->SetBoolField(TEXT("pieEndRequested"), false);
 	Result->SetNumberField(TEXT("dirtyContentCount"), Dirty.Content.Num());
 	Result->SetNumberField(TEXT("dirtyMapCount"), Dirty.Maps.Num());
-	Result->SetArrayField(TEXT("dirtyContentPackages"), PackageNamesToJson(Dirty.Content));
-	Result->SetArrayField(TEXT("dirtyMapPackages"), PackageNamesToJson(Dirty.Maps));
+	Result->SetArrayField(TEXT("dirtyContentPackages"), MCPStringListToJson(Dirty.Content));
+	Result->SetArrayField(TEXT("dirtyMapPackages"), MCPStringListToJson(Dirty.Maps));
 
 	if (bPIEWasActive && !bEndPIE)
 	{
