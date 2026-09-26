@@ -119,23 +119,7 @@ namespace
 	/** Every MetaSound in the project, so a bad path can name the good ones. */
 	FString MSEditKnownMetaSounds()
 	{
-		TArray<FString> Paths;
-		IAssetRegistry& AssetRegistry =
-			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-		const FTopLevelAssetPath ClassPaths[] = {
-			FTopLevelAssetPath(TEXT("/Script/MetasoundEngine"), TEXT("MetaSoundSource")),
-			FTopLevelAssetPath(TEXT("/Script/MetasoundEngine"), TEXT("MetaSoundPatch")),
-		};
-		for (const FTopLevelAssetPath& ClassPath : ClassPaths)
-		{
-			TArray<FAssetData> Found;
-			AssetRegistry.GetAssetsByClass(ClassPath, Found, /*bSearchSubClasses*/ true);
-			for (const FAssetData& Data : Found)
-			{
-				if (Paths.Num() >= 20) break;
-				Paths.Add(Data.GetSoftObjectPath().ToString());
-			}
-		}
+		const TArray<FString> Paths = MCPAudio::KnownMetaSoundPaths(20);
 		return Paths.Num() > 0 ? FString::Join(Paths, TEXT(", ")) : FString(TEXT("(none in this project)"));
 	}
 

@@ -4,6 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "HandlerUtils.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "Modules/ModuleManager.h"
 
 namespace MCPAudio
 {
@@ -26,6 +29,30 @@ namespace MCPAudio
 		const bool bSaved = FailedPath.IsEmpty();
 		MCPNoteSaveOutcome(Result, FailedPath, bSaved, FailedReason);
 		return bSaved;
+	}
+
+	/** Up to Limit MetaSound source and patch assets in the project, by object
+	 *  path, so a bad path can name the good ones. */
+	inline TArray<FString> KnownMetaSoundPaths(int32 Limit)
+	{
+		TArray<FString> Paths;
+		IAssetRegistry& AssetRegistry =
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		const FTopLevelAssetPath ClassPaths[] = {
+			FTopLevelAssetPath(TEXT("/Script/MetasoundEngine"), TEXT("MetaSoundSource")),
+			FTopLevelAssetPath(TEXT("/Script/MetasoundEngine"), TEXT("MetaSoundPatch")),
+		};
+		for (const FTopLevelAssetPath& ClassPath : ClassPaths)
+		{
+			TArray<FAssetData> Found;
+			AssetRegistry.GetAssetsByClass(ClassPath, Found, /*bSearchSubClasses*/ true);
+			for (const FAssetData& Data : Found)
+			{
+				if (Paths.Num() >= Limit) return Paths;
+				Paths.Add(Data.GetSoftObjectPath().ToString());
+			}
+		}
+		return Paths;
 	}
 
 	/** The answer every MetaSound document action gives below 5.5: 5.4 has a

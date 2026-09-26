@@ -81,34 +81,10 @@ namespace
 		bool bFellBackFromDefaultPage = false;
 	};
 
-	/** Every MetaSound asset in the project, so a bad path can name the good ones. */
-	TArray<FString> MSReadKnownMetaSounds(int32 Limit)
-	{
-		TArray<FString> Paths;
-		IAssetRegistry& AssetRegistry =
-			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-
-		const FTopLevelAssetPath ClassPaths[] = {
-			FTopLevelAssetPath(TEXT("/Script/MetasoundEngine"), TEXT("MetaSoundSource")),
-			FTopLevelAssetPath(TEXT("/Script/MetasoundEngine"), TEXT("MetaSoundPatch")),
-		};
-		for (const FTopLevelAssetPath& ClassPath : ClassPaths)
-		{
-			TArray<FAssetData> Found;
-			AssetRegistry.GetAssetsByClass(ClassPath, Found, /*bSearchSubClasses*/ true);
-			for (const FAssetData& Data : Found)
-			{
-				if (Paths.Num() >= Limit) return Paths;
-				Paths.Add(Data.GetSoftObjectPath().ToString());
-			}
-		}
-		return Paths;
-	}
-
 	/** "No MetaSound there" told as a next call rather than as a dead end. */
 	TSharedPtr<FJsonValue> MSReadNoAssetError(const FString& AssetPath)
 	{
-		const TArray<FString> Known = MSReadKnownMetaSounds(20);
+		const TArray<FString> Known = MCPAudio::KnownMetaSoundPaths(20);
 		FString Msg = FString::Printf(
 			TEXT("No MetaSound found at '%s'. "), *AssetPath);
 
