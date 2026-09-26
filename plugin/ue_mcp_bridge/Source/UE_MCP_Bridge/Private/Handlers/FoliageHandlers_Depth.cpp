@@ -172,15 +172,6 @@ namespace
 		return Info.Implementation.IsValid() ? Info.Implementation->GetInstanceCount() : 0;
 	}
 
-	TSharedPtr<FJsonObject> FoliageDepthTransformToJson(const FTransform& T)
-	{
-		auto Obj = MakeShared<FJsonObject>();
-		Obj->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(T.GetLocation()));
-		Obj->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(T.Rotator()));
-		Obj->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(T.GetScale3D()));
-		return Obj;
-	}
-
 	/** Read one {location, rotation?, scale?} entry. Returns false with a reason
 	 *  when the entry is not usable, so the whole batch can be validated before
 	 *  a single instance is placed. */
@@ -535,7 +526,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::AddFoliageInstances(const TSharedPtr<FJ
 		if (AddedTransforms.Num() < FoliageDepthMaxRollbackTransforms)
 		{
 			AddedTransforms.Add(MakeShared<FJsonValueObject>(
-				FoliageDepthTransformToJson(Instance.GetInstanceWorldTransform())));
+				MCPTransformToJsonObject(Instance.GetInstanceWorldTransform())));
 		}
 		++Added;
 	}
@@ -708,7 +699,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::RemoveFoliageInstances(const TSharedPtr
 			FTransform T;
 			if (FoliageDepthGetInstanceTransform(*Info, Idx, T))
 			{
-				RemovedTransforms.Add(MakeShared<FJsonValueObject>(FoliageDepthTransformToJson(T)));
+				RemovedTransforms.Add(MakeShared<FJsonValueObject>(MCPTransformToJsonObject(T)));
 			}
 		}
 

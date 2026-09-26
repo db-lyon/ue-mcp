@@ -1344,17 +1344,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("actorName"), PCGVolumeActor->GetActorLabel());
 	Result->SetStringField(TEXT("actorClass"), PCGVolumeActor->GetClass()->GetName());
 
-	TSharedPtr<FJsonObject> LocationObj = MakeShared<FJsonObject>();
-	LocationObj->SetNumberField(TEXT("x"), Location.X);
-	LocationObj->SetNumberField(TEXT("y"), Location.Y);
-	LocationObj->SetNumberField(TEXT("z"), Location.Z);
-	Result->SetObjectField(TEXT("location"), LocationObj);
-
-	TSharedPtr<FJsonObject> ExtentObj = MakeShared<FJsonObject>();
-	ExtentObj->SetNumberField(TEXT("x"), Extent.X);
-	ExtentObj->SetNumberField(TEXT("y"), Extent.Y);
-	ExtentObj->SetNumberField(TEXT("z"), Extent.Z);
-	Result->SetObjectField(TEXT("extent"), ExtentObj);
+	Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Location));
+	Result->SetObjectField(TEXT("extent"), MCPVec3ToJsonObject(Extent));
 
 	return MCPResult(Result);
 }
