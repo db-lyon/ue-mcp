@@ -71,34 +71,85 @@ void FNetworkingHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 }
 
-AActor* FNetworkingHandlers::LoadBlueprintCDO(const FString& BlueprintPath, TSharedPtr<FJsonObject>& OutResult)
+namespace
 {
-	// Thin adapter over the shared ::LoadBlueprintCDO<T> helper in HandlerUtils.h.
-	// Translates the helper's TSharedPtr<FJsonValue> error into the OutResult-style
-	// {success:false, error:...} object the networking call sites accumulate into.
-	TSharedPtr<FJsonValue> Err;
-	AActor* CDO = ::LoadBlueprintCDO<AActor>(BlueprintPath, Err);
-	if (!CDO)
+	/** Compile and save a Blueprint, recording on Result whether the write
+	 *  reached disk (#931). A null Blueprint is a failed save, not a skipped one. */
+	void NetSaveBlueprint(UBlueprint* Blueprint, const FString& BlueprintPath, const TSharedPtr<FJsonObject>& Result)
 	{
-		FString ErrMsg = TEXT("Failed to load blueprint CDO");
-		if (Err.IsValid())
+		FString Reason;
+		bool bSaved = false;
+		if (!Blueprint)
 		{
-			if (TSharedPtr<FJsonObject> ErrObj = Err->AsObject())
-			{
-				ErrObj->TryGetStringField(TEXT("error"), ErrMsg);
-			}
+			Reason = TEXT("The class has no owning Blueprint asset to save.");
 		}
-		OutResult->SetStringField(TEXT("error"), ErrMsg);
-		OutResult->SetBoolField(TEXT("success"), false);
+		else
+		{
+			FKismetEditorUtilities::CompileBlueprint(Blueprint);
+			bSaved = SaveAssetPackageChecked(Blueprint, Reason);
+		}
+		MCPNoteSaveOutcome(Result, BlueprintPath, bSaved, Reason);
 	}
-	return CDO;
-}
 
-void FNetworkingHandlers::SaveBlueprint(UBlueprint* Blueprint)
-{
-	if (!Blueprint) return;
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	/** Save the Blueprint whose generated class CDO belongs to. */
+	void NetSaveOwningBlueprint(AActor* CDO, const FString& BlueprintPath, const TSharedPtr<FJsonObject>& Result)
+	{
+		NetSaveBlueprint(CDO ? UBlueprint::GetBlueprintFromClass(CDO->GetClass()) : nullptr, BlueprintPath, Result);
+	}
+
+	void NetSetJsonValue(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Key, bool Value) { Obj->SetBoolField(Key, Value); }
+	void NetSetJsonValue(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Key, double Value) { Obj->SetNumberField(Key, Value); }
+	bool NetValuesEqual(bool A, bool B) { return A == B; }
+	bool NetValuesEqual(double A, double B) { return FMath::IsNearlyEqual(static_cast<float>(A), static_cast<float>(B)); }
+
+	/** One CDO value: read it, answer unchanged when it already holds NewValue,
+	 *  otherwise write it, save the owning Blueprint and emit the inverse record
+	 *  under the registered action name. */
+	template <typename TValue, typename TGetter, typename TSetter>
+	TSharedPtr<FJsonValue> NetApplyCdoSetting(
+		const FString& BlueprintPath,
+		const TCHAR* Action,
+		const TCHAR* ValueKey,
+		const TCHAR* PreviousKey,
+		TValue NewValue,
+		TGetter Get,
+		TSetter Set,
+		const TCHAR* UnchangedNote)
+	{
+		TSharedPtr<FJsonValue> LoadError;
+		AActor* CDO = LoadBlueprintCDO<AActor>(BlueprintPath, LoadError);
+		if (!CDO) return LoadError;
+		const TValue Previous = Get(CDO);
+
+		TSharedPtr<FJsonObject> Result = MCPSuccess();
+		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+		NetSetJsonValue(Result, ValueKey, NewValue);
+		NetSetJsonValue(Result, PreviousKey, Previous);
+
+		if (NetValuesEqual(Previous, NewValue))
+		{
+			MCPSetExisted(Result);
+			Result->SetBoolField(TEXT("updated"), false);
+			Result->SetBoolField(TEXT("unchanged"), true);
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"), UnchangedNote);
+			return MCPResult(Result);
+		}
+
+		Set(CDO, NewValue);
+		NetSaveOwningBlueprint(CDO, BlueprintPath, Result);
+
+		MCPSetUpdated(Result);
+		Result->SetBoolField(TEXT("unchanged"), false);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+		NetSetJsonValue(Payload, ValueKey, Previous);
+		MCPSetRollback(Result, Action, Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+		return MCPResult(Result);
+	}
+
+	const TCHAR* NetUnchangedNote = TEXT("The class already had this value, so nothing changed and there is nothing to undo.");
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::GetNetworkingInfo(const TSharedPtr<FJsonObject>& Params)
@@ -106,9 +157,10 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::GetNetworkingInfo(const TSharedPtr<F
 	FString BlueprintPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
+	TSharedPtr<FJsonValue> LoadError;
+	AActor* CDO = LoadBlueprintCDO<AActor>(BlueprintPath, LoadError);
+	if (!CDO) return LoadError;
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
 
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("replicates"), CDO->GetIsReplicated());
@@ -132,43 +184,12 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicates(const TSharedPtr<FJson
 {
 	FString BlueprintPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
+	const bool NewValue = OptionalBool(Params, TEXT("replicates"), false);
 
-	bool bReplicates = OptionalBool(Params, TEXT("replicates"), false);
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
-	const bool bPrev = CDO->GetIsReplicated();
-
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetBoolField(TEXT("replicates"), bReplicates);
-	Result->SetBoolField(TEXT("success"), true);
-
-	Result->SetBoolField(TEXT("previousReplicates"), bPrev);
-
-	if (bPrev == bReplicates)
-	{
-		MCPSetExisted(Result);
-		Result->SetBoolField(TEXT("updated"), false);
-		Result->SetBoolField(TEXT("unchanged"), true);
-		Result->SetBoolField(TEXT("rollbackPossible"), false);
-		Result->SetStringField(TEXT("rollbackNote"),
-			TEXT("The class already had this value, so nothing changed and there is nothing to undo."));
-		return MCPResult(Result);
-	}
-
-	CDO->SetReplicates(bReplicates);
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
-
-	MCPSetUpdated(Result);
-	Result->SetBoolField(TEXT("unchanged"), false);
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Payload->SetBoolField(TEXT("replicates"), bPrev);
-	MCPSetRollback(Result, TEXT("set_replicates"), Payload);
-	Result->SetBoolField(TEXT("rollbackLossy"), false);
-	return MCPResult(Result);
+	return NetApplyCdoSetting<bool>(BlueprintPath, TEXT("set_replicates"), TEXT("replicates"), TEXT("previousReplicates"), NewValue,
+		[](AActor* CDO) -> bool { return CDO->GetIsReplicated(); },
+		[](AActor* CDO, bool Value) { CDO->SetReplicates(Value); },
+		NetUnchangedNote);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetUpdateFrequency(const TSharedPtr<FJsonObject>& Params)
@@ -180,9 +201,10 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetUpdateFrequency(const TS
 	double MinNetUpdateFrequency = 0;
 	const bool bHasMinNetUpdateFrequency = TryGetNumberParam(Params, TEXT("minNetUpdateFrequency"), MinNetUpdateFrequency);
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
+	TSharedPtr<FJsonValue> LoadError;
+	AActor* CDO = LoadBlueprintCDO<AActor>(BlueprintPath, LoadError);
+	if (!CDO) return LoadError;
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
 
 	// Both frequencies as they stand, read before either is written. The record
 	// restores both regardless of which one this call was asked to change:
@@ -230,15 +252,16 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetUpdateFrequency(const TS
 	// package on disk and then report unchanged in the same breath.
 	if (bFrequencyChanged)
 	{
-		UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-		SaveBlueprint(Blueprint);
+		NetSaveOwningBlueprint(CDO, BlueprintPath, Result);
 	}
-	Result->SetBoolField(TEXT("saved"), bFrequencyChanged);
+	else
+	{
+		Result->SetBoolField(TEXT("saved"), false);
+	}
 	Result->SetNumberField(TEXT("netUpdateFrequency"), NewFrequency);
 	Result->SetNumberField(TEXT("minNetUpdateFrequency"), NewMinFrequency);
 	Result->SetNumberField(TEXT("previousNetUpdateFrequency"), PrevFrequency);
 	Result->SetNumberField(TEXT("previousMinNetUpdateFrequency"), PrevMinFrequency);
-	Result->SetBoolField(TEXT("success"), true);
 
 	Result->SetBoolField(TEXT("unchanged"), !bFrequencyChanged);
 	if (bFrequencyChanged)
@@ -284,9 +307,10 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetDormancy(const TSharedPtr<FJso
 
 	FString Dormancy = OptionalString(Params, TEXT("dormancy"));
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
+	TSharedPtr<FJsonValue> LoadError;
+	AActor* CDO = LoadBlueprintCDO<AActor>(BlueprintPath, LoadError);
+	if (!CDO) return LoadError;
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	const ENetDormancy PrevDormancy = CDO->NetDormancy;
 	const FString PrevDormStr = DormancyToString(PrevDormancy);
 	ENetDormancy NewDormancy = PrevDormancy;
@@ -328,8 +352,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetDormancy(const TSharedPtr<FJso
 	}
 
 	CDO->NetDormancy = NewDormancy;
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
+	NetSaveOwningBlueprint(CDO, BlueprintPath, Result);
 
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), false);
@@ -347,131 +370,36 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetAlwaysRelevant(const TSharedPtr<F
 {
 	FString BlueprintPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
+	const bool NewValue = OptionalBool(Params, TEXT("alwaysRelevant"), false);
 
-	bool bAlwaysRelevant = OptionalBool(Params, TEXT("alwaysRelevant"), false);
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
-	const bool bPrev = CDO->bAlwaysRelevant;
-
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetBoolField(TEXT("alwaysRelevant"), bAlwaysRelevant);
-	Result->SetBoolField(TEXT("success"), true);
-
-	Result->SetBoolField(TEXT("previousAlwaysRelevant"), bPrev);
-
-	if (bPrev == bAlwaysRelevant)
-	{
-		MCPSetExisted(Result);
-		Result->SetBoolField(TEXT("updated"), false);
-		Result->SetBoolField(TEXT("unchanged"), true);
-		Result->SetBoolField(TEXT("rollbackPossible"), false);
-		Result->SetStringField(TEXT("rollbackNote"),
-			TEXT("The class already had this value, so nothing changed and there is nothing to undo."));
-		return MCPResult(Result);
-	}
-
-	CDO->bAlwaysRelevant = bAlwaysRelevant;
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
-
-	MCPSetUpdated(Result);
-	Result->SetBoolField(TEXT("unchanged"), false);
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Payload->SetBoolField(TEXT("alwaysRelevant"), bPrev);
-	MCPSetRollback(Result, TEXT("set_always_relevant"), Payload);
-	Result->SetBoolField(TEXT("rollbackLossy"), false);
-	return MCPResult(Result);
+	return NetApplyCdoSetting<bool>(BlueprintPath, TEXT("set_always_relevant"), TEXT("alwaysRelevant"), TEXT("previousAlwaysRelevant"), NewValue,
+		[](AActor* CDO) -> bool { return CDO->bAlwaysRelevant; },
+		[](AActor* CDO, bool Value) { CDO->bAlwaysRelevant = Value; },
+		NetUnchangedNote);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetPriority(const TSharedPtr<FJsonObject>& Params)
 {
 	FString BlueprintPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
+	const double NewValue = OptionalNumber(Params, TEXT("netPriority"), 1.0);
 
-	double NetPriority = OptionalNumber(Params, TEXT("netPriority"), 1.0);
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
-	const float fPrev = CDO->NetPriority;
-
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetNumberField(TEXT("netPriority"), NetPriority);
-	Result->SetBoolField(TEXT("success"), true);
-
-	Result->SetNumberField(TEXT("previousNetPriority"), fPrev);
-
-	if (FMath::IsNearlyEqual(fPrev, (float)NetPriority))
-	{
-		MCPSetExisted(Result);
-		Result->SetBoolField(TEXT("updated"), false);
-		Result->SetBoolField(TEXT("unchanged"), true);
-		Result->SetBoolField(TEXT("rollbackPossible"), false);
-		Result->SetStringField(TEXT("rollbackNote"),
-			TEXT("The class already had this net priority, so nothing changed and there is nothing to undo."));
-		return MCPResult(Result);
-	}
-
-	CDO->NetPriority = (float)NetPriority;
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
-
-	MCPSetUpdated(Result);
-	Result->SetBoolField(TEXT("unchanged"), false);
-	// The previous value is carried as the float the property actually held, so
-	// the replay writes back exactly what was overwritten.
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Payload->SetNumberField(TEXT("netPriority"), fPrev);
-	MCPSetRollback(Result, TEXT("set_net_priority"), Payload);
-	Result->SetBoolField(TEXT("rollbackLossy"), false);
-	return MCPResult(Result);
+	return NetApplyCdoSetting<double>(BlueprintPath, TEXT("set_net_priority"), TEXT("netPriority"), TEXT("previousNetPriority"), NewValue,
+		[](AActor* CDO) -> double { return CDO->NetPriority; },
+		[](AActor* CDO, double Value) { CDO->NetPriority = static_cast<float>(Value); },
+		TEXT("The class already had this net priority, so nothing changed and there is nothing to undo."));
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicateMovement(const TSharedPtr<FJsonObject>& Params)
 {
 	FString BlueprintPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
+	const bool NewValue = OptionalBool(Params, TEXT("replicateMovement"), false);
 
-	bool bReplicateMovement = OptionalBool(Params, TEXT("replicateMovement"), false);
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
-	const bool bPrev = CDO->IsReplicatingMovement();
-
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetBoolField(TEXT("replicateMovement"), bReplicateMovement);
-	Result->SetBoolField(TEXT("success"), true);
-
-	Result->SetBoolField(TEXT("previousReplicateMovement"), bPrev);
-
-	if (bPrev == bReplicateMovement)
-	{
-		MCPSetExisted(Result);
-		Result->SetBoolField(TEXT("updated"), false);
-		Result->SetBoolField(TEXT("unchanged"), true);
-		Result->SetBoolField(TEXT("rollbackPossible"), false);
-		Result->SetStringField(TEXT("rollbackNote"),
-			TEXT("The class already had this value, so nothing changed and there is nothing to undo."));
-		return MCPResult(Result);
-	}
-
-	CDO->SetReplicatingMovement(bReplicateMovement);
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
-
-	MCPSetUpdated(Result);
-	Result->SetBoolField(TEXT("unchanged"), false);
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Payload->SetBoolField(TEXT("replicateMovement"), bPrev);
-	MCPSetRollback(Result, TEXT("set_replicate_movement"), Payload);
-	Result->SetBoolField(TEXT("rollbackLossy"), false);
-	return MCPResult(Result);
+	return NetApplyCdoSetting<bool>(BlueprintPath, TEXT("set_replicate_movement"), TEXT("replicateMovement"), TEXT("previousReplicateMovement"), NewValue,
+		[](AActor* CDO) -> bool { return CDO->IsReplicatingMovement(); },
+		[](AActor* CDO, bool Value) { CDO->SetReplicatingMovement(Value); },
+		NetUnchangedNote);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetVariableReplication(const TSharedPtr<FJsonObject>& Params)
@@ -496,11 +424,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetVariableReplication(const TShared
 		else ReplicationType = TEXT("None");
 	}
 
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	if (!Blueprint)
-	{
-		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
-	}
+	REQUIRE_ASSET(UBlueprint, Blueprint, BlueprintPath);
 
 	// Find the variable in the blueprint
 	FName VarFName(*VariableName);
@@ -565,7 +489,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetVariableReplication(const TShared
 		VarDesc->PropertyFlags &= ~CPF_RepNotify;
 	}
 
-	SaveBlueprint(Blueprint);
+	NetSaveBlueprint(Blueprint, BlueprintPath, Result);
 
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), false);
@@ -597,45 +521,12 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetOwnerOnlyRelevant(const TSharedPt
 {
 	FString BlueprintPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
+	const bool NewValue = OptionalBool(Params, TEXT("onlyRelevantToOwner"), false);
 
-	bool bOnlyRelevantToOwner = OptionalBool(Params, TEXT("onlyRelevantToOwner"), false);
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
-	const bool bPrev = CDO->bOnlyRelevantToOwner;
-
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetBoolField(TEXT("onlyRelevantToOwner"), bOnlyRelevantToOwner);
-	Result->SetBoolField(TEXT("success"), true);
-
-	if (bPrev == bOnlyRelevantToOwner)
-	{
-		MCPSetExisted(Result);
-		Result->SetBoolField(TEXT("updated"), false);
-		Result->SetBoolField(TEXT("unchanged"), true);
-		Result->SetBoolField(TEXT("rollbackPossible"), false);
-		Result->SetStringField(TEXT("rollbackNote"),
-			TEXT("The class already had this value, so nothing changed and there is nothing to undo."));
-		return MCPResult(Result);
-	}
-
-	CDO->bOnlyRelevantToOwner = bOnlyRelevantToOwner;
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
-
-	MCPSetUpdated(Result);
-	Result->SetBoolField(TEXT("unchanged"), false);
-	Result->SetBoolField(TEXT("previousOnlyRelevantToOwner"), bPrev);
-	// The REGISTERED method name is set_only_relevant_to_owner; the C++
-	// function is called SetOwnerOnlyRelevant and that name resolves to no
-	// handler, so a replay of that record failed the bridge's method lookup.
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Payload->SetBoolField(TEXT("onlyRelevantToOwner"), bPrev);
-	MCPSetRollback(Result, TEXT("set_only_relevant_to_owner"), Payload);
-	Result->SetBoolField(TEXT("rollbackLossy"), false);
-	return MCPResult(Result);
+	return NetApplyCdoSetting<bool>(BlueprintPath, TEXT("set_only_relevant_to_owner"), TEXT("onlyRelevantToOwner"), TEXT("previousOnlyRelevantToOwner"), NewValue,
+		[](AActor* CDO) -> bool { return CDO->bOnlyRelevantToOwner; },
+		[](AActor* CDO, bool Value) { CDO->bOnlyRelevantToOwner = Value; },
+		NetUnchangedNote);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetLoadOnClient(const TSharedPtr<FJsonObject>& Params)
@@ -645,9 +536,10 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetLoadOnClient(const TSharedPtr<
 
 	bool bLoadOnClient = OptionalBool(Params, TEXT("loadOnClient"), true);
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
+	TSharedPtr<FJsonValue> LoadError;
+	AActor* CDO = LoadBlueprintCDO<AActor>(BlueprintPath, LoadError);
+	if (!CDO) return LoadError;
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	bool bPrev = bLoadOnClient;
 
 	FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("bNetLoadOnClient"));
@@ -697,8 +589,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetLoadOnClient(const TSharedPtr<
 		if (ValPtr) { *ValPtr = bLoadOnClient; }
 	}
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BlueprintPath));
-	if (BP) SaveBlueprint(BP);
+	NetSaveOwningBlueprint(CDO, BlueprintPath, Result);
 
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), false);
@@ -717,9 +608,10 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetCullDistance(const TShar
 
 	double Distance = OptionalNumber(Params, TEXT("netCullDistanceSquared"), 225000000.0);
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MCPResult(Result);
+	TSharedPtr<FJsonValue> LoadError;
+	AActor* CDO = LoadBlueprintCDO<AActor>(BlueprintPath, LoadError);
+	if (!CDO) return LoadError;
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
 
 	FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("NetCullDistanceSquared"));
 	// The value that was there, read before the write, so the inverse restores
@@ -757,14 +649,15 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetCullDistance(const TShar
 	const bool bDistanceChanged = bReadPrevious && PreviousDistance != StoredDistance;
 	if (bDistanceChanged)
 	{
-		UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BlueprintPath));
-		if (BP) SaveBlueprint(BP);
+		NetSaveOwningBlueprint(CDO, BlueprintPath, Result);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("saved"), false);
 	}
 
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetNumberField(TEXT("netCullDistanceSquared"), Distance);
-	Result->SetBoolField(TEXT("saved"), bDistanceChanged);
-	Result->SetBoolField(TEXT("success"), true);
 
 	if (!bReadPrevious)
 	{

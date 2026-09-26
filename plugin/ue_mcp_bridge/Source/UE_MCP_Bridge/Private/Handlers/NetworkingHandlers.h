@@ -21,8 +21,4 @@ private:
 	static TSharedPtr<FJsonValue> SetOwnerOnlyRelevant(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNetLoadOnClient(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ConfigureNetCullDistance(const TSharedPtr<FJsonObject>& Params);
-
-	// Helper to load blueprint CDO as AActor
-	static AActor* LoadBlueprintCDO(const FString& BlueprintPath, TSharedPtr<FJsonObject>& OutResult);
-	static void SaveBlueprint(UBlueprint* Blueprint);
 };
