@@ -279,16 +279,6 @@ namespace
 		return false;
 	}
 
-	/** Location as the wire shape every other action in this bridge uses. */
-	TSharedPtr<FJsonObject> PerceptionLocalVectorToJson(const FVector& V)
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetNumberField(TEXT("x"), V.X);
-		Obj->SetNumberField(TEXT("y"), V.Y);
-		Obj->SetNumberField(TEXT("z"), V.Z);
-		return Obj;
-	}
-
 	/** One perceived actor, with enough to act on it without a second call. */
 	TSharedPtr<FJsonObject> PerceptionLocalDescribePerceived(
 		const UAIPerceptionComponent* Component,
@@ -300,7 +290,7 @@ namespace
 		Row->SetStringField(TEXT("actorLabel"), Target->GetActorLabel());
 		Row->SetStringField(TEXT("actorPath"), Target->GetPathName());
 		Row->SetStringField(TEXT("actorClass"), Target->GetClass()->GetName());
-		Row->SetObjectField(TEXT("location"), PerceptionLocalVectorToJson(Target->GetActorLocation()));
+		Row->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Target->GetActorLocation()));
 		if (Perceiver)
 		{
 			Row->SetNumberField(TEXT("distance"),
@@ -323,7 +313,7 @@ namespace
 					Row->SetNumberField(TEXT("stimulusAgeSeconds"), Age);
 					if (LastKnown != FAISystem::InvalidLocation)
 					{
-						Row->SetObjectField(TEXT("lastKnownLocation"), PerceptionLocalVectorToJson(LastKnown));
+						Row->SetObjectField(TEXT("lastKnownLocation"), MCPVec3ToJsonObject(LastKnown));
 					}
 				}
 			}
@@ -1182,7 +1172,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CheckPerception(const TSharedPtr<FJson
 	Result->SetNumberField(TEXT("distance"),
 		FVector::Dist(Origin->GetActorLocation(), Target->GetActorLocation()));
 	Result->SetObjectField(TEXT("targetLocation"),
-		PerceptionLocalVectorToJson(Target->GetActorLocation()));
+		MCPVec3ToJsonObject(Target->GetActorLocation()));
 
 	if (const FActorPerceptionInfo* Info = Component->GetActorInfo(*Target))
 	{
@@ -1192,7 +1182,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CheckPerception(const TSharedPtr<FJson
 		Result->SetBoolField(TEXT("isFriendly"), Info->bIsFriendly != 0);
 		if (LastKnown != FAISystem::InvalidLocation)
 		{
-			Result->SetObjectField(TEXT("lastKnownLocation"), PerceptionLocalVectorToJson(LastKnown));
+			Result->SetObjectField(TEXT("lastKnownLocation"), MCPVec3ToJsonObject(LastKnown));
 			Result->SetNumberField(TEXT("lastKnownLocationAgeSeconds"), LastAge);
 			// The gap between where the AI believes the target is and where it
 			// actually is IS the interesting number in a stealth or search bug.
@@ -1370,7 +1360,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReportNoiseEvent(const TSharedPtr<FJso
 			static_cast<float>(MaxRange), Tag);
 
 		ReportedSense = UAISense_Hearing::StaticClass();
-		Result->SetObjectField(TEXT("location"), PerceptionLocalVectorToJson(Location));
+		Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Location));
 		Result->SetNumberField(TEXT("loudness"), Loudness);
 		Result->SetNumberField(TEXT("maxRange"), MaxRange);
 		if (MaxRange <= 0.0)
@@ -1427,10 +1417,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReportNoiseEvent(const TSharedPtr<FJso
 		Result->SetStringField(TEXT("targetLabel"), DamagedActor->GetActorLabel());
 		Result->SetStringField(TEXT("targetPath"), DamagedActor->GetPathName());
 		Result->SetNumberField(TEXT("amount"), Amount);
-		Result->SetObjectField(TEXT("location"), PerceptionLocalVectorToJson(Location));
+		Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Location));
 		if (HitLocation != FAISystem::InvalidLocation)
 		{
-			Result->SetObjectField(TEXT("hitLocation"), PerceptionLocalVectorToJson(HitLocation));
+			Result->SetObjectField(TEXT("hitLocation"), MCPVec3ToJsonObject(HitLocation));
 		}
 	}
 
