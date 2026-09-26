@@ -8,7 +8,7 @@ import type { EditorSession, SessionRegistry } from "./session.js";
 import type { ProjectContext } from "./project.js";
 import type { PluginInfo, ToolContext, ToolDef } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
-import { warn } from "./log.js";
+import { info, warn } from "./log.js";
 import { ALL_TOOLS } from "./tools.js";
 import { applyNativeToolsConfig } from "./epic-surface.js";
 import { baseGraphFor, unionSurface, type SessionSurface, type UnionSurface } from "./session-surface.js";
@@ -81,8 +81,9 @@ export async function buildSessionLoad(
     const why = nativeCfg.enabled === false
       ? "nativeTools.enabled=false"
       : `nativeTools.exclude=[${(nativeCfg.exclude ?? []).join(", ")}]`;
-    console.error(
-      `[ue-mcp] ${label}Wrapped engine tools withheld (${why}): ${epicSurface.removed} actions; `
+    info(
+      "epic",
+      `${label}Wrapped engine tools withheld (${why}): ${epicSurface.removed} actions; `
       + "epic(call_tool) still reaches every one of them.",
     );
   }
@@ -347,7 +348,7 @@ export class SessionLoads {
       tasks: load.pluginLoad.taskDefs,
       flows: load.pluginLoad.flowDefs,
     }, (message) => {
-      console.error(`[ue-mcp] ${session.name}: ${message}`);
+      warn("guard", `${session.name}: ${message}`);
     });
     const sources = [
       ...load.pluginLoad.guardsByPlugin.map((g) => ({ label: g.plugin, guards: g.guards })),
@@ -373,7 +374,7 @@ export class SessionLoads {
     // cannot leave a partial or duplicated guard pipeline behind.
     for (const guard of built) session.guards.register(guard);
     if (built.length > 0) {
-      console.error(`[ue-mcp] ${session.name}: ${built.length} guard(s) registered`);
+      info("guard", `${session.name}: ${built.length} guard(s) registered`);
     }
   }
 }

@@ -16,7 +16,7 @@ import {
 } from "./target-params.js";
 import type { ToolDef } from "./types.js";
 import { DialogGuard, guardFor, sessionGuardDeps } from "./dialog-guard.js";
-import { info } from "./log.js";
+import { info, warn, error } from "./log.js";
 import { startVersionCheck } from "./version-check.js";
 import { GuardRegistry } from "./flow/guard.js";
 import { loadFlowConfig } from "./flow/loader.js";
@@ -46,34 +46,35 @@ function registerSessions(sessions: SessionRegistry, projectArgs: string[]): voi
   for (const arg of projectArgs) {
     try {
       const session = sessions.register({ projectPath: arg });
-      console.error(
-        `[ue-mcp] Project loaded: ${session.project.projectName} (engine ${session.project.engineAssociation ?? "unknown"})` +
+      info(
+        "server",
+        `Project loaded: ${session.project.projectName} (engine ${session.project.engineAssociation ?? "unknown"})` +
           (projectArgs.length > 1 ? ` as editor '${session.name}' on port ${session.bridge.port}` : ""),
       );
 
       // Non-destructive attach; deployment is reserved for `ue-mcp init` / `ue-mcp deploy`.
       const result = attach(session.project);
-      console.error(`[ue-mcp] ${attachSummary(result)}`);
+      info("deploy", attachSummary(result));
 
       // #785: a compiled plugin older than its source otherwise only shows up
       // later as "Unknown method", which reads as "not implemented yet".
       const freshness = checkPluginFreshness(session.project.projectPath);
       if (freshness.stale && freshness.message) {
-        console.error(`[ue-mcp] WARNING: ${freshness.message}`);
+        warn("deploy", freshness.message);
       }
 
       // D3: a malformed `ue-mcp:` key is dropped on its own, and named here.
       for (const line of describeConfigRejections(ueMcpConfigRejections(session.project.projectDir))) {
-        console.error(`[ue-mcp] WARNING: ${line}`);
+        warn("config", line);
       }
     } catch (e) {
-      console.error(`[ue-mcp] Failed to initialize project '${arg}': ${e instanceof Error ? e.message : e}`);
+      error("server", `Failed to initialize project '${arg}'`, e);
     }
   }
 
   // Which environment variables decide for every editor at once. Silent at one.
   for (const line of collapsingEnvWarnings(sessions.list().map((s) => s.name))) {
-    console.error(`[ue-mcp] ${line}`);
+    warn("env", line);
   }
 
   if (sessions.size === 0) sessions.register({});
@@ -126,8 +127,9 @@ async function main() {
     .filter((s) => resolveContextStrategy(s.project.config.context?.strategy) !== contextStrategy)
     .map((s) => s.name);
   if (dissenting.length > 0) {
-    console.error(
-      `[ue-mcp] Context strategy '${contextStrategy}' comes from '${primary.name}' and applies to the whole server; ` +
+    warn(
+      "context",
+      `Context strategy '${contextStrategy}' comes from '${primary.name}' and applies to the whole server; ` +
         `${dissenting.join(", ")} ask for a different one and it is not applied.`,
     );
   }
@@ -141,13 +143,13 @@ async function main() {
     ? unionSurface(loads.all().map((l) => ({ ...l.surface, tools: l.advertisedTools }))).tools
     : primaryLoad.advertisedTools;
   if (contextStrategy !== "full") {
-    console.error(`[ue-mcp] Context strategy: ${contextStrategy}`);
+    info("context", `Context strategy: ${contextStrategy}`);
   }
 
   // Per-asset locking for concurrent agents. Opt-in; off, it is a passthrough.
   const lockingCfg = resolveLockingConfig(project.config.locking);
   if (lockingCfg.enabled) {
-    console.error(`[ue-mcp] Per-asset locking enabled (TTL ${lockingCfg.ttlSeconds}s)`);
+    info("locking", `Per-asset locking enabled (TTL ${lockingCfg.ttlSeconds}s)`);
   }
 
   // One task registry and guard pipeline per session, built from its own graph.
@@ -208,10 +210,10 @@ async function main() {
     for (const tool of targetable) {
       if (signature) {
         const outcome = injectEditorTarget(tool, names);
-        if (!outcome.injected && outcome.reason) console.error(`[ue-mcp] ${outcome.reason}`);
+        if (!outcome.injected && outcome.reason) warn("targeting", outcome.reason);
         // asset(migrate) also takes a DESTINATION editor (6.5).
         const destination = injectMigrateTarget(tool, names);
-        if (!destination.injected && destination.reason) console.error(`[ue-mcp] ${destination.reason}`);
+        if (!destination.injected && destination.reason) warn("targeting", destination.reason);
       } else {
         removeEditorTarget(tool);
         removeMigrateTarget(tool);
@@ -249,7 +251,7 @@ async function main() {
     tasks: primaryLoad.pluginLoad.taskDefs,
     flows: primaryLoad.pluginLoad.flowDefs,
   });
-  console.error(`[ue-mcp] ue-mcp.yml loaded - ${Object.keys(initialLoad.config.flows).length} flow(s), ${Object.keys(initialLoad.config.tasks).length} custom task(s)`);
+  info("flow", `ue-mcp.yml loaded - ${Object.keys(initialLoad.config.flows).length} flow(s), ${Object.keys(initialLoad.config.tasks).length} custom task(s)`);
 
   // Resolved from the addressed editor: a flow declared in one project's
   // ue-mcp.yml runs through that project's registry, never the first one's (D1).
@@ -276,7 +278,7 @@ async function main() {
         host: project.config.http.host,
       });
     } catch (e) {
-      console.error(`[ue-mcp] Failed to start HTTP server: ${e instanceof Error ? e.message : e}`);
+      error("http", "Failed to start HTTP server", e);
     }
   }
 
@@ -295,7 +297,7 @@ async function main() {
 
   const disabled = primaryLoad.surface.disabled;
   if (disabled.size > 0) {
-    console.error(`[ue-mcp] Disabled categories: ${[...disabled].join(", ")}`);
+    info("server", `Disabled categories: ${[...disabled].join(", ")}`);
   }
   const pluginRecords = primaryLoad.surface.pluginRecords;
   const activePluginCount = pluginRecords.filter((r) => r.status === "active").length;
@@ -303,7 +305,7 @@ async function main() {
     ? `, ${activePluginCount}/${pluginRecords.length} plugin(s)`
     : "";
   const taskCount = primaryLoad.registry!.listRegistered().length;
-  console.error(`[ue-mcp] Registered ${advertisedTools.length + 1} tools, ${taskCount} tasks (flow engine)${pluginNote}`);
+  info("server", `Registered ${advertisedTools.length + 1} tools, ${taskCount} tasks (flow engine)${pluginNote}`);
 
   await server.connect(new StdioServerTransport());
 }
@@ -314,7 +316,7 @@ if (command) {
   void runCliCommand(command, process.argv.slice(3));
 } else {
   main().catch((e) => {
-    console.error(`[ue-mcp] Fatal error: ${e}`);
+    error("server", "Fatal error", e);
     process.exit(1);
   });
 }
