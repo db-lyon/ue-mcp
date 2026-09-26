@@ -394,15 +394,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListBones(const TSharedPtr<FJsonObjec
 TSharedPtr<FJsonValue> FAnimationHandlers::RebindLeaderPose(const TSharedPtr<FJsonObject>& Params)
 {
 	REQUIRE_EDITOR_WORLD(World);
-	FString ActorLabel;
-	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
 	// Read before anything can fail (#1057).
 	const FString BodyHint = OptionalString(Params, TEXT("bodyComponent"));
 
 	TSharedPtr<FJsonValue> ActorErr;
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr);
 	if (!Actor) return ActorErr;
-	ActorLabel = Actor->GetActorLabel();
+	const FString ActorLabel = Actor->GetActorLabel();
 
 	TArray<USkeletalMeshComponent*> Comps;
 	Actor->GetComponents<USkeletalMeshComponent>(Comps);
@@ -467,15 +465,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RebindLeaderPose(const TSharedPtr<FJs
 TSharedPtr<FJsonValue> FAnimationHandlers::PreviewAnimation(const TSharedPtr<FJsonObject>& Params)
 {
 	REQUIRE_EDITOR_WORLD(World);
-	FString ActorLabel;
-	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
 	bool bEnabled = true;
 	TryGetBoolParam(Params, TEXT("enabled"), bEnabled);
 
 	TSharedPtr<FJsonValue> ActorErr;
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr);
 	if (!Actor) return ActorErr;
-	ActorLabel = Actor->GetActorLabel();
+	const FString ActorLabel = Actor->GetActorLabel();
 
 	TArray<USkeletalMeshComponent*> Comps;
 	Actor->GetComponents<USkeletalMeshComponent>(Comps);
