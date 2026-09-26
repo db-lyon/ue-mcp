@@ -576,11 +576,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetNiagaraInfo(const TSharedPtr<FJsonOb
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
-	UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *AssetPath);
-	if (!System)
-	{
-		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *AssetPath));
-	}
+	REQUIRE_ASSET(UNiagaraSystem, System, AssetPath);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), System->GetName());
@@ -606,11 +602,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListEmittersInSystem(const TSharedPtr<F
 	FString SystemPath;
 	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 
-	UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
-	if (!System)
-	{
-		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
-	}
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	const TArray<FNiagaraEmitterHandle>& EmitterHandles = System->GetEmitterHandles();
 	TArray<TSharedPtr<FJsonValue>> EmitterArray;
@@ -743,11 +735,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr
 
 	FString Label = OptionalString(Params, TEXT("label"));
 
-	UNiagaraSystem* NiagaraSystem = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
-	if (!NiagaraSystem)
-	{
-		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
-	}
+	REQUIRE_ASSET(UNiagaraSystem, NiagaraSystem, SystemPath);
 
 	REQUIRE_EDITOR_WORLD(World);
 
@@ -827,11 +815,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraActor(const TSharedPtr<FJso
 	const FString Label = OptionalString(Params, TEXT("label"));
 	const bool bActivate = OptionalBool(Params, TEXT("activate"), true);
 
-	UNiagaraSystem* NiagaraSystem = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
-	if (!NiagaraSystem)
-	{
-		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
-	}
+	REQUIRE_ASSET(UNiagaraSystem, NiagaraSystem, SystemPath);
 
 	REQUIRE_EDITOR_WORLD(World);
 
@@ -1109,30 +1093,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJs
 	FString EmitterPath;
 	if (auto Err = RequireString(Params, TEXT("emitterPath"), EmitterPath)) return Err;
 
-	// #223: EditorAssetLibrary::LoadAsset returned None for valid Niagara
-	// asset paths (likely a class-resolution mismatch). Use LoadObject<>
-	// directly which mirrors what unreal.load_object does in Python.
-	auto LoadEither = [](const FString& Path) -> UObject*
-	{
-		FString WithSuffix = Path;
-		if (UObject* Hit = LoadObject<UObject>(nullptr, *WithSuffix)) return Hit;
-		const FString BaseName = FPaths::GetBaseFilename(Path);
-		WithSuffix = FString::Printf(TEXT("%s.%s"), *Path, *BaseName);
-		if (UObject* Hit = LoadObject<UObject>(nullptr, *WithSuffix)) return Hit;
-		return UEditorAssetLibrary::LoadAsset(Path);
-	};
-
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(LoadEither(SystemPath));
-	UNiagaraEmitter* Emitter = Cast<UNiagaraEmitter>(LoadEither(EmitterPath));
-
-	if (!System)
-	{
-		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
-	}
-	if (!Emitter)
-	{
-		return MCPError(FString::Printf(TEXT("NiagaraEmitter not found: %s"), *EmitterPath));
-	}
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
+	REQUIRE_ASSET(UNiagaraEmitter, Emitter, EmitterPath);
 
 	// Idempotency: if an emitter with the same source asset is already present, short-circuit
 	const FName EmitterFName = Emitter->GetFName();
@@ -1225,11 +1187,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 	FString Value;
 	if (auto Err = RequireString(Params, TEXT("value"), Value)) return Err;
 
-	UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
-	if (!System)
-	{
-		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
-	}
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	// Find the emitter handle by name (use first if no name specified)
 	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
@@ -1380,11 +1338,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetEmitterInfo(const TSharedPtr<FJsonOb
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
-	UNiagaraEmitter* Emitter = Cast<UNiagaraEmitter>(UEditorAssetLibrary::LoadAsset(AssetPath));
-	if (!Emitter)
-	{
-		return MCPError(FString::Printf(TEXT("NiagaraEmitter not found: %s"), *AssetPath));
-	}
+	REQUIRE_ASSET(UNiagaraEmitter, Emitter, AssetPath);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
@@ -1473,8 +1427,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListEmitterRenderers(const TSharedPtr<F
 	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
 	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
@@ -1510,8 +1463,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterRenderer(const TSharedPtr<FJs
 	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
 	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
@@ -1592,8 +1544,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterRenderer(const TSharedPtr<
 
 	if (RendererIndex < 0) return MCPError(TEXT("Missing 'rendererIndex'"));
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
@@ -1650,8 +1601,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 	// it again in the shape that property takes.
 	(void)TryGetParam(Params, TEXT("value"));
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
@@ -1718,8 +1668,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 		// Object/asset reference (e.g. a sprite renderer's Material): 'value' is
 		// the asset path.
 		if (!TryGetStringParam(Params, TEXT("value"), StringValue)) return MCPError(TEXT("Expected string asset path 'value'"));
-		UObject* Asset = UEditorAssetLibrary::LoadAsset(StringValue);
-		if (!Asset) return MCPError(FString::Printf(TEXT("Asset not found: %s"), *StringValue));
+		UObject* Asset = MCPLoadAssetObject(StringValue);
+		if (!Asset) return MCPAssetNotFoundError(StringValue);
 		if (OP->PropertyClass && !Asset->IsA(OP->PropertyClass))
 		{
 			return MCPError(FString::Printf(TEXT("Asset %s is a %s, not a %s"), *StringValue, *Asset->GetClass()->GetName(), *OP->PropertyClass->GetName()));
@@ -1816,8 +1766,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::InspectDataInterface(const TSharedPtr<F
 	FString SystemPath;
 	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	TArray<TSharedPtr<FJsonValue>> DIs;
 
@@ -1877,15 +1826,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromSpec(const TShar
 			if (!V->TryGetObject(EmitterObj)) continue;
 			FString EmitterPath;
 			if (!(*EmitterObj)->TryGetStringField(TEXT("path"), EmitterPath)) continue;
-			// #223: same load-asset gap as add_emitter_to_system - use
-			// LoadObject<> with both bare and Path.Path forms.
-			UNiagaraEmitter* Source = LoadObject<UNiagaraEmitter>(nullptr, *EmitterPath);
-			if (!Source)
-			{
-				const FString WithSuffix = FString::Printf(TEXT("%s.%s"), *EmitterPath, *FPaths::GetBaseFilename(EmitterPath));
-				Source = LoadObject<UNiagaraEmitter>(nullptr, *WithSuffix);
-			}
-			if (!Source) Source = Cast<UNiagaraEmitter>(UEditorAssetLibrary::LoadAsset(EmitterPath));
+			UNiagaraEmitter* Source = LoadAssetByPath<UNiagaraEmitter>(EmitterPath);
 			if (!Source) continue;
 			const FGuid Version = Source->GetExposedVersion().VersionGuid;
 			// Guard: skip GraphSource-less emitters instead of crashing the
@@ -1933,8 +1874,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetCompiledHLSL(const TSharedPtr<FJsonO
 	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
 	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
@@ -1965,8 +1905,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListSystemParameters(const TSharedPtr<F
 	FString SystemPath;
 	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	const FNiagaraUserRedirectionParameterStore& UserParams = System->GetExposedParameters();
 	TArray<FNiagaraVariable> Vars;
@@ -2109,8 +2048,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListModuleInputs(const TSharedPtr<FJson
 	return MCPResult(Unsupported);
 #else
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
@@ -2384,8 +2322,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 	return MCPResult(Unsupported);
 #else
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
@@ -2648,8 +2585,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddModule(const TSharedPtr<FJsonObject>
 	// -1 (default) appends to the end of the stack; >=0 inserts at that index.
 	int32 TargetIndex = OptionalInt(Params, TEXT("targetIndex"), -1);
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
@@ -2672,7 +2608,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddModule(const TSharedPtr<FJsonObject>
 	if (!OutputNode) return MCPError(FString::Printf(TEXT("No output node for usage in context '%s'"), *StackContext));
 
 	const FString ModulePath = NormaliseModulePath(ModuleScriptRef);
-	UNiagaraScript* ModuleScript = LoadObject<UNiagaraScript>(nullptr, *ModulePath);
+	UNiagaraScript* ModuleScript = LoadAssetByPath<UNiagaraScript>(ModulePath);
 	if (!ModuleScript)
 	{
 		return MCPError(FString::Printf(TEXT("Module script not found: %s (try a /Niagara/Modules/... path)"), *ModulePath));
@@ -2729,8 +2665,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterFromSystem(const TSharedPt
 	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
 	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), -1);
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
 	int32 TargetIdx = -1;
@@ -2810,8 +2745,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ValidateSystem(const TSharedPtr<FJsonOb
 	FString SystemPath;
 	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	TArray<TSharedPtr<FJsonValue>> EArr;
 	int32 ValidEmitters = 0;
@@ -2886,8 +2820,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListStaticSwitches(const TSharedPtr<FJs
 	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
 	FString StackContext = OptionalString(Params, TEXT("stackContext"), TEXT("all"));
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
@@ -2962,8 +2895,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetStaticSwitch(const TSharedPtr<FJsonO
 	FString Value;
 	if (auto Err = RequireString(Params, TEXT("value"), Value)) return Err;
 
-	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
-	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+	REQUIRE_ASSET(UNiagaraSystem, System, SystemPath);
 
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
