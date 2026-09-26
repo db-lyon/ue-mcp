@@ -145,10 +145,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateUserDefinedStruct(const TSharedPtr<
 	}
 
 	FAssetRegistryModule::AssetCreated(Struct);
-	UEditorAssetLibrary::SaveLoadedAsset(Struct);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(Struct, SaveReason);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, Struct->GetPathName(), bSaved, SaveReason);
 	Res->SetStringField(TEXT("path"), Struct->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	TArray<TSharedPtr<FJsonValue>> FieldList;
@@ -215,6 +217,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditUserDefinedStructImpl(const TSharedPt
 
 	UUserDefinedStruct* Struct = LoadAssetByPath<UUserDefinedStruct>(AssetPath);
 	if (!Struct) return MCPError(FString::Printf(TEXT("UserDefinedStruct not found (native structs are not editable): %s"), *AssetPath));
+	if (auto Blocked = MCPAssetWriteBlockedError(Struct, AssetPath, TEXT("edit this struct"))) return Blocked;
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	Res->SetStringField(TEXT("path"), AssetPath);
@@ -244,8 +247,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditUserDefinedStructImpl(const TSharedPt
 			FStructureEditorUtils::RenameVariable(Struct, NewGuid, FieldName);
 		}
 
-		UEditorAssetLibrary::SaveLoadedAsset(Struct);
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Struct, SaveReason);
 		MCPSetUpdated(Res);
+		MCPNoteSaveOutcome(Res, AssetPath, bSaved, SaveReason);
 		if (const FStructVariableDescription* Desc = FStructureEditorUtils::GetVarDescByGuid(Struct, NewGuid))
 		{
 			Res->SetObjectField(TEXT("field"), StructFieldToJson(*Desc, INDEX_NONE));
@@ -277,8 +282,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditUserDefinedStructImpl(const TSharedPt
 			return MCPError(FString::Printf(TEXT("Rename to '%s' failed (name invalid or duplicate)"), *NewDisplayName));
 		}
 
-		UEditorAssetLibrary::SaveLoadedAsset(Struct);
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Struct, SaveReason);
 		MCPSetUpdated(Res);
+		MCPNoteSaveOutcome(Res, AssetPath, bSaved, SaveReason);
 		if (const FStructVariableDescription* After = FStructureEditorUtils::GetVarDescByGuid(Struct, Guid))
 		{
 			Res->SetObjectField(TEXT("field"), StructFieldToJson(*After, INDEX_NONE));
@@ -306,8 +313,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditUserDefinedStructImpl(const TSharedPt
 			return MCPError(FString::Printf(TEXT("Failed to change field type to '%s'"), *FieldType));
 		}
 
-		UEditorAssetLibrary::SaveLoadedAsset(Struct);
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Struct, SaveReason);
 		MCPSetUpdated(Res);
+		MCPNoteSaveOutcome(Res, AssetPath, bSaved, SaveReason);
 		if (const FStructVariableDescription* After = FStructureEditorUtils::GetVarDescByGuid(Struct, Guid))
 		{
 			Res->SetObjectField(TEXT("field"), StructFieldToJson(*After, INDEX_NONE));
@@ -332,8 +341,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditUserDefinedStructImpl(const TSharedPt
 			return MCPError(TEXT("RemoveVariable failed"));
 		}
 
-		UEditorAssetLibrary::SaveLoadedAsset(Struct);
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Struct, SaveReason);
 		MCPSetUpdated(Res);
+		MCPNoteSaveOutcome(Res, AssetPath, bSaved, SaveReason);
 		if (Removed.IsValid()) Res->SetObjectField(TEXT("removed"), Removed);
 		Res->SetNumberField(TEXT("count"), FStructureEditorUtils::GetVarDesc(Struct).Num());
 		return MCPResult(Res);

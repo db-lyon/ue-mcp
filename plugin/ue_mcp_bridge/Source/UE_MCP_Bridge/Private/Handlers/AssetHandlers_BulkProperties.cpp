@@ -449,9 +449,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 		}
 
 		bool bSaved = false;
+		FString SaveError;
 		if (!bDryRun && bSave && bAssetChanged)
 		{
-			bSaved = UEditorAssetLibrary::SaveAsset(PreparedAsset.AssetPath, false);
+			bSaved = SaveAssetPackageChecked(PreparedAsset.Asset, SaveError);
 			if (bSaved) ++SavedAssetCount;
 			else ++SaveFailedCount;
 		}
@@ -472,6 +473,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 		ItemResult->SetBoolField(TEXT("wouldChange"), bDryRun && PreparedAsset.Properties.ContainsByPredicate(
 			[](const FPreparedPropertyWrite& Property) { return Property.PreviousText != Property.ProposedText; }));
 		ItemResult->SetBoolField(TEXT("saved"), bSaved);
+		if (!SaveError.IsEmpty()) ItemResult->SetStringField(TEXT("saveError"), SaveError);
 		ItemResult->SetArrayField(TEXT("properties"), PropertyResults);
 		ItemResults.Add(MakeShared<FJsonValueObject>(ItemResult));
 
@@ -484,15 +486,21 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 		}
 	}
 
-	const bool bAllOk = FailedAssetCount == 0;
+	const bool bAllOk = FailedAssetCount == 0 && SaveFailedCount == 0;
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("success"), bAllOk);
-	if (!bAllOk)
+	if (FailedAssetCount > 0)
 	{
 		Result->SetStringField(TEXT("error"), FString::Printf(
 			TEXT("%d of %d items failed; see items[] for the per-item status."),
 			FailedAssetCount, PreparedAssets.Num()));
+	}
+	else if (SaveFailedCount > 0)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d asset(s) changed in memory but were not written to disk; see items[].saveError."),
+			SaveFailedCount));
 	}
 	Result->SetBoolField(TEXT("dryRun"), bDryRun);
 	Result->SetBoolField(TEXT("continueOnError"), bContinueOnError);

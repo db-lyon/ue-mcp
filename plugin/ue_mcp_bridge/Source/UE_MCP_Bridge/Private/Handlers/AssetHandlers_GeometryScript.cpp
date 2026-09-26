@@ -611,7 +611,11 @@ void MCPGeoWriteBackup(const TSharedPtr<FJsonObject>& Result, const FMCPGeoReque
 	else if (UStaticMesh* CopyMesh = Cast<UStaticMesh>(Copy))
 	{
 		FString SaveReason;
-		SaveAssetPackageChecked(CopyMesh, SaveReason);
+		if (!SaveAssetPackageChecked(CopyMesh, SaveReason))
+		{
+			Result->SetBoolField(TEXT("backupSaved"), false);
+			Result->SetStringField(TEXT("backupSaveError"), SaveReason);
+		}
 	}
 }
 

@@ -113,10 +113,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateUserDefinedEnum(const TSharedPtr<FJ
 	}
 
 	FAssetRegistryModule::AssetCreated(UDE);
-	UEditorAssetLibrary::SaveLoadedAsset(UDE);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(UDE, SaveReason);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, UDE->GetPathName(), bSaved, SaveReason);
 	Res->SetStringField(TEXT("path"), UDE->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	Res->SetNumberField(TEXT("count"), CountRealEnumerators(UDE));
@@ -168,6 +170,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditUserDefinedEnum(const TSharedPtr<FJso
 
 	UUserDefinedEnum* Enum = LoadAssetByPath<UUserDefinedEnum>(AssetPath);
 	if (!Enum) return MCPError(FString::Printf(TEXT("UserDefinedEnum not found (native UEnums cannot be edited): %s"), *AssetPath));
+	if (auto Blocked = MCPAssetWriteBlockedError(Enum, AssetPath, TEXT("edit this enum"))) return Blocked;
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	Res->SetStringField(TEXT("path"), AssetPath);
@@ -195,8 +198,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditUserDefinedEnum(const TSharedPtr<FJso
 			}
 		}
 
-		UEditorAssetLibrary::SaveLoadedAsset(Enum);
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Enum, SaveReason);
 		MCPSetUpdated(Res);
+		MCPNoteSaveOutcome(Res, AssetPath, bSaved, SaveReason);
 		Res->SetObjectField(TEXT("value"), EnumeratorToJson(Enum, NewIndex));
 		Res->SetNumberField(TEXT("count"), CountRealEnumerators(Enum));
 
@@ -221,8 +226,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditUserDefinedEnum(const TSharedPtr<FJso
 			return MCPError(FString::Printf(TEXT("Display name '%s' is invalid or duplicate"), *DisplayName));
 		}
 
-		UEditorAssetLibrary::SaveLoadedAsset(Enum);
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Enum, SaveReason);
 		MCPSetUpdated(Res);
+		MCPNoteSaveOutcome(Res, AssetPath, bSaved, SaveReason);
 		Res->SetObjectField(TEXT("value"), EnumeratorToJson(Enum, Index));
 		Res->SetStringField(TEXT("previousDisplayName"), PrevDisplay);
 		return MCPResult(Res);
@@ -238,8 +245,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::EditUserDefinedEnum(const TSharedPtr<FJso
 		TSharedPtr<FJsonObject> Removed = EnumeratorToJson(Enum, Index);
 		FEnumEditorUtils::RemoveEnumeratorFromUserDefinedEnum(Enum, Index);
 
-		UEditorAssetLibrary::SaveLoadedAsset(Enum);
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Enum, SaveReason);
 		MCPSetUpdated(Res);
+		MCPNoteSaveOutcome(Res, AssetPath, bSaved, SaveReason);
 		Res->SetObjectField(TEXT("removed"), Removed);
 		Res->SetNumberField(TEXT("count"), CountRealEnumerators(Enum));
 		return MCPResult(Res);

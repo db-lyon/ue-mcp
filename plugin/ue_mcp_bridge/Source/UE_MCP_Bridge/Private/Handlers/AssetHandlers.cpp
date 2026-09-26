@@ -2005,9 +2005,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::DuplicateAsset(const TSharedPtr<FJsonObje
 				bRecompiledScript = true;
 			}
 		}
-		SaveAssetPackage(DupWorld);
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(DupWorld, SaveReason);
 		Result->SetBoolField(TEXT("isWorld"), true);
 		Result->SetBoolField(TEXT("recompiledLevelScript"), bRecompiledScript);
+		MCPNoteSaveOutcome(Result, DestPath, bSaved, SaveReason);
 	}
 
 	if (Dup)
@@ -3271,7 +3273,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataAsset(const TSharedPtr<FJsonObj
 		}
 	}
 
-	UEditorAssetLibrary::SaveAsset(FullPath);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(NewAsset, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -3285,6 +3288,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataAsset(const TSharedPtr<FJsonObj
 		for (const FString& E : PropErrors) Errs.Add(MakeShared<FJsonValueString>(E));
 		Result->SetArrayField(TEXT("propertyErrors"), Errs);
 	}
+	MCPNoteSaveOutcome(Result, FullPath, bSaved, SaveReason);
 
 	// Rollback: delete the newly created asset
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
@@ -3354,7 +3358,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateAssetByClass(const TSharedPtr<FJson
 		}
 	}
 
-	UEditorAssetLibrary::SaveAsset(FullPath);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(NewAsset, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -3368,6 +3373,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateAssetByClass(const TSharedPtr<FJson
 		for (const FString& E : PropErrors) Errs.Add(MakeShared<FJsonValueString>(E));
 		Result->SetArrayField(TEXT("propertyErrors"), Errs);
 	}
+	MCPNoteSaveOutcome(Result, FullPath, bSaved, SaveReason);
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), FullPath);
@@ -3429,6 +3435,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::SaveAsset(const TSharedPtr<FJsonObject>& 
 		{
 			return MCPAssetNotFoundError(AssetPath);
 		}
+		// A read-only or protected package is refused before the editor is
+		// asked to write it (#932).
+		if (auto Blocked = MCPAssetWriteBlockedError(PreSaveAsset, AssetPath, TEXT("save this asset"))) return Blocked;
 		UPackage* PreSavePackage = PreSaveAsset->GetOutermost();
 		const bool bWasDirty = PreSavePackage && PreSavePackage->IsDirty();
 		Result->SetBoolField(TEXT("wasDirty"), bWasDirty);
@@ -5074,7 +5083,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPt
 	}
 
 	NewAsset->PostEditChange();
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(NewAsset, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -5083,6 +5093,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPt
 	Result->SetStringField(TEXT("meshType"), MeshType);
 	Result->SetNumberField(TEXT("overridesApplied"), OverridesApplied);
 	if (OverrideFailures.Num() > 0) Result->SetArrayField(TEXT("overrideFailures"), OverrideFailures);
+	MCPNoteSaveOutcome(Result, NewAsset->GetPathName(), bSaved, SaveReason);
 	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 	return MCPResult(Result);
 }

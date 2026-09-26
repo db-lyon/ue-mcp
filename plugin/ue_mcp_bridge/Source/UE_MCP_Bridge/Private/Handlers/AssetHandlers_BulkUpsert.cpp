@@ -355,9 +355,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkRestoreDataAssets(const TSharedPtr<FJ
 			}
 			Asset->PostEditChange();
 			Asset->MarkPackageDirty();
-			if (bSave && !UEditorAssetLibrary::SaveAsset(AssetPath, false))
+			FString SaveError;
+			if (bSave && !SaveAssetPackageChecked(Asset, SaveError))
 			{
-				Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("Failed to save restored asset '%s'"), *AssetPath)));
+				Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("Failed to save restored asset '%s': %s"), *AssetPath, *SaveError)));
 				continue;
 			}
 			++RestoredAssetCount;
@@ -674,9 +675,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkUpsertDataAssets(const TSharedPtr<FJs
 		}
 
 		bool bSaved = false;
+		FString SaveError;
 		if (bChanged && bSave)
 		{
-			bSaved = UEditorAssetLibrary::SaveAsset(Prepared.AssetPath, false);
+			bSaved = SaveAssetPackageChecked(Asset, SaveError);
 			if (bSaved)
 			{
 				++SavedAssetCount;
@@ -719,7 +721,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkUpsertDataAssets(const TSharedPtr<FJs
 		// A package that would not write is an item-level fact, so it rides on
 		// the item record rather than only in an aggregate count.
 		const FString ItemError = (bChanged && bSave && !bSaved)
-			? FString::Printf(TEXT("Asset was modified in memory but '%s' could not be saved"), *Prepared.AssetPath)
+			? FString::Printf(TEXT("Asset was modified in memory but '%s' could not be saved: %s"), *Prepared.AssetPath, *SaveError)
 			: FString();
 		ItemResults.Add(MakeShared<FJsonValueObject>(BuildItemResult(
 			Prepared,

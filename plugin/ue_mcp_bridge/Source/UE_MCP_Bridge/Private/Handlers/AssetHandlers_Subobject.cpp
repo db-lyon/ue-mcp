@@ -300,12 +300,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 	FString PersistReason;
 	if (bSave)
 	{
-		bPersisted = SaveAssetPackage(OwnerAsset);
+		FString SaveError;
+		bPersisted = SaveAssetPackageChecked(OwnerAsset, SaveError);
 		if (!bPersisted)
 		{
 			PersistReason = FString::Printf(
-				TEXT("The editor refused to write '%s'. The subobject exists in memory and is kept alive, but it is not on disk yet."),
-				*OwnerPackage->GetName());
+				TEXT("'%s' was not written: %s The subobject exists in memory and is kept alive, but it is not on disk yet."),
+				*OwnerPackage->GetName(), *SaveError);
 		}
 	}
 	else

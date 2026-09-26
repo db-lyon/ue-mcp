@@ -146,13 +146,13 @@ namespace
 		return Found ? *Found : nullptr;
 	}
 
-	void SaveCurveTableChange(UCurveTable* Table)
+	bool SaveCurveTableChange(UCurveTable* Table, FString& OutReason)
 	{
-		if (!Table) return;
+		if (!Table) return false;
 		UCurveTable::InvalidateAllCachedCurves();
 		Table->OnCurveTableChanged().Broadcast();
 		Table->Modify(true);
-		SaveAssetPackage(Table);
+		return SaveAssetPackageChecked(Table, OutReason);
 	}
 
 	/** Resolve Params.assetPath the way asset(read) resolves any asset and
@@ -1436,10 +1436,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateCurveTable(const TSharedPtr<FJsonOb
 	}
 
 	UCurveTable* Table = Created.Asset;
-	SaveCurveTableChange(Table);
+	FString SaveReason;
+	const bool bSaved = SaveCurveTableChange(Table, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, Table->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
 	Result->SetStringField(TEXT("assetPath"), Table->GetPathName());
@@ -1584,10 +1586,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportCurveTable(const TSharedPtr<FJsonOb
 		return MCPResult(Result);
 	}
 
-	SaveCurveTableChange(Table);
+	FString SaveReason;
+	const bool bSaved = SaveCurveTableChange(Table, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Table->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("format"), Format);
 	Result->SetStringField(TEXT("curveType"), CurveTableModeName(Table->GetCurveTableMode()));
@@ -1668,10 +1672,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableRow(const TSharedPtr<FJsonOb
 		Curve.SetKeyInterpMode(InterpMode);
 	}
 
-	SaveCurveTableChange(Table);
+	FString SaveReason;
+	const bool bSaved = SaveCurveTableChange(Table, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, Table->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetStringField(TEXT("curveType"), CurveTableModeName(Table->GetCurveTableMode()));
@@ -1728,10 +1734,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveCurveTableRow(const TSharedPtr<FJso
 	}
 
 	Table->RemoveRow(RowKey);
-	SaveCurveTableChange(Table);
+	FString SaveReason;
+	const bool bSaved = SaveCurveTableChange(Table, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Table->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
@@ -1788,10 +1796,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameCurveTableRow(const TSharedPtr<FJso
 	}
 
 	Table->RenameRow(OldKey, NewKey);
-	SaveCurveTableChange(Table);
+	FString SaveReason;
+	const bool bSaved = SaveCurveTableChange(Table, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Table->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("oldName"), OldName);
 	Result->SetStringField(TEXT("newName"), NewName);
@@ -1950,10 +1960,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetCurveTableKeys(const TSharedPtr<FJsonO
 		return MCPError(TEXT("CurveTable has no curve type yet; add a row first."));
 	}
 
-	SaveCurveTableChange(Table);
+	FString SaveReason;
+	const bool bSaved = SaveCurveTableChange(Table, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Table->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetStringField(TEXT("curveType"), CurveTableModeName(Table->GetCurveTableMode()));
@@ -2028,10 +2040,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableKey(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("CurveTable has no curve type yet; add a row first."));
 	}
 
-	SaveCurveTableChange(Table);
+	FString SaveReason;
+	const bool bSaved = SaveCurveTableChange(Table, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Table->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetNumberField(TEXT("time"), Time);
@@ -2558,10 +2572,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableRow(const TSharedPtr<FJsonObj
 	}
 
 	DataTable->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(DataTable, /*bOnlyIfIsDirty*/ true);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(DataTable, SaveReason);
 
 	auto Result = MCPSuccess();
 	if (bExisted) MCPSetUpdated(Result); else MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, DataTable->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
@@ -2631,10 +2647,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRow(const TSharedPtr<FJson
 
 	DataTable->RemoveRow(RowKey);
 	DataTable->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(DataTable, /*bOnlyIfIsDirty*/ true);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(DataTable, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, DataTable->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
@@ -2772,10 +2790,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameDataTableRow(const TSharedPtr<FJson
 	FMemory::Free(NewRow);
 
 	DataTable->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(DataTable, /*bOnlyIfIsDirty*/ true);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(DataTable, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, DataTable->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("oldName"), OldName);
 	Result->SetStringField(TEXT("newName"), NewName);
@@ -2968,10 +2988,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateStringTable(const TSharedPtr<FJsonO
 		StringTable->GetMutableStringTable()->SetNamespace(TableNamespace);
 #endif
 	}
-	SaveAssetPackage(StringTable);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(StringTable, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, StringTable->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
 	SetStringTableInfoFields(Result, StringTable);
@@ -3096,10 +3118,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetStringTableEntry(const TSharedPtr<FJso
 #else
 	StringTable->GetMutableStringTable()->SetSourceString(EntryKey, SourceString);
 #endif
-	SaveAssetPackage(StringTable);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(StringTable, SaveReason);
 
 	auto Result = MCPSuccess();
 	if (bExisted) MCPSetUpdated(Result); else MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, StringTable->GetPathName(), bSaved, SaveReason);
 	SetStringTableInfoFields(Result, StringTable);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("key"), Key);
@@ -3143,10 +3167,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveStringTableEntry(const TSharedPtr<F
 
 	StringTable->Modify(true);
 	StringTable->GetMutableStringTable()->RemoveSourceString(EntryKey);
-	SaveAssetPackage(StringTable);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(StringTable, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, StringTable->GetPathName(), bSaved, SaveReason);
 	SetStringTableInfoFields(Result, StringTable);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("key"), Key);
@@ -3204,7 +3230,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTable(const TSharedPtr<FJsonO
 	{
 		return MCPError(FString::Printf(TEXT("Failed to import StringTable from: %s"), *FilePath));
 	}
-	SaveAssetPackage(StringTable);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(StringTable, SaveReason);
 
 	TArray<TSharedPtr<FJsonValue>> Entries;
 	TArray<TSharedPtr<FJsonValue>> Keys;
@@ -3215,6 +3242,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTable(const TSharedPtr<FJsonO
 	SetStringTableInfoFields(Result, StringTable);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("filePath"), FilePath);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
 	Result->SetNumberField(TEXT("entryCountBefore"), BeforeCount);
 	Result->SetNumberField(TEXT("entryCountAfter"), AfterCount);
 	Result->SetArrayField(TEXT("keys"), Keys);
@@ -3450,12 +3478,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 	FString PersistReason;
 	if (bSave)
 	{
-		bPersisted = SaveAssetPackage(StringTable);
+		FString SaveError;
+		bPersisted = SaveAssetPackageChecked(StringTable, SaveError);
 		if (!bPersisted)
 		{
 			PersistReason = FString::Printf(
-				TEXT("The editor refused to write '%s'. The entries are in memory only."),
-				Package ? *Package->GetName() : *AssetPath);
+				TEXT("'%s' was not written: %s The entries are in memory only."),
+				Package ? *Package->GetName() : *AssetPath, *SaveError);
 		}
 	}
 	else

@@ -236,9 +236,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateRenderTarget2D(const TSharedPtr<FJs
 	// recreates the resource, so every setting above has to be in place first.
 	RenderTarget->InitAutoFormat(Width, Height);
 
-	if (!SaveAssetPackage(RenderTarget))
+	FString SaveReason;
+	if (!SaveAssetPackageChecked(RenderTarget, SaveReason))
 	{
-		return MCPError(FString::Printf(TEXT("Created TextureRenderTarget2D '%s' but failed to save its package"), *ObjectPath));
+		return MCPError(FString::Printf(TEXT("Created TextureRenderTarget2D '%s' but failed to save its package: %s"), *ObjectPath, *SaveReason));
 	}
 
 	return MakeRenderTargetResult(RenderTarget, true);

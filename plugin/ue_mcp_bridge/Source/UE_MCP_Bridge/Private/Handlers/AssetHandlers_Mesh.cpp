@@ -75,10 +75,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterial(const TSharedPtr<FJsonObj
 	}
 
 	Mesh->SetMaterial(SlotIndex, Material);
-	UEditorAssetLibrary::SaveAsset(AssetPath, false);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(Mesh, SaveReason);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("materialPath"), MaterialPath);
 	Result->SetNumberField(TEXT("slotIndex"), SlotIndex);
@@ -159,6 +161,7 @@ namespace
 		TArray<int32> AssignmentIndices;
 		bool bChanged = false;
 		bool bSaved = false;
+		FString SaveError;
 	};
 
 	/** Human-readable slot inventory, so a slotName miss says what WAS there. */
@@ -519,7 +522,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterialsBatch(const TSharedPtr<FJ
 				UObject* Mesh = Target.StaticMesh
 					? static_cast<UObject*>(Target.StaticMesh)
 					: static_cast<UObject*>(Target.SkeletalMesh);
-				Target.bSaved = UEditorAssetLibrary::SaveLoadedAsset(Mesh, /*bOnlyIfIsDirty=*/false);
+				Target.bSaved = SaveAssetPackageChecked(Mesh, Target.SaveError);
 				if (Target.bSaved) ++SavedMeshCount;
 				else ++SaveFailedCount;
 			}
@@ -559,7 +562,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterialsBatch(const TSharedPtr<FJ
 			++UnchangedCount;
 		}
 
-		ItemResults.Add(MakeShared<FJsonValueObject>(MakeMeshMaterialItemResult(Item, Status, bOk, bDryRun, bSaved)));
+		TSharedPtr<FJsonObject> ItemResult = MakeMeshMaterialItemResult(Item, Status, bOk, bDryRun, bSaved);
+		if (Item.bApplied && Item.TargetIndex != INDEX_NONE && !Targets[Item.TargetIndex].SaveError.IsEmpty())
+		{
+			ItemResult->SetStringField(TEXT("saveError"), Targets[Item.TargetIndex].SaveError);
+		}
+		ItemResults.Add(MakeShared<FJsonValueObject>(ItemResult));
 
 		if (!bDryRun && Item.bApplied && Item.bChanged)
 		{
@@ -581,12 +589,17 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterialsBatch(const TSharedPtr<FJ
 	}
 
 	auto Result = MCPSuccess();
-	Result->SetBoolField(TEXT("success"), FailedCount == 0);
+	Result->SetBoolField(TEXT("success"), FailedCount == 0 && SaveFailedCount == 0);
 	if (FailedCount > 0)
 	{
 		Result->SetStringField(TEXT("error"), FString::Printf(
 			TEXT("%d of %d assignments failed; see items[] for the per-item status."),
 			FailedCount, Prepared.Num()));
+	}
+	else if (SaveFailedCount > 0)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d mesh(es) changed in memory but were not written to disk; see items[].saveError."), SaveFailedCount));
 	}
 	Result->SetBoolField(TEXT("dryRun"), bDryRun);
 	Result->SetBoolField(TEXT("continueOnError"), bContinueOnError);
@@ -682,6 +695,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 
 	// Apply the SAME offset to ALL meshes
 	TArray<TSharedPtr<FJsonValue>> ResultArray;
+	FString LastSaveFailedPath;
+	FString LastSaveError;
 	for (int32 i = 0; i < Meshes.Num(); i++)
 	{
 		FMeshDescription* MeshDesc = Meshes[i]->GetMeshDescription(0);
@@ -699,10 +714,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 		Meshes[i]->Build(false);
 		Meshes[i]->PostEditChange();
 		Meshes[i]->MarkPackageDirty();
-		UEditorAssetLibrary::SaveAsset(AssetPaths[i], false);
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Meshes[i], SaveReason);
 
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("assetPath"), AssetPaths[i]);
+		Entry->SetBoolField(TEXT("saved"), bSaved);
+		if (!bSaved)
+		{
+			Entry->SetStringField(TEXT("saveError"), SaveReason);
+			LastSaveFailedPath = AssetPaths[i];
+			LastSaveError = SaveReason;
+		}
 		Entry->SetNumberField(TEXT("vertexCount"), Verts.Num());
 		ResultArray.Add(MakeShared<FJsonValueObject>(Entry));
 	}
@@ -712,6 +735,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 	Result->SetArrayField(TEXT("meshes"), ResultArray);
 	Result->SetStringField(TEXT("offsetApplied"), FString::Printf(TEXT("(%.2f, %.2f, %.2f)"), Center.X, Center.Y, Center.Z));
 	Result->SetNumberField(TEXT("meshCount"), Meshes.Num());
+	if (!LastSaveFailedPath.IsEmpty()) MCPNoteSaveOutcome(Result, LastSaveFailedPath, false, LastSaveError);
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
 		TEXT("The offset (%.2f, %.2f, %.2f) was baked into the mesh descriptions and committed, and the bridge has no action ")
@@ -838,7 +862,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TShare
 	Mesh->SetMaterials(Materials);
 	Mesh->PostEditChange();
 	Mesh->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Mesh, /*bOnlyIfIsDirty=*/false);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(Mesh, SaveReason);
 
 	auto Result = MCPSuccess();
 	// Guarded: a call where every slot entry errored used to report
@@ -848,6 +873,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TShare
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("slotCount"), Materials.Num());
 	Result->SetArrayField(TEXT("applied"), Applied);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
 	if (Errors.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ErrArr;
@@ -1611,7 +1637,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::BindClothToSection(const TSharedPtr<FJson
 	Result->SetObjectField(TEXT("previous"), Previous);
 	if (Section) Result->SetObjectField(TEXT("section"), DescribeClothSection(Mesh, *Section));
 	Result->SetBoolField(TEXT("hasActiveClothingAssetsForLod"), Mesh->HasActiveClothingAssetsForLOD(LodIndex));
-	Result->SetBoolField(TEXT("saved"), SaveAssetPackage(Mesh));
+	{
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Mesh, SaveReason);
+		MCPNoteSaveOutcome(Result, Mesh->GetPathName(), bSaved, SaveReason);
+	}
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("skeletalMeshPath"), Mesh->GetPathName());
@@ -1708,7 +1738,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnbindClothFromSection(const TSharedPtr<F
 	{
 		Result->SetObjectField(TEXT("section"), DescribeClothSection(Mesh, *After));
 	}
-	Result->SetBoolField(TEXT("saved"), SaveAssetPackage(Mesh));
+	{
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Mesh, SaveReason);
+		MCPNoteSaveOutcome(Result, Mesh->GetPathName(), bSaved, SaveReason);
+	}
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("skeletalMeshPath"), Mesh->GetPathName());
@@ -1793,9 +1827,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetClothConfig(const TSharedPtr<FJsonObje
 	}
 	if (Applied == 0) return MCPError(TEXT("No matching cloth config / properties applied (check clothingAsset/configType/property names)"));
 
-	SaveAssetPackage(Mesh);
+	FString SaveReason;
+	const bool bSaved = SaveAssetPackageChecked(Mesh, SaveReason);
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Mesh->GetPathName(), bSaved, SaveReason);
 	Result->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
 	Result->SetNumberField(TEXT("applied"), Applied);
 	Result->SetNumberField(TEXT("configsTouched"), ConfigsTouched);
