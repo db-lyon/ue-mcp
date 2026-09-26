@@ -23,7 +23,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
-import yaml from "js-yaml";
 import { loadManifest } from "./plugin/manifest.js";
 import { satisfiesMinimum } from "./plugin/version.js";
 import { findInstalledPackage } from "./plugin/resolver.js";

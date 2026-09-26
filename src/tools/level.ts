@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { categoryTool, bp, type ToolDef } from "../types.js";
+import { categoryTool, type ToolDef } from "../types.js";
 import { PAGINATION_SCHEMA } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/level.generated.js";
 import { specBp, schema as specSchema } from "./specs/level.generated.js";

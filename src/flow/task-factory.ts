@@ -5,7 +5,7 @@ import { prepareCall, finishCall, forwardToBridge, type CallPreparation } from "
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
-import { DialogGuard, ensureGuard } from "../dialog-guard.js";
+import { ensureGuard } from "../dialog-guard.js";
 
 /**
  * Refuse a flow step while a modal is up, through the one guard.

@@ -35,12 +35,10 @@ import {
   stripAction,
 } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
-import * as nodePath from "node:path";
 import {
   DialogGuard,
   guardFor,
   type GuardDecision,
-  existingGuard,
   isDialogRefusal,
   stampBlockedEditor,
 } from "./dialog-guard.js";
@@ -217,7 +215,6 @@ async function main() {
   // has ever been.
   const primary = sessions.active;
   const project = primary.project;
-  const bridge = primary.bridge;
 
   // ── Per-session surfaces ─────────────────────────────────────────
   // Plugins and the Epic catalog are project-scoped: the `plugins:` list lives
@@ -321,7 +318,6 @@ async function main() {
     setLiveToolGraph(dispatchUnion.tools);
   };
   setLiveToolGraph(dispatchUnion.tools);
-  const registryTools = primaryLoad.registryTools;
   if (contextStrategy !== "full") {
     console.error(`[ue-mcp] Context strategy: ${contextStrategy}`);
   }

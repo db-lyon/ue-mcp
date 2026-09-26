@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { categoryTool, bp, type ToolDef, type ToolContext } from "../types.js";
+import { categoryTool, type ToolDef, type ToolContext } from "../types.js";
 import { directive } from "../directive.js";
-import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, connectedEditorOf, clientAdvertisesElicitation, resolveDialogMode } from "../editor-control.js";
+import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, connectedEditorOf, clientAdvertisesElicitation } from "../editor-control.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../engine-observer.js";
 import { progressRenderingNote } from "../client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
@@ -9,7 +9,6 @@ import { searchTools } from "../tool-search.js";
 import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../python-gate.js";
 import { checkBridgeParity } from "../bridge-parity.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge.js";
-import { DialogGuard } from "../dialog-guard.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
 

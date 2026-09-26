@@ -2,7 +2,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { ProjectContext } from "./project.js";
-import { deploy, deploySummary } from "./deployer.js";
+import { deploy } from "./deployer.js";
 import { coreSkillsInstalled, conflictMessages, installCoreSkills, syncPluginSkills } from "./skills.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
@@ -82,7 +82,6 @@ async function deployCmd() {
 
   console.log("");
   if (result.cppPluginDeployed) {
-    const projName = project.projectName ?? "<Project>";
     console.log(`  ${DIM}C++ sources changed - the plugin must be rebuilt before the editor will see new handlers.${RESET}`);
     console.log(`  ${DIM}From the project root:${RESET}`);
     console.log(`  ${DIM}  ue-mcp build${RESET}`);

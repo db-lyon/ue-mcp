@@ -46,24 +46,6 @@ function make(over: Omit<Partial<GuardDeps>, "mode"> & { mode?: DialogMode } = {
 const accept = (button: string) =>
   () => (vi.fn(async () => ({ action: "accept", content: { button } })) as unknown as ReturnType<NonNullable<GuardDeps["elicit"]>>);
 
-/**
- * Get past the relay, so a case about the FORM is about the form.
- *
- * Under interactive the first gated call for a dialog hands its whole text
- * back and refuses without asking anything, because an elicitation form is a
- * few lines tall and a client may collapse the rest of it. The form goes up on
- * the next call. A case about what the person is shown therefore starts one
- * call earlier than it used to, and this makes that call rather than letting
- * every such case open with an unexplained duplicate line.
- *
- * The relay decision is returned, not swallowed: a case that wants to assert
- * on it can, and one that ignores it still pays for it visibly.
- */
-async function relay(guard: DialogGuard, subject = "asset.list") {
-  const decision = await guard.check(subject, "action");
-  return decision;
-}
-
 describe("a failing probe never disarms the guard", () => {
   it("keeps the dialog when the probe throws but the editor is still publishing", async () => {
     // Conflating "no dialog" with "could not ask" let a dropped socket clear

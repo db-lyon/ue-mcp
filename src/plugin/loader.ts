@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { TaskConstructor, TaskDefinition, FlowDefinition } from "@db-lyon/flowkit";
 import type { ToolDef } from "../types.js";
-import type { FlowConfig, PluginEntry } from "../flow/schema.js";
+import type { PluginEntry } from "../flow/schema.js";
 import { warn, info } from "../log.js";
 import {
   loadManifest,

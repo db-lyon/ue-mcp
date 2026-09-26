@@ -14,7 +14,6 @@
  * of those graphs, with each action remembering which sessions provide it, so
  * dispatch to a session that lacks one can say which sessions have it.
  */
-import { z } from "zod";
 import type { ToolDef, ActionSpec } from "./types.js";
 import { actionEnum, cloneToolDef, cloneToolGraph } from "./types.js";
 import type { EditorSession } from "./session.js";
