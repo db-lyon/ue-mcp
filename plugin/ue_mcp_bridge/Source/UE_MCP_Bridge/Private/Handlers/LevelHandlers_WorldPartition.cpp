@@ -180,16 +180,10 @@ namespace
 		if (!(*BoundsObj)->TryGetObjectField(TEXT("min"), MinObj) || !MinObj) return false;
 		if (!(*BoundsObj)->TryGetObjectField(TEXT("max"), MaxObj) || !MaxObj) return false;
 
-		auto ReadVec = [](const TSharedPtr<FJsonObject>& Obj) -> FVector
-		{
-			double X = 0.0, Y = 0.0, Z = 0.0;
-			Obj->TryGetNumberField(TEXT("x"), X);
-			Obj->TryGetNumberField(TEXT("y"), Y);
-			Obj->TryGetNumberField(TEXT("z"), Z);
-			return FVector(X, Y, Z);
-		};
-		const FVector Min = ReadVec(*MinObj);
-		const FVector Max = ReadVec(*MaxObj);
+		FVector Min = FVector::ZeroVector;
+		FVector Max = FVector::ZeroVector;
+		ReadVec3Fields(*MinObj, Min);
+		ReadVec3Fields(*MaxObj, Max);
 		// An inverted box silently matches nothing, which reads as "no actors".
 		OutBox = FBox(FVector::Min(Min, Max), FVector::Max(Min, Max));
 		return true;

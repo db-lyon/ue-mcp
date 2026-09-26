@@ -4272,21 +4272,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddHismcInstances(const TSharedPtr<FJsonO
 	}
 	const bool bWorldSpace = OptionalBool(Params, TEXT("worldSpace"), true);
 
-	auto ReadVec = [](const TSharedPtr<FJsonObject>& Obj, const TCHAR* Key, FVector& Out, double DefaultX = 0, double DefaultY = 0, double DefaultZ = 0) -> bool
-	{
-		const TSharedPtr<FJsonObject>* VObj = nullptr;
-		if (Obj->TryGetObjectField(Key, VObj) && *VObj)
-		{
-			double X = DefaultX, Y = DefaultY, Z = DefaultZ;
-			(*VObj)->TryGetNumberField(TEXT("x"), X);
-			(*VObj)->TryGetNumberField(TEXT("y"), Y);
-			(*VObj)->TryGetNumberField(TEXT("z"), Z);
-			Out = FVector(X, Y, Z);
-			return true;
-		}
-		return false;
-	};
-
 	TArray<FTransform> Transforms;
 	Transforms.Reserve(Arr->Num());
 	for (const TSharedPtr<FJsonValue>& V : *Arr)
@@ -4295,19 +4280,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddHismcInstances(const TSharedPtr<FJsonO
 		if (!V->TryGetObject(TObj) || !*TObj) continue;
 		FVector Location = FVector::ZeroVector;
 		FVector Scale = FVector(1, 1, 1);
-		ReadVec(*TObj, TEXT("location"), Location);
-		ReadVec(*TObj, TEXT("scale"), Scale, 1, 1, 1);
-
 		FRotator Rotator = FRotator::ZeroRotator;
+		const TSharedPtr<FJsonObject>* LObj = nullptr;
+		const TSharedPtr<FJsonObject>* SObj = nullptr;
 		const TSharedPtr<FJsonObject>* RObj = nullptr;
-		if ((*TObj)->TryGetObjectField(TEXT("rotation"), RObj) && *RObj)
-		{
-			double P = 0, Y = 0, R = 0;
-			(*RObj)->TryGetNumberField(TEXT("pitch"), P);
-			(*RObj)->TryGetNumberField(TEXT("yaw"), Y);
-			(*RObj)->TryGetNumberField(TEXT("roll"), R);
-			Rotator = FRotator(P, Y, R);
-		}
+		if ((*TObj)->TryGetObjectField(TEXT("location"), LObj) && LObj) ReadVec3Fields(*LObj, Location);
+		if ((*TObj)->TryGetObjectField(TEXT("scale"), SObj) && SObj) ReadVec3Fields(*SObj, Scale);
+		if ((*TObj)->TryGetObjectField(TEXT("rotation"), RObj) && RObj) ReadRotatorFields(*RObj, Rotator);
 
 		Transforms.Add(FTransform(Rotator, Location, Scale));
 	}
@@ -6507,25 +6486,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActorsBatch(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("Missing 'actors' (array of {staticMesh, location?, rotation?, scale?, label?})"));
 	}
 
-	auto ReadVec = [](const TSharedPtr<FJsonObject>& Obj, FVector Default) -> FVector
-	{
-		if (!Obj.IsValid()) return Default;
-		FVector V = Default;
-		double X = 0; if (Obj->TryGetNumberField(TEXT("x"), X)) V.X = X;
-		double Y = 0; if (Obj->TryGetNumberField(TEXT("y"), Y)) V.Y = Y;
-		double Z = 0; if (Obj->TryGetNumberField(TEXT("z"), Z)) V.Z = Z;
-		return V;
-	};
-	auto ReadRot = [](const TSharedPtr<FJsonObject>& Obj) -> FRotator
-	{
-		if (!Obj.IsValid()) return FRotator::ZeroRotator;
-		FRotator R(0, 0, 0);
-		double V = 0; if (Obj->TryGetNumberField(TEXT("pitch"), V)) R.Pitch = V;
-		if (Obj->TryGetNumberField(TEXT("yaw"), V)) R.Yaw = V;
-		if (Obj->TryGetNumberField(TEXT("roll"), V)) R.Roll = V;
-		return R;
-	};
-
 	// Cache mesh loads by path so a 1000-row batch with 5 unique meshes only
 	// does 5 LoadObject calls.
 	TMap<FString, UStaticMesh*> MeshCache;
@@ -6569,9 +6529,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActorsBatch(const TSharedPtr<FJsonOb
 		Row->TryGetObjectField(TEXT("rotation"), RotObj);
 		Row->TryGetObjectField(TEXT("scale"), ScaleObj);
 
-		const FVector Loc   = LocObj ? ReadVec(*LocObj, FVector::ZeroVector) : FVector::ZeroVector;
-		const FRotator Rot  = RotObj ? ReadRot(*RotObj) : FRotator::ZeroRotator;
-		const FVector Scale = ScaleObj ? ReadVec(*ScaleObj, FVector::OneVector) : FVector::OneVector;
+		FVector Loc = FVector::ZeroVector;
+		FRotator Rot = FRotator::ZeroRotator;
+		FVector Scale = FVector::OneVector;
+		if (LocObj) ReadVec3Fields(*LocObj, Loc);
+		if (RotObj) ReadRotatorFields(*RotObj, Rot);
+		if (ScaleObj) ReadVec3Fields(*ScaleObj, Scale);
 
 		FActorSpawnParameters SpawnParams;
 		AStaticMeshActor* SMA = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Loc, Rot, SpawnParams);

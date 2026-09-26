@@ -200,28 +200,6 @@ namespace
 		return Missing;
 	}
 
-	FVector MCPBatchReadVector(const TSharedPtr<FJsonObject>& Obj, const FVector& Default)
-	{
-		if (!Obj.IsValid()) return Default;
-		FVector Value = Default;
-		double Component = 0.0;
-		if (Obj->TryGetNumberField(TEXT("x"), Component)) Value.X = Component;
-		if (Obj->TryGetNumberField(TEXT("y"), Component)) Value.Y = Component;
-		if (Obj->TryGetNumberField(TEXT("z"), Component)) Value.Z = Component;
-		return Value;
-	}
-
-	FRotator MCPBatchReadRotator(const TSharedPtr<FJsonObject>& Obj, const FRotator& Default)
-	{
-		if (!Obj.IsValid()) return Default;
-		FRotator Value = Default;
-		double Component = 0.0;
-		if (Obj->TryGetNumberField(TEXT("pitch"), Component)) Value.Pitch = Component;
-		if (Obj->TryGetNumberField(TEXT("yaw"), Component)) Value.Yaw = Component;
-		if (Obj->TryGetNumberField(TEXT("roll"), Component)) Value.Roll = Component;
-		return Value;
-	}
-
 	/** Pull the { ok, error } verdict out of a delegated single-item handler. */
 	void MCPBatchReadVerdict(const TSharedPtr<FJsonValue>& Response, bool& bOutOk, FString& OutError, FString& OutPrevious)
 	{
@@ -902,11 +880,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 			Row->TryGetObjectField(TEXT("rotation"), RotationObject);
 			Row->TryGetObjectField(TEXT("scale"), ScaleObject);
 
+			FVector SpawnLocation = FVector::ZeroVector;
+			FRotator SpawnRotation = FRotator::ZeroRotator;
+			FVector SpawnScale = FVector::OneVector;
+			if (LocationObject) ReadVec3Fields(*LocationObject, SpawnLocation);
+			if (RotationObject) ReadRotatorFields(*RotationObject, SpawnRotation);
+			if (ScaleObject) ReadVec3Fields(*ScaleObject, SpawnScale);
+
 			FPlannedSpawn Spawn;
-			Spawn.Transform = FTransform(
-				RotationObject ? MCPBatchReadRotator(*RotationObject, FRotator::ZeroRotator) : FRotator::ZeroRotator,
-				LocationObject ? MCPBatchReadVector(*LocationObject, FVector::ZeroVector) : FVector::ZeroVector,
-				ScaleObject ? MCPBatchReadVector(*ScaleObject, FVector::OneVector) : FVector::OneVector);
+			Spawn.Transform = FTransform(SpawnRotation, SpawnLocation, SpawnScale);
 			Row->TryGetStringField(TEXT("label"), Spawn.Label);
 			Spawn.Source = TEXT("instance");
 			const TSharedPtr<FJsonObject>* RowProperties = nullptr;
@@ -950,13 +932,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 
 		const TSharedPtr<FJsonObject>* OffsetObject = nullptr;
 		Source->TryGetObjectField(TEXT("offset"), OffsetObject);
-		const FVector Offset = OffsetObject ? MCPBatchReadVector(*OffsetObject, FVector::ZeroVector) : FVector::ZeroVector;
+		FVector Offset = FVector::ZeroVector;
+		if (OffsetObject) ReadVec3Fields(*OffsetObject, Offset);
 
 		const TSharedPtr<FJsonObject>* FractionObject = nullptr;
 		Source->TryGetObjectField(TEXT("extentFraction"), FractionObject);
-		const FVector ExtentFraction = FractionObject
-			? MCPBatchReadVector(*FractionObject, FVector::ZeroVector)
-			: FVector::ZeroVector;
+		FVector ExtentFraction = FVector::ZeroVector;
+		if (FractionObject) ReadVec3Fields(*FractionObject, ExtentFraction);
 
 		const bool bInheritRotation = OptionalBool(Source, TEXT("inheritRotation"), false);
 
@@ -1054,7 +1036,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 
 		const TSharedPtr<FJsonObject>* OffsetObject = nullptr;
 		Source->TryGetObjectField(TEXT("offset"), OffsetObject);
-		const FVector Offset = OffsetObject ? MCPBatchReadVector(*OffsetObject, FVector::ZeroVector) : FVector::ZeroVector;
+		FVector Offset = FVector::ZeroVector;
+		if (OffsetObject) ReadVec3Fields(*OffsetObject, Offset);
 
 		for (double Distance = StartDistance; Distance <= EndDistance; Distance += Spacing)
 		{
