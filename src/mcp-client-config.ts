@@ -4,6 +4,17 @@ import { warn as logWarn } from "./log.js";
 
 export type McpClientConfigFormat = "json" | "toml";
 
+/**
+ * How every MCP client entry launches the server. `-y` plus `@latest` makes
+ * npx fetch the current release on each start, so a stale local copy cannot
+ * shadow it. doctor flags any entry that launches it another way.
+ */
+export const UE_MCP_LAUNCH = "npx -y ue-mcp@latest";
+
+export function ueMcpServerArgs(uprojectPath: string): string[] {
+  return ["-y", "ue-mcp@latest", toMcpPath(uprojectPath)];
+}
+
 export interface McpClient {
   name: string;
   configPath: string;
@@ -102,7 +113,7 @@ export function writeJsonMcpConfig(configPath: string, uprojectPath: string): vo
   const mcpServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
   mcpServers["ue-mcp"] = {
     command: "npx",
-    args: ["ue-mcp", toMcpPath(uprojectPath)],
+    args: ueMcpServerArgs(uprojectPath),
   };
   existing.mcpServers = mcpServers;
 
@@ -127,7 +138,7 @@ export function upsertCodexMcpServer(existingToml: string, uprojectPath: string)
   const block = [
     "[mcp_servers.ue-mcp]",
     'command = "npx"',
-    `args = ["ue-mcp", ${tomlString(toMcpPath(uprojectPath))}]`,
+    `args = [${ueMcpServerArgs(uprojectPath).map(tomlString).join(", ")}]`,
     `cwd = ${tomlString(toMcpPath(getProjectDir(uprojectPath)))}`,
     "enabled = true",
   ].join("\n");

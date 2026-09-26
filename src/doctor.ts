@@ -13,6 +13,7 @@ import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { isNewer } from "./version-check.js";
+import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -401,7 +402,7 @@ export function formatDoctor(d: DoctorReport): string {
     problems.push(
       `A project-local node_modules/ue-mcp@${d.localShadow.version} shadows the global install. ` +
       `npx runs it, so global updates do nothing. Fix: remove the dependency from package.json and delete node_modules/ue-mcp, ` +
-      `or pin .mcp.json to \`npx -y ue-mcp@latest\`. Then run \`ue-mcp update --build\`.`,
+      `or pin .mcp.json to \`${UE_MCP_LAUNCH}\`. Then run \`ue-mcp update --build\`.`,
     );
   } else if (behindLatest(d.npmGlobal.version, latest)) {
     // No shadow, but the global package is behind latest: a bare `npx ue-mcp`
@@ -415,7 +416,7 @@ export function formatDoctor(d: DoctorReport): string {
   }
   for (const cfg of d.bareNpxConfigs) {
     const rel = path.relative(process.cwd(), cfg).replace(/\\/g, "/") || cfg;
-    problems.push(`${rel} launches with bare \`npx ue-mcp\`. Use \`npx -y ue-mcp@latest\` so the server self-heals to latest on each launch.`);
+    problems.push(`${rel} launches with bare \`npx ue-mcp\`. Use \`${UE_MCP_LAUNCH}\` so the server self-heals to latest on each launch.`);
   }
 
   // The verdict on running servers is scoped to the target project. A server

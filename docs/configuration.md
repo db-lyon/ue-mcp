@@ -11,7 +11,7 @@ The easiest way to configure UE-MCP is to run `npx ue-mcp init` - it detects you
   "mcpServers": {
     "ue-mcp": {
       "command": "npx",
-      "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
+      "args": ["-y", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
     }
   }
 }
@@ -22,7 +22,7 @@ Codex uses TOML instead:
 ```toml
 [mcp_servers.ue-mcp]
 command = "npx"
-args = ["ue-mcp", "C:/path/to/MyGame.uproject"]
+args = ["-y", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
 cwd = "C:/path/to"
 enabled = true
 ```
@@ -49,7 +49,7 @@ Pass more than one `.uproject` and each becomes an addressable **editor session*
   "mcpServers": {
     "ue-mcp": {
       "command": "npx",
-      "args": ["ue-mcp", "C:/games/Alpha/Alpha.uproject", "C:/games/Beta/Beta.uproject"]
+      "args": ["-y", "ue-mcp@latest", "C:/games/Alpha/Alpha.uproject", "C:/games/Beta/Beta.uproject"]
     }
   }
 }

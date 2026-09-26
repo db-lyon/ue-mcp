@@ -209,7 +209,7 @@ function positionalsFromArgs(args: unknown[]): string[] {
     const arg = raw.trim();
     if (!arg || arg.startsWith("-")) continue;
     const lower = arg.toLowerCase();
-    if (lower === "ue-mcp" || lower === "npx" || lower === "node") continue;
+    if (lower === "ue-mcp" || lower.startsWith("ue-mcp@") || lower === "npx" || lower === "node") continue;
     if (lower.endsWith("index.js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) continue;
     out.push(arg);
   }

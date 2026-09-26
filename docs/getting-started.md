@@ -174,7 +174,7 @@ If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself.
       "mcpServers": {
         "ue-mcp": {
           "command": "npx",
-          "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
+          "args": ["-y", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
         }
       }
     }
@@ -188,7 +188,7 @@ If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself.
       "mcpServers": {
         "ue-mcp": {
           "command": "npx",
-          "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
+          "args": ["-y", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
         }
       }
     }
@@ -202,7 +202,7 @@ If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself.
       "mcpServers": {
         "ue-mcp": {
           "command": "npx",
-          "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
+          "args": ["-y", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
         }
       }
     }
@@ -214,7 +214,7 @@ If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself.
     ```toml
     [mcp_servers.ue-mcp]
     command = "npx"
-    args = ["ue-mcp", "C:/path/to/MyGame.uproject"]
+    args = ["-y", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
     cwd = "C:/path/to"
     enabled = true
     ```

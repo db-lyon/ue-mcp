@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { collectDoctor, formatDoctor } from "./doctor.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { editorOwnsProject, listEditorProcesses } from "./engine-observer.js";
+import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
 import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "./version-check.js";
 
 const RESET = "\x1b[0m";
@@ -146,9 +147,9 @@ async function update() {
     try {
       execSync(`npm install ue-mcp@${aligned}`, { stdio: "inherit", cwd: shadowProjectRoot });
       ok(`Local copy aligned to ${aligned}`);
-      console.log(`  ${DIM}Cleaner long-term: drop ue-mcp from this project's package.json and pin .mcp.json to \`npx -y ue-mcp@latest\`.${RESET}`);
+      console.log(`  ${DIM}Cleaner long-term: drop ue-mcp from this project's package.json and pin .mcp.json to \`${UE_MCP_LAUNCH}\`.${RESET}`);
     } catch {
-      fail(`Could not update the local copy. Remove node_modules/ue-mcp manually, or pin .mcp.json to \`npx -y ue-mcp@latest\`.`);
+      fail(`Could not update the local copy. Remove node_modules/ue-mcp manually, or pin .mcp.json to \`${UE_MCP_LAUNCH}\`.`);
     }
   }
 

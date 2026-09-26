@@ -22,7 +22,7 @@ import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js"
 import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import { getInstalledHooks } from "./user-state.js";
-import { detectMcpClients, isProjectScopedClient, writeMcpConfig } from "./mcp-client-config.js";
+import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs, writeMcpConfig } from "./mcp-client-config.js";
 import { deriveProjectPort } from "./port.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
@@ -498,7 +498,7 @@ async function init() {
     console.log(`        "ue-mcp": {`);
     console.log(`          "command": "npx",`);
     console.log(
-      `          "args": ["ue-mcp", "${project.projectPath!.replace(/\\/g, "/")}"]`,
+      `          "args": ${JSON.stringify(ueMcpServerArgs(project.projectPath!)).replace(/,/g, ", ")}`,
     );
     console.log(`        }`);
     console.log(`      }`);
