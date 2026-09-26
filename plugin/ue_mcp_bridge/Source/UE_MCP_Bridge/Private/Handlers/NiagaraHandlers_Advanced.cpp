@@ -444,18 +444,20 @@ namespace
 		return O;
 	}
 
-	/** Compile the system and write it back. Every mutating handler ends here so
-	 *  the asset a follow-up read opens is the asset that was written. */
-	void NiaAdvFinalize(UNiagaraSystem* System, UNiagaraEmitter* Emitter, UNiagaraGraph* Graph)
+	/** Compile the system and write it back. Every mutating handler ends here and
+	 *  reports the returned save outcome with MCPNoteSaveOutcome. */
+	bool NiaAdvFinalize(UNiagaraSystem* System, UNiagaraEmitter* Emitter, UNiagaraGraph* Graph, FString& OutSaveError)
 	{
 		if (Graph) Graph->NotifyGraphChanged();
 		if (Emitter) Emitter->PostEditChange();
-		if (System)
+		if (!System)
 		{
-			System->PostEditChange();
-			System->RequestCompile(false);
-			UEditorAssetLibrary::SaveLoadedAsset(System);
+			OutSaveError = TEXT("No system to save.");
+			return false;
 		}
+		System->PostEditChange();
+		System->RequestCompile(false);
+		return SaveAssetPackageChecked(System, OutSaveError);
 	}
 
 	/** The addressing every action in this file shares, echoed back so a caller
@@ -852,11 +854,13 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetDynamicInput(const TSharedPtr<FJsonO
 	}
 
 	FC->MarkNodeRequiresSynchronization(TEXT("MCP_SetDynamicInput"), true);
-	NiaAdvFinalize(System, Emitter, Graph);
+	FString SaveError;
+	const bool bSaved = NiaAdvFinalize(System, Emitter, Graph, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	if (PreviousKind == TEXT("dynamicInput") || PreviousKind == TEXT("customHlsl")) MCPSetUpdated(Res);
 	else MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	NiaAdvEchoAddress(Res, SystemPath, EmitterName, EmitterIndex, Emitter);
 	Res->SetStringField(TEXT("stackContext"), Slot.Context);
 	Res->SetStringField(TEXT("moduleName"), FC->GetFunctionName());
@@ -1036,10 +1040,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveDynamicInput(const TSharedPtr<FJs
 	if (OverrideNode) OverrideNode->RemovePin(Target);
 
 	FC->MarkNodeRequiresSynchronization(TEXT("MCP_RemoveDynamicInput"), true);
-	NiaAdvFinalize(System, Emitter, Graph);
+	FString SaveError;
+	const bool bSaved = NiaAdvFinalize(System, Emitter, Graph, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetBoolField(TEXT("alreadyRemoved"), false);
 	NiaAdvEchoAddress(Res, SystemPath, EmitterName, EmitterIndex, Emitter);
 	Res->SetStringField(TEXT("stackContext"), Slot.Context);
@@ -1145,10 +1151,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddSimulationStage(const TSharedPtr<FJs
 	Stage->OuterEmitterVersion = Version;
 	Emitter->AddSimulationStage(Stage, Version);
 
-	NiaAdvFinalize(System, Emitter, NiaAdvEmitterGraph(Data));
+	FString SaveError;
+	const bool bSaved = NiaAdvFinalize(System, Emitter, NiaAdvEmitterGraph(Data), SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	NiaAdvEchoAddress(Res, SystemPath, EmitterName, EmitterIndex, Emitter);
 	Res->SetStringField(TEXT("stageName"), StageName);
 	Res->SetStringField(TEXT("simulationStageObjectPath"), Stage->GetPathName());
@@ -1229,10 +1237,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveSimulationStage(const TSharedPtr<
 	const int32 RemovedNodes = NiaAdvDeleteOutputChain(Graph, OutputNode);
 	Emitter->RemoveSimulationStage(Target, Version);
 
-	NiaAdvFinalize(System, Emitter, Graph);
+	FString SaveError;
+	const bool bSaved = NiaAdvFinalize(System, Emitter, Graph, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetBoolField(TEXT("alreadyRemoved"), false);
 	NiaAdvEchoAddress(Res, SystemPath, EmitterName, EmitterIndex, Emitter);
 	Res->SetStringField(TEXT("stageName"), StageName);
@@ -1324,12 +1334,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEventHandler(const TSharedPtr<FJsonO
 	if (ParsedSourceId.IsValid()) Props.SourceEmitterID = ParsedSourceId;
 	Emitter->AddEventHandler(Props, Version);
 
-	NiaAdvFinalize(System, Emitter, NiaAdvEmitterGraph(Data));
+	FString SaveError;
+	const bool bSaved = NiaAdvFinalize(System, Emitter, NiaAdvEmitterGraph(Data), SaveError);
 
 	const int32 NewIndex = Data->GetEventHandlers().Num() - 1;
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	NiaAdvEchoAddress(Res, SystemPath, EmitterName, EmitterIndex, Emitter);
 	Res->SetStringField(TEXT("eventName"), EventName);
 	Res->SetNumberField(TEXT("eventHandlerIndex"), NewIndex);
@@ -1420,10 +1432,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEventHandler(const TSharedPtr<FJs
 	const int32 RemovedNodes = NiaAdvDeleteOutputChain(Graph, OutputNode);
 	Emitter->RemoveEventHandlerByUsageId(UsageId, Version);
 
-	NiaAdvFinalize(System, Emitter, Graph);
+	FString SaveError;
+	const bool bSaved = NiaAdvFinalize(System, Emitter, Graph, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetBoolField(TEXT("alreadyRemoved"), false);
 	NiaAdvEchoAddress(Res, SystemPath, EmitterName, EmitterIndex, Emitter);
 	Res->SetStringField(TEXT("eventName"), EventName);
@@ -1639,14 +1653,15 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetCustomHlsl(const TSharedPtr<FJsonObj
 	Node->MarkNodeRequiresSynchronization(TEXT("MCP_SetCustomHlsl"), true);
 	Graph->NotifyGraphChanged();
 
+	FString SaveError;
+	bool bSaved = false;
 	if (System)
 	{
-		NiaAdvFinalize(System, Emitter, Graph);
+		bSaved = NiaAdvFinalize(System, Emitter, Graph, SaveError);
 	}
 	else
 	{
-		UObject* Owner = Graph->GetOutermostObject();
-		if (Owner) UEditorAssetLibrary::SaveLoadedAsset(Owner);
+		bSaved = SaveAssetPackageChecked(Graph->GetOutermostObject(), SaveError);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Pins;
@@ -1654,6 +1669,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetCustomHlsl(const TSharedPtr<FJsonObj
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, OwnerPath, bSaved, SaveError);
 	Res->SetBoolField(TEXT("alreadySet"), false);
 	Res->SetStringField(TEXT("graphContext"), Context);
 	Res->SetStringField(TEXT("graphOwnerPath"), Graph->GetPathName());
@@ -1826,10 +1842,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveModule(const TSharedPtr<FJsonObje
 	}
 	Graph->NotifyGraphChanged();
 
-	NiaAdvFinalize(System, Emitter, Graph);
+	FString SaveError;
+	const bool bSaved = NiaAdvFinalize(System, Emitter, Graph, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetBoolField(TEXT("alreadyRemoved"), false);
 	NiaAdvEchoAddress(Res, SystemPath, EmitterName, EmitterIndex, Emitter);
 	Res->SetStringField(TEXT("stackContext"), Slot.Context);
@@ -1932,10 +1950,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleEnabled(const TSharedPtr<FJson
 	Graph->Modify();
 	FC->Modify();
 	FNiagaraStackGraphUtilities::SetModuleIsEnabled(*FC, bEnabled);
-	NiaAdvFinalize(System, Emitter, Graph);
+	FString SaveError;
+	const bool bSaved = NiaAdvFinalize(System, Emitter, Graph, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetBoolField(TEXT("alreadySet"), false);
 	NiaAdvEchoAddress(Res, SystemPath, EmitterName, EmitterIndex, Emitter);
 	Res->SetStringField(TEXT("stackContext"), Slot.Context);

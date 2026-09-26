@@ -558,13 +558,15 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystem(const TSharedPtr<FJ
 	auto Created = MCPCreateAssetIdempotent<UNiagaraSystem>(Name, PackagePath, OnConflict, TEXT("NiagaraSystem"), Factory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 
 	return MCPResult(Result);
 }
@@ -690,7 +692,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraEmitter(const TSharedPtr<F
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("NiagaraEmitter"), EmitterClass, Factory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -702,6 +705,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraEmitter(const TSharedPtr<F
 		Result->SetBoolField(TEXT("inherited"), Factory->bUseInheritance);
 	}
 	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -1169,11 +1173,11 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("FNiagaraEditorUtilities::AddEmitterToSystem returned invalid handle for %s"), *EmitterPath));
 	}
 
-	// #223: SaveAsset by path resolved a different in-memory instance and
-	// dropped the new handle. Save the loaded system object directly.
+	// Save the loaded system object itself (#223): a save by path can resolve
+	// a different in-memory instance and drop the new handle.
 	System->PostEditChange();
-	System->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(System, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
 	// Re-find the handle by id so the response reports the actual stored name
 	// (AddEmitterToSystem deduplicates / renumbers when there's a collision).
@@ -1204,6 +1208,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJs
 	Payload->SetStringField(TEXT("emitterName"), StoredHandleName.ToString());
 	MCPSetRollback(Result, TEXT("remove_emitter_from_system"), Payload);
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
+	MCPNoteSaveOutcome(Result, SystemPath, bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -1317,10 +1322,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 		}
 	}
 
-	if (bSet)
-	{
-		UEditorAssetLibrary::SaveAsset(System->GetPathName());
-	}
+	FString SaveError;
+	const bool bSaved = bSet && SaveAssetPackageChecked(System, SaveError);
 
 	if (bSet && bChanged) MCPSetUpdated(Result);
 	else if (bSet) Result->SetBoolField(TEXT("unchanged"), true);
@@ -1330,6 +1333,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("propertyName"), PropName);
 	Result->SetStringField(TEXT("value"), Value);
 	Result->SetBoolField(TEXT("success"), bSet);
+	if (bSet) MCPNoteSaveOutcome(Result, SystemPath, bSaved, SaveError);
 
 	if (bSet && !bChanged)
 	{
@@ -1532,7 +1536,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterRenderer(const TSharedPtr<FJs
 	Emitter->Modify();
 	Emitter->AddRenderer(NewRenderer, Version);
 	Emitter->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(System);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
 	// Where the renderer landed, read off the emitter rather than assumed to be
 	// the end of the list: rendererIndex is the only key remove_emitter_renderer
@@ -1542,6 +1547,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterRenderer(const TSharedPtr<FJs
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetStringField(TEXT("rendererClass"), RendererClass->GetName());
 	Res->SetStringField(TEXT("emitter"), Emitter->GetName());
 	Res->SetNumberField(TEXT("rendererIndex"), NewRendererIndex);
@@ -1603,10 +1609,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterRenderer(const TSharedPtr<
 	Emitter->Modify();
 	Emitter->RemoveRenderer(ToRemove, Version);
 	Emitter->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(System);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetStringField(TEXT("emitter"), Emitter->GetName());
 	Res->SetNumberField(TEXT("removedIndex"), RendererIndex);
 	Res->SetStringField(TEXT("removedClass"), RemovedClassName);
@@ -1771,10 +1779,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 	}
 	R->PostEditChange();
 	Emitter->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(System);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetStringField(TEXT("property"), PropertyName);
 	Res->SetStringField(TEXT("systemPath"), SystemPath);
 	Res->SetNumberField(TEXT("rendererIndex"), RendererIndex);
@@ -1895,10 +1905,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromSpec(const TShar
 	}
 
 	System->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(System);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, System->GetPathName(), bSaved, SaveError);
 	Res->SetStringField(TEXT("path"), System->GetPathName());
 	Res->SetNumberField(TEXT("emittersAdded"), AddedEmitters);
 	if (SkippedEmitters.Num() > 0)
@@ -2520,9 +2532,11 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 
 	Emitter->PostEditChange();
 	System->RequestCompile(false);
-	UEditorAssetLibrary::SaveLoadedAsset(System);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	// Whether anything actually moved is only answerable on the pin-default
 	// path: there PrevValue was read off the very pin this call then wrote. On
 	// the override-map path PrevValue is a placeholder and says nothing, so that
@@ -2678,10 +2692,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddModule(const TSharedPtr<FJsonObject>
 	// Force a compile so the emitter is immediately usable (e.g. a verify step
 	// that spawns it and reads particle count).
 	System->RequestCompile(false);
-	UEditorAssetLibrary::SaveLoadedAsset(System);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetStringField(TEXT("systemPath"), SystemPath);
 	Res->SetStringField(TEXT("emitter"), Emitter ? Emitter->GetName() : TEXT(""));
 	Res->SetStringField(TEXT("stackContext"), StackContext);
@@ -2754,10 +2770,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterFromSystem(const TSharedPt
 	System->RemoveEmitterHandlesById({ RemovedId });
 	System->RequestCompile(false);
 	System->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(System);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetStringField(TEXT("systemPath"), SystemPath);
 	Res->SetStringField(TEXT("removedEmitter"), RemovedName);
 	Res->SetNumberField(TEXT("remainingEmitters"), System->GetEmitterHandles().Num());
@@ -2999,7 +3017,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetStaticSwitch(const TSharedPtr<FJsonO
 	}
 
 	Emitter->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(System);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	// PrevValue was read off the first matching switch pin immediately before it
@@ -3007,6 +3026,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetStaticSwitch(const TSharedPtr<FJsonO
 	// change" rather than reporting an update for a value that was already set.
 	if (PrevValue == Value) Res->SetBoolField(TEXT("unchanged"), true);
 	else MCPSetUpdated(Res);
+	MCPNoteSaveOutcome(Res, SystemPath, bSaved, SaveError);
 	Res->SetStringField(TEXT("moduleName"), ModuleName);
 	Res->SetStringField(TEXT("switchName"), SwitchName);
 	Res->SetStringField(TEXT("value"), Value);
@@ -3095,11 +3115,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateModuleFromHlsl(const TSharedPtr<F
 	TryGetArrayParam(Params, TEXT("outputs"), OutputsArr);
 
 	Graph->NotifyGraphChanged();
-	Script->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Script);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Script, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, Script->GetPathName(), bSaved, SaveError);
 	Res->SetStringField(TEXT("path"), Script->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	Res->SetNumberField(TEXT("hlslLength"), Hlsl.Len());
@@ -3193,11 +3214,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateScratchModule(const TSharedPtr<FJ
 		Graph->NotifyGraphChanged();
 	}
 
-	Script->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Script);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Script, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPNoteSaveOutcome(Res, Script->GetPathName(), bSaved, SaveError);
 	Res->SetStringField(TEXT("path"), Script->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	Res->SetNumberField(TEXT("requestedInputs"), InputCount);
