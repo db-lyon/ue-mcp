@@ -353,10 +353,16 @@ describe("a lifecycle no-op fails, and says why it did", () => {
       blocked: false,
     });
 
-    const result = await startEditor(project, 1);
-    expect(result.alreadyRunning).toBeUndefined();
-    expect(result.message).not.toContain("already running");
-    expect(spawnMock).toHaveBeenCalledTimes(1);
+    // A fixed binary, so the launch is reached on a machine with no engine too.
+    vi.stubEnv("UE_EDITOR_PATH", path.join(os.tmpdir(), "UnrealEditor-stub.exe"));
+    try {
+      const result = await startEditor(project, 1);
+      expect(result.alreadyRunning).toBeUndefined();
+      expect(result.message).not.toContain("already running");
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("refuses a stop for an editor that is already down, and marks the reason", async () => {
