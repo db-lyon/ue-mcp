@@ -44,7 +44,8 @@ vi.mock("../../src/engine-observer.js", async (importOriginal) => {
 });
 
 const observer = await import("../../src/engine-observer.js");
-const { stopEditor, resolveDialogMode, clientAdvertisesElicitation } = await import("../../src/editor-control.js");
+const { stopEditor } = await import("../../src/editor-control.js");
+const { resolveDialogMode, clientAdvertisesElicitation } = await import("../../src/dialog-mode.js");
 const { bridgeLockfilePath } = await import("../../src/editor-target.js");
 const { setDialogMode } = await import("../../src/user-state.js");
 

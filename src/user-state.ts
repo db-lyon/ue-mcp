@@ -59,7 +59,7 @@ export type FeedbackMode = "interactive" | "auto-approve" | "defer";
  * DialogGuard.handsOverPressCalls, which is the one place that rule lives.
  *
  * Same three-value shape as FeedbackMode, read the same way, defaulted in one
- * place (resolveDialogMode in editor-control.ts).
+ * place (resolveDialogMode in dialog-mode.ts).
  */
 export type DialogMode = "interactive" | "auto" | "defer";
 
@@ -460,7 +460,7 @@ function asDialogMode(mode: unknown): DialogMode | undefined {
  *
  * Returns undefined when nothing is stored. The default is NOT decided here:
  * it depends on whether the connected client advertised elicitation, which this
- * module cannot see. resolveDialogMode in editor-control.ts owns it.
+ * module cannot see. resolveDialogMode in dialog-mode.ts owns it.
  */
 export function getDialogMode(projectRoot?: string | null): DialogMode | undefined {
   const state = readState();

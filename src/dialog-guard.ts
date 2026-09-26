@@ -29,6 +29,8 @@ import type { IBridge } from "./bridge.js";
 import type { ElicitFn, ElicitPrimitiveSchema } from "./types.js";
 import type { DialogMode } from "./user-state.js";
 import { elicitationNeedsRelay } from "./client-quirks.js";
+import { resolveDialogMode } from "./dialog-mode.js";
+import { readEngineSnapshot } from "./engine-observer.js";
 
 /** One tickable row of a dialog that asks a question per item. */
 export interface DialogItem {
@@ -1186,23 +1188,35 @@ const guards = new WeakMap<EditorSession, DialogGuard>();
 export async function ensureGuard(session: EditorSession): Promise<DialogGuard> {
   const existing = guards.get(session);
   if (existing) return existing;
-  // Dynamic, because editor-control imports this module: a static import here
-  // would close the cycle.
-  const { resolveDialogMode } = await import("./editor-control.js");
-  const { readEngineSnapshot } = await import("./engine-observer.js");
-  const guard = guardFor(session, {
-    mode: () => resolveDialogMode({ projectDir: session.projectDir, canElicit: false }).mode,
+  const guard = guardFor(session, sessionGuardDeps(session, false));
+  guard.startWatching();
+  return guard;
+}
+
+/**
+ * A guard's dependencies for one session. `canElicit` is whether the connected
+ * client can be shown a form; `elicit` is consulted only when it can.
+ */
+export function sessionGuardDeps(
+  session: EditorSession,
+  canElicit: boolean,
+  elicit?: () => ElicitFn | undefined,
+): GuardDeps {
+  return {
+    mode: () => resolveDialogMode({ projectDir: session.projectDir, canElicit }).mode,
     probe: () => session.guarded.call("list_dialogs", {}),
     press: (buttonLabel: string, items?: Array<{ index: number; checked: boolean }>) =>
       session.guarded.call("respond_to_dialog", { buttonLabel, ...(items ? { items } : {}) }),
+    ...(elicit ? { elicit: () => (canElicit ? elicit() : undefined) } : {}),
     isConnected: () => session.bridge.isConnected,
+    // The instance-aware reader: it prefers status.<pid>.json over the shared
+    // file and reports the snapshot's age, so a crashed editor's leftover is
+    // not mistaken for a live modal.
     readSnapshot: () => {
       const proj = session.project.projectPath ?? session.bridge.getTarget().projectPath ?? null;
       return proj ? readEngineSnapshot(proj) : null;
     },
-  });
-  guard.startWatching();
-  return guard;
+  };
 }
 
 export function guardFor(session: EditorSession, deps: GuardDeps): DialogGuard {

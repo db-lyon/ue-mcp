@@ -38,11 +38,13 @@ import { McpError, ErrorCode } from "./errors.js";
 import {
   DialogGuard,
   guardFor,
+  sessionGuardDeps,
   type GuardDecision,
   isDialogRefusal,
   stampBlockedEditor,
 } from "./dialog-guard.js";
-import { resolveDialogMode, clientAdvertisesElicitation, connectedEditorOf } from "./editor-control.js";
+import { connectedEditorOf } from "./editor-control.js";
+import { clientAdvertisesElicitation } from "./dialog-mode.js";
 import { contestedProject } from "./project-holders.js";
 import { info, warn, debug } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
@@ -64,7 +66,6 @@ import { ALL_TOOLS, setLiveToolGraph } from "./tools.js";
 import { unknownActionMessage } from "./action-schema.js";
 import { applyNativeToolsConfig } from "./epic-surface.js";
 import { checkPluginFreshness } from "./plugin-freshness.js";
-import { readEngineSnapshot } from "./engine-observer.js";
 import {
   baseGraphFor,
   unionSurface,
@@ -406,24 +407,7 @@ async function main() {
    * the game thread is parked.
    */
   function dialogGuardFor(forSession: EditorSession, canElicit = false): DialogGuard {
-    const guard = guardFor(forSession, {
-      mode: () => resolveDialogMode({ projectDir: forSession.projectDir, canElicit }).mode,
-      probe: () => forSession.guarded.call("list_dialogs", {}),
-      press: (buttonLabel: string, items?: Array<{ index: number; checked: boolean }>) =>
-        forSession.guarded.call("respond_to_dialog", { buttonLabel, ...(items ? { items } : {}) }),
-      elicit: () => (canElicit ? ctx.elicit : undefined),
-      isConnected: () => forSession.bridge.isConnected,
-      // The instance-aware reader, not a second one: it prefers
-      // status.<pid>.json over the shared file two editors of one project take
-      // turns writing, and it reports how old the snapshot is so a leftover
-      // from a crashed editor is not mistaken for a live modal.
-      readSnapshot: () => {
-        const proj = forSession.project.projectPath
-          ?? forSession.bridge.getTarget().projectPath
-          ?? null;
-        return proj ? readEngineSnapshot(proj) : null;
-      },
-    });
+    const guard = guardFor(forSession, sessionGuardDeps(forSession, canElicit, () => ctx.elicit));
     guard.startWatching();
     return guard;
   }

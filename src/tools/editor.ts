@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { categoryTool, type ToolDef, type ToolContext } from "../types.js";
 import { directive } from "../directive.js";
-import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, connectedEditorOf, clientAdvertisesElicitation } from "../editor-control.js";
+import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, connectedEditorOf } from "../editor-control.js";
+import { clientAdvertisesElicitation } from "../dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../engine-observer.js";
 import { progressRenderingNote } from "../client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
