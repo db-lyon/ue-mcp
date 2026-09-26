@@ -120,6 +120,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "dispatch/offline.ts": "Classifies whichever tool graph it is handed as offline or editor-bound, and builds the editor-down message from a context handed to it; holds nothing per editor.",
   "surface/action-schema.ts": "Derives one action's parameter schema from whichever tool graph it is handed; holds nothing of its own.",
   "surface/action-signature.ts": "Renders one action's compact signature from whichever tool graph it is handed; its cache is keyed by the action object, never by editor.",
+  "surface/option-specs.ts": "Restates one action's schema as flowkit option specs, from whichever tool graph it is handed; holds nothing of its own.",
   "surface/context/call-envelope.ts": "Unwraps and validates one call against the tool it names; holds nothing per editor.",
   "bridge/bridge-timeouts.ts": "The call budget table and its resolution; the same answer for every editor.",
   "surface/asset-path.ts": "Pure Unreal path handling.",

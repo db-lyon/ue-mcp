@@ -1,4 +1,4 @@
-import type { TaskResult, TaskConstructor } from "@db-lyon/flowkit";
+import type { OptionSpecs, TaskResult, TaskConstructor } from "@db-lyon/flowkit";
 import { UeMcpTask } from "../task.js";
 import { stripEditorTarget } from "../surface/target-params.js";
 import type { CallPreparation } from "../dispatch/call-pipeline.js";
@@ -36,13 +36,18 @@ export function bridgeTaskClass(
 /**
  * Create a TaskConstructor that wraps an existing async handler function.
  * Used for the direct-handler actions (editor control, project ops, etc.).
+ *
+ * `optionsSchema` is the action's declared parameters. The flow runner checks
+ * a step's options against it before the handler runs.
  */
 export function handlerTaskClass(
   name: string,
   fn: (ctx: FlowContext, params: Record<string, unknown>) => Promise<unknown>,
   prep?: CallPreparation,
+  optionsSchema?: OptionSpecs,
 ): TaskConstructor {
   class FactoryHandlerTask extends UeMcpTask {
+    static optionsSchema = optionsSchema;
     get taskName() { return name; }
     async execute(): Promise<TaskResult> {
       return runHandler(this.ctx, name, fn, this.options as Record<string, unknown>, prep);

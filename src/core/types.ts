@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { OptionSpecs } from "@db-lyon/flowkit";
 import type { IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
@@ -364,6 +365,8 @@ export interface HandlerActionSpec extends ActionSpecBase {
  */
 export interface RegistryActionSpec extends ActionSpecBase {
   kind: "registry";
+  /** The plugin manifest's parameter schema, which describes the plugin's task. */
+  optionsSchema?: OptionSpecs;
   bridge?: never;
   handler?: never;
   mapParams?: never;
