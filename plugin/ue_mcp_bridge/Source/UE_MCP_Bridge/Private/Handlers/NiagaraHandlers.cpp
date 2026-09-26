@@ -51,8 +51,8 @@ namespace
 {
 	UFactory* CreateNiagaraEditorFactoryByClassPath(const TCHAR* ClassPath)
 	{
-		UClass* FactoryClass = LoadObject<UClass>(nullptr, ClassPath);
-		if (!FactoryClass || !FactoryClass->IsChildOf(UFactory::StaticClass()))
+		UClass* FactoryClass = MCPResolveClassOfType(ClassPath, UFactory::StaticClass());
+		if (!FactoryClass)
 		{
 			return nullptr;
 		}
@@ -1476,8 +1476,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterRenderer(const TSharedPtr<FJs
 	else if (RendererType.Equals(TEXT("ribbon"), ESearchCase::IgnoreCase))   RendererClass = UNiagaraRibbonRendererProperties::StaticClass();
 	else
 	{
-		RendererClass = FindObject<UClass>(nullptr, *RendererType);
-		if (!RendererClass) RendererClass = FindClassByShortName(RendererType);
+		RendererClass = MCPResolveClassOfType(RendererType, UNiagaraRendererProperties::StaticClass());
 	}
 	if (!RendererClass || !RendererClass->IsChildOf(UNiagaraRendererProperties::StaticClass()))
 	{
@@ -1572,7 +1571,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterRenderer(const TSharedPtr<
 	Res->SetBoolField(TEXT("removedWasEnabled"), bRemovedWasEnabled);
 
 	// Rollback: put a renderer of the same class back. add_emitter_renderer
-	// resolves a full class name through FindObject/FindClassByShortName, so the
+	// resolves a class name through MCPResolveClassOfType, so the
 	// class this one really had is what gets recreated - but it comes back with
 	// its class defaults and at the end of the list, which is the lossy part.
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
