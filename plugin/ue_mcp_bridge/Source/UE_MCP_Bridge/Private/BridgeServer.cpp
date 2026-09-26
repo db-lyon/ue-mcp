@@ -748,9 +748,9 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	if (Result.IsValid() && Result->Type == EJson::Object)
 	{
 		const TSharedPtr<FJsonObject>& ResultObject = Result->AsObject();
-		FString ErrorText;
-		if (ResultObject->TryGetStringField(TEXT("error"), ErrorText)
-			&& (ErrorText.Contains(TEXT("timed out")) || ErrorText.Contains(TEXT("still initializing"))))
+		FString Reason;
+		if (ResultObject->TryGetStringField(TEXT("reason"), Reason)
+			&& (Reason == TEXT("timeout") || Reason == TEXT("not_ready")))
 		{
 			ResultObject->SetObjectField(TEXT("engineState"), FMCPEngineStatus::Get().Snapshot());
 		}

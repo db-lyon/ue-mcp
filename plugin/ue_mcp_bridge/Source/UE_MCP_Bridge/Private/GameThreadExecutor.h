@@ -15,6 +15,10 @@ public:
 	// Game-thread timeout for a handler that registered none of its own.
 	static constexpr float DefaultTimeoutSeconds = 30.0f;
 
+	/** The answer for a request the executor did not run: success false, the
+	 *  message, and a reason of timeout, not_ready or shutting_down. */
+	static TSharedPtr<FJsonValue> MakeExecutorError(const TCHAR* Reason, const TCHAR* Message);
+
 	FMCPGameThreadExecutor();
 	~FMCPGameThreadExecutor();
 

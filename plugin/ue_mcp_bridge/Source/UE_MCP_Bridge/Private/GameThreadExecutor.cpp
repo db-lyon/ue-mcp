@@ -100,9 +100,7 @@ namespace
 		// nothing else can clear.
 		if (!GEditor && !bModalSafe)
 		{
-			TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
-			ErrorObject->SetStringField(TEXT("error"), TEXT("Editor world not ready yet. Retry in a moment."));
-			Result = MakeShared<FJsonValueObject>(ErrorObject);
+			Result = FMCPGameThreadExecutor::MakeExecutorError(TEXT("not_ready"), TEXT("Editor world not ready yet. Retry in a moment."));
 		}
 		else
 		{
@@ -185,6 +183,15 @@ void FMCPGameThreadExecutor::DrainModalSafeQueue()
 	}
 }
 
+TSharedPtr<FJsonValue> FMCPGameThreadExecutor::MakeExecutorError(const TCHAR* Reason, const TCHAR* Message)
+{
+	TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
+	ErrorObject->SetBoolField(TEXT("success"), false);
+	ErrorObject->SetStringField(TEXT("error"), Message);
+	ErrorObject->SetStringField(TEXT("reason"), Reason);
+	return MakeShared<FJsonValueObject>(ErrorObject);
+}
+
 TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds, bool bModalSafe)
 {
 	// #968: the readiness gate does not apply to the handlers whose job is to
@@ -200,9 +207,7 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 	// Slate and touch nothing that startup has yet to build, so they run.
 	if (!bEditorReady && !bModalSafe)
 	{
-		TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
-		ErrorObject->SetStringField(TEXT("error"), TEXT("Editor is still initializing. Please wait and retry."));
-		return MakeShared<FJsonValueObject>(ErrorObject);
+		return MakeExecutorError(TEXT("not_ready"), TEXT("Editor is still initializing. Please wait and retry."));
 	}
 
 	if (IsGameThread())
@@ -288,11 +293,9 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 
 	if (!bCompleted)
 	{
-		TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
-		ErrorObject->SetStringField(TEXT("error"), bShuttingDown
-			? TEXT("Editor is shutting down; the request was not run.")
-			: TEXT("Handler execution timed out"));
-		return MakeShared<FJsonValueObject>(ErrorObject);
+		return bShuttingDown
+			? MakeExecutorError(TEXT("shutting_down"), TEXT("Editor is shutting down; the request was not run."))
+			: MakeExecutorError(TEXT("timeout"), TEXT("Handler execution timed out"));
 	}
 
 	return State->Result;
