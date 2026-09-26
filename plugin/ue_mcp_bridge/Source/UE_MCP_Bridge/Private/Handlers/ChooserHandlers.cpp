@@ -414,7 +414,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::Describe(const TSharedPtr<FJsonObject>&
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
 	UChooserTable* Table = LoadChooserTable(TablePath);
-	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
+	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	Res->SetStringField(TEXT("path"), Table->GetPathName());
@@ -471,7 +471,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddColumn(const TSharedPtr<FJsonObject>
 	const FString EnumPath = OptionalString(Params, TEXT("enumPath"));
 
 	UChooserTable* Table = LoadChooserTable(TablePath);
-	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
+	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
 
 	UScriptStruct* ColStruct = ResolveChooserStruct(ColumnType);
 	if (!ColStruct)
@@ -534,7 +534,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::ListRows(const TSharedPtr<FJsonObject>&
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
 	UChooserTable* Table = LoadChooserTable(TablePath);
-	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
+	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	Res->SetStringField(TEXT("path"), Table->GetPathName());
@@ -586,7 +586,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 	TryGetObjectParam(Params, TEXT("inputs"), Inputs);
 
 	UChooserTable* Table = LoadChooserTable(TablePath);
-	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
+	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
 
 	// Build the output struct (optional - a row can start with no output).
 	FInstancedStruct OutputStruct;
@@ -680,7 +680,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 	if (IndexErr) return IndexErr;
 
 	UChooserTable* Table = LoadChooserTable(TablePath);
-	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
+	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
 
 	if (!Table->ResultsStructs.IsValidIndex(RowIndex))
 	{
@@ -809,7 +809,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	if (auto IndexErr = RequireNumber(Params, TEXT("index"), RowIndex)) return IndexErr;
 
 	UChooserTable* Table = LoadChooserTable(TablePath);
-	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
+	if (!Table) return MCPAssetLoadError(TablePath, TEXT("ChooserTable"));
 
 	if (!Table->ResultsStructs.IsValidIndex(RowIndex))
 	{
