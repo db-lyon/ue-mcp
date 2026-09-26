@@ -144,13 +144,6 @@ static bool WCui_PluginLoaded()
 	return IPluginManager::Get().FindEnabledPlugin(TEXT("CommonUI")).IsValid();
 }
 
-/** Every widget in the tree, parents before children. */
-static void WCui_CollectWidgets(UWidgetTree* Tree, TArray<UWidget*>& Out)
-{
-	if (!Tree) return;
-	Tree->ForEachWidget([&Out](UWidget* W) { if (W) Out.Add(W); });
-}
-
 /** The class a TSubclassOf property currently points at, or null. */
 static UClass* WCui_ReadClassProperty(UObject* Object, const TCHAR* PropertyName)
 {
@@ -290,7 +283,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetBindWidgetContract(const TSharedPtr<F
 	if (WidgetBP)
 	{
 		TArray<UWidget*> Tree;
-		WCui_CollectWidgets(WidgetBP->WidgetTree, Tree);
+		MCPWidget::CollectWidgets(WidgetBP->WidgetTree, Tree);
 
 		TArray<FString> AnimationNames;
 		for (UWidgetAnimation* Anim : WidgetBP->Animations)
@@ -539,7 +532,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AuditCommonUI(const TSharedPtr<FJsonObje
 		};
 
 		TArray<UWidget*> Tree;
-		WCui_CollectWidgets(WidgetBP->WidgetTree, Tree);
+		MCPWidget::CollectWidgets(WidgetBP->WidgetTree, Tree);
 		for (UWidget* Widget : Tree)
 		{
 			if (ActionBarClass && Widget->IsA(ActionBarClass)

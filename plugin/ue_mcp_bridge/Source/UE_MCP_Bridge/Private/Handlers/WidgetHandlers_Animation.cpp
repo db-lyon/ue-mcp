@@ -109,29 +109,11 @@
 namespace MCPWidgetAnim
 {
 
-/** Every widget in the tree, root first, parents before children. */
-static void WAnim_CollectWidgets(UWidgetTree* Tree, TArray<UWidget*>& Out)
-{
-	if (!Tree) return;
-	Tree->ForEachWidget([&Out](UWidget* W) { if (W) Out.Add(W); });
-}
-
-static UWidget* WAnim_FindWidget(UWidgetTree* Tree, const FString& Name)
-{
-	if (!Tree) return nullptr;
-	UWidget* Found = nullptr;
-	Tree->ForEachWidget([&](UWidget* W)
-	{
-		if (W && !Found && W->GetName() == Name) Found = W;
-	});
-	return Found;
-}
-
 /** The names in the tree, for an error that says what was actually searched. */
 static FString WAnim_WidgetNameList(UWidgetTree* Tree, int32 Max = 24)
 {
 	TArray<UWidget*> All;
-	WAnim_CollectWidgets(Tree, All);
+	MCPWidget::CollectWidgets(Tree, All);
 	TArray<FString> Names;
 	for (UWidget* W : All)
 	{
@@ -467,20 +449,6 @@ static void WAnim_CollectFonts(
 		}
 		WAnim_CollectFonts(Value, StructProp->Struct, Path, Depth + 1, Out);
 	}
-}
-
-/** The PIE / game world, or null. The audits below only read it. */
-static UWorld* WAnim_RuntimeWorld()
-{
-	if (!GEngine) return nullptr;
-	for (const FWorldContext& Context : GEngine->GetWorldContexts())
-	{
-		if ((Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game) && Context.World())
-		{
-			return Context.World();
-		}
-	}
-	return nullptr;
 }
 
 } // namespace MCPWidgetAnim
@@ -824,7 +792,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetAnimationTrack(const TSharedPtr
 			*AnimationName, *AssetPath, *WAnim_AnimationNameList(WidgetBP)));
 	}
 
-	UWidget* Widget = WAnim_FindWidget(WidgetBP->WidgetTree, WidgetName);
+	UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 	if (!Widget)
 	{
 		return MCPError(FString::Printf(
@@ -1829,7 +1797,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetNavigation(const TSharedPtr<FJs
 		FString FocusText;
 		(*Entry)->TryGetStringField(TEXT("widgetToFocus"), FocusText);
 
-		P.Widget = WAnim_FindWidget(WidgetBP->WidgetTree, P.WidgetName);
+		P.Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, P.WidgetName);
 		if (!P.Widget)
 		{
 			return MCPError(FString::Printf(
@@ -1856,7 +1824,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetNavigation(const TSharedPtr<FJs
 				return MCPError(FString::Printf(
 					TEXT("rules[%d]: rule Explicit needs widgetToFocus. Nothing was written."), i));
 			}
-			if (!WAnim_FindWidget(WidgetBP->WidgetTree, FocusText))
+			if (!MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, FocusText))
 			{
 				return MCPError(FString::Printf(
 					TEXT("rules[%d]: widgetToFocus '%s' is not a widget in %s. The tree has: %s. ")
@@ -1954,7 +1922,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetNavigation(const TSharedPtr<F
 	if (!WidgetBP) return ResolveError;
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
-	UWidget* Widget = WAnim_FindWidget(WidgetBP->WidgetTree, WidgetName);
+	UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 	if (!Widget)
 	{
 		return MCPError(FString::Printf(
@@ -2047,7 +2015,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RestoreWidgetNavigation(const TSharedPtr
 		if (!Entry->TryGetObject(Obj) || !Obj) continue;
 		FString WidgetName;
 		(*Obj)->TryGetStringField(TEXT("widgetName"), WidgetName);
-		UWidget* Widget = WAnim_FindWidget(WidgetBP->WidgetTree, WidgetName);
+		UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 		if (!Widget) { ++Missing; continue; }
 
 		bool bHadNav = false;
@@ -2092,7 +2060,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RestoreWidgetNavigation(const TSharedPtr
 		if (!Entry->TryGetObject(Obj) || !Obj) continue;
 		FString SnapshotName;
 		(*Obj)->TryGetStringField(TEXT("widgetName"), SnapshotName);
-		UWidget* Widget = WAnim_FindWidget(WidgetBP->WidgetTree, SnapshotName);
+		UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, SnapshotName);
 		if (!Widget) continue;
 		TSharedPtr<FJsonObject> Snapshot = WAnim_CaptureNavigation(Widget);
 		Snapshot->SetStringField(TEXT("widgetName"), Widget->GetName());
@@ -2125,7 +2093,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AuditWidgetFocusChain(const TSharedPtr<F
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	TArray<UWidget*> All;
-	WAnim_CollectWidgets(WidgetBP->WidgetTree, All);
+	MCPWidget::CollectWidgets(WidgetBP->WidgetTree, All);
 
 	// ── Pass 1: classify every widget, and record its explicit outbound edges.
 	struct FNode
@@ -2362,7 +2330,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AuditWidgetAccessibility(const TSharedPt
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	TArray<UWidget*> All;
-	WAnim_CollectWidgets(WidgetBP->WidgetTree, All);
+	MCPWidget::CollectWidgets(WidgetBP->WidgetTree, All);
 
 	TArray<TSharedPtr<FJsonValue>> SmallFonts;
 	TArray<TSharedPtr<FJsonValue>> MissingLabels;
@@ -2505,7 +2473,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeFocusPath(const TSharedPtr<FJs
 	{
 		return MCPError(TEXT("Slate is not initialised in this process, so there is no focus to report."));
 	}
-	if (!WAnim_RuntimeWorld())
+	if (!GetPIEWorld())
 	{
 		return MCPError(
 			TEXT("No PIE or Game world is running. Focus is only meaningful while the game is playing - ")
@@ -2572,7 +2540,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRuntimeFocus(const TSharedPtr<FJsonOb
 	{
 		return MCPError(TEXT("Slate is not initialised in this process."));
 	}
-	UWorld* World = WAnim_RuntimeWorld();
+	UWorld* World = GetPIEWorld();
 	if (!World)
 	{
 		return MCPError(
@@ -2594,7 +2562,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRuntimeFocus(const TSharedPtr<FJsonOb
 		if (UserWidget->GetName() == WidgetName) { Target = UserWidget; break; }
 		if (UserWidget->WidgetTree)
 		{
-			if (UWidget* Child = WAnim_FindWidget(UserWidget->WidgetTree, WidgetName)) { Target = Child; break; }
+			if (UWidget* Child = MCPWidget::FindWidgetByName(UserWidget->WidgetTree, WidgetName)) { Target = Child; break; }
 		}
 	}
 

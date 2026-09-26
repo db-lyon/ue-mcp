@@ -4,7 +4,10 @@
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
 
+class UClass;
+class UWidget;
 class UWidgetBlueprint;
+class UWidgetTree;
 
 /**
  * Shared WidgetBlueprint resolution for every widget action (#972).
@@ -89,6 +92,13 @@ TSharedPtr<FJsonValue> MissingWidgetTreeError(const FString& AssetPath);
 /** A UWidget class from a friendly alias ("textblock"), a class name or path,
  *  or a Widget Blueprint asset path. Null when nothing widget-shaped matches. */
 UClass* ResolveWidgetClass(const FString& ClassName);
+
+/** Every widget in Tree, root first, parents before children. */
+void CollectWidgets(UWidgetTree* Tree, TArray<UWidget*>& Out);
+
+/** The widget in Tree named exactly Name (case-sensitive, as UObject names
+ *  are), or null. */
+UWidget* FindWidgetByName(UWidgetTree* Tree, const FString& Name);
 
 }
 

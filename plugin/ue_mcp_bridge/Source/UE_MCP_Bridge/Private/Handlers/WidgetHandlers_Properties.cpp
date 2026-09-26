@@ -69,14 +69,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetProperties(const TSharedPtr<FJs
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	// Find the widget
-	UWidget* FoundWidget = nullptr;
-	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
-	{
-		if (Widget && Widget->GetName() == WidgetName)
-		{
-			FoundWidget = Widget;
-		}
-	});
+	UWidget* FoundWidget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 
 	if (!FoundWidget)
 	{
@@ -265,11 +258,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetFullProperties(const TSharedPtr
 	if (!WidgetBP) return ResolveError;
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
-	UWidget* FoundWidget = nullptr;
-	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
-	{
-		if (Widget && Widget->GetName() == WidgetName) FoundWidget = Widget;
-	});
+	UWidget* FoundWidget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 	if (!FoundWidget)
 	{
 		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
@@ -472,14 +461,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	// Find the widget
-	UWidget* FoundWidget = nullptr;
-	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
-	{
-		if (Widget && Widget->GetName() == WidgetName)
-		{
-			FoundWidget = Widget;
-		}
-	});
+	UWidget* FoundWidget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 
 	if (!FoundWidget)
 	{
@@ -1278,19 +1260,6 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetAnimations(const TSharedPtr<FJ
 // generic JSON->property setter so FButtonStyle / FEditableTextBoxStyle /
 // FSlateFontInfo / FSlateColor and their nested brushes are all expressible,
 // which the scalar set_widget_property path cannot do.
-static UWidget* FindWidgetByName(UWidgetBlueprint* WidgetBP, const FString& Name)
-{
-	UWidget* Found = nullptr;
-	if (WidgetBP && WidgetBP->WidgetTree)
-	{
-		WidgetBP->WidgetTree->ForEachWidget([&](UWidget* W)
-		{
-			if (W && W->GetName() == Name && !Found) Found = W;
-		});
-	}
-	return Found;
-}
-
 TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetStyle(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -1307,7 +1276,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetStyle(const TSharedPtr<FJsonObj
 	if (!WidgetBP) return ResolveError;
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
-	UWidget* Widget = FindWidgetByName(WidgetBP, WidgetName);
+	UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 	if (!Widget) return MCPError(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
 
 	FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*PropertyName));
@@ -1415,7 +1384,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 		R->SetStringField(TEXT("widgetName"), WName);
 		R->SetStringField(TEXT("propertyName"), PName);
 
-		UWidget* Widget = FindWidgetByName(WidgetBP, WName);
+		UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WName);
 		if (!Widget || WName.IsEmpty() || PName.IsEmpty() || !Val.IsValid())
 		{
 			R->SetBoolField(TEXT("ok"), false);
@@ -1508,7 +1477,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReorderChild(const TSharedPtr<FJsonObjec
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
 	if (!WidgetBP) return ResolveError;
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
-	UWidget* Widget = FindWidgetByName(WidgetBP, WidgetName);
+	UWidget* Widget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 	if (!Widget) return MCPError(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
 
 	UPanelWidget* Parent = Widget->GetParent();

@@ -972,6 +972,23 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityBlueprint(const TSharedP
 	return MCPResult(Result);
 }
 
+void MCPWidget::CollectWidgets(UWidgetTree* Tree, TArray<UWidget*>& Out)
+{
+	if (!Tree) return;
+	Tree->ForEachWidget([&Out](UWidget* W) { if (W) Out.Add(W); });
+}
+
+UWidget* MCPWidget::FindWidgetByName(UWidgetTree* Tree, const FString& Name)
+{
+	UWidget* Found = nullptr;
+	if (!Tree) return Found;
+	Tree->ForEachWidget([&](UWidget* W)
+	{
+		if (!Found && W && W->GetName() == Name) Found = W;
+	});
+	return Found;
+}
+
 // ── Widget class lookup ───────────────────────────────────────────────
 /** Friendly lower-case aliases first, then the shared class resolver restricted
  *  to UWidget, then a Widget Blueprint asset path, whose class is generated. */
@@ -1100,11 +1117,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	// else is reported rather than passed off as the requested widget.
 	if (!WidgetName.IsEmpty())
 	{
-		UWidget* Existing = nullptr;
-		WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
-		{
-			if (Widget && Widget->GetName() == WidgetName) Existing = Widget;
-		});
+		UWidget* Existing = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 		if (Existing)
 		{
 			if (Existing->GetClass() != WClass)
@@ -1143,14 +1156,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	if (!ParentWidgetName.IsEmpty())
 	{
 		// Find specified parent
-		UWidget* ParentRaw = nullptr;
-		WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
-		{
-			if (Widget && Widget->GetName() == ParentWidgetName)
-			{
-				ParentRaw = Widget;
-			}
-		});
+		UWidget* ParentRaw = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, ParentWidgetName);
 
 		if (!ParentRaw)
 		{
@@ -1263,14 +1269,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	// Find the widget
-	UWidget* FoundWidget = nullptr;
-	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
-	{
-		if (Widget && Widget->GetName() == WidgetName)
-		{
-			FoundWidget = Widget;
-		}
-	});
+	UWidget* FoundWidget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 
 	if (!FoundWidget)
 	{
@@ -1449,13 +1448,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	// Find the widget to move
-	UWidget* WidgetToMove = nullptr;
-	UWidget* NewParentRaw = nullptr;
-	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
-	{
-		if (Widget && Widget->GetName() == WidgetName) WidgetToMove = Widget;
-		if (Widget && Widget->GetName() == NewParentName) NewParentRaw = Widget;
-	});
+	UWidget* WidgetToMove = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
+	UWidget* NewParentRaw = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, NewParentName);
 
 	if (!WidgetToMove)
 	{
@@ -1580,11 +1574,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 	if (!WidgetBP) return ResolveError;
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
-	UWidget* NewRoot = nullptr;
-	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* W)
-	{
-		if (W && W->GetName() == WidgetName) NewRoot = W;
-	});
+	UWidget* NewRoot = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
 	if (!NewRoot)
 	{
 		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
@@ -2754,14 +2744,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 		}
 
 		// Search the widget tree for the named child.
-		UWidget* Target = nullptr;
-		Found->WidgetTree->ForEachWidget([&](UWidget* W)
-		{
-			if (W && W->GetName() == ChildName && !Target)
-			{
-				Target = W;
-			}
-		});
+		UWidget* Target = MCPWidget::FindWidgetByName(Found->WidgetTree, ChildName);
 		if (!Target)
 		{
 			return MCPError(FString::Printf(TEXT("Child widget '%s' not found inside '%s'"), *ChildName, *Found->GetName()));
@@ -3001,10 +2984,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::InvokeRuntimeWidgetFunction(const TShare
 		UWidget* Target = nullptr;
 		if (Found->WidgetTree)
 		{
-			Found->WidgetTree->ForEachWidget([&](UWidget* W)
-			{
-				if (W && W->GetName() == ChildName && !Target) Target = W;
-			});
+			Target = MCPWidget::FindWidgetByName(Found->WidgetTree, ChildName);
 		}
 		if (!Target)
 		{
