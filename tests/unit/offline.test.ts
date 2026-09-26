@@ -25,7 +25,7 @@ import {
   LOCAL_ACTIONS,
   EDITOR_BOUND_LOCAL_ACTIONS,
   availabilityReport,
-  classifyAction,
+  classifyAvailability,
   classifyGraph,
   editorDownMessage,
   explainEditorDown,
@@ -87,7 +87,7 @@ describe("offline classification stays level with the dispatched graph", () => {
     const contradictions: string[] = [];
     for (const tool of ALL_TOOLS) {
       for (const [action, spec] of Object.entries(tool.actions)) {
-        const verdict = classifyAction(tool.name, action, spec);
+        const verdict = classifyAvailability(tool.name, action, spec);
         if (verdict.availability === "always" && spec.bridge) {
           contradictions.push(`${tool.name}.${action} -> ${spec.bridge}`);
         }
@@ -97,14 +97,14 @@ describe("offline classification stays level with the dispatched graph", () => {
   });
 
   it("classifies a bridge action from its own declaration, with the method named", () => {
-    const verdict = classifyAction("asset", "list", { kind: "bridge", effect: "read", bridge: "list_assets" });
+    const verdict = classifyAvailability("asset", "list", { kind: "bridge", effect: "read", bridge: "list_assets" });
     expect(verdict.availability).toBe("editor");
     expect(verdict.bridgeMethod).toBe("list_assets");
     expect(verdict.reason).toContain("list_assets");
   });
 
   it("reports an unclassified local action as unknown rather than as offline", () => {
-    const verdict = classifyAction("someplugin", "do_a_thing", { kind: "handler", effect: "read", handler: async () => ({}) });
+    const verdict = classifyAvailability("someplugin", "do_a_thing", { kind: "handler", effect: "read", handler: async () => ({}) });
     expect(verdict.availability).toBe("unknown");
     expect(verdict.reason).toContain("plugin");
   });
@@ -116,7 +116,7 @@ describe("offline classification stays level with the dispatched graph", () => {
     // then told a migrate will work with the editor down.
     const migrate = ALL_TOOLS.find((t) => t.name === "asset")!.actions.migrate;
     expect(migrate.bridge).toBeUndefined();
-    expect(classifyAction("asset", "migrate", migrate).availability).toBe("editor");
+    expect(classifyAvailability("asset", "migrate", migrate).availability).toBe("editor");
   });
 });
 

@@ -26,7 +26,7 @@ export type ActionClass = ActionEffect;
 /** Where a classification came from: a verb the lexicon knows, or nothing. */
 export type ActionClassSource = "lexicon" | "unresolved";
 
-export interface ActionClassification {
+export interface NameClassification {
   class: ActionClass;
   source: ActionClassSource;
 }
@@ -97,7 +97,7 @@ export function splitTaskName(taskName: string): { tool: string; action: string 
  * Classify one action name. A mutate verb in any underscore segment wins,
  * because `metasound_add_node` adds a node and `cue_get_graph` does not.
  */
-export function classifyActionClass(action: string): ActionClassification {
+export function classifyActionClass(action: string): NameClassification {
   const segments = action.toLowerCase().split(/[._]/).filter(Boolean);
   if (segments.some((s) => MUTATE_VERBS.has(s))) return { class: "mutate", source: "lexicon" };
   // A read verb settles the question only from the FRONT of the name.

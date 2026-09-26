@@ -149,7 +149,7 @@ export const EDITOR_BOUND_LOCAL_ACTIONS: Record<string, string> = {
 };
 
 /** Where a handler-backed action's classification comes from. */
-export function classifyAction(tool: string, action: string, spec: ActionSpec): ActionVerdict {
+export function classifyAvailability(tool: string, action: string, spec: ActionSpec): ActionVerdict {
   const key = `${tool}.${action}`;
 
   if (spec.bridge) {
@@ -183,7 +183,7 @@ export function classifyGraph(graph: ToolDef[]): ActionVerdict[] {
   const out: ActionVerdict[] = [];
   for (const tool of graph) {
     for (const [action, spec] of Object.entries(tool.actions)) {
-      out.push(classifyAction(tool.name, action, spec));
+      out.push(classifyAvailability(tool.name, action, spec));
     }
   }
   return out;
