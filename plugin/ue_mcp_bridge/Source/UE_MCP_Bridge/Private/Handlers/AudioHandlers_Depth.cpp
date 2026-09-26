@@ -48,6 +48,7 @@
 #include "AudioHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "AudioHandlers_Internal.h"
 
 #include "Sound/SoundBase.h"
 #include "Sound/SoundClass.h"
@@ -262,11 +263,9 @@ namespace
 			? TEXT("Applied to the asset's own document through the builder that was already attached to it, and saved. audio(metasound_build) is a save, so it is not needed after this call.")
 			: TEXT("Applied to the asset's own document through a builder attached on demand, and saved. This is the path that works on a MetaSound this editor session did not create."));
 
-		if (T.Asset)
-		{
-			T.Asset->MarkPackageDirty();
-			UEditorAssetLibrary::SaveLoadedAsset(T.Asset, /*bOnlyIfIsDirty*/ true);
-		}
+		FString SaveError = TEXT("No asset was resolved to save.");
+		const bool bSaved = T.Asset && SaveAssetPackageChecked(T.Asset, SaveError);
+		MCPNoteSaveOutcome(Res, T.AssetPath, bSaved, SaveError);
 	}
 
 	/** The document the resolved builder is editing. */
@@ -419,15 +418,15 @@ namespace
 		return Ids.Num() > 0 ? FString::Join(Ids, TEXT(", ")) : FString(TEXT("(none)"));
 	}
 
-	/** Push the node tree back into the editor graph and save. */
-	void MSEditSaveCue(USoundCue* Cue, const FString& CuePath)
+	/** Push the node tree back into the editor graph and save. Returns whether
+	 *  the package was written, with the reason in OutSaveError when not. */
+	bool MSEditSaveCue(USoundCue* Cue, FString& OutSaveError)
 	{
 #if WITH_EDITOR
 		Cue->LinkGraphNodesFromSoundNodes();
 		Cue->PostEditChange();
 #endif
-		Cue->MarkPackageDirty();
-		UEditorAssetLibrary::SaveAsset(CuePath);
+		return SaveAssetPackageChecked(Cue, OutSaveError);
 	}
 }
 
@@ -1120,7 +1119,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueRemoveNode(const TSharedPtr<FJson
 	}
 #endif
 
-	MSEditSaveCue(Cue, CuePath);
+	FString SaveError;
+	const bool bSaved = MSEditSaveCue(Cue, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1146,6 +1146,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueRemoveNode(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("rollbackNote"),
 		TEXT("soundcue_add_node restores a DEFAULT node of the same type under a NEW node id. Its property values, its wave assignment, its parent link and its ")
 		TEXT("children are not restored; detachedFrom and orphanedChildren list what has to be re-wired with audio(cue_connect)."));
+	MCPNoteSaveOutcome(Result, CuePath, bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -1234,7 +1235,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueDisconnect(const TSharedPtr<FJson
 		return MCPResult(Noop);
 	}
 
-	MSEditSaveCue(Cue, CuePath);
+	FString SaveError;
+	const bool bSaved = MSEditSaveCue(Cue, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1262,6 +1264,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueDisconnect(const TSharedPtr<FJson
 		Result->SetStringField(TEXT("rollbackNote"),
 			TEXT("The rollback restores ONE parent link (the first in 'detached'). Any further links, and a cleared root, have to be replayed from 'detached' with audio(cue_connect)."));
 	}
+	MCPNoteSaveOutcome(Result, CuePath, bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -1344,18 +1347,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundClassParent(const TSharedPtr<FJso
 	return MCPError(TEXT("Sound class reparenting requires an editor build."));
 #endif
 
-	SoundClass->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(SoundClass, /*bOnlyIfIsDirty*/ true);
-	if (OldParent)
-	{
-		OldParent->MarkPackageDirty();
-		UEditorAssetLibrary::SaveLoadedAsset(OldParent, /*bOnlyIfIsDirty*/ true);
-	}
-	if (NewParent)
-	{
-		NewParent->MarkPackageDirty();
-		UEditorAssetLibrary::SaveLoadedAsset(NewParent, /*bOnlyIfIsDirty*/ true);
-	}
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1367,6 +1358,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundClassParent(const TSharedPtr<FJso
 	Result->SetBoolField(TEXT("listedOnParent"),
 		NewParent ? NewParent->ChildClasses.Contains(SoundClass) : false);
 	AttachRollback(Result);
+	MCPAudio::SaveAndNote(Result, { SoundClass, OldParent, NewParent });
 	return MCPResult(Result);
 }
 

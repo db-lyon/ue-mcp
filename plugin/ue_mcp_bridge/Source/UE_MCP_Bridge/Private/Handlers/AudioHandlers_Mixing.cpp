@@ -12,6 +12,7 @@
 #include "HandlerAssetCreate.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerQuery.h"
+#include "AudioHandlers_Internal.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 
 #include "Sound/SoundSubmix.h"
@@ -74,22 +75,19 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSubmix(const TSharedPtr<FJsonObject
 	SetNumberProp(Submix, TEXT("DryLevelModulation.Value"), Params, TEXT("dryLevel"));
 
 	FString ParentPath;
+	USoundSubmixBase* Parent = nullptr;
 	if (TryGetStringParam(Params, TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
 	{
-		if (USoundSubmixBase* Parent = Cast<USoundSubmixBase>(UEditorAssetLibrary::LoadAsset(ParentPath)))
-		{
-			Submix->SetParentSubmix(Parent);
-			UEditorAssetLibrary::SaveAsset(ParentPath);
-		}
+		Parent = Cast<USoundSubmixBase>(UEditorAssetLibrary::LoadAsset(ParentPath));
+		if (Parent) Submix->SetParentSubmix(Parent);
 	}
-
-	UEditorAssetLibrary::SaveAsset(Submix->GetPathName());
 
 	auto Res = MCPSuccess();
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), Submix->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	MCPSetDeleteAssetRollback(Res, Submix->GetPathName());
+	MCPAudio::SaveAndNote(Res, { Submix, Parent });
 	return MCPResult(Res);
 }
 
@@ -116,8 +114,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSubmixParent(const TSharedPtr<FJsonObj
 	const FString PreviousParentPath = PreviousParent ? PreviousParent->GetPathName() : FString();
 
 	Submix->SetParentSubmix(Parent);
-	UEditorAssetLibrary::SaveAsset(SubmixPath);
-	if (Parent) UEditorAssetLibrary::SaveAsset(ParentPath);
 
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -133,6 +129,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSubmixParent(const TSharedPtr<FJsonObj
 	Payload->SetStringField(TEXT("parentPath"), PreviousParentPath);
 	MCPSetRollback(Res, TEXT("set_submix_parent"), Payload);
 	Res->SetBoolField(TEXT("rollbackLossy"), false);
+	MCPAudio::SaveAndNote(Res, { Submix, Parent });
 	return MCPResult(Res);
 }
 
@@ -215,8 +212,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::AddSubmixEffect(const TSharedPtr<FJsonObj
 		MCPQuery::ReadDottedProperty(Submix, TEXT("SubmixEffectChain"), PreviousChainType);
 
 	Submix->SubmixEffectChain.Add(Preset);
-	UEditorAssetLibrary::SaveAsset(Preset->GetPathName());
-	UEditorAssetLibrary::SaveAsset(SubmixPath);
 
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -247,6 +242,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::AddSubmixEffect(const TSharedPtr<FJsonObj
 			TEXT("The submix's effect chain could not be read back before the append, so there is no captured state to restore. ")
 			TEXT("Rewrite the chain by hand with audio(set_property) on 'SubmixEffectChain'."));
 	}
+	MCPAudio::SaveAndNote(Res, { Preset, Submix });
 	return MCPResult(Res);
 }
 
@@ -269,24 +265,21 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundClass(const TSharedPtr<FJsonOb
 	}
 
 	FString ParentPath;
+	USoundClass* Parent = nullptr;
 	if (TryGetStringParam(Params, TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
 	{
-		if (USoundClass* Parent = Cast<USoundClass>(UEditorAssetLibrary::LoadAsset(ParentPath)))
-		{
+		Parent = Cast<USoundClass>(UEditorAssetLibrary::LoadAsset(ParentPath));
 #if WITH_EDITOR
-			SoundClass->SetParentClass(Parent);
+		if (Parent) SoundClass->SetParentClass(Parent);
 #endif
-			UEditorAssetLibrary::SaveAsset(ParentPath);
-		}
 	}
-
-	UEditorAssetLibrary::SaveAsset(SoundClass->GetPathName());
 
 	auto Res = MCPSuccess();
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), SoundClass->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	MCPSetDeleteAssetRollback(Res, SoundClass->GetPathName());
+	MCPAudio::SaveAndNote(Res, { SoundClass, Parent });
 	return MCPResult(Res);
 }
 
@@ -329,14 +322,13 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundMix(const TSharedPtr<FJsonObje
 		}
 	}
 
-	UEditorAssetLibrary::SaveAsset(Mix->GetPathName());
-
 	auto Res = MCPSuccess();
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), Mix->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	Res->SetNumberField(TEXT("adjusters"), Added);
 	MCPSetDeleteAssetRollback(Res, Mix->GetPathName());
+	MCPAudio::SaveAndNote(Res, { Mix });
 	return MCPResult(Res);
 }
 
@@ -361,13 +353,12 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateConcurrency(const TSharedPtr<FJsonO
 		SetProp(Conc, TEXT("Concurrency.ResolutionRule"), MakeShared<FJsonValueString>(Rule), E);
 	}
 
-	UEditorAssetLibrary::SaveAsset(Conc->GetPathName());
-
 	auto Res = MCPSuccess();
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), Conc->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	MCPSetDeleteAssetRollback(Res, Conc->GetPathName());
+	MCPAudio::SaveAndNote(Res, { Conc });
 	return MCPResult(Res);
 }
 
@@ -401,13 +392,12 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateAttenuation(const TSharedPtr<FJsonO
 		MCPJsonProperty::SetDottedPropertyFromJson(Atten, TEXT("Attenuation.bAttenuate"), MakeShared<FJsonValueBoolean>(true), E);
 	}
 
-	UEditorAssetLibrary::SaveAsset(Atten->GetPathName());
-
 	auto Res = MCPSuccess();
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), Atten->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	MCPSetDeleteAssetRollback(Res, Atten->GetPathName());
+	MCPAudio::SaveAndNote(Res, { Atten });
 	return MCPResult(Res);
 }
 
@@ -427,7 +417,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundSubmix(const TSharedPtr<FJsonObje
 	const FString PreviousSubmixPath = PreviousSubmix ? PreviousSubmix->GetPathName() : FString();
 
 	Sound->SoundSubmixObject = Submix;
-	UEditorAssetLibrary::SaveAsset(SoundPath);
 
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -442,6 +431,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundSubmix(const TSharedPtr<FJsonObje
 	Payload->SetStringField(TEXT("submixPath"), PreviousSubmixPath);
 	MCPSetRollback(Res, TEXT("set_sound_submix"), Payload);
 	Res->SetBoolField(TEXT("rollbackLossy"), false);
+	MCPAudio::SaveAndNote(Res, { Sound });
 	return MCPResult(Res);
 }
 
@@ -471,7 +461,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::AddSoundSubmixSend(const TSharedPtr<FJson
 	Send.SendLevel = (float)SendLevel;
 	Send.SendLevelControlMethod = ESendLevelControlMethod::Manual;
 	Sound->SoundSubmixSends.Add(Send);
-	UEditorAssetLibrary::SaveAsset(SoundPath);
 
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -498,6 +487,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::AddSoundSubmixSend(const TSharedPtr<FJson
 			TEXT("The sound's send array could not be read back before the append, so there is no captured state to restore. ")
 			TEXT("Rewrite it by hand with audio(set_property) on 'SoundSubmixSends'."));
 	}
+	MCPAudio::SaveAndNote(Res, { Sound });
 	return MCPResult(Res);
 }
 
@@ -516,7 +506,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundClass(const TSharedPtr<FJsonObjec
 	const FString PreviousClassPath = PreviousClass ? PreviousClass->GetPathName() : FString();
 
 	Sound->SoundClassObject = SC;
-	UEditorAssetLibrary::SaveAsset(SoundPath);
 
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -542,6 +531,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundClass(const TSharedPtr<FJsonObjec
 		MCPSetRollback(Res, TEXT("set_audio_property"), Payload);
 	}
 	Res->SetBoolField(TEXT("rollbackLossy"), false);
+	MCPAudio::SaveAndNote(Res, { Sound });
 	return MCPResult(Res);
 }
 
@@ -561,7 +551,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundAttenuation(const TSharedPtr<FJso
 	const FString PreviousAttenPath = PreviousAtten ? PreviousAtten->GetPathName() : FString();
 
 	Sound->AttenuationSettings = Atten;
-	UEditorAssetLibrary::SaveAsset(SoundPath);
 
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -576,6 +565,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundAttenuation(const TSharedPtr<FJso
 	Payload->SetStringField(TEXT("attenuationPath"), PreviousAttenPath);
 	MCPSetRollback(Res, TEXT("set_sound_attenuation"), Payload);
 	Res->SetBoolField(TEXT("rollbackLossy"), false);
+	MCPAudio::SaveAndNote(Res, { Sound });
 	return MCPResult(Res);
 }
 
@@ -606,7 +596,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundConcurrency(const TSharedPtr<FJso
 		if (!Conc) return MCPError(FString::Printf(TEXT("Concurrency not found: %s"), *ConcPath));
 		Sound->ConcurrencySet.Add(Conc);
 	}
-	UEditorAssetLibrary::SaveAsset(SoundPath);
 
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -629,8 +618,9 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundConcurrency(const TSharedPtr<FJso
 		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
 			TEXT("The sound held %d concurrency assets and set_sound_concurrency assigns at most one, so the rollback restores only '%s'. ")
 			TEXT("previousConcurrencyPaths lists them all; rewrite the whole set with audio(set_property) on 'ConcurrencySet' to get them back."),
-			PreviousConcurrencyPaths.Num(), *PreviousConcurrencyPaths[0]));
+				PreviousConcurrencyPaths.Num(), *PreviousConcurrencyPaths[0]));
 	}
+	MCPAudio::SaveAndNote(Res, { Sound });
 	return MCPResult(Res);
 }
 
@@ -658,8 +648,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetAudioProperty(const TSharedPtr<FJsonOb
 	{
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *E));
 	}
-	Asset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -688,5 +676,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetAudioProperty(const TSharedPtr<FJsonOb
 			TEXT("than nested structs - so there is nothing captured to restore. Read the value you want with asset(read_properties) and ")
 			TEXT("write it back with audio(set_property)."), *PropertyName));
 	}
+	MCPAudio::SaveAndNote(Res, { Asset });
 	return MCPResult(Res);
 }

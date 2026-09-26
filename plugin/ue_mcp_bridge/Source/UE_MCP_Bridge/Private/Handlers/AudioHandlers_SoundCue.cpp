@@ -11,6 +11,7 @@
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
 #include "HandlerJsonProperty.h"
+#include "AudioHandlers_Internal.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Factories/SoundCueFactoryNew.h"
 
@@ -105,11 +106,9 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAddNode(const TSharedPtr<FJsonObj
 	{
 		ApplyNodeProps(Node, Params);
 	}
-	Cue->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(CuePath);
-
 	auto Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPAudio::SaveAndNote(Res, { Cue });
 	Res->SetStringField(TEXT("cuePath"), CuePath);
 	Res->SetStringField(TEXT("nodeId"), Node->GetName());
 	Res->SetStringField(TEXT("nodeType"), NodeType);
@@ -181,11 +180,9 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueConnect(const TSharedPtr<FJsonObj
 	Cue->LinkGraphNodesFromSoundNodes();
 	Cue->PostEditChange();
 #endif
-	Cue->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(CuePath);
-
 	auto Res = MCPSuccess();
 	MCPSetUpdated(Res);
+	MCPAudio::SaveAndNote(Res, { Cue });
 	Res->SetStringField(TEXT("cuePath"), CuePath);
 	Res->SetStringField(TEXT("parentNodeId"), ParentNodeId);
 	Res->SetStringField(TEXT("childNodeId"), ChildNodeId);
@@ -380,11 +377,9 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAuthor(const TSharedPtr<FJsonObje
 	Cue->LinkGraphNodesFromSoundNodes();
 	Cue->PostEditChange();
 #endif
-	Cue->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(Cue->GetPathName());
-
 	auto Res = MCPSuccess();
 	MCPSetCreated(Res);
+	MCPAudio::SaveAndNote(Res, { Cue });
 	Res->SetStringField(TEXT("path"), Cue->GetPathName());
 	Res->SetStringField(TEXT("root"), Cue->FirstNode ? Cue->FirstNode->GetName() : TEXT(""));
 	Res->SetNumberField(TEXT("nodes"), NodeMap.Num());

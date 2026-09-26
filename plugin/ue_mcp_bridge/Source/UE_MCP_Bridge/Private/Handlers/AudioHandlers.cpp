@@ -1,6 +1,7 @@
 #include "AudioHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "AudioHandlers_Internal.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -404,7 +405,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::ImportAudio(const TSharedPtr<FJsonObject>
 	if (ImportedWave && bHasLooping)
 	{
 		ImportedWave->bLooping = bLooping;
-		SaveAssetPackage(ImportedWave);
 	}
 
 	auto Result = MCPSuccess();
@@ -429,6 +429,10 @@ TSharedPtr<FJsonValue> FAudioHandlers::ImportAudio(const TSharedPtr<FJsonObject>
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
 		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
+	}
+	if (ImportedWave && bHasLooping)
+	{
+		MCPAudio::SaveAndNote(Result, { ImportedWave });
 	}
 	return MCPResult(Result);
 }
@@ -604,10 +608,9 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundCue(const TSharedPtr<FJsonObje
 	auto Created = MCPCreateAssetIdempotent<USoundCue>(Name, PackagePath, OnConflict, TEXT("SoundCue"), SoundCueFactory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
-
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPAudio::SaveAndNote(Result, { Created.Asset });
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());

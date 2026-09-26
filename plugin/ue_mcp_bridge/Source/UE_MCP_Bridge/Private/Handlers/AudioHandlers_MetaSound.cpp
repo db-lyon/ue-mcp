@@ -305,14 +305,14 @@ namespace
 			*AssetPath));
 	}
 
-	/** Persist the asset's document. Every authoring entry point ends here. */
-	void MSAuthorSave(const FString& AssetPath)
+	/** Persist the asset's document and record the outcome on Res. Every
+	 *  authoring entry point ends here. */
+	void MSAuthorSave(const TSharedPtr<FJsonObject>& Res, const FString& AssetPath)
 	{
-		if (UObject* Asset = MCPLoadAssetObject(AssetPath))
-		{
-			Asset->MarkPackageDirty();
-			UEditorAssetLibrary::SaveLoadedAsset(Asset, /*bOnlyIfIsDirty*/ false);
-		}
+		UObject* Asset = MCPLoadAssetObject(AssetPath);
+		FString SaveError = TEXT("The asset could not be loaded to save it.");
+		const bool bSaved = Asset && SaveAssetPackageChecked(Asset, SaveError);
+		MCPNoteSaveOutcome(Res, AssetPath, bSaved, SaveError);
 	}
 
 	FMetaSoundNodeHandle NodeFromId(const FString& Id)
@@ -505,9 +505,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateMetaSoundSource(const TSharedPtr<FJ
 
 	// The builder writes into the asset's own document, so the asset is already
 	// a loadable, interface-valid, silent MetaSound. Only the save is left.
-	MSAuthorSave(AssetPath);
-
 	auto Res = MCPSuccess();
+	MSAuthorSave(Res, AssetPath);
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetBoolField(TEXT("oneShot"), S->bOneShot);
@@ -688,9 +687,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAuthor(const TSharedPtr<FJsonObj
 
 	// 5. Save. Every step above wrote into the asset's own document, so there is
 	//    no separate build to run.
-	MSAuthorSave(AssetPath);
-
 	auto Res = MCPSuccess();
+	MSAuthorSave(Res, AssetPath);
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetNumberField(TEXT("nodes"), NodeMap.Num());
@@ -1075,9 +1073,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundBuild(const TSharedPtr<FJsonObje
 	UMetaSoundSource* Source = Cast<UMetaSoundSource>(MCPLoadAssetObject(AssetPath));
 	if (!Source) return MCPAssetNotFoundError(AssetPath, TEXT("MetaSoundSource"));
 
-	MSAuthorSave(Source->GetPathName());
-
 	auto Res = MCPSuccess();
+	MSAuthorSave(Res, Source->GetPathName());
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("path"), Source->GetPathName());
 	Res->SetStringField(TEXT("note"),
