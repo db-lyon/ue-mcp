@@ -14,6 +14,8 @@ function recordingBridge(): IBridge & { calls: Array<{ method: string; timeoutMs
     calls,
     isConnected: true,
     connect: async () => {},
+    retargetProject: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
+    getTarget: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
     call: async (method, _params, timeoutMs) => {
       calls.push({ method, timeoutMs });
       return { success: true };

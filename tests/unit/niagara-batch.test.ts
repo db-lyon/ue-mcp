@@ -15,11 +15,13 @@ function recordingBridge(result: unknown = { kept: 1, dropped: 2 }): IBridge & {
     calls,
     isConnected: true,
     connect: async () => {},
+    retargetProject: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
+    getTarget: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
     call: async (method, params, timeoutMs) => {
       calls.push({ method, params, timeoutMs });
       return result;
     },
-  } as unknown as IBridge & { calls: BridgeCall[] };
+  };
 }
 
 function activeContext(bridge: IBridge, tool: ToolDef): ToolContext {

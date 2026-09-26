@@ -41,7 +41,7 @@ function harness(mode: "auto" | "defer" | "interactive" = "auto") {
   });
   guard.note(DIALOG);
 
-  const bridge = new GuardedBridge(inner, new GuardRegistry(), async () => null, session);
+  const bridge = new GuardedBridge(inner, new GuardRegistry(), () => null, session);
   return { session, inner, guard, bridge };
 }
 
@@ -97,7 +97,7 @@ describe("guardCall, the boundary a flow step crosses", () => {
       probe: async () => ({ dialogs: [] }),
       press: async () => ({ success: true }),
     });
-    const bridge = new GuardedBridge(inner, new GuardRegistry(), async () => null, session);
+    const bridge = new GuardedBridge(inner, new GuardRegistry(), () => null, session);
     try {
       await bridge.call("spawn_actor", {});
       expect(inner.call).toHaveBeenCalledTimes(1);
@@ -127,7 +127,7 @@ describe("guardCall, the boundary a flow step crosses", () => {
     } as unknown as EditorSession;
     try {
       expect(existing(session), "started with a guard, so this proves nothing").toBeUndefined();
-      const bridge = new GuardedBridge(inner, new GuardRegistry(), async () => null, session);
+      const bridge = new GuardedBridge(inner, new GuardRegistry(), () => null, session);
       const result = await bridge.call("spawn_actor", {});
       // Nothing is blocking, so the call runs; what matters is that it was
       // decided by a guard rather than refused for the lack of one.

@@ -338,9 +338,12 @@ describe("a lifecycle no-op fails, and says why it did", () => {
       log: { logPath: null, secondsSinceWrite: 1, phase: "editor exited", blocking: false, lastLine: null, tail: [], errors: [], warnings: [] },
       snapshot: null,
       dialogs: [],
+      processProbeFailed: false,
+      runningEvidence: "process-table",
+      snapshotSource: "none",
       summary: "Editor is up (editor exited).",
       blocked: false,
-    } as Awaited<ReturnType<typeof observer.readEngineState>>);
+    });
 
     const result = await startEditor(project, 1);
     expect(result.alreadyRunning).toBeUndefined();

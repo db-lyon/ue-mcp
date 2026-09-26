@@ -51,6 +51,7 @@ function installedPieStudio(overrides: Partial<PluginInfo> = {}): PluginInfo {
     version: "1.0.0",
     actionPrefix: "pie",
     status: "active",
+    degraded: [],
     injected: {},
     provided: { pie: ["replay", "record", "observe", "inject_input"] },
     knowledge: {},

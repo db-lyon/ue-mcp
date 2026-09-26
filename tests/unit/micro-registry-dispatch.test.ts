@@ -94,7 +94,7 @@ describe("micro calls use the session task registry", () => {
     const answer = { success: false, error: "partially applied", detail: "keep this",
       rollback: { method: "undo_input", payload: { assetPath: "/Game/Take" } } };
     const { ctx } = context(answer);
-    if (inFlow) ctx.taskReferenceContext = {};
+    if (inFlow) ctx.taskReferenceContext = { steps: [] };
     const args = { assetPath: "/Game/Take", select: ["detail"] };
     const micro = await registry.create("tools.call", ctx, { category: "pie", method: "inject_input", args });
     const direct = await registry.create("pie.inject_input", ctx, args);
