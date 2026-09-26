@@ -95,6 +95,8 @@ const PER_SESSION: Record<string, string> = {
   "flow/guard-config.ts": "Owns one session's last valid YAML guard declarations, merged from its project and user-global config layers.",
   "flow/guard-schema.ts": "What a guard declaration is, shared by the manifest and ue-mcp.yml.",
   "flow/loader.ts": "Loads each project's own ue-mcp.yml.",
+  "flow/config-cache.ts": "Caches one project's flow config, keyed by that project's config layer files.",
+  "flow/config-layers.ts": "Stamps the config layer files of the project directory it is handed.",
   "flow/git-snapshot.ts": "Snapshots the repository holding one project, through its bridge.",
   "flow/http-server.ts": "Resolves an editor per request and refuses an untargeted run.",
 

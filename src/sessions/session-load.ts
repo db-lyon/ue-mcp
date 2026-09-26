@@ -17,7 +17,7 @@ import { buildMicroGateway } from "../surface/context/micro-context.js";
 import { buildFlowRegistry } from "../flow/registry.js";
 import { assertNoLegacyGuardTasks, buildGuards } from "../flow/guards.js";
 import { createLiveGuardSource } from "../flow/guard-config.js";
-import { loadFlowConfig } from "../flow/loader.js";
+import { FlowConfigCache } from "../flow/config-cache.js";
 import type { FlowConfig, PluginEntry } from "../flow/schema.js";
 import { loadPlugins, type PluginRecord } from "../extensions/loader.js";
 import { readPluginsList } from "../extensions/plugins-list.js";
@@ -34,6 +34,8 @@ export interface SessionLoad {
   advertisedTools: ToolDef[];
   registryTools: ToolDef[];
   registry?: ReturnType<typeof buildFlowRegistry>;
+  /** The project's flow config, reread only when one of its files changes. */
+  flowConfig: FlowConfigCache;
 }
 
 /** The `plugins:` entries of a project's ue-mcp.yml. A bad file means none. */
@@ -103,6 +105,10 @@ export async function buildSessionLoad(
     },
     pluginLoad,
     configDir,
+    flowConfig: new FlowConfigCache(tools, configDir, {
+      tasks: pluginLoad.taskDefs,
+      flows: pluginLoad.flowDefs,
+    }),
     advertisedTools: tools,
     registryTools: tools,
   };
@@ -208,17 +214,14 @@ export class SessionLoads {
   }
 
   /**
-   * Flows declared in the session's own ue-mcp.yml, read fresh each call so
+   * Flows declared in the session's own ue-mcp.yml, current as of this call so
    * edits show without a restart. A session with no load has none.
    */
   getFlows(forSession: EditorSession = this.primary): Array<{ name: string; description?: string }> {
     const load = this.perSession.get(forSession);
     if (!load) return [];
     try {
-      const cfg = loadFlowConfig(load.surface.tools, load.configDir, {
-        tasks: load.pluginLoad.taskDefs,
-        flows: load.pluginLoad.flowDefs,
-      }).config;
+      const cfg = load.flowConfig.get();
       return Object.entries(cfg.flows).map(([name, def]) => ({
         name,
         description: (def as { description?: string }).description,
@@ -281,13 +284,9 @@ export class SessionLoads {
     );
   }
 
-  /** The addressed session's flow config, reloaded so edits apply without a restart. */
+  /** The addressed session's flow config, reread when a config file changes so edits apply without a restart. */
   reloadConfigFor(target?: ToolContext): FlowConfig {
-    const load = this.loadFor(target);
-    return loadFlowConfig(load.surface.tools, load.configDir, {
-      tasks: load.pluginLoad.taskDefs,
-      flows: load.pluginLoad.flowDefs,
-    }).config;
+    return this.loadFor(target).flowConfig.get();
   }
 
   /** Each session's registry dispatches only what its own project provides. */

@@ -19,7 +19,6 @@ import { DialogGuard, guardFor, sessionGuardDeps } from "./editor/dialog-guard.j
 import { info, warn, error } from "./core/log.js";
 import { startVersionCheck } from "./core/version-check.js";
 import { GuardRegistry } from "./flow/guard.js";
-import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
 import { resolveLockingConfig } from "./dispatch/locking.js";
@@ -246,12 +245,9 @@ async function main() {
     registeredTools.set(tool.name, registration);
   }
 
-  // ── Flow tool: ue-mcp.yml is reloaded on every call ─────────────
-  const initialLoad = loadFlowConfig(primaryLoad.surface.tools, primaryLoad.configDir, {
-    tasks: primaryLoad.pluginLoad.taskDefs,
-    flows: primaryLoad.pluginLoad.flowDefs,
-  });
-  info("flow", `ue-mcp.yml loaded - ${Object.keys(initialLoad.config.flows).length} flow(s), ${Object.keys(initialLoad.config.tasks).length} custom task(s)`);
+  // ── Flow tool: ue-mcp.yml is reread whenever one of its files changes ──
+  const initialConfig = primaryLoad.flowConfig.get();
+  info("flow", `ue-mcp.yml loaded - ${Object.keys(initialConfig.flows).length} flow(s), ${Object.keys(initialConfig.tasks).length} custom task(s)`);
 
   // Resolved from the addressed editor: a flow declared in one project's
   // ue-mcp.yml runs through that project's registry, never the first one's (D1).

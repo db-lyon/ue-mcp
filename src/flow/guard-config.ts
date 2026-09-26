@@ -1,43 +1,10 @@
-import { readEnv } from "../core/env.js";
-import * as fs from "node:fs";
 import * as path from "node:path";
-import { globalConfigPath } from "../config/ue-mcp-config.js";
+import { configLayers, sameLayers, type ConfigLayer } from "./config-layers.js";
 import type { ToolDef } from "../core/types.js";
 import type { GuardDeclarations } from "./guard-schema.js";
 import type { GuardSource } from "./guards.js";
 import { loadFlowConfig, type PluginContribution } from "./loader.js";
 import type { FlowConfig } from "./schema.js";
-
-interface ConfigLayer {
-  file: string;
-  stamp: string | null;
-}
-
-function configLayer(file: string): ConfigLayer {
-  try {
-    const stat = fs.statSync(file);
-    return { file, stamp: `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}:${stat.ino}:${stat.mode}` };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { file, stamp: null };
-    // The loader decides how to handle read failures (global is optional).
-    // Recording them also lets a recovered stat trigger another load.
-    return { file, stamp: `error:${String(error)}` };
-  }
-}
-
-function configLayers(configDir: string): ConfigLayer[] {
-  const project = configLayer(path.join(configDir, "ue-mcp.yml"));
-  const layers = [configLayer(globalConfigPath()), project];
-  if (project.stamp !== null) {
-    if (readEnv("env")) layers.push(configLayer(path.join(configDir, `ue-mcp.${readEnv("env")}.yml`)));
-    layers.push(configLayer(path.join(configDir, "ue-mcp.local.yml")));
-  }
-  return layers;
-}
-
-function sameLayers(a: ConfigLayer[], b: ConfigLayer[]): boolean {
-  return a.length === b.length && a.every((layer, i) => layer.file === b[i].file && layer.stamp === b[i].stamp);
-}
 
 function missingLayer(previous: ConfigLayer[], next: ConfigLayer[]): ConfigLayer | undefined {
   return previous.find((layer) => layer.stamp !== null
