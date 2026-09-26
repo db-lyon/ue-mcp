@@ -146,15 +146,15 @@ namespace
 {
 	// `assetPath` and `path` reach the spec'd handlers as `sequencePath`, renamed
 	// by the registry (#1057), so the path is read by the caller.
-	ULevelSequence* LoadSequence(const FString& Path, bool bHasPath, FString& OutError)
+	ULevelSequence* LoadSequence(const FString& Path, bool bHasPath, TSharedPtr<FJsonValue>& OutError)
 	{
 		if (!bHasPath)
 		{
-			OutError = TEXT("Missing 'sequencePath' parameter");
+			OutError = MCPError(TEXT("Missing 'sequencePath' parameter"));
 			return nullptr;
 		}
-		ULevelSequence* Seq = Cast<ULevelSequence>(UEditorAssetLibrary::LoadAsset(Path));
-		if (!Seq) { OutError = FString::Printf(TEXT("LevelSequence not found: %s"), *Path); return nullptr; }
+		ULevelSequence* Seq = LoadAssetByPath<ULevelSequence>(Path);
+		if (!Seq) OutError = MCPAssetLoadError(Path, TEXT("LevelSequence"));
 		return Seq;
 	}
 
@@ -1045,8 +1045,9 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetPlaybackRange(const TSharedPtr<FJs
 	const bool bHasStart = TryGetNumberParam(Params, TEXT("startSeconds"), StartSeconds);
 	const bool bHasEnd = TryGetNumberParam(Params, TEXT("endSeconds"), EndSeconds);
 
-	ULevelSequence* Sequence = LoadSequence(Path, bHasPath, Err);
-	if (!Sequence) return MCPError(Err);
+	TSharedPtr<FJsonValue> LoadErr;
+	ULevelSequence* Sequence = LoadSequence(Path, bHasPath, LoadErr);
+	if (!Sequence) return LoadErr;
 	UMovieScene* MovieScene = Sequence->GetMovieScene();
 	if (!MovieScene) return MCPError(TEXT("Sequence has no MovieScene"));
 
@@ -1157,8 +1158,9 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 	const bool bHasStart = TryGetNumberParam(Params, TEXT("startSeconds"), StartSeconds);
 	const bool bHasEnd = TryGetNumberParam(Params, TEXT("endSeconds"), EndSeconds);
 
-	ULevelSequence* Sequence = LoadSequence(Path, bHasPath, Err);
-	if (!Sequence) return MCPError(Err);
+	TSharedPtr<FJsonValue> LoadErr;
+	ULevelSequence* Sequence = LoadSequence(Path, bHasPath, LoadErr);
+	if (!Sequence) return LoadErr;
 	UMovieScene* MovieScene = Sequence->GetMovieScene();
 	if (!MovieScene) return MCPError(TEXT("Sequence has no MovieScene"));
 
@@ -1282,8 +1284,9 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetKeyframes(const TSharedPtr<FJsonOb
 
 	if (auto PieErr = MCPRefuseDuringPlayInEditor(TEXT("set_sequence_keyframes"))) return PieErr;
 
-	ULevelSequence* Sequence = LoadSequence(Path, bHasPath, Err);
-	if (!Sequence) return MCPError(Err);
+	TSharedPtr<FJsonValue> LoadErr;
+	ULevelSequence* Sequence = LoadSequence(Path, bHasPath, LoadErr);
+	if (!Sequence) return LoadErr;
 	UMovieScene* MovieScene = Sequence->GetMovieScene();
 	if (!MovieScene) return MCPError(TEXT("Sequence has no MovieScene"));
 
