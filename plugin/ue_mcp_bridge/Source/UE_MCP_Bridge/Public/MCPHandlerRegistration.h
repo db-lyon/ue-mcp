@@ -56,7 +56,8 @@ namespace UEMCP
 	using FExternalHandlerFn = TFunction<TSharedPtr<FJsonValue>(const TSharedPtr<FJsonObject>& Params)>;
 
 	/** Register a handler under the given method name. Last writer wins
-	 *  if the same name is registered twice. */
+	 *  if the same name is registered twice, and a timeout from an earlier
+	 *  registration is dropped. */
 	UE_MCP_BRIDGE_API void RegisterExternalHandler(const FString& MethodName, FExternalHandlerFn Handler);
 
 	/** Register a handler with a non-default game-thread execution timeout
@@ -72,6 +73,14 @@ namespace UEMCP
 	 *  exists under MethodName. OutTimeoutSeconds is 0 when no per-handler
 	 *  override was registered (caller should use its default). */
 	UE_MCP_BRIDGE_API bool LookupExternalHandler(const FString& MethodName, FExternalHandlerFn& OutFn, float& OutTimeoutSeconds);
+
+	/** Whether an external handler is registered under MethodName, without
+	 *  copying the handler. */
+	UE_MCP_BRIDGE_API bool HasExternalHandler(const FString& MethodName);
+
+	/** The registered timeout for MethodName in seconds, or 0 when none was
+	 *  registered (or no such handler exists). */
+	UE_MCP_BRIDGE_API float GetExternalHandlerTimeout(const FString& MethodName);
 
 	/** Snapshot of registered external handler names. Diagnostic use only;
 	 *  do not rely on the order. */

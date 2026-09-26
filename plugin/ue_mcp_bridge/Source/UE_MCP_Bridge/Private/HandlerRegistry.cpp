@@ -561,13 +561,7 @@ float FMCPHandlerRegistry::GetHandlerTimeout(const FString& MethodName) const
 		return *V;
 	}
 	// External (plugin-contributed) handlers may register their own timeout.
-	UEMCP::FExternalHandlerFn Unused;
-	float ExternalTimeout = 0.0f;
-	if (UEMCP::LookupExternalHandler(MethodName, Unused, ExternalTimeout) && ExternalTimeout > 0.0f)
-	{
-		return ExternalTimeout;
-	}
-	return 0.0f;
+	return UEMCP::GetExternalHandlerTimeout(MethodName);
 }
 
 TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
@@ -611,9 +605,7 @@ bool FMCPHandlerRegistry::HasHandler(const FString& MethodName) const
 	{
 		return true;
 	}
-	UEMCP::FExternalHandlerFn Unused;
-	float UnusedTimeout = 0.0f;
-	return UEMCP::LookupExternalHandler(MethodName, Unused, UnusedTimeout);
+	return UEMCP::HasExternalHandler(MethodName);
 }
 
 TArray<FString> FMCPHandlerRegistry::GetHandlerNames() const
