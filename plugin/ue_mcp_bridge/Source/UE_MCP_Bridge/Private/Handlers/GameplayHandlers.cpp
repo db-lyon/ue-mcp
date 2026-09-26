@@ -1049,7 +1049,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 		Result->SetNumberField(TEXT("defaultBehaviorIndex"), Index);
 	}
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -1096,9 +1098,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectDefaultBehavior(const TS
 
 	SA.Asset->PostEditChange();
 	SA.Asset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(SA.Asset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, SA.Asset->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
 	Result->SetStringField(TEXT("behavior"), Instance->GetClass()->GetPathName());
@@ -1163,9 +1167,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlot(const TSharedPtr<FJ
 
 	SA.Asset->PostEditChange();
 	SA.Asset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(SA.Asset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, SA.Asset->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
 	Result->SetNumberField(TEXT("slotIndex"), NewIdx);
@@ -1254,9 +1260,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetSmartObjectSlot(const TSharedPtr<FJ
 	const bool bSlotChanged = SlotTextAfter != SlotTextBefore;
 	SA.Asset->PostEditChange();
 	SA.Asset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(SA.Asset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, SA.Asset->GetPathName(), bSaved, SaveError);
 	if (bSlotChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
 	Result->SetBoolField(TEXT("unchanged"), !bSlotChanged);
 	Result->SetNumberField(TEXT("fieldsWritten"), CapturedFields);
@@ -1343,9 +1351,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSmartObjectSlot(const TSharedPtr
 	Helper.RemoveValues(SlotIdx, 1);
 	SA.Asset->PostEditChange();
 	SA.Asset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(SA.Asset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, SA.Asset->GetPathName(), bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
 	Result->SetNumberField(TEXT("slotIndex"), SlotIdx);
@@ -1474,9 +1484,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlotBehavior(const TShar
 
 	SA.Asset->PostEditChange();
 	SA.Asset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(SA.Asset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, SA.Asset->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
 	Result->SetNumberField(TEXT("slotIndex"), SlotIdx);
@@ -1774,9 +1786,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlackboard(const TSharedPtr<FJso
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("BlackboardData"), BlackboardClass, nullptr);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -1821,9 +1835,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJ
 		}
 	}
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -1855,9 +1871,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateEqsQuery(const TSharedPtr<FJsonO
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("EnvironmentQuery"), EQSClass, nullptr);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -1920,9 +1938,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 #endif
 	StateTree->MarkPackageDirty();
 
-	SaveAssetPackage(StateTree);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(StateTree, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, StateTree->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), StateTree->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -2058,11 +2078,13 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FStrin
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	SaveAssetPackage(NewBlueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(NewBlueprint, SaveError);
 
 	const FString CreatedPath = NewBlueprint->GetPathName();
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, NewBlueprint->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), CreatedPath);
 	Result->SetStringField(TEXT("name"), Name);
@@ -2617,9 +2639,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 	BlackboardAsset->MarkPackageDirty();
 
 	// Save
-	UEditorAssetLibrary::SaveAsset(BlackboardAsset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BlackboardAsset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, BlackboardAsset->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 	Result->SetStringField(TEXT("keyName"), KeyName);
@@ -2706,9 +2730,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBlackboardParent(const TSharedPtr<F
 	Child->UpdateKeyIDs();
 
 	Child->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(Child->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Child, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Child->GetPathName(), bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 	Result->SetStringField(TEXT("parentPath"), Parent ? Parent->GetPathName() : TEXT("None"));
@@ -2806,9 +2832,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBlackboardKey(const TSharedPtr<F
 	BB->Keys.RemoveAt(RemovedIdx);
 	BB->UpdateKeyIDs();
 	BB->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(BB->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BB, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, BB->GetPathName(), bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 	Result->SetStringField(TEXT("keyName"), KeyName);
@@ -3031,9 +3059,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBehaviorTreeBlackboard(const TShare
 	BT->Modify();
 	BBProp->SetObjectPropertyValue_InContainer(BT, BB);
 	BT->PostEditChange();
-	SaveAssetPackage(BT);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BT, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, BT->GetPathName(), bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("behaviorTreePath"), BehaviorTreePath);
 	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
@@ -3161,13 +3191,18 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 		ConfiguredSenses.Add(MakeShared<FJsonValueString>(ConfigClass->GetName()));
 	}
 
+	bool bSaveAttempted = false;
+	bool bSaved = false;
+	FString SaveError;
 	if (bCreated || ConfiguredSenses.Num() > 0)
 	{
 		FKismetEditorUtilities::CompileBlueprint(BP);
-		SaveAssetPackage(BP);
+		bSaveAttempted = true;
+		bSaved = SaveAssetPackageChecked(BP, SaveError);
 	}
 
 	auto Result = MCPSuccess();
+	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	if (bCreated) MCPSetCreated(Result); else MCPSetExisted(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TargetNode->GetVariableName().ToString());
@@ -3402,15 +3437,20 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 	// Compile and save only when something actually moved. A call that found the
 	// sense already configured exactly as asked has no reason to dirty the asset.
 	const bool bChanged = (!bExisted || ChangedProps.Num() > 0);
+	bool bSaveAttempted = false;
+	bool bSaved = false;
+	FString SaveError;
 	if (bChanged)
 	{
 		FKismetEditorUtilities::CompileBlueprint(BP);
-		SaveAssetPackage(BP);
+		bSaveAttempted = true;
+		bSaved = SaveAssetPackageChecked(BP, SaveError);
 	}
 
 	// Three outcomes, reported apart: created, existed and updated, existed and
 	// unchanged. Collapsing the last two is what made the old result dishonest.
 	auto Result = MCPSuccess();
+	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	if (bExisted) MCPSetExisted(Result); else MCPSetCreated(Result);
 	if (bExisted && ChangedProps.Num() > 0) MCPSetUpdated(Result);
 	else Result->SetBoolField(TEXT("updated"), false);
@@ -3514,15 +3554,20 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 	}
 
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("StateTreeComp"));
+	bool bSaveAttempted = false;
+	bool bSaved = false;
+	FString SaveError;
 	if (NewNode)
 	{
 		BP->SimpleConstructionScript->AddNode(NewNode);
 		FKismetEditorUtilities::CompileBlueprint(BP);
 
-		SaveAssetPackage(BP);
+		bSaveAttempted = true;
+		bSaved = SaveAssetPackageChecked(BP, SaveError);
 	}
 
 	auto Result = MCPSuccess();
+	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("StateTreeComp"));
@@ -3566,15 +3611,20 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 	}
 
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("SmartObjectComp"));
+	bool bSaveAttempted = false;
+	bool bSaved = false;
+	FString SaveError;
 	if (NewNode)
 	{
 		BP->SimpleConstructionScript->AddNode(NewNode);
 		FKismetEditorUtilities::CompileBlueprint(BP);
 
-		SaveAssetPackage(BP);
+		bSaveAttempted = true;
+		bSaved = SaveAssetPackageChecked(BP, SaveError);
 	}
 
 	auto Result = MCPSuccess();
+	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("SmartObjectComp"));

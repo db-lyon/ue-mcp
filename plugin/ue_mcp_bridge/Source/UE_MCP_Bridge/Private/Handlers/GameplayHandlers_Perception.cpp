@@ -912,7 +912,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSense(const TSharedPtr<FJsonObje
 	Helper.RemoveValues(TargetIndex, 1);
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	MCPNoteSaveOutcome(Result, Blueprint->GetPathName(), bSaved, SaveError);
 
 	Result->SetBoolField(TEXT("alreadyRemoved"), false);
 	MCPSetUpdated(Result);

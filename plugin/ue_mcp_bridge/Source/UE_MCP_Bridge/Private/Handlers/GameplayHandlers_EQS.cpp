@@ -306,11 +306,13 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddEqsGenerator(const TSharedPtr<FJson
 	Query->GetOptionsMutable().Add(Option);
 
 	Query->MarkPackageDirty();
-	SaveAssetPackage(Query);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Query, SaveError);
 
 	const int32 AddedIndex = Query->GetOptions().Num() - 1;
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Query->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("queryPath"), Query->GetPathName());
 	Result->SetNumberField(TEXT("optionIndex"), AddedIndex);
@@ -399,9 +401,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddEqsTest(const TSharedPtr<FJsonObjec
 
 	Options[OptionIndex]->Tests.Add(Test);
 	Query->MarkPackageDirty();
-	SaveAssetPackage(Query);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Query, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Query->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("queryPath"), Query->GetPathName());
 	Result->SetNumberField(TEXT("optionIndex"), OptionIndex);
@@ -470,7 +474,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveEqsTest(const TSharedPtr<FJsonOb
 
 	Tests.RemoveAt(TestIndex);
 	Query->MarkPackageDirty();
-	SaveAssetPackage(Query);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Query, SaveError);
+	MCPNoteSaveOutcome(Result, Query->GetPathName(), bSaved, SaveError);
 
 	Result->SetStringField(TEXT("removed"), Removed);
 	// Removing shifts every later index down, and a caller removing several
@@ -538,7 +544,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveEqsOption(const TSharedPtr<FJson
 
 	Options.RemoveAt(OptionIndex);
 	Query->MarkPackageDirty();
-	SaveAssetPackage(Query);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Query, SaveError);
+	MCPNoteSaveOutcome(Result, Query->GetPathName(), bSaved, SaveError);
 
 	Result->SetStringField(TEXT("removedGenerator"), GeneratorName);
 	Result->SetNumberField(TEXT("removedTests"), LostTests);
@@ -623,7 +631,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReorderEqsTests(const TSharedPtr<FJson
 	Tests = Reordered;
 
 	Query->MarkPackageDirty();
-	SaveAssetPackage(Query);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Query, SaveError);
 
 	TArray<TSharedPtr<FJsonValue>> Names;
 	for (const UEnvQueryTest* Test : Tests)
@@ -636,6 +645,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReorderEqsTests(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("queryPath"), Query->GetPathName());
 	Result->SetNumberField(TEXT("optionIndex"), OptionIndex);
 	Result->SetArrayField(TEXT("tests"), Names);
+	MCPNoteSaveOutcome(Result, Query->GetPathName(), bSaved, SaveError);
 
 	// The inverse of a permutation is exact and cheap: Inverse[Order[i]] = i.
 	TArray<int32> Inverse;

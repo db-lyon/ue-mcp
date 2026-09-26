@@ -635,9 +635,13 @@ namespace
 	}
 
 	/** Recompile the graph into the runnable tree and persist the asset. */
-	bool MCPBTACompileAndSave(UBehaviorTree* Tree, UBehaviorTreeGraph* Graph)
+	bool MCPBTACompileAndSave(UBehaviorTree* Tree, UBehaviorTreeGraph* Graph, FString& OutSaveError)
 	{
-		if (!Graph || !Tree) return false;
+		if (!Graph || !Tree)
+		{
+			OutSaveError = TEXT("The tree or its graph is missing, so nothing was saved.");
+			return false;
+		}
 		Graph->Modify();
 		Graph->UpdateAsset();
 		// A BehaviorTree editor tab open on this asset is listening. Without the
@@ -646,7 +650,7 @@ namespace
 		Graph->NotifyGraphChanged();
 		Tree->PostEditChange();
 		Tree->MarkPackageDirty();
-		return SaveAssetPackage(Tree);
+		return SaveAssetPackageChecked(Tree, OutSaveError);
 	}
 
 	/** Load the tree and its graph, or return the error a handler should emit. */
@@ -987,7 +991,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBTNode(const TSharedPtr<FJsonObject
 	// a resolved one.
 	Instance->InitializeFromAsset(*Tree);
 
-	const bool bSaved = MCPBTACompileAndSave(Tree, Graph);
+	FString SaveError;
+	const bool bSaved = MCPBTACompileAndSave(Tree, Graph, SaveError);
 
 	TArray<FMCPBTAEntry> AfterEntries;
 	MCPBTACollectGraph(Graph, AfterEntries);
@@ -1004,7 +1009,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBTNode(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("class"), RuntimeClass->GetName());
 	Result->SetStringField(TEXT("classPath"), RuntimeClass->GetPathName());
 	Result->SetNumberField(TEXT("index"), PlacedIndex);
-	Result->SetBoolField(TEXT("saved"), bSaved);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	if (AppliedKeys.Num() > 0) Result->SetArrayField(TEXT("blackboardKeys"), AppliedKeys);
 
 	if (const FMCPBTAEntry* Entry = MCPBTAFind(AfterEntries, NewNode))
@@ -1191,7 +1196,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::MoveBTNode(const TSharedPtr<FJsonObjec
 		}
 	}
 
-	const bool bSaved = MCPBTACompileAndSave(Tree, Graph);
+	FString SaveError;
+	const bool bSaved = MCPBTACompileAndSave(Tree, Graph, SaveError);
 
 	TArray<FMCPBTAEntry> AfterEntries;
 	MCPBTACollectGraph(Graph, AfterEntries);
@@ -1207,7 +1213,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::MoveBTNode(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("previousIndex"), OldIndex);
 	Result->SetStringField(TEXT("parentGuid"), MCPBTAGuidString(NewParent));
 	Result->SetNumberField(TEXT("index"), PlacedIndex);
-	Result->SetBoolField(TEXT("saved"), bSaved);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 
 	if (const FMCPBTAEntry* Entry = MCPBTAFind(AfterEntries, Node))
 	{
@@ -1322,7 +1328,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBTNode(const TSharedPtr<FJsonObj
 		if (Doomed[i]) Doomed[i]->DestroyNode();
 	}
 
-	const bool bSaved = MCPBTACompileAndSave(Tree, Graph);
+	FString SaveError;
+	const bool bSaved = MCPBTACompileAndSave(Tree, Graph, SaveError);
 
 	TMap<UBTNode*, FString> Addresses;
 	MapBTNodeAddresses(Tree, Addresses);
@@ -1335,7 +1342,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBTNode(const TSharedPtr<FJsonObj
 	Result->SetNumberField(TEXT("removedCount"), Removed.Num());
 	Result->SetArrayField(TEXT("removed"), Removed);
 	Result->SetNumberField(TEXT("compiledNodeCount"), Addresses.Num());
-	Result->SetBoolField(TEXT("saved"), bSaved);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 
 	// add_bt_node is the opposite operation, not the inverse of this one. It
 	// places a single fresh node under a new guid, so it cannot rebuild the

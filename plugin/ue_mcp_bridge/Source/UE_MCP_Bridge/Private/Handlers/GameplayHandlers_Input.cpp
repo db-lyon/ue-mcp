@@ -212,9 +212,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputAction(const TSharedPtr<FJs
 		}
 	}
 
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(NewAsset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, NewAsset->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -241,9 +243,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputMappingContext(const TShare
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("InputMappingContext"), IMCClass, nullptr);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);

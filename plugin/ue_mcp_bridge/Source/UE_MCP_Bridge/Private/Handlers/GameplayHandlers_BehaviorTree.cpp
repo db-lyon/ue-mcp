@@ -1158,7 +1158,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 
 	Node->PostEditChange();
 	BT->PostEditChange();
-	const bool bSaved = SaveAssetPackage(BT);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BT, SaveError);
 
 	// #940 asks for the write to be proved rather than asserted: every target
 	// is read back off the node and reported next to what it held before.
@@ -1204,7 +1205,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("objectName"), Node->GetName());
 	Result->SetNumberField(TEXT("appliedCount"), Applied.Num());
 	Result->SetArrayField(TEXT("applied"), Applied);
-	Result->SetBoolField(TEXT("saved"), bSaved);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 
 	if (RollbackProperties->Values.Num() > 0)
 	{
