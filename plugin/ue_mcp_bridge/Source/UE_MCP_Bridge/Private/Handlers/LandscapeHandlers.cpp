@@ -1198,11 +1198,8 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetLandscapeMaterial(const TSharedPtr
 	}
 
 	// Load the material
-	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
-	if (!Material)
-	{
-		return MCPError(FString::Printf(TEXT("Material not found: %s"), *MaterialPath));
-	}
+	UMaterialInterface* Material = LoadAssetByPath<UMaterialInterface>(MaterialPath);
+	if (!Material) return MCPAssetLoadError(MaterialPath, TEXT("MaterialInterface"));
 
 	// Capture previous material for rollback and idempotency
 	UMaterialInterface* PrevMaterial = TargetLandscape->LandscapeMaterial;
@@ -1314,7 +1311,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::AddLandscapeLayerInfo(const TSharedPt
 	FString PackageFullPath = PackagePath / AssetName;
 
 	// Check if the asset already exists
-	ULandscapeLayerInfoObject* LayerInfoObj = LoadObject<ULandscapeLayerInfoObject>(nullptr, *(PackageFullPath + TEXT(".") + AssetName));
+	ULandscapeLayerInfoObject* LayerInfoObj = LoadAssetByPath<ULandscapeLayerInfoObject>(PackageFullPath + TEXT(".") + AssetName);
 	// Whether the LayerInfo ASSET is created here matters to the rollback: the
 	// inverse un-registers the layer but leaves the asset on disk.
 	const bool bCreatedLayerInfoAsset = (LayerInfoObj == nullptr);

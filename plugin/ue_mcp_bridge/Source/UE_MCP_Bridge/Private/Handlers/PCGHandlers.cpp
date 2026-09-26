@@ -364,11 +364,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGGraph(const TSharedPtr<FJsonObject>&
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), Graph->GetName());
@@ -474,11 +471,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	const bool bHasPosY = TryGetNumberParam(Params, TEXT("posY"), PosY);
 	const bool bHasPosition = bHasPosX || bHasPosY;
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	// Find the settings class by name
 	UClass* SettingsClass = FindObject<UClass>(nullptr, *NodeType);
@@ -576,11 +570,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	const FString SourcePinLabel = OptionalString(Params, TEXT("sourcePin"));
 	const FString TargetPinLabel = OptionalString(Params, TEXT("targetPin"));
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	// Find source and target nodes
 	UPCGNode* SourceNode = nullptr;
@@ -801,11 +792,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 	const FString SourcePinLabel = OptionalString(Params, TEXT("sourcePin"));
 	const FString TargetPinLabel = OptionalString(Params, TEXT("targetPin"));
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	UPCGNode* SourceNode = nullptr;
 	UPCGNode* TargetNode = nullptr;
@@ -937,11 +925,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 	FString NodeName;
 	if (auto Err = RequireString(Params, TEXT("nodeName"), NodeName)) return Err;
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	// Find the node by name
 	UPCGNode* FoundNode = nullptr;
@@ -1074,11 +1059,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("Missing 'propertyValue' parameter"));
 	}
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	// Find the node by name
 	UPCGNode* FoundNode = nullptr;
@@ -1373,7 +1355,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject
 
 	if (!GraphPath.IsEmpty())
 	{
-		UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *GraphPath);
+		UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(GraphPath);
 		if (Graph)
 		{
 			UPCGComponent* PCGComp = PCGVolumeActor->FindComponentByClass<UPCGComponent>();
@@ -1416,11 +1398,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonO
 	FString NodeName;
 	if (auto Err = RequireString(Params, TEXT("nodeName"), NodeName)) return Err;
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	// Find the node by name
 	UPCGNode* FoundNode = nullptr;
@@ -1667,8 +1646,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	// Read before anything can fail (#1057).
 	const bool bReplace = OptionalBool(Params, TEXT("replace"), true);
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph) return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	UPCGNode* FoundNode = nullptr;
 	for (UPCGNode* Node : Graph->GetNodes())
@@ -2001,8 +1980,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ToggleGraphPCG(const TSharedPtr<FJsonObject
 	UPCGGraph* TargetGraph = nullptr;
 	if (!GraphPath.IsEmpty())
 	{
-		TargetGraph = LoadObject<UPCGGraph>(nullptr, *GraphPath);
-		if (!TargetGraph) return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *GraphPath));
+		TargetGraph = LoadAssetByPath<UPCGGraph>(GraphPath);
+		if (!TargetGraph) return MCPAssetLoadError(GraphPath, TEXT("PCGGraph"));
 	}
 	else
 	{
@@ -2077,11 +2056,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 	const TArray<TSharedPtr<FJsonValue>>* ConnsArr = nullptr;
 	const bool bHasConnections = TryGetArrayParam(Params, TEXT("connections"), ConnsArr) && ConnsArr;
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	// Snapshot the graph before touching it. export_pcg_graph and this action
 	// speak the same vocabulary by design (#213), so the export IS the inverse
@@ -2392,11 +2368,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 	// Read before anything can fail (#1057).
 	const bool bIncludeSettings = OptionalBool(Params, TEXT("includeSettings"), true);
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
 	// #235: editor layout (NodePosX/NodePosY) lives on UPCGEditorGraphNodeBase
 	// in the asset's UPCGEditorGraph. The runtime UPCGNode::PositionX/Y is
@@ -2513,11 +2486,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::UnwrapInstanceNodes(const TSharedPtr<FJsonO
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FString OnlyNode = OptionalString(Params, TEXT("nodeName"));
 
-	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
-	if (!Graph)
-	{
-		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-	}
+	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
+	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 	if (MCPIsProtectedAssetPath(Graph->GetPathName()))
 	{
 		return MCPProtectedPathError(Graph->GetPathName());

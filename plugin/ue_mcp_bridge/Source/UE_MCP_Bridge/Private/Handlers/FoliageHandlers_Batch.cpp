@@ -162,7 +162,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 	TArray<FString> UnloadablePaths;
 	for (const FString& Path : ExplicitPaths)
 	{
-		UFoliageType* Type = LoadObject<UFoliageType>(nullptr, *Path);
+		UFoliageType* Type = LoadAssetByPath<UFoliageType>(Path);
 		if (!Type)
 		{
 			UnloadablePaths.Add(Path);

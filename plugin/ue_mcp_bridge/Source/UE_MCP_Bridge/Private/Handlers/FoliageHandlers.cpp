@@ -301,11 +301,8 @@ TSharedPtr<FJsonValue> FFoliageHandlers::GetFoliageSettings(const TSharedPtr<FJs
 		return MCPError(TEXT("Missing required parameter 'foliageTypePath'. To read or filter many types at once use foliage(list_types) or asset(bulk_read_properties); to WRITE settings to every type matching a predicate use foliage(batch_set_settings_where)."));
 	}
 
-	UFoliageType* FoliageType = LoadObject<UFoliageType>(nullptr, *FoliageTypePath);
-	if (!FoliageType)
-	{
-		return MCPError(FString::Printf(TEXT("Foliage type not found: %s"), *FoliageTypePath));
-	}
+	UFoliageType* FoliageType = LoadAssetByPath<UFoliageType>(FoliageTypePath);
+	if (!FoliageType) return MCPAssetLoadError(FoliageTypePath, TEXT("FoliageType"));
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), FoliageTypePath);
@@ -384,7 +381,9 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SetFoliageTypeSettings(const TSharedPtr
 	}
 
 	// Try to load by path first; if not found, search by name in the world
-	UFoliageType* FoliageType = LoadObject<UFoliageType>(nullptr, *FoliageTypePath);
+	UFoliageType* FoliageType = FoliageTypePath.StartsWith(TEXT("/"))
+		? LoadAssetByPath<UFoliageType>(FoliageTypePath)
+		: nullptr;
 
 	if (!FoliageType)
 	{
@@ -585,11 +584,8 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJso
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
 	const bool bHasSettings = TryGetObjectParam(Params, TEXT("settings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid();
 
-	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
-	if (!Mesh)
-	{
-		return MCPError(FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath));
-	}
+	UStaticMesh* Mesh = LoadAssetByPath<UStaticMesh>(MeshPath);
+	if (!Mesh) return MCPAssetLoadError(MeshPath, TEXT("StaticMesh"));
 
 	if (AssetName.IsEmpty())
 	{
