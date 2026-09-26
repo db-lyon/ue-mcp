@@ -46,12 +46,6 @@
 #include "Runtime/Launch/Resources/Version.h"
 #include <functional>
 
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4)
-#define UE_MCP_HAS_PCG_EDITOR_GRAPH_NODE_LAYOUT 1
-#else
-#define UE_MCP_HAS_PCG_EDITOR_GRAPH_NODE_LAYOUT 0
-#endif
-
 #define UE_MCP_HAS_STATIC_FIND_OBJECT_FLAGS (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
 
 namespace
@@ -2352,7 +2346,6 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 	// editor never writes back to it. Build a lookup so editor-authored
 	// graphs round-trip their hand-laid-out positions.
 	// Use reflection instead of including private PCG editor graph-node headers.
-#if UE_MCP_HAS_PCG_EDITOR_GRAPH_NODE_LAYOUT
 	TMap<const UPCGNode*, const UEdGraphNode*> EditorNodeByPCGNode;
 	for (TObjectIterator<UEdGraphNode> It; It; ++It)
 	{
@@ -2367,7 +2360,6 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 			EditorNodeByPCGNode.Add(PCGN, EdNode);
 		}
 	}
-#endif
 
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
 	for (const UPCGNode* Node : Graph->GetNodes())
@@ -2379,13 +2371,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 
 		double PosX = Node->PositionX;
 		double PosY = Node->PositionY;
-#if UE_MCP_HAS_PCG_EDITOR_GRAPH_NODE_LAYOUT
 		if (const UEdGraphNode* const* EdNodePtr = EditorNodeByPCGNode.Find(Node); EdNodePtr && *EdNodePtr)
 		{
 			PosX = (*EdNodePtr)->NodePosX;
 			PosY = (*EdNodePtr)->NodePosY;
 		}
-#endif
 		NodeObj->SetNumberField(TEXT("posX"), PosX);
 		NodeObj->SetNumberField(TEXT("posY"), PosY);
 
