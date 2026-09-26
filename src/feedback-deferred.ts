@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomBytes } from "node:crypto";
 import { userDir } from "./user-dir.js";
+import { readEnv } from "./env.js";
 
 /**
  * Storage for `feedback.mode = "defer"` submissions. The server writes the
@@ -20,7 +21,7 @@ import { userDir } from "./user-dir.js";
  *  between operations without re-importing the module. */
 function pendingDir(): string {
   return (
-    process.env.UE_MCP_PENDING_DIR ||
+    readEnv("pendingDir") ||
     path.join(userDir(), "pending-feedback")
   );
 }

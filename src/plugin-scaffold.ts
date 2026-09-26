@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { packageVersion } from "./package-root.js";
+import { readEnv } from "./env.js";
 
 export function deriveDefaultPrefix(pkgName: string): string {
   const normalized = pkgName.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
@@ -38,7 +39,7 @@ export function writeScaffold(dir: string, pkgName: string, prefix: string): voi
   // version that introduced it. Default the floor to the running server's
   // version so a freshly scaffolded plugin declares a dependency that can
   // actually resolve the import; an explicit env override still wins.
-  const minServer = process.env.UE_MCP_PLUGIN_MIN_SERVER ?? packageVersion();
+  const minServer = readEnv("pluginMinServer") ?? packageVersion();
   const year = new Date().getFullYear();
 
   const pkgJson = {

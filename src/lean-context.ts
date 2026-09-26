@@ -4,6 +4,7 @@ import { actionEnum, categoryTool } from "./category-tool.js";
 import { actionSchema } from "./action-schema.js";
 import { searchToolGraph } from "./tool-search.js";
 import { actionSignature } from "./action-signature.js";
+import { readEnv } from "./env.js";
 
 /**
  * Lean context strategy, and what every strategy shares: choosing one, and
@@ -41,7 +42,7 @@ export const DEFAULT_CONTEXT_STRATEGY: ContextStrategy = "micro";
  * surface cost most of a context window before the first call.
  */
 export function resolveContextStrategy(configStrategy?: string): ContextStrategy {
-  const raw = (process.env.UE_MCP_CONTEXT_STRATEGY ?? configStrategy ?? DEFAULT_CONTEXT_STRATEGY).trim().toLowerCase();
+  const raw = (readEnv("contextStrategy") ?? configStrategy ?? DEFAULT_CONTEXT_STRATEGY).trim().toLowerCase();
   return raw === "full" ? "full" : raw === "lean" ? "lean" : "micro";
 }
 

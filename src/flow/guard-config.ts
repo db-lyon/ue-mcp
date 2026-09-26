@@ -1,3 +1,4 @@
+import { readEnv } from "../env.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { globalConfigPath } from "../global-config.js";
@@ -28,7 +29,7 @@ function configLayers(configDir: string): ConfigLayer[] {
   const project = configLayer(path.join(configDir, "ue-mcp.yml"));
   const layers = [configLayer(globalConfigPath()), project];
   if (project.stamp !== null) {
-    if (process.env.UE_MCP_ENV) layers.push(configLayer(path.join(configDir, `ue-mcp.${process.env.UE_MCP_ENV}.yml`)));
+    if (readEnv("env")) layers.push(configLayer(path.join(configDir, `ue-mcp.${readEnv("env")}.yml`)));
     layers.push(configLayer(path.join(configDir, "ue-mcp.local.yml")));
   }
   return layers;

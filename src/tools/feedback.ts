@@ -19,6 +19,7 @@ import { clientAdvertisesElicitation } from "../dialog-mode.js";
 import { warn } from "../log.js";
 import { routeFeedback, type RoutingDecision } from "../feedback-routing.js";
 import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubRepo } from "../registry-catalog.js";
+import { readEnv } from "../env.js";
 
 /**
  * Resolve the active feedback mode. Precedence (highest wins):
@@ -40,7 +41,7 @@ import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubR
  * change this; it's set by the human running the server.
  */
 function resolveFeedbackMode(ctx: ToolContext): FeedbackMode {
-  const env = (process.env.UE_MCP_FEEDBACK_MODE ?? "").trim().toLowerCase();
+  const env = (readEnv("feedbackMode") ?? "").trim().toLowerCase();
   if (env === "auto-approve" || env === "defer" || env === "interactive") return env;
   const pref = getFeedbackMode(ctx.project?.projectDir ?? null);
   if (pref) return pref;
@@ -371,7 +372,7 @@ function buildApprovalMessage(
  * air-gapped runs or anyone who wants the old single-tracker behaviour.
  */
 function routingDisabled(): boolean {
-  return /^(0|off|false|no)$/i.test((process.env.UE_MCP_FEEDBACK_ROUTING ?? "").trim());
+  return /^(0|off|false|no)$/i.test((readEnv("feedbackRouting") ?? "").trim());
 }
 
 /** The addressed editor's graph for routing, or none when its surface is not built. */
@@ -894,7 +895,7 @@ async function submitInteractive(ctx: ToolContext, s: PreparedSubmission) {
     const elapsedMs = Date.now() - elicitStartedAt;
     // Overridable so both branches are testable without sleeping, and so an
     // operator on a slow-but-real client can tune it. 0 disables it.
-    const configured = Number(process.env.UE_MCP_ELICIT_MIN_HUMAN_MS);
+    const configured = Number(readEnv("elicitMinHumanMs"));
     const noHumanCouldRespondMs = Number.isFinite(configured) && configured >= 0 ? configured : 1000;
     if (noHumanCouldRespondMs > 0 && elapsedMs < noHumanCouldRespondMs) {
       // #991: without a saved report this answer led nowhere on a client that

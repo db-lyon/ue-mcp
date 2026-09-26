@@ -22,6 +22,7 @@ import {
   type UserAuth,
 } from "./auth.js";
 import { registryBase } from "./registry-catalog.js";
+import { readEnv } from "./env.js";
 
 const registryFile = () => join(authDir(), "registry.json");
 
@@ -64,7 +65,7 @@ export async function clearRegistryAuth(): Promise<void> {
  */
 export async function resolvePublishToken(flagToken?: string): Promise<string | null> {
   if (flagToken) return flagToken;
-  const env = process.env.UE_MCP_PUBLISH_TOKEN ?? process.env.REGISTRY_PUBLISH_TOKEN;
+  const env = readEnv("publishToken") ?? process.env.REGISTRY_PUBLISH_TOKEN;
   if (env) return env;
   const cached = await readRegistryAuth();
   return cached?.token ?? null;

@@ -9,6 +9,7 @@
  * so once, in the result, and only to the client that actually has the
  * problem.
  */
+import { readEnv } from "./env.js";
 
 export interface ClientInfo {
   name: string;
@@ -110,7 +111,7 @@ const RENDERS_WHOLE_ELICITATION = [
  * to the client.
  */
 export function elicitationNeedsRelay(client: ClientInfo | undefined): boolean {
-  const override = (process.env.UE_MCP_DIALOG_RELAY ?? "").trim().toLowerCase();
+  const override = (readEnv("dialogRelay") ?? "").trim().toLowerCase();
   if (override === "off" || override === "0" || override === "false") return false;
   if (override === "on" || override === "1" || override === "true") return true;
   if (!client) return true;

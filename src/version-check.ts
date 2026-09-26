@@ -16,6 +16,7 @@ import * as path from "node:path";
 import { warn, debug } from "./log.js";
 import { userDir } from "./user-dir.js";
 import { compareVersions, parseVersion } from "./plugin/version.js";
+import { readEnv } from "./env.js";
 
 /**
  * Where the answer is cached.
@@ -28,7 +29,7 @@ import { compareVersions, parseVersion } from "./plugin/version.js";
  * this process later treats as trusted belongs.
  */
 function cacheFile(): string {
-  const override = process.env.UE_MCP_VERSION_CACHE;
+  const override = readEnv("versionCache");
   if (override && override.trim() !== "") return override;
   return path.join(userDir(), "version-check.json");
 }
@@ -190,7 +191,7 @@ function buildNotice(current: string, latest: string): string {
  * locked-down environments, tests).
  */
 export function startVersionCheck(currentVersion: string): void {
-  if (process.env.UE_MCP_DISABLE_UPDATE_CHECK === "1") return;
+  if (readEnv("disableUpdateCheck") === "1") return;
 
   void (async () => {
     try {

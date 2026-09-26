@@ -28,6 +28,7 @@
  * calls it, it does not reimplement any part of it. Nothing new belongs in a
  * dispatcher; it belongs in `prepareCall`, where every route gets it.
  */
+import { ENV_VARS, readEnv } from "./env.js";
 import { normalizePathParams, attachPathRepairs, type PathRepair } from "./path-params.js";
 import { MAX_BRIDGE_TIMEOUT_MS } from "./bridge-timeouts.js";
 import {
@@ -215,7 +216,7 @@ export function prepareCall(
 }
 
 /** Set to 1 to refuse a call instead of warning when a parameter is not forwarded (#1057). */
-export const STRICT_PARAMS_ENV = "UE_MCP_STRICT_PARAMS";
+export const STRICT_PARAMS_ENV = ENV_VARS.strictParams;
 
 /**
  * Map a bridge action's parameters and record what the mapper ignored (#1057).
@@ -238,7 +239,7 @@ export function forwardToBridge(
   const { params, unforwarded } = mapTracked(mapParams, bag, pipeline.supplied);
   pipeline.sentKeys = Object.keys(params);
   if (unforwarded.length === 0) return params;
-  if (process.env[STRICT_PARAMS_ENV] === "1") {
+  if (readEnv("strictParams") === "1") {
     throw new McpError(
       ErrorCode.INVALID_PARAMS,
       `${label} does not take ${unforwarded.join(", ")}, so the call was not sent. `

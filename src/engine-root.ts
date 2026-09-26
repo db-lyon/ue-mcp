@@ -39,6 +39,7 @@ import * as path from "node:path";
 import { execSync } from "node:child_process";
 import { debug, warn } from "./log.js";
 import { readEngineRootFromLog } from "./engine-observer.js";
+import { readEnv } from "./env.js";
 
 /** Where a candidate engine came from. Printed verbatim in failures. */
 export type EngineCandidateSource =
@@ -244,7 +245,7 @@ function isAbsoluteAnyPlatform(entry: string): boolean {
 }
 
 export function protectedEngineRoots(env: NodeJS.ProcessEnv = process.env): string[] {
-  return splitDenyList(env.UE_MCP_PROTECTED_ENGINE_ROOTS || "")
+  return splitDenyList(readEnv("protectedEngineRoots", env) || "")
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry) => {
@@ -394,7 +395,7 @@ export function engineCandidates(lookup: EngineLookup = {}, probed: string[] = [
   };
 
   // 1-5: everything a person configured on purpose.
-  pushRoot("UE_MCP_TEST_ENGINE_ROOT", trimmed(env.UE_MCP_TEST_ENGINE_ROOT), true);
+  pushRoot("UE_MCP_TEST_ENGINE_ROOT", trimmed(readEnv("testEngineRoot", env)), true);
   pushTool("UE_BUILD_TOOL_PATH", trimmed(env.UE_BUILD_TOOL_PATH));
   pushTool("editor.buildToolPath", trimmed(lookup.configBuildToolPath));
   // An editor binary names its tree, but it is a statement about the editor,

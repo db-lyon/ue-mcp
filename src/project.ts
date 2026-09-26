@@ -10,6 +10,7 @@ import { resolveEngineRoot, type EngineLookup } from "./engine-root.js";
 import { readGlobalUeMcpBlock } from "./global-config.js";
 import { setInstalledHooks, setFeedbackMode, type FeedbackMode } from "./user-state.js";
 import { resolveUProjectPath } from "./uproject-path.js";
+import { readEnv } from "./env.js";
 
 export interface PluginInfo {
   name: string;
@@ -482,7 +483,7 @@ function overlayFor(
   global: Record<string, unknown>,
   project: Record<string, unknown>,
 ): string | undefined {
-  const fromVariable = firstString(process.env.UE_MCP_ENV);
+  const fromVariable = firstString(readEnv("env"));
   if (fromVariable) return fromVariable;
 
   const local = readUeMcpBlock(path.join(projectDir, "ue-mcp.local.yml"));

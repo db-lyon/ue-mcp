@@ -1,5 +1,6 @@
 import { getDialogMode, getUserStatePath, type DialogMode } from "./user-state.js";
 import type { ElicitFn } from "./types.js";
+import { readEnv } from "./env.js";
 
 /**
  * The dialog handling mode that applied, and why it applied.
@@ -64,7 +65,7 @@ export function resolveDialogMode(opts: {
   canElicit: boolean;
   env?: NodeJS.ProcessEnv;
 }): ResolvedDialogMode {
-  const raw = ((opts.env ?? process.env).UE_MCP_DIALOG_MODE ?? "").trim().toLowerCase();
+  const raw = (readEnv("dialogMode", opts.env) ?? "").trim().toLowerCase();
   if (raw === "interactive" || raw === "auto" || raw === "defer") {
     return { mode: raw, source: `UE_MCP_DIALOG_MODE=${raw}` };
   }

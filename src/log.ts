@@ -7,13 +7,14 @@
  * Levels are filtered by UE_MCP_LOG_LEVEL (debug | info | warn | error).
  * Default is info.
  */
+import { readEnv } from "./env.js";
 
 type Level = "debug" | "info" | "warn" | "error";
 
 const LEVELS: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
 function threshold(): number {
-  const envLevel = (process.env.UE_MCP_LOG_LEVEL ?? "info").toLowerCase();
+  const envLevel = (readEnv("logLevel") ?? "info").toLowerCase();
   return LEVELS[envLevel as Level] ?? LEVELS.info;
 }
 

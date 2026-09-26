@@ -12,6 +12,7 @@
  *   ue-mcp.{env}.yml      (env overlay)         <
  *   ue-mcp.local.yml      (local, untracked)
  */
+import { readEnv } from "../env.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
@@ -45,7 +46,7 @@ export function readLayers(projectDir: string): ConfigLayer[] {
     { target: "global", label: "~/.ue-mcp/config.yml (you, all projects)", file: globalConfigPath() },
     { target: "project", label: "ue-mcp.yml (team, tracked)", file: path.join(projectDir, "ue-mcp.yml") },
   ];
-  const env = process.env.UE_MCP_ENV;
+  const env = readEnv("env");
   if (env) {
     layers.push({ target: "env", label: `ue-mcp.${env}.yml (env overlay)`, file: path.join(projectDir, `ue-mcp.${env}.yml`) });
   }

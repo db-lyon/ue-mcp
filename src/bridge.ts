@@ -9,6 +9,7 @@ import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
 import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
 import { syncRequestedPort } from "./requested-port.js";
 import { packageVersion } from "./package-root.js";
+import { readEnv } from "./env.js";
 
 /**
  * The wire protocol this client speaks. Must match
@@ -258,9 +259,9 @@ export class EditorBridge implements IBridge {
     // where the IPv6 stack wins DNS, leaving the client stuck connecting to
     // an empty IPv6 socket while the plugin owns 127.0.0.1:9877.
     // UE_MCP_HOST overrides the default for non-standard topologies.
-    this.host = host ?? process.env.UE_MCP_HOST ?? "127.0.0.1";
+    this.host = host ?? readEnv("host") ?? "127.0.0.1";
 
-    const envPort = Number.parseInt(process.env.UE_MCP_PORT ?? "", 10);
+    const envPort = Number.parseInt(readEnv("port") ?? "", 10);
     if (typeof port === "number" && port > 0) {
       this.port = port;
       this.portSource = "explicit";
@@ -285,7 +286,7 @@ export class EditorBridge implements IBridge {
    * was, and this is what one project uses to differ when it is unset.
    */
   setConfigHost(host?: string): void {
-    if (process.env.UE_MCP_HOST) return;
+    if (readEnv("host")) return;
     if (typeof host === "string" && host.trim() !== "") this.host = host.trim();
   }
 

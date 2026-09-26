@@ -1,3 +1,4 @@
+import { readEnv } from "./env.js";
 import { resolveUserAuth, clearUserAuth, type PendingDeviceFlow } from "./auth.js";
 import {
   CORE_REPO,
@@ -33,12 +34,12 @@ import {
  *                             their deployment, not the public one.
  */
 function signingEndpoints(): string[] {
-  const override = process.env.UE_MCP_FEEDBACK_ENDPOINT?.trim();
+  const override = readEnv("feedbackEndpoint")?.trim();
   if (override) return [override.replace(/\/+$/, "")];
 
   const hosted = `${feedbackBase()}/`;
   const viaRegistry = `${registryBase()}/api/feedback`;
-  const selfHostedRegistry = Boolean(process.env.UE_MCP_REGISTRY?.trim());
+  const selfHostedRegistry = Boolean(readEnv("registry")?.trim());
   const ordered = selfHostedRegistry ? [viaRegistry, hosted] : [hosted, viaRegistry];
   return ordered.filter((url, i) => ordered.indexOf(url) === i);
 }

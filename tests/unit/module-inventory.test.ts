@@ -144,6 +144,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "schemas.ts": "Shared schema declarations.",
   "types.ts": "Shared type declarations. No runtime code.",
   "category-tool.ts": "Builds category tools and their routing parameters; holds nothing per editor.",
+  "env.ts": "Names and reads the process environment; one answer for the whole process.",
   "cli-main.ts": "The command entry contract and the helpers that run one; no editor involved.",
   "cli-commands.ts": "The table of commands and the dispatcher over it; each command picks its own editor.",
   "plugin-scaffold.ts": "Writes a new plugin's files into the directory it is handed; no editor involved.",

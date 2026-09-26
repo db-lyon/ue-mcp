@@ -48,6 +48,7 @@ import {
   warn,
 } from "./ui/ansi.js";
 import { isUProjectPath, projectDirOf } from "./uproject-path.js";
+import { readEnv } from "./env.js";
 
 function printHelp(): void {
   console.log("");
@@ -77,7 +78,7 @@ function printHelp(): void {
 function cmdMode(arg: string | undefined, projectRoot: string | null, editorLabel: string | null): void {
   const scope = editorLabel ? `editor '${editorLabel}'` : "per-user";
   if (arg === undefined) {
-    const env = (process.env.UE_MCP_FEEDBACK_MODE ?? "").trim().toLowerCase();
+    const env = (readEnv("feedbackMode") ?? "").trim().toLowerCase();
     const scoped = projectRoot ? getFeedbackMode(projectRoot) : undefined;
     const pref = getFeedbackMode();
     const effective: FeedbackMode =
@@ -122,8 +123,8 @@ function cmdMode(arg: string | undefined, projectRoot: string | null, editorLabe
       ? `Feedback mode for ${scope} set to "${arg}" (per-user, stored in ~/.ue-mcp/state.json).`
       : `Feedback mode set to "${arg}" (per-user, stored in ~/.ue-mcp/state.json).`,
   );
-  if (process.env.UE_MCP_FEEDBACK_MODE) {
-    warn(`UE_MCP_FEEDBACK_MODE=${process.env.UE_MCP_FEEDBACK_MODE} is set in your env and will override this preference for processes started from that shell.`);
+  if (readEnv("feedbackMode")) {
+    warn(`UE_MCP_FEEDBACK_MODE=${readEnv("feedbackMode")} is set in your env and will override this preference for processes started from that shell.`);
   }
 }
 

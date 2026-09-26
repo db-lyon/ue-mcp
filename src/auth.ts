@@ -1,16 +1,20 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
 import { userDir } from "./user-dir.js";
+import { readEnv } from "./env.js";
 
 // OAuth Client ID for the ue-mcp-feedback GitHub App. This is NOT a secret -
 // device flow client IDs are designed to be public. Override at runtime via
 // UE_MCP_OAUTH_CLIENT_ID for testing or for users running a fork.
 const DEFAULT_CLIENT_ID = "Iv23li9lpE9A0FqmXlJH";
-const CLIENT_ID = process.env.UE_MCP_OAUTH_CLIENT_ID || DEFAULT_CLIENT_ID;
+/** Read per call, like every other variable, so an override is seen when it is set. */
+function clientId(): string {
+  return readEnv("oauthClientId") || DEFAULT_CLIENT_ID;
+}
 
 /** Where the GitHub and registry tokens are kept: UE_MCP_AUTH_DIR, else ~/.ue-mcp. */
 export function authDir(): string {
-  return process.env.UE_MCP_AUTH_DIR || userDir();
+  return readEnv("authDir") || userDir();
 }
 const authFile = () => join(authDir(), "auth.json");
 const pendingFile = () => join(authDir(), "device-pending.json");
@@ -83,7 +87,7 @@ export async function startDeviceFlow(): Promise<PendingDeviceFlow> {
       "Content-Type": "application/json",
       "User-Agent": "ue-mcp",
     },
-    body: JSON.stringify({ client_id: CLIENT_ID }),
+    body: JSON.stringify({ client_id: clientId() }),
   });
   if (!res.ok) {
     throw new Error(`Device code request failed: ${res.status} ${await res.text()}`);
@@ -123,7 +127,7 @@ export async function tryExchangeDeviceCode(
       "User-Agent": "ue-mcp",
     },
     body: JSON.stringify({
-      client_id: CLIENT_ID,
+      client_id: clientId(),
       device_code: pending.device_code,
       grant_type: "urn:ietf:params:oauth:grant-type:device_code",
     }),

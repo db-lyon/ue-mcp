@@ -3,6 +3,7 @@ import * as path from "node:path";
 import yaml from "js-yaml";
 import { warn } from "./log.js";
 import { userDir } from "./user-dir.js";
+import { readEnv } from "./env.js";
 
 /**
  * User-global config layer: `~/.ue-mcp/config.yml`. A per-user config file
@@ -28,7 +29,7 @@ import { userDir } from "./user-dir.js";
  */
 export function globalConfigPath(): string {
   return (
-    process.env.UE_MCP_GLOBAL_CONFIG ||
+    readEnv("globalConfig") ||
     path.join(userDir(), "config.yml")
   );
 }

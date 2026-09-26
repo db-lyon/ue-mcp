@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { normalizeProjectRoot } from "./port.js";
 import { warn } from "./log.js";
 import { userDir } from "./user-dir.js";
+import { readEnv } from "./env.js";
 
 /**
  * User-scoped, machine-only state. Lives at `~/.ue-mcp/state.json`. Stores
@@ -82,7 +83,7 @@ interface UserState {
 
 function statePath(): string {
   return (
-    process.env.UE_MCP_USER_STATE ||
+    readEnv("userState") ||
     path.join(userDir(), "state.json")
   );
 }

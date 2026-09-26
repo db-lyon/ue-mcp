@@ -25,6 +25,7 @@
  * and tests/unit/bridge-timeout-parity.test.ts parses the plugin sources and
  * fails when the two drift apart. A mirror nobody checks is worse than none.
  */
+import { ENV_VARS, readEnv } from "./env.js";
 
 /** What a method with no registered timeout gets. Unchanged from before. */
 export const DEFAULT_BRIDGE_TIMEOUT_MS = 30_000;
@@ -41,7 +42,7 @@ export const SERVER_TIMEOUT_MARGIN_MS = 5_000;
 export const MAX_BRIDGE_TIMEOUT_MS = 3_600_000;
 
 /** Environment override for the floor under every call, in milliseconds. */
-export const TIMEOUT_ENV_VAR = "UE_MCP_BRIDGE_TIMEOUT_MS";
+export const TIMEOUT_ENV_VAR = ENV_VARS.bridgeTimeoutMs;
 
 /**
  * Mirror of every FMCPHandlerRegistry::RegisterHandlerWithTimeout call in
@@ -124,7 +125,7 @@ export function registeredTimeoutMs(method: string): number | undefined {
 
 /** The floor under every call: the env override when it is a usable number. */
 export function environmentTimeoutMs(env: NodeJS.ProcessEnv = process.env): number | undefined {
-  const raw = env[TIMEOUT_ENV_VAR];
+  const raw = readEnv("bridgeTimeoutMs", env);
   if (raw === undefined || raw === "") return undefined;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined;

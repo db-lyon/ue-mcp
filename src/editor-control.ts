@@ -24,6 +24,7 @@ import { startProgress } from "./ui/progress.js";
 import { oneLine } from "./dialog-guard.js";
 import type { ProgressFn } from "./types.js";
 import { findUProject } from "./uproject-path.js";
+import { readEnv } from "./env.js";
 
 // Process control is cross-platform: the editor binary path and the running-
 // process probe differ per OS, and stopping goes through the bridge (#790).
@@ -128,7 +129,7 @@ function editorExecutableFailure(project?: ProjectContext): string {
  * that project differs when it is unset (#817).
  */
 function bridgeHost(projectDir?: string | null): string {
-  const env = process.env.UE_MCP_HOST;
+  const env = readEnv("host");
   if (env) return env;
   if (projectDir) {
     try {
@@ -1474,7 +1475,7 @@ export function safeParallelActions(
   totalMemBytes = os.totalmem(),
   cores = os.cpus().length,
 ): number {
-  const override = Number(process.env.UE_MCP_MAX_PARALLEL_ACTIONS);
+  const override = Number(readEnv("maxParallelActions"));
   if (Number.isInteger(override) && override > 0) return override;
 
   // Measured against Unreal 5.8 on Windows: a PCH compile peaks around 5 GB,

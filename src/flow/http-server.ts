@@ -8,6 +8,7 @@ import { refuseUntargetedCall } from "../editor-gate.js";
 import { info, warn, error as logError } from "../log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
 import { existingGuard } from "../dialog-guard.js";
+import { readEnv } from "../env.js";
 
 type FlowTool = ReturnType<typeof createFlowTool>;
 
@@ -65,7 +66,7 @@ export function startFlowHttpServer(
   // Env override lets CI scripts pin a known value without parsing stderr.
   const token =
     options.token ??
-    process.env.UE_MCP_HTTP_TOKEN ??
+    readEnv("httpToken") ??
     randomBytes(32).toString("hex");
 
   const server = http.createServer(async (req, res) => {

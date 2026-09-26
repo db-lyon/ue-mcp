@@ -23,6 +23,7 @@ import {
 } from "./user-state.js";
 import { BOLD, CYAN, DIM, RESET, fail, info, ok, warn } from "./ui/ansi.js";
 import { projectDirOf } from "./uproject-path.js";
+import { readEnv } from "./env.js";
 
 function printHelp(): void {
   console.log("");
@@ -61,7 +62,7 @@ function projectRootOf(projectPath?: string): string | null {
  */
 function cmdMode(arg: string | undefined, projectRoot: string | null, editorLabel: string | null): void {
   const scope = editorLabel ? `editor '${editorLabel}'` : "per-user";
-  const env = (process.env.UE_MCP_DIALOG_MODE ?? "").trim().toLowerCase();
+  const env = (readEnv("dialogMode") ?? "").trim().toLowerCase();
 
   if (arg === undefined) {
     // What each scope HOLDS, not what applies. getDialogMode falls back to the
@@ -123,8 +124,8 @@ function cmdMode(arg: string | undefined, projectRoot: string | null, editorLabe
         "Nothing is pressed by the server, but the person at the keyboard is no longer the one deciding.",
     );
   }
-  if (process.env.UE_MCP_DIALOG_MODE) {
-    warn(`UE_MCP_DIALOG_MODE=${process.env.UE_MCP_DIALOG_MODE} is set in your env and will override this preference for processes started from that shell.`);
+  if (readEnv("dialogMode")) {
+    warn(`UE_MCP_DIALOG_MODE=${readEnv("dialogMode")} is set in your env and will override this preference for processes started from that shell.`);
   }
 }
 

@@ -27,6 +27,7 @@ import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs, writeMcpConfi
 import { deriveProjectPort } from "./port.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "./uproject-path.js";
+import { readEnv } from "./env.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -261,7 +262,7 @@ async function init(argv: string[]) {
   // The C++ bridge resolves the same way from the same inputs, so the number
   // printed here is the number the editor will listen on.
   const derivedPort = deriveProjectPort(path.dirname(project.projectPath!));
-  const envPort = Number.parseInt(process.env.UE_MCP_PORT ?? "", 10);
+  const envPort = Number.parseInt(readEnv("port") ?? "", 10);
   const pinnedPort = Number.isFinite(envPort) && envPort > 0 ? envPort : project.config.bridge?.port;
   const portOrigin = Number.isFinite(envPort) && envPort > 0
     ? "pinned by UE_MCP_PORT"

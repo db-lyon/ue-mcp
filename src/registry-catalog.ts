@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { debug, warn } from "./log.js";
 import { userDir } from "./user-dir.js";
+import { readEnv } from "./env.js";
 
 /**
  * Read-only client for the ue-mcp plugin registry (plugins.ue-mcp.com).
@@ -46,7 +47,7 @@ export const CORE_REPO: GitHubRepo = { owner: "db-lyon", repo: "ue-mcp" };
 
 /** The plugin registry's origin: UE_MCP_REGISTRY, else the public registry. */
 export function registryBase(): string {
-  return (process.env.UE_MCP_REGISTRY ?? "https://plugins.ue-mcp.com").replace(/\/+$/, "");
+  return (readEnv("registry") ?? "https://plugins.ue-mcp.com").replace(/\/+$/, "");
 }
 
 /**
@@ -61,7 +62,7 @@ export function registryBase(): string {
  * src/github-app.ts) overrides the full URL when the path differs too.
  */
 export function feedbackBase(): string {
-  return (process.env.UE_MCP_FEEDBACK ?? "https://feedback.ue-mcp.com").replace(/\/+$/, "");
+  return (readEnv("feedback") ?? "https://feedback.ue-mcp.com").replace(/\/+$/, "");
 }
 
 /** `https://github.com/db-lyon/pie-studio(.git)` -> `{owner, repo}`. */
@@ -122,7 +123,7 @@ let memoryCache: { at: number; base: string; plugins: RegistryPlugin[] } | null 
 
 function cachePath(): string {
   return (
-    process.env.UE_MCP_REGISTRY_CACHE ||
+    readEnv("registryCache") ||
     path.join(userDir(), "registry-catalog.json")
   );
 }
