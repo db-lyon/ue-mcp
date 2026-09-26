@@ -56,19 +56,12 @@
 
 namespace
 {
-	// #213: shared class lookup. Mirrors AddPCGNode's tolerant resolver - accepts
-	// short name, "/Script/PCG.X" path, or "U"-prefixed short name.
+	// A PCG node type is a UPCGSettings subclass, named any way MCPResolveClass
+	// accepts: short name, U-prefixed name, or /Script path.
 	static UClass* FindPCGSettingsClass(const FString& ClassName)
 	{
 		if (ClassName.IsEmpty()) return nullptr;
-		UClass* Cls = FindObject<UClass>(nullptr, *ClassName);
-		if (!Cls) Cls = FindObject<UClass>(nullptr, *(TEXT("/Script/PCG.") + ClassName));
-		if (!Cls && !ClassName.StartsWith(TEXT("U")))
-		{
-			Cls = FindObject<UClass>(nullptr, *(TEXT("/Script/PCG.U") + ClassName));
-		}
-		if (Cls && !Cls->IsChildOf(UPCGSettings::StaticClass())) return nullptr;
-		return Cls;
+		return MCPResolveClassOfType(ClassName, UPCGSettings::StaticClass());
 	}
 
 	// #213: locate a node by name within a graph, including Input/Output specials.
@@ -474,26 +467,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
 	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
-	// Find the settings class by name
-	UClass* SettingsClass = FindObject<UClass>(nullptr, *NodeType);
-	if (!SettingsClass)
-	{
-		// Try with /Script/PCG prefix
-		SettingsClass = FindObject<UClass>(nullptr, *(TEXT("/Script/PCG.") + NodeType));
-	}
-	if (!SettingsClass)
-	{
-		// Try with U prefix stripped
-		FString CleanName = NodeType;
-		if (!CleanName.StartsWith(TEXT("U")))
-		{
-			SettingsClass = FindObject<UClass>(nullptr, *(TEXT("/Script/PCG.U") + CleanName));
-		}
-	}
-	if (!SettingsClass || !SettingsClass->IsChildOf(UPCGSettings::StaticClass()))
-	{
-		return MCPError(FString::Printf(TEXT("PCG settings class not found or invalid: %s"), *NodeType));
-	}
+	UClass* SettingsClass = FindPCGSettingsClass(NodeType);
+	if (!SettingsClass) return MCPClassNotFoundError(NodeType, TEXT("nodeType"));
 
 	// #157: mutate inside a transaction, outer the settings to the graph so they
 	// serialize with the package, and save the exact Graph instance mutated.
@@ -1008,7 +983,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 	if (!RemovedSettingsClassPath.IsEmpty())
 	{
 		// Rollback: put a node of the same settings class back at the same spot.
-		// add_pcg_node resolves a full class path through FindObject<UClass>, so
+		// add_pcg_node resolves a full class path through MCPResolveClass, so
 		// the class this node really had is the one recreated. What it cannot do
 		// is restore the settings values or the edges, both of which are listed
 		// above for a caller that has to rebuild them.
