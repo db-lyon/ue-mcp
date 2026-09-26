@@ -12,6 +12,9 @@ public:
 	// Handler function signature
 	using FHandlerFunction = TFunction<TSharedPtr<FJsonValue>(const TSharedPtr<FJsonObject>& Params)>;
 
+	// Game-thread timeout for a handler that registered none of its own.
+	static constexpr float DefaultTimeoutSeconds = 30.0f;
+
 	FMCPGameThreadExecutor();
 	~FMCPGameThreadExecutor();
 
@@ -32,7 +35,7 @@ public:
 	// kill. The two exemptions travel together because they describe one
 	// property - this handler is how a blocked engine gets unblocked, so no
 	// block may stand in front of it.
-	TSharedPtr<FJsonValue> ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds = 30.0f, bool bModalSafe = false);
+	TSharedPtr<FJsonValue> ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds = DefaultTimeoutSeconds, bool bModalSafe = false);
 
 	// Run any modal-safe work that was queued while a dialog blocked the
 	// engine loop. Called from the Slate modal loop tick. Game thread only.

@@ -368,7 +368,8 @@ private:
 
 	// #821: identity for this server object, so a record on disk can say which
 	// process wrote it and only that process can take it away. A pid alone is
-	// not enough; pids are recycled.
-	FGuid InstanceId;
+	// not enough; pids are recycled. Held in its wire form, which is the only
+	// form any record or payload uses.
+	const FString InstanceId;
 	FDateTime StartedAtUtc;
 };

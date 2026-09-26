@@ -15,7 +15,6 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/DateTime.h"
-#include "Misc/Timespan.h"
 #include "Misc/App.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/CommandLine.h"
@@ -144,7 +143,7 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port, const FString& InPortSource, bool
 	, ServerThread(nullptr)
 	, bShouldStop(false)
 	, bIsRunning(false)
-	, InstanceId(FGuid::NewGuid())
+	, InstanceId(FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens))
 	, StartedAtUtc(FDateTime::UtcNow())
 {
 	// #817: construction-gated, from the command line or the environment only.
@@ -563,12 +562,6 @@ FString FMCPBridgeServer::GetBridgeErrorFilePath()
 
 namespace
 {
-	/** Publish JSON by temp-and-rename. See FMCPBridgeStateFiles::PublishJson. */
-	bool PublishJsonAtomically(const FString& FilePath, const TSharedPtr<FJsonObject>& Payload)
-	{
-		return FMCPBridgeStateFiles::PublishJson(FilePath, Payload);
-	}
-
 	/** Read the instanceId out of a record, or empty when there is not one. */
 	FString ReadRecordInstanceId(const FString& FilePath)
 	{
@@ -609,7 +602,7 @@ namespace
 void FMCPBridgeServer::WritePortLockfile(int32 PortValue)
 {
 	const FString FilePath = GetPortLockfilePath();
-	const FString OurId = InstanceId.ToString(EGuidFormats::DigitsWithHyphens);
+	const FString OurId = InstanceId;
 
 	// #817: the write is owner-checked, the same way the delete already was.
 	// One project directory has one port.json and two editors of that project
@@ -636,12 +629,12 @@ void FMCPBridgeServer::WritePortLockfile(int32 PortValue)
 	Obj->SetStringField(TEXT("startedAt"), StartedAtUtc.ToIso8601());
 	// Who wrote this. A pid is not identity: pids are recycled, and two
 	// instances of one project would otherwise be indistinguishable on disk.
-	Obj->SetStringField(TEXT("instanceId"), InstanceId.ToString(EGuidFormats::DigitsWithHyphens));
+	Obj->SetStringField(TEXT("instanceId"), InstanceId);
 	Obj->SetStringField(TEXT("status"), TEXT("listening"));
 	Obj->SetNumberField(TEXT("protocolVersion"), (double)UEMCP_BRIDGE_PROTOCOL_VERSION);
 	Obj->SetNumberField(TEXT("handlerApiVersion"), (double)UEMCP_BRIDGE_API_VERSION);
 
-	if (!PublishJsonAtomically(FilePath, Obj))
+	if (!FMCPBridgeStateFiles::PublishJson(FilePath, Obj))
 	{
 		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to write port lockfile: %s"), *FilePath);
 		return;
@@ -652,7 +645,7 @@ void FMCPBridgeServer::WritePortLockfile(int32 PortValue)
 	IFileManager::Get().Delete(*GetBridgeErrorFilePath(), /*RequireExists*/ false, /*EvenReadOnly*/ false, /*Quiet*/ true);
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Port lockfile published: %s (port=%d, instance=%s)"),
-		*FilePath, PortValue, *InstanceId.ToString(EGuidFormats::DigitsWithHyphens));
+		*FilePath, PortValue, *InstanceId);
 }
 
 void FMCPBridgeServer::WriteBindFailureRecord(int32 FirstPort, int32 LastPort, int32 ErrorCode)
@@ -666,14 +659,14 @@ void FMCPBridgeServer::WriteBindFailureRecord(int32 FirstPort, int32 LastPort, i
 	Obj->SetNumberField(TEXT("pid"), (double)FPlatformProcess::GetCurrentProcessId());
 	Obj->SetStringField(TEXT("startedAt"), StartedAtUtc.ToIso8601());
 	Obj->SetStringField(TEXT("failedAt"), FDateTime::UtcNow().ToIso8601());
-	Obj->SetStringField(TEXT("instanceId"), InstanceId.ToString(EGuidFormats::DigitsWithHyphens));
+	Obj->SetStringField(TEXT("instanceId"), InstanceId);
 	Obj->SetNumberField(TEXT("firstPortTried"), FirstPort);
 	Obj->SetNumberField(TEXT("lastPortTried"), LastPort);
 	Obj->SetNumberField(TEXT("errorCode"), ErrorCode);
 	Obj->SetStringField(TEXT("detail"), FString::Printf(
 		TEXT("The editor is running but its MCP bridge could not bind a port in [%d, %d]."), FirstPort, LastPort));
 
-	if (!PublishJsonAtomically(FilePath, Obj))
+	if (!FMCPBridgeStateFiles::PublishJson(FilePath, Obj))
 	{
 		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to write bridge error record: %s"), *FilePath);
 	}
@@ -690,7 +683,7 @@ void FMCPBridgeServer::WriteInstanceRecord(const FString& State, int32 PortValue
 	FMCPInstanceRecord Record;
 	Record.Port = PortValue;
 	Record.Pid = FPlatformProcess::GetCurrentProcessId();
-	Record.InstanceId = InstanceId.ToString(EGuidFormats::DigitsWithHyphens);
+	Record.InstanceId = InstanceId;
 	Record.ProjectRoot = FMCPBridgeStateFiles::ThisProjectRoot();
 	Record.StartedAtUtc = StartedAtUtc.ToIso8601();
 	Record.EngineVersion = FEngineVersion::Current().ToString();
@@ -710,14 +703,14 @@ void FMCPBridgeServer::DeleteOwnInstanceRecord()
 	FMCPBridgeStateFiles::DeleteOwnInstanceRecord(
 		FMCPBridgeStateFiles::InstancesDir(),
 		FPlatformProcess::GetCurrentProcessId(),
-		InstanceId.ToString(EGuidFormats::DigitsWithHyphens));
+		InstanceId);
 }
 
 void FMCPBridgeServer::ReapStaleInstanceRecords()
 {
 	const int32 Removed = FMCPBridgeStateFiles::ReapStaleInstanceRecords(
 		FMCPBridgeStateFiles::InstancesDir(),
-		InstanceId.ToString(EGuidFormats::DigitsWithHyphens));
+		InstanceId);
 	if (Removed > 0)
 	{
 		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Removed %d stale bridge instance record(s)."), Removed);
@@ -736,7 +729,7 @@ void FMCPBridgeServer::DeletePortLockfileIfOwned()
 	// from Run(), including the one where the bind failed, so an editor that
 	// never listened used to delete a live editor's record on its way out.
 	const FString OwnerId = ReadRecordInstanceId(FilePath);
-	const FString OurId = InstanceId.ToString(EGuidFormats::DigitsWithHyphens);
+	const FString OurId = InstanceId;
 	if (OwnerId != OurId)
 	{
 		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Leaving port lockfile alone: it belongs to instance %s, not %s"),
@@ -1462,7 +1455,7 @@ TSharedPtr<FJsonObject> FMCPBridgeServer::BuildCapabilitiesPayload()
 	Payload->SetStringField(TEXT("builtAt"), ANSI_TO_TCHAR(__DATE__ " " __TIME__));
 	Payload->SetStringField(TEXT("engineVersion"), FEngineVersion::Current().ToString());
 	Payload->SetStringField(TEXT("projectName"), FApp::GetProjectName());
-	Payload->SetStringField(TEXT("instanceId"), InstanceId.ToString(EGuidFormats::DigitsWithHyphens));
+	Payload->SetStringField(TEXT("instanceId"), InstanceId);
 	Payload->SetNumberField(TEXT("pid"), (double)FPlatformProcess::GetCurrentProcessId());
 	Payload->SetNumberField(TEXT("port"), ServerPort);
 	Payload->SetStringField(TEXT("startedAt"), StartedAtUtc.ToIso8601());
@@ -1673,7 +1666,7 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	TSharedPtr<FJsonValue> Result = GameThreadExecutor.ExecuteOnGameThread(
 		Handler,
 		Params,
-		PerHandlerTimeout > 0.0f ? PerHandlerTimeout : 30.0f,
+		PerHandlerTimeout > 0.0f ? PerHandlerTimeout : FMCPGameThreadExecutor::DefaultTimeoutSeconds,
 		bModalSafe);
 	FMCPEngineStatus::Get().NoteHandlerEnd(Method);
 
