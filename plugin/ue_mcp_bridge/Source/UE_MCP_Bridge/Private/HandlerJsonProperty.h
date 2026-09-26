@@ -11,6 +11,7 @@
 #include "UObject/PropertyPortFlags.h"
 #include "UObject/SoftObjectPtr.h"
 #include "MCPEngineCompat.h"
+#include "HandlerUtils.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
 #include "Engine/Blueprint.h"
@@ -494,7 +495,16 @@ namespace MCPJsonProperty
 					ObjProp->SetObjectPropertyValue(ValueAddr, nullptr);
 					return true;
 				}
-				UObject* Loaded = StaticLoadObject(ObjProp->PropertyClass, nullptr, *Path);
+				// The shared resolver answers every asset path form; a subobject
+				// or /Script path it does not cover falls through to the engine load.
+				UObject* Loaded = MCPLoadAssetObject(Path);
+				if (Loaded && !Loaded->IsA(ObjProp->PropertyClass))
+				{
+					OutError = FString::Printf(TEXT("'%s' is a %s, not a %s"),
+						*Path, *Loaded->GetClass()->GetName(), *ObjProp->PropertyClass->GetName());
+					return false;
+				}
+				if (!Loaded) Loaded = StaticLoadObject(ObjProp->PropertyClass, nullptr, *Path);
 				if (!Loaded) { OutError = FString::Printf(TEXT("asset not found: %s"), *Path); return false; }
 				ObjProp->SetObjectPropertyValue(ValueAddr, Loaded);
 				return true;

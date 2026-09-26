@@ -1256,38 +1256,6 @@ inline TSharedPtr<FJsonValue> MCPCheckActorLabelExists(
 	return MCPResult(Existing);
 }
 
-/** Load a Blueprint by path and return its CDO cast to T. Returns nullptr
- *  on miss; writes a structured error to OutError. Centralises the
- *  pattern that previously lived in NetworkingHandlers::LoadBlueprintCDO,
- *  GasHandlers, and GameplayHandlers. */
-template <typename T = AActor>
-inline T* LoadBlueprintCDO(const FString& BlueprintPath, TSharedPtr<FJsonValue>& OutError)
-{
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	if (!Blueprint && !BlueprintPath.Contains(TEXT(".")))
-	{
-		// Retry in ObjectPath form ("/Game/Foo/Bar" → "/Game/Foo/Bar.Bar").
-		FString AssetName;
-		BlueprintPath.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-		Blueprint = LoadObject<UBlueprint>(nullptr, *(BlueprintPath + TEXT(".") + AssetName));
-	}
-	if (!Blueprint || !Blueprint->GeneratedClass)
-	{
-		OutError = MCPError(FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
-		return nullptr;
-	}
-	T* CDO = Cast<T>(Blueprint->GeneratedClass->GetDefaultObject());
-	if (!CDO)
-	{
-		OutError = MCPError(FString::Printf(
-			TEXT("Blueprint CDO at '%s' is not a %s"),
-			*BlueprintPath,
-			*T::StaticClass()->GetName()));
-		return nullptr;
-	}
-	return CDO;
-}
-
 // ── Parameter extraction ─────────────────────────────────────────────────────
 //
 // Every helper below treats an unset Params the same way it treats an empty
@@ -2533,6 +2501,35 @@ inline TSharedPtr<FJsonValue> MCPAssetLoadError(const FString& AssetPath, const 
 #define REQUIRE_ASSET(Type, OutVar, AssetPath) \
 	Type* OutVar = LoadAssetByPath<Type>(AssetPath); \
 	if (!OutVar) return MCPAssetLoadError(AssetPath, TEXT(#Type));
+
+/** Load a Blueprint by path and return its CDO cast to T. Returns nullptr
+ *  on miss; writes a structured error to OutError. The path goes through
+ *  the shared asset resolver, so it accepts every form asset(read) does. */
+template <typename T = AActor>
+inline T* LoadBlueprintCDO(const FString& BlueprintPath, TSharedPtr<FJsonValue>& OutError)
+{
+	UBlueprint* Blueprint = LoadAssetByPath<UBlueprint>(BlueprintPath);
+	if (!Blueprint)
+	{
+		OutError = MCPAssetLoadError(BlueprintPath, TEXT("Blueprint"));
+		return nullptr;
+	}
+	if (!Blueprint->GeneratedClass)
+	{
+		OutError = MCPError(FString::Printf(TEXT("Blueprint has no generated class: %s"), *BlueprintPath));
+		return nullptr;
+	}
+	T* CDO = Cast<T>(Blueprint->GeneratedClass->GetDefaultObject());
+	if (!CDO)
+	{
+		OutError = MCPError(FString::Printf(
+			TEXT("Blueprint CDO at '%s' is not a %s"),
+			*BlueprintPath,
+			*T::StaticClass()->GetName()));
+		return nullptr;
+	}
+	return CDO;
+}
 
 /** Export a property's value as text, honouring C-style fixed arrays.
  *
