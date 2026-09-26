@@ -34,6 +34,10 @@ private:
 	static UStateTreeState* ResolveState(UStateTreeEditorData* EditorData, const FStateRef& Ref);
 	static bool CompileAndSave(UStateTree* StateTree, TSharedPtr<FJsonObject>& OutResult);
 	static FString MissingEditorDataMessage(const FString& AssetPath);
+	/** Load a tree and its editor data for authoring. Returns the error to hand
+	 *  back (asset load diagnostic, or the missing-editor-data repair hint), or
+	 *  nullptr with both outputs set. */
+	static TSharedPtr<FJsonValue> LoadForEdit(const FString& AssetPath, UStateTree*& OutTree, UStateTreeEditorData*& OutEditorData);
 	static TSharedPtr<FJsonValue> RequireSchema(UStateTree* StateTree, const FString& AssetPath);
 	static TSharedPtr<FJsonObject> SerializeStateHierarchy(const UStateTreeState* State);
 

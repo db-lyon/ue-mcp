@@ -397,6 +397,16 @@ FString FStateTreeHandlers::MissingEditorDataMessage(const FString& AssetPath)
 		*AssetPath, *AssetPath);
 }
 
+TSharedPtr<FJsonValue> FStateTreeHandlers::LoadForEdit(const FString& AssetPath, UStateTree*& OutTree, UStateTreeEditorData*& OutEditorData)
+{
+	OutTree = LoadStateTree(AssetPath);
+	OutEditorData = nullptr;
+	if (!OutTree) return MCPAssetLoadError(AssetPath, TEXT("StateTree"));
+	OutEditorData = GetEditorData(OutTree);
+	if (!OutEditorData) return MCPError(MissingEditorDataMessage(AssetPath));
+	return nullptr;
+}
+
 // The compiler refuses a schema-less tree by logging to LogStateTreeEditor and
 // returning false with an EMPTY compiler log, so a caller saw compiled=false
 // and errors=[] and had nothing to act on. Answer with the reason before
@@ -1048,11 +1058,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadStateTree(const TSharedPtr<FJsonO
 {
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(MissingEditorDataMessage(AssetPath));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -1152,11 +1160,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStates(const TSharedPtr<FJsonObje
 		return Err;
 	}
 
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	auto Result = MCPSuccess();
 	TArray<MCPPagination::FPageRow> Rows;
@@ -1209,11 +1215,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 	const bool bHasInsertIndex = HasParam(Params, TEXT("insertIndex"));
 	const bool bHasLinkedSubtree = HasParam(Params, TEXT("linkedSubtree"));
 
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	if (Name.IsEmpty()) return MCPError(TEXT("name is required"));
 
@@ -1292,11 +1296,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveState(const TSharedPtr<FJsonObj
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -1406,11 +1408,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 	// Every parameter is read before the asset load (#1057).
 	const FString PropName = OptionalString(Params, TEXT("propertyName"));
 	const FString Value = OptionalString(Params, TEXT("value"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -1570,11 +1570,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ClearStateNodes(const TSharedPtr<FJso
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -1640,11 +1638,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTask(const TSharedPtr<FJsonObject>
 	{
 		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -1695,11 +1691,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEnterCondition(const TSharedPtr<FJ
 	}
 	const bool bHasOperand = HasParam(Params, TEXT("operand"));
 	const FString Operand = OptionalString(Params, TEXT("operand"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -1778,11 +1772,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEnterCondition(const TSharedPtr
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
 	const int32 ConditionIndex = static_cast<int32>(OptionalNumber(Params, TEXT("conditionIndex")));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -1841,11 +1833,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTask(const TSharedPtr<FJsonObje
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
 	const int32 TaskIndex = static_cast<int32>(OptionalNumber(Params, TEXT("taskIndex")));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -1903,11 +1893,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskInstanceProperty(const TShared
 	const int32 TaskIndex = static_cast<int32>(OptionalNumber(Params, TEXT("taskIndex")));
 	const FString PropName = OptionalString(Params, TEXT("propertyName"));
 	const FString Value = OptionalString(Params, TEXT("value"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -1962,11 +1950,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskProperty(const TSharedPtr<FJso
 	const int32 TaskIndex = static_cast<int32>(OptionalNumber(Params, TEXT("taskIndex")));
 	const FString PropName = OptionalString(Params, TEXT("propertyName"));
 	const FString Value = OptionalString(Params, TEXT("value"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -2040,11 +2026,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEvaluator(const TSharedPtr<FJsonOb
 	{
 		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
@@ -2089,11 +2073,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEvaluator(const TSharedPtr<FJso
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
 	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
@@ -2155,11 +2137,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorInstanceProperty(const TS
 	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	const FString PropName = OptionalString(Params, TEXT("propertyName"));
 	const FString Value = OptionalString(Params, TEXT("value"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
@@ -2214,11 +2194,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorProperty(const TSharedPtr
 	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	const FString PropName = OptionalString(Params, TEXT("propertyName"));
 	const FString Value = OptionalString(Params, TEXT("value"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
@@ -2286,11 +2264,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddGlobalTask(const TSharedPtr<FJsonO
 	{
 		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
@@ -2335,11 +2311,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveGlobalTask(const TSharedPtr<FJs
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
 	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
@@ -2401,11 +2375,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskInstanceProperty(const T
 	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	const FString PropName = OptionalString(Params, TEXT("propertyName"));
 	const FString Value = OptionalString(Params, TEXT("value"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
@@ -2460,11 +2432,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskProperty(const TSharedPt
 	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	const FString PropName = OptionalString(Params, TEXT("propertyName"));
 	const FString Value = OptionalString(Params, TEXT("value"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
@@ -2541,11 +2511,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 	const bool bDelayTransition = OptionalBool(Params, TEXT("bDelayTransition"));
 	const bool bHasDelayDuration = HasParam(Params, TEXT("delayDuration"));
 	const double DelayDuration = OptionalNumber(Params, TEXT("delayDuration"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -2636,11 +2604,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedP
 	}
 	const bool bHasOperand = HasParam(Params, TEXT("operand"));
 	const FString Operand = OptionalString(Params, TEXT("operand"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -2695,11 +2661,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTransition(const TSharedPtr<FJs
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
 	const int32 TransIndex = static_cast<int32>(OptionalNumber(Params, TEXT("transitionIndex")));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -2793,11 +2757,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 	const FString SourcePathStr = OptionalString(Params, TEXT("sourcePath"));
 	const FString TargetStructIdStr = OptionalString(Params, TEXT("targetStructId"));
 	const FString TargetPathStr = OptionalString(Params, TEXT("targetPath"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	FUE_MCPStateTreePropertyPath SourcePath;
 	SourcePath.SetStructID(ParseGuid(SourceStructIdStr));
@@ -2924,10 +2886,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListBindableSources(const TSharedPtr<
 		return Err;
 	}
 
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	TMap<FGuid, const FStateTreeDataView> AllValues;
 	EditorData->GetAllStructValues(AllValues);
@@ -2963,11 +2924,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 	// Every parameter is read before the asset load (#1057).
 	const FString TargetStructIdStr = OptionalString(Params, TEXT("targetStructId"));
 	const FString TargetPathStr = OptionalString(Params, TEXT("targetPath"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	FUE_MCPStateTreePropertyPath TargetPath;
 	TargetPath.SetStructID(ParseGuid(TargetStructIdStr));
@@ -3055,11 +3014,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListBindings(const TSharedPtr<FJsonOb
 	// Every parameter is read before the asset load (#1057).
 	const bool bHasStructId = HasParam(Params, TEXT("structId"));
 	const FString StructIdStr = OptionalString(Params, TEXT("structId"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	const FStateTreeEditorPropertyBindings* Bindings = EditorData->GetPropertyEditorBindings();
 	auto Result = MCPSuccess();
@@ -3101,11 +3058,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListColors(const TSharedPtr<FJsonObje
 {
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	TArray<TSharedPtr<FJsonValue>> ColorsArr;
 	for (const FStateTreeEditorColor& C : EditorData->Colors)
@@ -3130,11 +3085,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddColor(const TSharedPtr<FJsonObject
 	const FString DisplayName = OptionalString(Params, TEXT("displayName"));
 	const bool bHasColor = HasParam(Params, TEXT("color"));
 	const FString ColorStr = OptionalString(Params, TEXT("color"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	if (DisplayName.IsEmpty()) return MCPError(TEXT("displayName is required"));
 
@@ -3175,11 +3128,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStateParameters(const TSharedPtr<
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -3243,11 +3194,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 	// Every parameter is read before the asset load (#1057).
 	const FString ParamName = OptionalString(Params, TEXT("paramName"));
 	const FString ParamType = OptionalString(Params, TEXT("paramType"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -3308,11 +3257,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveStateParameter(const TSharedPtr
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
 	const FString ParamName = OptionalString(Params, TEXT("paramName"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -3415,11 +3362,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJ
 	// Every parameter is read before the asset load (#1057).
 	const FString ParamName = OptionalString(Params, TEXT("paramName"));
 	const FString Value = OptionalString(Params, TEXT("value"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
@@ -3484,11 +3429,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJ
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
 	const TSharedPtr<FJsonValue> ParametersValue = TryGetParam(Params, TEXT("parameters"));
-	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+	UStateTree* ST = nullptr;
+	UStateTreeEditorData* EditorData = nullptr;
+	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	if (!ParametersValue.IsValid())
 	{
@@ -3547,7 +3490,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::CompileStateTree(const TSharedPtr<FJs
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
+	if (!ST) return MCPAssetLoadError(AssetPath, TEXT("StateTree"));
 	if (auto SchemaErr = RequireSchema(ST, AssetPath)) return SchemaErr;
 
 	auto Result = MCPSuccess();
@@ -3570,7 +3513,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ValidateStateTree(const TSharedPtr<FJ
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
+	if (!ST) return MCPAssetLoadError(AssetPath, TEXT("StateTree"));
 	if (auto SchemaErr = RequireSchema(ST, AssetPath)) return SchemaErr;
 
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
@@ -3604,7 +3547,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetSchema(const TSharedPtr<FJsonObjec
 	// Read before the asset load (#1057).
 	const FString SchemaSpec = OptionalString(Params, TEXT("schema"));
 	UStateTree* ST = LoadStateTree(AssetPath);
-	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
+	if (!ST) return MCPAssetLoadError(AssetPath, TEXT("StateTree"));
 
 	MCPStateTreeSchema::FResolution Schema = MCPStateTreeSchema::Resolve(SchemaSpec);
 	if (!Schema.SchemaClass)
