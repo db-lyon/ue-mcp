@@ -247,7 +247,7 @@ describe("animation Control Rig edit workflow", () => {
       ),
       "utf8",
     );
-    expect(source).toContain("ENGINE_MINOR_VERSION >= 6");
+    expect(source).toContain("UE_MCP_HAS_5_6_API");
     expect(source).toContain("static_cast<UObject&>(*SkeletalMesh)");
   });
 

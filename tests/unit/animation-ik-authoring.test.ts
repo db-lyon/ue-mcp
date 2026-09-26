@@ -141,12 +141,12 @@ describe("animation IK and retarget authoring", () => {
     expect(registry).toContain('TEXT("configure_ik_retargeter"), &ConfigureIKRetargeter');
     for (const source of [ik, retarget]) {
       expect(source).toContain("UE_MCP_HAS_5_8_API");
-      expect(source).toContain('TEXT("unsupported_engine_version")');
+      expect(source).toMatch(/TEXT\("unsupported_engine_version"\)|MCPUnsupportedEngineError\(/);
       expect(source).toContain("FScopedTransaction");
       expect(source).toContain("UndoTransaction");
     }
-    expect(ik).toContain("SaveLoadedAsset");
-    expect(retarget).toContain("SaveAssetPackage");
+    expect(ik).toContain("SaveAssetPackageChecked");
+    expect(retarget).toContain("SaveAssetPackageChecked");
     expect(ik).toContain("MCPIsProtectedAssetPath(RigPath)");
     expect(ik).toContain("TSet<FName> RequiredFBIKBones");
     expect(ik).toContain("ExistingSolver->GetRequiredGoals(ConnectedGoals)");
