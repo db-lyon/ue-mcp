@@ -862,15 +862,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraActor(const TSharedPtr<FJso
 // Params: actorLabel.
 TSharedPtr<FJsonValue> FNiagaraHandlers::ReactivateNiagara(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ActorLabel;
-	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
-
 	REQUIRE_EDITOR_WORLD(World);
 
 	TSharedPtr<FJsonValue> ActorErr;
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr);
 	if (!Actor) return ActorErr;
-	ActorLabel = Actor->GetActorLabel();
+	const FString ActorLabel = Actor->GetActorLabel();
 	UNiagaraComponent* Comp = Actor->FindComponentByClass<UNiagaraComponent>();
 	if (!Comp)
 	{
