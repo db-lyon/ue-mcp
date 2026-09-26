@@ -17,7 +17,7 @@
 // no-op rather than failing. FMCPBTAuthoringChildOrderTest is what would catch
 // it.
 
-#include "Handlers/GameplayHandlers.h"
+#include "Handlers/Gameplay/GameplayHandlers.h"
 #include "Misc/AutomationTest.h"
 
 #include "Dom/JsonObject.h"

@@ -12,7 +12,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/Docking/TabManager.h"
 #include "HandlerRegistry.h"
-#include "Handlers/EditorHandlers.h"
+#include "Handlers/Editor/EditorHandlers.h"
 #include "Misc/AutomationTest.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "UObject/UObjectGlobals.h"

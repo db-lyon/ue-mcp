@@ -1,6 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Handlers/GasHandlers.h"
+#include "Handlers/Gas/GasHandlers.h"
 #include "HandlerRegistry.h"
 #include "Misc/AutomationTest.h"
 #include "AbilitySystemComponent.h"

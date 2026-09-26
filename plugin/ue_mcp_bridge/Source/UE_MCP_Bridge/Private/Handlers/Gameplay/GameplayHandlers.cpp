@@ -21,7 +21,7 @@
 #include "StateTreeCompiler.h"
 #endif
 #include "StateTreeCompilerLog.h"
-#include "HandlerStateTreeSchema.h"
+#include "Handlers/StateTree/HandlerStateTreeSchema.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -54,7 +54,7 @@
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig.h"
 #include "NavAreas/NavArea.h"
-#include "VolumeHelpers_Internal.h"
+#include "Handlers/VolumeHelpers_Internal.h"
 #include "GameFramework/WorldSettings.h"
 #include "UObject/UnrealType.h"
 #include "BehaviorTree/BlackboardData.h"

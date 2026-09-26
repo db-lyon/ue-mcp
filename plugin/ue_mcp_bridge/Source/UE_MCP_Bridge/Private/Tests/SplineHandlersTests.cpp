@@ -1,7 +1,7 @@
 // Focused native coverage for exact component targeting and validate-before-mutate.
 #if WITH_DEV_AUTOMATION_TESTS
 #include "HandlerRegistry.h"
-#include "Handlers/SplineHandlers.h"
+#include "Handlers/Spline/SplineHandlers.h"
 #include "Components/SplineComponent.h"
 #include "Editor.h"
 #include "Engine/World.h"

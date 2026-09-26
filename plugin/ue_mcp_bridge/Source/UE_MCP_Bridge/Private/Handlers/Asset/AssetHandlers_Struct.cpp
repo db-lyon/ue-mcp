@@ -12,7 +12,7 @@
 // (DataTables, Blueprint variables) can be authored end to end from the bridge.
 
 #include "AssetHandlers.h"
-#include "BlueprintHandlers.h"
+#include "Handlers/Blueprint/BlueprintHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "MCPEngineCompat.h"

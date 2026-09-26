@@ -1,6 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Handlers/GameplayHandlers.h"
+#include "Handlers/Gameplay/GameplayHandlers.h"
 #include "HandlerRegistry.h"
 #include "Misc/AutomationTest.h"
 

@@ -4,8 +4,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/LevelHandlers.h"
-#include "Handlers/LevelHandlers_InstanceProjection_Internal.h"
+#include "Handlers/Level/LevelHandlers.h"
+#include "Handlers/Level/LevelHandlers_InstanceProjection_Internal.h"
 #include "Components/BoxComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/Engine.h"

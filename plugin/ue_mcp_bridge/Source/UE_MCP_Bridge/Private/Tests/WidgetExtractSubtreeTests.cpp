@@ -1,6 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Handlers/WidgetHandlers.h"
+#include "Handlers/Widget/WidgetHandlers.h"
 #include "HandlerRegistry.h"
 #include "Misc/AutomationTest.h"
 

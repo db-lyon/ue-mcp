@@ -20,7 +20,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Engine/Blueprint.h"
-#include "HandlerEditorState.h"
+#include "Handlers/HandlerEditorState.h"
 #include "HandlerQuery.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"

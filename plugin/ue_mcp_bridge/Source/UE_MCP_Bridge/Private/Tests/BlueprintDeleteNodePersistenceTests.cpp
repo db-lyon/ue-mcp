@@ -6,7 +6,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/BlueprintHandlers.h"
+#include "Handlers/Blueprint/BlueprintHandlers.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "EdGraph/EdGraph.h"

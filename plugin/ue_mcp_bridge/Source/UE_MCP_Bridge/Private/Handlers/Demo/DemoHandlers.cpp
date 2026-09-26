@@ -2,7 +2,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
-#include "VolumeHelpers_Internal.h"
+#include "Handlers/VolumeHelpers_Internal.h"
 
 // Core / Editor
 #include "Editor.h"

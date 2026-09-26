@@ -8,7 +8,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/FoliageHandlers.h"
+#include "Handlers/Foliage/FoliageHandlers.h"
 #include "Misc/AutomationTest.h"
 
 namespace

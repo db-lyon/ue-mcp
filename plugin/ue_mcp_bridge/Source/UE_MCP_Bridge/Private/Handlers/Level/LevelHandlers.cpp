@@ -3,7 +3,7 @@
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
-#include "VolumeHelpers_Internal.h"
+#include "Handlers/VolumeHelpers_Internal.h"
 #include "EditorScriptingUtilities/Public/EditorLevelLibrary.h"
 #include "ScopedTransaction.h"
 #include "Editor.h"

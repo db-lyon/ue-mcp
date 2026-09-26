@@ -15,7 +15,7 @@
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
 #include "JsonSerializer.h"
-#include "Handlers/AssetHandlers.h"
+#include "Handlers/Asset/AssetHandlers.h"
 #include "Components/SceneComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"

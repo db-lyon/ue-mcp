@@ -9,7 +9,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/AnimationHandlers.h"
+#include "Handlers/Animation/AnimationHandlers.h"
 #include "Tests/MCPScopedTestMount.h"
 
 #include "Animation/AnimData/IAnimationDataController.h"

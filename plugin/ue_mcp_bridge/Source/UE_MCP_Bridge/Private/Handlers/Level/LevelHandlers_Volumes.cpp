@@ -10,7 +10,7 @@
 #include "HandlerJsonProperty.h"
 #include "Misc/OutputDeviceNull.h"
 #include "JsonSerializer.h"
-#include "VolumeHelpers_Internal.h"
+#include "Handlers/VolumeHelpers_Internal.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"

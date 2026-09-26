@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/MaterialHandlers.h"
+#include "Handlers/Material/MaterialHandlers.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionConstant.h"

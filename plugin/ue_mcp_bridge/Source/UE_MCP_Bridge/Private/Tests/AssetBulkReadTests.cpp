@@ -9,7 +9,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/AssetHandlers_BulkRead.h"
+#include "Handlers/Asset/AssetHandlers_BulkRead.h"
 #include "Misc/AutomationTest.h"
 
 namespace

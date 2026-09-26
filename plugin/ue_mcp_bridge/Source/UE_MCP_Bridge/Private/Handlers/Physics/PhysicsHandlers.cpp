@@ -1,7 +1,7 @@
 #include "PhysicsHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/BlueprintHandlers_Internal.h"
+#include "Handlers/Blueprint/BlueprintHandlers_Internal.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Engine/CollisionProfile.h"

@@ -1,7 +1,7 @@
 #include "LevelHandlers.h"
 
 #include "HandlerUtils.h"
-#include "HandlerEditorState.h"
+#include "Handlers/HandlerEditorState.h"
 
 #include "Editor.h"
 #include "Engine/Brush.h"

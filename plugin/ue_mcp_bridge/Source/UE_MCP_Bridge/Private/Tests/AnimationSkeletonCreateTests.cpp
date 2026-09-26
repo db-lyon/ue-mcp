@@ -6,7 +6,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/AnimationHandlers.h"
+#include "Handlers/Animation/AnimationHandlers.h"
 #include "Misc/AutomationTest.h"
 
 namespace

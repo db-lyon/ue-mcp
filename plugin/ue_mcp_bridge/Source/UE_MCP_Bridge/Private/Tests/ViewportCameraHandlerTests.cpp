@@ -1,6 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Handlers/EditorHandlers.h"
+#include "Handlers/Editor/EditorHandlers.h"
 #include "HandlerRegistry.h"
 
 #include "Editor.h"

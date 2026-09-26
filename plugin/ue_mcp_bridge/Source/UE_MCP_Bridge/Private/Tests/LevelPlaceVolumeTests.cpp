@@ -3,7 +3,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/LevelHandlers.h"
+#include "Handlers/Level/LevelHandlers.h"
 #include "Handlers/VolumeHelpers_Internal.h"
 #include "Components/BrushComponent.h"
 #include "Components/StaticMeshComponent.h"

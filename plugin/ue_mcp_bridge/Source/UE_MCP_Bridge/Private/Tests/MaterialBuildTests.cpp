@@ -12,7 +12,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/MaterialHandlers.h"
+#include "Handlers/Material/MaterialHandlers.h"
 #include "Misc/AutomationTest.h"
 #include "UObject/Class.h"
 #include "Engine/EngineTypes.h"

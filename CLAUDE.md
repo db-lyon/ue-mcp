@@ -5,7 +5,7 @@ Operating guide for Claude Code (and any AI agent) working in this repo. Shared 
 ## Repo at a glance
 
 - **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->26<!-- /count --> category tools with <!-- count:actions -->1966+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
-- **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/*.cpp`, registers actions with `FMCPHandlerRegistry`.
+- **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/<Category>/*.cpp`, registers actions with `FMCPHandlerRegistry`.
 - **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
 - **Docs** (`docs/`) - MkDocs site. Release bodies are drafted outside the repo (see Release process).
 
@@ -161,7 +161,7 @@ Prerelease notes stay incremental: the `1.2.0-beta.3` page says what changed sin
 
 ### Handler conventions
 
-Each category has a paired `Private/Handlers/<Category>Handlers.{h,cpp}`. Handler methods are static, take `const TSharedPtr<FJsonObject>& Params`, and return `TSharedPtr<FJsonValue>`. They self-register in `RegisterHandlers(FMCPHandlerRegistry&)`.
+Each category has a folder `Private/Handlers/<Category>/` holding a paired `<Category>Handlers.{h,cpp}`, its split files, and the helper headers only it uses. Handler methods are static, take `const TSharedPtr<FJsonObject>& Params`, and return `TSharedPtr<FJsonValue>`. They self-register in `RegisterHandlers(FMCPHandlerRegistry&)`.
 
 - Use the helpers `Public/HandlerUtils.h` gathers from the `Public/Handler*.h` headers: `MCPError`, `MCPSuccess`, `MCPResult`, `MCPSetCreated`/`Existed`/`Updated`, `MCPSetRollback`, `RequireString`, `OptionalString`/`Int`/`Number`/`Bool`, `REQUIRE_EDITOR_WORLD`.
 - For JSON-driven property assignment (TArray, TSet, nested structs, UObject path refs, dotted paths), use `Private/HandlerJsonProperty.h::MCPJsonProperty::SetJsonOnProperty`. Introduced for `set_pcg_node_settings` (#149), now also used by `blueprint(set_component_property)` and `level(set_water_body_property)`.

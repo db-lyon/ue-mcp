@@ -269,7 +269,7 @@ the context has no registry graph accessor, such as a direct unit invocation.
 
 ### C++ Side
 
-1. Create handler files in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/`
+1. Create handler files in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/<Category>/`
 2. Register handlers in `HandlerCatalog.cpp`
 3. Each handler receives `TSharedPtr<FJsonObject>` params and returns `TSharedPtr<FJsonValue>`
 

@@ -4,7 +4,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/ReflectionHandlers.h"
+#include "Handlers/Reflection/ReflectionHandlers.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"

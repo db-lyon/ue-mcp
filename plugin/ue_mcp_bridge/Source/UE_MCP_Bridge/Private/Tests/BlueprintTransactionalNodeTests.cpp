@@ -5,8 +5,8 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/AnimationHandlers.h"
-#include "Handlers/BlueprintHandlers.h"
+#include "Handlers/Animation/AnimationHandlers.h"
+#include "Handlers/Blueprint/BlueprintHandlers.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimBlueprintGeneratedClass.h"
 #include "Animation/AnimInstance.h"

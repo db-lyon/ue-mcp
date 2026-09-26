@@ -4,7 +4,7 @@
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
 #include "HandlerJsonProperty.h"
-#include "VolumeHelpers_Internal.h"
+#include "Handlers/VolumeHelpers_Internal.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"

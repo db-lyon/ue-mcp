@@ -16,7 +16,7 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "HandlerRegistry.h"
-#include "Handlers/LevelHandlers.h"
+#include "Handlers/Level/LevelHandlers.h"
 #include "Misc/AutomationTest.h"
 #include "WorldPartition/WorldPartition.h"
 

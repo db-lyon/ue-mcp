@@ -27,7 +27,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerQuery.h"
 #include "HandlerUtils.h"
-#include "HandlerEditorState.h"
+#include "Handlers/HandlerEditorState.h"
 
 #include "Components/ActorComponent.h"
 #include "Components/BoxComponent.h"

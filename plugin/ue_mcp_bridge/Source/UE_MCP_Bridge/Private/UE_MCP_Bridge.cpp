@@ -3,7 +3,7 @@
 #include "BridgeServer.h"
 #include "EngineStatusHooks.h"
 #include "MCPEngineStatus.h"
-#include "Handlers/DialogHandlers.h"
+#include "Handlers/Dialog/DialogHandlers.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "HAL/PlatformMisc.h"

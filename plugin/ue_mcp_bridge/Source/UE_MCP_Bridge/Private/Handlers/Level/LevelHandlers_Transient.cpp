@@ -31,7 +31,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
-#include "HandlerEditorState.h"
+#include "Handlers/HandlerEditorState.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerPagination.h"
 #include "HandlerRegistry.h"

@@ -1,6 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Handlers/SequencerHandlers.h"
+#include "Handlers/Sequencer/SequencerHandlers.h"
 #include "HandlerRegistry.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
