@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ToolContext, ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { EDITOR_TARGET_PARAM } from "../surface/routing-params.js";
+import { stripEditorTarget } from "../surface/target-params.js";
 import { handlerFailure } from "../flow/handler-outcome.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/niagara.generated.js";
 import { specBp, schema as specSchema } from "./specs/niagara.generated.js";
@@ -15,6 +16,9 @@ function targetsSession(ctx: ToolContext, target: unknown): boolean {
     return false;
   }
 }
+
+/** batch: the operations, in order. */
+const OPS = z.array(z.record(z.unknown())).optional().describe("For batch: [{action, params}]");
 
 export const niagaraTool: ToolDef = categoryTool(
   "niagara",
@@ -63,19 +67,26 @@ export const niagaraTool: ToolDef = categoryTool(
     create_module_from_hlsl: specBp("mutate", "Create a NiagaraScript module backed by a custom HLSL node. inputs/outputs are [{name,type}].", "create_niagara_module_from_hlsl"),
     create_scratch_module:  specBp("mutate", "Create empty Niagara scratch module. inputs/outputs are [{name,type}] (#185).", "create_scratch_module"),
     batch: {
-      kind: "handler",
+      kind: "flow",
       effect: "mutate",
       description: "Run a sequence of niagara operations against the bridge in order. Fails fast on the first error (returns results up to that point + error). Params: ops:[{action, params}] where action is any niagara subaction listed above.",
-      handler: async (ctx, params) => {
+      inputs: { ops: OPS },
+      // Every op the input names; fail-fast may stop before the last.
+      expand: (params) => Array.isArray(params.ops)
+        ? (params.ops as Array<{ action?: string; params?: Record<string, unknown> }>).map((op) => ({
+            task: `niagara.${String(op?.action ?? "")}`,
+            options: op?.params ?? {},
+          }))
+        : null,
+      compose: async (run, params, ctx) => {
         const opsUnknown = params.ops;
         if (!Array.isArray(opsUnknown)) throw new Error("'ops' must be an array of {action, params}");
-        // A session graph may add or remove actions, and the category handler
-        // owns every piece of per-call preparation. Dispatch each operation
-        // through that active handler instead of duplicating part of it here.
-        // Contexts built outside the registry (mainly direct unit calls) have
-        // no graph accessor, so only those use the exported base tool.
-        // A session with no surface built throws; that is reported per op, like
-        // a graph without niagara, rather than failing the whole call.
+        // A session graph may add or remove actions, so an op is checked
+        // against the active graph before it runs. Contexts built outside the
+        // registry (mainly direct unit calls) have no graph accessor, so only
+        // those use the exported base tool. A session with no surface built
+        // throws; that is reported per op, like a graph without niagara,
+        // rather than failing the whole call.
         let unavailable = "Niagara is not available in the active tool graph";
         let dispatchTool: ToolDef | undefined;
         try {
@@ -104,26 +115,27 @@ export const niagaraTool: ToolDef = categoryTool(
             });
             return { results, stoppedAt: i };
           }
-          try {
-            const subParams = { ...(op.params ?? {}), action } as Record<string, unknown>;
-            // The batch's own budget covers every op that names none of its own.
-            if (subParams.timeoutMs === undefined && ctx.callTimeoutMs !== undefined) subParams.timeoutMs = ctx.callTimeoutMs;
-            const result = await dispatchTool.handler(ctx, subParams);
-            // A handler that failed resolves with success:false rather than
-            // throwing, so the verdict is read off the body.
-            const failure = handlerFailure(result);
-            if (failure !== null) {
-              results.push({ action, result, error: failure });
-              return { results, stoppedAt: i };
-            }
-            results.push({ action, result });
-          } catch (e) {
-            results.push({ action, error: (e as Error).message });
+          const opParams = dispatchTool.injectedEditorParam ? stripEditorTarget(op.params ?? {}) : { ...(op.params ?? {}) };
+          // The batch's own budget covers every op that names none of its own.
+          if (opParams.timeoutMs === undefined && ctx.callTimeoutMs !== undefined) opParams.timeoutMs = ctx.callTimeoutMs;
+          const r = await run(`niagara.${action}`, opParams);
+          if (r.data === undefined) {
+            if (r.success) { results.push({ action, result: r.data }); continue; }
+            results.push({ action, error: r.error?.message ?? `niagara.${action} failed` });
             return { results, stoppedAt: i };
           }
+          // A handler that failed answers success:false rather than throwing,
+          // so the verdict is read off the body.
+          const failure = handlerFailure(r.data);
+          if (failure !== null) {
+            results.push({ action, result: r.data, error: failure });
+            return { results, stoppedAt: i };
+          }
+          results.push({ action, result: r.data });
         }
         return { results, stoppedAt: null };
       },
+      result: (outcome) => outcome,
     },
     ...epicActions,
   },
@@ -133,6 +145,6 @@ export const niagaraTool: ToolDef = categoryTool(
     // registration. A key listed again below is shared with hand-written
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
-    ops: z.array(z.record(z.unknown())).optional().describe("For batch: [{action, params}]"),
+    ops: OPS,
   },
 );
