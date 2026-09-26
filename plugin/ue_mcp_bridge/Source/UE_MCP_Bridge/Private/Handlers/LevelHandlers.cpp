@@ -4578,6 +4578,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 		Settings.PositionPrecision != PreviousPositionPrecision;
 
 	bool bSaved = false;
+	FString SaveError;
 	if (bSettingsChanged)
 	{
 		// Modify() lives INSIDE the branch. It defaults to bAlwaysMarkDirty, so
@@ -4591,7 +4592,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 		// than on next cook. Build() is the editor's explicit rebuild entry point.
 		Mesh->Build(/*bSilent*/ true);
 		Mesh->PostEditChange();
-		bSaved = SaveAssetPackage(Mesh);
+		bSaved = SaveAssetPackageChecked(Mesh, SaveError);
 	}
 
 	const bool bNowEnabled = MCPGetNaniteSettings(Mesh).bEnabled != 0;
@@ -4603,7 +4604,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("assetPath"), Mesh->GetPathName());
 	Result->SetBoolField(TEXT("naniteEnabled"), bNowEnabled);
 	Result->SetNumberField(TEXT("positionPrecision"), NowPositionPrecision);
-	Result->SetBoolField(TEXT("saved"), bSaved);
+	if (bSettingsChanged) MCPNoteSaveOutcome(Result, Mesh->GetPathName(), bSaved, SaveError);
+	else Result->SetBoolField(TEXT("saved"), false);
 	Result->SetBoolField(TEXT("previousNaniteEnabled"), bPreviousEnabled);
 	Result->SetNumberField(TEXT("previousPositionPrecision"), PreviousPositionPrecision);
 	Result->SetBoolField(TEXT("rebuilt"), bSettingsChanged);

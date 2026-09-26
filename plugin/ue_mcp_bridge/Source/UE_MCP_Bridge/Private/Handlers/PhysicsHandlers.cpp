@@ -725,10 +725,12 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 	if (ChannelResponses.Num() > 0) Applied.Add(TEXT("responses"));
 
 	// Persist Blueprint template edits with a recompile + save.
+	bool bBlueprintSaved = false;
+	FString BlueprintSaveError;
 	if (Blueprint)
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		SaveAssetPackage(Blueprint);
+		bBlueprintSaved = SaveAssetPackageChecked(Blueprint, BlueprintSaveError);
 	}
 
 	// Read the same digest back off the same component. A call that wrote the
@@ -741,6 +743,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 	Result->SetBoolField(TEXT("unchanged"), !bChanged);
 	Result->SetStringField(TEXT("target"), TargetDesc);
 	Result->SetNumberField(TEXT("componentsModified"), Targets.Num());
+	if (Blueprint) MCPNoteSaveOutcome(Result, Blueprint->GetPathName(), bBlueprintSaved, BlueprintSaveError);
 	TArray<TSharedPtr<FJsonValue>> AppliedArr;
 	for (const FString& A : Applied) AppliedArr.Add(MakeShared<FJsonValueString>(A));
 	Result->SetArrayField(TEXT("applied"), AppliedArr);
