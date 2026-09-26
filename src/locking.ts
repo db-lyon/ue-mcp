@@ -17,12 +17,6 @@ import { SESSION_ID } from "./lock-owner.js";
 // agent drives one editor. The explicit asset(lock/unlock/list_locks) actions
 // work regardless of this setting.
 
-/**
- * The lock owner ids, re-exported for callers that still import them here.
- * They live in `lock-owner.ts`, a leaf, for the same reason the verb lexicon
- * does: this module now imports the tool graph.
- */
-export { SESSION_ID, newLockOwnerId } from "./lock-owner.js";
 
 export interface LockingConfig {
   enabled: boolean;
@@ -36,15 +30,6 @@ export function resolveLockingConfig(cfg?: { enabled?: boolean; ttlSeconds?: num
   };
 }
 
-/**
- * The verb lexicon this module used to own, re-exported for the callers that
- * still import it from here.
- *
- * It moved to `action-verbs.ts` when locking started reading an action's
- * DECLARED effect: a lexicon underneath `locking.ts` closes an import cycle the
- * moment locking imports the tool graph.
- */
-export { READ_PREFIXES, MUTATE_PREFIXES } from "./action-verbs.js";
 
 /** Keys whose string value is an in-editor asset path (not a filesystem source). */
 const PATH_KEYS = [

@@ -13,7 +13,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { FakeBridge } from "../fake-bridge.js";
 import { SessionRegistry, type EditorSession } from "../../src/session.js";
-import { withAssetLocks, SESSION_ID } from "../../src/locking.js";
+import { withAssetLocks } from "../../src/locking.js";
+import { SESSION_ID } from "../../src/lock-owner.js";
 import { assetTool } from "../../src/tools/asset.js";
 import type { ToolContext } from "../../src/types.js";
 
