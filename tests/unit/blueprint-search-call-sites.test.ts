@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import { classifyActionClass } from "../../src/action-class.js";
+import { declaredActionEffect } from "../../src/action-effects.js";
 import type { ToolContext } from "../../src/types.js";
 
 describe("blueprint.search_call_sites (#945)", () => {
@@ -71,12 +71,8 @@ describe("blueprint.search_call_sites (#945)", () => {
     expect(blueprintTool.schema.directory.safeParse("/Game/AI").success).toBe(true);
   });
 
-  it("classifies as a read even though 'call' is a mutate verb", () => {
-    // Without the explicit override the lexicon sees "call" and gates this
-    // audit behind an explicit editor target. It authors nothing.
-    expect(classifyActionClass("blueprint", "search_call_sites")).toEqual({
-      class: "read",
-      source: "override",
-    });
+  it("declares itself a read even though 'call' is a mutate verb", () => {
+    // It loads packages and reads graphs; it authors nothing.
+    expect(declaredActionEffect("blueprint", "search_call_sites")).toBe("read");
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
-import { classifyActionClass } from "../../src/action-class.js";
+import { declaredActionEffect } from "../../src/action-effects.js";
 import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 import type { ToolContext } from "../../src/types.js";
 
@@ -75,9 +75,6 @@ describe("editor.scrub_sequence", () => {
   });
 
   it("classifies as a mutation, so it cannot land in an unnamed editor", () => {
-    expect(classifyActionClass("editor", "scrub_sequence")).toEqual({
-      class: "mutate",
-      source: "lexicon",
-    });
+    expect(declaredActionEffect("editor", "scrub_sequence")).toBe("mutate");
   });
 });

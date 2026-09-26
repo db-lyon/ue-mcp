@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import { classifyActionClass } from "../../src/action-class.js";
+import { declaredActionEffect } from "../../src/action-effects.js";
 import type { ToolContext } from "../../src/types.js";
 
 describe("blueprint.get_variable_default (#902)", () => {
@@ -22,7 +22,7 @@ describe("blueprint.get_variable_default (#902)", () => {
   });
 
   it("is a read, so a multi-editor caller is not forced to name a target for it", () => {
-    expect(classifyActionClass("blueprint", "get_variable_default").class).toBe("read");
+    expect(declaredActionEffect("blueprint", "get_variable_default")).toBe("read");
   });
 });
 

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { classifyActionClass } from "../../src/action-class.js";
+import { declaredActionEffect } from "../../src/action-effects.js";
 import { animationTool } from "../../src/tools/animation.js";
 import type { ToolContext } from "../../src/types.js";
 
@@ -35,10 +35,7 @@ describe("animation.set_live_post_process_anim_blueprint", () => {
   });
 
   it("is a mutation, so multi-editor dispatch requires an explicit target", () => {
-    expect(classifyActionClass("animation", "set_live_post_process_anim_blueprint")).toEqual({
-      class: "mutate",
-      source: "override",
-    });
+    expect(declaredActionEffect("animation", "set_live_post_process_anim_blueprint")).toBe("mutate");
   });
 
   it("keeps the native action transient and validates generated classes before mutation", () => {

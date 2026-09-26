@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
-import { classifyActionClass } from "../../src/action-class.js";
+import { declaredActionEffect } from "../../src/action-effects.js";
 import type { ToolContext } from "../../src/types.js";
 
 /**
@@ -43,6 +43,6 @@ describe("editor.render_sequence_frames", () => {
   });
 
   it("classifies as a mutation", () => {
-    expect(classifyActionClass("editor", "render_sequence_frames").class).toBe("mutate");
+    expect(declaredActionEffect("editor", "render_sequence_frames")).toBe("mutate");
   });
 });

@@ -36,7 +36,7 @@
 import { describe, it, expect } from "vitest";
 import { auditHandlers, stripComments } from "../../scripts/audit-handler-conventions.mjs";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { classifyActionClass } from "../../src/action-class.js";
+
 
 /**
  * The counts as they stand. Lower these when you fix one; never raise them.
@@ -148,11 +148,11 @@ const KNOWN_ORPHANS: Record<string, string> = {
  */
 
 /** bridge method -> the TS tool+action that reaches it. */
-function bridgeToAction(): Map<string, { tool: string; action: string }> {
-  const out = new Map<string, { tool: string; action: string }>();
+function bridgeToAction(): Map<string, { tool: string; action: string; effect: string }> {
+  const out = new Map<string, { tool: string; action: string; effect: string }>();
   for (const tool of ALL_TOOLS) {
     for (const [action, spec] of Object.entries(tool.actions)) {
-      if (spec.bridge) out.set(spec.bridge, { tool: tool.name, action });
+      if (spec.bridge) out.set(spec.bridge, { tool: tool.name, action, effect: spec.effect });
     }
   }
   return out;
@@ -174,7 +174,7 @@ function audit(): Row[] {
   const rows = auditHandlers((bridgeName: string) => {
     const hit = byBridge.get(bridgeName);
     if (!hit) return "orphan";
-    return classifyActionClass(hit.tool, hit.action).class;
+    return hit.effect;
   }) as Row[];
   // The audit keys on the bridge method name; the read-verb test has to read
   // the TS spelling, which is what a caller actually types and is not always
@@ -187,11 +187,10 @@ function audit(): Row[] {
 /**
  * Read verbs that settle the question no matter what else the name contains.
  *
- * `classifyActionClass` scans the WHOLE action name for a mutating verb and is
- * deliberately generous, because it answers a different question: while this
- * server drives more than one editor, an unaddressed call falls through to the
- * active session, so over-classifying costs an explicit target and nothing
- * else. Erring that way is right at the gate.
+ * A row's class is the action's declared effect, which answers a different
+ * question: whether an unaddressed call may fall through to the active editor.
+ * Over-declaring a mutation there costs an explicit target and nothing else,
+ * so erring that way is right at the gate.
  *
  * It is wrong here. `editor(get_frame_timing)` matches on nothing it does,
  * `level(get_relative_transform)` reads a transform, `editor(list_dirty_packages)`
