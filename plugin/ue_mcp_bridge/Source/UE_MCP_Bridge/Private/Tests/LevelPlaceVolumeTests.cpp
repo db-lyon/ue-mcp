@@ -74,7 +74,8 @@ namespace LevelPlaceVolumeTests
 			if (!Test.TestTrue(TEXT("place_actor returns an object"), Response.IsValid() && Response->Type == EJson::Object)) return nullptr;
 			bool bSuccess = false;
 			if (!Test.TestTrue(TEXT("place_actor succeeds"), Response->AsObject()->TryGetBoolField(TEXT("success"), bSuccess) && bSuccess)) return nullptr;
-			AActor* Actor = FindActorByLabel(World, Label);
+			TSharedPtr<FJsonValue> LookupError;
+			AActor* Actor = MCPResolveActorToken(World, Label, LookupError);
 			Test.TestNotNull(TEXT("placed actor is in the disposable world"), Actor);
 			return Actor;
 		}
