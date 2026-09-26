@@ -523,10 +523,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 			UClass* ModClass = nullptr;
 			if (!ClassPath.IsEmpty())
 			{
-				ModClass = LoadClass<UInputModifier>(nullptr, *ClassPath);
-				if (!ModClass) ModClass = LoadObject<UClass>(nullptr, *ClassPath);
-				if (!ModClass) ModClass = FindClassByShortName(ClassPath);
-				if (ModClass && !ModClass->IsChildOf(UInputModifier::StaticClass())) ModClass = nullptr;
+				ModClass = MCPResolveClassOfType(ClassPath, UInputModifier::StaticClass());
 			}
 
 			FString TypeName;
@@ -554,9 +551,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 				}
 				for (const FString& Cand : Candidates)
 				{
-					ModClass = FindClassByShortName(Cand);
-					if (ModClass && ModClass->IsChildOf(UInputModifier::StaticClass())) break;
-					ModClass = nullptr;
+					ModClass = MCPResolveClassOfType(Cand, UInputModifier::StaticClass());
+					if (ModClass) break;
 				}
 			}
 			if (!ModClass)
@@ -671,10 +667,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 			UClass* TrigClass = nullptr;
 			if (!ClassPath.IsEmpty())
 			{
-				TrigClass = LoadClass<UInputTrigger>(nullptr, *ClassPath);
-				if (!TrigClass) TrigClass = LoadObject<UClass>(nullptr, *ClassPath);
-				if (!TrigClass) TrigClass = FindClassByShortName(ClassPath);
-				if (TrigClass && !TrigClass->IsChildOf(UInputTrigger::StaticClass())) TrigClass = nullptr;
+				TrigClass = MCPResolveClassOfType(ClassPath, UInputTrigger::StaticClass());
 			}
 
 			FString TypeName;
@@ -694,9 +687,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 				}
 				for (const FString& Cand : Candidates)
 				{
-					TrigClass = FindClassByShortName(Cand);
-					if (TrigClass && TrigClass->IsChildOf(UInputTrigger::StaticClass())) break;
-					TrigClass = nullptr;
+					TrigClass = MCPResolveClassOfType(Cand, UInputTrigger::StaticClass());
+					if (TrigClass) break;
 				}
 			}
 

@@ -121,10 +121,9 @@ namespace
 		Token.TrimStartAndEndInline();
 		if (Token.IsEmpty()) return nullptr;
 
-		UClass* Resolved = LoadObject<UClass>(nullptr, *Token);
-		if (!Resolved) Resolved = FindClassByShortName(Token);
-		if (!Resolved) Resolved = FindClassByShortName(TEXT("AISense_") + Token);
-		if (!Resolved) Resolved = FindClassByShortName(TEXT("AISenseConfig_") + Token);
+		UClass* Resolved = MCPResolveClass(Token);
+		if (!Resolved) Resolved = MCPResolveClass(TEXT("AISense_") + Token);
+		if (!Resolved) Resolved = MCPResolveClass(TEXT("AISenseConfig_") + Token);
 
 		if (Resolved && Resolved->IsChildOf(UAISenseConfig::StaticClass()))
 		{

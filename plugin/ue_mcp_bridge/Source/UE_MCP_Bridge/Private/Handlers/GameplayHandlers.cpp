@@ -2012,34 +2012,6 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetStateTreeRuntime(const TSharedPtr<F
 	return MCPResult(Result);
 }
 
-// Resolve a class from a short name, a /Script path, or a Blueprint ASSET path.
-// A Blueprint's generated class lives at "<path>.<AssetName>_C" - appending a
-// bare "_C" to the package path (which is what this used to do) never resolves,
-// so every documented "or a Blueprint asset path" call failed.
-static UClass* ResolveClassFlexible(const FString& Requested)
-{
-	if (Requested.IsEmpty()) return nullptr;
-	if (UClass* Direct = LoadObject<UClass>(nullptr, *Requested)) return Direct;
-	if (UClass* ByName = FindClassByShortName(Requested)) return ByName;
-	if (Requested.StartsWith(TEXT("/")))
-	{
-		FString AssetName = Requested;
-		if (!Requested.Contains(TEXT(".")))
-		{
-			Requested.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-			const FString Generated = Requested + TEXT(".") + AssetName + TEXT("_C");
-			if (UClass* Gen = LoadObject<UClass>(nullptr, *Generated)) return Gen;
-			// Also try the plain object path, for a non-Blueprint asset.
-			if (UClass* Obj = LoadObject<UClass>(nullptr, *(Requested + TEXT(".") + AssetName))) return Obj;
-		}
-		else if (!Requested.EndsWith(TEXT("_C")))
-		{
-			if (UClass* Gen = LoadObject<UClass>(nullptr, *(Requested + TEXT("_C")))) return Gen;
-		}
-	}
-	return nullptr;
-}
-
 // Resolve an optional caller-supplied parentClass, requiring it to derive from
 // the framework base the action is for. Returning the engine default silently
 // when the caller named a class is how you end up debugging a Blueprint that
@@ -2052,7 +2024,7 @@ static bool ResolveFrameworkParent(const TSharedPtr<FJsonObject>& Params, const 
 	if (Requested.IsEmpty()) return true;
 
 	UClass* Base = FindObject<UClass>(nullptr, *DefaultPath);
-	UClass* Resolved = ResolveClassFlexible(Requested);
+	UClass* Resolved = MCPResolveClass(Requested);
 	if (!Resolved)
 	{
 		OutError = MCPError(FString::Printf(TEXT("parentClass not found: %s"), *Requested));
@@ -2211,7 +2183,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPt
 	FString AreaClassPath = OptionalString(Params, TEXT("areaClass"));
 	if (!AreaClassPath.IsEmpty())
 	{
-		UClass* AreaClass = ResolveClassFlexible(AreaClassPath);
+		UClass* AreaClass = MCPResolveClass(AreaClassPath);
 		if (!AreaClass || !AreaClass->IsChildOf(UNavArea::StaticClass()))
 		{
 			World->DestroyActor(NewVolume);
@@ -2490,7 +2462,7 @@ static TSharedPtr<FJsonValue> ResolveBlackboardBaseClass(const TSharedPtr<FJsonO
 	const FString Requested = OptionalString(Params, TEXT("baseClass"));
 	if (Requested.IsEmpty()) return nullptr;
 
-	UClass* Resolved = ResolveClassFlexible(Requested);
+	UClass* Resolved = MCPResolveClass(Requested);
 	if (!Resolved)
 	{
 		return MCPError(FString::Printf(TEXT("baseClass not found: %s"), *Requested));
@@ -3135,9 +3107,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 				return MCPError(TEXT("senses contains an empty entry."));
 			}
 			// Accept "Sight", "AISenseConfig_Sight", or a full class path.
-			UClass* ConfigClass = LoadObject<UClass>(nullptr, *SenseName);
-			if (!ConfigClass) ConfigClass = FindClassByShortName(SenseName);
-			if (!ConfigClass) ConfigClass = FindClassByShortName(TEXT("AISenseConfig_") + SenseName);
+			UClass* ConfigClass = MCPResolveClassOfType(SenseName, UAISenseConfig::StaticClass());
+			if (!ConfigClass) ConfigClass = MCPResolveClassOfType(TEXT("AISenseConfig_") + SenseName, UAISenseConfig::StaticClass());
 			if (!ConfigClass || !ConfigClass->IsChildOf(UAISenseConfig::StaticClass()))
 			{
 				return MCPError(FString::Printf(

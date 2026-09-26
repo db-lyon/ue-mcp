@@ -254,31 +254,6 @@ namespace
 			*SetClass->GetName()));
 		return nullptr;
 	}
-
-	// Resolve a UClass deriving from Base from a content path or short class name.
-	// Handles native classes, Blueprint generated classes (path + "_C"), and a
-	// Blueprint-asset fallback. Returns nullptr unless the result is a Base subclass.
-	UClass* ResolveClassDeriving(const FString& Spec, UClass* Base)
-	{
-		auto Ok = [Base](UClass* C) { return C && Base && C->IsChildOf(Base); };
-
-		if (Spec.Contains(TEXT("/")))
-		{
-			if (UClass* C = LoadObject<UClass>(nullptr, *Spec); Ok(C)) return C;
-			FString AssetName;
-			Spec.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-			const FString ClassPath = Spec + TEXT(".") + AssetName + TEXT("_C");
-			if (UClass* C = LoadObject<UClass>(nullptr, *ClassPath); Ok(C)) return C;
-			if (UBlueprint* BP = LoadAssetByPath<UBlueprint>(Spec))
-			{
-				if (Ok(BP->GeneratedClass)) return BP->GeneratedClass;
-			}
-			return nullptr;
-		}
-
-		UClass* C = FindClassByShortName(Spec);
-		return Ok(C) ? C : nullptr;
-	}
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& Params)
@@ -301,7 +276,7 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Err);
 	if (!ASC) return Err;
 
-	UClass* EffectClass = ResolveClassDeriving(EffectSpec, UGameplayEffect::StaticClass());
+	UClass* EffectClass = MCPGas::ResolveClassDerivingFrom(EffectSpec, UGameplayEffect::StaticClass());
 	if (!EffectClass)
 	{
 		return MCPError(FString::Printf(
@@ -497,7 +472,7 @@ TSharedPtr<FJsonValue> FGasHandlers::RemoveEffect(const TSharedPtr<FJsonObject>&
 	}
 	else
 	{
-		UClass* EffectClass = ResolveClassDeriving(EffectSpec, UGameplayEffect::StaticClass());
+		UClass* EffectClass = MCPGas::ResolveClassDerivingFrom(EffectSpec, UGameplayEffect::StaticClass());
 		if (!EffectClass)
 		{
 			return MCPError(FString::Printf(
@@ -769,7 +744,7 @@ namespace
 		Out.ASC = ResolveASC(Params, Out.Actor, OutError);
 		if (!Out.ASC) return false;
 
-		UClass* SetClass = ResolveClassDeriving(SetSpec, UAttributeSet::StaticClass());
+		UClass* SetClass = MCPGas::ResolveClassDerivingFrom(SetSpec, UAttributeSet::StaticClass());
 		if (!SetClass)
 		{
 			OutError = MCPError(FString::Printf(
@@ -1063,7 +1038,7 @@ TSharedPtr<FJsonValue> FGasHandlers::InitAsc(const TSharedPtr<FJsonObject>& Para
 	bool bConstructedSet = false;
 	if (!AttrSetSpec.IsEmpty())
 	{
-		UClass* AttrSetClass = ResolveClassDeriving(AttrSetSpec, UAttributeSet::StaticClass());
+		UClass* AttrSetClass = MCPGas::ResolveClassDerivingFrom(AttrSetSpec, UAttributeSet::StaticClass());
 		if (!AttrSetClass)
 		{
 			return MCPError(FString::Printf(
@@ -1817,7 +1792,8 @@ UClass* ResolveGameplayAbilityClass(const FString& Spec, TSharedPtr<FJsonValue>&
 
 UClass* ResolveClassDerivingFrom(const FString& Spec, UClass* Base)
 {
-	return ResolveClassDeriving(Spec, Base);
+	UClass* Resolved = MCPResolveClassOfType(Spec, Base);
+	return (Resolved && Base && Resolved->IsChildOf(Base)) ? Resolved : nullptr;
 }
 
 TSharedPtr<FJsonObject> DescribeAbilitySpec(const FGameplayAbilitySpec& Spec)

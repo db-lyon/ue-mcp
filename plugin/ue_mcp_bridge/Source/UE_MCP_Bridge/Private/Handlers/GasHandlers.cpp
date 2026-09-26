@@ -872,34 +872,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAscDefaults(const TSharedPtr<FJsonObject
 	UClass* ASCClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AbilitySystemComponent"));
 	if (!ASCClass) return MCPError(TEXT("AbilitySystemComponent not found. Enable GameplayAbilities plugin."));
 
-	// Resolve the AttributeSet class from a content path (BP generated class) or
-	// a native short name.
-	UClass* AttrSetClass = nullptr;
-	{
-		UClass* AttrBase = UAttributeSet::StaticClass();
-		auto Ok = [AttrBase](UClass* C) { return C && C->IsChildOf(AttrBase); };
-		if (AttrSetSpec.Contains(TEXT("/")))
-		{
-			if (UClass* C = LoadObject<UClass>(nullptr, *AttrSetSpec); Ok(C)) AttrSetClass = C;
-			if (!AttrSetClass)
-			{
-				FString AssetName;
-				AttrSetSpec.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-				if (UClass* C = LoadObject<UClass>(nullptr, *(AttrSetSpec + TEXT(".") + AssetName + TEXT("_C"))); Ok(C)) AttrSetClass = C;
-			}
-			if (!AttrSetClass)
-			{
-				if (UBlueprint* SetBP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(AttrSetSpec)))
-				{
-					if (Ok(SetBP->GeneratedClass)) AttrSetClass = SetBP->GeneratedClass;
-				}
-			}
-		}
-		else if (UClass* C = FindClassByShortName(AttrSetSpec); Ok(C))
-		{
-			AttrSetClass = C;
-		}
-	}
+	UClass* AttrSetClass = MCPGas::ResolveClassDerivingFrom(AttrSetSpec, UAttributeSet::StaticClass());
 	if (!AttrSetClass) return MCPError(FString::Printf(TEXT("AttributeSet class not found: %s"), *AttrSetSpec));
 
 	// Find the ASC component template on the blueprint's construction script.

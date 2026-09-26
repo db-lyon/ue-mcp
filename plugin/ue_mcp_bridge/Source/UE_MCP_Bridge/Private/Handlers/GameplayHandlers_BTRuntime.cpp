@@ -1029,16 +1029,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetLiveBlackboard(const TSharedPtr<FJs
 					TEXT("Blackboard key '%s' is a Class key; 'value' must be a class path, a Blueprint asset path, or a short class name (or null to clear it)."),
 					*KeyName));
 			}
-			UClass* Resolved = LoadObject<UClass>(nullptr, *Spec);
-			if (!Resolved) Resolved = LoadObject<UClass>(nullptr, *(Spec + TEXT("_C")));
-			if (!Resolved) Resolved = FindClassByShortName(Spec);
-			if (!Resolved)
-			{
-				if (UBlueprint* AsBlueprint = LoadAssetByPath<UBlueprint>(Spec))
-				{
-					Resolved = AsBlueprint->GeneratedClass;
-				}
-			}
+			UClass* Resolved = MCPResolveClass(Spec);
 			if (!Resolved)
 			{
 				return MCPError(FString::Printf(

@@ -79,18 +79,6 @@ namespace MassZoneGraph_Internal
 	static const TCHAR* ZoneShapeClassPath     = TEXT("/Script/ZoneGraph.ZoneShape");
 	static const TCHAR* ZoneGraphSettingsPath  = TEXT("/Script/ZoneGraph.ZoneGraphSettings");
 
-	/** Resolve a /Script class path without linking the module that owns it.
-	 *  Returns null when the plugin providing it is not enabled or loaded,
-	 *  which is the answer every caller here turns into a named error. */
-	static UClass* ResolveOptionalClass(const TCHAR* ClassPath)
-	{
-		if (UClass* Found = FindObject<UClass>(nullptr, ClassPath))
-		{
-			return Found;
-		}
-		return LoadObject<UClass>(nullptr, ClassPath);
-	}
-
 	/** True for the skeleton, reinstanced and trashed classes that
 	 *  TObjectIterator sees but nobody can author against. */
 	static bool IsUsableConcreteClass(const UClass* Class)
@@ -246,7 +234,7 @@ namespace MassZoneGraph_Internal
 	 *  entry is one element of ONE FProperty, not a separate property. */
 	static void ReadZoneGraphTagNames(TMap<uint8, FString>& OutNames)
 	{
-		UClass* SettingsClass = ResolveOptionalClass(ZoneGraphSettingsPath);
+		UClass* SettingsClass = MCPResolveClass(ZoneGraphSettingsPath);
 		if (!SettingsClass) return;
 		const UObject* Settings = SettingsClass->GetDefaultObject();
 		if (!Settings) return;
@@ -472,8 +460,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListMassTypes(const TSharedPtr<FJsonOb
 			TEXT("unknown kind '%s'; valid: all, traits, processors"), *Kind));
 	}
 
-	UClass* TraitBase = ResolveOptionalClass(MassTraitBaseClassPath);
-	UClass* ProcessorBase = ResolveOptionalClass(MassProcessorClassPath);
+	UClass* TraitBase = MCPResolveClass(MassTraitBaseClassPath);
+	UClass* ProcessorBase = MCPResolveClass(MassProcessorClassPath);
 	if (!TraitBase && !ProcessorBase)
 	{
 		return MCPError(TEXT("Mass is unavailable: neither /Script/MassSpawner.MassEntityTraitBase nor /Script/MassEntity.MassProcessor resolved. Enable the MassGameplay and MassEntity plugins, restart the editor, then retry."));
@@ -582,8 +570,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveMassTrait(const TSharedPtr<FJson
 	const bool bHasIndex = HasParam(Params, TEXT("index"));
 	const int32 RequestedIndex = OptionalInt(Params, TEXT("index"), -1);
 
-	UClass* ConfigClass = ResolveOptionalClass(MassConfigClassPath);
-	UClass* TraitBase = ResolveOptionalClass(MassTraitBaseClassPath);
+	UClass* ConfigClass = MCPResolveClass(MassConfigClassPath);
+	UClass* TraitBase = MCPResolveClass(MassTraitBaseClassPath);
 	if (!ConfigClass || !TraitBase)
 	{
 		return MCPError(TEXT("MassSpawner is unavailable; enable MassGameplay/MassSpawner before using remove_mass_trait"));
@@ -738,7 +726,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReorderMassTraits(const TSharedPtr<FJs
 	const TArray<TSharedPtr<FJsonValue>>* OrderArray = nullptr;
 	const bool bHasOrder = TryGetArrayParam(Params, TEXT("order"), OrderArray) && OrderArray;
 
-	UClass* ConfigClass = ResolveOptionalClass(MassConfigClassPath);
+	UClass* ConfigClass = MCPResolveClass(MassConfigClassPath);
 	if (!ConfigClass)
 	{
 		return MCPError(TEXT("MassSpawner is unavailable; enable MassGameplay/MassSpawner before using reorder_mass_traits"));
@@ -878,8 +866,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ValidateMassEntityConfig(const TShared
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
-	UClass* ConfigClass = ResolveOptionalClass(MassConfigClassPath);
-	UClass* TraitBase = ResolveOptionalClass(MassTraitBaseClassPath);
+	UClass* ConfigClass = MCPResolveClass(MassConfigClassPath);
+	UClass* TraitBase = MCPResolveClass(MassTraitBaseClassPath);
 	if (!ConfigClass || !TraitBase)
 	{
 		return MCPError(TEXT("MassSpawner is unavailable; enable MassGameplay/MassSpawner before using validate_mass_entity_config"));
@@ -1088,7 +1076,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::QueryZoneGraph(const TSharedPtr<FJsonO
 			TEXT("unknown queryMode '%s'; valid: summary, lanes, lane, nearest"), *QueryMode));
 	}
 
-	UClass* DataClass = ResolveOptionalClass(ZoneGraphDataClassPath);
+	UClass* DataClass = MCPResolveClass(ZoneGraphDataClassPath);
 	if (!DataClass)
 	{
 		return MCPError(TEXT("ZoneGraph is unavailable: /Script/ZoneGraph.ZoneGraphData did not resolve. Enable the ZoneGraph plugin and restart the editor."));
@@ -1116,7 +1104,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::QueryZoneGraph(const TSharedPtr<FJsonO
 
 	TArray<AActor*> DataActors;
 	int32 ShapeCount = 0;
-	UClass* ShapeClass = ResolveOptionalClass(ZoneShapeClassPath);
+	UClass* ShapeClass = MCPResolveClass(ZoneShapeClassPath);
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
