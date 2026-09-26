@@ -710,10 +710,8 @@ TSharedPtr<FJsonValue> FGasHandlers::AddEffectCue(const TSharedPtr<FJsonObject>&
 	{
 		GE->MarkPackageDirty();
 		FString SaveReason;
-		if (!SaveAssetPackageChecked(GE, SaveReason))
-		{
-			Result->SetStringField(TEXT("saveWarning"), SaveReason);
-		}
+		const bool bSaved = SaveAssetPackageChecked(GE, SaveReason);
+		MCPNoteSaveOutcome(Result, EffectPath, bSaved, SaveReason);
 	}
 
 	// The half a property write cannot do: say whether anything will answer
@@ -845,7 +843,8 @@ TSharedPtr<FJsonValue> FGasHandlers::RemoveEffectCue(const TSharedPtr<FJsonObjec
 	Result->SetBoolField(TEXT("unchanged"), false);
 	GE->MarkPackageDirty();
 	FString SaveReason;
-	if (!SaveAssetPackageChecked(GE, SaveReason)) Result->SetStringField(TEXT("saveWarning"), SaveReason);
+	const bool bSaved = SaveAssetPackageChecked(GE, SaveReason);
+	MCPNoteSaveOutcome(Result, EffectPath, bSaved, SaveReason);
 
 	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
 	RollbackPayload->SetStringField(TEXT("effectPath"), EffectPath);

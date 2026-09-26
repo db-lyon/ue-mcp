@@ -340,9 +340,11 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGasBlueprint(
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	SaveAssetPackage(NewBlueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(NewBlueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, NewBlueprint->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -500,15 +502,20 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<
 	}
 
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(ASCClass, *CompName);
+	bool bSaveAttempted = false;
+	bool bSaved = false;
+	FString SaveError;
 	if (NewNode)
 	{
 		BP->SimpleConstructionScript->AddNode(NewNode);
 		FKismetEditorUtilities::CompileBlueprint(BP);
 
-		SaveAssetPackage(BP);
+		bSaveAttempted = true;
+		bSaved = SaveAssetPackageChecked(BP, SaveError);
 	}
 
 	auto Result = MCPSuccess();
+	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), CompName);
@@ -558,9 +565,11 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAttribute(const TSharedPtr<FJsonObject>&
 	FBlueprintEditorUtils::AddMemberVariable(BP, AttrFName, PinType);
 	FKismetEditorUtilities::CompileBlueprint(BP);
 
-	SaveAssetPackage(BP);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BP, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, BP->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("attributeSetPath"), BPPath);
 	Result->SetStringField(TEXT("attributeName"), AttrName);
@@ -670,13 +679,16 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject
 		}
 	}
 
+	bool bSaved = false;
+	FString SaveError;
 	if (bAnyApplied)
 	{
 		CDO->MarkPackageDirty();
-		SaveAssetPackage(CDO);
+		bSaved = SaveAssetPackageChecked(CDO, SaveError);
 	}
 
 	auto Result = MCPSuccess();
+	if (bAnyApplied) MCPNoteSaveOutcome(Result, AbilityPath, bSaved, SaveError);
 	if (bAnyChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
 	Result->SetBoolField(TEXT("unchanged"), !bAnyChanged);
 	Result->SetBoolField(TEXT("containersWritten"), bAnyApplied);
@@ -785,9 +797,11 @@ TSharedPtr<FJsonValue> FGasHandlers::SetEffectModifier(const TSharedPtr<FJsonObj
 	}
 
 	GE->MarkPackageDirty();
-	SaveAssetPackage(GE);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(GE, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, EffectPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	// Qualified with the set it resolved against, so the inverse below and any
 	// caller echoing this back address the same attribute rather than the first
@@ -913,9 +927,11 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAscDefaults(const TSharedPtr<FJsonObject
 	ASCTemplate->DefaultStartingData.Add(Def);
 
 	FKismetEditorUtilities::CompileBlueprint(BP);
-	SaveAssetPackage(BP);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BP, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, BP->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), ResolvedComp);
