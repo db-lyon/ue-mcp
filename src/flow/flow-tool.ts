@@ -30,6 +30,7 @@ import {
   trimError,
 } from "./events.js";
 import { unappliedRollbackCall } from "./handler-outcome.js";
+import { hostNamespaces, makeConditionEvaluator } from "./condition.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -319,12 +320,17 @@ function makeRunner(
     },
   };
 
+  // `${project.*}`, `${editor.*}` and `${session.*}` in options and in
+  // `when:`, read from this run's own editor.
+  const namespaces = hostNamespaces(ctx);
   return new FlowRunner({
     tasks: config.tasks as Record<string, TaskDefinition>,
     flows: config.flows as Record<string, FlowDefinition>,
     registry,
     context: flowCtx,
     hooks,
+    references: namespaces,
+    conditionEvaluator: makeConditionEvaluator(namespaces),
   });
 }
 

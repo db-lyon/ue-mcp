@@ -232,6 +232,52 @@ taskDef.options  <  step.options  <  runtime params
 
 References in any of those layers resolve at step-execution time against already-completed steps in the same flow. Nested flows have their own scope - a nested step cannot reference a step in the enclosing flow.
 
+### Project, editor and session references
+
+Three more namespaces resolve in any option value, and in `when:`. They are read when the step runs, so a long flow sees the editor as it is at each step.
+
+| Reference | Value |
+|-----------|-------|
+| `${project.name}` | The project name (the `.uproject` file name) |
+| `${project.path}` | The `.uproject` path |
+| `${project.dir}` | The project directory |
+| `${project.contentDir}` | The project's `Content` directory |
+| `${project.engine}` | The project's `EngineAssociation` |
+| `${editor.connected}` | Whether the editor bridge is connected |
+| `${editor.name}` | The name of the editor session the flow runs in |
+| `${session.name}` | Same as `editor.name` |
+| `${session.count}` | How many editors this server drives |
+
+A missing value resolves to nothing: the whole value becomes `undefined`, an embedded one an empty string. Any other `${ns.x}` is left as written.
+
+## Conditional Steps (`when`)
+
+A step, or a hook step, with `when:` runs only when its condition holds. A skipped step is reported with `skipped: true`.
+
+```yaml
+steps:
+  1:
+    task: asset.search
+    options: { query: BP_Door }
+  2:
+    task: blueprint.create
+    when: "${steps.1.count} == 0 and editor.connected"
+    options: { assetPath: /Game/BP_Door, parentClass: Actor }
+  3:
+    task: editor.execute_command
+    when: "params.mode == 'verbose' || session.count > 1"
+    options: { command: stat unit }
+```
+
+A condition is a small expression language, interpreted rather than run as code:
+
+- Literals: numbers, `'text'` or `"text"`, `true`, `false`, `null`.
+- Names under `steps`, `params` (the run's `params`), `error` (in `on_failure` and `finally`), `project`, `editor` and `session`, written bare (`steps.1.count`) or as a reference (`${steps.1.count}`).
+- `==` `!=` `<` `<=` `>` `>=`, where a number and a numeric string compare as numbers.
+- `!` or `not`, `&&` or `and`, `||` or `or`, and parentheses.
+
+A condition that is not an expression keeps its original meaning: its references are resolved and the result is tested for truthiness, where `false`, `0`, `null`, `undefined` and the empty string are false. `when: "${steps.1.ok}"` works as it always did. A string that contains an operator but does not parse fails the step with the grammar in the error, rather than being read as a non-empty string. A reference to a step that has not run fails the step too.
+
 ## Flow-level Hooks
 
 A flow can attach steps that run around the main sequence, keyed by outcome:

@@ -35,6 +35,7 @@ import { unknownActionMessage } from "../surface/action-schema.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
 import { createLiveTask } from "../flow/live-task.js";
+import { hostNamespaces } from "../flow/condition.js";
 import type { TaskDefinition } from "@db-lyon/flowkit";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 
@@ -294,7 +295,7 @@ export async function dispatchCategoryCall(
   try {
     // Resolved through the session's `tasks:` definitions, as a flow step is.
     const task = await createLiveTask(
-      { registry: sessionRegistry, definitions: liveDefinitions(loads, flowCtx) },
+      { registry: sessionRegistry, definitions: liveDefinitions(loads, flowCtx), namespaces: hostNamespaces(flowCtx) },
       flowCtx,
       taskName,
       taskParams,
