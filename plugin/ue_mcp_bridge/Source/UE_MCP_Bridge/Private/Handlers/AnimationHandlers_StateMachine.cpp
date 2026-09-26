@@ -1507,9 +1507,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 	}
 
 	IKRig->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(IKRig->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, IKRig, IKRig->GetPathName());
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), IKRig->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -1920,11 +1920,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 	}
 #endif
 
-	if (!SaveAssetPackage(NewAsset))
+	FString SaveError;
+	if (!SaveAssetPackageChecked(NewAsset, SaveError))
 	{
 		const FString FailedPackage = NewAsset->GetOutermost()->GetName();
 		UEditorAssetLibrary::DeleteAsset(NewAsset->GetPathName());
-		return MCPError(FString::Printf(TEXT("Failed to save IKRetargeter package '%s'"), *FailedPackage));
+		return MCPError(FString::Printf(TEXT("Failed to save IKRetargeter package '%s': %s"), *FailedPackage, *SaveError));
 	}
 
 	auto Result = MCPSuccess();
@@ -2168,9 +2169,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchDatabase(const TShare
 		Database->Schema = Schema;
 	}
 
-	UEditorAssetLibrary::SaveLoadedAsset(Database);
-
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Database, Database->GetPathName());
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), Database->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
@@ -2217,9 +2217,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchSchema(const TSharedPtr<
 	Database->Modify();
 	Database->Schema = Schema;
 	Database->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(Database);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Database, AssetPath);
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetStringField(TEXT("schemaPath"), SchemaPath);
@@ -2275,11 +2275,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSequence(const TSharedPt
 		return MCPError(AddError);
 	}
 	Database->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(Database);
 
 	const int32 NewCount = GetPoseSearchAnimationAssetCount(Database);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Database, AssetPath);
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetStringField(TEXT("sequencePath"), SequencePath);
@@ -2406,9 +2406,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchClips(const TSharedPtr<F
 	}
 
 	Database->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(Database);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Database, AssetPath);
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetBoolField(TEXT("clearedExisting"), bClearExisting);
@@ -2461,11 +2461,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BuildPoseSearchIndex(const TSharedPtr
 		case EAsyncBuildIndexResult::Failed:     ResultStr = TEXT("Failed"); break;
 	}
 
-	UEditorAssetLibrary::SaveLoadedAsset(Database);
-
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	if (bSuccess) MCPSetUpdated(Res);
 	Res->SetBoolField(TEXT("success"), bSuccess);
+	MCPAnimSaveOutcome(Res, Database, AssetPath);
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetStringField(TEXT("result"), ResultStr);
 	Res->SetBoolField(TEXT("waitedForCompletion"), bWait);
@@ -2583,9 +2582,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetIKRigMesh(const TSharedPtr<FJsonOb
 	USkeletalMesh* PrevMesh = Controller->GetSkeletalMesh();
 	const FString PrevMeshPath = PrevMesh ? PrevMesh->GetPathName() : FString();
 	const bool bOk = Controller->SetSkeletalMesh(Mesh);
-	SaveAssetPackage(IKRig);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, IKRig, IKRig->GetPathName());
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), PrevMesh == Mesh);
 	Result->SetStringField(TEXT("rigPath"), IKRig->GetPathName());
@@ -2675,12 +2674,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetIKRetargeterRig(const TSharedPtr<F
 			? TEXT("IK Retargeter rig assignment failed readback validation and was rolled back")
 			: TEXT("IK Retargeter rig assignment failed readback validation and could not be rolled back"));
 	}
-	if (!SaveAssetPackage(Retargeter))
+	FString SaveError;
+	if (!SaveAssetPackageChecked(Retargeter, SaveError))
 	{
 		const bool bRolledBack = GEditor && GEditor->UndoTransaction();
-		return MCPError(bRolledBack
-			? TEXT("IK Retargeter rig assignment could not be saved and was rolled back")
-			: TEXT("IK Retargeter rig assignment could not be saved and the editor transaction could not be rolled back"));
+		return MCPError(FString(bRolledBack
+			? TEXT("IK Retargeter rig assignment could not be saved and was rolled back: ")
+			: TEXT("IK Retargeter rig assignment could not be saved and the editor transaction could not be rolled back: "))
+			+ SaveError);
 	}
 
 	auto Result = MCPSuccess();
@@ -2785,9 +2786,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AutoAlignRetargetPose(const TSharedPt
 	TSharedPtr<FJsonObject> PrevPose = CaptureRetargetPosePayload(Controller, AlignSide, Side.ToLower());
 #endif
 	Controller->AutoAlignAllBones(AlignSide);
-	SaveAssetPackage(Retargeter);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Retargeter, Retargeter->GetPathName());
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("retargeterPath"), Retargeter->GetPathName());
 	Result->SetStringField(TEXT("side"), Side.ToLower());
@@ -2858,9 +2859,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ResetRetargetPose(const TSharedPtr<FJ
 	TSharedPtr<FJsonObject> PrevPose = CaptureRetargetPosePayload(Controller, SoT, Side.ToLower());
 #endif
 	Controller->ResetRetargetPose(CurrentPose, TArray<FName>(), SoT);
-	SaveAssetPackage(Retargeter);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Retargeter, Retargeter->GetPathName());
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("retargeterPath"), Retargeter->GetPathName());
 	Result->SetStringField(TEXT("side"), Side.ToLower());
