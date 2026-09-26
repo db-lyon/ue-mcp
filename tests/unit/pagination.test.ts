@@ -23,6 +23,7 @@ import {
 } from "../../src/pagination.js";
 import { parseParams } from "../../src/action-schema.js";
 import { reflectionTool } from "../../src/tools/reflection.js";
+import { paramMapperOf } from "../../src/epic-input.js";
 
 describe("pagination parameter declarations", () => {
   it("declares exactly cursor and limit", () => {
@@ -129,8 +130,9 @@ describe("the reflection category, which is the first adopter", () => {
     // name, so a paged action with a mapParams has to list both explicitly.
     for (const action of pagedActions) {
       const spec = reflectionTool.actions[action];
-      if (!spec.mapParams) continue;
-      const mapped = spec.mapParams({ action, cursor: "abc", limit: 5 });
+      const mapper = spec.kind === "bridge" ? paramMapperOf(spec) : undefined;
+      if (!mapper) continue;
+      const mapped = mapper({ action, cursor: "abc", limit: 5 });
       expect(mapped.cursor, `${action} forwards cursor`).toBe("abc");
       expect(mapped.limit, `${action} forwards limit`).toBe(5);
     }

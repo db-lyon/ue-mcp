@@ -16,7 +16,8 @@
  * no entry in the effects file stops this script rather than being guessed at.
  *
  * What comes out is an ordinary category action record: `bp("read", "...",
- * "epic_call_tool", mapParams)` plus the zod parameters those actions accept.
+ * "epic_call_tool")` carrying the wrapped tool as `epicTool` and its input
+ * schema as `epicSchema`, plus the zod parameters those actions accept.
  * Nothing about the result is special-cased downstream. It goes through the
  * same union, the same task factory, the same guards, locks, path repair,
  * `describe_action` and parameter audits as an action written by hand, because
@@ -310,7 +311,6 @@ function emitCategory(category, bucket) {
 import { z } from "zod";
 import type { ActionSpec } from "../../types.js";
 import { bp } from "../../category-tool.js";
-import { epicToolCall } from "../../epic-input.js";
 
 `;
 
@@ -342,12 +342,11 @@ import { epicToolCall } from "../../epic-input.js";
     .map((a) => {
       const schemaConst = `const ${constName(a.key)} = ${JSON.stringify(minifySchema(a.input))} as const;`;
       return { schemaConst, entry:
-`  ${safeKey(a.key)}: { epicSchema: ${constName(a.key)}, ...bp(
-    ${q(a.effect)},
-    ${q(a.description)},
-    "epic_call_tool",
-    (p) => epicToolCall(${q(a.toolset)}, ${q(a.tool)}, ${constName(a.key)}, p),
-  ) },` };
+`  ${safeKey(a.key)}: {
+    epicSchema: ${constName(a.key)},
+    epicTool: { toolset: ${q(a.toolset)}, name: ${q(a.tool)} },
+    ...bp(${q(a.effect)}, ${q(a.description)}, "epic_call_tool"),
+  },` };
     });
 
   return header

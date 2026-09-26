@@ -11,6 +11,7 @@ import { bp, categoryTool } from "../../src/category-tool.js";
 import { parseParams, ROUTING_PARAMS } from "../../src/action-schema.js";
 import { mapTracked } from "../../src/param-forwarding.js";
 import { STRICT_PARAMS_ENV } from "../../src/call-pipeline.js";
+import { paramMapperOf } from "../../src/epic-input.js";
 
 
 function fakeCtx(seen: Array<Record<string, unknown>>) {
@@ -185,8 +186,9 @@ function surfaceOffenders(): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const tool of ALL_TOOLS) {
     for (const [action, spec] of Object.entries(tool.actions)) {
-      if (spec.kind !== "bridge" || !spec.mapParams) continue;
-      const ignored = ignoredDocumentedParams(tool.schema as Record<string, z.ZodTypeAny>, spec.description ?? "", spec.mapParams);
+      const mapper = spec.kind === "bridge" ? paramMapperOf(spec) : undefined;
+      if (!mapper) continue;
+      const ignored = ignoredDocumentedParams(tool.schema as Record<string, z.ZodTypeAny>, spec.description ?? "", mapper);
       if (ignored.length > 0) out[`${tool.name}.${action}`] = ignored;
     }
   }

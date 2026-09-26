@@ -3,7 +3,7 @@ import type { IBridge } from "./bridge.js";
 import type { ProjectContext } from "./project.js";
 import type { EditorSession, SessionRegistry } from "./session.js";
 import type { ParamChoice, ParamSpec } from "./handler-spec.js";
-import type { EpicInputSchema } from "./epic-input.js";
+import type { EpicInputSchema, EpicToolRef } from "./epic-input.js";
 
 /**
  * Elicit a deterministic, user-mediated form response via the MCP client.
@@ -310,6 +310,11 @@ export interface BridgeActionSpec extends ActionSpecBase {
    * The structured source their compact signatures are built from (#1172).
    */
   epicSchema?: EpicInputSchema;
+  /**
+   * The engine tool a generated `epic_*` action wraps. Dispatch builds the
+   * `epic_call_tool` envelope from it and `epicSchema` (see paramMapperOf).
+   */
+  epicTool?: EpicToolRef;
   handler?: never;
 }
 

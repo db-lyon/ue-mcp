@@ -136,9 +136,8 @@ export function resolveEpicToolInput(
 }
 
 /**
- * The bridge arguments for one wrapped engine tool. Generated action modules
- * call this as their `mapParams`, so the whole of an Epic action's dispatch is
- * a declaration plus this one function.
+ * The bridge arguments for one wrapped engine tool, so the whole of an Epic
+ * action's dispatch is a declaration plus this one function.
  */
 export function epicToolCall(
   toolset: string,
@@ -147,4 +146,38 @@ export function epicToolCall(
   params: Record<string, unknown>,
 ): Record<string, unknown> {
   return { toolset, tool, ...resolveEpicToolInput(tool, schema, params) };
+}
+
+/**
+ * The top-level parameters a wrapped tool forwards: the properties its own
+ * input schema names. The `input` escape hatch and the asset-path fallback are
+ * the category's spellings, not the tool's, so they are not listed.
+ */
+export function epicForwardedParams(schema: EpicInputSchema | undefined): string[] {
+  return Object.keys(schema?.properties ?? {}).filter((n) => n !== "action");
+}
+
+/** The engine tool a generated `epic_*` action wraps, declared on the action. */
+export interface EpicToolRef {
+  readonly toolset: string;
+  /** The qualified tool name, e.g. `UMGToolSet.UMGToolSet.GetWidgets`. */
+  readonly name: string;
+}
+
+type ParamMapper = (p: Record<string, unknown>) => Record<string, unknown>;
+
+/**
+ * How a bridge action turns its parameters into the bridge call's arguments:
+ * its own `mapParams`, the envelope for a declared `epicTool`, or none (the bag
+ * is sent as given). Every dispatch route asks here.
+ */
+export function paramMapperOf(spec: {
+  mapParams?: ParamMapper;
+  epicTool?: EpicToolRef;
+  epicSchema?: EpicInputSchema;
+}): ParamMapper | undefined {
+  if (spec.mapParams) return spec.mapParams;
+  const tool = spec.epicTool;
+  if (!tool) return undefined;
+  return (p) => epicToolCall(tool.toolset, tool.name, spec.epicSchema, p);
 }

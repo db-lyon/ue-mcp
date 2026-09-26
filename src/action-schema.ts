@@ -25,6 +25,7 @@ import { ROUTING_PARAM_NAMES } from "./routing-params.js";
 import type { ActionEffectSource, ActionSpec, ToolDef } from "./types.js";
 import type { ParamSpec, ValueForm } from "./handler-spec.js";
 import type { ActionClass } from "./action-class.js";
+import { epicForwardedParams } from "./epic-input.js";
 
 /** A readable schema summary, not a substitute for runtime validation. */
 export interface ValueSchema {
@@ -671,6 +672,11 @@ export function parseParams(description: string, known?: ReadonlySet<string>): D
  * nothing here - so it only ever adds names, never removes them.
  */
 export function forwardedParams(spec: ActionSpec): string[] {
+  // A wrapped engine tool declares its mapping instead of writing a closure:
+  // it forwards the properties its own input schema names.
+  if (spec.kind === "bridge" && !spec.mapParams && spec.epicTool) {
+    return epicForwardedParams(spec.epicSchema);
+  }
   // A bridge action maps its parameters through `mapParams`; a local one
   // reads them out of its handler's second argument. Both are the same
   // question - which keys does this action look at - so both are scanned.

@@ -97,7 +97,8 @@ describe("the generated actions", () => {
       expect(spec.kind, `${tool}.${action}`).toBe("bridge");
       if (spec.kind !== "bridge") continue;
       expect(spec.bridge, `${tool}.${action}`).toBe("epic_call_tool");
-      expect(typeof spec.mapParams, `${tool}.${action}`).toBe("function");
+      expect(spec.mapParams, `${tool}.${action}`).toBeUndefined();
+      expect(spec.epicTool?.name, `${tool}.${action}`).toMatch(/^[\w.]+\.\w+$/);
     }
   });
 

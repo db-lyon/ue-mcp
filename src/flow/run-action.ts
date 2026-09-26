@@ -7,6 +7,7 @@ import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
 import { ensureGuard } from "../dialog-guard.js";
+import { paramMapperOf } from "../epic-input.js";
 
 /**
  * Refuse a handler-backed call while a modal is up, through the one guard.
@@ -75,7 +76,7 @@ export async function runAction(
   options: Record<string, unknown>,
   prep?: CallPreparation,
 ): Promise<TaskResult> {
-  if (spec.kind === "bridge") return runBridge(ctx, name, spec.bridge, spec.mapParams, spec.timeoutMs, options, prep);
+  if (spec.kind === "bridge") return runBridge(ctx, name, spec.bridge, paramMapperOf(spec), spec.timeoutMs, options, prep);
   if (spec.kind === "handler") return runHandler(ctx, name, spec.handler, options, prep);
   throw new McpError(ErrorCode.NO_HANDLER, `Action '${name}' has no handler or bridge method`);
 }

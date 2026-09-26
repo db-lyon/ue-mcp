@@ -7,6 +7,7 @@ import { bridgeTaskClass, handlerTaskClass } from "./task-factory.js";
 import { actionPreparation } from "./run-action.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../micro-context.js";
 import { McpError, ErrorCode } from "../errors.js";
+import { paramMapperOf } from "../epic-input.js";
 
 /** A gateway call is an alias for the target task, not a handler that executes
  *  another action and repackages its result. Both MCP and FlowRunner create
@@ -78,7 +79,7 @@ export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
           // widget.remove_widget) declare 120s because their method has no
           // entry in the editor's own timeout table, and dropping it here gave
           // them the 30s default on every live call.
-          bridgeTaskClass(taskName, spec.bridge, spec.mapParams, spec.timeoutMs, prep),
+          bridgeTaskClass(taskName, spec.bridge, paramMapperOf(spec), spec.timeoutMs, prep),
         );
       }
     }

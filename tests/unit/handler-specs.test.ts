@@ -41,6 +41,7 @@ import { schema as specSchema, handlerSpecs } from "../../src/tools/specs/animat
 import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 import { deployedPlugin, checkBridgeParity } from "../../src/bridge-parity.js";
 import type { BridgeCapabilities } from "../../src/bridge.js";
+import { paramMapperOf } from "../../src/epic-input.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {
@@ -50,16 +51,17 @@ const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "golden", "
 
 /**
  * The one documented passthrough (#1057). Every generated `epic_*` action
- * dispatches to `epic_call_tool` through `epicToolCall`, which assembles the
+ * declares the tool it wraps as `epicTool` and dispatches to `epic_call_tool`
+ * through `epicToolCall` (see paramMapperOf), which assembles the
  * bag epic_call_tool's spec declares (toolset, tool, input or inputJson) from
  * the wrapped tool's recorded Epic input schema. That schema is the action's
  * parameter contract, carried on the action as `epicSchema` (#1175); the spec
  * is the contract of the bag it builds. Recognized narrowly: the method, the
- * name, the schema and the mapper all have to be there.
+ * name, the schema and the declared tool all have to be there.
  */
 function isEpicPassthrough(name: string, spec: ActionSpec): boolean {
   return spec.kind === "bridge" && spec.bridge === "epic_call_tool" && name.startsWith("epic_")
-    && spec.epicSchema !== undefined && typeof spec.mapParams === "function";
+    && spec.epicSchema !== undefined && spec.epicTool !== undefined && spec.mapParams === undefined;
 }
 
 /** Actions of a tool that dispatch to a spec'd bridge method, the Epic passthrough aside. */
@@ -448,7 +450,7 @@ describe("the Epic passthrough", () => {
         const type = (prop as { type?: string }).type;
         bag[key] = type === "number" || type === "integer" ? 1 : type === "boolean" ? true : type === "array" ? [] : type === "object" ? {} : "x";
       }
-      const sent = spec.mapParams!(bag);
+      const sent = paramMapperOf(spec)!(bag);
       expect(typeof sent.toolset, name).toBe("string");
       expect(typeof sent.tool, name).toBe("string");
       for (const key of Object.keys(sent)) expect(declared.has(key), `${name} sends ${key}`).toBe(true);

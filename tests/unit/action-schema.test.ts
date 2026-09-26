@@ -389,6 +389,17 @@ describe("forwardedParams", () => {
   it("is empty for an action that takes no parameters", () => {
     expect(forwardedParams({ kind: "bridge", effect: "read", bridge: "x" })).toEqual([]);
   });
+
+  it("reads a wrapped engine tool's parameters off its declared schema", () => {
+    const names = forwardedParams({
+      kind: "bridge",
+      effect: "read",
+      bridge: "epic_call_tool",
+      epicTool: { toolset: "T", name: "T.Get" },
+      epicSchema: { properties: { widgetBlueprint: { type: "object" }, depth: { type: "integer" } } },
+    });
+    expect(names.sort()).toEqual(["depth", "widgetBlueprint"]);
+  });
 });
 
 describe("actionSchema", () => {
