@@ -11,8 +11,8 @@ import {
   clearRegistryAuth,
   loginToRegistry,
   readRegistryAuth,
-} from "./extensions/registry-auth.js";
-import { registryBase } from "./extensions/registry-catalog.js";
+} from "../extensions/registry-auth.js";
+import { registryBase } from "../extensions/registry-catalog.js";
 
 function log(msg: string): void {
   console.log(msg ? `[ue-mcp] ${msg}` : "");

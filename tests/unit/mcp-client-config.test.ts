@@ -10,7 +10,7 @@ import {
   writeCodexMcpConfig,
   writeJsonMcpConfig,
 } from "../../src/integrations/claude-code/mcp-client-config.js";
-import { findBareNpxConfigs } from "../../src/doctor.js";
+import { findBareNpxConfigs } from "../../src/cli/doctor.js";
 
 let tmpRoot: string;
 let originalHome: string | undefined;

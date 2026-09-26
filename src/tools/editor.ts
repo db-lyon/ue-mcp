@@ -5,7 +5,7 @@ import { toolGraphOf } from "../surface/target-params.js";
 import { directive } from "../core/directive.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
 import { buildProjectAction } from "./project/install.js";
-import { startProgress } from "../ui/progress.js";
+import { startProgress } from "../cli/ui/progress.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
 import { progressRenderingNote } from "../dispatch/client-quirks.js";

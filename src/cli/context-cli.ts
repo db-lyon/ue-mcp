@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import * as path from "node:path";
-import { projectConfigPath, readConfigDoc, writeConfigDoc } from "./config/ue-mcp-config.js";
+import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../config/ue-mcp-config.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { findUProject } from "./config/uproject-path.js";
+import { findUProject } from "../config/uproject-path.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
 
 /**

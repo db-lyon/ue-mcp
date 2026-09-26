@@ -17,7 +17,7 @@ import {
 import type { ToolDef } from "./core/types.js";
 import { DialogGuard, guardFor, sessionGuardDeps } from "./editor/dialog-guard.js";
 import { info, warn, error } from "./core/log.js";
-import { startVersionCheck } from "./version-check.js";
+import { startVersionCheck } from "./core/version-check.js";
 import { GuardRegistry } from "./flow/guard.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
@@ -27,7 +27,7 @@ import { collapsingEnvWarnings } from "./config/session-env.js";
 import { checkPluginFreshness } from "./editor/bridge-freshness.js";
 import { unionSurface } from "./sessions/session-surface.js";
 import { packageVersion } from "./core/package-root.js";
-import { findCliCommand, runCliCommand } from "./cli-commands.js";
+import { findCliCommand, runCliCommand } from "./cli/cli-commands.js";
 import { SessionLoads } from "./sessions/session-load.js";
 import {
   buildElicit,

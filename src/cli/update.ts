@@ -1,0 +1,195 @@
+import { execSync } from "node:child_process";
+import * as fs from "node:fs";
+
+import * as path from "node:path";
+
+import { collectDoctor, formatDoctor } from "./doctor.js";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { editorOwnsProject, listEditorProcesses } from "../editor/engine-observer.js";
+import { UE_MCP_LAUNCH } from "../integrations/claude-code/mcp-client-config.js";
+import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "../core/version-check.js";
+import { packageModulePath, packageRoot, packageVersion } from "../core/package-root.js";
+import { findUProject, isUProjectPath } from "../config/uproject-path.js";
+import { RESET, BOLD, RED, DIM, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
+
+/** The version behind the `latest` dist-tag, which is the stable line. */
+function getLatestVersion(): string | null {
+  try {
+    return execSync("npm view ue-mcp version", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function isGlobalInstall(): boolean {
+  try {
+    const globalRoot = execSync("npm root -g", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    const norm = (p: string) => path.resolve(p).toLowerCase();
+    return norm(packageRoot()).startsWith(norm(globalRoot));
+  } catch {
+    return false;
+  }
+}
+
+/** The .uproject an argument names (file or directory), else the one in cwd. */
+function targetUProject(arg: string | undefined): string | null {
+  if (arg && isUProjectPath(arg)) return path.resolve(arg);
+  const isDir = !!arg && fs.existsSync(arg) && fs.statSync(arg).isDirectory();
+  return findUProject(isDir ? arg : process.cwd());
+}
+
+async function editorRunningFor(uproject: string): Promise<boolean> {
+  try {
+    return (await listEditorProcesses()).some((p) => editorOwnsProject(p, uproject));
+  } catch {
+    return false;
+  }
+}
+
+/** Run a sibling CLI from THIS package (not npx) so a local shadow can't intercept. */
+function runSelfCli(scriptBase: string, projectArg: string | undefined): boolean {
+  const script = packageModulePath(scriptBase);
+  const argSuffix = projectArg ? ` "${projectArg}"` : "";
+  try {
+    execSync(`"${process.execPath}" "${script}"${argSuffix}`, { stdio: "inherit" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function update(argv: string[]) {
+  let target: { projectPath?: string; rest: string[] };
+  try {
+    target = takeEditorTarget(argv);
+  } catch (e) {
+    fail(e instanceof EditorFlagError ? e.message : String(e));
+    process.exit(1);
+  }
+  const args = target.rest;
+  // The package and the editor plugin are one product, so a bare update carries
+  // both. Stopping at npm left editors on an old plugin that answered
+  // "Unknown method" for actions the new server advertised.
+  const uproject = targetUProject(target.projectPath ?? args.find((a) => !a.startsWith("-")));
+  const projectArg = uproject ?? undefined;
+  const shouldDeploy = !!uproject && !args.includes("--no-deploy");
+  // --build and --deploy are the old opt-ins, now the default; still accepted.
+  let shouldBuild = shouldDeploy && !args.includes("--no-build");
+
+  console.log("");
+  console.log(`  ${BOLD}${CYAN}UE-MCP Update${RESET}`);
+  console.log("");
+
+  const installed = packageVersion();
+  console.log(`  Installed: ${BOLD}${installed}${RESET}`);
+
+  const latest = getLatestVersion();
+  if (!latest) {
+    fail("Could not reach npm registry. Check your network connection.");
+    process.exit(1);
+  }
+  console.log(`  Latest:    ${BOLD}${latest}${RESET}`);
+  console.log("");
+
+  // 1. Update the package this CLI lives in (global or local).
+  const wanted = resolveUpdateTarget(installed, latest);
+  // Everything below aligns to the version this install ends on, not to the
+  // stable line, so a prerelease tester's copies stay on the version they run.
+  const aligned = wanted ?? installed;
+  if (!wanted) {
+    ok("Package already up to date");
+    if (isPrereleaseVersion(installed)) {
+      const tag = distTagForVersion(installed);
+      step(`You are on the ${tag} prerelease channel, ahead of the stable line (${latest}).`);
+      step(`Newer prereleases: npm install -g ue-mcp@${tag}. Back to stable: npm install -g ue-mcp@latest.`);
+    }
+  } else {
+    console.log(`  ${YELLOW}Updating ue-mcp ${installed} -> ${wanted}...${RESET}`);
+    console.log("");
+    const cmd = isGlobalInstall() ? `npm install -g ue-mcp@${wanted}` : `npm install ue-mcp@${wanted}`;
+    try {
+      execSync(cmd, { stdio: "inherit" });
+      console.log("");
+      ok(`Updated to ${wanted}`);
+    } catch {
+      console.log("");
+      fail(`npm install failed. Try manually: ${cmd}`);
+      process.exit(1);
+    }
+  }
+
+  // 2. Detect a project-local node_modules/ue-mcp that would shadow the global
+  //    install (npx prefers it). If it differs, align it to the version this
+  //    install ended on so the server actually runs that version. (#550)
+  const preDoctor = collectDoctor(projectArg);
+  if (preDoctor.localShadow && preDoctor.localShadow.version !== aligned) {
+    const shadowProjectRoot = path.dirname(path.dirname(preDoctor.localShadow.dir));
+    console.log("");
+    console.log(`  ${YELLOW}Local shadow detected: node_modules/ue-mcp@${preDoctor.localShadow.version} (npx runs this, not the global).${RESET}`);
+    step(`Aligning the local copy to ${aligned} in ${shadowProjectRoot}...`);
+    try {
+      execSync(`npm install ue-mcp@${aligned}`, { stdio: "inherit", cwd: shadowProjectRoot });
+      ok(`Local copy aligned to ${aligned}`);
+      console.log(`  ${DIM}Cleaner long-term: drop ue-mcp from this project's package.json and pin .mcp.json to \`${UE_MCP_LAUNCH}\`.${RESET}`);
+    } catch {
+      fail(`Could not update the local copy. Remove node_modules/ue-mcp manually, or pin .mcp.json to \`${UE_MCP_LAUNCH}\`.`);
+    }
+  }
+
+  // 3. Deploy the bridge plugin sources into the project.
+  if (!uproject) {
+    console.log("");
+    console.log(`  ${YELLOW}No .uproject here, so the editor plugin was NOT updated.${RESET}`);
+    step("Run `ue-mcp update` from your project directory, or pass the .uproject path.");
+  } else if (shouldDeploy) {
+    console.log("");
+    step("Deploying bridge plugin...");
+    console.log("");
+    if (!runSelfCli("deploy-cli.js", projectArg)) {
+      fail("Deploy failed. Run `ue-mcp deploy` manually.");
+      process.exit(1);
+    }
+  } else {
+    console.log("");
+    console.log(`  ${YELLOW}Skipped the plugin (--no-deploy). The editor still runs the old one until \`ue-mcp deploy\` and \`ue-mcp build\`.${RESET}`);
+  }
+
+  // 4. Rebuild the editor. A running editor holds the plugin DLL, so the build
+  //    would fail on a locked file; skip it and say what to run instead.
+  if (shouldBuild && uproject && (await editorRunningFor(uproject))) {
+    shouldBuild = false;
+    console.log("");
+    console.log(`  ${YELLOW}The editor is running, so the plugin was deployed but not rebuilt.${RESET}`);
+    step("Close the editor, then run `ue-mcp build`.");
+  } else if (shouldDeploy && !shouldBuild) {
+    console.log("");
+    step("Plugin deployed but not rebuilt (--no-build). Run `ue-mcp build` before the next editor launch.");
+  }
+  if (shouldBuild) {
+    console.log("");
+    step("Rebuilding the editor (this can take a few minutes)...");
+    console.log("");
+    if (!runSelfCli("build-cli.js", projectArg)) {
+      fail("Build failed. Run `ue-mcp build` manually and check the output.");
+      process.exit(1);
+    }
+  }
+
+  // 5. Show the version table so alignment is visible.
+  console.log(formatDoctor(collectDoctor(projectArg)));
+
+  // 6. Remind to relaunch - an update launched through the MCP client cannot
+  //    restart the server it was spawned by.
+  console.log(`  ${BOLD}Next:${RESET} quit your MCP client and relaunch it so it spawns the updated server.`);
+  console.log("");
+}
+
+/** Entry point for `ue-mcp update [project] [--editor <name-or-path>]`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    await update(argv);
+  } catch (e) {
+    console.error(`\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`);
+    return 1;
+  }
+}

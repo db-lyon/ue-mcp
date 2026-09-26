@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { projectDirOf } from "./config/uproject-path.js";
+import { projectDirOf } from "../config/uproject-path.js";
 import { RESET, BOLD, DIM, RED, CYAN, YELLOW, ok } from "./ui/ansi.js";
 
 const fail = (msg: string) => {

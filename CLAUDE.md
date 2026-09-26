@@ -142,7 +142,7 @@ A version with a prerelease suffix (`1.2.0-beta`, `1.2.0-beta.2`, `1.3.0-rc.1`) 
 - **npm dist-tag** comes from the first prerelease identifier, so `1.2.0-beta` and `1.2.0-beta.2` publish under `beta` and `1.3.0-rc.1` under `rc`. `npx ue-mcp` keeps resolving to the newest plain `X.Y.Z`; testers opt in with `ue-mcp@beta`.
 - **The GitHub release** is marked as a prerelease, so it does not take the "Latest" badge or answer `/releases/latest`.
 - **The publish gate** asks whether that exact version is already on the registry, so a prerelease does not wedge every later push.
-- The rules live in `scripts/release-version.mjs` (unit tested in `tests/unit/release-version.test.ts`), mirrored for the shipped CLI in `src/version-check.ts`. Change one and the parity test will tell you to change the other.
+- The rules live in `scripts/release-version.mjs` (unit tested in `tests/unit/release-version.test.ts`), mirrored for the shipped CLI in `src/core/version-check.ts`. Change one and the parity test will tell you to change the other.
 
 The tag name still has to match the version exactly: `gh release create v1.2.0-beta --draft --notes-file ...`.
 

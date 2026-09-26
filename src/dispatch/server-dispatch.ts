@@ -9,7 +9,7 @@ import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "../core/types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
-import { consumeUpgradeNotice } from "../version-check.js";
+import { consumeUpgradeNotice } from "../core/version-check.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
 import {
   routeEditorCall,

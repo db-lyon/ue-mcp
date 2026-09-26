@@ -17,23 +17,23 @@ import {
   listDeferred as listAllDeferred,
   loadDeferred,
   type DeferredFeedback,
-} from "./feedback/feedback-deferred.js";
-import { deleteFallbackReport } from "./feedback/feedback-fallback.js";
+} from "../feedback/feedback-deferred.js";
+import { deleteFallbackReport } from "../feedback/feedback-fallback.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { submitFeedback } from "./feedback/github-app.js";
+import { submitFeedback } from "../feedback/github-app.js";
 import {
   CORE_REPO,
   newIssueUrl,
   parseRepoSlug,
   repoSlug,
   type GitHubRepo,
-} from "./extensions/registry-catalog.js";
+} from "../extensions/registry-catalog.js";
 import {
   getFeedbackMode,
   setFeedbackMode,
   getUserStatePath,
   type FeedbackMode,
-} from "./config/user-state.js";
+} from "../config/user-state.js";
 import {
   BOLD,
   CYAN,
@@ -47,8 +47,8 @@ import {
   ok,
   warn,
 } from "./ui/ansi.js";
-import { isUProjectPath, projectDirOf } from "./config/uproject-path.js";
-import { readEnv } from "./core/env.js";
+import { isUProjectPath, projectDirOf } from "../config/uproject-path.js";
+import { readEnv } from "../core/env.js";
 
 function printHelp(): void {
   console.log("");

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { CLI_COMMANDS, cliCommandNames, findCliCommand } from "../../src/cli-commands.js";
-import { parseServerInvocation } from "../../src/doctor.js";
+import { CLI_COMMANDS, cliCommandNames, findCliCommand } from "../../src/cli/cli-commands.js";
+import { parseServerInvocation } from "../../src/cli/doctor.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -15,7 +15,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { isUProjectPath, projectDirOf } from "./config/uproject-path.js";
+import { isUProjectPath, projectDirOf } from "../config/uproject-path.js";
 
 export const EDITOR_FLAG = "--editor";
 

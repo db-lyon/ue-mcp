@@ -9,7 +9,7 @@
  * re-running the full setup wizard.
  */
 
-import { pollDeviceFlow, readUserAuth, startDeviceFlow } from "./feedback/github-auth.js";
+import { pollDeviceFlow, readUserAuth, startDeviceFlow } from "../feedback/github-auth.js";
 import {
   BOLD,
   CYAN,
@@ -103,7 +103,7 @@ export async function run(): Promise<number | void> {
   await runFeedbackAuthStep();
 }
 
-// Also runnable as `node dist/auth-cli.js`, only when executed directly.
+// Also runnable as `node dist/cli/auth-cli.js`, only when executed directly.
 if (isMainModule(import.meta.url)) {
   runFeedbackAuthStep().catch((e) => {
     console.error(

@@ -20,10 +20,10 @@ import {
   setDialogMode,
   getUserStatePath,
   type DialogMode,
-} from "./config/user-state.js";
+} from "../config/user-state.js";
 import { BOLD, CYAN, DIM, RESET, fail, info, ok, warn } from "./ui/ansi.js";
-import { projectDirOf } from "./config/uproject-path.js";
-import { readEnv } from "./core/env.js";
+import { projectDirOf } from "../config/uproject-path.js";
+import { readEnv } from "../core/env.js";
 
 function printHelp(): void {
   console.log("");

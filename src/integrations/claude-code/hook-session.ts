@@ -88,7 +88,7 @@ export async function hookProjectDir(
  * tool-call path, so the import is deferred to the calls that name an editor.
  */
 async function defaultResolveEditor(name: string): Promise<string> {
-  const { resolveEditorFlag } = await import("../../editor-flag.js");
+  const { resolveEditorFlag } = await import("../../cli/editor-flag.js");
   return resolveEditorFlag(name);
 }
 

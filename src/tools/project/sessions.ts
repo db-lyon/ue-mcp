@@ -12,7 +12,7 @@ import { switchProject, isTargetDiverged } from "../../sessions/project-switch.j
 import { ueMcpConfigRejections, describeConfigRejections } from "../../config/project.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
 import { toolGraphOf } from "../../surface/target-params.js";
-import { startProgress } from "../../ui/progress.js";
+import { startProgress } from "../../cli/ui/progress.js";
 
 /**
  * The environment variables flattening every registered editor into one, right

@@ -17,7 +17,7 @@ import {
   resolveEditorFlag,
   takeEditorTarget,
   EditorFlagError,
-} from "../../src/editor-flag.js";
+} from "../../src/cli/editor-flag.js";
 import { SessionRegistry } from "../../src/sessions/session.js";
 
 let root: string;
