@@ -941,10 +941,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 	const bool bHasDefaultValue = TryGetStringParam(Params, TEXT("defaultValue"), DefaultValue);
 	const TArray<TSharedPtr<FJsonValue>>* Order = nullptr;
 	TryGetArrayParam(Params, TEXT("order"), Order);
-	auto MissingParam = [](const TCHAR* Key)
-	{
-		return MCPError(FString::Printf(TEXT("Missing required parameter '%s'"), Key));
-	};
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
@@ -1045,7 +1041,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 	// ── add ──────────────────────────────────────────────────────────────────
 	if (Op == TEXT("add"))
 	{
-		if (ParameterName.IsEmpty()) return MissingParam(TEXT("parameterName"));
+		if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
 		const FString TypeSpec = bHasParameterType ? ParameterType : FString(TEXT("bool"));
 
 		FEdGraphPinType PinType;
@@ -1112,7 +1108,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 	// ── remove ───────────────────────────────────────────────────────────────
 	if (Op == TEXT("remove"))
 	{
-		if (ParameterName.IsEmpty()) return MissingParam(TEXT("parameterName"));
+		if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
 
 		const FName PinName(*ParameterName);
 		const int32 At = FindUserPin(Owner, PinName);
@@ -1166,8 +1162,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 	// ── rename ───────────────────────────────────────────────────────────────
 	if (Op == TEXT("rename"))
 	{
-		if (ParameterName.IsEmpty()) return MissingParam(TEXT("parameterName"));
-		if (NewName.IsEmpty()) return MissingParam(TEXT("newName"));
+		if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
+		if (auto Err = RequireString(Params, TEXT("newName"), NewName)) return Err;
 
 		const FName OldPin(*ParameterName);
 		const FName NewPin(*NewName);
@@ -1226,8 +1222,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 	// ── set_type ─────────────────────────────────────────────────────────────
 	if (Op == TEXT("set_type"))
 	{
-		if (ParameterName.IsEmpty()) return MissingParam(TEXT("parameterName"));
-		if (ParameterType.IsEmpty()) return MissingParam(TEXT("parameterType"));
+		if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
+		if (auto Err = RequireString(Params, TEXT("parameterType"), ParameterType)) return Err;
 		const FString TypeSpec = ParameterType;
 
 		const int32 At = FindUserPin(Owner, FName(*ParameterName));
@@ -1294,7 +1290,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 	// ── set_default ──────────────────────────────────────────────────────────
 	if (Op == TEXT("set_default"))
 	{
-		if (ParameterName.IsEmpty()) return MissingParam(TEXT("parameterName"));
+		if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
 		if (!bHasDefaultValue)
 		{
 			return MCPError(TEXT("Missing required parameter 'defaultValue': the value as Unreal export text (e.g. '5', 'true', '(X=1.000000,Y=0.000000,Z=0.000000)'). Pass an empty string to clear it."));
