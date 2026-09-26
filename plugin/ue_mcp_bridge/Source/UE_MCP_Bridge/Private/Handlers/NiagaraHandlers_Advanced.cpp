@@ -2,11 +2,8 @@
 // dynamic inputs, simulation stages, event handlers, custom HLSL bodies, and
 // the missing half of module-stack CRUD (remove / enable).
 //
-// Split out of NiagaraHandlers.cpp on purpose. Every helper in here carries a
-// NiaAdv prefix because the module is a unity build: a second copy of
-// ResolveEmitter, GraphOfScript or UsageOfContext in a file that shares a blob
-// with NiagaraHandlers.cpp is a redefinition (C2084), and the grouping shifts
-// with file count and order, so it would build clean here and break elsewhere.
+// File-local helpers carry a NiaAdv prefix because the module is a unity build.
+// Emitter and stack-context addressing is shared through NiagaraHandlers_Internal.h.
 //
 // Deliberately NOT here: configure_simulation_stage / configure_event_handler.
 // ExecuteBehavior, NumIterations, IterationSource, SpawnNumber, ExecutionMode
@@ -19,6 +16,7 @@
 #include "NiagaraHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "NiagaraHandlers_Internal.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -51,63 +49,6 @@ namespace
 {
 	// ── Addressing ───────────────────────────────────────────────────────────
 
-	/** The four emitter stack contexts a module can live in, spelled once. */
-	const TCHAR* NiaAdvValidContexts = TEXT("ParticleSpawn|ParticleUpdate|EmitterSpawn|EmitterUpdate");
-
-	FVersionedNiagaraEmitterData* NiaAdvResolveEmitter(
-		UNiagaraSystem* System, const FString& EmitterName, int32 EmitterIndex,
-		UNiagaraEmitter*& OutEmitter, FGuid& OutVersion, FString& OutError)
-	{
-		OutEmitter = nullptr;
-		if (!System) { OutError = TEXT("System is null"); return nullptr; }
-
-		const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
-		TArray<FString> Names;
-		for (const FNiagaraEmitterHandle& H : Handles) Names.Add(H.GetName().ToString());
-
-		int32 TargetIdx = -1;
-		if (!EmitterName.IsEmpty())
-		{
-			for (int32 i = 0; i < Handles.Num(); ++i)
-			{
-				if (Names[i].Equals(EmitterName, ESearchCase::IgnoreCase)) { TargetIdx = i; break; }
-			}
-			if (TargetIdx < 0)
-			{
-				OutError = FString::Printf(
-					TEXT("No emitter named '%s' in '%s'. Emitters present: [%s]. Address one by 'emitterName' or by 'emitterIndex' (0-%d)."),
-					*EmitterName, *System->GetPathName(),
-					Names.Num() ? *FString::Join(Names, TEXT(", ")) : TEXT("none"),
-					FMath::Max(0, Names.Num() - 1));
-				return nullptr;
-			}
-		}
-		else if (EmitterIndex >= 0 && EmitterIndex < Handles.Num())
-		{
-			TargetIdx = EmitterIndex;
-		}
-		else
-		{
-			OutError = FString::Printf(
-				TEXT("emitterIndex %d is out of range for '%s', which has %d emitter(s): [%s]. Pass 'emitterName' instead when you know it."),
-				EmitterIndex, *System->GetPathName(), Names.Num(),
-				Names.Num() ? *FString::Join(Names, TEXT(", ")) : TEXT("none"));
-			return nullptr;
-		}
-
-		FVersionedNiagaraEmitter VE = Handles[TargetIdx].GetInstance();
-		OutEmitter = VE.Emitter;
-		OutVersion = VE.Version;
-		FVersionedNiagaraEmitterData* Data = VE.GetEmitterData();
-		if (!Data)
-		{
-			OutError = FString::Printf(
-				TEXT("Emitter '%s' resolved but carries no version data for version %s. The emitter asset may be a stale or unmigrated version."),
-				*Names[TargetIdx], *OutVersion.ToString());
-		}
-		return Data;
-	}
-
 	/** Index of the emitter's version-data entry that matches Version. This is
 	 *  the array index asset(set_property) needs to reach anything that lives on
 	 *  FVersionedNiagaraEmitterData rather than on the UObject. */
@@ -122,13 +63,6 @@ namespace
 		return 0;
 	}
 
-	UNiagaraGraph* NiaAdvGraphOfScript(UNiagaraScript* Script)
-	{
-		if (!Script) return nullptr;
-		UNiagaraScriptSource* Src = Cast<UNiagaraScriptSource>(Script->GetLatestSource());
-		return Src ? Src->NodeGraph : nullptr;
-	}
-
 	/** The one graph every script on an emitter shares. Output nodes, not
 	 *  graphs, are what separate a spawn script from a sim stage. */
 	UNiagaraGraph* NiaAdvEmitterGraph(FVersionedNiagaraEmitterData* Data)
@@ -136,39 +70,6 @@ namespace
 		if (!Data) return nullptr;
 		UNiagaraScriptSource* Src = Cast<UNiagaraScriptSource>(Data->GraphSource);
 		return Src ? Src->NodeGraph : nullptr;
-	}
-
-	struct FNiaAdvStackSlot
-	{
-		FString Context;
-		UNiagaraScript* Script = nullptr;
-		ENiagaraScriptUsage Usage = ENiagaraScriptUsage::ParticleSpawnScript;
-	};
-
-	bool NiaAdvResolveContext(FVersionedNiagaraEmitterData* Data, const FString& Ctx, FNiaAdvStackSlot& Out)
-	{
-		if (!Data) return false;
-		if (Ctx.Equals(TEXT("ParticleSpawn"), ESearchCase::IgnoreCase))
-		{ Out = { TEXT("ParticleSpawn"), Data->SpawnScriptProps.Script, ENiagaraScriptUsage::ParticleSpawnScript }; return true; }
-		if (Ctx.Equals(TEXT("ParticleUpdate"), ESearchCase::IgnoreCase))
-		{ Out = { TEXT("ParticleUpdate"), Data->UpdateScriptProps.Script, ENiagaraScriptUsage::ParticleUpdateScript }; return true; }
-		if (Ctx.Equals(TEXT("EmitterSpawn"), ESearchCase::IgnoreCase))
-		{ Out = { TEXT("EmitterSpawn"), Data->EmitterSpawnScriptProps.Script, ENiagaraScriptUsage::EmitterSpawnScript }; return true; }
-		if (Ctx.Equals(TEXT("EmitterUpdate"), ESearchCase::IgnoreCase))
-		{ Out = { TEXT("EmitterUpdate"), Data->EmitterUpdateScriptProps.Script, ENiagaraScriptUsage::EmitterUpdateScript }; return true; }
-		return false;
-	}
-
-	void NiaAdvAllContexts(FVersionedNiagaraEmitterData* Data, const FString& Filter, TArray<FNiaAdvStackSlot>& Out)
-	{
-		static const TCHAR* All[] = { TEXT("ParticleSpawn"), TEXT("ParticleUpdate"), TEXT("EmitterSpawn"), TEXT("EmitterUpdate") };
-		const bool bAll = Filter.IsEmpty() || Filter.Equals(TEXT("all"), ESearchCase::IgnoreCase);
-		for (const TCHAR* Name : All)
-		{
-			if (!bAll && !Filter.Equals(Name, ESearchCase::IgnoreCase)) continue;
-			FNiaAdvStackSlot Slot;
-			if (NiaAdvResolveContext(Data, Name, Slot) && Slot.Script) Out.Add(Slot);
-		}
 	}
 
 	// ── Graph shape ──────────────────────────────────────────────────────────
@@ -597,24 +498,25 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListDynamicInputs(const TSharedPtr<FJso
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
 	FString ResolveError;
-	FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
+	FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
 	if (!Data) return MCPError(ResolveError);
 
-	TArray<FNiaAdvStackSlot> Slots;
-	NiaAdvAllContexts(Data, StackContext, Slots);
+	TArray<MCPNiagara::FStackSlot> Slots;
+	FString ContextError;
+	if (!MCPNiagara::CollectStackContexts(Data, StackContext, Slots, ContextError)) return MCPError(ContextError);
 	if (Slots.Num() == 0)
 	{
 		return MCPError(FString::Printf(
-			TEXT("Unknown stackContext '%s'. Valid values: %s, or 'all'."), *StackContext, NiaAdvValidContexts));
+			TEXT("stackContext '%s' selects no script on this emitter. Valid values: %s, or 'all'."), *StackContext, MCPNiagara::ValidStackContexts()));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ModuleRows;
 	TArray<FString> SeenModules;
 	int32 TotalDynamic = 0;
 
-	for (const FNiaAdvStackSlot& Slot : Slots)
+	for (const MCPNiagara::FStackSlot& Slot : Slots)
 	{
-		UNiagaraGraph* Graph = NiaAdvGraphOfScript(Slot.Script);
+		UNiagaraGraph* Graph = MCPNiagara::GraphOfScript(Slot.Script);
 		if (!Graph) continue;
 		UNiagaraNodeOutput* OutputNode = NiaAdvFindOutputNode(Graph, Slot.Usage, FGuid());
 		TArray<UNiagaraNodeFunctionCall*> Modules;
@@ -698,15 +600,15 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetDynamicInput(const TSharedPtr<FJsonO
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
 	FString ResolveError;
-	FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
+	FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
 	if (!Data) return MCPError(ResolveError);
 
-	FNiaAdvStackSlot Slot;
-	if (!NiaAdvResolveContext(Data, StackContext, Slot) || !Slot.Script)
+	MCPNiagara::FStackSlot Slot;
+	if (!MCPNiagara::ResolveStackContext(Data, StackContext, Slot) || !Slot.Script)
 	{
-		return MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, NiaAdvValidContexts));
+		return MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, MCPNiagara::ValidStackContexts()));
 	}
-	UNiagaraGraph* Graph = NiaAdvGraphOfScript(Slot.Script);
+	UNiagaraGraph* Graph = MCPNiagara::GraphOfScript(Slot.Script);
 	if (!Graph) return MCPError(FString::Printf(TEXT("The %s script on emitter '%s' has no editor graph."), *Slot.Context, Emitter ? *Emitter->GetName() : TEXT("?")));
 
 	TArray<FString> SeenModules;
@@ -920,15 +822,15 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveDynamicInput(const TSharedPtr<FJs
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
 	FString ResolveError;
-	FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
+	FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
 	if (!Data) return MCPError(ResolveError);
 
-	FNiaAdvStackSlot Slot;
-	if (!NiaAdvResolveContext(Data, StackContext, Slot) || !Slot.Script)
+	MCPNiagara::FStackSlot Slot;
+	if (!MCPNiagara::ResolveStackContext(Data, StackContext, Slot) || !Slot.Script)
 	{
-		return MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, NiaAdvValidContexts));
+		return MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, MCPNiagara::ValidStackContexts()));
 	}
-	UNiagaraGraph* Graph = NiaAdvGraphOfScript(Slot.Script);
+	UNiagaraGraph* Graph = MCPNiagara::GraphOfScript(Slot.Script);
 	if (!Graph) return MCPError(TEXT("The addressed script has no editor graph."));
 
 	TArray<FString> SeenModules;
@@ -1093,7 +995,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddSimulationStage(const TSharedPtr<FJs
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
 	FString ResolveError;
-	FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
+	FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
 	if (!Data) return MCPError(ResolveError);
 
 	const FName WantedName(*StageName);
@@ -1174,7 +1076,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveSimulationStage(const TSharedPtr<
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
 	FString ResolveError;
-	FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
+	FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
 	if (!Data) return MCPError(ResolveError);
 
 	const FName WantedName(*StageName);
@@ -1269,7 +1171,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEventHandler(const TSharedPtr<FJsonO
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
 	FString ResolveError;
-	FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
+	FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
 	if (!Data) return MCPError(ResolveError);
 
 	FGuid ParsedSourceId;
@@ -1360,7 +1262,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEventHandler(const TSharedPtr<FJs
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
 	FString ResolveError;
-	FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
+	FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
 	if (!Data) return MCPError(ResolveError);
 
 	const FName WantedEvent(*EventName);
@@ -1468,7 +1370,7 @@ namespace
 			if (!Asset) { OutError = MCPAssetNotFoundError(ScriptPath, TEXT("Niagara script")); return nullptr; }
 			UNiagaraScript* Script = Cast<UNiagaraScript>(Asset);
 			if (!Script) { OutError = MCPAssetWrongTypeError(ScriptPath, Asset, TEXT("NiagaraScript")); return nullptr; }
-			UNiagaraGraph* Graph = NiaAdvGraphOfScript(Script);
+			UNiagaraGraph* Graph = MCPNiagara::GraphOfScript(Script);
 			if (!Graph)
 			{
 				OutError = MCPError(FString::Printf(TEXT("Niagara script '%s' has no editor graph."), *Script->GetPathName()));
@@ -1491,20 +1393,20 @@ namespace
 			return nullptr;
 		}
 		FString ResolveError;
-		FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(
+		FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(
 			OutSystem, OptionalString(Params, TEXT("emitterName"), TEXT("")),
 			OptionalInt(Params, TEXT("emitterIndex"), 0), OutEmitter, OutVersion, ResolveError);
 		if (!Data) { OutError = MCPError(ResolveError); return nullptr; }
 
 		const FString StackContext = OptionalString(Params, TEXT("stackContext"), TEXT("ParticleUpdate"));
-		FNiaAdvStackSlot Slot;
-		if (!NiaAdvResolveContext(Data, StackContext, Slot) || !Slot.Script)
+		MCPNiagara::FStackSlot Slot;
+		if (!MCPNiagara::ResolveStackContext(Data, StackContext, Slot) || !Slot.Script)
 		{
-			OutError = MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, NiaAdvValidContexts));
+			OutError = MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, MCPNiagara::ValidStackContexts()));
 			return nullptr;
 		}
 		OutContext = Slot.Context;
-		UNiagaraGraph* Graph = NiaAdvGraphOfScript(Slot.Script);
+		UNiagaraGraph* Graph = MCPNiagara::GraphOfScript(Slot.Script);
 		if (!Graph) OutError = MCPError(TEXT("The addressed script has no editor graph."));
 		return Graph;
 	}
@@ -1701,15 +1603,15 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveModule(const TSharedPtr<FJsonObje
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
 	FString ResolveError;
-	FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
+	FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
 	if (!Data) return MCPError(ResolveError);
 
-	FNiaAdvStackSlot Slot;
-	if (!NiaAdvResolveContext(Data, StackContext, Slot) || !Slot.Script)
+	MCPNiagara::FStackSlot Slot;
+	if (!MCPNiagara::ResolveStackContext(Data, StackContext, Slot) || !Slot.Script)
 	{
-		return MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, NiaAdvValidContexts));
+		return MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, MCPNiagara::ValidStackContexts()));
 	}
-	UNiagaraGraph* Graph = NiaAdvGraphOfScript(Slot.Script);
+	UNiagaraGraph* Graph = MCPNiagara::GraphOfScript(Slot.Script);
 	if (!Graph) return MCPError(TEXT("The addressed script has no editor graph."));
 
 	UNiagaraNodeOutput* OutputNode = NiaAdvFindOutputNode(Graph, Slot.Usage, FGuid());
@@ -1891,15 +1793,15 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleEnabled(const TSharedPtr<FJson
 	UNiagaraEmitter* Emitter = nullptr;
 	FGuid Version;
 	FString ResolveError;
-	FVersionedNiagaraEmitterData* Data = NiaAdvResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
+	FVersionedNiagaraEmitterData* Data = MCPNiagara::ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version, ResolveError);
 	if (!Data) return MCPError(ResolveError);
 
-	FNiaAdvStackSlot Slot;
-	if (!NiaAdvResolveContext(Data, StackContext, Slot) || !Slot.Script)
+	MCPNiagara::FStackSlot Slot;
+	if (!MCPNiagara::ResolveStackContext(Data, StackContext, Slot) || !Slot.Script)
 	{
-		return MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, NiaAdvValidContexts));
+		return MCPError(FString::Printf(TEXT("Unknown stackContext '%s'. Valid values: %s."), *StackContext, MCPNiagara::ValidStackContexts()));
 	}
-	UNiagaraGraph* Graph = NiaAdvGraphOfScript(Slot.Script);
+	UNiagaraGraph* Graph = MCPNiagara::GraphOfScript(Slot.Script);
 	if (!Graph) return MCPError(TEXT("The addressed script has no editor graph."));
 
 	TArray<FString> SeenModules;
