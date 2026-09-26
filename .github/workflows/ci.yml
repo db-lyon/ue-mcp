@@ -67,6 +67,12 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit
 
+      - name: Type-check tests and scripts
+        # tsconfig.json covers src/ only and vitest strips types without
+        # checking them, so a test could build a fixture src/ no longer accepts
+        # and still pass. Kept out of the pre-commit hook because it is slow.
+        run: npm run typecheck:tests
+
       - name: Unit tests
         run: npm run test:unit
 
