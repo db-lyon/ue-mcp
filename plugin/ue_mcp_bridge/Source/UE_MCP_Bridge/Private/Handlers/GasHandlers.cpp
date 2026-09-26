@@ -29,15 +29,7 @@
 #include "ScalableFloat.h"
 #include "GameplayTagsManager.h"
 
-// Resolve a FGameplayAttribute by name across every loaded AttributeSet
-// subclass. Accepts a bare property name ("Health") or a qualified
-// "SetClassSubstring.Attribute". Returns an invalid attribute on miss.
-// OutSetName reports the attribute set class this resolved against. A BARE
-// attribute name is answered by the first matching set TObjectIterator reaches,
-// and iterator order is not stable, so anything that has to name the attribute
-// back - a rollback record above all - must carry the qualified form or it can
-// land on a different set's attribute of the same name on the next call.
-static FGameplayAttribute FindGameplayAttributeByName(const FString& Name, FString* OutSetName = nullptr)
+FGameplayAttribute MCPGas::FindAttributeAcrossSets(const FString& Name, FString* OutSetName)
 {
 	FString SetFilter, AttrName = Name;
 	if (Name.Contains(TEXT(".")))
@@ -744,7 +736,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetEffectModifier(const TSharedPtr<FJsonObj
 	if (!GE) return CdoErr;
 
 	FString ResolvedSetName;
-	const FGameplayAttribute GAttr = FindGameplayAttributeByName(Attribute, &ResolvedSetName);
+	const FGameplayAttribute GAttr = MCPGas::FindAttributeAcrossSets(Attribute, &ResolvedSetName);
 	if (!GAttr.IsValid())
 	{
 		return MCPError(FString::Printf(

@@ -275,40 +275,6 @@ namespace
 		return nullptr;
 	}
 
-	/**
-	 * A FGameplayAttribute by name, searched across every loaded attribute set
-	 * class. Accepts "Health" and "HealthSet.Health".
-	 *
-	 * GasHandlers.cpp has a file-local function that does the same job; this one
-	 * cannot call it (it is static, so unity-build aside it has internal
-	 * linkage) and must not share its name (unity build, C2084).
-	 */
-	FGameplayAttribute MCPGasAbilFindAttributeAcrossSets(const FString& Name)
-	{
-		FString SetFilter;
-		FString AttrName = Name;
-		if (Name.Contains(TEXT("."))) Name.Split(TEXT("."), &SetFilter, &AttrName);
-
-		for (TObjectIterator<UClass> It; It; ++It)
-		{
-			UClass* Class = *It;
-			if (Class == UAttributeSet::StaticClass()) continue;
-			if (!Class->IsChildOf(UAttributeSet::StaticClass())) continue;
-			if (!SetFilter.IsEmpty() && !Class->GetName().Contains(SetFilter)) continue;
-			for (TFieldIterator<FProperty> P(Class); P; ++P)
-			{
-				FStructProperty* SProp = CastField<FStructProperty>(*P);
-				if (SProp
-					&& SProp->Struct == FGameplayAttributeData::StaticStruct()
-					&& SProp->GetName() == AttrName)
-				{
-					return FGameplayAttribute(SProp);
-				}
-			}
-		}
-		return FGameplayAttribute();
-	}
-
 	/** Granted specs sharing an InputID, other than the one being bound. */
 	TArray<FString> MCPGasAbilInputIdConflicts(
 		UAbilitySystemComponent* ASC,
@@ -664,7 +630,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddEffectCue(const TSharedPtr<FJsonObject>&
 	FGameplayAttribute MagnitudeAttribute;
 	if (!MagnitudeAttributeName.IsEmpty())
 	{
-		MagnitudeAttribute = MCPGasAbilFindAttributeAcrossSets(MagnitudeAttributeName);
+		MagnitudeAttribute = MCPGas::FindAttributeAcrossSets(MagnitudeAttributeName);
 		if (!MagnitudeAttribute.IsValid())
 		{
 			return MCPError(FString::Printf(

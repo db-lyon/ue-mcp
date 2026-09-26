@@ -12,6 +12,7 @@
 // type for every use inside the namespace, in this header and in every .cpp
 // that includes it first.
 #include "GameplayAbilitySpec.h"
+#include "AttributeSet.h"
 #include "HandlerUtils.h"
 
 /**
@@ -70,6 +71,13 @@ int32 AdoptOwnerAttributeSets(
  * ("MySet.Mana" / "MySet:Mana") the other GAS actions take. Null on a miss.
  */
 FStructProperty* FindAttributeDataProperty(UClass* SetClass, const FString& Name);
+
+/**
+ * A FGameplayAttribute by name across every loaded attribute set class.
+ * Accepts "Health" or "SetClassSubstring.Health"; a bare name takes the first
+ * set found, so name the set when the answer must be stable. Invalid on a miss.
+ */
+FGameplayAttribute FindAttributeAcrossSets(const FString& Name, FString* OutSetName = nullptr);
 
 /** Every FGameplayAttributeData property name on a set class, comma separated. */
 FString ListAttributeDataPropertyNames(UClass* SetClass);
