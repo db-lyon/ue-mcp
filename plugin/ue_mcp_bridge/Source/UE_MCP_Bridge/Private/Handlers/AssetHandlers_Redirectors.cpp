@@ -78,13 +78,6 @@ namespace
 		return SlashCount <= 1;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> MCPRedirectorStringsToJson(const TArray<FString>& Values)
-	{
-		TArray<TSharedPtr<FJsonValue>> Out;
-		Out.Reserve(Values.Num());
-		for (const FString& Value : Values) Out.Add(MakeShared<FJsonValueString>(Value));
-		return Out;
-	}
 
 	/** Package referencers of one package, split by whether the reference is
 	 *  hard. A soft referencer is the case the manual workaround kept missing:
@@ -257,8 +250,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 		Entry->SetStringField(TEXT("packageName"), Plan.PackageName);
 		Entry->SetStringField(TEXT("objectPath"), Plan.ObjectPath);
 		Entry->SetStringField(TEXT("destinationPath"), Plan.DestinationPath);
-		Entry->SetArrayField(TEXT("hardReferencers"), MCPRedirectorStringsToJson(Plan.HardReferencers));
-		Entry->SetArrayField(TEXT("softReferencers"), MCPRedirectorStringsToJson(Plan.SoftReferencers));
+		Entry->SetArrayField(TEXT("hardReferencers"), MCPStringListToJson(Plan.HardReferencers));
+		Entry->SetArrayField(TEXT("softReferencers"), MCPStringListToJson(Plan.SoftReferencers));
 		Entry->SetNumberField(TEXT("referencerCount"), Plan.AllReferencers().Num());
 		if (!Plan.PreflightError.IsEmpty())
 		{
@@ -273,8 +266,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 	Result->SetBoolField(TEXT("allowProjectWide"), bAllowProjectWide);
 	Result->SetNumberField(TEXT("redirectorCount"), Plans.Num());
 	Result->SetArrayField(TEXT("redirectors"), PlanJson);
-	Result->SetArrayField(TEXT("packagesToLoad"), MCPRedirectorStringsToJson(PackagesToLoad));
-	Result->SetArrayField(TEXT("packagesToSave"), MCPRedirectorStringsToJson(PackagesToLoad));
+	Result->SetArrayField(TEXT("packagesToLoad"), MCPStringListToJson(PackagesToLoad));
+	Result->SetArrayField(TEXT("packagesToSave"), MCPStringListToJson(PackagesToLoad));
 	if (UnresolvedPaths.Num() > 0)
 	{
 		Result->SetArrayField(TEXT("unresolvedPaths"), UnresolvedPaths);
@@ -401,8 +394,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 		Entry->SetStringField(TEXT("packageName"), Plan.PackageName);
 		Entry->SetStringField(TEXT("objectPath"), Plan.ObjectPath);
 		Entry->SetStringField(TEXT("destinationPath"), Plan.DestinationPath);
-		Entry->SetArrayField(TEXT("hardReferencers"), MCPRedirectorStringsToJson(Plan.HardReferencers));
-		Entry->SetArrayField(TEXT("softReferencers"), MCPRedirectorStringsToJson(Plan.SoftReferencers));
+		Entry->SetArrayField(TEXT("hardReferencers"), MCPStringListToJson(Plan.HardReferencers));
+		Entry->SetArrayField(TEXT("softReferencers"), MCPStringListToJson(Plan.SoftReferencers));
 
 		if (!Plan.PreflightError.IsEmpty())
 		{
@@ -418,8 +411,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 		const int32 Remaining = RemainingHard.Num() + RemainingSoft.Num();
 		Entry->SetNumberField(TEXT("referencersBefore"), Plan.AllReferencers().Num());
 		Entry->SetNumberField(TEXT("referencersAfter"), Remaining);
-		Entry->SetArrayField(TEXT("remainingHardReferencers"), MCPRedirectorStringsToJson(RemainingHard));
-		Entry->SetArrayField(TEXT("remainingSoftReferencers"), MCPRedirectorStringsToJson(RemainingSoft));
+		Entry->SetArrayField(TEXT("remainingHardReferencers"), MCPStringListToJson(RemainingHard));
+		Entry->SetArrayField(TEXT("remainingSoftReferencers"), MCPStringListToJson(RemainingSoft));
 
 		if (Remaining > 0 || bFixupStillRunning)
 		{

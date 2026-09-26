@@ -71,14 +71,6 @@ namespace
 		}
 		return Applied;
 	}
-
-	TArray<TSharedPtr<FJsonValue>> MCPSubobjectStringsToJson(const TArray<FString>& Values)
-	{
-		TArray<TSharedPtr<FJsonValue>> Out;
-		Out.Reserve(Values.Num());
-		for (const FString& Value : Values) Out.Add(MakeShared<FJsonValueString>(Value));
-		return Out;
-	}
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObject>& Params)
@@ -217,7 +209,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 				ProbeErrors.Num(), Properties->Values.Num(), *Class->GetName(),
 				*FString::Join(ProbeErrors, TEXT("; "))));
 			Obj->SetStringField(TEXT("reason"), TEXT("property_preflight_failed"));
-			Obj->SetArrayField(TEXT("propertyErrors"), MCPSubobjectStringsToJson(ProbeErrors));
+			Obj->SetArrayField(TEXT("propertyErrors"), MCPStringListToJson(ProbeErrors));
 			return MakeShared<FJsonValueObject>(Obj);
 		}
 	}
@@ -282,10 +274,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 	}
 
 	Result->SetStringField(TEXT("objectPath"), Subobject->GetPathName());
-	Result->SetArrayField(TEXT("propertiesSet"), MCPSubobjectStringsToJson(Applied));
+	Result->SetArrayField(TEXT("propertiesSet"), MCPStringListToJson(Applied));
 	if (PropertyErrors.Num() > 0)
 	{
-		Result->SetArrayField(TEXT("propertyErrors"), MCPSubobjectStringsToJson(PropertyErrors));
+		Result->SetArrayField(TEXT("propertyErrors"), MCPStringListToJson(PropertyErrors));
 	}
 
 	OwnerAsset->PostEditChange();
