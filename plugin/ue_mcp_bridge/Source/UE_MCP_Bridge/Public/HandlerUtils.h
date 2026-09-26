@@ -1791,6 +1791,7 @@ inline bool ReadRotatorFieldsStrict(const TSharedPtr<FJsonObject>& Obj, FRotator
 	return true;
 }
 
+UE_DEPRECATED(5.4, "Unused by the bridge; read r/g/b/a fields directly or use a typed color parser.")
 inline bool ReadLinearColorFields(const TSharedPtr<FJsonObject>& Obj, FLinearColor& Out)
 {
 	if (!Obj.IsValid()) return false;
@@ -1847,6 +1848,7 @@ inline FRotator OptionalRotator(
 	return Out;
 }
 
+UE_DEPRECATED(5.4, "Unused by the bridge; use OptionalRotator or ReadRotatorFieldsStrict.")
 inline TSharedPtr<FJsonValue> RequireRotator(
 	const TSharedPtr<FJsonObject>& Params,
 	const TCHAR* Key,
@@ -1862,6 +1864,7 @@ inline TSharedPtr<FJsonValue> RequireRotator(
 	return nullptr;
 }
 
+UE_DEPRECATED(5.4, "Unused by the bridge; read r/g/b/a fields directly or use a typed color parser.")
 inline FLinearColor OptionalLinearColor(
 	const TSharedPtr<FJsonObject>& Params,
 	const TCHAR* Key,
@@ -1871,7 +1874,9 @@ inline FLinearColor OptionalLinearColor(
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
 	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
 	FLinearColor Out = DefaultValue;
+PRAGMA_DISABLE_DEPRECATION_WARNINGS
 	ReadLinearColorFields(*Obj, Out);
+PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	return Out;
 }
 
@@ -2962,6 +2967,7 @@ private:
 /** Find a property by name and error out cleanly if missing. Returns nullptr
  *  and writes an error JSON to OutError when the property does not exist on
  *  the class, so callers get a typed response instead of a null deref. */
+UE_DEPRECATED(5.4, "Unused by the bridge; call FindPropertyByName and build the error at the call site.")
 inline FProperty* FindPropertyChecked(
 	UClass* Cls,
 	const TCHAR* PropertyName,
