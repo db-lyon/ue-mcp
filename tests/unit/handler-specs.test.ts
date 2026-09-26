@@ -31,9 +31,9 @@ import {
   type HandlerSpec,
   type HandlerSpecs,
   type ParamSpec,
-} from "../../src/handler-spec.js";
-import { ROUTING_PARAM_NAMES } from "../../src/routing-params.js";
-import { parseParams, actionSchema } from "../../src/action-schema.js";
+} from "../../src/surface/handler-spec.js";
+import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
+import { parseParams, actionSchema } from "../../src/surface/action-schema.js";
 import { animationTool } from "../../src/tools/animation.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import type { ActionSpec, ToolDef } from "../../src/core/types.js";
@@ -41,7 +41,7 @@ import { schema as specSchema, handlerSpecs } from "../../src/tools/specs/animat
 import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 import { deployedPlugin, checkBridgeParity } from "../../src/bridge/bridge-parity.js";
 import type { BridgeCapabilities } from "../../src/bridge/bridge.js";
-import { paramMapperOf } from "../../src/epic-input.js";
+import { paramMapperOf } from "../../src/surface/epic-input.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {

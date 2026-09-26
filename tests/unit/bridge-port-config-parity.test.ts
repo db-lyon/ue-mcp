@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { UeMcpConfigSchema } from "../../src/schemas.js";
+import { UeMcpConfigSchema } from "../../src/surface/schemas.js";
 
 /**
  * `ue-mcp.bridge.port` is read twice.

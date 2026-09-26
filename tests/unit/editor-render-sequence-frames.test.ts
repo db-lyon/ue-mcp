@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
-import { declaredActionEffect } from "../../src/action-effects.js";
+import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import type { ToolContext } from "../../src/core/types.js";
 
 /**

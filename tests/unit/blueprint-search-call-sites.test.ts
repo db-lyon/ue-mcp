@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import { declaredActionEffect } from "../../src/action-effects.js";
+import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import type { ToolContext } from "../../src/core/types.js";
 
 describe("blueprint.search_call_sites (#945)", () => {

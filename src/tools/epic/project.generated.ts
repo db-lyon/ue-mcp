@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_discover_tests = {"properties":{"bForceRediscover":{"type":"boolean"}}} as const;
 const S_epic_get_section_property_values = {"properties":{"containerName":{"type":"string"},"categoryName":{"type":"string"},"sectionName":{"type":"string"},"propertyNames":{"type":"array"}},"required":["containerName","categoryName","sectionName","propertyNames"]} as const;

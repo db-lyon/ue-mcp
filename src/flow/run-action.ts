@@ -1,13 +1,13 @@
 import type { TaskResult } from "@db-lyon/flowkit";
 import type { ActionSpec, CategoryOptions } from "../core/types.js";
-import { stripAction } from "../routing-params.js";
+import { stripAction } from "../surface/routing-params.js";
 import { prepareCall, finishCall, forwardToBridge, type CallPreparation } from "../dispatch/call-pipeline.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
 import { ensureGuard } from "../editor/dialog-guard.js";
-import { paramMapperOf } from "../epic-input.js";
+import { paramMapperOf } from "../surface/epic-input.js";
 
 /**
  * Refuse a handler-backed call while a modal is up, through the one guard.

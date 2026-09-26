@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_component = {"properties":{"owner":{"type":"object","properties":{"refPath":{}}},"component_type":{"type":"object","properties":{"refPath":{}}},"name":{"type":"string"}},"required":["owner","component_type","name"]} as const;
 const S_epic_add_cone = {"properties":{"actor":{"type":"object","properties":{"refPath":{}}},"name":{"type":"string"},"radius":{"type":"number"},"height":{"type":"number"},"local_transform":{"type":"object"}},"required":["actor","name"]} as const;

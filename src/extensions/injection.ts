@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "../core/types.js";
-import { actionEnum } from "../category-tool.js";
+import { actionEnum } from "../surface/category-tool.js";
 import { compileSchemaFields, type ManifestInjectAction } from "./manifest.js";
-import { inferActionEffect } from "../action-class.js";
+import { inferActionEffect } from "../surface/action-class.js";
 
 /**
  * Per-category injection plan derived from one plugin's `inject:` block.

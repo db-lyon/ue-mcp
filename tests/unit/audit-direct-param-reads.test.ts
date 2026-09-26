@@ -8,7 +8,7 @@ import {
   findDirectReads,
   reportingCategories,
 } from "../../scripts/audit-direct-param-reads.mjs";
-import { ROUTING_PARAM_NAMES } from "../../src/routing-params.js";
+import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HANDLER_UTILS = path.join(

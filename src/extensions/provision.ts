@@ -1,11 +1,11 @@
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "../core/types.js";
-import { categoryTool } from "../category-tool.js";
+import { categoryTool } from "../surface/category-tool.js";
 import {
   compileSchemaFields,
   type ManifestProvidedCategory,
 } from "./manifest.js";
-import { inferActionEffect } from "../action-class.js";
+import { inferActionEffect } from "../surface/action-class.js";
 
 /**
  * Per-category provision plan derived from one plugin's `provides:` block.

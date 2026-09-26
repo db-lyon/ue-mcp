@@ -18,12 +18,12 @@ import {
   unwrapArgsEnvelope,
   usesArgsEnvelope,
   validateCategoryParams,
-} from "../../src/call-envelope.js";
-import { buildCatalogTool, describeCategory, DESCRIBE_PAGE_CHARS } from "../../src/lean-context.js";
-import { buildMicroGateway, resolveMicroCall } from "../../src/micro-context.js";
+} from "../../src/surface/context/call-envelope.js";
+import { buildCatalogTool, describeCategory, DESCRIBE_PAGE_CHARS } from "../../src/surface/context/lean-context.js";
+import { buildMicroGateway, resolveMicroCall } from "../../src/surface/context/micro-context.js";
 import type { ToolDef } from "../../src/core/types.js";
-import { bp, categoryTool } from "../../src/category-tool.js";
-import { injectEditorTarget } from "../../src/target-params.js";
+import { bp, categoryTool } from "../../src/surface/category-tool.js";
+import { injectEditorTarget } from "../../src/surface/target-params.js";
 
 function levelTool(): ToolDef {
   return categoryTool("level", "Level.", {

@@ -25,15 +25,15 @@ import { SessionRegistry, type EditorSession } from "../../src/sessions/session.
 import { ALL_TOOLS } from "../../src/tools.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { niagaraTool } from "../../src/tools/niagara.js";
-import { buildMicroGateway } from "../../src/micro-context.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { loadFlowConfig } from "../../src/flow/loader.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import { startFlowHttpServer } from "../../src/flow/http-server.js";
 import { routeEditorCall } from "../../src/dispatch/editor-gate.js";
 import type { ToolContext, ToolDef } from "../../src/core/types.js";
-import { cloneToolDef } from "../../src/category-tool.js";
-import { injectEditorTarget, sessionContext } from "../../src/target-params.js";
+import { cloneToolDef } from "../../src/surface/category-tool.js";
+import { injectEditorTarget, sessionContext } from "../../src/surface/target-params.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 import { LiveServer } from "./server.js";
 import {

@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_expression = {"properties":{"material_or_function":{"type":"object","properties":{"refPath":{}}},"expression_class":{"type":"object","properties":{"refPath":{}}},"x":{"type":"integer"},"y":{"type":"integer"}},"required":["material_or_function","expression_class"]} as const;
 const S_epic_clear_parameters = {"properties":{"instance":{"type":"object","properties":{"refPath":{}}}},"required":["instance"]} as const;

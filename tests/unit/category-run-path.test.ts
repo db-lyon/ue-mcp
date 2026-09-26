@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import type { IBridge } from "../../src/bridge/bridge.js";
 import type { ToolContext, ToolDef } from "../../src/core/types.js";
-import { bp, categoryTool } from "../../src/category-tool.js";
+import { bp, categoryTool } from "../../src/surface/category-tool.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/extensions/injection.js";
 import { buildProvidedTool } from "../../src/extensions/provision.js";
 import { ErrorCode } from "../../src/core/errors.js";

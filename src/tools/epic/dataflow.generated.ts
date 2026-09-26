@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_comment_box = {"properties":{"graph":{"type":"object","properties":{"refPath":{}}},"nodes":{"type":"array"},"comment":{"type":"string"},"color":{"type":"object"}},"required":["graph","nodes"]} as const;
 const S_epic_add_node = {"properties":{"graph":{"type":"object","properties":{"refPath":{}}},"typeName":{"type":"string"},"nodeName":{"type":"string"},"jsonParams":{"type":"string"},"x":{"type":"integer"},"y":{"type":"integer"}},"required":["graph","typeName","nodeName","jsonParams"]} as const;

@@ -11,14 +11,14 @@ import { FakeBridge } from "../fake-bridge.js";
 import { SessionRegistry, type EditorSession } from "../../src/sessions/session.js";
 import { assetTool } from "../../src/tools/asset.js";
 
-import { cloneToolDef } from "../../src/category-tool.js";
+import { cloneToolDef } from "../../src/surface/category-tool.js";
 import {
   injectEditorTarget,
   injectMigrateTarget,
   removeEditorTarget,
   removeMigrateTarget,
-} from "../../src/target-params.js";
-import { MIGRATE_TARGET_PARAM } from "../../src/routing-params.js";
+} from "../../src/surface/target-params.js";
+import { MIGRATE_TARGET_PARAM } from "../../src/surface/routing-params.js";
 import { ProjectFixture, sessionToolContext } from "../helpers/project-fixture.js";
 
 let root: string;

@@ -7,8 +7,8 @@
  * these assert what is LEFT ALONE.
  */
 import { describe, it, expect } from "vitest";
-import { isPathParam, normalizePathParams, attachPathRepairs } from "../../src/path-params.js";
-import { categoryTool } from "../../src/category-tool.js";
+import { isPathParam, normalizePathParams, attachPathRepairs } from "../../src/surface/path-params.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
 import type { ToolContext } from "../../src/core/types.js";
 
 describe("isPathParam", () => {

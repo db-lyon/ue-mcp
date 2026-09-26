@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { borrowSchema } from "../../src/handler-spec.js";
+import { borrowSchema } from "../../src/surface/handler-spec.js";
 import { levelTool } from "../../src/tools/level.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { schema as editorSpecSchema } from "../../src/tools/specs/editor.generated.js";

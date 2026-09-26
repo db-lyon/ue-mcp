@@ -1,5 +1,5 @@
 import type { ToolDef } from "../core/types.js";
-import { categoryTool } from "../category-tool.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/demo.generated.js";
 
 export const demoTool: ToolDef = categoryTool(

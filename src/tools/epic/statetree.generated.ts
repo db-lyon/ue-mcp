@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_get_children = {"properties":{"state":{"type":"object","properties":{"refPath":{}}}},"required":["state"]} as const;
 const S_epic_get_editor_data = {"properties":{"state_tree":{"type":"object","properties":{"refPath":{}}}},"required":["state_tree"]} as const;

@@ -3,12 +3,12 @@ import { FlowDefinitionSchema, FlowRunner } from "@db-lyon/flowkit";
 import type { TaskConstructor, TaskResult } from "@db-lyon/flowkit";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import type { FlowContext } from "../../src/flow/context.js";
-import { applyLeanContext } from "../../src/lean-context.js";
-import { buildMicroGateway } from "../../src/micro-context.js";
+import { applyLeanContext } from "../../src/surface/context/lean-context.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { nativeHandlerSurface } from "../../src/extensions/loader.js";
 import { PluginManifestSchema } from "../../src/extensions/manifest.js";
 import { buildProvidedTool } from "../../src/extensions/provision.js";
-import { categoryTool } from "../../src/category-tool.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
 import { UeMcpTask } from "../../src/task.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
 

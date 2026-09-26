@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { declaredActionEffect } from "../../src/action-effects.js";
+import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { animationTool } from "../../src/tools/animation.js";
 import type { ToolContext } from "../../src/core/types.js";
 

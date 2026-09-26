@@ -15,7 +15,7 @@
  * generated code calls `epicToolCall`, so nothing has to read a catalog at
  * startup to know how to dispatch one.
  */
-import { McpError, ErrorCode } from "./core/errors.js";
+import { McpError, ErrorCode } from "../core/errors.js";
 import { coerceAssetPathValue } from "./asset-path.js";
 
 /** The shape of one wrapped tool's JSON Schema, as far as this needs it. */

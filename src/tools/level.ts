@@ -1,9 +1,9 @@
 import type { ToolDef } from "../core/types.js";
-import { categoryTool } from "../category-tool.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/level.generated.js";
 import { specBp, schema as specSchema } from "./specs/level.generated.js";
 import { specBp as editorSpecBp, schema as editorSpecSchema } from "./specs/editor.generated.js";
-import { borrowSchema } from "../handler-spec.js";
+import { borrowSchema } from "../surface/handler-spec.js";
 
 export const levelTool: ToolDef = categoryTool(
   "level",

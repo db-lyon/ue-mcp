@@ -29,18 +29,18 @@
  * dispatcher; it belongs in `prepareCall`, where every route gets it.
  */
 import { ENV_VARS, readEnv } from "../core/env.js";
-import { normalizePathParams, attachPathRepairs, type PathRepair } from "../path-params.js";
+import { normalizePathParams, attachPathRepairs, type PathRepair } from "../surface/path-params.js";
 import { MAX_BRIDGE_TIMEOUT_MS } from "../bridge/bridge-timeouts.js";
 import {
   takeFieldSelection,
   projectResult,
   attachFieldReport,
   type FieldSelection,
-} from "../field-select.js";
-import { mapTracked } from "../param-forwarding.js";
+} from "../surface/context/field-select.js";
+import { mapTracked } from "../surface/param-forwarding.js";
 import { isDirectiveResponse } from "../core/directive.js";
 import { McpError, ErrorCode } from "../core/errors.js";
-import { choiceViolation, type ParamChoice, type ParamSpec } from "../handler-spec.js";
+import { choiceViolation, type ParamChoice, type ParamSpec } from "../surface/handler-spec.js";
 
 /**
  * Separate the per-call timeout budget from the action's own parameters.

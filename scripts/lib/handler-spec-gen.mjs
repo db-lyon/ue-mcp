@@ -3,7 +3,7 @@
 // tests/unit/handler-specs.test.ts, which asserts the checked-in files are what
 // the recording renders to. Run under tsx, so the validation is the server's own.
 
-import { specProblems, clauseItems, renderChoice, formsMessage } from "../../src/handler-spec.js";
+import { specProblems, clauseItems, renderChoice, formsMessage } from "../../src/surface/handler-spec.js";
 
 const ZOD_BY_TYPE = {
   string: "z.string()",
@@ -73,7 +73,7 @@ function oneOfExpression(oneOf, name) {
 
 /**
  * The zod expression a parameter renders to, without optionality. The written
- * twin of paramZod in src/handler-spec.ts: a literal, a value's forms, an
+ * twin of paramZod in src/surface/handler-spec.ts: a literal, a value's forms, an
  * object or array element with declared fields or variants, the alternative
  * types of a union, then null.
  */
@@ -178,7 +178,7 @@ export function renderCategoryModule(category, handlers) {
   );
   return `${HEADER}
 import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../handler-spec.js";
+import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd ${category} handler. */
 export const handlerSpecs: HandlerSpecs = ${JSON.stringify(specs, null, 2)};
@@ -202,7 +202,7 @@ export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
 export function renderIndexModule(categories) {
   const imports = categories.map((c) => `import { handlerSpecs as ${c} } from "./${c}.generated.js";`);
   return `${HEADER}
-import type { HandlerSpecs } from "../../handler-spec.js";
+import type { HandlerSpecs } from "../../surface/handler-spec.js";
 ${imports.join("\n")}
 
 /** Every recorded handler spec, across categories. */

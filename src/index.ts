@@ -5,15 +5,15 @@ import type { z } from "zod";
 import { SessionRegistry, type EditorSession } from "./sessions/session.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "./config/project.js";
 import { attach, attachSummary } from "./editor/deployer.js";
-import { composeServerInstructions } from "./instructions.js";
-import { resolveContextStrategy, fullSurfaceDescription } from "./lean-context.js";
-import { envelopeInputSchema, envelopeShape, usesArgsEnvelope } from "./call-envelope.js";
+import { composeServerInstructions } from "./surface/context/instructions.js";
+import { resolveContextStrategy, fullSurfaceDescription } from "./surface/context/lean-context.js";
+import { envelopeInputSchema, envelopeShape, usesArgsEnvelope } from "./surface/context/call-envelope.js";
 import {
   injectEditorTarget,
   removeEditorTarget,
   injectMigrateTarget,
   removeMigrateTarget,
-} from "./target-params.js";
+} from "./surface/target-params.js";
 import type { ToolDef } from "./core/types.js";
 import { DialogGuard, guardFor, sessionGuardDeps } from "./editor/dialog-guard.js";
 import { info, warn, error } from "./core/log.js";

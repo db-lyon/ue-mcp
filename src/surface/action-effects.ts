@@ -23,11 +23,11 @@
  * dispatches, which carries plugin-injected actions and their effects too;
  * omitted, the pristine declaration in `ALL_TOOLS` answers.
  */
-import { ALL_TOOLS } from "./tools.js";
+import { ALL_TOOLS } from "../tools.js";
 import { splitTaskName } from "./action-class.js";
-import { flowCategoryForCheck } from "./flow/flow-surface.js";
-import { EPIC_TOOL_EFFECTS } from "./tools/epic/effects.js";
-import type { ActionEffect, ActionEffectSource, ToolDef } from "./core/types.js";
+import { flowCategoryForCheck } from "../flow/flow-surface.js";
+import { EPIC_TOOL_EFFECTS } from "../tools/epic/effects.js";
+import type { ActionEffect, ActionEffectSource, ToolDef } from "../core/types.js";
 
 export interface ResolvedEffect {
   effect: ActionEffect;

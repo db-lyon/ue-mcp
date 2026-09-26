@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { deepMerge } from "@db-lyon/flowkit";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { info, warn } from "../core/log.js";
-import { UProjectSchema, UeMcpConfigSchema } from "../schemas.js";
+import { UProjectSchema, UeMcpConfigSchema } from "../surface/schemas.js";
 import { resolveEngineRoot, type EngineLookup } from "../editor/engine-root.js";
 import {
   configLayerFiles,

@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_actors = {"properties":{"actors":{"type":"array"}},"required":["actors"]} as const;
 const S_epic_add_actors_by_name = {"properties":{"actor_names":{"type":"array"}},"required":["actor_names"]} as const;

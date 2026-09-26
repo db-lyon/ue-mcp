@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_emitter = {"properties":{"system":{"type":"object","properties":{"refPath":{}}},"templateEmitter":{"type":"object","properties":{"refPath":{}}},"emitterName":{"type":"string"}},"required":["system","templateEmitter","emitterName"]} as const;
 const S_epic_add_module = {"properties":{"moduleLocationRef":{"type":"object"},"moduleAsset":{"type":"object","properties":{"refPath":{}}}},"required":["moduleLocationRef","moduleAsset"]} as const;

@@ -21,7 +21,7 @@
  * `call_tool` stays reachable for a toolset this package has not baked, which
  * is what makes turning the surface off survivable rather than a dead end.
  */
-import type { ToolDef } from "./core/types.js";
+import type { ToolDef } from "../core/types.js";
 import { actionEnum } from "./category-tool.js";
 
 /** Prefix every generated engine-tool action carries. */

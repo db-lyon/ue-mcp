@@ -1,4 +1,4 @@
-import { isDirectiveResponse } from "./core/directive.js";
+import { isDirectiveResponse } from "../core/directive.js";
 
 /**
  * Backslash repair on path parameters, with the repair reported back.

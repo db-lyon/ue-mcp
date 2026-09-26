@@ -15,7 +15,7 @@
  * dispatch to a session that lacks one can say which sessions have it.
  */
 import type { ToolDef, ActionSpec } from "../core/types.js";
-import { actionEnum, cloneToolDef, cloneToolGraph } from "../category-tool.js";
+import { actionEnum, cloneToolDef, cloneToolGraph } from "../surface/category-tool.js";
 import type { EditorSession } from "./session.js";
 import type { PluginRecord } from "../extensions/loader.js";
 

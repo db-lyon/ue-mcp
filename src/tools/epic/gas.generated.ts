@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_cue_tag = {"properties":{"cueTag":{"type":"string"},"comment":{"type":"string"}},"required":["cueTag"]} as const;
 const S_epic_create_cue_notify_asset = {"properties":{"cueTag":{"type":"string"},"packagePath":{"type":"string"},"assetName":{"type":"string"},"bIsActor":{"type":"boolean"}},"required":["cueTag","packagePath","assetName","bIsActor"]} as const;

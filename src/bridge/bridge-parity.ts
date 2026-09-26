@@ -23,7 +23,7 @@
  */
 import type { BridgeCapabilities } from "./bridge.js";
 import type { ToolDef } from "../core/types.js";
-import { compareHandlerSpecs, type HandlerSpecs } from "../handler-spec.js";
+import { compareHandlerSpecs, type HandlerSpecs } from "../surface/handler-spec.js";
 import { RECORDED_HANDLER_SPECS } from "../tools/specs/index.js";
 
 export interface BridgeParity {

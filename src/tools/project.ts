@@ -1,7 +1,7 @@
 import type { ActionSpec, ToolDef } from "../core/types.js";
-import { categoryTool } from "../category-tool.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { z } from "zod";
-import { CURSOR_PARAM } from "../pagination.js";
+import { CURSOR_PARAM } from "../surface/pagination.js";
 import { schema as specSchema } from "./specs/project.generated.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/project.generated.js";
 import { sessionActions } from "./project/sessions.js";

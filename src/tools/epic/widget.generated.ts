@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_uicomponent = {"properties":{"widgetBlueprint":{"type":"object","properties":{"refPath":{}}},"widgetName":{"type":"string"},"componentClass":{"type":"object","properties":{"refPath":{}}}},"required":["widgetBlueprint","widgetName","componentClass"]} as const;
 const S_epic_add_widget = {"properties":{"widgetBlueprint":{"type":"object","properties":{"refPath":{}}},"widgetClass":{"type":"object","properties":{"refPath":{}}},"widgetDisplayName":{"type":"string"},"parentWidget":{"type":"object","properties":{"refPath":{}}},"childIndex":{"type":"integer"}},"required":["widgetBlueprint","widgetClass","widgetDisplayName"]} as const;

@@ -17,8 +17,8 @@
  * name in it, on the same terms as the 24 categories.
  */
 import { describe, expect, it } from "vitest";
-import { actionSchema } from "../../src/action-schema.js";
-import { declaredActionEffect } from "../../src/action-effects.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
+import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import type { FlowConfig } from "../../src/flow/schema.js";
 

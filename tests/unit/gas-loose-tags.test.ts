@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { parseParams } from "../../src/action-schema.js";
+import { parseParams } from "../../src/surface/action-schema.js";
 import { gasTool } from "../../src/tools/gas.js";
 
 const ACTIONS = ["add_loose_gameplay_tag", "remove_loose_gameplay_tag"] as const;

@@ -24,7 +24,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ALL_TOOLS, enumerateBridgeActions } from "../src/tools.js";
-import { actionSignature } from "../src/action-signature.js";
+import { actionSignature } from "../src/surface/action-signature.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..");

@@ -5,9 +5,9 @@ import type { FlowContext } from "./context.js";
 import { BridgeTask } from "./bridge-task.js";
 import { bridgeTaskClass, handlerTaskClass } from "./task-factory.js";
 import { actionPreparation } from "./run-action.js";
-import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../micro-context.js";
+import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../surface/context/micro-context.js";
 import { McpError, ErrorCode } from "../core/errors.js";
-import { paramMapperOf } from "../epic-input.js";
+import { paramMapperOf } from "../surface/epic-input.js";
 
 /** A gateway call is an alias for the target task, not a handler that executes
  *  another action and repackages its result. Both MCP and FlowRunner create

@@ -14,7 +14,7 @@
  * reported as drift by `project(get_status)`.
  */
 import { z } from "zod";
-import type { ActionEffect, BridgeActionSpec } from "./core/types.js";
+import type { ActionEffect, BridgeActionSpec } from "../core/types.js";
 import { ROUTING_PARAM_NAMES } from "./routing-params.js";
 
 /** Wire types a spec can declare. Mirrors EMCPParamType in HandlerRegistry.h. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseParams } from "../../src/action-schema.js";
+import { parseParams } from "../../src/surface/action-schema.js";
 import { materialTool } from "../../src/tools/material.js";
 import { handlerSpecs } from "../../src/tools/specs/material.generated.js";
 

@@ -11,7 +11,7 @@ import { readLogState, readEngineSnapshot } from "../../editor/engine-observer.j
 import { switchProject, isTargetDiverged } from "../../sessions/project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../config/project.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
-import { toolGraphOf } from "../../target-params.js";
+import { toolGraphOf } from "../../surface/target-params.js";
 import { startProgress } from "../../ui/progress.js";
 
 /**

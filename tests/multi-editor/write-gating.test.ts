@@ -18,10 +18,10 @@ import {
   editorAttribution,
 } from "../../src/dispatch/editor-gate.js";
 import type { ToolDef } from "../../src/core/types.js";
-import { injectEditorTarget } from "../../src/target-params.js";
+import { injectEditorTarget } from "../../src/surface/target-params.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { editorTool } from "../../src/tools/editor.js";
-import { cloneToolDef } from "../../src/category-tool.js";
+import { cloneToolDef } from "../../src/surface/category-tool.js";
 import { ProjectFixture, sessionToolContext } from "../helpers/project-fixture.js";
 
 let fixture: ProjectFixture;

@@ -1,5 +1,5 @@
 import { McpError, ErrorCode } from "../core/errors.js";
-import { coerceAssetPathValue, normalizeUnrealAssetPath, splitAssetPath, PATH_FORMAT_HELP } from "../asset-path.js";
+import { coerceAssetPathValue, normalizeUnrealAssetPath, splitAssetPath, PATH_FORMAT_HELP } from "../surface/asset-path.js";
 
 /**
  * One parameter contract for the whole `widget` category (#798).

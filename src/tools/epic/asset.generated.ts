@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_key = {"properties":{"curve_table":{"type":"object","properties":{"refPath":{}}},"row_name":{"type":"string"},"key":{"type":"object"}},"required":["curve_table","row_name","key"]} as const;
 const S_epic_add_row = {"properties":{"curve_table":{"type":"object","properties":{"refPath":{}}},"row_name":{"type":"string"},"default_value":{"type":"number"}},"required":["curve_table","row_name"]} as const;

@@ -31,8 +31,8 @@ import { describe, expect, it } from "vitest";
 
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import type { ToolDef, ToolContext } from "../../src/core/types.js";
-import { categoryTool, bp } from "../../src/category-tool.js";
-import { buildMicroGateway } from "../../src/micro-context.js";
+import { categoryTool, bp } from "../../src/surface/category-tool.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { widgetTool } from "../../src/tools/widget.js";
 import { ProjectContext } from "../../src/config/project.js";
 import type { IBridge } from "../../src/bridge/bridge.js";

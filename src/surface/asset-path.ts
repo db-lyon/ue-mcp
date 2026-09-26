@@ -1,4 +1,4 @@
-import { McpError, ErrorCode } from "./core/errors.js";
+import { McpError, ErrorCode } from "../core/errors.js";
 
 /**
  * Shared Unreal asset path handling (#798).

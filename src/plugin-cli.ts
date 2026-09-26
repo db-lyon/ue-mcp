@@ -45,7 +45,7 @@ import { ALL_TOOLS } from "./tools.js";
 import { readPluginsList, type PluginEntry } from "./extensions/plugins-list.js";
 import { prefixedActionName } from "./extensions/manifest.js";
 import { flowCategoryForCheck } from "./flow/flow-surface.js";
-import { buildMicroGateway } from "./micro-context.js";
+import { buildMicroGateway } from "./surface/context/micro-context.js";
 import {
   checkSkills,
   conflictMessages,

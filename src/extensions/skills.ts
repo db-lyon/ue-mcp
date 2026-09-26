@@ -14,7 +14,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
-import { nearestActions } from "../action-schema.js";
+import { nearestActions } from "../surface/action-schema.js";
 import { readPluginsList } from "./plugins-list.js";
 import { findInstalledPackage } from "./resolver.js";
 import { pluginSlug } from "./plugin-groups.js";

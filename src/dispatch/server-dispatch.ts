@@ -10,7 +10,7 @@ import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from 
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
 import { consumeUpgradeNotice } from "../version-check.js";
-import { unwrapArgsEnvelope, validateCategoryParams } from "../call-envelope.js";
+import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
 import {
   routeEditorCall,
   callSubject,
@@ -19,8 +19,8 @@ import {
   type RoutedCall,
 } from "./editor-gate.js";
 import { isDirectiveResponse } from "../core/directive.js";
-import { EDITOR_TARGET_PARAM, stripAction } from "../routing-params.js";
-import { stripEditorTarget, sessionContext } from "../target-params.js";
+import { EDITOR_TARGET_PARAM, stripAction } from "../surface/routing-params.js";
+import { stripEditorTarget, sessionContext } from "../surface/target-params.js";
 import {
   DialogGuard,
   type GuardDecision,
@@ -31,7 +31,7 @@ import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
-import { unknownActionMessage } from "../action-schema.js";
+import { unknownActionMessage } from "../surface/action-schema.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";

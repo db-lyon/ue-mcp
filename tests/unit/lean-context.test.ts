@@ -1,17 +1,17 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { z } from "zod";
 import type { ToolDef, ToolContext } from "../../src/core/types.js";
-import { actionEnumValues, categoryTool, bp } from "../../src/category-tool.js";
+import { actionEnumValues, categoryTool, bp } from "../../src/surface/category-tool.js";
 import {
   resolveContextStrategy,
   splitDescription,
   buildCatalogTool,
   applyLeanContext,
-} from "../../src/lean-context.js";
-import { buildMicroGateway } from "../../src/micro-context.js";
-import { searchToolGraph } from "../../src/tool-search.js";
-import { actionSignature } from "../../src/action-signature.js";
-import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO } from "../../src/instructions.js";
+} from "../../src/surface/context/lean-context.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
+import { searchToolGraph } from "../../src/surface/context/tool-search.js";
+import { actionSignature } from "../../src/surface/action-signature.js";
+import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO } from "../../src/surface/context/instructions.js";
 
 function fixtureTools(): ToolDef[] {
   return [

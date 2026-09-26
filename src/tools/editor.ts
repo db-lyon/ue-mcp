@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDef, ToolContext } from "../core/types.js";
-import { categoryTool } from "../category-tool.js";
-import { toolGraphOf } from "../target-params.js";
+import { categoryTool } from "../surface/category-tool.js";
+import { toolGraphOf } from "../surface/target-params.js";
 import { directive } from "../core/directive.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
 import { buildProjectAction } from "./project/install.js";
@@ -10,7 +10,7 @@ import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
 import { progressRenderingNote } from "../dispatch/client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../dispatch/workaround-tracker.js";
-import { searchToolGraph } from "../tool-search.js";
+import { searchToolGraph } from "../surface/context/tool-search.js";
 import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../dispatch/python-gate.js";
 import { checkBridgeParity } from "../bridge/bridge-parity.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";

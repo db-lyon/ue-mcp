@@ -5,10 +5,10 @@
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { actionSignature, SIGNATURE_LEGEND } from "../../src/action-signature.js";
+import { actionSignature, SIGNATURE_LEGEND } from "../../src/surface/action-signature.js";
 import type { ActionSpec, ToolDef } from "../../src/core/types.js";
-import { bp, categoryTool } from "../../src/category-tool.js";
-import type { ParamChoice, ParamSpec } from "../../src/handler-spec.js";
+import { bp, categoryTool } from "../../src/surface/category-tool.js";
+import type { ParamChoice, ParamSpec } from "../../src/surface/handler-spec.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 
 function specTool(params: ParamSpec[], choices?: ParamChoice[]): ToolDef {

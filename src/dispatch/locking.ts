@@ -2,7 +2,7 @@ import { isDialogRefusal } from "../editor/dialog-guard.js";
 import type { IBridge } from "../bridge/bridge.js";
 import { McpError, ErrorCode, type McpErrorDetails } from "../core/errors.js";
 import { debug } from "../core/log.js";
-import { taskEffect } from "../action-effects.js";
+import { taskEffect } from "../surface/action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
 import type { ToolDef } from "../core/types.js";
 

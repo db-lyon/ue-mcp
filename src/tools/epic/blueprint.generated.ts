@@ -11,7 +11,7 @@
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_component_bound_event = {"properties":{"component":{"type":"object","properties":{"refPath":{}}},"event_name":{"type":"string"},"graph":{"type":"object","properties":{"refPath":{}}}},"required":["component","event_name","graph"]} as const;
 const S_epic_add_event = {"properties":{"blueprint":{"type":"object","properties":{"refPath":{}}},"event_name":{"type":"string"},"position":{"type":"object"}},"required":["blueprint","event_name"]} as const;

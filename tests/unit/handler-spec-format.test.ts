@@ -22,9 +22,9 @@ import {
   type HandlerSpec,
   type HandlerSpecs,
   type ParamSpec,
-} from "../../src/handler-spec.js";
-import { actionSchema, parseParams } from "../../src/action-schema.js";
-import { categoryTool } from "../../src/category-tool.js";
+} from "../../src/surface/handler-spec.js";
+import { actionSchema, parseParams } from "../../src/surface/action-schema.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
 import { prepareCall } from "../../src/dispatch/call-pipeline.js";
 import { bridgeTaskClass } from "../../src/flow/task-factory.js";
 

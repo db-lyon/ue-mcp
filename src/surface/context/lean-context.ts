@@ -1,10 +1,10 @@
 import { z } from "zod";
-import type { ActionSpec, ToolDef } from "./core/types.js";
-import { actionEnum, categoryTool } from "./category-tool.js";
-import { actionSchema } from "./action-schema.js";
+import type { ActionSpec, ToolDef } from "../../core/types.js";
+import { actionEnum, categoryTool } from "../category-tool.js";
+import { actionSchema } from "../action-schema.js";
 import { searchToolGraph } from "./tool-search.js";
-import { actionSignature } from "./action-signature.js";
-import { readEnv } from "./core/env.js";
+import { actionSignature } from "../action-signature.js";
+import { readEnv } from "../../core/env.js";
 
 /**
  * Lean context strategy, and what every strategy shares: choosing one, and

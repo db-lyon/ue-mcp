@@ -4,7 +4,7 @@
  * `tests/unit/action-effects.test.ts` holds the surface to that.
  */
 import { describe, it, expect } from "vitest";
-import { classifyActionClass, inferActionEffect, requiresExplicitEditor } from "../../src/action-class.js";
+import { classifyActionClass, inferActionEffect, requiresExplicitEditor } from "../../src/surface/action-class.js";
 
 describe("inferring an effect from a name, for the actions nobody declares", () => {
   it("reads a mutate verb anywhere in the name, not only at the front", () => {

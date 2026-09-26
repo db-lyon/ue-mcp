@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { loadPlugins } from "../../src/extensions/loader.js";
 import type { ToolDef } from "../../src/core/types.js";
-import { categoryTool } from "../../src/category-tool.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
 
 /**
  * #892: a plugin manifest with one malformed param used to fail validation as a

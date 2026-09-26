@@ -34,7 +34,7 @@ import { fileURLToPath } from "node:url";
 // The dispatcher's own parameter names, imported from the module that
 // declares them. Run under tsx, so this reads the real export rather than
 // parsing the file.
-import { ROUTING_PARAMS } from "../src/action-schema.js";
+import { ROUTING_PARAMS } from "../src/surface/action-schema.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
@@ -310,7 +310,7 @@ function emitCategory(category, bucket) {
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
 import type { ActionSpec } from "../../core/types.js";
-import { bp } from "../../category-tool.js";
+import { bp } from "../../surface/category-tool.js";
 
 `;
 

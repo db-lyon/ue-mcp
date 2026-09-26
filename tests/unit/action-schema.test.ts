@@ -20,9 +20,9 @@
  */
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { categoryTool, bp } from "../../src/category-tool.js";
+import { categoryTool, bp } from "../../src/surface/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { requiresExplicitEditor } from "../../src/action-class.js";
+import { requiresExplicitEditor } from "../../src/surface/action-class.js";
 import {
   actionSchema,
 
@@ -33,7 +33,7 @@ import {
   resolveActionRef,
   similarity,
   suggestActions,
-} from "../../src/action-schema.js";
+} from "../../src/surface/action-schema.js";
 
 const surfaceSchemas = () => ALL_TOOLS.flatMap((tool) => Object.keys(tool.actions).map((action) => actionSchema(tool, action)));
 

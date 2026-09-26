@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchToolGraph } from "../../src/tool-search.js";
+import { searchToolGraph } from "../../src/surface/context/tool-search.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 
 const ids = (query: string, limit = 20) =>

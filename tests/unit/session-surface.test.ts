@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { ToolDef } from "../../src/core/types.js";
-import { categoryTool, cloneToolGraph, bp } from "../../src/category-tool.js";
+import { categoryTool, cloneToolGraph, bp } from "../../src/surface/category-tool.js";
 import {
   baseGraphFor,
   unionSurface,
@@ -18,7 +18,7 @@ import {
   type SessionSurface,
 } from "../../src/sessions/session-surface.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { buildMicroGateway } from "../../src/micro-context.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { callSubject } from "../../src/dispatch/editor-gate.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 
