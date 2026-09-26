@@ -144,7 +144,11 @@ bool FDemoHandlers::EnsureHomeLevelLoaded(FString& OutError)
 			OutError = FString::Printf(TEXT("NewLevel failed for %s"), *DemoConstants::HOME_LEVEL);
 			return false;
 		}
-		LevelSub->SaveCurrentLevel();
+		if (!LevelSub->SaveCurrentLevel())
+		{
+			OutError = FString::Printf(TEXT("%s was created but could not be saved"), *DemoConstants::HOME_LEVEL);
+			return false;
+		}
 	}
 	else
 	{
@@ -566,7 +570,7 @@ void FDemoHandlers::ApplyMat(AActor* Actor, UMaterialInterface* Mat)
 // ===========================================================================
 //  Helper: create a simple material with a constant base color
 // ===========================================================================
-static UMaterial* CreateSimpleMaterial(const FString& Name, const FString& PackagePath,
+static UMaterial* CreateSimpleMaterial(const FString& Name, const FString& PackagePath, FString& OutSaveError,
 	FLinearColor BaseColor, float Metallic, float Roughness,
 	bool bEmissive = false, FLinearColor EmissiveColor = FLinearColor::Black, float EmissiveStrength = 1.0f)
 {
@@ -627,8 +631,8 @@ static UMaterial* CreateSimpleMaterial(const FString& Name, const FString& Packa
 	Mat->PostEditChange();
 	Mat->MarkPackageDirty();
 
-	// Save
-	SaveAssetPackage(Mat);
+	// A material that never reached disk is reported as missing, with the reason.
+	if (!SaveAssetPackageChecked(Mat, OutSaveError)) return nullptr;
 
 	return Mat;
 }
@@ -673,7 +677,10 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepCreateLevel()
 	else
 	{
 		bCreated = LevelSub->NewLevel(DemoConstants::DEMO_LEVEL);
-		if (bCreated) LevelSub->SaveCurrentLevel();
+		if (bCreated && !LevelSub->SaveCurrentLevel())
+		{
+			return DemoStepFailed(Result, FString::Printf(TEXT("%s was created but could not be saved"), *DemoConstants::DEMO_LEVEL));
+		}
 	}
 
 	Result->SetStringField(TEXT("levelPath"), DemoConstants::DEMO_LEVEL);
@@ -690,16 +697,18 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepMaterials()
 	UEditorAssetLibrary::MakeDirectory(DemoConstants::MAT_DIR);
 
 	// M_Demo_Floor - dark reflective
+	FString FloorSaveError;
 	UMaterial* Floor = CreateSimpleMaterial(
-		TEXT("M_Demo_Floor"), DemoConstants::MAT_DIR,
+		TEXT("M_Demo_Floor"), DemoConstants::MAT_DIR, FloorSaveError,
 		FLinearColor(0.02f, 0.02f, 0.025f, 1.0f), // near-black
 		0.9f,  // high metallic
 		0.15f  // low roughness (reflective)
 	);
 
 	// M_Demo_Glow - emissive gold
+	FString GlowSaveError;
 	UMaterial* Glow = CreateSimpleMaterial(
-		TEXT("M_Demo_Glow"), DemoConstants::MAT_DIR,
+		TEXT("M_Demo_Glow"), DemoConstants::MAT_DIR, GlowSaveError,
 		FLinearColor(0.8f, 0.6f, 0.1f, 1.0f), // gold base
 		0.5f,
 		0.3f,
@@ -709,8 +718,9 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepMaterials()
 	);
 
 	// M_Demo_Pillar - dark matte
+	FString PillarSaveError;
 	UMaterial* Pillar = CreateSimpleMaterial(
-		TEXT("M_Demo_Pillar"), DemoConstants::MAT_DIR,
+		TEXT("M_Demo_Pillar"), DemoConstants::MAT_DIR, PillarSaveError,
 		FLinearColor(0.05f, 0.05f, 0.06f, 1.0f),
 		0.0f,  // no metallic
 		0.85f  // high roughness (matte)
@@ -724,6 +734,16 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepMaterials()
 	Result->SetArrayField(TEXT("materials"), MatArray);
 	Result->SetNumberField(TEXT("count"), MatArray.Num());
 	Result->SetBoolField(TEXT("success"), MatArray.Num() == 3);
+	TArray<FString> SaveErrors;
+	for (const FString* Error : { &FloorSaveError, &GlowSaveError, &PillarSaveError })
+	{
+		if (!Error->IsEmpty()) SaveErrors.Add(*Error);
+	}
+	if (SaveErrors.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("saveErrors"), MCPStringListToJson(SaveErrors));
+		Result->SetStringField(TEXT("error"), FString::Join(SaveErrors, TEXT(" ")));
+	}
 	return Result;
 }
 
@@ -1123,7 +1143,13 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 		return DemoStepFailed(Result, TEXT("Failed to create NiagaraSystem"));
 	}
 
-	UEditorAssetLibrary::SaveAsset(NiagaraSys->GetPathName());
+	{
+		FString SaveError;
+		if (!SaveAssetPackageChecked(NiagaraSys, SaveError))
+		{
+			return DemoStepFailed(Result, FString::Printf(TEXT("'%s' was not written: %s"), *NiagaraSys->GetPathName(), *SaveError));
+		}
+	}
 
 	// Spawn a dedicated actor and attach a NiagaraComponent with the system
 	FTransform SpawnTransform(FRotator::ZeroRotator, FVector(0.0, 0.0, 380.0));
@@ -1340,7 +1366,13 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepLevelSequence()
 		}
 	}
 
-	UEditorAssetLibrary::SaveAsset(Seq->GetPathName());
+	{
+		FString SaveError;
+		if (!SaveAssetPackageChecked(Seq, SaveError))
+		{
+			return DemoStepFailed(Result, FString::Printf(TEXT("'%s' was not written: %s"), *Seq->GetPathName(), *SaveError));
+		}
+	}
 
 	// Place a LevelSequenceActor in the level
 	FTransform SeqTransform(FRotator::ZeroRotator, FVector::ZeroVector);
@@ -1405,7 +1437,13 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepTuningPanel()
 		return DemoStepFailed(Result, TEXT("CreateAsset returned null for EUW_DemoTuning"));
 	}
 
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	{
+		FString SaveError;
+		if (!SaveAssetPackageChecked(NewAsset, SaveError))
+		{
+			return DemoStepFailed(Result, FString::Printf(TEXT("'%s' was not written: %s"), *NewAsset->GetPathName(), *SaveError));
+		}
+	}
 
 	Result->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("status"), TEXT("created"));
