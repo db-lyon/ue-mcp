@@ -220,7 +220,6 @@ private:
 	static TSharedPtr<FJsonValue> FocusViewportOnActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> HotReload(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateNewLevel(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> SaveCurrentLevel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> OpenAsset(const TSharedPtr<FJsonObject>& Params);
 	// #1112: which asset editors are open, and which one holds focus.
 	static TSharedPtr<FJsonValue> GetOpenAssetEditors(const TSharedPtr<FJsonObject>& Params);
@@ -236,8 +235,6 @@ private:
 	static TSharedPtr<FJsonValue> CheckForCrashes(const TSharedPtr<FJsonObject>& Params);
 	// #693: headlessly run registered Automation tests and report pass/fail.
 	static TSharedPtr<FJsonValue> RunAutomationTests(const TSharedPtr<FJsonObject>& Params);
-	// #14: Build project
-	static TSharedPtr<FJsonValue> BuildProject(const TSharedPtr<FJsonObject>& Params);
 	// #49: Generate project files
 	static TSharedPtr<FJsonValue> GenerateProjectFiles(const TSharedPtr<FJsonObject>& Params);
 	// #126: Fast-forward PIE game time

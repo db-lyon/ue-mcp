@@ -237,9 +237,9 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// renamed to its parameter by the registry before the handler runs.
 	// A handler that would run a command, a script, a build, PIE, a trace or a
 	// save under the contract test's values is ContractExempt, and its source is
-	// held to its spec instead. execute_python, request_editor_shutdown,
-	// save_current_level, build_project and pie_start_ignoring_blueprint_errors
-	// have no bridge action of their own, so they carry no spec.
+	// held to its spec instead. execute_python, request_editor_shutdown and
+	// pie_start_ignoring_blueprint_errors have no bridge action of their own,
+	// so they carry no spec.
 	using EType = EMCPParamType;
 	const TArray<FMCPParamSpec> NoParams;
 	auto ChannelListParam = [](const TCHAR* Name, const TCHAR* Description)
@@ -661,7 +661,6 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("templateLevel"), EType::String, TEXT("Level to copy; omit, Empty or None for a blank level")),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the level exists: skip (default) returns it untouched, error refuses")),
 	}, MCPSpec::ContractExempt(TEXT("creates and opens a level")));
-	Registry.RegisterHandler(TEXT("save_current_level"), &SaveCurrentLevel);
 	Registry.RegisterHandler(TEXT("open_asset"), &OpenAsset, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to open in its editor")).Alias(TEXT("path")),
 	});
@@ -712,8 +711,6 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("maxTests"), EType::Number, TEXT("Cap on tests to run (default 50)")),
 		MCPParam::Optional(TEXT("latentTimeoutSeconds"), EType::Number, TEXT("How long one test's latent command queue may take before it is reported abandoned (default 5, max 120)")),
 	}, MCPSpec::ContractExempt(TEXT("runs automation tests")));
-	// #14: Build project
-	Registry.RegisterHandler(TEXT("build_project"), &BuildProject);
 	// #49: Generate project files
 	{
 		FMCPHandlerRegistry::FCategoryScope ProjectScope(Registry, TEXT("project"));
@@ -3540,57 +3537,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObj
 	{
 		MCPSetDeleteAssetRollback(Result, LevelPath);
 	}
-	return MCPResult(Result);
-}
-
-TSharedPtr<FJsonValue> FEditorHandlers::SaveCurrentLevel(const TSharedPtr<FJsonObject>& Params)
-{
-	REQUIRE_EDITOR_WORLD(World);
-
-	ULevelEditorSubsystem* LevelEditorSubsystem = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
-	if (!LevelEditorSubsystem)
-	{
-		return MCPError(TEXT("LevelEditorSubsystem not available"));
-	}
-
-	// #833: an untitled map has no file to write, and SaveCurrentLevel answers
-	// that with "Can't save the level because it doesn't have a filename" in
-	// the editor log and a bare false here. The world knows its own package, so
-	// say which call gives it a name instead of asking for an impossible save.
-	const FString PackageName = World->GetOutermost()->GetName();
-	if (!FPackageName::DoesPackageExist(PackageName))
-	{
-		return MCPError(FString::Printf(
-			TEXT("The current level '%s' has never been saved, so it has no file to save to and this action cannot ")
-			TEXT("give it one. Write it to a path first with level(create, levelPath=\"/Game/Maps/<Name>\"), which ")
-			TEXT("creates and saves the map, or level(save) to save the packages that do have files."),
-			*PackageName));
-	}
-
-	bool bSuccess = LevelEditorSubsystem->SaveCurrentLevel();
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("levelName"), World->GetName());
-	Result->SetStringField(TEXT("levelPath"), World->GetPathName());
-	Result->SetBoolField(TEXT("success"), bSuccess);
-
-	if (!bSuccess)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to save current level"));
-	}
-	else
-	{
-		Result->SetStringField(TEXT("message"), TEXT("Current level saved"));
-	}
-	// SaveCurrentLevel reports only whether the save ran; it does not say
-	// whether the map was dirty, so this is the honest granularity available.
-	Result->SetBoolField(TEXT("changed"), bSuccess);
-	// No rollback: the previous .umap on disk was overwritten and is not held
-	// anywhere the bridge can reach.
-	Result->SetBoolField(TEXT("rollbackPossible"), false);
-	Result->SetStringField(TEXT("rollbackNote"),
-		TEXT("Saving overwrites the map file and the bytes it replaced are gone. Nothing un-saves a level. Recover from source control if the write was wrong."));
-
 	return MCPResult(Result);
 }
 
