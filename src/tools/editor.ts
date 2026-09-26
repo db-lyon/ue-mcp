@@ -5,6 +5,7 @@ import { toolGraphOf } from "../target-params.js";
 import { directive } from "../directive.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor-control.js";
 import { buildProject } from "../editor-build.js";
+import { startProgress } from "../ui/progress.js";
 import { clientAdvertisesElicitation } from "../dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../engine-observer.js";
 import { progressRenderingNote } from "../client-quirks.js";
@@ -52,6 +53,7 @@ export const editorTool: ToolDef = categoryTool(
         const result = await startEditor(ctx.project, timeout, ctx.onProgress, {
           dialogPolicy,
           paramEcho,
+          openDisplay: startProgress,
         });
 
         // The call blocks for as long as the editor takes, so when its progress
@@ -116,7 +118,7 @@ export const editorTool: ToolDef = categoryTool(
       effect: "mutate",
       description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action. Params: none",
       handler: async (ctx: ToolContext) => {
-        return restartEditor(ctx.project, ctx.bridge);
+        return restartEditor(ctx.project, ctx.bridge, startProgress);
       },
     },
     build_project: {

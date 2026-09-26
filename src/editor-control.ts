@@ -17,9 +17,8 @@ import {
   type EngineState,
 } from "./engine-observer.js";
 import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "./editor-target.js";
-import { startProgress } from "./ui/progress.js";
 import { oneLine } from "./dialog-guard.js";
-import type { ProgressFn } from "./types.js";
+import type { ProgressDisplay, ProgressFn } from "./types.js";
 import { findUProject } from "./uproject-path.js";
 import { readEnv } from "./env.js";
 
@@ -176,7 +175,8 @@ export async function waitForEditorReady(
   projectDir: string | undefined,
   maxWaitSeconds: number,
   opts: {
-    showProgress?: boolean;
+    /** Draws the wait in a terminal. Omitted, nothing is drawn. */
+    openDisplay?: (title: string) => ProgressDisplay;
     onProgress?: ProgressFn;
     launchedAtMs?: number;
   } = {},
@@ -194,7 +194,7 @@ export async function waitForEditorReady(
   let lastActivity = "";
   let lastWindowProbeAt = 0;
 
-  const bar = opts.showProgress === false ? null : startProgress("Starting Unreal Editor");
+  const bar = opts.openDisplay?.("Starting Unreal Editor") ?? null;
   const elapsed = (): number => (Date.now() - startTime) / 1000;
 
   const finish = (result: ReadyResult): ReadyResult => {
@@ -495,6 +495,8 @@ export async function startEditor(
      */
     paramEcho?: boolean;
 
+    /** Draws the startup in a terminal. Omitted, nothing is drawn. */
+    openDisplay?: (title: string) => ProgressDisplay;
   } = {},
 ): Promise<StartEditorResult> {
   // Every check below is about ONE editor: the one holding this project. Know
@@ -578,6 +580,7 @@ export async function startEditor(
     const result = await waitForEditorReady(project.projectPath, projectDir, timeoutSeconds, {
       onProgress,
       launchedAtMs,
+      openDisplay: opts.openDisplay,
     });
 
     if (!result.ready) {
@@ -1282,6 +1285,7 @@ export async function stopEditor(
 export async function restartEditor(
   project: ProjectContext,
   bridge?: { connect: (timeoutMs?: number) => Promise<void> } & ConnectedEditorSource,
+  openDisplay?: (title: string) => ProgressDisplay,
 ): Promise<RestartEditorResult> {
   // Same rule as start and stop: without a loaded project there is no editor
   // this is about, and the machine-wide answer is somebody else's editor (#819).
@@ -1299,7 +1303,7 @@ export async function restartEditor(
     return { success: false, message: `Failed to stop editor: ${stopResult.message}` };
   }
 
-  const startResult = await startEditor(project);
+  const startResult = await startEditor(project, undefined, undefined, { openDisplay });
   if (!startResult.success) {
     return startResult;
   }

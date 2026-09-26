@@ -12,6 +12,7 @@ import { switchProject, isTargetDiverged } from "../../project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../project.js";
 import type { ToolContext, ActionSpec } from "../../types.js";
 import { toolGraphOf } from "../../target-params.js";
+import { startProgress } from "../../ui/progress.js";
 
 /**
  * The environment variables flattening every registered editor into one, right
@@ -319,7 +320,7 @@ export const sessionActions: Record<string, ActionSpec> = {
       let started: unknown;
       if (p.start === true) {
         const timeout = typeof p.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
-        started = await startEditor(session.project, timeout, ctx.onProgress);
+        started = await startEditor(session.project, timeout, ctx.onProgress, { openDisplay: startProgress });
       }
       try { await session.bridge.connect(); } catch { /* editor may not be running yet */ }
 

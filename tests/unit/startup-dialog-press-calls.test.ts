@@ -44,7 +44,7 @@ describe("a dialog met during startup is named, never pressed", () => {
   });
 
   it("names the dialog so the launch failure says what is holding it", async () => {
-    const r = await waitForEditorReady(projectPath, dir, 5, { showProgress: false });
+    const r = await waitForEditorReady(projectPath, dir, 5);
     expect(r.ready).toBe(false);
     expect(r.reason).toContain("Restore Packages");
     expect(r.reason).toContain("Some packages were not saved.");
@@ -55,12 +55,12 @@ describe("a dialog met during startup is named, never pressed", () => {
     // A startup report never hands back a press call. There is no bridge yet,
     // so the call it would name cannot be delivered, and answering a prompt
     // this early is dialogPolicy's job.
-    const r = await waitForEditorReady(projectPath, dir, 5, { showProgress: false });
+    const r = await waitForEditorReady(projectPath, dir, 5);
     expect(r.reason, "a startup dialog leaked the press call").not.toContain("respond_to_dialog");
   });
 
   it("drops the blank button the editor pads its list with", async () => {
-    const r = await waitForEditorReady(projectPath, dir, 5, { showProgress: false });
+    const r = await waitForEditorReady(projectPath, dir, 5);
     expect(r.reason).not.toMatch(/,\s*,/);
     expect(r.reason).not.toMatch(/Buttons: ,/);
   });
