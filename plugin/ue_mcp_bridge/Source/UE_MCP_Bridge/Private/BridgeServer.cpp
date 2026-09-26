@@ -76,12 +76,6 @@
 #endif
 
 #include "Misc/Base64.h"
-#if PLATFORM_WINDOWS
-#include "Windows/AllowWindowsPlatformTypes.h"
-#include <wincrypt.h>
-#include "Windows/HideWindowsPlatformTypes.h"
-#pragma comment(lib, "advapi32.lib")
-#endif
 
 namespace
 {
@@ -1901,16 +1895,6 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 
 	// Create accept key
 	const FString AcceptKey = CreateWebSocketAcceptKey(WebSocketKey);
-	if (AcceptKey.IsEmpty())
-	{
-		// The platform SHA-1 refused. Sending a 101 with a key we could not
-		// compute would leave the client rejecting a handshake the bridge had
-		// already declared good, so say so with a status the caller can read.
-		UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] Could not compute Sec-WebSocket-Accept; refusing the upgrade"));
-		SendHttpError(ClientSocketFD, 500, TEXT("Internal Server Error"),
-			TEXT("The UE-MCP bridge could not compute the WebSocket accept key."));
-		return TEXT("");
-	}
 
 	// Build response (WebSocket spec requires exact format)
 	// Must be: HTTP/1.1 101 Switching Protocols\r\n
@@ -2072,70 +2056,14 @@ FString FMCPBridgeServer::CreateWebSocketAcceptKey(const FString& ClientKey)
 	FString MagicString = TEXT("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
 	FString Combined = ClientKey + MagicString;
 
-	// Compute SHA1 hash (20 bytes)
+	// FSHA1 always produces the full 20-byte digest.
 	FTCHARToUTF8 UTF8String(*Combined);
 
-	// Zeroed, and every step below checked. The buffer used to be an
-	// uninitialised local with three unchecked CryptoAPI calls over it, so any
-	// failure sent 20 bytes of whatever the stack happened to hold as
-	// Sec-WebSocket-Accept. The client rejected the handshake and hung up while
-	// the bridge logged success and entered the frame loop, which reads to the
-	// user as an unexplained disconnect. An empty return says "no key" instead.
 	uint8 HashBytes[20] = {};
-	bool bHashed = false;
-
-#if PLATFORM_WINDOWS
-	uint32 CryptError = 0;
-	HCRYPTPROV hProv = 0;
-	HCRYPTHASH hHash = 0;
-	if (CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
-	{
-		if (CryptCreateHash(hProv, CALG_SHA1, 0, 0, &hHash))
-		{
-			DWORD HashLen = sizeof(HashBytes);
-			if (CryptHashData(hHash, (BYTE*)UTF8String.Get(), UTF8String.Length(), 0)
-				&& CryptGetHashParam(hHash, HP_HASHVAL, HashBytes, &HashLen, 0)
-				&& HashLen == sizeof(HashBytes))
-			{
-				bHashed = true;
-			}
-			else
-			{
-				// Read before the cleanup calls below, which overwrite it.
-				CryptError = FPlatformMisc::GetLastError();
-			}
-			CryptDestroyHash(hHash);
-		}
-		else
-		{
-			CryptError = FPlatformMisc::GetLastError();
-		}
-		CryptReleaseContext(hProv, 0);
-	}
-	else
-	{
-		CryptError = FPlatformMisc::GetLastError();
-	}
-	if (!bHashed)
-	{
-		UE_LOG(LogMCPBridge, Error,
-			TEXT("[UE-MCP] SHA-1 of the WebSocket key failed (CryptoAPI error 0x%08X)"),
-			CryptError);
-	}
-#else
-	// UE's cross-platform SHA1. It always writes all 20 bytes and cannot fail,
-	// so this path reaches the encode exactly as it always did.
 	FSHA1 Sha1;
 	Sha1.Update((const uint8*)UTF8String.Get(), UTF8String.Length());
 	Sha1.Final();
 	Sha1.GetHash(HashBytes);
-	bHashed = true;
-#endif
-
-	if (!bHashed)
-	{
-		return FString();
-	}
 
 	// Base64 encode
 	FString AcceptKey = FBase64::Encode(HashBytes, 20);
