@@ -14,7 +14,7 @@
 // GEOMETRY SCRIPT IS REACHED BY REFLECTION. GeometryScripting is an engine
 // PLUGIN, so a Build.cs dependency on it would fail to link for every project
 // that has it switched off. Instead the UFUNCTIONs are invoked through a
-// heap-allocated parameter frame (FMCPGeoCall below), exactly the way
+// heap-allocated parameter frame (FMCPReflectedCall in HandlerFunctionCall.h), exactly the way
 // AssetHandlers_MeshBoolean.cpp and AssetHandlers_UV.cpp do it, and a project
 // without the plugin gets a typed "geometry_scripting_unavailable" answer that
 // names what to enable.
@@ -163,276 +163,6 @@ int64 MCPGeoEnumValue(const TCHAR* EnumPath, const FString& EnumeratorName)
 	return Enum->GetValueByNameString(EnumeratorName);
 }
 
-/**
- * One reflected call into a class this module does not link against.
- *
- * The frame is heap-allocated and every parameter is default-constructed in it,
- * which is how the Geometry Script option structs get their engine defaults
- * without this file knowing their C++ layout: only the fields this handler has
- * an opinion about are overwritten, and by name.
- */
-struct FMCPGeoCall
-{
-	UObject* CDO = nullptr;
-	UFunction* Function = nullptr;
-	TArray<uint8> Frame;
-
-	FMCPGeoCall() = default;
-	FMCPGeoCall(const FMCPGeoCall&) = delete;
-	FMCPGeoCall& operator=(const FMCPGeoCall&) = delete;
-	~FMCPGeoCall() { Release(); }
-
-	bool Bind(const TCHAR* ClassPath, const TCHAR* FunctionName, FString& OutError)
-	{
-		Release();
-		UClass* Class = FindObject<UClass>(nullptr, ClassPath);
-		if (!Class)
-		{
-			OutError = FString::Printf(TEXT("class '%s' is not loaded."), ClassPath);
-			return false;
-		}
-		Function = Class->FindFunctionByName(FName(FunctionName));
-		if (!Function)
-		{
-			OutError = FString::Printf(
-				TEXT("'%s' has no reflected function named '%s' in this engine build."),
-				ClassPath, FunctionName);
-			return false;
-		}
-		CDO = Class->GetDefaultObject();
-		if (!CDO)
-		{
-			OutError = FString::Printf(TEXT("'%s' has no default object to call through."), ClassPath);
-			Function = nullptr;
-			return false;
-		}
-		Frame.SetNumZeroed(FMath::Max<int32>(Function->ParmsSize, 1));
-		for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
-		{
-			It->InitializeValue_InContainer(Frame.GetData());
-		}
-		return true;
-	}
-
-	void Release()
-	{
-		if (Function && Frame.Num() > 0)
-		{
-			MCPFunctionCall::DestroyFrame(Function, Frame.GetData());
-		}
-		Frame.Reset();
-		Function = nullptr;
-		CDO = nullptr;
-	}
-
-	void Invoke() { if (CDO && Function) CDO->ProcessEvent(Function, Frame.GetData()); }
-
-	FProperty* Param(const TCHAR* Name) const
-	{
-		return Function ? Function->FindPropertyByName(FName(Name)) : nullptr;
-	}
-
-	bool SetObject(const TCHAR* Name, UObject* Value)
-	{
-		FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(Param(Name));
-		if (!Prop) return false;
-		Prop->SetObjectPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetBool(const TCHAR* Name, bool Value)
-	{
-		FBoolProperty* Prop = CastField<FBoolProperty>(Param(Name));
-		if (!Prop) return false;
-		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetString(const TCHAR* Name, const FString& Value)
-	{
-		FStrProperty* Prop = CastField<FStrProperty>(Param(Name));
-		if (!Prop) return false;
-		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetNumber(const TCHAR* Name, double Value)
-	{
-		FNumericProperty* Prop = CastField<FNumericProperty>(Param(Name));
-		if (!Prop) return false;
-		void* Ptr = Prop->ContainerPtrToValuePtr<void>(Frame.GetData());
-		if (Prop->IsFloatingPoint()) Prop->SetFloatingPointPropertyValue(Ptr, Value);
-		else Prop->SetIntPropertyValue(Ptr, static_cast<int64>(Value));
-		return true;
-	}
-
-	bool SetTransform(const TCHAR* Name, const FTransform& Value)
-	{
-		FStructProperty* Prop = CastField<FStructProperty>(Param(Name));
-		if (!Prop || Prop->Struct != TBaseStructure<FTransform>::Get()) return false;
-		*Prop->ContainerPtrToValuePtr<FTransform>(Frame.GetData()) = Value;
-		return true;
-	}
-
-	bool SetEnum(const TCHAR* Name, int64 Value)
-	{
-		if (Value == INDEX_NONE) return false;
-		FProperty* Prop = Param(Name);
-		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
-		{
-			EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(
-				EnumProp->ContainerPtrToValuePtr<void>(Frame.GetData()), Value);
-			return true;
-		}
-		if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
-		{
-			ByteProp->SetPropertyValue_InContainer(Frame.GetData(), static_cast<uint8>(Value));
-			return true;
-		}
-		return false;
-	}
-
-	/** Address of one field inside a struct parameter, so an option struct can
-	 *  be filled without this module knowing its layout. */
-	void* StructField(const TCHAR* ParamName, const TCHAR* FieldName, FProperty*& OutField) const
-	{
-		OutField = nullptr;
-		FStructProperty* Prop = CastField<FStructProperty>(Param(ParamName));
-		if (!Prop || !Prop->Struct) return nullptr;
-		OutField = Prop->Struct->FindPropertyByName(FName(FieldName));
-		if (!OutField) return nullptr;
-		void* StructPtr = Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData()));
-		return OutField->ContainerPtrToValuePtr<void>(StructPtr);
-	}
-
-	bool SetStructBool(const TCHAR* ParamName, const TCHAR* FieldName, bool Value)
-	{
-		FProperty* Field = nullptr;
-		void* Ptr = StructField(ParamName, FieldName, Field);
-		FBoolProperty* BoolProp = CastField<FBoolProperty>(Field);
-		if (!Ptr || !BoolProp) return false;
-		BoolProp->SetPropertyValue(Ptr, Value);
-		return true;
-	}
-
-	bool SetStructNumber(const TCHAR* ParamName, const TCHAR* FieldName, double Value)
-	{
-		FProperty* Field = nullptr;
-		void* Ptr = StructField(ParamName, FieldName, Field);
-		FNumericProperty* NumProp = CastField<FNumericProperty>(Field);
-		if (!Ptr || !NumProp) return false;
-		if (NumProp->IsFloatingPoint()) NumProp->SetFloatingPointPropertyValue(Ptr, Value);
-		else NumProp->SetIntPropertyValue(Ptr, static_cast<int64>(Value));
-		return true;
-	}
-
-	bool SetStructEnum(const TCHAR* ParamName, const TCHAR* FieldName, int64 Value)
-	{
-		if (Value == INDEX_NONE) return false;
-		FProperty* Field = nullptr;
-		void* Ptr = StructField(ParamName, FieldName, Field);
-		if (!Ptr) return false;
-		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Field))
-		{
-			EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(Ptr, Value);
-			return true;
-		}
-		if (FByteProperty* ByteProp = CastField<FByteProperty>(Field))
-		{
-			ByteProp->SetPropertyValue(Ptr, static_cast<uint8>(Value));
-			return true;
-		}
-		return false;
-	}
-
-	int32 GetInt(const TCHAR* Name) const
-	{
-		FNumericProperty* Prop = CastField<FNumericProperty>(Param(Name));
-		if (!Prop) return 0;
-		return static_cast<int32>(Prop->GetSignedIntPropertyValue(
-			Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData()))));
-	}
-
-	bool GetBool(const TCHAR* Name) const
-	{
-		FBoolProperty* Prop = CastField<FBoolProperty>(Param(Name));
-		if (!Prop) return false;
-		return Prop->GetPropertyValue_InContainer(const_cast<uint8*>(Frame.GetData()));
-	}
-
-	/** An FBox return or out parameter, which is how the mesh bounds come back.
-	 *  FBox is a noexport core struct: it is declared as USTRUCT in
-	 *  NoExportTypes.h but the C++ type is UE::Math::TBox<double>, which has no
-	 *  StaticStruct() and no TBaseStructure specialisation (Class.h only
-	 *  specialises Box2D, not Box). The reflected type is
-	 *  /Script/CoreUObject.Box, so its name is the identity check available. */
-	bool GetBox(const TCHAR* Name, FBox& Out) const
-	{
-		FStructProperty* Prop = CastField<FStructProperty>(Param(Name));
-		if (!Prop || !Prop->Struct) return false;
-		if (Prop->Struct->GetFName() != FName(NAME_Box)) return false;
-		Out = *Prop->ContainerPtrToValuePtr<FBox>(const_cast<uint8*>(Frame.GetData()));
-		return true;
-	}
-
-	/** An array-of-objects out parameter, which is how SplitMeshByComponents
-	 *  hands back the pieces it made. */
-	bool GetObjectArray(const TCHAR* Name, TArray<UObject*>& Out) const
-	{
-		Out.Reset();
-		FArrayProperty* ArrayProp = CastField<FArrayProperty>(Param(Name));
-		if (!ArrayProp) return false;
-		FObjectPropertyBase* Inner = CastField<FObjectPropertyBase>(ArrayProp->Inner);
-		if (!Inner) return false;
-
-		FScriptArrayHelper Helper(ArrayProp,
-			ArrayProp->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData())));
-		Out.Reserve(Helper.Num());
-		for (int32 Index = 0; Index < Helper.Num(); ++Index)
-		{
-			if (UObject* Element = Inner->GetObjectPropertyValue(Helper.GetRawPtr(Index)))
-			{
-				Out.Add(Element);
-			}
-		}
-		return true;
-	}
-
-	/** An enum output read as its enumerator NAME, so the Outcome pin does not
-	 *  depend on Failure staying ordinal 0 forever. */
-	FString GetEnumName(const TCHAR* Name) const
-	{
-		FProperty* Prop = Param(Name);
-		void* Ptr = Prop ? Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData())) : nullptr;
-		if (!Ptr) return FString();
-		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
-		{
-			const int64 Raw = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(Ptr);
-			return EnumProp->GetEnum() ? EnumProp->GetEnum()->GetNameStringByValue(Raw) : FString();
-		}
-		if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
-		{
-			const int64 Raw = ByteProp->GetPropertyValue(Ptr);
-			return ByteProp->Enum ? ByteProp->Enum->GetNameStringByValue(Raw) : FString();
-		}
-		return FString();
-	}
-
-	/** The return value, whatever it is named. */
-	UObject* ReturnObject() const
-	{
-		for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
-		{
-			if (!(It->PropertyFlags & CPF_ReturnParm)) continue;
-			if (FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(*It))
-			{
-				return Prop->GetObjectPropertyValue_InContainer(const_cast<uint8*>(Frame.GetData()));
-			}
-		}
-		return nullptr;
-	}
-};
-
 /** Read and clear the messages a UGeometryScriptDebug collected, so the reason
  *  an operation failed reaches the caller instead of only the output log. */
 TArray<FString> MCPGeoDrainDebug(UObject* Debug)
@@ -499,7 +229,7 @@ FMCPGeoMeshStats MCPGeoReadStats(UObject* Mesh)
 	FString Error;
 	auto ReadInt = [&](const TCHAR* FunctionName) -> int32
 	{
-		FMCPGeoCall Call;
+		FMCPReflectedCall Call;
 		if (!Call.Bind(MCPGeoQueryFunctions, FunctionName, Error)) return 0;
 		Call.SetObject(TEXT("TargetMesh"), Mesh);
 		Call.Invoke();
@@ -511,7 +241,7 @@ FMCPGeoMeshStats MCPGeoReadStats(UObject* Mesh)
 	Stats.Islands = ReadInt(TEXT("GetNumConnectedComponents"));
 	Stats.OpenBorderEdges = ReadInt(TEXT("GetNumOpenBorderEdges"));
 
-	FMCPGeoCall Closed;
+	FMCPReflectedCall Closed;
 	if (Closed.Bind(MCPGeoQueryFunctions, TEXT("GetIsClosedMesh"), Error))
 	{
 		Closed.SetObject(TEXT("TargetMesh"), Mesh);
@@ -526,7 +256,7 @@ bool MCPGeoReadBounds(UObject* Mesh, FBox& OutBox)
 	OutBox = FBox(ForceInit);
 	if (!Mesh) return false;
 	FString Error;
-	FMCPGeoCall Call;
+	FMCPReflectedCall Call;
 	if (!Call.Bind(MCPGeoQueryFunctions, TEXT("GetMeshBoundingBox"), Error)) return false;
 	Call.SetObject(TEXT("TargetMesh"), Mesh);
 	Call.Invoke();
@@ -777,7 +507,7 @@ bool MCPGeoCopyMeshIn(
 	TArray<FString>& Messages,
 	FString& OutFailure)
 {
-	FMCPGeoCall Call;
+	FMCPReflectedCall Call;
 	FString Error;
 	if (!Call.Bind(MCPGeoAssetFunctions, TEXT("CopyMeshFromStaticMeshV2"), Error))
 	{
@@ -824,7 +554,7 @@ UStaticMesh* MCPGeoWriteMeshOut(
 
 	if (ExistingTarget)
 	{
-		FMCPGeoCall CopyOut;
+		FMCPReflectedCall CopyOut;
 		if (!CopyOut.Bind(MCPGeoAssetFunctions, TEXT("CopyMeshToStaticMesh"), BindError))
 		{
 			OutFailure = BindError;
@@ -851,7 +581,7 @@ UStaticMesh* MCPGeoWriteMeshOut(
 		return ExistingTarget;
 	}
 
-	FMCPGeoCall Create;
+	FMCPReflectedCall Create;
 	if (!Create.Bind(MCPGeoCreateAssetFunctions, TEXT("CreateNewStaticMeshAssetFromMesh"), BindError))
 	{
 		OutFailure = FString::Printf(
@@ -1342,7 +1072,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SimplifyMesh(const TSharedPtr<FJsonObject
 	const bool bPreserveVertexPositions = OptionalBool(Params, TEXT("preserveVertexPositions"), false);
 	const bool bAutoCompact = OptionalBool(Params, TEXT("autoCompact"), true);
 
-	auto ApplyOptions = [&](FMCPGeoCall& Call)
+	auto ApplyOptions = [&](FMCPReflectedCall& Call)
 	{
 		Call.SetStructEnum(TEXT("Options"), TEXT("Method"), MethodValue);
 		Call.SetStructBool(TEXT("Options"), TEXT("bAllowSeamCollapse"), bAllowSeamCollapse);
@@ -1353,7 +1083,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SimplifyMesh(const TSharedPtr<FJsonObject
 	auto Operate = [&](UObject* Mesh, UObject* Debug, TArray<FString>& Messages, FString& OutFailure) -> bool
 	{
 		FString BindError;
-		FMCPGeoCall Call;
+		FMCPReflectedCall Call;
 
 		const TCHAR* FunctionName =
 			Mode == TEXT("trianglecount")       ? TEXT("ApplySimplifyToTriangleCount") :
@@ -1549,7 +1279,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemeshMesh(const TSharedPtr<FJsonObject>&
 	auto Operate = [&](UObject* Mesh, UObject* Debug, TArray<FString>& Messages, FString& OutFailure) -> bool
 	{
 		FString BindError;
-		FMCPGeoCall Call;
+		FMCPReflectedCall Call;
 		const TCHAR* FunctionName = Mode == TEXT("uniform")
 			? TEXT("ApplyUniformRemesh") : TEXT("ApplyAdaptiveRemesh");
 		if (!Call.Bind(MCPGeoRemeshFunctions, FunctionName, BindError))
@@ -1680,7 +1410,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::MirrorMesh(const TSharedPtr<FJsonObject>&
 	auto Operate = [&](UObject* Mesh, UObject* Debug, TArray<FString>& Messages, FString& OutFailure) -> bool
 	{
 		FString BindError;
-		FMCPGeoCall Call;
+		FMCPReflectedCall Call;
 		if (!Call.Bind(MCPGeoBooleanFunctions, TEXT("ApplyMeshMirror"), BindError))
 		{
 			OutFailure = BindError;
@@ -1797,7 +1527,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillMeshHoles(const TSharedPtr<FJsonObjec
 
 		if (bRemoveDegenerateFirst)
 		{
-			FMCPGeoCall Repair;
+			FMCPReflectedCall Repair;
 			if (!Repair.Bind(MCPGeoRepairFunctions, TEXT("RepairMeshDegenerateGeometry"), BindError))
 			{
 				OutFailure = BindError;
@@ -1813,7 +1543,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillMeshHoles(const TSharedPtr<FJsonObjec
 		{
 			const FMCPGeoMeshStats BeforeWeld = MCPGeoReadStats(Mesh);
 
-			FMCPGeoCall Weld;
+			FMCPReflectedCall Weld;
 			if (!Weld.Bind(MCPGeoRepairFunctions, TEXT("WeldMeshEdges"), BindError))
 			{
 				OutFailure = BindError;
@@ -1829,7 +1559,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillMeshHoles(const TSharedPtr<FJsonObjec
 			WeldedOpenEdges = FMath::Max(0, BeforeWeld.OpenBorderEdges - AfterWeld.OpenBorderEdges);
 		}
 
-		FMCPGeoCall Fill;
+		FMCPReflectedCall Fill;
 		if (!Fill.Bind(MCPGeoRepairFunctions, TEXT("FillAllMeshHoles"), BindError))
 		{
 			OutFailure = BindError;
@@ -2128,7 +1858,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	}
 
 	FString BindError;
-	FMCPGeoCall Generate;
+	FMCPReflectedCall Generate;
 	if (!Generate.Bind(MCPGeoCollisionFunctions, TEXT("SetStaticMeshCollisionFromMesh"), BindError))
 	{
 		return MCPGeoUnavailable(BindError);
@@ -2578,7 +2308,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 	FString BindError;
 	for (const FMCPGeoPlane& Plane : Planes)
 	{
-		FMCPGeoCall Slice;
+		FMCPReflectedCall Slice;
 		if (!Slice.Bind(MCPGeoBooleanFunctions, TEXT("ApplyMeshPlaneSlice"), BindError))
 		{
 			return MCPGeoUnavailable(BindError);
@@ -2594,7 +2324,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 	}
 
 	// ── Split into pieces ───────────────────────────────────────────────────
-	FMCPGeoCall Split;
+	FMCPReflectedCall Split;
 	if (!Split.Bind(MCPGeoDecompFunctions, TEXT("SplitMeshByComponents"), BindError))
 	{
 		return MCPGeoUnavailable(BindError);

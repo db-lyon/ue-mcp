@@ -11,7 +11,7 @@
 //   GeometryScriptLibrary_CreateNewAssetFunctions::CreateNewStaticMeshAssetFromMesh
 //
 // They are UFUNCTIONs, so a reflected call reaches them without a Build.cs
-// dependency on the plugin. FMeshBooleanCall below is the whole of that
+// dependency on the plugin. FMCPReflectedCall (HandlerFunctionCall.h) is the whole of that
 // machinery: allocate the function's parameter frame, initialise every
 // parameter to its declared default (which is how the option structs get their
 // engine defaults without this file knowing their layout), overwrite the ones
@@ -98,245 +98,6 @@ int64 GeometryScriptEnumValue(const TCHAR* EnumPath, const FString& EnumeratorNa
 	return Value;
 }
 
-/**
- * One reflected call into a class this module does not link against.
- *
- * The frame is heap-allocated because a Geometry Script parameter list carries
- * option structs with arrays in them, so it cannot be a POD blob on the stack
- * that nobody destroys.
- */
-struct FMeshBooleanCall
-{
-	UObject* CDO = nullptr;
-	UFunction* Function = nullptr;
-	TArray<uint8> Frame;
-
-	~FMeshBooleanCall() { Release(); }
-
-	FMeshBooleanCall() = default;
-	FMeshBooleanCall(const FMeshBooleanCall&) = delete;
-	FMeshBooleanCall& operator=(const FMeshBooleanCall&) = delete;
-
-	bool Bind(const TCHAR* ClassPath, const TCHAR* FunctionName, FString& OutError)
-	{
-		Release();
-
-		UClass* Class = FindObject<UClass>(nullptr, ClassPath);
-		if (!Class)
-		{
-			OutError = FString::Printf(TEXT("class '%s' is not loaded."), ClassPath);
-			return false;
-		}
-		Function = Class->FindFunctionByName(FName(FunctionName));
-		if (!Function)
-		{
-			OutError = FString::Printf(
-				TEXT("'%s' has no reflected function named '%s' in this engine build."),
-				ClassPath, FunctionName);
-			return false;
-		}
-		CDO = Class->GetDefaultObject();
-		if (!CDO)
-		{
-			OutError = FString::Printf(TEXT("'%s' has no default object to call through."), ClassPath);
-			Function = nullptr;
-			return false;
-		}
-
-		// Zero first, then let every parameter construct itself. That second
-		// step is what gives each option struct its C++ defaults, so this file
-		// only has to name the fields it disagrees with.
-		Frame.SetNumZeroed(FMath::Max<int32>(Function->ParmsSize, 1));
-		for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
-		{
-			It->InitializeValue_InContainer(Frame.GetData());
-		}
-		return true;
-	}
-
-	void Release()
-	{
-		if (Function && Frame.Num() > 0)
-		{
-			MCPFunctionCall::DestroyFrame(Function, Frame.GetData());
-		}
-		Frame.Reset();
-		Function = nullptr;
-		CDO = nullptr;
-	}
-
-	void Invoke()
-	{
-		if (CDO && Function)
-		{
-			CDO->ProcessEvent(Function, Frame.GetData());
-		}
-	}
-
-	FProperty* Param(const TCHAR* Name) const
-	{
-		return Function ? Function->FindPropertyByName(FName(Name)) : nullptr;
-	}
-
-	bool SetObject(const TCHAR* Name, UObject* Value)
-	{
-		FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(Param(Name));
-		if (!Prop) return false;
-		Prop->SetObjectPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetBool(const TCHAR* Name, bool Value)
-	{
-		FBoolProperty* Prop = CastField<FBoolProperty>(Param(Name));
-		if (!Prop) return false;
-		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetString(const TCHAR* Name, const FString& Value)
-	{
-		FStrProperty* Prop = CastField<FStrProperty>(Param(Name));
-		if (!Prop) return false;
-		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetTransform(const TCHAR* Name, const FTransform& Value)
-	{
-		FStructProperty* Prop = CastField<FStructProperty>(Param(Name));
-		if (!Prop || Prop->Struct != TBaseStructure<FTransform>::Get()) return false;
-		*Prop->ContainerPtrToValuePtr<FTransform>(Frame.GetData()) = Value;
-		return true;
-	}
-
-	bool SetEnum(const TCHAR* Name, int64 Value)
-	{
-		if (Value == INDEX_NONE) return false;
-		FProperty* Prop = Param(Name);
-		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
-		{
-			EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(
-				EnumProp->ContainerPtrToValuePtr<void>(Frame.GetData()), Value);
-			return true;
-		}
-		if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
-		{
-			ByteProp->SetPropertyValue_InContainer(Frame.GetData(), static_cast<uint8>(Value));
-			return true;
-		}
-		return false;
-	}
-
-	/** Address of one field inside a struct parameter, so an option struct can
-	 *  be filled in without this module knowing its C++ layout. */
-	void* StructField(const TCHAR* ParamName, const TCHAR* FieldName, FProperty*& OutField) const
-	{
-		OutField = nullptr;
-		FStructProperty* Prop = CastField<FStructProperty>(Param(ParamName));
-		if (!Prop || !Prop->Struct) return nullptr;
-		OutField = Prop->Struct->FindPropertyByName(FName(FieldName));
-		if (!OutField) return nullptr;
-		void* StructPtr = Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData()));
-		return OutField->ContainerPtrToValuePtr<void>(StructPtr);
-	}
-
-	bool SetStructBool(const TCHAR* ParamName, const TCHAR* FieldName, bool Value)
-	{
-		FProperty* Field = nullptr;
-		void* Ptr = StructField(ParamName, FieldName, Field);
-		FBoolProperty* BoolProp = CastField<FBoolProperty>(Field);
-		if (!Ptr || !BoolProp) return false;
-		BoolProp->SetPropertyValue(Ptr, Value);
-		return true;
-	}
-
-	bool SetStructNumber(const TCHAR* ParamName, const TCHAR* FieldName, double Value)
-	{
-		FProperty* Field = nullptr;
-		void* Ptr = StructField(ParamName, FieldName, Field);
-		FNumericProperty* NumProp = CastField<FNumericProperty>(Field);
-		if (!Ptr || !NumProp) return false;
-		if (NumProp->IsFloatingPoint())
-		{
-			NumProp->SetFloatingPointPropertyValue(Ptr, Value);
-		}
-		else
-		{
-			NumProp->SetIntPropertyValue(Ptr, static_cast<int64>(Value));
-		}
-		return true;
-	}
-
-	bool SetStructEnum(const TCHAR* ParamName, const TCHAR* FieldName, int64 Value)
-	{
-		if (Value == INDEX_NONE) return false;
-		FProperty* Field = nullptr;
-		void* Ptr = StructField(ParamName, FieldName, Field);
-		if (!Ptr) return false;
-		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Field))
-		{
-			EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(Ptr, Value);
-			return true;
-		}
-		if (FByteProperty* ByteProp = CastField<FByteProperty>(Field))
-		{
-			ByteProp->SetPropertyValue(Ptr, static_cast<uint8>(Value));
-			return true;
-		}
-		return false;
-	}
-
-	UObject* GetObject(const TCHAR* Name) const
-	{
-		FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(Param(Name));
-		if (!Prop) return nullptr;
-		return Prop->GetObjectPropertyValue_InContainer(const_cast<uint8*>(Frame.GetData()));
-	}
-
-	int32 GetInt(const TCHAR* Name) const
-	{
-		FNumericProperty* Prop = CastField<FNumericProperty>(Param(Name));
-		if (!Prop) return 0;
-		return static_cast<int32>(Prop->GetSignedIntPropertyValue(
-			Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData()))));
-	}
-
-	/** An enum output as its enumerator name, which is how the Outcome pin is
-	 *  read without depending on Failure being 0 forever. */
-	FString GetEnumName(const TCHAR* Name) const
-	{
-		FProperty* Prop = Param(Name);
-		void* Ptr = Prop ? Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData())) : nullptr;
-		if (!Ptr) return FString();
-		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
-		{
-			const int64 Raw = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(Ptr);
-			return EnumProp->GetEnum() ? EnumProp->GetEnum()->GetNameStringByValue(Raw) : FString();
-		}
-		if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
-		{
-			const int64 Raw = ByteProp->GetPropertyValue(Ptr);
-			return ByteProp->Enum ? ByteProp->Enum->GetNameStringByValue(Raw) : FString();
-		}
-		return FString();
-	}
-
-	/** The return value, whatever it is named. */
-	UObject* ReturnObject() const
-	{
-		for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
-		{
-			if (!(It->PropertyFlags & CPF_ReturnParm)) continue;
-			if (FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(*It))
-			{
-				return Prop->GetObjectPropertyValue_InContainer(const_cast<uint8*>(Frame.GetData()));
-			}
-		}
-		return nullptr;
-	}
-};
-
 /** Read and clear the messages a UGeometryScriptDebug collected, so the reason
  *  a boolean failed reaches the caller instead of only the output log. */
 TArray<FString> DrainDebugMessages(UObject* Debug)
@@ -383,14 +144,14 @@ bool ReadDynamicMeshCounts(UObject* Mesh, int32& OutTriangles, int32& OutVertice
 	if (!Mesh) return false;
 
 	FString Error;
-	FMeshBooleanCall Triangles;
+	FMCPReflectedCall Triangles;
 	if (Triangles.Bind(GSQueryFunctions, TEXT("GetNumTriangleIDs"), Error))
 	{
 		Triangles.SetObject(TEXT("TargetMesh"), Mesh);
 		Triangles.Invoke();
 		OutTriangles = Triangles.GetInt(TEXT("ReturnValue"));
 	}
-	FMeshBooleanCall Vertices;
+	FMCPReflectedCall Vertices;
 	if (Vertices.Bind(GSQueryFunctions, TEXT("GetNumVertexIDs"), Error))
 	{
 		Vertices.SetObject(TEXT("TargetMesh"), Mesh);
@@ -660,12 +421,12 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	}
 
 	FString BindError;
-	FMeshBooleanCall CopyIn;
+	FMCPReflectedCall CopyIn;
 	if (!CopyIn.Bind(GSStaticMeshFunctions, TEXT("CopyMeshFromStaticMeshV2"), BindError))
 	{
 		return GeometryScriptingUnavailableError(BindError);
 	}
-	FMeshBooleanCall Boolean;
+	FMCPReflectedCall Boolean;
 	if (!Boolean.Bind(GSBooleanFunctions, TEXT("ApplyMeshBoolean"), BindError))
 	{
 		return GeometryScriptingUnavailableError(BindError);
@@ -700,7 +461,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 
 	auto CopyMeshIn = [&](UStaticMesh* From, UObject* To, const FString& FromPath, FString& OutFailure) -> bool
 	{
-		FMeshBooleanCall Call;
+		FMCPReflectedCall Call;
 		FString Error;
 		if (!Call.Bind(GSStaticMeshFunctions, TEXT("CopyMeshFromStaticMeshV2"), Error))
 		{
@@ -819,7 +580,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 
 	if (ExistingOutput)
 	{
-		FMeshBooleanCall CopyOut;
+		FMCPReflectedCall CopyOut;
 		if (!CopyOut.Bind(GSStaticMeshFunctions, TEXT("CopyMeshToStaticMesh"), BindError))
 		{
 			return GeometryScriptingUnavailableError(BindError);
@@ -850,7 +611,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	}
 	else
 	{
-		FMeshBooleanCall Create;
+		FMCPReflectedCall Create;
 		if (!Create.Bind(GSCreateAssetFunctions, TEXT("CreateNewStaticMeshAssetFromMesh"), BindError))
 		{
 			return GeometryScriptingUnavailableError(FString::Printf(

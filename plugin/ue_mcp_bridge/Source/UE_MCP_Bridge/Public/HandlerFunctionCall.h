@@ -507,3 +507,380 @@ namespace MCPFunctionCall
 			}), 0.0f);
 	}
 }
+
+/**
+ * One reflected call into a UFUNCTION this module does not link against.
+ *
+ * The frame is heap allocated and every parameter is initialised through its
+ * own FProperty, so option structs get their engine defaults and containers are
+ * constructed and destroyed correctly without this module knowing the layout.
+ * Parameters are addressed BY NAME: a signature that gains an argument fails to
+ * find the name instead of shifting a value into the wrong slot.
+ */
+struct FMCPReflectedCall
+{
+	UObject* Target = nullptr;
+	UFunction* Function = nullptr;
+	TArray<uint8> Frame;
+
+	FMCPReflectedCall() = default;
+	FMCPReflectedCall(const FMCPReflectedCall&) = delete;
+	FMCPReflectedCall& operator=(const FMCPReflectedCall&) = delete;
+	~FMCPReflectedCall() { Release(); }
+
+	/** Bind a function on the default object of an already loaded class. */
+	bool Bind(const TCHAR* ClassPath, const TCHAR* FunctionName, FString& OutError)
+	{
+		Release();
+		UClass* Class = FindObject<UClass>(nullptr, ClassPath);
+		if (!Class)
+		{
+			OutError = FString::Printf(TEXT("class '%s' is not loaded."), ClassPath);
+			return false;
+		}
+		UFunction* Found = Class->FindFunctionByName(FName(FunctionName));
+		if (!Found)
+		{
+			OutError = FString::Printf(
+				TEXT("'%s' has no reflected function named '%s' in this engine build."),
+				ClassPath, FunctionName);
+			return false;
+		}
+		UObject* CDO = Class->GetDefaultObject();
+		if (!CDO)
+		{
+			OutError = FString::Printf(TEXT("'%s' has no default object to call through."), ClassPath);
+			return false;
+		}
+		InitFrame(CDO, Found);
+		return true;
+	}
+
+	/** Bind a function on a live instance. InstanceName and ClassLabel only
+	 *  word the errors; ClassLabel defaults to the instance's class name. */
+	bool BindInstance(
+		UObject* Instance,
+		const TCHAR* FunctionName,
+		FString& OutError,
+		const TCHAR* InstanceName = TEXT("call target"),
+		const TCHAR* ClassLabel = nullptr)
+	{
+		Release();
+		if (!Instance)
+		{
+			OutError = FString::Printf(TEXT("the %s instance is gone."), InstanceName);
+			return false;
+		}
+		UFunction* Found = Instance->GetClass()->FindFunctionByName(FName(FunctionName));
+		if (!Found)
+		{
+			OutError = FString::Printf(
+				TEXT("%s has no reflected function named '%s' in this engine build."),
+				ClassLabel ? ClassLabel : *Instance->GetClass()->GetName(), FunctionName);
+			return false;
+		}
+		InitFrame(Instance, Found);
+		return true;
+	}
+
+	void Release()
+	{
+		if (Function && Frame.Num() > 0)
+		{
+			MCPFunctionCall::DestroyFrame(Function, Frame.GetData());
+		}
+		Frame.Reset();
+		Function = nullptr;
+		Target = nullptr;
+	}
+
+	void Invoke() { if (Target && Function) Target->ProcessEvent(Function, Frame.GetData()); }
+
+	FProperty* Param(const TCHAR* Name) const
+	{
+		return Function ? Function->FindPropertyByName(FName(Name)) : nullptr;
+	}
+
+	FProperty* ReturnParam() const
+	{
+		if (!Function) return nullptr;
+		for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
+		{
+			if (It->PropertyFlags & CPF_ReturnParm) return *It;
+		}
+		return nullptr;
+	}
+
+	// ── Inputs ───────────────────────────────────────────────────────────────
+
+	bool SetObject(const TCHAR* Name, UObject* Value)
+	{
+		FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(Param(Name));
+		if (!Prop) return false;
+		Prop->SetObjectPropertyValue_InContainer(Frame.GetData(), Value);
+		return true;
+	}
+
+	bool SetBool(const TCHAR* Name, bool Value)
+	{
+		FBoolProperty* Prop = CastField<FBoolProperty>(Param(Name));
+		if (!Prop) return false;
+		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
+		return true;
+	}
+
+	bool SetString(const TCHAR* Name, const FString& Value)
+	{
+		FStrProperty* Prop = CastField<FStrProperty>(Param(Name));
+		if (!Prop) return false;
+		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
+		return true;
+	}
+
+	bool SetName(const TCHAR* Name, const FName& Value)
+	{
+		FNameProperty* Prop = CastField<FNameProperty>(Param(Name));
+		if (!Prop) return false;
+		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
+		return true;
+	}
+
+	bool SetNumber(const TCHAR* Name, double Value)
+	{
+		FNumericProperty* Prop = CastField<FNumericProperty>(Param(Name));
+		if (!Prop) return false;
+		void* Ptr = Prop->ContainerPtrToValuePtr<void>(Frame.GetData());
+		if (Prop->IsFloatingPoint()) Prop->SetFloatingPointPropertyValue(Ptr, Value);
+		else Prop->SetIntPropertyValue(Ptr, static_cast<int64>(Value));
+		return true;
+	}
+
+	bool SetTransform(const TCHAR* Name, const FTransform& Value)
+	{
+		FStructProperty* Prop = CastField<FStructProperty>(Param(Name));
+		if (!Prop || Prop->Struct != TBaseStructure<FTransform>::Get()) return false;
+		*Prop->ContainerPtrToValuePtr<FTransform>(Frame.GetData()) = Value;
+		return true;
+	}
+
+	/** Enum parameter by value; INDEX_NONE (an enumerator that was not found) is refused. */
+	bool SetEnum(const TCHAR* Name, int64 Value)
+	{
+		if (Value == INDEX_NONE) return false;
+		FProperty* Prop = Param(Name);
+		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
+		{
+			EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(
+				EnumProp->ContainerPtrToValuePtr<void>(Frame.GetData()), Value);
+			return true;
+		}
+		if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
+		{
+			ByteProp->SetPropertyValue_InContainer(Frame.GetData(), static_cast<uint8>(Value));
+			return true;
+		}
+		return false;
+	}
+
+	/** Address of one field inside a struct parameter, so an option struct can
+	 *  be filled without this module knowing its layout. */
+	void* StructField(const TCHAR* ParamName, const TCHAR* FieldName, FProperty*& OutField) const
+	{
+		OutField = nullptr;
+		FStructProperty* Prop = CastField<FStructProperty>(Param(ParamName));
+		if (!Prop || !Prop->Struct) return nullptr;
+		OutField = Prop->Struct->FindPropertyByName(FName(FieldName));
+		if (!OutField) return nullptr;
+		void* StructPtr = Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData()));
+		return OutField->ContainerPtrToValuePtr<void>(StructPtr);
+	}
+
+	bool SetStructBool(const TCHAR* ParamName, const TCHAR* FieldName, bool Value)
+	{
+		FProperty* Field = nullptr;
+		void* Ptr = StructField(ParamName, FieldName, Field);
+		FBoolProperty* BoolProp = CastField<FBoolProperty>(Field);
+		if (!Ptr || !BoolProp) return false;
+		BoolProp->SetPropertyValue(Ptr, Value);
+		return true;
+	}
+
+	bool SetStructNumber(const TCHAR* ParamName, const TCHAR* FieldName, double Value)
+	{
+		FProperty* Field = nullptr;
+		void* Ptr = StructField(ParamName, FieldName, Field);
+		FNumericProperty* NumProp = CastField<FNumericProperty>(Field);
+		if (!Ptr || !NumProp) return false;
+		if (NumProp->IsFloatingPoint()) NumProp->SetFloatingPointPropertyValue(Ptr, Value);
+		else NumProp->SetIntPropertyValue(Ptr, static_cast<int64>(Value));
+		return true;
+	}
+
+	/** One level deeper (Options.PackingOptions.TargetImageWidth): a dotted
+	 *  name passed to FindPropertyByName resolves to nothing at all. */
+	bool SetNestedStructNumber(
+		const TCHAR* ParamName, const TCHAR* OuterField, const TCHAR* InnerField, double Value)
+	{
+		FStructProperty* Prop = CastField<FStructProperty>(Param(ParamName));
+		if (!Prop || !Prop->Struct) return false;
+		FStructProperty* Outer = CastField<FStructProperty>(Prop->Struct->FindPropertyByName(FName(OuterField)));
+		if (!Outer || !Outer->Struct) return false;
+		FNumericProperty* Inner = CastField<FNumericProperty>(Outer->Struct->FindPropertyByName(FName(InnerField)));
+		if (!Inner) return false;
+		void* ParamPtr = Prop->ContainerPtrToValuePtr<void>(Frame.GetData());
+		void* OuterPtr = Outer->ContainerPtrToValuePtr<void>(ParamPtr);
+		void* InnerPtr = Inner->ContainerPtrToValuePtr<void>(OuterPtr);
+		if (Inner->IsFloatingPoint()) Inner->SetFloatingPointPropertyValue(InnerPtr, Value);
+		else Inner->SetIntPropertyValue(InnerPtr, static_cast<int64>(Value));
+		return true;
+	}
+
+	bool SetStructEnum(const TCHAR* ParamName, const TCHAR* FieldName, int64 Value)
+	{
+		if (Value == INDEX_NONE) return false;
+		FProperty* Field = nullptr;
+		void* Ptr = StructField(ParamName, FieldName, Field);
+		if (!Ptr) return false;
+		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Field))
+		{
+			EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(Ptr, Value);
+			return true;
+		}
+		if (FByteProperty* ByteProp = CastField<FByteProperty>(Field))
+		{
+			ByteProp->SetPropertyValue(Ptr, static_cast<uint8>(Value));
+			return true;
+		}
+		return false;
+	}
+
+	// ── Outputs by parameter name ────────────────────────────────────────────
+
+	UObject* GetObject(const TCHAR* Name) const
+	{
+		FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(Param(Name));
+		if (!Prop) return nullptr;
+		return Prop->GetObjectPropertyValue_InContainer(const_cast<uint8*>(Frame.GetData()));
+	}
+
+	int32 GetInt(const TCHAR* Name) const
+	{
+		FNumericProperty* Prop = CastField<FNumericProperty>(Param(Name));
+		if (!Prop) return 0;
+		return static_cast<int32>(Prop->GetSignedIntPropertyValue(
+			Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData()))));
+	}
+
+	bool GetBool(const TCHAR* Name) const
+	{
+		FBoolProperty* Prop = CastField<FBoolProperty>(Param(Name));
+		if (!Prop) return false;
+		return Prop->GetPropertyValue_InContainer(const_cast<uint8*>(Frame.GetData()));
+	}
+
+	/** An FBox output. FBox is a noexport core struct with no TBaseStructure
+	 *  specialisation, so its reflected name (/Script/CoreUObject.Box) is the
+	 *  identity check available. */
+	bool GetBox(const TCHAR* Name, FBox& Out) const
+	{
+		FStructProperty* Prop = CastField<FStructProperty>(Param(Name));
+		if (!Prop || !Prop->Struct) return false;
+		if (Prop->Struct->GetFName() != FName(NAME_Box)) return false;
+		Out = *Prop->ContainerPtrToValuePtr<FBox>(const_cast<uint8*>(Frame.GetData()));
+		return true;
+	}
+
+	/** An array-of-objects output; null elements are skipped. */
+	bool GetObjectArray(const TCHAR* Name, TArray<UObject*>& Out) const
+	{
+		Out.Reset();
+		FArrayProperty* ArrayProp = CastField<FArrayProperty>(Param(Name));
+		if (!ArrayProp) return false;
+		FObjectPropertyBase* Inner = CastField<FObjectPropertyBase>(ArrayProp->Inner);
+		if (!Inner) return false;
+
+		FScriptArrayHelper Helper(ArrayProp,
+			ArrayProp->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData())));
+		Out.Reserve(Helper.Num());
+		for (int32 Index = 0; Index < Helper.Num(); ++Index)
+		{
+			if (UObject* Element = Inner->GetObjectPropertyValue(Helper.GetRawPtr(Index)))
+			{
+				Out.Add(Element);
+			}
+		}
+		return true;
+	}
+
+	/** An enum output as its enumerator NAME, so an Outcome pin does not depend
+	 *  on Failure staying ordinal 0. */
+	FString GetEnumName(const TCHAR* Name) const
+	{
+		FProperty* Prop = Param(Name);
+		void* Ptr = Prop ? Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData())) : nullptr;
+		if (!Ptr) return FString();
+		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
+		{
+			const int64 Raw = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(Ptr);
+			return EnumProp->GetEnum() ? EnumProp->GetEnum()->GetNameStringByValue(Raw) : FString();
+		}
+		if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
+		{
+			const int64 Raw = ByteProp->GetPropertyValue(Ptr);
+			return ByteProp->Enum ? ByteProp->Enum->GetNameStringByValue(Raw) : FString();
+		}
+		return FString();
+	}
+
+	// ── The return value, whatever it is named ───────────────────────────────
+
+	UObject* ReturnObject() const
+	{
+		FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(ReturnParam());
+		return Prop ? Prop->GetObjectPropertyValue_InContainer(const_cast<uint8*>(Frame.GetData())) : nullptr;
+	}
+
+	bool BoolReturn() const
+	{
+		FBoolProperty* Prop = CastField<FBoolProperty>(ReturnParam());
+		return Prop && Prop->GetPropertyValue_InContainer(Frame.GetData());
+	}
+
+	FName NameReturn() const
+	{
+		FNameProperty* Prop = CastField<FNameProperty>(ReturnParam());
+		return Prop ? Prop->GetPropertyValue_InContainer(Frame.GetData()) : NAME_None;
+	}
+
+	FTransform TransformReturn() const
+	{
+		FStructProperty* Prop = CastField<FStructProperty>(ReturnParam());
+		if (!Prop || Prop->Struct != TBaseStructure<FTransform>::Get()) return FTransform::Identity;
+		return *Prop->ContainerPtrToValuePtr<FTransform>(Frame.GetData());
+	}
+
+	TArray<FName> NameArrayReturn() const
+	{
+		TArray<FName> Out;
+		FArrayProperty* Prop = CastField<FArrayProperty>(ReturnParam());
+		if (!Prop || !CastField<FNameProperty>(Prop->Inner)) return Out;
+		FScriptArrayHelper Helper(Prop, Prop->ContainerPtrToValuePtr<void>(Frame.GetData()));
+		for (int32 Index = 0; Index < Helper.Num(); ++Index)
+		{
+			Out.Add(*reinterpret_cast<FName*>(Helper.GetRawPtr(Index)));
+		}
+		return Out;
+	}
+
+private:
+	void InitFrame(UObject* InTarget, UFunction* InFunction)
+	{
+		Target = InTarget;
+		Function = InFunction;
+		Frame.SetNumZeroed(FMath::Max<int32>(Function->ParmsSize, 1));
+		for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
+		{
+			It->InitializeValue_InContainer(Frame.GetData());
+		}
+	}
+};

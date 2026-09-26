@@ -22,8 +22,8 @@
 // link-time dependency, and a project without the plugin gets a typed
 // "skeleton_modifier_unavailable" answer instead of an editor that will not
 // start. This is the same trade AssetHandlers_MeshBoolean.cpp makes for
-// Geometry Script, and FSkeletonModifierCall below is that file's
-// FMeshBooleanCall applied to an instance rather than a CDO.
+// Geometry Script, through the same FMCPReflectedCall (HandlerFunctionCall.h)
+// bound to an instance rather than a CDO.
 //
 // One consequence is worth naming: USkeletonModifier::SetReadOnly and
 // SetReferenceSkeleton are plain C++ methods with no UFUNCTION, so they are
@@ -288,164 +288,22 @@ static TSharedPtr<FJsonValue> SkeletonModifierUnavailable(const FString& Detail)
 		Extra);
 }
 
-/**
- * One reflected call into USkeletonModifier.
- *
- * The frame is heap allocated and every parameter is initialised through its
- * own FProperty, so a parameter list carrying an FTransform or a TArray<FName>
- * is constructed and destroyed correctly without this file knowing the layout
- * UHT generated. Parameters are addressed BY NAME, so a signature that gains a
- * defaulted argument in a later engine does not silently shift a value into the
- * wrong slot: it fails to find the name and says which one.
- */
-struct FSkeletonModifierCall
-{
-	UObject* Instance = nullptr;
-	UFunction* Function = nullptr;
-	TArray<uint8> Frame;
-
-	FSkeletonModifierCall() = default;
-	FSkeletonModifierCall(const FSkeletonModifierCall&) = delete;
-	FSkeletonModifierCall& operator=(const FSkeletonModifierCall&) = delete;
-	~FSkeletonModifierCall() { Release(); }
-
-	bool Bind(UObject* InInstance, const TCHAR* FunctionName, FString& OutError)
-	{
-		Release();
-		if (!InInstance)
-		{
-			OutError = TEXT("the skeleton modifier instance is gone.");
-			return false;
-		}
-		Function = InInstance->GetClass()->FindFunctionByName(FName(FunctionName));
-		if (!Function)
-		{
-			OutError = FString::Printf(
-				TEXT("USkeletonModifier has no reflected function named '%s' in this engine build."),
-				FunctionName);
-			return false;
-		}
-		Instance = InInstance;
-		Frame.SetNumZeroed(FMath::Max<int32>(Function->ParmsSize, 1));
-		for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
-		{
-			It->InitializeValue_InContainer(Frame.GetData());
-		}
-		return true;
-	}
-
-	void Release()
-	{
-		if (Function && Frame.Num() > 0)
-		{
-			MCPFunctionCall::DestroyFrame(Function, Frame.GetData());
-		}
-		Frame.Reset();
-		Function = nullptr;
-		Instance = nullptr;
-	}
-
-	FProperty* Param(const TCHAR* Name) const
-	{
-		return Function ? Function->FindPropertyByName(FName(Name)) : nullptr;
-	}
-
-	FProperty* ReturnParam() const
-	{
-		if (!Function) return nullptr;
-		for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
-		{
-			if (It->PropertyFlags & CPF_ReturnParm) return *It;
-		}
-		return nullptr;
-	}
-
-	bool SetName(const TCHAR* Key, const FName& Value)
-	{
-		FNameProperty* Prop = CastField<FNameProperty>(Param(Key));
-		if (!Prop) return false;
-		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetBool(const TCHAR* Key, bool Value)
-	{
-		FBoolProperty* Prop = CastField<FBoolProperty>(Param(Key));
-		if (!Prop) return false;
-		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetObject(const TCHAR* Key, UObject* Value)
-	{
-		FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(Param(Key));
-		if (!Prop) return false;
-		Prop->SetObjectPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetTransform(const TCHAR* Key, const FTransform& Value)
-	{
-		FStructProperty* Prop = CastField<FStructProperty>(Param(Key));
-		if (!Prop || Prop->Struct != TBaseStructure<FTransform>::Get()) return false;
-		*Prop->ContainerPtrToValuePtr<FTransform>(Frame.GetData()) = Value;
-		return true;
-	}
-
-	void Invoke()
-	{
-		if (Instance && Function) Instance->ProcessEvent(Function, Frame.GetData());
-	}
-
-	bool BoolReturn() const
-	{
-		FBoolProperty* Prop = CastField<FBoolProperty>(ReturnParam());
-		return Prop && Prop->GetPropertyValue_InContainer(Frame.GetData());
-	}
-
-	FName NameReturn() const
-	{
-		FNameProperty* Prop = CastField<FNameProperty>(ReturnParam());
-		return Prop ? Prop->GetPropertyValue_InContainer(Frame.GetData()) : NAME_None;
-	}
-
-	FTransform TransformReturn() const
-	{
-		FStructProperty* Prop = CastField<FStructProperty>(ReturnParam());
-		if (!Prop || Prop->Struct != TBaseStructure<FTransform>::Get()) return FTransform::Identity;
-		return *Prop->ContainerPtrToValuePtr<FTransform>(Frame.GetData());
-	}
-
-	TArray<FName> NameArrayReturn() const
-	{
-		TArray<FName> Out;
-		FArrayProperty* Prop = CastField<FArrayProperty>(ReturnParam());
-		if (!Prop || !CastField<FNameProperty>(Prop->Inner)) return Out;
-		FScriptArrayHelper Helper(Prop, Prop->ContainerPtrToValuePtr<void>(Frame.GetData()));
-		for (int32 Index = 0; Index < Helper.Num(); ++Index)
-		{
-			Out.Add(*reinterpret_cast<FName*>(Helper.GetRawPtr(Index)));
-		}
-		return Out;
-	}
-};
-
 // Thin typed wrappers, so the handler body reads as calls rather than as frames.
 
 static TArray<FName> SkeletonModifierAllBones(UObject* Modifier)
 {
-	FSkeletonModifierCall Call;
+	FMCPReflectedCall Call;
 	FString Error;
-	if (!Call.Bind(Modifier, TEXT("GetAllBoneNames"), Error)) return TArray<FName>();
+	if (!Call.BindInstance(Modifier, TEXT("GetAllBoneNames"), Error, TEXT("skeleton modifier"), TEXT("USkeletonModifier"))) return TArray<FName>();
 	Call.Invoke();
 	return Call.NameArrayReturn();
 }
 
 static FName SkeletonModifierParentOf(UObject* Modifier, const FName& Bone)
 {
-	FSkeletonModifierCall Call;
+	FMCPReflectedCall Call;
 	FString Error;
-	if (!Call.Bind(Modifier, TEXT("GetParentName"), Error)) return NAME_None;
+	if (!Call.BindInstance(Modifier, TEXT("GetParentName"), Error, TEXT("skeleton modifier"), TEXT("USkeletonModifier"))) return NAME_None;
 	if (!Call.SetName(TEXT("InBoneName"), Bone)) return NAME_None;
 	Call.Invoke();
 	return Call.NameReturn();
@@ -453,9 +311,9 @@ static FName SkeletonModifierParentOf(UObject* Modifier, const FName& Bone)
 
 static FTransform SkeletonModifierTransformOf(UObject* Modifier, const FName& Bone, bool bGlobal)
 {
-	FSkeletonModifierCall Call;
+	FMCPReflectedCall Call;
 	FString Error;
-	if (!Call.Bind(Modifier, TEXT("GetBoneTransform"), Error)) return FTransform::Identity;
+	if (!Call.BindInstance(Modifier, TEXT("GetBoneTransform"), Error, TEXT("skeleton modifier"), TEXT("USkeletonModifier"))) return FTransform::Identity;
 	Call.SetName(TEXT("InBoneName"), Bone);
 	Call.SetBool(TEXT("bGlobal"), bGlobal);
 	Call.Invoke();
@@ -955,9 +813,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginSkeletonEdit(const TSharedPtr<FJ
 	TStrongObjectPtr<UObject> Held(Modifier);
 
 	{
-		FSkeletonModifierCall Call;
+		FMCPReflectedCall Call;
 		FString BindError;
-		if (!Call.Bind(Modifier, TEXT("SetSkeletalMesh"), BindError))
+		if (!Call.BindInstance(Modifier, TEXT("SetSkeletalMesh"), BindError, TEXT("skeleton modifier"), TEXT("USkeletonModifier")))
 		{
 			return SkeletonModifierUnavailable(BindError);
 		}
@@ -1426,13 +1284,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 			continue;
 		}
 
-		FSkeletonModifierCall Call;
+		FMCPReflectedCall Call;
 		FString BindError;
 		bool bOk = false;
 
 		if (Planned.Op == TEXT("add"))
 		{
-			if (!Call.Bind(Modifier, TEXT("AddBone"), BindError)) return SkeletonModifierUnavailable(BindError);
+			if (!Call.BindInstance(Modifier, TEXT("AddBone"), BindError, TEXT("skeleton modifier"), TEXT("USkeletonModifier"))) return SkeletonModifierUnavailable(BindError);
 			Call.SetName(TEXT("InBoneName"), Planned.Bone);
 			Call.SetName(TEXT("InParentName"), Planned.Parent);
 			Call.SetTransform(TEXT("InTransform"), Planned.Transform);
@@ -1449,7 +1307,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 		}
 		else if (Planned.Op == TEXT("remove"))
 		{
-			if (!Call.Bind(Modifier, TEXT("RemoveBone"), BindError)) return SkeletonModifierUnavailable(BindError);
+			if (!Call.BindInstance(Modifier, TEXT("RemoveBone"), BindError, TEXT("skeleton modifier"), TEXT("USkeletonModifier"))) return SkeletonModifierUnavailable(BindError);
 			Call.SetName(TEXT("InBoneName"), Planned.Bone);
 			Call.SetBool(TEXT("bRemoveChildren"), Planned.bRemoveChildren);
 			Call.Invoke();
@@ -1469,7 +1327,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 		}
 		else if (Planned.Op == TEXT("rename"))
 		{
-			if (!Call.Bind(Modifier, TEXT("RenameBone"), BindError)) return SkeletonModifierUnavailable(BindError);
+			if (!Call.BindInstance(Modifier, TEXT("RenameBone"), BindError, TEXT("skeleton modifier"), TEXT("USkeletonModifier"))) return SkeletonModifierUnavailable(BindError);
 			Call.SetName(TEXT("InOldBoneName"), Planned.Bone);
 			Call.SetName(TEXT("InNewBoneName"), Planned.NewName);
 			Call.Invoke();
@@ -1484,7 +1342,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 		}
 		else if (Planned.Op == TEXT("reparent"))
 		{
-			if (!Call.Bind(Modifier, TEXT("ParentBone"), BindError)) return SkeletonModifierUnavailable(BindError);
+			if (!Call.BindInstance(Modifier, TEXT("ParentBone"), BindError, TEXT("skeleton modifier"), TEXT("USkeletonModifier"))) return SkeletonModifierUnavailable(BindError);
 			Call.SetName(TEXT("InBoneName"), Planned.Bone);
 			Call.SetName(TEXT("InParentName"), Planned.Parent);
 			Call.Invoke();
@@ -1500,7 +1358,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 		}
 		else // set_transform
 		{
-			if (!Call.Bind(Modifier, TEXT("SetBoneTransform"), BindError)) return SkeletonModifierUnavailable(BindError);
+			if (!Call.BindInstance(Modifier, TEXT("SetBoneTransform"), BindError, TEXT("skeleton modifier"), TEXT("USkeletonModifier"))) return SkeletonModifierUnavailable(BindError);
 			Call.SetName(TEXT("InBoneName"), Planned.Bone);
 			Call.SetTransform(TEXT("InNewTransform"), Planned.Transform);
 			Call.SetBool(TEXT("bMoveChildren"), Planned.bMoveChildren);
@@ -1695,9 +1553,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CommitSkeletonEdit(const TSharedPtr<F
 		Mesh->Modify();
 		if (Skeleton) Skeleton->Modify();
 
-		FSkeletonModifierCall Call;
+		FMCPReflectedCall Call;
 		FString BindError;
-		if (!Call.Bind(Modifier, TEXT("CommitSkeletonToSkeletalMesh"), BindError))
+		if (!Call.BindInstance(Modifier, TEXT("CommitSkeletonToSkeletalMesh"), BindError, TEXT("skeleton modifier"), TEXT("USkeletonModifier")))
 		{
 			return SkeletonModifierUnavailable(BindError);
 		}

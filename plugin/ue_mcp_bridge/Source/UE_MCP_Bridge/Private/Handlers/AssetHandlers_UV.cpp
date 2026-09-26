@@ -146,211 +146,6 @@ int64 MCPUvEnumValue(const TCHAR* EnumPath, const FString& EnumeratorName)
 	return Enum->GetValueByNameString(EnumeratorName);
 }
 
-/**
- * One reflected call into a class this module does not link against.
- *
- * The frame is heap-allocated and every parameter is default-constructed in it,
- * which is how the Geometry Script option structs get their engine defaults
- * without this file knowing their C++ layout: only the fields this handler has
- * an opinion about are overwritten, and by name.
- */
-struct FMCPUvScriptCall
-{
-	UObject* CDO = nullptr;
-	UFunction* Function = nullptr;
-	TArray<uint8> Frame;
-
-	FMCPUvScriptCall() = default;
-	FMCPUvScriptCall(const FMCPUvScriptCall&) = delete;
-	FMCPUvScriptCall& operator=(const FMCPUvScriptCall&) = delete;
-	~FMCPUvScriptCall() { Release(); }
-
-	bool Bind(const TCHAR* ClassPath, const TCHAR* FunctionName, FString& OutError)
-	{
-		Release();
-		UClass* Class = FindObject<UClass>(nullptr, ClassPath);
-		if (!Class)
-		{
-			OutError = FString::Printf(TEXT("class '%s' is not loaded."), ClassPath);
-			return false;
-		}
-		Function = Class->FindFunctionByName(FName(FunctionName));
-		if (!Function)
-		{
-			OutError = FString::Printf(
-				TEXT("'%s' has no reflected function named '%s' in this engine build."),
-				ClassPath, FunctionName);
-			return false;
-		}
-		CDO = Class->GetDefaultObject();
-		if (!CDO)
-		{
-			OutError = FString::Printf(TEXT("'%s' has no default object to call through."), ClassPath);
-			Function = nullptr;
-			return false;
-		}
-		Frame.SetNumZeroed(FMath::Max<int32>(Function->ParmsSize, 1));
-		for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
-		{
-			It->InitializeValue_InContainer(Frame.GetData());
-		}
-		return true;
-	}
-
-	void Release()
-	{
-		if (Function && Frame.Num() > 0)
-		{
-			MCPFunctionCall::DestroyFrame(Function, Frame.GetData());
-		}
-		Frame.Reset();
-		Function = nullptr;
-		CDO = nullptr;
-	}
-
-	void Invoke() { if (CDO && Function) CDO->ProcessEvent(Function, Frame.GetData()); }
-
-	FProperty* Param(const TCHAR* Name) const
-	{
-		return Function ? Function->FindPropertyByName(FName(Name)) : nullptr;
-	}
-
-	bool SetObject(const TCHAR* Name, UObject* Value)
-	{
-		FObjectPropertyBase* Prop = CastField<FObjectPropertyBase>(Param(Name));
-		if (!Prop) return false;
-		Prop->SetObjectPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetBool(const TCHAR* Name, bool Value)
-	{
-		FBoolProperty* Prop = CastField<FBoolProperty>(Param(Name));
-		if (!Prop) return false;
-		Prop->SetPropertyValue_InContainer(Frame.GetData(), Value);
-		return true;
-	}
-
-	bool SetNumber(const TCHAR* Name, double Value)
-	{
-		FNumericProperty* Prop = CastField<FNumericProperty>(Param(Name));
-		if (!Prop) return false;
-		void* Ptr = Prop->ContainerPtrToValuePtr<void>(Frame.GetData());
-		if (Prop->IsFloatingPoint()) Prop->SetFloatingPointPropertyValue(Ptr, Value);
-		else Prop->SetIntPropertyValue(Ptr, static_cast<int64>(Value));
-		return true;
-	}
-
-	bool SetVector2D(const TCHAR* Name, const FVector2D& Value)
-	{
-		FStructProperty* Prop = CastField<FStructProperty>(Param(Name));
-		if (!Prop || Prop->Struct != TBaseStructure<FVector2D>::Get()) return false;
-		*Prop->ContainerPtrToValuePtr<FVector2D>(Frame.GetData()) = Value;
-		return true;
-	}
-
-	bool SetTransform(const TCHAR* Name, const FTransform& Value)
-	{
-		FStructProperty* Prop = CastField<FStructProperty>(Param(Name));
-		if (!Prop || Prop->Struct != TBaseStructure<FTransform>::Get()) return false;
-		*Prop->ContainerPtrToValuePtr<FTransform>(Frame.GetData()) = Value;
-		return true;
-	}
-
-	/** Address of one field inside a struct parameter, so an option struct can
-	 *  be filled without this module knowing its layout. */
-	void* StructField(const TCHAR* ParamName, const TCHAR* FieldName, FProperty*& OutField) const
-	{
-		OutField = nullptr;
-		FStructProperty* Prop = CastField<FStructProperty>(Param(ParamName));
-		if (!Prop || !Prop->Struct) return nullptr;
-		OutField = Prop->Struct->FindPropertyByName(FName(FieldName));
-		if (!OutField) return nullptr;
-		void* StructPtr = Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData()));
-		return OutField->ContainerPtrToValuePtr<void>(StructPtr);
-	}
-
-	bool SetStructBool(const TCHAR* ParamName, const TCHAR* FieldName, bool Value)
-	{
-		FProperty* Field = nullptr;
-		void* Ptr = StructField(ParamName, FieldName, Field);
-		FBoolProperty* BoolProp = CastField<FBoolProperty>(Field);
-		if (!Ptr || !BoolProp) return false;
-		BoolProp->SetPropertyValue(Ptr, Value);
-		return true;
-	}
-
-	bool SetStructNumber(const TCHAR* ParamName, const TCHAR* FieldName, double Value)
-	{
-		FProperty* Field = nullptr;
-		void* Ptr = StructField(ParamName, FieldName, Field);
-		FNumericProperty* NumProp = CastField<FNumericProperty>(Field);
-		if (!Ptr || !NumProp) return false;
-		if (NumProp->IsFloatingPoint()) NumProp->SetFloatingPointPropertyValue(Ptr, Value);
-		else NumProp->SetIntPropertyValue(Ptr, static_cast<int64>(Value));
-		return true;
-	}
-
-	/** One level deeper: Options.PackingOptions.TargetImageWidth and friends.
-	 *  Geometry Script nests its option structs, and a dotted name passed to
-	 *  FindPropertyByName resolves to nothing at all rather than failing loudly. */
-	bool SetNestedStructNumber(
-		const TCHAR* ParamName, const TCHAR* OuterField, const TCHAR* InnerField, double Value)
-	{
-		FStructProperty* Prop = CastField<FStructProperty>(Param(ParamName));
-		if (!Prop || !Prop->Struct) return false;
-		FStructProperty* Outer = CastField<FStructProperty>(Prop->Struct->FindPropertyByName(FName(OuterField)));
-		if (!Outer || !Outer->Struct) return false;
-		FNumericProperty* Inner = CastField<FNumericProperty>(Outer->Struct->FindPropertyByName(FName(InnerField)));
-		if (!Inner) return false;
-		void* ParamPtr = Prop->ContainerPtrToValuePtr<void>(Frame.GetData());
-		void* OuterPtr = Outer->ContainerPtrToValuePtr<void>(ParamPtr);
-		void* InnerPtr = Inner->ContainerPtrToValuePtr<void>(OuterPtr);
-		if (Inner->IsFloatingPoint()) Inner->SetFloatingPointPropertyValue(InnerPtr, Value);
-		else Inner->SetIntPropertyValue(InnerPtr, static_cast<int64>(Value));
-		return true;
-	}
-
-	bool SetStructEnum(const TCHAR* ParamName, const TCHAR* FieldName, int64 Value)
-	{
-		if (Value == INDEX_NONE) return false;
-		FProperty* Field = nullptr;
-		void* Ptr = StructField(ParamName, FieldName, Field);
-		if (!Ptr) return false;
-		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Field))
-		{
-			EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(Ptr, Value);
-			return true;
-		}
-		if (FByteProperty* ByteProp = CastField<FByteProperty>(Field))
-		{
-			ByteProp->SetPropertyValue(Ptr, static_cast<uint8>(Value));
-			return true;
-		}
-		return false;
-	}
-
-	/** An enum output read as its enumerator NAME, so the Outcome pin does not
-	 *  depend on Failure staying ordinal 0 forever. */
-	FString GetEnumName(const TCHAR* Name) const
-	{
-		FProperty* Prop = Param(Name);
-		void* Ptr = Prop ? Prop->ContainerPtrToValuePtr<void>(const_cast<uint8*>(Frame.GetData())) : nullptr;
-		if (!Ptr) return FString();
-		if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
-		{
-			const int64 Raw = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(Ptr);
-			return EnumProp->GetEnum() ? EnumProp->GetEnum()->GetNameStringByValue(Raw) : FString();
-		}
-		if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
-		{
-			const int64 Raw = ByteProp->GetPropertyValue(Ptr);
-			return ByteProp->Enum ? ByteProp->Enum->GetNameStringByValue(Raw) : FString();
-		}
-		return FString();
-	}
-};
-
 /** Read and clear the messages a UGeometryScriptDebug collected, so the reason
  *  an unwrap failed reaches the caller instead of only the output log. */
 TArray<FString> MCPUvDrainDebug(UObject* Debug)
@@ -1986,7 +1781,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 	// of these reports it without having already half-rewritten the asset.
 	FString BindError;
 	{
-		FMCPUvScriptCall Probe;
+		FMCPReflectedCall Probe;
 		if (!Probe.Bind(MCPUvGSAssetFunctions, CopyInName, BindError))
 		{
 			return MCPUvGeometryScriptUnavailable(BindError);
@@ -2057,7 +1852,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 	const int64 LODTypeValue = MCPUvEnumValue(MCPUvGSLODTypeEnum, TEXT("SourceModel"));
 
 	{
-		FMCPUvScriptCall CopyIn;
+		FMCPReflectedCall CopyIn;
 		if (!CopyIn.Bind(MCPUvGSAssetFunctions, CopyInName, BindError))
 		{
 			return MCPUvGeometryScriptUnavailable(BindError);
@@ -2090,7 +1885,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 
 	// Make sure the destination channel exists on the dynamic mesh.
 	{
-		FMCPUvScriptCall SetCount;
+		FMCPReflectedCall SetCount;
 		if (SetCount.Bind(MCPUvGSUVFunctions, TEXT("SetNumUVSets"), BindError))
 		{
 			SetCount.SetObject(TEXT("TargetMesh"), Dynamic);
@@ -2116,7 +1911,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 	};
 
 	{
-		FMCPUvScriptCall Unwrap;
+		FMCPReflectedCall Unwrap;
 		if (Method == TEXT("xatlas"))
 		{
 			if (!Unwrap.Bind(MCPUvGSUVFunctions, TEXT("AutoGenerateXAtlasMeshUVs"), BindError))
@@ -2189,7 +1984,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 	bool bPacked = false;
 	if (bPack && Method != TEXT("patchbuilder"))
 	{
-		FMCPUvScriptCall Repack;
+		FMCPReflectedCall Repack;
 		if (Repack.Bind(MCPUvGSUVFunctions, TEXT("RepackMeshUVs"), BindError))
 		{
 			Repack.SetObject(TEXT("TargetMesh"), Dynamic);
@@ -2216,7 +2011,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 
 	// ── Write back ──────────────────────────────────────────────────────────
 	{
-		FMCPUvScriptCall CopyOut;
+		FMCPReflectedCall CopyOut;
 		if (!CopyOut.Bind(MCPUvGSAssetFunctions, CopyOutName, BindError))
 		{
 			return MCPUvGeometryScriptUnavailable(BindError);
