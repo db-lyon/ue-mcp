@@ -22,7 +22,7 @@
  * does not have, which is the fact, and leaves the diagnosis to the reader.
  */
 import type { BridgeCapabilities } from "./bridge.js";
-import type { ToolDef } from "./types.js";
+import type { ToolDef } from "./core/types.js";
 import { compareHandlerSpecs, type HandlerSpecs } from "./handler-spec.js";
 import { RECORDED_HANDLER_SPECS } from "./tools/specs/index.js";
 

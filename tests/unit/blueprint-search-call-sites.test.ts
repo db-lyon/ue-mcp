@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
 import { declaredActionEffect } from "../../src/action-effects.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 describe("blueprint.search_call_sites (#945)", () => {
   it("forwards every narrowing, bounding and dump parameter to the native handler", async () => {

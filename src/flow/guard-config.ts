@@ -1,8 +1,8 @@
-import { readEnv } from "../env.js";
+import { readEnv } from "../core/env.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { globalConfigPath } from "../ue-mcp-config.js";
-import type { ToolDef } from "../types.js";
+import type { ToolDef } from "../core/types.js";
 import type { GuardDeclarations } from "./guard-schema.js";
 import type { GuardSource } from "./guards.js";
 import { loadFlowConfig, type PluginContribution } from "./loader.js";

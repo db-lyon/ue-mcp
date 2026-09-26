@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { reflectionTool } from "../../src/tools/reflection.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 describe("reflection.inspect_save_game", () => {
   // The action is spec'd (#1057): its bag goes to the bridge as sent, and a key

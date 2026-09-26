@@ -20,7 +20,7 @@ import { z } from "zod";
 import { FlowConfigSchema, type FlowConfig } from "../../src/flow/schema.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 import { categoryTool } from "../../src/category-tool.js";
 import { ProjectContext } from "../../src/project.js";
 import type { IBridge } from "../../src/bridge.js";

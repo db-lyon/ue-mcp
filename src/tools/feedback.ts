@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { ToolDef, ToolContext } from "../types.js";
+import type { ToolDef, ToolContext } from "../core/types.js";
 import { categoryTool } from "../category-tool.js";
-import { directive } from "../directive.js";
+import { directive } from "../core/directive.js";
 import { submitFeedback, type SubmitResult } from "../github-app.js";
 import { readUserAuth } from "../auth.js";
 import { getWorkarounds, clearWorkarounds, type WorkaroundScopeSource } from "../workaround-tracker.js";
@@ -16,10 +16,10 @@ import {
 } from "../feedback-fallback.js";
 import { getFeedbackMode, type FeedbackMode } from "../user-state.js";
 import { clientAdvertisesElicitation } from "../dialog-mode.js";
-import { warn } from "../log.js";
+import { warn } from "../core/log.js";
 import { routeFeedback, type RoutingDecision } from "../feedback-routing.js";
 import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubRepo } from "../registry-catalog.js";
-import { readEnv } from "../env.js";
+import { readEnv } from "../core/env.js";
 
 /**
  * Resolve the active feedback mode. Precedence (highest wins):

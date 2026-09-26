@@ -1,4 +1,4 @@
-import { McpError, ErrorCode } from "../errors.js";
+import { McpError, ErrorCode } from "../core/errors.js";
 import { coerceAssetPathValue, normalizeUnrealAssetPath, splitAssetPath, PATH_FORMAT_HELP } from "../asset-path.js";
 
 /**

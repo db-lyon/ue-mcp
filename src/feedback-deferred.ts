@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomBytes } from "node:crypto";
-import { userDir } from "./user-dir.js";
-import { readEnv } from "./env.js";
+import { userDir } from "./core/user-dir.js";
+import { readEnv } from "./core/env.js";
 
 /**
  * Storage for `feedback.mode = "defer"` submissions. The server writes the

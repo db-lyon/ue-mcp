@@ -27,7 +27,7 @@ import { ALL_TOOLS } from "./tools.js";
 import { splitTaskName } from "./action-class.js";
 import { flowCategoryForCheck } from "./flow/flow-surface.js";
 import { EPIC_TOOL_EFFECTS } from "./tools/epic/effects.js";
-import type { ActionEffect, ActionEffectSource, ToolDef } from "./types.js";
+import type { ActionEffect, ActionEffectSource, ToolDef } from "./core/types.js";
 
 export interface ResolvedEffect {
   effect: ActionEffect;

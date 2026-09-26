@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
 import { declaredActionEffect } from "../../src/action-effects.js";
 import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 /**
  * #881: the playhead has to be movable to an exact frame, or a capture of the

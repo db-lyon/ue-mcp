@@ -23,7 +23,7 @@ import {
 } from "./user-state.js";
 import { BOLD, CYAN, DIM, RESET, fail, info, ok, warn } from "./ui/ansi.js";
 import { projectDirOf } from "./uproject-path.js";
-import { readEnv } from "./env.js";
+import { readEnv } from "./core/env.js";
 
 function printHelp(): void {
   console.log("");

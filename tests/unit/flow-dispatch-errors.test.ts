@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { dispatchFlowCall, errorResult, type DispatchDeps } from "../../src/server-dispatch.js";
 import { SessionRegistry } from "../../src/session.js";
 import { GuardRegistry } from "../../src/flow/guard.js";
-import { McpError, ErrorCode } from "../../src/errors.js";
-import type { ToolDef } from "../../src/types.js";
+import { McpError, ErrorCode } from "../../src/core/errors.js";
+import type { ToolDef } from "../../src/core/types.js";
 
 /** Deps for one project-less session, with a dialog guard that allows everything. */
 function depsWithOneSession(): { deps: DispatchDeps; sessions: SessionRegistry } {

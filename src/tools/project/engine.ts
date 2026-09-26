@@ -18,7 +18,7 @@ import {
   symbolContext,
 } from "../../engine-analysis.js";
 import { specBp as reflectionSpecBp } from "../specs/reflection.generated.js";
-import type { ToolContext, ActionSpec } from "../../types.js";
+import type { ToolContext, ActionSpec } from "../../core/types.js";
 
 /**
  * The engine tree the engine-source readers work against.

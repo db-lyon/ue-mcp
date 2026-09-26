@@ -21,7 +21,7 @@ import {
 } from "../../src/call-envelope.js";
 import { buildCatalogTool, describeCategory, DESCRIBE_PAGE_CHARS } from "../../src/lean-context.js";
 import { buildMicroGateway, resolveMicroCall } from "../../src/micro-context.js";
-import type { ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/core/types.js";
 import { bp, categoryTool } from "../../src/category-tool.js";
 import { injectEditorTarget } from "../../src/target-params.js";
 

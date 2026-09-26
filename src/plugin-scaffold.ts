@@ -4,8 +4,8 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { packageVersion } from "./package-root.js";
-import { readEnv } from "./env.js";
+import { packageVersion } from "./core/package-root.js";
+import { readEnv } from "./core/env.js";
 
 export function deriveDefaultPrefix(pkgName: string): string {
   const normalized = pkgName.replace(/[^a-z0-9]+/gi, "_").toLowerCase();

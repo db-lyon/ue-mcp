@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { warn as logWarn } from "./log.js";
+import { warn as logWarn } from "./core/log.js";
 
 export type McpClientConfigFormat = "json" | "toml";
 

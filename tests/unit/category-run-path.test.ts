@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import type { IBridge } from "../../src/bridge.js";
-import type { ToolContext, ToolDef } from "../../src/types.js";
+import type { ToolContext, ToolDef } from "../../src/core/types.js";
 import { bp, categoryTool } from "../../src/category-tool.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/plugin/injection.js";
 import { buildProvidedTool } from "../../src/plugin/provision.js";
-import { ErrorCode } from "../../src/errors.js";
+import { ErrorCode } from "../../src/core/errors.js";
 
 function bridgeAnswering(answer: unknown): IBridge & { calls: Array<{ method: string; params?: Record<string, unknown> }> } {
   const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];

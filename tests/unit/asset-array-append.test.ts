@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 describe("asset append_array_elements", () => {
   it("maps structured elements to the generic bridge handler", async () => {

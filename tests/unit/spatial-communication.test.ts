@@ -4,7 +4,7 @@ import { z } from "zod";
 import { levelTool } from "../../src/tools/level.js";
 import { actionSchema } from "../../src/action-schema.js";
 import { buildMicroGateway } from "../../src/micro-context.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 import { editorTool } from "../../src/tools/editor.js";
 import { projectTool } from "../../src/tools/project.js";
 

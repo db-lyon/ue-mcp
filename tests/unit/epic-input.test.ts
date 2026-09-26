@@ -10,7 +10,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { resolveEpicToolInput, type EpicInputSchema } from "../../src/epic-input.js";
 import { widgetTool } from "../../src/tools/widget.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 const GET_WIDGETS_NAME = "UMGToolSet.UMGToolSet.GetWidgets";
 const GET_WIDGETS: EpicInputSchema = {

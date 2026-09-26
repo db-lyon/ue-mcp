@@ -6,9 +6,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
 import type { EditorSession, SessionRegistry } from "./session.js";
-import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "./types.js";
-import { McpError, ErrorCode } from "./errors.js";
-import { debug } from "./log.js";
+import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "./core/types.js";
+import { McpError, ErrorCode } from "./core/errors.js";
+import { debug } from "./core/log.js";
 import { consumeUpgradeNotice } from "./version-check.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "./call-envelope.js";
 import {
@@ -18,7 +18,7 @@ import {
   editorAttribution,
   type RoutedCall,
 } from "./editor-gate.js";
-import { isDirectiveResponse } from "./directive.js";
+import { isDirectiveResponse } from "./core/directive.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "./routing-params.js";
 import { stripEditorTarget, sessionContext } from "./target-params.js";
 import {

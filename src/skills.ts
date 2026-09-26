@@ -18,7 +18,7 @@ import { nearestActions } from "./action-schema.js";
 import { readPluginsList } from "./plugin/plugins-list.js";
 import { findInstalledPackage } from "./plugin/resolver.js";
 import { pluginSlug } from "./plugin/plugin-groups.js";
-import { packageRoot } from "./package-root.js";
+import { packageRoot } from "./core/package-root.js";
 
 /** The owner name recorded for the skills that ship with ue-mcp itself. */
 export const CORE_OWNER = "ue-mcp";

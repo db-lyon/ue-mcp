@@ -1,10 +1,10 @@
 import { isDialogRefusal } from "./dialog-guard.js";
 import type { IBridge } from "./bridge.js";
-import { McpError, ErrorCode, type McpErrorDetails } from "./errors.js";
-import { debug } from "./log.js";
+import { McpError, ErrorCode, type McpErrorDetails } from "./core/errors.js";
+import { debug } from "./core/log.js";
 import { taskEffect } from "./action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
-import type { ToolDef } from "./types.js";
+import type { ToolDef } from "./core/types.js";
 
 // Per-asset exclusive locking, orchestrated from the dispatch layer. The lock
 // registry itself lives in the C++ bridge (the one editor every agent shares);

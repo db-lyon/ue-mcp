@@ -9,7 +9,7 @@
  * so once, in the result, and only to the client that actually has the
  * problem.
  */
-import { readEnv } from "./env.js";
+import { readEnv } from "./core/env.js";
 
 export interface ClientInfo {
   name: string;

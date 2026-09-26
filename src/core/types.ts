@@ -1,9 +1,9 @@
 import type { z } from "zod";
-import type { IBridge } from "./bridge.js";
-import type { ProjectContext } from "./project.js";
-import type { EditorSession, SessionRegistry } from "./session.js";
-import type { ParamChoice, ParamSpec } from "./handler-spec.js";
-import type { EpicInputSchema, EpicToolRef } from "./epic-input.js";
+import type { IBridge } from "../bridge.js";
+import type { ProjectContext } from "../project.js";
+import type { EditorSession, SessionRegistry } from "../session.js";
+import type { ParamChoice, ParamSpec } from "../handler-spec.js";
+import type { EpicInputSchema, EpicToolRef } from "../epic-input.js";
 
 /**
  * Elicit a deterministic, user-mediated form response via the MCP client.

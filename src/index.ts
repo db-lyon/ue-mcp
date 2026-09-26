@@ -14,9 +14,9 @@ import {
   injectMigrateTarget,
   removeMigrateTarget,
 } from "./target-params.js";
-import type { ToolDef } from "./types.js";
+import type { ToolDef } from "./core/types.js";
 import { DialogGuard, guardFor, sessionGuardDeps } from "./dialog-guard.js";
-import { info, warn, error } from "./log.js";
+import { info, warn, error } from "./core/log.js";
 import { startVersionCheck } from "./version-check.js";
 import { GuardRegistry } from "./flow/guard.js";
 import { loadFlowConfig } from "./flow/loader.js";
@@ -26,7 +26,7 @@ import { resolveLockingConfig } from "./locking.js";
 import { collapsingEnvWarnings } from "./session-env.js";
 import { checkPluginFreshness } from "./plugin-freshness.js";
 import { unionSurface } from "./session-surface.js";
-import { packageVersion } from "./package-root.js";
+import { packageVersion } from "./core/package-root.js";
 import { findCliCommand, runCliCommand } from "./cli-commands.js";
 import { SessionLoads } from "./session-load.js";
 import {

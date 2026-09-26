@@ -27,7 +27,7 @@ import { execFileSync } from "node:child_process";
 import { checkPluginFreshness, type PluginFreshness } from "./plugin-freshness.js";
 import { trySelectEngine } from "./engine-root.js";
 import { ProjectContext } from "./project.js";
-import { packageRoot } from "./package-root.js";
+import { packageRoot } from "./core/package-root.js";
 import { isUProjectPath } from "./uproject-path.js";
 
 /**

@@ -5,7 +5,7 @@
  * import the list without triggering the MCP server's top-level `main()`
  * side effect.
  */
-import type { ToolDef } from "./types.js";
+import type { ToolDef } from "./core/types.js";
 
 import { projectTool } from "./tools/project.js";
 import { assetTool } from "./tools/asset.js";

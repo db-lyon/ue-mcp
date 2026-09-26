@@ -1,8 +1,8 @@
 import { z } from "zod";
-import type { ToolDef, ToolContext } from "../types.js";
+import type { ToolDef, ToolContext } from "../core/types.js";
 import { categoryTool } from "../category-tool.js";
 import { toolGraphOf } from "../target-params.js";
-import { directive } from "../directive.js";
+import { directive } from "../core/directive.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor-control.js";
 import { buildProjectAction } from "./project/install.js";
 import { startProgress } from "../ui/progress.js";

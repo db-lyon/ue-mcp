@@ -48,7 +48,7 @@ import {
   warn,
 } from "./ui/ansi.js";
 import { isUProjectPath, projectDirOf } from "./uproject-path.js";
-import { readEnv } from "./env.js";
+import { readEnv } from "./core/env.js";
 
 function printHelp(): void {
   console.log("");

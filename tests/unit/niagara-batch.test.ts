@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IBridge } from "../../src/bridge.js";
-import type { ToolContext, ToolDef } from "../../src/types.js";
+import type { ToolContext, ToolDef } from "../../src/core/types.js";
 import { bp, categoryTool } from "../../src/category-tool.js";
 import { injectEditorTarget } from "../../src/target-params.js";
 import { niagaraTool } from "../../src/tools/niagara.js";

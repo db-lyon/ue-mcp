@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { parseHeader, collectFiles, findSourceRoots, resolveModuleDir } from "../../cpp-parser.js";
 import { listContent } from "../../content-index.js";
 import { specBp } from "../specs/project.generated.js";
-import type { ToolContext, ActionSpec } from "../../types.js";
+import type { ToolContext, ActionSpec } from "../../core/types.js";
 
 /**
  * Resolve a module name to its Source/<Module> directory, searching the project

@@ -22,7 +22,7 @@ import {
   type UserAuth,
 } from "./auth.js";
 import { registryBase } from "./registry-catalog.js";
-import { readEnv } from "./env.js";
+import { readEnv } from "./core/env.js";
 
 const registryFile = () => join(authDir(), "registry.json");
 

@@ -28,7 +28,7 @@ import { resetAllWorkarounds } from "../../src/workaround-tracker.js";
 import { PLUGIN_UPGRADE_POINTER } from "../../src/bridge.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import type { IBridge } from "../../src/bridge.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 const CANDIDATES: GateCandidate[] = [
   { tool: "editor", action: "invoke_function", description: "Call a UFUNCTION", score: 9 },

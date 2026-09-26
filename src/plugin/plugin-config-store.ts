@@ -12,7 +12,7 @@
  *   ue-mcp.{env}.yml      (env overlay)         <
  *   ue-mcp.local.yml      (local, untracked)
  */
-import { readEnv } from "../env.js";
+import { readEnv } from "../core/env.js";
 import {
   configLayerFiles,
   globalConfigPath,

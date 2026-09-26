@@ -3,14 +3,14 @@
  * builder and the routing parameters every category tool offers.
  */
 import { z } from "zod";
-import { McpError, ErrorCode } from "./errors.js";
+import { McpError, ErrorCode } from "./core/errors.js";
 import { MAX_BRIDGE_TIMEOUT_MS } from "./bridge-timeouts.js";
 import { unknownActionMessage } from "./action-schema.js";
 import { stripAction } from "./routing-params.js";
 import { stripEditorTarget } from "./target-params.js";
 import type { FlowContext } from "./flow/context.js";
 import { runAction, actionPreparation } from "./flow/run-action.js";
-import type { ActionEffect, ActionSpec, BridgeActionSpec, CategoryOptions, ToolDef } from "./types.js";
+import type { ActionEffect, ActionSpec, BridgeActionSpec, CategoryOptions, ToolDef } from "./core/types.js";
 
 /**
  * An independent copy of one tool. Prefers the rebuilder so the copy's

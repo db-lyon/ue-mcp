@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { ALL_TOOLS } from "../../src/tools.js";
-import type { ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/core/types.js";
 import { handlerSpecs } from "../../src/tools/specs/asset.generated.js";
 
 function tool(name: string): ToolDef {

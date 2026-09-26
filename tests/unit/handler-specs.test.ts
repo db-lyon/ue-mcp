@@ -36,7 +36,7 @@ import { ROUTING_PARAM_NAMES } from "../../src/routing-params.js";
 import { parseParams, actionSchema } from "../../src/action-schema.js";
 import { animationTool } from "../../src/tools/animation.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import type { ActionSpec, ToolDef } from "../../src/types.js";
+import type { ActionSpec, ToolDef } from "../../src/core/types.js";
 import { schema as specSchema, handlerSpecs } from "../../src/tools/specs/animation.generated.js";
 import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 import { deployedPlugin, checkBridgeParity } from "../../src/bridge-parity.js";

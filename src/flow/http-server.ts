@@ -1,14 +1,14 @@
 import * as http from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { createFlowTool } from "./flow-tool.js";
-import type { ToolContext } from "../types.js";
+import type { ToolContext } from "../core/types.js";
 import { sessionContext } from "../target-params.js";
 import { EDITOR_TARGET_PARAM } from "../routing-params.js";
 import { refuseUntargetedCall } from "../editor-gate.js";
-import { info, warn, error as logError } from "../log.js";
+import { info, warn, error as logError } from "../core/log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
 import { existingGuard } from "../dialog-guard.js";
-import { readEnv } from "../env.js";
+import { readEnv } from "../core/env.js";
 
 type FlowTool = ReturnType<typeof createFlowTool>;
 

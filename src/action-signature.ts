@@ -20,7 +20,7 @@ import type { ParamChoice, ParamSpec, ParamType, ValueForm } from "./handler-spe
 import { clauseItems } from "./handler-spec.js";
 import { actionSchema, ROUTING_PARAMS } from "./action-schema.js";
 import type { EpicInputSchema } from "./epic-input.js";
-import type { ActionSpec, ToolDef } from "./types.js";
+import type { ActionSpec, ToolDef } from "./core/types.js";
 
 /** The notation, written once in `instructions` rather than in every tool. */
 export const SIGNATURE_LEGEND =

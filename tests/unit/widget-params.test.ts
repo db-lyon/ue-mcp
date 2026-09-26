@@ -10,7 +10,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { widgetTool } from "../../src/tools/widget.js";
 import { normalizeUnrealAssetPath } from "../../src/asset-path.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 const ASSET = "/Game/_Project/UI/WBP_Example";
 

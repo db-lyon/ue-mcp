@@ -22,7 +22,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { debug } from "./log.js";
+import { debug } from "./core/log.js";
 import { normalizeProjectRoot } from "./port.js";
 import { bridgeStateDir } from "./editor-target.js";
 

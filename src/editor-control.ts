@@ -18,9 +18,9 @@ import {
 } from "./engine-observer.js";
 import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "./editor-target.js";
 import { oneLine } from "./dialog-guard.js";
-import type { ProgressDisplay, ProgressFn } from "./types.js";
+import type { ProgressDisplay, ProgressFn } from "./core/types.js";
 import { findUProject } from "./uproject-path.js";
-import { readEnv } from "./env.js";
+import { readEnv } from "./core/env.js";
 
 const NO_EDITOR_BINARY_MSG =
   "Unreal Editor executable not found. Set UE_EDITOR_PATH to the editor binary (on macOS that is inside UnrealEditor.app/Contents/MacOS/), or install the engine to a default location.";

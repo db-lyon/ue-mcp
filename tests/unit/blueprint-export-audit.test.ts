@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
 import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge-timeouts.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const HANDLERS = path.join(HERE, "..", "..", "plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Private", "Handlers");

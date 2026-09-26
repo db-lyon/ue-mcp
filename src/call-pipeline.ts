@@ -28,7 +28,7 @@
  * calls it, it does not reimplement any part of it. Nothing new belongs in a
  * dispatcher; it belongs in `prepareCall`, where every route gets it.
  */
-import { ENV_VARS, readEnv } from "./env.js";
+import { ENV_VARS, readEnv } from "./core/env.js";
 import { normalizePathParams, attachPathRepairs, type PathRepair } from "./path-params.js";
 import { MAX_BRIDGE_TIMEOUT_MS } from "./bridge-timeouts.js";
 import {
@@ -38,8 +38,8 @@ import {
   type FieldSelection,
 } from "./field-select.js";
 import { mapTracked } from "./param-forwarding.js";
-import { isDirectiveResponse } from "./directive.js";
-import { McpError, ErrorCode } from "./errors.js";
+import { isDirectiveResponse } from "./core/directive.js";
+import { McpError, ErrorCode } from "./core/errors.js";
 import { choiceViolation, type ParamChoice, type ParamSpec } from "./handler-spec.js";
 
 /**

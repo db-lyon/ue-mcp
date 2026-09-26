@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import yaml from "js-yaml";
-import { dumpYaml } from "../../src/yaml-dump.js";
+import { dumpYaml } from "../../src/core/yaml-dump.js";
 
 describe("dumpYaml", () => {
   it("unquotes integer-string keys at the top level", () => {

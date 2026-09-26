@@ -1,4 +1,4 @@
-import { readEnv } from "./env.js";
+import { readEnv } from "./core/env.js";
 import { resolveUserAuth, clearUserAuth, type PendingDeviceFlow } from "./auth.js";
 import {
   CORE_REPO,

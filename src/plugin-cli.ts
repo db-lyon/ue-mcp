@@ -57,7 +57,7 @@ import {
 } from "./skills.js";
 import { resolvePublishToken } from "./registry-auth.js";
 import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
-import { packageVersion } from "./package-root.js";
+import { packageVersion } from "./core/package-root.js";
 import { deriveDefaultPrefix, deriveUePluginName, writeScaffold } from "./plugin-scaffold.js";
 import { ProjectContext } from "./project.js";
 import { registryBase } from "./registry-catalog.js";

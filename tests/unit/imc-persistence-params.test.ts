@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { assetTool } from "../../src/tools/asset.js";
 import { gameplayTool } from "../../src/tools/gameplay.js";
-import type { ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/core/types.js";
 
 type RouteCase = {
   tool: ToolDef;

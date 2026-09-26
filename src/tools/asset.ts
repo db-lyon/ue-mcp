@@ -1,11 +1,11 @@
 import { z } from "zod";
-import type { ToolDef } from "../types.js";
+import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../category-tool.js";
 import { paged } from "../pagination.js";
 import { SESSION_ID } from "../lock-owner.js";
-import { McpError, ErrorCode } from "../errors.js";
+import { McpError, ErrorCode } from "../core/errors.js";
 import type { EditorSession } from "../session.js";
-import type { ToolContext } from "../types.js";
+import type { ToolContext } from "../core/types.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/asset.generated.js";
 import { specBp, schema as specSchema } from "./specs/asset.generated.js";
 import { specBp as gameplaySpecBp, schema as gameplaySpecSchema } from "./specs/gameplay.generated.js";

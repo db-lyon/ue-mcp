@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { applyNativeToolsConfig } from "../../src/epic-surface.js";
 import { applyLeanContext } from "../../src/lean-context.js";
-import type { ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/core/types.js";
 import { actionEnumValues, bp, categoryTool, cloneToolGraph } from "../../src/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { unionSurface, type SessionSurface } from "../../src/session-surface.js";

@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { ALL_TOOLS } from "../src/tools.js";
 import { buildDefaults } from "../src/flow/loader.js";
-import { dumpYaml } from "../src/yaml-dump.js";
+import { dumpYaml } from "../src/core/yaml-dump.js";
 
 const HEADER = [
   "# Auto-generated - do not edit by hand.",

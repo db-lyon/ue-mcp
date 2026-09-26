@@ -25,7 +25,7 @@
  * and tests/unit/bridge-timeout-parity.test.ts parses the plugin sources and
  * fails when the two drift apart. A mirror nobody checks is worse than none.
  */
-import { ENV_VARS, readEnv } from "./env.js";
+import { ENV_VARS, readEnv } from "./core/env.js";
 
 /** What a method with no registered timeout gets. Unchanged from before. */
 export const DEFAULT_BRIDGE_TIMEOUT_MS = 30_000;

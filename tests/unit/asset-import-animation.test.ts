@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
 import { handlerSpecs } from "../../src/tools/specs/asset.generated.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 describe("asset.import_animation", () => {
   it("forwards the FBX animation options the handler reads (#1134)", async () => {

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { PluginInfo, ToolDef } from "./types.js";
+import type { PluginInfo, ToolDef } from "./core/types.js";
 import {
   CORE_REPO,
   fetchRegistryCatalog,

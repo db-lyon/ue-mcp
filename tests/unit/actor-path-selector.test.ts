@@ -18,7 +18,7 @@ import { animationTool } from "../../src/tools/animation.js";
 import { niagaraTool } from "../../src/tools/niagara.js";
 import { pcgTool } from "../../src/tools/pcg.js";
 import { landscapeTool } from "../../src/tools/landscape.js";
-import type { ToolDef, ToolContext } from "../../src/types.js";
+import type { ToolDef, ToolContext } from "../../src/core/types.js";
 
 const ACTOR_PATH = "/Game/Maps/Main.Main:PersistentLevel.BP_SnappyRoad2_3";
 

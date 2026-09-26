@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { z } from "zod";
-import type { ToolDef, ToolContext } from "../../src/types.js";
+import type { ToolDef, ToolContext } from "../../src/core/types.js";
 import { actionEnumValues, categoryTool, bp } from "../../src/category-tool.js";
 import {
   resolveContextStrategy,

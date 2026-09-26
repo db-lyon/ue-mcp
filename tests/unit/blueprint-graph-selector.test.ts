@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 // #1100: graphSelector reaches every single-graph wiring write, and
 // get_connections takes a node filter. The bridge reads graphSelector ahead of

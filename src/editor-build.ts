@@ -11,7 +11,7 @@ import * as os from "node:os";
 import { readUeMcpConfig } from "./project.js";
 import { EngineResolutionError, engineLookupFor, selectEngine } from "./engine-root.js";
 import { invalidatePluginFreshness } from "./plugin-freshness.js";
-import { readEnv } from "./env.js";
+import { readEnv } from "./core/env.js";
 
 const IS_WINDOWS = process.platform === "win32";
 

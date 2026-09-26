@@ -3,9 +3,9 @@ import type { GuardDeclarations } from "../flow/guard-schema.js";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { TaskConstructor, TaskDefinition, FlowDefinition } from "@db-lyon/flowkit";
-import type { ToolDef } from "../types.js";
+import type { ToolDef } from "../core/types.js";
 import type { PluginEntry } from "../flow/schema.js";
-import { warn, info } from "../log.js";
+import { warn, info } from "../core/log.js";
 import {
   loadManifest,
   type PluginManifest,

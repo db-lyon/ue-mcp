@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { packageModulePath, packageRoot, packageVersion } from "../../src/package-root.js";
+import { packageModulePath, packageRoot, packageVersion } from "../../src/core/package-root.js";
 
 describe("packageRoot", () => {
   it("is the directory shipping package.json, the bridge plugin and the skills", () => {
@@ -11,7 +11,7 @@ describe("packageRoot", () => {
     expect(fs.statSync(path.join(root, "skills")).isDirectory()).toBe(true);
   });
 
-  it("resolves sibling entry points next to this module", () => {
+  it("resolves top-level entry points in src/, whatever folder this module is in", () => {
     expect(path.dirname(packageModulePath("deploy-cli.js"))).toBe(path.join(packageRoot(), "src"));
   });
 });

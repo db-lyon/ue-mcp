@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ENV_VARS, readEnv } from "../../src/env.js";
+import { ENV_VARS, readEnv } from "../../src/core/env.js";
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src");
 
@@ -20,10 +20,10 @@ afterEach(() => {
   else process.env.UE_MCP_LOG_LEVEL = savedLogLevel;
 });
 
-describe("env.ts", () => {
+describe("core/env.ts", () => {
   it("is the only place src reads a UE_MCP_* variable from process.env", () => {
     const direct = sources(srcDir)
-      .filter((f) => relative(srcDir, f) !== "env.ts")
+      .filter((f) => relative(srcDir, f).split(sep).join("/") !== "core/env.ts")
       .filter((f) => /process\.env(\.UE_MCP_|\[\s*["']UE_MCP_)/.test(readFileSync(f, "utf8")))
       .map((f) => relative(srcDir, f));
     expect(direct).toEqual([]);

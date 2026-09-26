@@ -4,7 +4,7 @@
  * reads the same table to tell a one-shot command line from a running server.
  */
 import { runCli, type CliRun } from "./cli-main.js";
-import { packageVersion } from "./package-root.js";
+import { packageVersion } from "./core/package-root.js";
 
 export interface CliCommand {
   name: string;

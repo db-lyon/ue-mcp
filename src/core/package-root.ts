@@ -3,20 +3,20 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Where this ue-mcp package lives on disk. This module sits directly under
- * src/ (tsx) or dist/ (built), so its parent directory is the package root in
- * both layouts.
+ * Where this ue-mcp package lives on disk. This module sits in src/core/ (tsx)
+ * or dist/core/ (built), so src/ or dist/ is its parent and the package root
+ * is one above that, in both layouts.
  */
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ENTRY_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** The directory holding package.json, plugin/ and skills/. */
 export function packageRoot(): string {
-  return path.resolve(MODULE_DIR, "..");
+  return path.resolve(ENTRY_DIR, "..");
 }
 
-/** A sibling entry point of the running build (e.g. "deploy-cli.js"), whatever the caller's depth. */
+/** A top-level entry point of the running build (e.g. "deploy-cli.js"), whatever the caller's depth. */
 export function packageModulePath(fileName: string): string {
-  return path.join(MODULE_DIR, fileName);
+  return path.join(ENTRY_DIR, fileName);
 }
 
 /** Reported when package.json cannot be read: valid semver, older than any release. */

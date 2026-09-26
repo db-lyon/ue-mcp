@@ -30,7 +30,7 @@
 import { bridgeMethodEffect } from "../action-effects.js";
 import type { HandlerSpecs, ParamSpec } from "../handler-spec.js";
 import { RECORDED_HANDLER_SPECS } from "../tools/specs/index.js";
-import type { ToolDef } from "../types.js";
+import type { ToolDef } from "../core/types.js";
 
 export interface WriteClassification {
   /**

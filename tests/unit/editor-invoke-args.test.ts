@@ -7,7 +7,7 @@ import { editorTool } from "../../src/tools/editor.js";
 import { applyLeanContext } from "../../src/lean-context.js";
 import { handlerSpecs } from "../../src/tools/specs/editor.generated.js";
 import { paramZod, zodSignature } from "../../src/handler-spec.js";
-import type { ToolContext, ToolDef } from "../../src/types.js";
+import type { ToolContext, ToolDef } from "../../src/core/types.js";
 
 /**
  * #811: `args` was advertised as a union whose object branch carried an empty

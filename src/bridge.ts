@@ -2,14 +2,14 @@ import WebSocket from "ws";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { McpError, ErrorCode } from "./errors.js";
+import { McpError, ErrorCode } from "./core/errors.js";
 import { resolveBridgeTimeout, TIMEOUT_ENV_VAR } from "./bridge-timeouts.js";
-import { debug, warn } from "./log.js";
+import { debug, warn } from "./core/log.js";
 import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
 import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
 import { syncRequestedPort } from "./requested-port.js";
-import { packageVersion } from "./package-root.js";
-import { readEnv } from "./env.js";
+import { packageVersion } from "./core/package-root.js";
+import { readEnv } from "./core/env.js";
 
 /**
  * The wire protocol this client speaks. Must match

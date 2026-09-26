@@ -16,7 +16,7 @@ import {
   conflictMessages,
   syncPluginSkills,
 } from "./skills.js";
-import { warn as logWarn } from "./log.js";
+import { warn as logWarn } from "./core/log.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
 import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
@@ -26,7 +26,7 @@ import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs, writeMcpConfi
 import { deriveProjectPort } from "./port.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "./uproject-path.js";
-import { readEnv } from "./env.js";
+import { readEnv } from "./core/env.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */

@@ -1,12 +1,12 @@
 import { TaskRegistry, ShellTask } from "@db-lyon/flowkit";
 import type { TaskConstructor, TaskContextInput } from "@db-lyon/flowkit";
-import type { ToolDef } from "../types.js";
+import type { ToolDef } from "../core/types.js";
 import type { FlowContext } from "./context.js";
 import { BridgeTask } from "./bridge-task.js";
 import { bridgeTaskClass, handlerTaskClass } from "./task-factory.js";
 import { actionPreparation } from "./run-action.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../micro-context.js";
-import { McpError, ErrorCode } from "../errors.js";
+import { McpError, ErrorCode } from "../core/errors.js";
 import { paramMapperOf } from "../epic-input.js";
 
 /** A gateway call is an alias for the target task, not a handler that executes

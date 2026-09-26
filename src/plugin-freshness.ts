@@ -13,7 +13,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { packageRoot } from "./package-root.js";
+import { packageRoot } from "./core/package-root.js";
 
 
 export interface PluginFreshness {

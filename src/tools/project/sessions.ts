@@ -10,7 +10,7 @@ import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../../bridge.
 import { readLogState, readEngineSnapshot } from "../../engine-observer.js";
 import { switchProject, isTargetDiverged } from "../../project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../project.js";
-import type { ToolContext, ActionSpec } from "../../types.js";
+import type { ToolContext, ActionSpec } from "../../core/types.js";
 import { toolGraphOf } from "../../target-params.js";
 import { startProgress } from "../../ui/progress.js";
 

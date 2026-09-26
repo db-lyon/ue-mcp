@@ -172,7 +172,7 @@ describe("EditorBridge connection handling", () => {
     const server = await withBridgeServer(() => {});
 
     const { EditorBridge } = await import("../../src/bridge.js");
-    const { McpError, ErrorCode } = await import("../../src/errors.js");
+    const { McpError, ErrorCode } = await import("../../src/core/errors.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -310,7 +310,7 @@ describe("bridge capability handshake", () => {
     const serverB = await withBridgeServer(() => {}, { ...DEFAULT_CAPABILITIES, projectName: "B" });
     const { EditorBridge } = await import("../../src/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", serverA.port);
-    const warnings = vi.spyOn(await import("../../src/log.js"), "warn").mockImplementation(() => {});
+    const warnings = vi.spyOn(await import("../../src/core/log.js"), "warn").mockImplementation(() => {});
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const connectingA = bridge.connect(5000);
     let socketA: import("ws").WebSocket | undefined;
@@ -363,7 +363,7 @@ describe("bridge capability handshake", () => {
     const server = await withBridgeServer(() => {}, held.handle);
     const { EditorBridge } = await import("../../src/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
-    const warnings = vi.spyOn(await import("../../src/log.js"), "warn").mockImplementation(() => {});
+    const warnings = vi.spyOn(await import("../../src/core/log.js"), "warn").mockImplementation(() => {});
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const connecting = bridge.connect(1000);
 

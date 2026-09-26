@@ -24,8 +24,8 @@ import { z } from "zod";
 import { getParseErrorMessage, normalizeObjectSchema, safeParse as sdkSafeParse } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { McpError as SdkMcpError, ErrorCode as SdkErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { EDITOR_TARGET_PARAM, MIGRATE_TARGET_PARAM, ROUTING_PARAM_NAMES } from "./routing-params.js";
-import type { ToolDef } from "./types.js";
-import { McpError, ErrorCode } from "./errors.js";
+import type { ToolDef } from "./core/types.js";
+import { McpError, ErrorCode } from "./core/errors.js";
 
 /** The key a category call nests its action's parameters under. */
 export const ARGS_KEY = "args";

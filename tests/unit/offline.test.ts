@@ -20,7 +20,7 @@ import { describe, it, expect } from "vitest";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { projectTool } from "../../src/tools/project.js";
 import { ProjectContext } from "../../src/project.js";
-import { McpError, ErrorCode } from "../../src/errors.js";
+import { McpError, ErrorCode } from "../../src/core/errors.js";
 import {
   LOCAL_ACTIONS,
   EDITOR_BOUND_LOCAL_ACTIONS,
@@ -31,7 +31,7 @@ import {
   explainEditorDown,
   offlineActionNames,
 } from "../../src/offline.js";
-import type { ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/core/types.js";
 
 /** Every `tool.action` in this package whose work starts in a local handler. */
 function handlerBackedActions(): string[] {

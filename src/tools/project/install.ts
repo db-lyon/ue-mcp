@@ -1,7 +1,7 @@
 import { buildProject } from "../../editor-build.js";
 import { inspectInstall } from "../../install-check.js";
 import { specBp } from "../specs/project.generated.js";
-import type { ToolContext, ActionSpec, HandlerActionSpec } from "../../types.js";
+import type { ToolContext, ActionSpec, HandlerActionSpec } from "../../core/types.js";
 
 /**
  * The out-of-process UnrealBuildTool build, registered as project(build) and

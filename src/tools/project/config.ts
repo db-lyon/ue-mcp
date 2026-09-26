@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { resolveConfigPath, findIniFiles, parseIni, buildTagTree } from "../../config-parser.js";
 import { specBp } from "../specs/project.generated.js";
 import { specBp as blueprintSpecBp } from "../specs/blueprint.generated.js";
-import type { ActionSpec } from "../../types.js";
+import type { ActionSpec } from "../../core/types.js";
 
 /** The project's INI config: read, search, list tags, write. */
 export const configActions: Record<string, ActionSpec> = {

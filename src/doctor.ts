@@ -14,7 +14,7 @@ import { execSync } from "node:child_process";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { isNewer } from "./version-check.js";
 import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
-import { packageVersion } from "./package-root.js";
+import { packageVersion } from "./core/package-root.js";
 import { findUProject, isUProjectPath, projectDirOf } from "./uproject-path.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
 import { cliCommandNames } from "./cli-commands.js";

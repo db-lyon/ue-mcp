@@ -13,10 +13,10 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { warn, debug } from "./log.js";
-import { userDir } from "./user-dir.js";
+import { warn, debug } from "./core/log.js";
+import { userDir } from "./core/user-dir.js";
 import { compareVersions, parseVersion } from "./plugin/version.js";
-import { readEnv } from "./env.js";
+import { readEnv } from "./core/env.js";
 
 /**
  * Where the answer is cached.

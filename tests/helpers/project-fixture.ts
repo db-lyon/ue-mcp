@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { EditorSession, SessionRegistry } from "../../src/session.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 export interface MakeProjectOptions {
   /** Create the project's Content directory too. */

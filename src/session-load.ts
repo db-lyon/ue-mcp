@@ -6,9 +6,9 @@
 import * as path from "node:path";
 import type { EditorSession, SessionRegistry } from "./session.js";
 import type { ProjectContext } from "./project.js";
-import type { PluginInfo, ToolContext, ToolDef } from "./types.js";
-import { McpError, ErrorCode } from "./errors.js";
-import { info, warn } from "./log.js";
+import type { PluginInfo, ToolContext, ToolDef } from "./core/types.js";
+import { McpError, ErrorCode } from "./core/errors.js";
+import { info, warn } from "./core/log.js";
 import { ALL_TOOLS } from "./tools.js";
 import { applyNativeToolsConfig } from "./epic-surface.js";
 import { baseGraphFor, unionSurface, type SessionSurface, type UnionSurface } from "./session-surface.js";

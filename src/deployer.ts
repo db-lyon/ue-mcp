@@ -1,9 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ProjectContext } from "./project.js";
-import { warn } from "./log.js";
+import { warn } from "./core/log.js";
 import { UPluginSchema } from "./schemas.js";
-import { packageRoot } from "./package-root.js";
+import { packageRoot } from "./core/package-root.js";
 
 export interface DeployResult {
   pythonPluginEnabled: boolean;

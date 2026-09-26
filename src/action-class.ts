@@ -13,7 +13,7 @@
  *   unknown the name settles nothing. Gated exactly like `mutate`.
  */
 import { MUTATE_PREFIXES, READ_PREFIXES } from "./action-verbs.js";
-import type { ActionEffect } from "./types.js";
+import type { ActionEffect } from "./core/types.js";
 
 /**
  * The same three values as `ActionEffect`, kept as a separate name because
