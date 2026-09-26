@@ -433,6 +433,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 		Empty->SetNumberField(TEXT("matched"), 0);
 		Empty->SetNumberField(TEXT("affected"), 0);
 		Empty->SetStringField(TEXT("note"), TEXT("No actor descriptor matched. Use list_actor_descs to see what the map contains."));
+		Empty->SetBoolField(TEXT("changed"), false);
+		Empty->SetBoolField(TEXT("unchanged"), true);
+		MCPSetNoRollback(Empty, TEXT("No actor matched, so no pin state changed and there is nothing to undo."));
 		return MCPResult(Empty);
 	}
 
@@ -461,10 +464,27 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 		Affected.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 
+	// Pin state before the call, so the inverse touches only the actors this
+	// call flipped and never releases a pin someone else placed.
+	TSet<FGuid> PinnedBefore;
+	for (const FGuid& Guid : Guids)
+	{
+		if (WorldPartition->IsActorPinned(Guid)) PinnedBefore.Add(Guid);
+	}
+
 	if (!bDryRun)
 	{
 		if (Mode == TEXT("pin")) WorldPartition->PinActors(Guids);
 		else                     WorldPartition->UnpinActors(Guids);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> FlippedGuids;
+	for (const FGuid& Guid : Guids)
+	{
+		if (WorldPartition->IsActorPinned(Guid) != PinnedBefore.Contains(Guid))
+		{
+			FlippedGuids.Add(MakeShared<FJsonValueString>(Guid.ToString()));
+		}
 	}
 
 	// Read the world back so the caller sees what actually became resident
@@ -496,6 +516,26 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 	Result->SetNumberField(TEXT("affected"), bDryRun ? 0 : Changed);
 	Result->SetNumberField(TEXT("residentAfter"), ResidentAfter);
 	Result->SetArrayField(TEXT("actors"), Affected);
+	Result->SetNumberField(TEXT("pinStateChanged"), FlippedGuids.Num());
+
+	const bool bChanged = FlippedGuids.Num() > 0;
+	if (bChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("changed"), bChanged);
+	Result->SetBoolField(TEXT("unchanged"), !bChanged);
+	if (bChanged)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("mode"), Mode == TEXT("pin") ? TEXT("unpin") : TEXT("pin"));
+		Payload->SetArrayField(TEXT("guids"), FlippedGuids);
+		Payload->SetNumberField(TEXT("maxActors"), FMath::Max(MaxAffected, FlippedGuids.Num()));
+		MCPSetRollback(Result, TEXT("load_actor_descs"), Payload);
+	}
+	else
+	{
+		MCPSetNoRollback(Result, bDryRun
+			? TEXT("Dry run: no pin state was changed, so there is nothing to undo.")
+			: TEXT("Every matched actor already had the requested pin state, so nothing changed and there is nothing to undo."));
+	}
 	return MCPResult(Result);
 #elif WITH_EDITOR
 	return MCPError(TEXT("load_actor_descs needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 load the cell from the World Partition editor window instead."));
