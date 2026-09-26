@@ -26,13 +26,11 @@ namespace
 		{
 			return false;
 		}
-		double X = 0.0, Y = 0.0, Z = 0.0;
-		if (!ReadFiniteNumber(*VectorObject, TEXT("x"), X) || !ReadFiniteNumber(*VectorObject, TEXT("y"), Y) || !ReadFiniteNumber(*VectorObject, TEXT("z"), Z))
-		{
-			return false;
-		}
-		OutValue = FVector(X, Y, Z);
-		return !OutValue.ContainsNaN();
+		// Every axis present and finite; ContainsNaN also rejects infinities.
+		FVector Value;
+		if (!ReadVec3FieldsStrict(*VectorObject, Value) || Value.ContainsNaN()) return false;
+		OutValue = Value;
+		return true;
 	}
 
 	static bool ParseSplinePointType(const FString& TypeName, ESplinePointType::Type& OutType)

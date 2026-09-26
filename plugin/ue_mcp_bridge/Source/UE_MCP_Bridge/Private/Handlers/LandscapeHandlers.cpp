@@ -1923,22 +1923,10 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 			return MCPError(TEXT("'bounds' must be {min:{x,y,z}, max:{x,y,z}}"));
 		}
 
-		auto ReadVector = [](const TSharedPtr<FJsonObject>& Object, FVector& Out) -> bool
-		{
-			double X = 0.0, Y = 0.0, Z = 0.0;
-			if (!Object->TryGetNumberField(TEXT("x"), X) ||
-				!Object->TryGetNumberField(TEXT("y"), Y) ||
-				!Object->TryGetNumberField(TEXT("z"), Z) ||
-				!FMath::IsFinite(X) || !FMath::IsFinite(Y) || !FMath::IsFinite(Z))
-			{
-				return false;
-			}
-			Out = FVector(X, Y, Z);
-			return true;
-		};
-
+		// Every axis present and finite; ContainsNaN also rejects infinities.
 		FVector Min, Max;
-		if (!ReadVector(*MinObject, Min) || !ReadVector(*MaxObject, Max))
+		if (!ReadVec3FieldsStrict(*MinObject, Min) || !ReadVec3FieldsStrict(*MaxObject, Max) ||
+			Min.ContainsNaN() || Max.ContainsNaN())
 		{
 			return MCPError(TEXT("Every bounds min/max coordinate must be a finite number"));
 		}
