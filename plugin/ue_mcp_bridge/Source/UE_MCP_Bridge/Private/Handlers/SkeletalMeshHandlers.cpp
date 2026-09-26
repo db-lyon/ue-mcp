@@ -884,13 +884,13 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::SetSkinWeights(const TSharedPtr<FJ
 		Target.Mesh->Build();
 		Target.Mesh->PostEditChange();
 		Target.Mesh->MarkPackageDirty();
-		if (!SaveAssetPackage(Target.Mesh))
+		FString SaveError;
+		if (!SaveAssetPackageChecked(Target.Mesh, SaveError))
 		{
-			auto Result = MakeShared<FJsonObject>();
-			Result->SetBoolField(TEXT("success"), false);
-			Result->SetStringField(TEXT("error"), FString::Printf(
+			auto Result = MCPErrorObject(FString::Printf(
 				TEXT("Failed to save SkeletalMesh: %s. The selected source weights changed in memory and remain dirty; use the rollback payload to restore them or save the package after fixing the write failure."),
 				*Target.Mesh->GetPathName()));
+			Result->SetStringField(TEXT("saveError"), SaveError);
 			Result->SetStringField(TEXT("assetPath"), Target.Mesh->GetPathName());
 			Result->SetNumberField(TEXT("lodIndex"), Target.LodIndex);
 			Result->SetStringField(TEXT("profileName"), Target.DisplayProfileName);
@@ -1034,9 +1034,10 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::SetOptimizeForInstancing(const TSh
 			USkeletalMeshEditorSubsystem::GetLodBuildSettings(Mesh, Target.Index, After);
 			Lods.Add(MakeShared<FJsonValueObject>(MakeLodResult(Target.Index, Target.Before, After)));
 		}
-		if (!SaveAssetPackage(Mesh))
+		FString SaveError;
+		if (!SaveAssetPackageChecked(Mesh, SaveError))
 		{
-			return MCPError(FString::Printf(TEXT("Failed to save SkeletalMesh: %s"), *Mesh->GetPathName()));
+			return MCPError(FString::Printf(TEXT("Failed to save SkeletalMesh: %s. %s"), *Mesh->GetPathName(), *SaveError));
 		}
 	}
 	else
