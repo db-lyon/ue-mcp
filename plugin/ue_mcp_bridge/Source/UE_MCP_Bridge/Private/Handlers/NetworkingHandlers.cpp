@@ -186,7 +186,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicates(const TSharedPtr<FJson
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 	const bool NewValue = OptionalBool(Params, TEXT("replicates"), false);
 
-	return NetApplyCdoSetting<bool>(BlueprintPath, TEXT("set_replicates"), TEXT("replicates"), TEXT("previousReplicates"), NewValue,
+	return NetApplyCdoSetting(BlueprintPath, TEXT("set_replicates"), TEXT("replicates"), TEXT("previousReplicates"), NewValue,
 		[](AActor* CDO) -> bool { return CDO->GetIsReplicated(); },
 		[](AActor* CDO, bool Value) { CDO->SetReplicates(Value); },
 		NetUnchangedNote);
@@ -372,7 +372,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetAlwaysRelevant(const TSharedPtr<F
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 	const bool NewValue = OptionalBool(Params, TEXT("alwaysRelevant"), false);
 
-	return NetApplyCdoSetting<bool>(BlueprintPath, TEXT("set_always_relevant"), TEXT("alwaysRelevant"), TEXT("previousAlwaysRelevant"), NewValue,
+	return NetApplyCdoSetting(BlueprintPath, TEXT("set_always_relevant"), TEXT("alwaysRelevant"), TEXT("previousAlwaysRelevant"), NewValue,
 		[](AActor* CDO) -> bool { return CDO->bAlwaysRelevant; },
 		[](AActor* CDO, bool Value) { CDO->bAlwaysRelevant = Value; },
 		NetUnchangedNote);
@@ -384,7 +384,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetPriority(const TSharedPtr<FJso
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 	const double NewValue = OptionalNumber(Params, TEXT("netPriority"), 1.0);
 
-	return NetApplyCdoSetting<double>(BlueprintPath, TEXT("set_net_priority"), TEXT("netPriority"), TEXT("previousNetPriority"), NewValue,
+	return NetApplyCdoSetting(BlueprintPath, TEXT("set_net_priority"), TEXT("netPriority"), TEXT("previousNetPriority"), NewValue,
 		[](AActor* CDO) -> double { return CDO->NetPriority; },
 		[](AActor* CDO, double Value) { CDO->NetPriority = static_cast<float>(Value); },
 		TEXT("The class already had this net priority, so nothing changed and there is nothing to undo."));
@@ -396,7 +396,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicateMovement(const TSharedPt
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 	const bool NewValue = OptionalBool(Params, TEXT("replicateMovement"), false);
 
-	return NetApplyCdoSetting<bool>(BlueprintPath, TEXT("set_replicate_movement"), TEXT("replicateMovement"), TEXT("previousReplicateMovement"), NewValue,
+	return NetApplyCdoSetting(BlueprintPath, TEXT("set_replicate_movement"), TEXT("replicateMovement"), TEXT("previousReplicateMovement"), NewValue,
 		[](AActor* CDO) -> bool { return CDO->IsReplicatingMovement(); },
 		[](AActor* CDO, bool Value) { CDO->SetReplicatingMovement(Value); },
 		NetUnchangedNote);
@@ -523,7 +523,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetOwnerOnlyRelevant(const TSharedPt
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 	const bool NewValue = OptionalBool(Params, TEXT("onlyRelevantToOwner"), false);
 
-	return NetApplyCdoSetting<bool>(BlueprintPath, TEXT("set_only_relevant_to_owner"), TEXT("onlyRelevantToOwner"), TEXT("previousOnlyRelevantToOwner"), NewValue,
+	return NetApplyCdoSetting(BlueprintPath, TEXT("set_only_relevant_to_owner"), TEXT("onlyRelevantToOwner"), TEXT("previousOnlyRelevantToOwner"), NewValue,
 		[](AActor* CDO) -> bool { return CDO->bOnlyRelevantToOwner; },
 		[](AActor* CDO, bool Value) { CDO->bOnlyRelevantToOwner = Value; },
 		NetUnchangedNote);
