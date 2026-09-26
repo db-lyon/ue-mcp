@@ -9,20 +9,6 @@
 
 namespace
 {
-	USceneComponent* FindExactSceneComponent(AActor* Actor, const FString& ComponentName)
-	{
-		if (!Actor || ComponentName.IsEmpty()) return nullptr;
-		for (UActorComponent* Component : Actor->GetComponents())
-		{
-			if (USceneComponent* Scene = Cast<USceneComponent>(Component);
-				Scene && Scene->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
-			{
-				return Scene;
-			}
-		}
-		return nullptr;
-	}
-
 	TSharedPtr<FJsonObject> QuatToJson(const FQuat& Quat)
 	{
 		auto Json = MakeShared<FJsonObject>();
@@ -231,7 +217,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr, ActorSel);
 	if (!Actor) return ActorErr;
 	ActorLabel = Actor->GetActorLabel();
-	USceneComponent* Component = FindExactSceneComponent(Actor, ComponentName);
+	USceneComponent* Component = MCPFindComponentByName<USceneComponent>(Actor, ComponentName);
 	if (!Component)
 	{
 		return MCPError(FString::Printf(
@@ -533,7 +519,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RestoreComponentRelativeTransform(const T
 	TSharedPtr<FJsonValue> ActorErr;
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr, ActorSel);
 	if (!Actor) return ActorErr;
-	USceneComponent* Component = FindExactSceneComponent(Actor, ComponentName);
+	USceneComponent* Component = MCPFindComponentByName<USceneComponent>(Actor, ComponentName);
 	if (!Component)
 	{
 		return MCPError(FString::Printf(

@@ -54,15 +54,16 @@ namespace
 		}
 
 		TArray<UInstancedStaticMeshComponent*> Matches;
-		for (UActorComponent* Component : Actor->GetComponents())
+		if (!ComponentName.IsEmpty())
 		{
-			if (UInstancedStaticMeshComponent* ISMC = Cast<UInstancedStaticMeshComponent>(Component))
+			if (UInstancedStaticMeshComponent* Named = MCPFindComponentByName<UInstancedStaticMeshComponent>(Actor, ComponentName))
 			{
-				if (ComponentName.IsEmpty() || ISMC->GetName() == ComponentName)
-				{
-					Matches.Add(ISMC);
-				}
+				Matches.Add(Named);
 			}
+		}
+		else
+		{
+			Actor->GetComponents(Matches);
 		}
 
 		if (Matches.Num() == 1) return Matches[0];

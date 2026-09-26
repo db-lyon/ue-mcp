@@ -989,10 +989,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::AddImpulse(const TSharedPtr<FJsonObject
 	UPrimitiveComponent* Prim = nullptr;
 	if (!ComponentName.IsEmpty())
 	{
-		for (UActorComponent* C : Actor->GetComponents())
-		{
-			if (C->GetName() == ComponentName) { Prim = Cast<UPrimitiveComponent>(C); break; }
-		}
+		Prim = MCPFindComponentByName<UPrimitiveComponent>(Actor, ComponentName);
 	}
 	else
 	{

@@ -184,19 +184,6 @@ namespace
 		return bOverlapping;
 	}
 
-	UActorComponent* MCPRefreshFindComponent(AActor* Actor, const FString& ComponentName)
-	{
-		if (!Actor) return nullptr;
-		for (UActorComponent* Component : Actor->GetComponents())
-		{
-			if (Component && Component->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
-			{
-				return Component;
-			}
-		}
-		return nullptr;
-	}
-
 	TSharedPtr<FJsonObject> MCPRefreshDescribeBounds(const FBoxSphereBounds& Bounds)
 	{
 		TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
@@ -660,7 +647,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::TestComponentOverlap(const TSharedPtr<FJs
 			}
 			return true;
 		}
-		UActorComponent* Component = MCPRefreshFindComponent(Actor, ComponentName);
+		UActorComponent* Component = MCPFindComponentByName(Actor, ComponentName);
 		OutComponent = Cast<USceneComponent>(Component);
 		if (!OutComponent)
 		{

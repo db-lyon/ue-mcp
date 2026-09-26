@@ -2729,23 +2729,6 @@ static UActorComponent* FindComponentOnActor(AActor* Actor, const FString& Name)
 	return nullptr;
 }
 
-// Mutation handlers must not use FindComponentOnActor's class/prefix/substring
-// fallbacks: a fuzzy selector can silently mutate the wrong sibling component.
-// Resolve a named component by its instance name only, case-insensitively.
-static UActorComponent* FindNamedComponentOnActor(AActor* Actor, const FString& Name)
-{
-	if (!Actor || Name.IsEmpty()) return nullptr;
-
-	for (UActorComponent* Component : Actor->GetComponents())
-	{
-		if (Component && Component->GetName().Equals(Name, ESearchCase::IgnoreCase))
-		{
-			return Component;
-		}
-	}
-	return nullptr;
-}
-
 TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, {
@@ -5065,7 +5048,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentSkeletalMesh(const TSharedPtr
 	}
 	else
 	{
-		Comp = Cast<USkinnedMeshComponent>(FindNamedComponentOnActor(Actor, ComponentName));
+		Comp = Cast<USkinnedMeshComponent>(MCPFindComponentByName(Actor, ComponentName));
 	}
 	if (!Comp)
 	{
@@ -5732,7 +5715,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AttachComponent(const TSharedPtr<FJsonObj
 
 	UActorComponent* ResolvedChildComponent = ChildComponentSelector.IsEmpty()
 		? static_cast<UActorComponent*>(Child->GetRootComponent())
-		: FindNamedComponentOnActor(Child, ChildComponentSelector);
+		: MCPFindComponentByName(Child, ChildComponentSelector);
 	if (!ResolvedChildComponent)
 	{
 		return ChildComponentSelector.IsEmpty()
@@ -5747,7 +5730,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AttachComponent(const TSharedPtr<FJsonObj
 
 	UActorComponent* ResolvedParentComponent = ParentComponentSelector.IsEmpty()
 		? static_cast<UActorComponent*>(Parent->GetRootComponent())
-		: FindNamedComponentOnActor(Parent, ParentComponentSelector);
+		: MCPFindComponentByName(Parent, ParentComponentSelector);
 	if (!ResolvedParentComponent)
 	{
 		return ParentComponentSelector.IsEmpty()
@@ -5966,7 +5949,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DetachComponent(const TSharedPtr<FJsonObj
 	const FString ChildComponentSelector = OptionalString(Params, TEXT("childComponentName"));
 	UActorComponent* ResolvedChildComponent = ChildComponentSelector.IsEmpty()
 		? static_cast<UActorComponent*>(Child->GetRootComponent())
-		: FindNamedComponentOnActor(Child, ChildComponentSelector);
+		: MCPFindComponentByName(Child, ChildComponentSelector);
 	if (!ResolvedChildComponent)
 	{
 		return ChildComponentSelector.IsEmpty()

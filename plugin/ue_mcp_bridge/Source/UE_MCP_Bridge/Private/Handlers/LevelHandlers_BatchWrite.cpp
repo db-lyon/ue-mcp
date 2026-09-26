@@ -238,21 +238,6 @@ namespace
 		Object->TryGetStringField(TEXT("error"), OutError);
 		Object->TryGetStringField(TEXT("previousValue"), OutPrevious);
 	}
-
-	/** Resolve one named component on an actor, matching the case-insensitive
-	 *  rule set_component_property already uses for SCS components. */
-	UActorComponent* MCPBatchFindComponent(AActor* Actor, const FString& ComponentName)
-	{
-		if (!Actor) return nullptr;
-		for (UActorComponent* Component : Actor->GetComponents())
-		{
-			if (Component && Component->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
-			{
-				return Component;
-			}
-		}
-		return nullptr;
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -526,7 +511,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BulkSetComponentProperty(const TSharedPtr
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		Row->SetStringField(TEXT("actorLabel"), Label);
 
-		UActorComponent* Component = MCPBatchFindComponent(Actor, ComponentName);
+		UActorComponent* Component = MCPFindComponentByName(Actor, ComponentName);
 		if (!Component)
 		{
 			// An actor that has no such component is neither a success nor an
@@ -1364,7 +1349,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentMaterials(const TSharedPtr<FJ
 		}
 		else
 		{
-			MeshComponent = Cast<UMeshComponent>(MCPBatchFindComponent(Actor, ComponentName));
+			MeshComponent = Cast<UMeshComponent>(MCPFindComponentByName(Actor, ComponentName));
 		}
 		if (!MeshComponent)
 		{
