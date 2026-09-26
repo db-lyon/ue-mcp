@@ -1,4 +1,4 @@
-import { getDialogMode, getUserStatePath, type DialogMode } from "./user-state.js";
+import { getDialogMode, getUserStatePath, type DialogMode } from "./config/user-state.js";
 import type { ElicitFn } from "./core/types.js";
 import { readEnv } from "./core/env.js";
 

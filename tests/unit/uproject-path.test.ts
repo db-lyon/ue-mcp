@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { findUProject, projectDirOf } from "../../src/uproject-path.js";
+import { findUProject, projectDirOf } from "../../src/config/uproject-path.js";
 
 let root: string;
 

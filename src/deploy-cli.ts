@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { isMainModule, runCli } from "./cli-main.js";
 import * as path from "node:path";
-import { ProjectContext } from "./project.js";
+import { ProjectContext } from "./config/project.js";
 import { deploy } from "./deployer.js";
 import { coreSkillsInstalled, conflictMessages, installCoreSkills, syncPluginSkills } from "./skills.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { findUProject } from "./uproject-path.js";
+import { findUProject } from "./config/uproject-path.js";
 import { RESET, BOLD, RED, DIM, CYAN, ok, fail } from "./ui/ansi.js";
 
 async function deployCmd(argv: string[]) {

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { McpError, ErrorCode } from "./core/errors.js";
+import { McpError, ErrorCode } from "../core/errors.js";
 
 /**
  * True when a path names a `.uproject` file, whatever case the extension is

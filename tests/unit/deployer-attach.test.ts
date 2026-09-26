@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { attach } from "../../src/deployer.js";
-import { ProjectContext } from "../../src/project.js";
+import { ProjectContext } from "../../src/config/project.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 
 let fixture: ProjectFixture;

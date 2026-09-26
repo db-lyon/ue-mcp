@@ -7,7 +7,7 @@ import {
   uninstallClaudeHooks,
   uninstallAllRegisteredHooks,
 } from "../../src/hook-installer.js";
-import { getInstalledHooks } from "../../src/user-state.js";
+import { getInstalledHooks } from "../../src/config/user-state.js";
 
 let tmpRoot: string;
 let projectDir: string;

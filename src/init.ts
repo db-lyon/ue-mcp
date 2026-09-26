@@ -4,8 +4,8 @@ import * as fs from "node:fs";
 import { EPIC_CATEGORIES } from "./tools/epic/index.js";
 import * as path from "node:path";
 import * as readline from "node:readline";
-import { projectConfigPath, readConfigDoc, writeConfigDoc } from "./ue-mcp-config.js";
-import { ProjectContext } from "./project.js";
+import { projectConfigPath, readConfigDoc, writeConfigDoc } from "./config/ue-mcp-config.js";
+import { ProjectContext } from "./config/project.js";
 import { deploy } from "./deployer.js";
 import { inspectInstall, installWarning } from "./install-check.js";
 import {
@@ -21,11 +21,11 @@ import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/a
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
 import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
-import { getInstalledHooks } from "./user-state.js";
+import { getInstalledHooks } from "./config/user-state.js";
 import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs, writeMcpConfig } from "./mcp-client-config.js";
 import { deriveProjectPort } from "./port.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { findUProject } from "./uproject-path.js";
+import { findUProject } from "./config/uproject-path.js";
 import { readEnv } from "./core/env.js";
 
 /* ------------------------------------------------------------------ */

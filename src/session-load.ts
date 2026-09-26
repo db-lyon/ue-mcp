@@ -5,7 +5,7 @@
  */
 import * as path from "node:path";
 import type { EditorSession, SessionRegistry } from "./session.js";
-import type { ProjectContext } from "./project.js";
+import type { ProjectContext } from "./config/project.js";
 import type { PluginInfo, ToolContext, ToolDef } from "./core/types.js";
 import { McpError, ErrorCode } from "./core/errors.js";
 import { info, warn } from "./core/log.js";

@@ -19,7 +19,7 @@ import * as path from "node:path";
 import { describe, it, expect } from "vitest";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { projectTool } from "../../src/tools/project.js";
-import { ProjectContext } from "../../src/project.js";
+import { ProjectContext } from "../../src/config/project.js";
 import { McpError, ErrorCode } from "../../src/core/errors.js";
 import {
   LOCAL_ACTIONS,

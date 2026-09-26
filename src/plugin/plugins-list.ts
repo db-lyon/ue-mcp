@@ -1,4 +1,4 @@
-import { readConfigDoc } from "../ue-mcp-config.js";
+import { readConfigDoc } from "../config/ue-mcp-config.js";
 import { PluginEntrySchema, type PluginEntry } from "../flow/schema.js";
 
 export type { PluginEntry } from "../flow/schema.js";

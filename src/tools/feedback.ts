@@ -14,7 +14,7 @@ import {
   deleteFallbackReport,
   type FallbackReport,
 } from "../feedback-fallback.js";
-import { getFeedbackMode, type FeedbackMode } from "../user-state.js";
+import { getFeedbackMode, type FeedbackMode } from "../config/user-state.js";
 import { clientAdvertisesElicitation } from "../dialog-mode.js";
 import { warn } from "../core/log.js";
 import { routeFeedback, type RoutingDecision } from "../feedback-routing.js";

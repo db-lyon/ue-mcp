@@ -26,9 +26,9 @@ import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { checkPluginFreshness, type PluginFreshness } from "./plugin-freshness.js";
 import { trySelectEngine } from "./engine-root.js";
-import { ProjectContext } from "./project.js";
+import { ProjectContext } from "./config/project.js";
 import { packageRoot } from "./core/package-root.js";
-import { isUProjectPath } from "./uproject-path.js";
+import { isUProjectPath } from "./config/uproject-path.js";
 
 /**
  * Whether the project declares native modules of its own.

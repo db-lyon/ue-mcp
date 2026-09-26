@@ -59,9 +59,9 @@ import { resolvePublishToken } from "./registry-auth.js";
 import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
 import { packageVersion } from "./core/package-root.js";
 import { deriveDefaultPrefix, deriveUePluginName, writeScaffold } from "./plugin-scaffold.js";
-import { ProjectContext } from "./project.js";
+import { ProjectContext } from "./config/project.js";
 import { registryBase } from "./registry-catalog.js";
-import { findUProject, projectDirOf } from "./uproject-path.js";
+import { findUProject, projectDirOf } from "./config/uproject-path.js";
 
 const RESTART_NOTE =
   "Injected actions appear on the next server start. Restart your MCP client (or `ue-mcp restart`).";

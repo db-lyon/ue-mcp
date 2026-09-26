@@ -12,7 +12,7 @@ import {
   stampBlockedEditor,
   type GuardDeps,
 } from "../../src/dialog-guard.js";
-import type { DialogMode } from "../../src/user-state.js";
+import type { DialogMode } from "../../src/config/user-state.js";
 
 const DIALOG = {
   title: "Save Content",

@@ -33,7 +33,7 @@ import {
   setFeedbackMode,
   getUserStatePath,
   type FeedbackMode,
-} from "./user-state.js";
+} from "./config/user-state.js";
 import {
   BOLD,
   CYAN,
@@ -47,7 +47,7 @@ import {
   ok,
   warn,
 } from "./ui/ansi.js";
-import { isUProjectPath, projectDirOf } from "./uproject-path.js";
+import { isUProjectPath, projectDirOf } from "./config/uproject-path.js";
 import { readEnv } from "./core/env.js";
 
 function printHelp(): void {

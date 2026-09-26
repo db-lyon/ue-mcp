@@ -2,7 +2,7 @@
 // Run the deployer manually to sync plugin/ → tests/ue_mcp/Plugins/
 // without starting the full MCP server.
 import { deploy, deploySummary } from "../dist/deployer.js";
-import { ProjectContext } from "../dist/project.js";
+import { ProjectContext } from "../dist/config/project.js";
 
 const proj = new ProjectContext();
 const target = process.argv[2] ?? "tests/ue_mcp/ue_mcp.uproject";

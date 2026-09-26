@@ -27,7 +27,7 @@ import { checkPluginFreshness } from "../../src/plugin-freshness.js";
 import { attach } from "../../src/deployer.js";
 import { startEditor } from "../../src/editor-control.js";
 import { switchProject } from "../../src/project-switch.js";
-import { ProjectContext } from "../../src/project.js";
+import { ProjectContext } from "../../src/config/project.js";
 import { requestedPortPath } from "../../src/requested-port.js";
 import { LiveServer, resultJson } from "./server.js";
 import { closeLiveBridges, liveTarget, makeTempProject } from "./harness.js";

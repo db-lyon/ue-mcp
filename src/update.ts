@@ -11,7 +11,7 @@ import { editorOwnsProject, listEditorProcesses } from "./engine-observer.js";
 import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
 import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "./version-check.js";
 import { packageModulePath, packageRoot, packageVersion } from "./core/package-root.js";
-import { findUProject, isUProjectPath } from "./uproject-path.js";
+import { findUProject, isUProjectPath } from "./config/uproject-path.js";
 import { RESET, BOLD, RED, DIM, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
 
 /** The version behind the `latest` dist-tag, which is the stable line. */

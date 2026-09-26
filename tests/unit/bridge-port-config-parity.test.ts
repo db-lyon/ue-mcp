@@ -7,8 +7,8 @@ import { UeMcpConfigSchema } from "../../src/schemas.js";
 /**
  * `ue-mcp.bridge.port` is read twice.
  *
- * The client reads it through the layered YAML cascade src/project.ts builds
- * from the file list in src/ue-mcp-config.ts. The
+ * The client reads it through the layered YAML cascade src/config/project.ts builds
+ * from the file list in src/config/ue-mcp-config.ts. The
  * C++ bridge reads it with its own single-key reader, because Unreal ships no
  * YAML parser and one integer does not justify a dependency. If the two
  * disagree about which files they consult, in what order, or what counts as a
@@ -30,8 +30,8 @@ const BRIDGE_SERVER_CPP = path.join(
   "Private",
   "BridgeServer.cpp",
 );
-const PROJECT_TS = path.join(REPO_ROOT, "src", "project.ts");
-const CONFIG_TS = path.join(REPO_ROOT, "src", "ue-mcp-config.ts");
+const PROJECT_TS = path.join(REPO_ROOT, "src", "config", "project.ts");
+const CONFIG_TS = path.join(REPO_ROOT, "src", "config", "ue-mcp-config.ts");
 
 /** The body of a function, from its signature to the closing brace at column zero (TS) or one tab (C++). */
 function functionBody(file: string, signature: string, closer: string): string {
@@ -79,7 +79,7 @@ describe("bridge.port config parity between the client and the plugin", () => {
       CPP_LAYERS,
     );
 
-    // src/project.ts deep-merges lowest precedence first, so its last layer
+    // src/config/project.ts deep-merges lowest precedence first, so its last layer
     // wins. The plugin has no merge step: it takes the first hit, so it must
     // read the same list backwards.
     expect(tsOrder).toEqual(["user-global", "project", "env-overlay", "local"]);

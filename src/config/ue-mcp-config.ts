@@ -17,10 +17,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
-import { warn } from "./core/log.js";
-import { userDir } from "./core/user-dir.js";
-import { readEnv } from "./core/env.js";
-import { dumpYaml } from "./core/yaml-dump.js";
+import { warn } from "../core/log.js";
+import { userDir } from "../core/user-dir.js";
+import { readEnv } from "../core/env.js";
+import { dumpYaml } from "../core/yaml-dump.js";
 
 /** A parsed config file: its top-level keys. */
 export type ConfigDoc = Record<string, unknown>;

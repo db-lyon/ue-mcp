@@ -8,7 +8,7 @@ import {
   partitionUeMcpConfig,
   ueMcpConfigRejections,
   describeConfigRejections,
-} from "../../src/project.js";
+} from "../../src/config/project.js";
 
 function makeTempProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-project-test-"));

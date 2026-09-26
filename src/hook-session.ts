@@ -18,7 +18,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { isUProjectPath, projectDirOf } from "./uproject-path.js";
+import { isUProjectPath, projectDirOf } from "./config/uproject-path.js";
 
 /** The fields of a hook payload this cares about. Everything else passes through. */
 export interface HookPayload {
@@ -125,7 +125,7 @@ export async function feedbackDisabledForDir(dir: string | null): Promise<boolea
   if (!dir) return true;
   try {
     // Loaded only once a hook has a project to ask about.
-    const { projectConfigPath, readConfigDoc, ueMcpBlockOf } = await import("./ue-mcp-config.js");
+    const { projectConfigPath, readConfigDoc, ueMcpBlockOf } = await import("./config/ue-mcp-config.js");
     let cursor = dir;
     for (let i = 0; i < 32; i++) {
       const ymlPath = projectConfigPath(cursor);

@@ -15,7 +15,7 @@ import yaml from "js-yaml";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { EditorBridge } from "../../src/bridge.js";
-import { ProjectContext } from "../../src/project.js";
+import { ProjectContext } from "../../src/config/project.js";
 import { switchProject, isTargetDiverged } from "../../src/project-switch.js";
 
 async function fakeEditor(name: string): Promise<{

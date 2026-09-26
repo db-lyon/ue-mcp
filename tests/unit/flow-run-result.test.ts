@@ -22,7 +22,7 @@ import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import type { ToolContext } from "../../src/core/types.js";
 import { categoryTool } from "../../src/category-tool.js";
-import { ProjectContext } from "../../src/project.js";
+import { ProjectContext } from "../../src/config/project.js";
 import type { IBridge } from "../../src/bridge.js";
 
 const bridge: IBridge = {

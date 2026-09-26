@@ -13,7 +13,7 @@ import * as path from "node:path";
 import { uninstallAllRegisteredHooks } from "./hook-installer.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { projectDirOf } from "./uproject-path.js";
+import { projectDirOf } from "./config/uproject-path.js";
 
 function resolveProjectDir(argv: string[]): string | null {
   // A user-supplied project dir is the first argument. --editor names one of

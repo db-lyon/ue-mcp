@@ -2,7 +2,7 @@ import * as path from "node:path";
 import { spawn } from "child_process";
 import * as net from "net";
 import { bridgeReplyAccepted, callBridgeOnce, type BridgeReply } from "./bridge.js";
-import { readUeMcpConfig, type ProjectContext } from "./project.js";
+import { readUeMcpConfig, type ProjectContext } from "./config/project.js";
 import { EngineResolutionError, engineLookupFor, selectEngine, trySelectEngine } from "./engine-root.js";
 import {
   editorOwnsProject,
@@ -19,7 +19,7 @@ import {
 import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "./editor-target.js";
 import { oneLine } from "./dialog-guard.js";
 import type { ProgressDisplay, ProgressFn } from "./core/types.js";
-import { findUProject } from "./uproject-path.js";
+import { findUProject } from "./config/uproject-path.js";
 import { readEnv } from "./core/env.js";
 
 const NO_EDITOR_BINARY_MSG =

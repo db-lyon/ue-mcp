@@ -34,7 +34,7 @@ import type { ToolDef, ToolContext } from "../../src/core/types.js";
 import { categoryTool, bp } from "../../src/category-tool.js";
 import { buildMicroGateway } from "../../src/micro-context.js";
 import { widgetTool } from "../../src/tools/widget.js";
-import { ProjectContext } from "../../src/project.js";
+import { ProjectContext } from "../../src/config/project.js";
 import type { IBridge } from "../../src/bridge.js";
 import type { FlowContext } from "../../src/flow/context.js";
 import { recordingBridge } from "../fake-bridge.js";

@@ -21,7 +21,7 @@ import {
   readConfigDoc,
   writeConfigDoc,
   type ConfigLayerFile,
-} from "../ue-mcp-config.js";
+} from "../config/ue-mcp-config.js";
 
 export type ConfigTarget = "global" | "local" | "project";
 

@@ -21,7 +21,7 @@
  * count except targeting itself.
  */
 import { EditorBridge } from "./bridge.js";
-import { ProjectContext } from "./project.js";
+import { ProjectContext } from "./config/project.js";
 import { GuardedBridge } from "./flow/guarded-bridge.js";
 import { GuardRegistry } from "./flow/guard.js";
 import { makeResolveExistingFile } from "./flow/guard.js";
@@ -30,7 +30,7 @@ import { McpError, ErrorCode } from "./core/errors.js";
 import { warn } from "./core/log.js";
 import { newLockOwnerId } from "./lock-owner.js";
 import { withoutDialogActuation } from "./dialog-guard.js";
-import { projectDirOf } from "./uproject-path.js";
+import { projectDirOf } from "./config/uproject-path.js";
 import type { ToolDef } from "./core/types.js";
 
 /** Key used for the session that has no project bound. */

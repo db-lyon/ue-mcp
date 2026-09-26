@@ -7,7 +7,7 @@ import {
   readConfigDoc,
   ueMcpBlockOf,
   writeConfigDoc,
-} from "../../src/ue-mcp-config.js";
+} from "../../src/config/ue-mcp-config.js";
 
 const dirs: string[] = [];
 function tempDir(): string {

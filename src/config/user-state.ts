@@ -1,9 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { normalizeProjectRoot } from "./port.js";
-import { warn } from "./core/log.js";
-import { userDir } from "./core/user-dir.js";
-import { readEnv } from "./core/env.js";
+import { normalizeProjectRoot } from "../port.js";
+import { warn } from "../core/log.js";
+import { userDir } from "../core/user-dir.js";
+import { readEnv } from "../core/env.js";
 
 /**
  * User-scoped, machine-only state. Lives at `~/.ue-mcp/state.json`. Stores

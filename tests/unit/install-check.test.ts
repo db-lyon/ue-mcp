@@ -252,7 +252,7 @@ describe("installWarning", () => {
 describe("project(check_install) over the real dispatcher", () => {
   it("inspects the loaded project, and a named one, without an editor", async () => {
     const { projectTool } = await import("../../src/tools/project.js");
-    const { ProjectContext } = await import("../../src/project.js");
+    const { ProjectContext } = await import("../../src/config/project.js");
 
     const uproject = makeProject("Dispatched", BLUEPRINT_ONLY, { deployBridge: true, compiled: true });
     const project = new ProjectContext();

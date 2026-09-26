@@ -1,10 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { deepMerge } from "@db-lyon/flowkit";
-import { McpError, ErrorCode } from "./core/errors.js";
-import { info, warn } from "./core/log.js";
-import { UProjectSchema, UeMcpConfigSchema } from "./schemas.js";
-import { resolveEngineRoot, type EngineLookup } from "./engine-root.js";
+import { McpError, ErrorCode } from "../core/errors.js";
+import { info, warn } from "../core/log.js";
+import { UProjectSchema, UeMcpConfigSchema } from "../schemas.js";
+import { resolveEngineRoot, type EngineLookup } from "../engine-root.js";
 import {
   configLayerFiles,
   localConfigPath,
@@ -17,7 +17,7 @@ import {
 } from "./ue-mcp-config.js";
 import { setInstalledHooks, setFeedbackMode, type FeedbackMode } from "./user-state.js";
 import { resolveUProjectPath } from "./uproject-path.js";
-import { readEnv } from "./core/env.js";
+import { readEnv } from "../core/env.js";
 
 export interface PluginInfo {
   name: string;
