@@ -1526,18 +1526,19 @@ namespace
 // unbound first.
 TSharedPtr<FJsonValue> FAssetHandlers::BindClothToSection(const TSharedPtr<FJsonObject>& Params)
 {
+	// Every parameter is read before anything can fail (#1057).
+	MCPReadParamsAhead(Params, {
+		TEXT("skeletalMeshPath"), TEXT("lodIndex"), TEXT("sectionIndex"), TEXT("clothingAsset"), TEXT("assetLodIndex"),
+	});
 	FString MeshPath;
 	if (auto Err = RequireString(Params, TEXT("skeletalMeshPath"), MeshPath)) return Err;
-	// Every parameter is read before anything can fail (#1057).
 	int32 LodIndex = 0;
-	const bool bHasLodIndex = TryGetNumberParam(Params, TEXT("lodIndex"), LodIndex);
+	if (auto Err = RequireNumber(Params, TEXT("lodIndex"), LodIndex)) return Err;
 	int32 SectionIndex = 0;
-	const bool bHasSectionIndex = TryGetNumberParam(Params, TEXT("sectionIndex"), SectionIndex);
+	if (auto Err = RequireNumber(Params, TEXT("sectionIndex"), SectionIndex)) return Err;
 	const FString ClothingAssetName = OptionalString(Params, TEXT("clothingAsset"));
 	int32 RequestedAssetLodIndex = 0;
 	const bool bHasAssetLodIndex = TryGetNumberParam(Params, TEXT("assetLodIndex"), RequestedAssetLodIndex);
-	if (!bHasLodIndex) return MCPError(TEXT("Missing required parameter 'lodIndex'"));
-	if (!bHasSectionIndex) return MCPError(TEXT("Missing required parameter 'sectionIndex'"));
 
 	USkeletalMesh* Mesh = LoadAssetByPath<USkeletalMesh>(MeshPath);
 	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
@@ -1635,16 +1636,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::BindClothToSection(const TSharedPtr<FJson
 // released too and reported.
 TSharedPtr<FJsonValue> FAssetHandlers::UnbindClothFromSection(const TSharedPtr<FJsonObject>& Params)
 {
+	// Every parameter is read before anything can fail (#1057).
+	MCPReadParamsAhead(Params, { TEXT("skeletalMeshPath"), TEXT("lodIndex"), TEXT("sectionIndex"), TEXT("clothingAsset") });
 	FString MeshPath;
 	if (auto Err = RequireString(Params, TEXT("skeletalMeshPath"), MeshPath)) return Err;
-	// Every parameter is read before anything can fail (#1057).
 	int32 LodIndex = 0;
-	const bool bHasLodIndex = TryGetNumberParam(Params, TEXT("lodIndex"), LodIndex);
+	if (auto Err = RequireNumber(Params, TEXT("lodIndex"), LodIndex)) return Err;
 	int32 SectionIndex = 0;
-	const bool bHasSectionIndex = TryGetNumberParam(Params, TEXT("sectionIndex"), SectionIndex);
+	if (auto Err = RequireNumber(Params, TEXT("sectionIndex"), SectionIndex)) return Err;
 	const FString ExpectedName = OptionalString(Params, TEXT("clothingAsset"));
-	if (!bHasLodIndex) return MCPError(TEXT("Missing required parameter 'lodIndex'"));
-	if (!bHasSectionIndex) return MCPError(TEXT("Missing required parameter 'sectionIndex'"));
 
 	USkeletalMesh* Mesh = LoadAssetByPath<USkeletalMesh>(MeshPath);
 	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
