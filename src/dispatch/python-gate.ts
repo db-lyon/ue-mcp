@@ -29,6 +29,10 @@
  * instead (#1167).
  */
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
+import { checkBridgeParity } from "../bridge/bridge-parity.js";
+import { searchToolGraph } from "../surface/context/tool-search.js";
+import { toolGraphOf } from "../surface/target-params.js";
+import type { ToolContext } from "../core/types.js";
 import { workaroundScope, type WorkaroundScopeSource } from "./workaround-tracker.js";
 
 /** A ruling has to say something. Twelve characters is the long-standing bar. */
@@ -155,6 +159,11 @@ function recordRulings(
 }
 
 
+/** What the session already knows, plus this call's rulings, recording nothing. */
+function knownRulings(ctx: WorkaroundScopeSource | undefined, rulings: Map<string, string>): Map<string, string> {
+  return new Map([...(remembered.get(workaroundScope(ctx)) ?? []), ...rulings]);
+}
+
 /** Drop every partition. Test-only. */
 export function resetRulings(): void {
   remembered.clear();
@@ -184,9 +193,11 @@ export function evaluateGate(
   rawRuledOut: unknown,
   ctx?: WorkaroundScopeSource,
   notRegistered: (c: GateCandidate) => boolean = () => false,
+  /** False to decide without remembering this call's rulings, as a preflight does. */
+  record = true,
 ): GateVerdict {
   const parsed = parseRulings(rawRuledOut);
-  const known = recordRulings(ctx, parsed.accepted);
+  const known = record ? recordRulings(ctx, parsed.accepted) : knownRulings(ctx, parsed.accepted);
 
   const notInPlugin = candidates.filter((c) => notRegistered(c));
   const unresolved = candidates.filter((c) => !notRegistered(c) && !known.has(ruledOutKey(c.action)));
@@ -241,4 +252,39 @@ export function gateRefusalMessage(
     `If one of these actually does the task, call it instead of Python.`,
   );
   return lines.join(" ");
+}
+
+// ── Shared by the handler and the preflight ───────────────────────────────────
+
+/** The candidate actions a taskSummary has to rule out: meaningful matches, at most five. */
+export function gateCandidates(ctx: ToolContext, taskSummary: string): GateCandidate[] {
+  return searchToolGraph(toolGraphOf(ctx), taskSummary, 5).filter((h) => h.score >= 4);
+}
+
+/**
+ * Which gate candidates dispatch to a bridge method the connected plugin does
+ * not register, read from the parity check. Nothing is excluded when the
+ * plugin published no action list, since then nothing is known.
+ */
+export async function notInRunningPlugin(ctx: ToolContext): Promise<(c: GateCandidate) => boolean> {
+  const graph = toolGraphOf(ctx);
+  const missing = new Set(checkBridgeParity(graph, ctx.bridge.capabilities).missing);
+  if (missing.size === 0) return () => false;
+  return (c) => {
+    const spec = graph.find((t) => t.name === c.tool)?.actions[c.action];
+    return spec?.kind === "bridge" && missing.has(spec.bridge);
+  };
+}
+
+/**
+ * Why execute_python would refuse these parameters, or null when it would run.
+ * Decides exactly as the handler does and remembers nothing, so a plan can ask.
+ */
+export async function pythonGateRefusal(ctx: ToolContext, params: Record<string, unknown>): Promise<string | null> {
+  const taskSummary = String(params.taskSummary ?? "").trim();
+  if (!taskSummary) return "execute_python requires a 'taskSummary' (plain-words intent).";
+  const candidates = gateCandidates(ctx, taskSummary);
+  if (candidates.length === 0) return null;
+  const verdict = evaluateGate(candidates, params.ruledOut, ctx, await notInRunningPlugin(ctx), false);
+  return verdict.unresolved.length > 0 ? gateRefusalMessage(taskSummary, candidates, verdict) : null;
 }

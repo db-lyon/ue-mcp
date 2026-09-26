@@ -2,7 +2,6 @@ import { z } from "zod";
 import type { ToolDef, ToolContext } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { callOwnBridgeMethod } from "../flow/action-call.js";
-import { toolGraphOf } from "../surface/target-params.js";
 import { directive } from "../core/directive.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
 import { buildProjectAction } from "./project/install.js";
@@ -11,27 +10,10 @@ import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
 import { progressRenderingNote } from "../dispatch/client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../dispatch/workaround-tracker.js";
-import { searchToolGraph } from "../surface/context/tool-search.js";
-import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../dispatch/python-gate.js";
-import { checkBridgeParity } from "../bridge/bridge-parity.js";
+import { evaluateGate, gateCandidates, gateRefusalMessage, notInRunningPlugin } from "../dispatch/python-gate.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
-
-/**
- * Which gate candidates dispatch to a bridge method the connected plugin does
- * not register, read from the parity check. Nothing is excluded when the
- * plugin published no action list, since then nothing is known.
- */
-async function notInRunningPlugin(ctx: ToolContext): Promise<(c: GateCandidate) => boolean> {
-  const graph = toolGraphOf(ctx);
-  const missing = new Set(checkBridgeParity(graph, ctx.bridge.capabilities).missing);
-  if (missing.size === 0) return () => false;
-  return (c) => {
-    const spec = graph.find((t) => t.name === c.tool)?.actions[c.action];
-    return spec?.kind === "bridge" && missing.has(spec.bridge);
-  };
-}
 
 /** Where a caller declares a standing opt-in to the Blueprint-error bypass.
  *  Rides the normal global < project < env < local config cascade, so a
@@ -150,7 +132,7 @@ export const editorTool: ToolDef = categoryTool(
         }
 
         // Candidates = meaningful matches (a name/phrase hit), capped at 5.
-        const candidates = searchToolGraph(toolGraphOf(ctx), taskSummary, 5).filter((h) => h.score >= 4);
+        const candidates = gateCandidates(ctx, taskSummary);
         if (candidates.length > 0) {
           // #938 / #960: matching is spelling-insensitive and rulings persist
           // for the session, so the strings this refusal prints are exactly the

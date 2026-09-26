@@ -647,6 +647,18 @@ export class DialogGuard {
   }
 
   /**
+   * Whether a call to `subject` would be refused by the dialog on screen now,
+   * deciding nothing: no form is raised and nothing is pressed. For a plan.
+   */
+  async wouldRefuse(subject: string, kind: "bridge" | "action"): Promise<boolean> {
+    const dialog = await this.currentDialog();
+    if (!dialog) return false;
+    const allowed = kind === "bridge" ? DialogGuard.bridgeAllowed(subject) : DialogGuard.actionAllowed(subject);
+    return !allowed || (kind === "action" && PRESS_ACTIONS.has(subject)
+      && !DialogGuard.handsOverPressCalls(this.deps.mode(), this.canAsk({})));
+  }
+
+  /**
    * What is on screen right now.
    *
    * The watcher usually knows already. When it does not, ask the editor. A
