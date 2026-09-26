@@ -9,7 +9,7 @@ import { stripEditorTarget } from "../types.js";
  *
  * Used two ways:
  *
- * 1. **YAML-defined tasks** (`class_path: flow.bridge`):
+ * 1. **YAML-defined tasks** (`class_path: ue-mcp.bridge`):
  *    The `method` option specifies the bridge method to call.
  *    Remaining options are passed as bridge params.
  *
