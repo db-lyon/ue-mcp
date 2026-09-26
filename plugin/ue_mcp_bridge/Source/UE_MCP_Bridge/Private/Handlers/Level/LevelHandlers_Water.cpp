@@ -1,4 +1,4 @@
-// Water zone rebuild and read-back (#1156).
+// Water body properties (#151), and water zone rebuild and read-back (#1156).
 //
 // Water is an optional plugin, so nothing here links against it: classes are
 // found by path and every field is reached through reflection.
@@ -567,5 +567,119 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetWaterState(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("bodyCount"), Bodies.Num());
 	Result->SetArrayField(TEXT("zones"), Zones);
 	Result->SetArrayField(TEXT("bodies"), Bodies);
+	return MCPResult(Result);
+}
+
+// ─── #151 set_water_body_property ───────────────────────────────────
+// Set a property on the first UWaterBodyComponent of an actor (ShapeDilation,
+// WaterLevel, etc.). Uses runtime class lookup so the Water plugin is not a
+// hard build dependency - if the plugin isn't loaded, the handler returns
+// a clear error rather than failing to link.
+TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, {
+		TEXT("actorLabel"), TEXT("actorPath"), TEXT("propertyName"), TEXT("value"),
+	});
+
+	FString ActorLabel;
+	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+
+	FString ValueStr;
+	bool bHaveValue = false;
+	TSharedPtr<FJsonValue> V = TryGetParam(Params, TEXT("value"));
+	if (V.IsValid())
+	{
+		if (V->TryGetString(ValueStr)) bHaveValue = true;
+		else if (V->Type == EJson::Number) { ValueStr = FString::SanitizeFloat(V->AsNumber()); bHaveValue = true; }
+		else if (V->Type == EJson::Boolean) { ValueStr = V->AsBool() ? TEXT("true") : TEXT("false"); bHaveValue = true; }
+	}
+	if (!bHaveValue) return MCPError(TEXT("Missing or non-coerceable 'value' parameter"));
+
+	REQUIRE_EDITOR_WORLD(World);
+
+	TSharedPtr<FJsonValue> ActorErr;
+	AActor* Actor = MCPResolveActor(World, Params, ActorErr);
+	if (!Actor) return ActorErr;
+	ActorLabel = Actor->GetActorLabel();
+
+	UClass* WBClass = LoadClass<UActorComponent>(nullptr, TEXT("/Script/Water.WaterBodyComponent"));
+	if (!WBClass)
+	{
+		return MCPError(TEXT("WaterBodyComponent class not available - enable the Water plugin"));
+	}
+
+	UActorComponent* WBComp = nullptr;
+	TArray<UActorComponent*> Comps;
+	Actor->GetComponents(Comps);
+	for (UActorComponent* C : Comps)
+	{
+		if (C && C->GetClass()->IsChildOf(WBClass)) { WBComp = C; break; }
+	}
+	if (!WBComp) return MCPError(FString::Printf(TEXT("Actor '%s' has no WaterBodyComponent"), *ActorLabel));
+
+	// #1156: TessellatedWaterMeshExtent is deprecated and not serialized, so a
+	// write to it is lost on save. Refuse the miss by name and warn on a hit.
+	const bool bTessellatedExtent = PropertyName.StartsWith(TEXT("TessellatedWaterMeshExtent"), ESearchCase::IgnoreCase);
+	FProperty* Prop = WBComp->GetClass()->FindPropertyByName(FName(*PropertyName));
+	if (!Prop && bTessellatedExtent)
+	{
+		return MCPError(TEXT("TessellatedWaterMeshExtent is not a WaterBodyComponent property. It is deprecated (TessellatedWaterMeshExtent_DEPRECATED on the WaterZone) and not serialized, so a write would be lost. Size the water mesh with level(rebuild_water_zone, zoneExtent, tileSize) instead."));
+	}
+	if (!Prop) return MCPError(FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName, *WBComp->GetClass()->GetName()));
+
+	WBComp->Modify();
+	void* Addr = Prop->ContainerPtrToValuePtr<void>(WBComp);
+	// Read the value out in the same export-text form this handler imports, so
+	// the inverse is literally the call that puts the old value back.
+	FString PreviousValue;
+	Prop->ExportTextItem_Direct(PreviousValue, Addr, nullptr, WBComp, PPF_None);
+	const TCHAR* R = Prop->ImportText_Direct(*ValueStr, Addr, WBComp, PPF_None);
+	if (R == nullptr) return MCPError(FString::Printf(TEXT("ImportText failed for '%s'"), *ValueStr));
+
+	// Read back in the same form to say whether the write moved anything. The
+	// caller's text and the export text are not comparable ("1" against
+	// "1.000000"), so the comparison has to be export against export.
+	FString WrittenValue;
+	Prop->ExportTextItem_Direct(WrittenValue, Addr, nullptr, WBComp, PPF_None);
+	const bool bValueChanged = WrittenValue != PreviousValue;
+
+	// Fire PostEditChangeProperty so the water body rebuilds / re-renders.
+	FPropertyChangedEvent Evt(Prop);
+	WBComp->PostEditChangeProperty(Evt);
+	Actor->MarkPackageDirty();
+
+	auto Result = MCPSuccess();
+	if (bValueChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bValueChanged);
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Result->SetStringField(TEXT("componentName"), WBComp->GetName());
+	Result->SetStringField(TEXT("componentClass"), WBComp->GetClass()->GetName());
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("value"), ValueStr);
+	Result->SetStringField(TEXT("previousValue"), PreviousValue);
+	if (bTessellatedExtent || Prop->HasAnyPropertyFlags(CPF_Deprecated))
+	{
+		Result->SetStringField(TEXT("warning"), FString::Printf(
+			TEXT("'%s' is deprecated and is not serialized, so this write is lost on save. For the water mesh extent use level(rebuild_water_zone, zoneExtent, tileSize)."),
+			*Prop->GetName()));
+	}
+
+	// The undo travels by actor path so replaying it cannot land on a namesake.
+	// Emitted only when the value actually moved: restoring a value that was
+	// already there is a second write, not an undo.
+	if (bValueChanged)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("propertyName"), PropertyName);
+		Payload->SetStringField(TEXT("value"), PreviousValue);
+		MCPSetRollback(Result, TEXT("set_water_body_property"), Payload);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("On a World Partition map the inverse resolves the actor by path against loaded actors only, so it fails if the actor's cell unloaded between this call and the replay."));
+	}
 	return MCPResult(Result);
 }

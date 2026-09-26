@@ -41,6 +41,7 @@
 #include "HandlerQuery.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Engine/StaticMeshActor.h"
 #include "Materials/MaterialInterface.h"
 #include "ScopedTransaction.h"
 // #985: bulk HLOD layer assignment. UHLODLayer has to be a complete type for
@@ -1605,5 +1606,251 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorHLODLayer(const TSharedPtr<FJsonO
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
 		TEXT("results[].previousHLODLayer carries each actor's own layer from before the write, an empty string meaning it had no override. Replay them one actor at a time with an explicit actorLabels of one. enableAutoLODGeneration, when it was passed, is not captured per actor and does not come back."));
+	return MCPResult(Result);
+}
+
+// #203: batch spawn StaticMeshActors on a 3D grid (or jittered cloud) so
+// agents don't ship one place_actor per mesh. Bounds are an FBox; density
+// drives count along each axis.
+TSharedPtr<FJsonValue> FLevelHandlers::SpawnGrid(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, {
+		TEXT("staticMesh"), TEXT("min"), TEXT("max"), TEXT("countX"), TEXT("countY"), TEXT("countZ"),
+		TEXT("jitter"), TEXT("labelPrefix"),
+	});
+
+	REQUIRE_EDITOR_WORLD(World);
+
+	FString MeshPath; if (auto E = RequireString(Params, TEXT("staticMesh"), MeshPath)) return E;
+	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+	if (!Mesh) return MCPError(FString::Printf(TEXT("StaticMesh not found: %s"), *MeshPath));
+
+	FVector Min, Max;
+	if (auto Err = RequireVec3(Params, TEXT("min"), Min)) return Err;
+	if (auto Err = RequireVec3(Params, TEXT("max"), Max)) return Err;
+
+	const int32 CountX = FMath::Max(1, OptionalInt(Params, TEXT("countX"), 4));
+	const int32 CountY = FMath::Max(1, OptionalInt(Params, TEXT("countY"), 4));
+	const int32 CountZ = FMath::Max(1, OptionalInt(Params, TEXT("countZ"), 1));
+	const double Jitter = OptionalNumber(Params, TEXT("jitter"), 0.0);
+	const FString LabelPrefix = OptionalString(Params, TEXT("labelPrefix"), TEXT("Grid"));
+
+	const FVector Step = FVector(
+		CountX > 1 ? (Max.X - Min.X) / (CountX - 1) : 0,
+		CountY > 1 ? (Max.Y - Min.Y) / (CountY - 1) : 0,
+		CountZ > 1 ? (Max.Z - Min.Z) / (CountZ - 1) : 0);
+
+	FRandomStream Rand((int32)FDateTime::Now().GetTicks());
+
+	TArray<TSharedPtr<FJsonValue>> Spawned;
+	int32 Index = 0;
+	for (int32 zi = 0; zi < CountZ; ++zi)
+	for (int32 yi = 0; yi < CountY; ++yi)
+	for (int32 xi = 0; xi < CountX; ++xi)
+	{
+		FVector Loc = Min + FVector(xi * Step.X, yi * Step.Y, zi * Step.Z);
+		if (Jitter > 0.0)
+		{
+			Loc += FVector(Rand.FRandRange(-Jitter, Jitter), Rand.FRandRange(-Jitter, Jitter), Rand.FRandRange(-Jitter, Jitter));
+		}
+		FActorSpawnParameters SpawnParams;
+		AStaticMeshActor* SMA = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Loc, FRotator::ZeroRotator, SpawnParams);
+		if (!SMA) continue;
+		SMA->SetMobility(EComponentMobility::Movable);
+		if (UStaticMeshComponent* SMC = SMA->GetStaticMeshComponent())
+		{
+			SMC->SetStaticMesh(Mesh);
+		}
+		SMA->SetActorLabel(FString::Printf(TEXT("%s_%d"), *LabelPrefix, Index));
+		Spawned.Add(MakeShared<FJsonValueString>(SMA->GetActorLabel()));
+		Index++;
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetNumberField(TEXT("count"), Spawned.Num());
+	Result->SetArrayField(TEXT("labels"), Spawned);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Undoing this means deleting the actors it spawned, and level(delete_actor) takes one actor path per call while level(delete_actors) takes filters rather than a path list. A single delete_actors on the shared labelPrefix would also delete any pre-existing actor whose label starts with it, so no inverse is named. labels[] is the list to delete one at a time."));
+	return MCPResult(Result);
+}
+
+// #203: batch translate by label list or tag.
+TSharedPtr<FJsonValue> FLevelHandlers::BatchTranslate(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	FVector Offset;
+	if (auto Err = RequireVec3(Params, TEXT("offset"), Offset)) return Err;
+
+	TSet<AActor*> Targets;
+	const TArray<TSharedPtr<FJsonValue>>* LabelArr = nullptr;
+	if (TryGetArrayParam(Params, TEXT("actorLabels"), LabelArr) && LabelArr)
+	{
+		for (const auto& V : *LabelArr)
+		{
+			FString S; if (V.IsValid() && V->TryGetString(S))
+			{
+				// #983: a batch is the plural case, so a label naming several
+				// actors moves all of them rather than one at random.
+				TArray<AActor*> Matches;
+				MCPCollectActorsByToken(World, S, EMCPActorMatch::Label, Matches);
+				for (AActor* Match : Matches) Targets.Add(Match);
+			}
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* PathArr = nullptr;
+	if (TryGetArrayParam(Params, TEXT("actorPaths"), PathArr) && PathArr)
+	{
+		for (const auto& V : *PathArr)
+		{
+			FString S; if (V.IsValid() && V->TryGetString(S))
+			{
+				if (AActor* A = MCPFindActorByPath(World, S)) Targets.Add(A);
+			}
+		}
+	}
+	FString TagFilter; if (TryGetStringParam(Params, TEXT("tag"), TagFilter) && !TagFilter.IsEmpty())
+	{
+		const FName TagName(*TagFilter);
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->ActorHasTag(TagName)) Targets.Add(*It);
+		}
+	}
+	if (Targets.Num() == 0) return MCPError(TEXT("Provide actorLabels[], actorPaths[] or tag matching at least one actor"));
+
+	// Resolve the selector to paths as the move happens. The inverse names the
+	// same actors by path rather than replaying a label or tag selector that
+	// may match a different set by the time it runs.
+	TArray<TSharedPtr<FJsonValue>> TargetPaths;
+	for (AActor* A : Targets)
+	{
+		A->Modify();
+		A->SetActorLocation(A->GetActorLocation() + Offset);
+		A->MarkPackageDirty();
+		TargetPaths.Add(MakeShared<FJsonValueString>(A->GetPathName()));
+	}
+
+	// A zero offset moved nothing, however many actors it walked. Reporting
+	// updated and handing back an inverse that translates by -0 would be two
+	// falsehoods about the same no-op.
+	const bool bOffsetMoves = !Offset.IsNearlyZero();
+
+	auto Result = MCPSuccess();
+	if (bOffsetMoves) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bOffsetMoves);
+	Result->SetNumberField(TEXT("count"), Targets.Num());
+	Result->SetArrayField(TEXT("actorPaths"), TargetPaths);
+
+	// A translation by an offset inverts to a translation by its negation, on
+	// exactly the actors that moved.
+	if (bOffsetMoves)
+	{
+		TSharedPtr<FJsonObject> InverseOffset = MCPVec3ToJsonObject(-Offset);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetArrayField(TEXT("actorPaths"), TargetPaths);
+		Payload->SetObjectField(TEXT("offset"), InverseOffset);
+		MCPSetRollback(Result, TEXT("batch_translate"), Payload);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("On a World Partition map the inverse resolves each actor by path against loaded actors only, so any actor whose cell unloaded between this call and the replay is silently not moved back: the count in the response is what was moved, not what the inverse will reach."));
+	}
+	return MCPResult(Result);
+}
+
+// #264 - place_actors_batch: spawn many StaticMeshActors with per-instance
+// mesh + transform. Avoids the chatty place_actor-per-row pattern that filled
+// up the workaround log for procedural placement scripts.
+TSharedPtr<FJsonValue> FLevelHandlers::PlaceActorsBatch(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	const TArray<TSharedPtr<FJsonValue>>* ActorsArr = nullptr;
+	if (!TryGetArrayParam(Params, TEXT("actors"), ActorsArr) || !ActorsArr)
+	{
+		return MCPError(TEXT("Missing 'actors' (array of {staticMesh, location?, rotation?, scale?, label?})"));
+	}
+
+	// Cache mesh loads by path so a 1000-row batch with 5 unique meshes only
+	// does 5 LoadObject calls.
+	TMap<FString, UStaticMesh*> MeshCache;
+	auto ResolveMesh = [&MeshCache](const FString& Path) -> UStaticMesh*
+	{
+		if (Path.IsEmpty()) return nullptr;
+		if (UStaticMesh** Cached = MeshCache.Find(Path)) return *Cached;
+		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *Path);
+		MeshCache.Add(Path, Mesh);
+		return Mesh;
+	};
+
+	int32 Spawned = 0, FailedMesh = 0, FailedSpawn = 0;
+	TArray<TSharedPtr<FJsonValue>> Labels;
+	TArray<TSharedPtr<FJsonValue>> Errors;
+
+	for (int32 i = 0; i < ActorsArr->Num(); i++)
+	{
+		const TSharedPtr<FJsonValue>& Entry = (*ActorsArr)[i];
+		const TSharedPtr<FJsonObject> Row = Entry.IsValid() ? Entry->AsObject() : nullptr;
+		if (!Row.IsValid()) { FailedSpawn++; continue; }
+
+		FString MeshPath;
+		Row->TryGetStringField(TEXT("staticMesh"), MeshPath);
+		UStaticMesh* Mesh = ResolveMesh(MeshPath);
+		if (!Mesh)
+		{
+			FailedMesh++;
+			TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
+			Err->SetNumberField(TEXT("index"), i);
+			Err->SetStringField(TEXT("staticMesh"), MeshPath);
+			Err->SetStringField(TEXT("reason"), TEXT("static_mesh_not_found"));
+			Errors.Add(MakeShared<FJsonValueObject>(Err));
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject>* LocObj = nullptr;
+		const TSharedPtr<FJsonObject>* RotObj = nullptr;
+		const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
+		Row->TryGetObjectField(TEXT("location"), LocObj);
+		Row->TryGetObjectField(TEXT("rotation"), RotObj);
+		Row->TryGetObjectField(TEXT("scale"), ScaleObj);
+
+		FVector Loc = FVector::ZeroVector;
+		FRotator Rot = FRotator::ZeroRotator;
+		FVector Scale = FVector::OneVector;
+		if (LocObj) ReadVec3Fields(*LocObj, Loc);
+		if (RotObj) ReadRotatorFields(*RotObj, Rot);
+		if (ScaleObj) ReadVec3Fields(*ScaleObj, Scale);
+
+		FActorSpawnParameters SpawnParams;
+		AStaticMeshActor* SMA = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Loc, Rot, SpawnParams);
+		if (!SMA) { FailedSpawn++; continue; }
+		SMA->SetMobility(EComponentMobility::Movable);
+		if (UStaticMeshComponent* SMC = SMA->GetStaticMeshComponent())
+		{
+			SMC->SetStaticMesh(Mesh);
+			SMC->SetWorldScale3D(Scale);
+		}
+
+		FString Label;
+		if (Row->TryGetStringField(TEXT("label"), Label) && !Label.IsEmpty())
+		{
+			SMA->SetActorLabel(Label);
+		}
+		Labels.Add(MakeShared<FJsonValueString>(SMA->GetActorLabel()));
+		Spawned++;
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetNumberField(TEXT("requested"), ActorsArr->Num());
+	Result->SetNumberField(TEXT("spawned"), Spawned);
+	Result->SetNumberField(TEXT("failedMesh"), FailedMesh);
+	Result->SetNumberField(TEXT("failedSpawn"), FailedSpawn);
+	Result->SetArrayField(TEXT("labels"), Labels);
+	if (Errors.Num() > 0) Result->SetArrayField(TEXT("errors"), Errors);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Undoing this means deleting the actors it spawned, and level(delete_actor) takes one actor path per call while level(delete_actors) takes filters rather than a path list. Deleting by the labels these actors carry would reach any namesake as well, so no inverse is named. labels[] is the list to delete one at a time."));
 	return MCPResult(Result);
 }

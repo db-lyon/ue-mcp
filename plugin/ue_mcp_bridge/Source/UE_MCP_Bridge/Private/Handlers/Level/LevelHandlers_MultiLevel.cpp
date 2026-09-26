@@ -1,6 +1,8 @@
 #include "LevelHandlers.h"
 
 #include "HandlerUtils.h"
+#include "Engine/LevelStreamingDynamic.h"
+#include "EditorLevelUtils.h"
 #include "Handlers/HandlerEditorState.h"
 
 #include "Editor.h"
@@ -689,4 +691,363 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 		return BuildResult(false, RestoreError, true, false, {});
 	}
 	return BuildResult(true, FString(), false, bRestored, {});
+}
+
+// #204: read the current edit-target sub-level. UE drops new actors into this
+// level when multiple sub-levels are loaded; without a way to query/set it the
+// caller can't reliably target a particular streaming sub-level for spawns.
+TSharedPtr<FJsonValue> FLevelHandlers::GetCurrentEditLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+	ULevel* Cur = World->GetCurrentLevel();
+	auto Result = MCPSuccess();
+	if (Cur)
+	{
+		Result->SetStringField(TEXT("levelName"), Cur->GetOuter()->GetName());
+		Result->SetStringField(TEXT("levelPath"), Cur->GetOuter()->GetPathName());
+		Result->SetBoolField(TEXT("isPersistent"), Cur == World->PersistentLevel);
+	}
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::SetCurrentEditLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, {
+		TEXT("levelName"),
+	});
+
+	REQUIRE_EDITOR_WORLD(World);
+	// levelPath is a spec alias, renamed to levelName before this runs (#1057).
+	FString LevelName;
+	if (auto Err = RequireString(Params, TEXT("levelName"), LevelName)) return Err;
+
+	ULevelEditorSubsystem* LES = GEditor ? GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
+	if (!LES) return MCPError(TEXT("LevelEditorSubsystem not available"));
+
+	// The level that was current. Held as a POINTER as well as a name: two
+	// sub-levels can share a name, so comparing names afterwards would report
+	// a real switch between namesakes as "nothing happened".
+	ULevel* PreviousLevel = World->GetCurrentLevel();
+	FString PreviousLevelName;
+	FString PreviousLevelPath;
+	if (PreviousLevel)
+	{
+		PreviousLevelName = PreviousLevel->GetOuter()->GetName();
+		PreviousLevelPath = PreviousLevel->GetOuter()->GetPathName();
+	}
+
+	// SetCurrentLevelByName is first-match-wins on a duplicated name, and the
+	// payload can carry nothing but that name, so count the namesakes now and
+	// let the response say whether the inverse is exact or a coin flip.
+	int32 PreviousNameMatches = 0;
+	if (!PreviousLevelName.IsEmpty())
+	{
+		for (ULevel* Candidate : World->GetLevels())
+		{
+			if (Candidate && Candidate->GetOuter() &&
+				Candidate->GetOuter()->GetName() == PreviousLevelName)
+			{
+				++PreviousNameMatches;
+			}
+		}
+	}
+
+	const bool bOk = LES->SetCurrentLevelByName(FName(*LevelName));
+	if (!bOk)
+	{
+		return MCPError(FString::Printf(TEXT("No loaded sub-level named '%s'"), *LevelName));
+	}
+
+	ULevel* Cur = World->GetCurrentLevel();
+	auto Result = MCPSuccess();
+	const FString NewLevelName = Cur ? Cur->GetOuter()->GetName() : FString();
+	const bool bLevelChanged = Cur != PreviousLevel;
+	if (bLevelChanged) MCPSetUpdated(Result); else MCPSetExisted(Result);
+	// Present in both branches: MCPSetExisted does not write `updated`, and a
+	// consumer branching on it must not read undefined.
+	Result->SetBoolField(TEXT("updated"), bLevelChanged);
+	Result->SetBoolField(TEXT("unchanged"), !bLevelChanged);
+	if (Cur)
+	{
+		Result->SetStringField(TEXT("levelName"), NewLevelName);
+		Result->SetStringField(TEXT("levelPath"), Cur->GetOuter()->GetPathName());
+	}
+	Result->SetStringField(TEXT("previousLevelName"), PreviousLevelName);
+	Result->SetStringField(TEXT("previousLevelPath"), PreviousLevelPath);
+
+	if (bLevelChanged && !PreviousLevelName.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("levelName"), PreviousLevelName);
+		MCPSetRollback(Result, TEXT("set_current_edit_level"), Payload);
+		if (PreviousNameMatches > 1)
+		{
+			Result->SetBoolField(TEXT("rollbackLossy"), true);
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("%d loaded sub-levels answer to the name '%s', and SetCurrentLevelByName takes the first one it reaches. This action's only parameter is that name, so the inverse can set the current level to a DIFFERENT sub-level of the same name, and everything spawned afterwards would land in the wrong package. previousLevelPath names the one this call left; check the current level against it after replaying."),
+				PreviousNameMatches, *PreviousLevelName));
+		}
+	}
+	return MCPResult(Result);
+}
+
+// #206: streaming sub-level CRUD
+namespace
+{
+	static ULevelStreaming* FindStreamingByName(UWorld* World, const FString& NameOrPath)
+	{
+		if (!World) return nullptr;
+		for (ULevelStreaming* SL : World->GetStreamingLevels())
+		{
+			if (!SL) continue;
+			const FString PkgName = SL->GetWorldAssetPackageName();
+			if (PkgName == NameOrPath) return SL;
+			if (FPaths::GetBaseFilename(PkgName) == NameOrPath) return SL;
+			if (SL->GetName() == NameOrPath) return SL;
+		}
+		return nullptr;
+	}
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::ListStreamingSublevels(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	TArray<TSharedPtr<FJsonValue>> Out;
+	for (ULevelStreaming* SL : World->GetStreamingLevels())
+	{
+		if (!SL) continue;
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		const FString PkgName = SL->GetWorldAssetPackageName();
+		O->SetStringField(TEXT("levelName"), FPaths::GetBaseFilename(PkgName));
+		O->SetStringField(TEXT("packageName"), PkgName);
+		O->SetStringField(TEXT("streamingClass"), SL->GetClass()->GetName());
+		O->SetBoolField(TEXT("initiallyLoaded"), SL->ShouldBeLoaded());
+		O->SetBoolField(TEXT("initiallyVisible"), SL->GetShouldBeVisibleFlag());
+		O->SetBoolField(TEXT("loaded"), SL->IsLevelLoaded());
+		O->SetBoolField(TEXT("visible"), SL->GetShouldBeVisibleFlag());
+		const FTransform T = SL->LevelTransform;
+		TSharedPtr<FJsonObject> Loc = MCPVec3ToJsonObject(T.GetLocation());
+		O->SetObjectField(TEXT("location"), Loc);
+		Out.Add(MakeShared<FJsonValueObject>(O));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("sublevels"), Out);
+	Result->SetNumberField(TEXT("count"), Out.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::AddStreamingSublevel(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+	FString LevelPath; if (auto E = RequireString(Params, TEXT("levelPath"), LevelPath)) return E;
+
+	const FString StreamingClassName = OptionalString(Params, TEXT("streamingClass"), TEXT("LevelStreamingDynamic"));
+	UClass* StreamingClass = ULevelStreamingDynamic::StaticClass();
+	if (StreamingClassName.Equals(TEXT("LevelStreamingAlwaysLoaded"), ESearchCase::IgnoreCase))
+	{
+		StreamingClass = LoadClass<ULevelStreaming>(nullptr, TEXT("/Script/Engine.LevelStreamingAlwaysLoaded"));
+		if (!StreamingClass) StreamingClass = ULevelStreamingDynamic::StaticClass();
+	}
+
+	ULevelStreaming* SL = UEditorLevelUtils::AddLevelToWorld(World, *LevelPath, StreamingClass);
+	if (!SL)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to add sub-level '%s'"), *LevelPath));
+	}
+
+	if (HasParam(Params, TEXT("initiallyLoaded"))) SL->SetShouldBeLoaded(OptionalBool(Params, TEXT("initiallyLoaded"), true));
+	if (HasParam(Params, TEXT("initiallyVisible"))) SL->SetShouldBeVisible(OptionalBool(Params, TEXT("initiallyVisible"), true));
+
+	if (HasParam(Params, TEXT("location")))
+	{
+		FTransform T = SL->LevelTransform;
+		T.SetLocation(OptionalVec3(Params, TEXT("location")));
+		SL->LevelTransform = T;
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("levelPath"), LevelPath);
+	Result->SetStringField(TEXT("levelName"), FPaths::GetBaseFilename(LevelPath));
+
+	// remove_streaming_sublevel resolves by package name, which is what
+	// AddLevelToWorld recorded on the streaming level it returned.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("levelName"), SL->GetWorldAssetPackageName());
+	MCPSetRollback(Result, TEXT("remove_streaming_sublevel"), Payload);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::RemoveStreamingSublevel(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, {
+		TEXT("levelName"),
+	});
+
+	REQUIRE_EDITOR_WORLD(World);
+	FString Name;
+	// levelPath is a spec alias, renamed to levelName before this runs (#1057).
+	if (auto Err = RequireString(Params, TEXT("levelName"), Name)) return Err;
+
+	ULevelStreaming* SL = FindStreamingByName(World, Name);
+	if (!SL)
+	{
+		// Idempotent: a sub-level that is not in the world is the state this
+		// call asks for, so a replayed rollback is a no-op rather than a fail.
+		//
+		// #963's rule applies though: a destructive action that matched nothing
+		// must not answer with a bare success. A typo and a completed removal
+		// produce the same alreadyRemoved=true, so the response names what IS
+		// in the world and says which of the two this might be.
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("levelName"), Name);
+		Noop->SetBoolField(TEXT("removed"), false);
+		Noop->SetBoolField(TEXT("alreadyRemoved"), true);
+		Noop->SetStringField(TEXT("zeroMatchNote"),
+			TEXT("No streaming sub-level answers to that name. This is idempotent, not a statement that it was ever there: an already-removed sub-level and a misspelt name look identical here. Compare against candidates[] before concluding the removal happened."));
+		TArray<TSharedPtr<FJsonValue>> Candidates;
+		for (ULevelStreaming* Other : World->GetStreamingLevels())
+		{
+			if (!Other) continue;
+			Candidates.Add(MakeShared<FJsonValueString>(Other->GetWorldAssetPackageName()));
+		}
+		Noop->SetArrayField(TEXT("candidates"), Candidates);
+		return MCPResult(Noop);
+	}
+
+	// Everything add_streaming_sublevel can put back, read before the removal.
+	const FString PackageName = SL->GetWorldAssetPackageName();
+	const bool bWasLoaded = SL->ShouldBeLoaded();
+	const bool bWasVisible = SL->GetShouldBeVisibleFlag();
+	const FVector PreviousLocation = SL->LevelTransform.GetLocation();
+	const bool bWasAlwaysLoaded = SL->GetClass()->GetName().Contains(TEXT("AlwaysLoaded"));
+
+	ULevel* Loaded = SL->GetLoadedLevel();
+	if (Loaded)
+	{
+		UEditorLevelUtils::RemoveLevelFromWorld(Loaded);
+	}
+	World->RemoveStreamingLevels({ SL });
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("levelName"), Name);
+	Result->SetStringField(TEXT("packageName"), PackageName);
+	Result->SetBoolField(TEXT("removed"), true);
+	Result->SetBoolField(TEXT("alreadyRemoved"), false);
+
+	if (!PackageName.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("levelPath"), PackageName);
+		Payload->SetStringField(TEXT("streamingClass"),
+			bWasAlwaysLoaded ? TEXT("LevelStreamingAlwaysLoaded") : TEXT("LevelStreamingDynamic"));
+		Payload->SetBoolField(TEXT("initiallyLoaded"), bWasLoaded);
+		Payload->SetBoolField(TEXT("initiallyVisible"), bWasVisible);
+		Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLocation));
+		MCPSetRollback(Result, TEXT("add_streaming_sublevel"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The biggest loss first: removing a sub-level discards the loaded ULevel, and adding it back LOADS IT FROM DISK, so every unsaved edit to every actor inside it is gone and does not come back. Beyond that, the sub-level returns with its package, its loaded and visible flags and its transform location, but add_streaming_sublevel only builds a LevelStreamingDynamic or a LevelStreamingAlwaysLoaded, so any other streaming class becomes the nearest of those two, and the streaming level's remaining properties, the transform rotation and its position in the world's streaming list are not restored."));
+	}
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, {
+		TEXT("levelName"), TEXT("initiallyLoaded"), TEXT("initiallyVisible"), TEXT("location"), TEXT("editorVisible"),
+	});
+
+	REQUIRE_EDITOR_WORLD(World);
+	FString Name;
+	// levelPath is a spec alias, renamed to levelName before this runs (#1057).
+	if (auto Err = RequireString(Params, TEXT("levelName"), Name)) return Err;
+
+	ULevelStreaming* SL = FindStreamingByName(World, Name);
+	if (!SL) return MCPError(FString::Printf(TEXT("Streaming sub-level not found: %s"), *Name));
+
+	// Every field this action can write, as it stands, so the inverse is this
+	// same call with the values that were there.
+	const bool bPreviousLoaded = SL->ShouldBeLoaded();
+	const bool bPreviousVisible = SL->GetShouldBeVisibleFlag();
+	const FVector PreviousLocation = SL->LevelTransform.GetLocation();
+	// Read the field the write actually drives. UEditorLevelUtils::SetLevelVisibility
+	// sets ULevelStreaming::bShouldBeVisibleInEditor; ULevel::bIsVisible is the
+	// transient "is it associated with the world right now" state, which is a
+	// different question and can disagree mid-transition. Restoring from the
+	// wrong one would put back a value this call never changed.
+	const bool bPreviousEditorVisible = SL->GetShouldBeVisibleInEditor();
+
+	bool bChanged = false;
+	if (HasParam(Params, TEXT("initiallyLoaded"))) { SL->SetShouldBeLoaded(OptionalBool(Params, TEXT("initiallyLoaded"), true)); bChanged = true; }
+	if (HasParam(Params, TEXT("initiallyVisible"))) { SL->SetShouldBeVisible(OptionalBool(Params, TEXT("initiallyVisible"), true)); bChanged = true; }
+
+	const TSharedPtr<FJsonObject>* LocObj = nullptr;
+	if (TryGetObjectParam(Params, TEXT("location"), LocObj) && LocObj && (*LocObj).IsValid())
+	{
+		double X = 0, Y = 0, Z = 0;
+		(*LocObj)->TryGetNumberField(TEXT("x"), X);
+		(*LocObj)->TryGetNumberField(TEXT("y"), Y);
+		(*LocObj)->TryGetNumberField(TEXT("z"), Z);
+		FTransform T = SL->LevelTransform;
+		T.SetLocation(FVector(X, Y, Z));
+		SL->LevelTransform = T;
+		bChanged = true;
+	}
+
+	bool bEditorVisibleSet = false;
+	bool bEditorVisibleSkipped = false;
+	const bool bEditorVisible = OptionalBool(Params, TEXT("editorVisible"), true);
+	if (HasParam(Params, TEXT("editorVisible")))
+	{
+		ULevel* Loaded = SL->GetLoadedLevel();
+		if (Loaded)
+		{
+			UEditorLevelUtils::SetLevelVisibility(Loaded, bEditorVisible, false);
+			bEditorVisibleSet = true;
+		}
+		else
+		{
+			// The sub-level is not loaded, so there is nothing to show or hide
+			// and no write happened. Flagging it as set anyway made the
+			// response claim a write and emit a rollback record for it.
+			bEditorVisibleSkipped = true;
+		}
+	}
+
+	auto Result = MCPSuccess();
+	if (bChanged) MCPSetUpdated(Result); else MCPSetExisted(Result);
+	Result->SetStringField(TEXT("levelName"), Name);
+	Result->SetBoolField(TEXT("initiallyLoaded"), SL->ShouldBeLoaded());
+	Result->SetBoolField(TEXT("initiallyVisible"), SL->GetShouldBeVisibleFlag());
+	if (bEditorVisibleSet) Result->SetBoolField(TEXT("editorVisible"), bEditorVisible);
+	if (bEditorVisibleSkipped)
+	{
+		Result->SetStringField(TEXT("editorVisibleNote"),
+			TEXT("editorVisible was passed but the sub-level is not loaded, so there was nothing to show or hide and no write was made. Load it first if you meant to change its editor visibility."));
+	}
+
+	if (bChanged || bEditorVisibleSet)
+	{
+		// Restate only the fields this call actually wrote. Passing the others
+		// would write values the caller never asked to change.
+		//
+		// Addressed by the resolved PACKAGE NAME, never by the caller's token.
+		// FindStreamingByName also matches on the base filename, and
+		// /Game/A/Sub and /Game/B/Sub both answer to "Sub", so replaying the
+		// token could write this sub-level's old flags onto a different one.
+		// The package name is the pass that resolver checks first and the only
+		// one that is unique.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("levelName"), SL->GetWorldAssetPackageName());
+		if (HasParam(Params, TEXT("initiallyLoaded"))) Payload->SetBoolField(TEXT("initiallyLoaded"), bPreviousLoaded);
+		if (HasParam(Params, TEXT("initiallyVisible"))) Payload->SetBoolField(TEXT("initiallyVisible"), bPreviousVisible);
+		if (HasParam(Params, TEXT("location"))) Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLocation));
+		if (bEditorVisibleSet) Payload->SetBoolField(TEXT("editorVisible"), bPreviousEditorVisible);
+		MCPSetRollback(Result, TEXT("set_streaming_sublevel_properties"), Payload);
+	}
+	return MCPResult(Result);
 }
