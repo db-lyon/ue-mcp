@@ -637,6 +637,17 @@ static UMaterial* CreateSimpleMaterial(const FString& Name, const FString& Packa
 //  Step implementations
 // ===========================================================================
 
+namespace
+{
+	/** Mark a demo step result failed with Message and hand it back. */
+	TSharedPtr<FJsonObject> DemoStepFailed(const TSharedPtr<FJsonObject>& Result, const FString& Message)
+	{
+		Result->SetStringField(TEXT("error"), Message);
+		Result->SetBoolField(TEXT("success"), false);
+		return Result;
+	}
+}
+
 // Step 1: Create level
 TSharedPtr<FJsonObject> FDemoHandlers::StepCreateLevel()
 {
@@ -646,9 +657,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepCreateLevel()
 	ULevelEditorSubsystem* LevelSub = GEditor ? GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
 	if (!LevelSub)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("LevelEditorSubsystem not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("LevelEditorSubsystem not available"));
 	}
 
 	UEditorAssetLibrary::MakeDirectory(DemoConstants::MAT_DIR);
@@ -732,9 +741,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepFloor()
 
 	if (!FloorActor)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn floor"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn floor"));
 	}
 
 	ApplyMat(FloorActor, LoadDemoMat(TEXT("M_Demo_Floor")));
@@ -758,9 +765,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepPedestal()
 
 	if (!Ped)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn pedestal"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn pedestal"));
 	}
 
 	ApplyMat(Ped, LoadDemoMat(TEXT("M_Demo_Pillar")));
@@ -784,9 +789,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepHeroSphere()
 
 	if (!Hero)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn hero sphere"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn hero sphere"));
 	}
 
 	ApplyMat(Hero, LoadDemoMat(TEXT("M_Demo_Glow")));
@@ -913,9 +916,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepHeroLight()
 
 	if (!L)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn hero light"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn hero light"));
 	}
 
 	Result->SetStringField(TEXT("actorLabel"), L->GetActorLabel());
@@ -931,9 +932,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepMoonlight()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Editor world not available"));
 	}
 
 	FTransform SpawnTransform(FRotator(-30.0, 210.0, 0.0), FVector::ZeroVector);
@@ -941,9 +940,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepMoonlight()
 		ADirectionalLight::StaticClass(), SpawnTransform);
 	if (!DirLight)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn directional light"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn directional light"));
 	}
 
 	DirLight->SetActorLabel(TEXT("Demo_Moonlight"));
@@ -970,18 +967,14 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepSkyLight()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Editor world not available"));
 	}
 
 	FTransform SpawnTransform(FRotator::ZeroRotator, FVector(0.0, 0.0, 500.0));
 	ASkyLight* Sky = World->SpawnActor<ASkyLight>(ASkyLight::StaticClass(), SpawnTransform);
 	if (!Sky)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn sky light"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn sky light"));
 	}
 
 	Sky->SetActorLabel(TEXT("Demo_SkyLight"));
@@ -1008,9 +1001,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepFog()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Editor world not available"));
 	}
 
 	FTransform SpawnTransform(FRotator::ZeroRotator, FVector::ZeroVector);
@@ -1018,9 +1009,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepFog()
 		AExponentialHeightFog::StaticClass(), SpawnTransform);
 	if (!Fog)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn fog"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn fog"));
 	}
 
 	Fog->SetActorLabel(TEXT("Demo_Fog"));
@@ -1047,9 +1036,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepPostProcess()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Editor world not available"));
 	}
 
 	FTransform SpawnTransform(FRotator::ZeroRotator, FVector::ZeroVector);
@@ -1057,9 +1044,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepPostProcess()
 		APostProcessVolume::StaticClass(), SpawnTransform);
 	if (!PP)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn post process volume"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn post process volume"));
 	}
 
 	PP->SetActorLabel(TEXT("Demo_PostProcess"));
@@ -1091,9 +1076,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Editor world not available"));
 	}
 
 	// Clean up any existing asset
@@ -1109,9 +1092,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 		nullptr, TEXT("/Niagara/DefaultAssets/Templates/Emitters/Fountain.Fountain"));
 	if (!FountainEmitter)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not load engine Fountain emitter template"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Could not load engine Fountain emitter template"));
 	}
 
 	// Create the system using the stock editor factory. The concrete factory
@@ -1122,9 +1103,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 	UFactory* Factory = CreateEditorFactoryByClassPath(TEXT("/Script/NiagaraEditor.NiagaraSystemFactoryNew"));
 	if (!Factory)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not create Niagara system factory"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Could not create Niagara system factory"));
 	}
 
 #if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4)
@@ -1141,9 +1120,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 	UNiagaraSystem* NiagaraSys = Cast<UNiagaraSystem>(NSAsset);
 	if (!NiagaraSys)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create NiagaraSystem"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to create NiagaraSystem"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NiagaraSys->GetPathName());
@@ -1153,9 +1130,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 	AActor* NiagaraActor = World->SpawnActor<AActor>(AActor::StaticClass(), SpawnTransform);
 	if (!NiagaraActor)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn Niagara actor"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn Niagara actor"));
 	}
 
 	NiagaraActor->SetActorLabel(TEXT("Demo_NiagaraVFX"));
@@ -1192,9 +1167,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepPcgScatter()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Editor world not available"));
 	}
 
 	// Spawn PCG Volume on floor
@@ -1202,9 +1175,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepPcgScatter()
 	APCGVolume* PCGVol = World->SpawnActor<APCGVolume>(APCGVolume::StaticClass(), SpawnTransform);
 	if (!PCGVol)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn PCG volume"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn PCG volume"));
 	}
 
 	PCGVol->SetActorLabel(TEXT("Demo_PCGScatter"));
@@ -1240,9 +1211,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepOrbitRings()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Editor world not available"));
 	}
 
 	UMaterialInterface* GlowMat = LoadDemoMat(TEXT("M_Demo_Glow"));
@@ -1256,9 +1225,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepOrbitRings()
 	AActor* PivotActor = World->SpawnActor<AActor>(AActor::StaticClass(), PivotTransform);
 	if (!PivotActor)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn orbit pivot"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to spawn orbit pivot"));
 	}
 	PivotActor->SetActorLabel(TEXT("Demo_OrbitPivot"));
 	PivotActor->SetFolderPath(*DemoConstants::FOLDER);
@@ -1321,9 +1288,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepLevelSequence()
 	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Editor world not available"));
 	}
 
 	// Create LevelSequence asset
@@ -1338,9 +1303,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepLevelSequence()
 	UPackage* Package = CreatePackage(*FullPackagePath);
 	if (!Package)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create sequence package"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to create sequence package"));
 	}
 
 	ULevelSequence* Seq = NewObject<ULevelSequence>(Package, FName(*SeqName), RF_Public | RF_Standalone);
@@ -1348,9 +1311,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepLevelSequence()
 
 	if (!Seq)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create LevelSequence"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("Failed to create LevelSequence"));
 	}
 
 	FAssetRegistryModule::AssetCreated(Seq);
@@ -1419,17 +1380,13 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepTuningPanel()
 	UClass* EUWBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityWidgetBlueprint"));
 	if (!EUWBClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("EditorUtilityWidgetBlueprint class not found - Blutility plugin disabled?"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("EditorUtilityWidgetBlueprint class not found - Blutility plugin disabled?"));
 	}
 
 	UClass* FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/UMGEditor.WidgetBlueprintFactory"));
 	if (!FactoryClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("WidgetBlueprintFactory not found"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("WidgetBlueprintFactory not found"));
 	}
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
@@ -1445,9 +1402,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepTuningPanel()
 	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, EUWBClass, Factory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("CreateAsset returned null for EUW_DemoTuning"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("CreateAsset returned null for EUW_DemoTuning"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
@@ -1467,9 +1422,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepSave()
 		GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
 	if (!LevelSub)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("LevelEditorSubsystem not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return Result;
+		return DemoStepFailed(Result, TEXT("LevelEditorSubsystem not available"));
 	}
 
 	bool bSaved = LevelSub->SaveCurrentLevel();
