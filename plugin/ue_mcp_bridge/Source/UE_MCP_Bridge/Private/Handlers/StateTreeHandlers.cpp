@@ -1204,7 +1204,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
-	const FString Name = OptionalString(Params, TEXT("name"));
+	FString Name;
+	const TSharedPtr<FJsonValue> NameErr = RequireString(Params, TEXT("name"), Name);
 	const FString StateTypeStr = OptionalString(Params, TEXT("stateType"));
 	const FString SelectionBehaviorStr = OptionalString(Params, TEXT("selectionBehavior"));
 	const int32 InsertIndex = static_cast<int32>(OptionalNumber(Params, TEXT("insertIndex")));
@@ -1215,11 +1216,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 	const bool bHasInsertIndex = HasParam(Params, TEXT("insertIndex"));
 	const bool bHasLinkedSubtree = HasParam(Params, TEXT("linkedSubtree"));
 
+	if (NameErr) return NameErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
-
-	if (Name.IsEmpty()) return MCPError(TEXT("name is required"));
 
 	EStateTreeStateType StateType = EStateTreeStateType::State;
 	if (bHasStateType)
@@ -1632,20 +1632,20 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTask(const TSharedPtr<FJsonObject>
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
-	const FString StructType = OptionalString(Params, TEXT("structType"));
+	FString StructType;
+	const TSharedPtr<FJsonValue> StructTypeErr = RequireString(Params, TEXT("structType"), StructType);
 	TSharedPtr<FJsonObject> InstanceProps;
 	if (HasParam(Params, TEXT("instanceProperties")))
 	{
 		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
+	if (StructTypeErr) return StructTypeErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
-
-	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	State->Modify();
 
@@ -1683,7 +1683,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEnterCondition(const TSharedPtr<FJ
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
-	const FString StructType = OptionalString(Params, TEXT("structType"));
+	FString StructType;
+	const TSharedPtr<FJsonValue> StructTypeErr = RequireString(Params, TEXT("structType"), StructType);
 	TSharedPtr<FJsonObject> InstanceProps;
 	if (HasParam(Params, TEXT("instanceProperties")))
 	{
@@ -1691,14 +1692,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEnterCondition(const TSharedPtr<FJ
 	}
 	const bool bHasOperand = HasParam(Params, TEXT("operand"));
 	const FString Operand = OptionalString(Params, TEXT("operand"));
+	if (StructTypeErr) return StructTypeErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
-
-	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	State->Modify();
 
@@ -2020,17 +2020,17 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEvaluator(const TSharedPtr<FJsonOb
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
-	const FString StructType = OptionalString(Params, TEXT("structType"));
+	FString StructType;
+	const TSharedPtr<FJsonValue> StructTypeErr = RequireString(Params, TEXT("structType"), StructType);
 	TSharedPtr<FJsonObject> InstanceProps;
 	if (HasParam(Params, TEXT("instanceProperties")))
 	{
 		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
+	if (StructTypeErr) return StructTypeErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
-
-	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	FString ResolveError;
 	UScriptStruct* NodeStruct = MCPResolveScriptStruct(StructType, &ResolveError, true);
@@ -2258,17 +2258,17 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddGlobalTask(const TSharedPtr<FJsonO
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
-	const FString StructType = OptionalString(Params, TEXT("structType"));
+	FString StructType;
+	const TSharedPtr<FJsonValue> StructTypeErr = RequireString(Params, TEXT("structType"), StructType);
 	TSharedPtr<FJsonObject> InstanceProps;
 	if (HasParam(Params, TEXT("instanceProperties")))
 	{
 		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
+	if (StructTypeErr) return StructTypeErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
-
-	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	FString ResolveError;
 	UScriptStruct* NodeStruct = MCPResolveScriptStruct(StructType, &ResolveError, true);
@@ -2596,7 +2596,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedP
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
 	const int32 TransIndex = static_cast<int32>(OptionalNumber(Params, TEXT("transitionIndex")));
-	const FString StructType = OptionalString(Params, TEXT("structType"));
+	FString StructType;
+	const TSharedPtr<FJsonValue> StructTypeErr = RequireString(Params, TEXT("structType"), StructType);
 	TSharedPtr<FJsonObject> InstanceProps;
 	if (HasParam(Params, TEXT("instanceProperties")))
 	{
@@ -2604,6 +2605,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedP
 	}
 	const bool bHasOperand = HasParam(Params, TEXT("operand"));
 	const FString Operand = OptionalString(Params, TEXT("operand"));
+	if (StructTypeErr) return StructTypeErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
@@ -2615,8 +2617,6 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedP
 	{
 		return MCPError(FString::Printf(TEXT("Invalid transitionIndex: %d"), TransIndex));
 	}
-
-	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	State->Modify();
 
@@ -3082,14 +3082,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddColor(const TSharedPtr<FJsonObject
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
-	const FString DisplayName = OptionalString(Params, TEXT("displayName"));
+	FString DisplayName;
+	const TSharedPtr<FJsonValue> DisplayNameErr = RequireString(Params, TEXT("displayName"), DisplayName);
 	const bool bHasColor = HasParam(Params, TEXT("color"));
 	const FString ColorStr = OptionalString(Params, TEXT("color"));
+	if (DisplayNameErr) return DisplayNameErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
-
-	if (DisplayName.IsEmpty()) return MCPError(TEXT("displayName is required"));
 
 	for (const FStateTreeEditorColor& C : EditorData->Colors)
 	{
@@ -3192,8 +3192,12 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
-	const FString ParamName = OptionalString(Params, TEXT("paramName"));
-	const FString ParamType = OptionalString(Params, TEXT("paramType"));
+	FString ParamName;
+	const TSharedPtr<FJsonValue> ParamNameErr = RequireString(Params, TEXT("paramName"), ParamName);
+	FString ParamType;
+	const TSharedPtr<FJsonValue> ParamTypeErr = RequireString(Params, TEXT("paramType"), ParamType);
+	if (ParamNameErr) return ParamNameErr;
+	if (ParamTypeErr) return ParamTypeErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
@@ -3205,10 +3209,6 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 	{
 		return MCPError(TEXT("Cannot add parameters to a state with fixed layout (linked state). Use set_state_parameter to override values instead."));
 	}
-
-	if (ParamName.IsEmpty()) return MCPError(TEXT("paramName is required"));
-
-	if (ParamType.IsEmpty()) return MCPError(TEXT("paramType is required"));
 
 	EPropertyBagPropertyType BagType;
 	if (ParamType == TEXT("Bool")) BagType = EPropertyBagPropertyType::Bool;
@@ -3256,7 +3256,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveStateParameter(const TSharedPtr
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
-	const FString ParamName = OptionalString(Params, TEXT("paramName"));
+	FString ParamName;
+	const TSharedPtr<FJsonValue> ParamNameErr = RequireString(Params, TEXT("paramName"), ParamName);
+	if (ParamNameErr) return ParamNameErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
@@ -3268,8 +3270,6 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveStateParameter(const TSharedPtr
 	{
 		return MCPError(TEXT("Cannot remove parameters from a state with fixed layout (linked state)."));
 	}
-
-	if (ParamName.IsEmpty()) return MCPError(TEXT("paramName is required"));
 
 	// Read the descriptor and the current value before the removal: the inverse
 	// has to name the type, and the value is worth reporting since the inverse
@@ -3360,16 +3360,16 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJ
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
-	const FString ParamName = OptionalString(Params, TEXT("paramName"));
+	FString ParamName;
+	const TSharedPtr<FJsonValue> ParamNameErr = RequireString(Params, TEXT("paramName"), ParamName);
 	const FString Value = OptionalString(Params, TEXT("value"));
+	if (ParamNameErr) return ParamNameErr;
 	UStateTree* ST = nullptr;
 	UStateTreeEditorData* EditorData = nullptr;
 	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found"));
-
-	if (ParamName.IsEmpty()) return MCPError(TEXT("paramName is required"));
 
 	FInstancedPropertyBag& Bag = State->Parameters.Parameters;
 	const UPropertyBag* BagStruct = Bag.GetPropertyBagStruct();
