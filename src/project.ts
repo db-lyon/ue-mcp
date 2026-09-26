@@ -308,6 +308,19 @@ export class ProjectContext {
     return absolutePath;
   }
 
+  /** Whether the .uproject enables UE plugin `name`; undefined when it cannot be read. */
+  isUePluginEnabled(name: string): boolean | undefined {
+    if (!this.projectPath) return undefined;
+    try {
+      const parsed = UProjectSchema.safeParse(JSON.parse(fs.readFileSync(this.projectPath, "utf-8")));
+      if (!parsed.success) return undefined;
+      const entry = parsed.data.Plugins?.find((p) => p.Name === name);
+      return entry ? entry.Enabled !== false : false;
+    } catch {
+      return undefined;
+    }
+  }
+
   get projectDir(): string | null {
     return this.projectPath ? path.dirname(this.projectPath) : null;
   }

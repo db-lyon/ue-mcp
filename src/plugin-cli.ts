@@ -58,6 +58,7 @@ import {
 import { resolvePublishToken } from "./registry-auth.js";
 import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
 import { packageVersion } from "./package-root.js";
+import { ProjectContext } from "./project.js";
 
 // --editor names one of the editors this server drives; every project lookup
 // below starts from it instead of cwd. Taken before the subcommand is shifted
@@ -303,7 +304,7 @@ function cmdInstall(): void {
 
   // Optional UE plugin dependency warning.
   if (manifest.uePluginDependency) {
-    const present = uePluginEnabled(proj.projectDir, manifest.uePluginDependency);
+    const present = projectContextIn(proj.projectDir)?.isUePluginEnabled(manifest.uePluginDependency);
     if (present === false) {
       note(`WARNING: ${name} requires UE plugin '${manifest.uePluginDependency}', not enabled in the .uproject. Enable it in the editor before using ${name} actions.`);
     } else if (present === undefined) {
@@ -1041,17 +1042,12 @@ if (errors) {
 console.log("ue-mcp plugin check: OK");
 `;
 
-function uePluginEnabled(projectDir: string, name: string): boolean | undefined {
-  const files = fs.readdirSync(projectDir).filter((f) => f.endsWith(".uproject"));
-  if (files.length === 0) return undefined;
+/** The project in `projectDir`, or undefined when it holds no .uproject. */
+function projectContextIn(projectDir: string): ProjectContext | undefined {
+  const ctx = new ProjectContext();
   try {
-    const raw = JSON.parse(fs.readFileSync(path.join(projectDir, files[0]), "utf-8")) as {
-      Plugins?: Array<{ Name?: string; Enabled?: boolean }>;
-    };
-    if (!raw.Plugins) return false;
-    const entry = raw.Plugins.find((p) => p.Name === name);
-    if (!entry) return false;
-    return entry.Enabled !== false;
+    ctx.setProject(projectDir);
+    return ctx;
   } catch {
     return undefined;
   }

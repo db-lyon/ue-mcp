@@ -58,9 +58,7 @@ import type { FlowConfig, PluginEntry } from "./flow/schema.js";
 import { loadPlugins, type PluginRecord } from "./plugin/loader.js";
 import { withAssetLocks, resolveLockingConfig } from "./locking.js";
 import { collapsingEnvWarnings } from "./session-env.js";
-import * as fs from "node:fs";
 import * as path from "node:path";
-import yaml from "js-yaml";
 
 import { ALL_TOOLS, setLiveToolGraph } from "./tools.js";
 import { unknownActionMessage } from "./action-schema.js";
@@ -75,6 +73,7 @@ import {
   type SessionSurface,
 } from "./session-surface.js";
 import { packageVersion } from "./package-root.js";
+import { readPluginsList } from "./plugin/plugins-list.js";
 
 type TextBlock = { type: "text"; text: string };
 
@@ -1246,7 +1245,14 @@ async function buildSessionLoad(
   // missing or invalid file means zero plugins, never a fatal error). Then
   // resolve, validate, and inject into target categories BEFORE the flow
   // registry is built so plugin tasks register cleanly.
-  const pluginEntries = readPluginsEntries(configDir);
+  let pluginEntries: PluginEntry[] = [];
+  if (configDir) {
+    try {
+      pluginEntries = readPluginsList(path.join(configDir, "ue-mcp.yml"));
+    } catch (e) {
+      warn("plugin", `failed to parse plugins: from ue-mcp.yml - ${(e as Error).message}`);
+    }
+  }
   const pluginLoad = await loadPlugins(
     baseGraphFor(ALL_TOOLS),
     pluginEntries,
@@ -1299,34 +1305,6 @@ async function buildSessionLoad(
   };
 }
 
-/**
- * Best-effort read of the `plugins:` array from ue-mcp.yml. Returns [] when
- * the file is missing, unreadable, or malformed - plugin failures are loud at
- * load time, not fatal here.
- */
-function readPluginsEntries(configDir: string | undefined): PluginEntry[] {
-  if (!configDir) return [];
-  const configPath = path.join(configDir, "ue-mcp.yml");
-  if (!fs.existsSync(configPath)) return [];
-  try {
-    const raw = yaml.load(fs.readFileSync(configPath, "utf-8")) as { plugins?: unknown } | null;
-    if (!raw || !Array.isArray(raw.plugins)) return [];
-    const out: PluginEntry[] = [];
-    for (const entry of raw.plugins) {
-      if (entry && typeof entry === "object" && typeof (entry as { name?: unknown }).name === "string") {
-        const e = entry as { name: string; version?: unknown };
-        out.push({
-          name: e.name,
-          version: typeof e.version === "string" ? e.version : undefined,
-        });
-      }
-    }
-    return out;
-  } catch (e) {
-    warn("plugin", `failed to parse plugins: from ue-mcp.yml - ${(e as Error).message}`);
-    return [];
-  }
-}
 
 function buildKnowledgeBlock(knowledgeByCategory: Record<string, string[]>): string {
   const lines: string[] = [];
@@ -1369,7 +1347,7 @@ function buildPluginWarningBlock(surfaces: SessionSurface[]): string {
 
 function toPluginInfo(rec: PluginRecord, project: ProjectContext): PluginInfo {
   const uePluginPresent = rec.uePluginDependency
-    ? isUePluginEnabled(project, rec.uePluginDependency)
+    ? project.isUePluginEnabled(rec.uePluginDependency)
     : undefined;
   return {
     name: rec.name,
@@ -1391,20 +1369,6 @@ function toPluginInfo(rec: PluginRecord, project: ProjectContext): PluginInfo {
   };
 }
 
-function isUePluginEnabled(project: ProjectContext, name: string): boolean | undefined {
-  if (!project.projectPath) return undefined;
-  try {
-    const raw = JSON.parse(fs.readFileSync(project.projectPath, "utf-8")) as {
-      Plugins?: Array<{ Name?: string; Enabled?: boolean }>;
-    };
-    if (!raw.Plugins) return false;
-    const entry = raw.Plugins.find((p) => p.Name === name);
-    if (!entry) return false;
-    return entry.Enabled !== false;
-  } catch {
-    return undefined;
-  }
-}
 
 // Route subcommands
 const subcmd = process.argv[2];

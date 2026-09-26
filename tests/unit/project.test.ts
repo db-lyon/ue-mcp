@@ -54,6 +54,30 @@ describe("ProjectContext.resolveContentPath", () => {
   });
 });
 
+describe("ProjectContext.isUePluginEnabled", () => {
+  it("reads the .uproject Plugins list, treating a listed plugin without Enabled as on", () => {
+    const uproject = makeTempProject();
+    fs.writeFileSync(uproject, JSON.stringify({
+      Plugins: [{ Name: "On", Enabled: true }, { Name: "Off", Enabled: false }, { Name: "Bare" }],
+    }));
+    const ctx = new ProjectContext();
+    ctx.setProject(uproject);
+    expect(ctx.isUePluginEnabled("On")).toBe(true);
+    expect(ctx.isUePluginEnabled("Bare")).toBe(true);
+    expect(ctx.isUePluginEnabled("Off")).toBe(false);
+    expect(ctx.isUePluginEnabled("Absent")).toBe(false);
+  });
+
+  it("cannot say without a readable .uproject", () => {
+    expect(new ProjectContext().isUePluginEnabled("Any")).toBeUndefined();
+    const uproject = makeTempProject();
+    const ctx = new ProjectContext();
+    ctx.setProject(uproject);
+    fs.writeFileSync(uproject, "{ not json");
+    expect(ctx.isUePluginEnabled("Any")).toBeUndefined();
+  });
+});
+
 describe("ProjectContext config loading", () => {
   let globalCfg: string;
   beforeEach(() => {
