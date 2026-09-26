@@ -120,7 +120,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "param-forwarding.ts": "Pure read tracking over one mapper call; nothing per editor.",
   "handler-spec.ts": "Validates and compares the recorded handler specs it is handed; holds nothing per editor.",
   "call-pipeline.ts": "Composes those two over one call's parameters and result; holds nothing per editor.",
-  "pagination.ts": "Declares the cursor/limit parameters and reads the paging fields back; the editor holds the collection and the C++ half holds the cursor.",
+  "pagination.ts": "Declares the cursor/limit parameters; the editor holds the collection and the C++ half holds the cursor.",
   "engine-index.ts": "Indexes an ENGINE tree, which projects share; keyed by engine root, not by editor.",
   "cpp-correctness.ts": "Views over that index plus a Build.cs read; takes its paths as arguments.",
   "engine-analysis.ts": "Hierarchy, reference and call queries over the same engine tree and index; every path it reads is an argument.",

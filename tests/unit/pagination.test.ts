@@ -1,7 +1,7 @@
 /**
  * The TypeScript half of cursor pagination (T3).
  *
- * Three properties matter here, and each of them is a real failure this repo
+ * Two properties matter here, and each of them is a real failure this repo
  * has already paid for once:
  *
  *   1. `cursor` and `limit` are DECLARED wherever they are documented. The MCP
@@ -11,8 +11,6 @@
  *   2. `paged()` puts the two names INSIDE the `Params:` clause, because that
  *      clause is what `describe_action` and the drift test read. Appending
  *      after a `Returns` section would document them somewhere nothing looks.
- *   3. `readPage` never throws on a result shape it does not recognise, since
- *      callers probe arbitrary bridge results with it.
  */
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
@@ -22,8 +20,6 @@ import {
   PAGINATION_PARAM_NAMES,
   PAGINATION_SCHEMA,
   paged,
-  pageHint,
-  readPage,
 } from "../../src/pagination.js";
 import { parseParamsClause } from "../../src/action-schema.js";
 import { reflectionTool } from "../../src/tools/reflection.js";
@@ -170,90 +166,5 @@ describe("the reflection category, which is the first adopter", () => {
     const limit = reflectionTool.schema.limit as z.ZodType;
     expect(() => limit.parse(-1)).toThrow();
     expect(limit.parse(10)).toBe(10);
-  });
-});
-
-describe("readPage", () => {
-  it("reads a full page record", () => {
-    const page = readPage({
-      success: true,
-      tags: [],
-      count: 500,
-      pageOffset: 0,
-      hasMore: true,
-      nextCursor: "abc",
-      total: 1200,
-      totalKnown: true,
-    });
-    expect(page).toEqual({
-      count: 500,
-      pageOffset: 0,
-      hasMore: true,
-      nextCursor: "abc",
-      total: 1200,
-      totalKnown: true,
-      collectionChanged: false,
-      cursorNote: undefined,
-    });
-  });
-
-  it("carries the handler's account of a collection that moved between pages", () => {
-    const page = readPage({
-      hasMore: true,
-      count: 10,
-      pageOffset: 500,
-      nextCursor: "def",
-      totalKnown: true,
-      total: 900,
-      collectionChanged: true,
-      cursorNote: "The collection changed between pages.",
-    });
-    expect(page?.collectionChanged).toBe(true);
-    expect(page?.cursorNote).toBe("The collection changed between pages.");
-  });
-
-  it("reports an unknown total rather than inventing one", () => {
-    const page = readPage({ hasMore: false, count: 3, pageOffset: 0, totalKnown: false });
-    expect(page?.total).toBeUndefined();
-    expect(page?.totalKnown).toBe(false);
-  });
-
-  it("returns undefined for anything that is not a paged result, without throwing", () => {
-    for (const input of [undefined, null, 7, "text", [], {}, { count: 3 }, { hasMore: "yes" }]) {
-      expect(readPage(input)).toBeUndefined();
-    }
-  });
-});
-
-describe("pageHint", () => {
-  it("names the exact call that reads the next page", () => {
-    const hint = pageHint("reflection", "list_tags", readPage({
-      hasMore: true, count: 500, pageOffset: 0, nextCursor: "abc", total: 1200, totalKnown: true,
-    }));
-    expect(hint).toContain("rows 1-500 of 1200");
-    expect(hint).toContain('reflection(action="list_tags", cursor="abc")');
-  });
-
-  it("says nothing on the last page", () => {
-    expect(pageHint("reflection", "list_tags", readPage({
-      hasMore: false, count: 4, pageOffset: 0, totalKnown: true, total: 4,
-    }))).toBe("");
-  });
-
-  it("says nothing at all for an unpaged result", () => {
-    expect(pageHint("reflection", "reflect_class", readPage({ success: true }))).toBe("");
-  });
-
-  it("passes the change note through, since a caller has to see it to act on it", () => {
-    const hint = pageHint("reflection", "list_classes", readPage({
-      hasMore: false,
-      count: 2,
-      pageOffset: 8,
-      totalKnown: true,
-      total: 10,
-      collectionChanged: true,
-      cursorNote: "Rows near that boundary may have been skipped.",
-    }));
-    expect(hint).toBe("Rows near that boundary may have been skipped.");
   });
 });

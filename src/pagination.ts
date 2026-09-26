@@ -8,8 +8,8 @@ import { z } from "zod";
  * which owns the cursor format and the rules for what happens when the
  * collection changes between pages. This module is the half that lives on this
  * side of the bridge: it declares `cursor` and `limit` identically for every
- * category that pages, keeps each action's documentation in step with that
- * declaration, and reads the paging fields back off a result.
+ * category that pages, and keeps each action's documentation in step with that
+ * declaration.
  *
  * ── Why the declaration is not optional ──
  *
@@ -130,78 +130,4 @@ function clauseLength(text: string): number {
     }
   }
   return text.length;
-}
-
-/** The paging fields a paged bridge result carries. */
-export interface PageInfo {
-  /** Rows on this page. */
-  count: number;
-  /** Index of this page's first row in the full enumeration. */
-  pageOffset: number;
-  /** Whether another page exists. */
-  hasMore: boolean;
-  /** Pass this back as `cursor` to read the next page. Absent on the last one. */
-  nextCursor?: string;
-  /** Rows in the whole collection, when the handler could count it. */
-  total?: number;
-  /** False when the handler could not count the collection, so `total` is absent. */
-  totalKnown: boolean;
-  /** True when the collection moved underneath a resumed page. */
-  collectionChanged: boolean;
-  /** Plain-language account of that change, straight from the handler. */
-  cursorNote?: string;
-}
-
-/**
- * Read the paging fields off a bridge result, or `undefined` when the result is
- * not a paged one. Never throws on a shape it does not recognise: a caller
- * probing an arbitrary result must be able to ask without guarding first.
- */
-export function readPage(result: unknown): PageInfo | undefined {
-  if (typeof result !== "object" || result === null) return undefined;
-  const row = result as Record<string, unknown>;
-  if (typeof row.hasMore !== "boolean") return undefined;
-
-  const num = (key: string): number | undefined =>
-    typeof row[key] === "number" && Number.isFinite(row[key] as number) ? (row[key] as number) : undefined;
-
-  return {
-    count: num("count") ?? 0,
-    pageOffset: num("pageOffset") ?? 0,
-    hasMore: row.hasMore,
-    nextCursor: typeof row.nextCursor === "string" ? row.nextCursor : undefined,
-    total: num("total"),
-    totalKnown: row.totalKnown === true,
-    collectionChanged: row.collectionChanged === true,
-    cursorNote: typeof row.cursorNote === "string" ? row.cursorNote : undefined,
-  };
-}
-
-/**
- * One line telling the caller how to read the rest, written for the agent that
- * has to act on it rather than for a log. Returns an empty string when there is
- * nothing left to say, so it can be concatenated unconditionally.
- *
- * NOTHING IN src/ CALLS THIS, and nothing calls readPage above it either. The
- * "Showing rows X-Y, for the next page: cursor=..." line is not emitted
- * anywhere: callers read `nextCursor`, `hasMore` and `cursorNote` straight off
- * the raw result the bridge returned, which is already in every paged response.
- * Both functions are kept as the one place that decodes that shape, with their
- * own unit tests, for a caller that wants the decoded form rather than the raw
- * fields. Read this as the answer to "why do I not see this line": it is not
- * dead by accident and it is not wired by accident.
- */
-export function pageHint(tool: string, action: string, page: PageInfo | undefined): string {
-  if (!page) return "";
-  const parts: string[] = [];
-  if (page.hasMore && page.nextCursor) {
-    const seen = page.pageOffset + page.count;
-    const of = page.total !== undefined ? ` of ${page.total}` : "";
-    parts.push(
-      `Showing rows ${page.pageOffset + 1}-${seen}${of}. `
-      + `For the next page: ${tool}(action="${action}", cursor="${page.nextCursor}").`,
-    );
-  }
-  if (page.collectionChanged && page.cursorNote) parts.push(page.cursorNote);
-  return parts.join(" ");
 }
