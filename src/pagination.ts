@@ -36,23 +36,7 @@ export const CURSOR_PARAM = z
     + "the same, and an invalid one is refused with instructions rather than returning nothing.",
   );
 
-export const LIMIT_PARAM = z
-  .number()
-  .int()
-  .positive()
-  .optional()
-  .describe(
-    "Rows to return on this page. Each action names its own default and maximum, and refuses "
-    + "a value outside that range rather than silently clamping.",
-  );
-
-/** The two parameters, ready to spread into a category's zod shape. */
-export const PAGINATION_SCHEMA: Record<string, z.ZodType> = {
-  cursor: CURSOR_PARAM,
-  limit: LIMIT_PARAM,
-};
-
-/** The names this module declares, in the order `paged()` documents them. */
+/** The names `paged()` adds to a Params clause, in order. */
 export const PAGINATION_PARAM_NAMES = ["cursor", "limit"] as const;
 
 /**

@@ -14,42 +14,22 @@
  */
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import {
-  CURSOR_PARAM,
-  LIMIT_PARAM,
-  PAGINATION_PARAM_NAMES,
-  PAGINATION_SCHEMA,
-  paged,
-} from "../../src/pagination.js";
+import { CURSOR_PARAM, PAGINATION_PARAM_NAMES, paged } from "../../src/pagination.js";
 import { parseParams } from "../../src/action-schema.js";
 import { reflectionTool } from "../../src/tools/reflection.js";
 import { paramMapperOf } from "../../src/epic-input.js";
 
 describe("pagination parameter declarations", () => {
-  it("declares exactly cursor and limit", () => {
-    expect(Object.keys(PAGINATION_SCHEMA).sort()).toEqual(["cursor", "limit"]);
-    expect(PAGINATION_SCHEMA.cursor).toBe(CURSOR_PARAM);
-    expect(PAGINATION_SCHEMA.limit).toBe(LIMIT_PARAM);
+  it("pages on cursor and limit", () => {
     expect([...PAGINATION_PARAM_NAMES]).toEqual(["cursor", "limit"]);
   });
 
-  it("accepts an omitted cursor and a whole positive limit", () => {
+  it("accepts an omitted cursor", () => {
     expect(CURSOR_PARAM.parse(undefined)).toBeUndefined();
-    expect(LIMIT_PARAM.parse(undefined)).toBeUndefined();
-    expect(LIMIT_PARAM.parse(25)).toBe(25);
   });
 
-  it("refuses a limit that is not a positive whole number", () => {
-    expect(() => LIMIT_PARAM.parse(0)).toThrow();
-    expect(() => LIMIT_PARAM.parse(-5)).toThrow();
-    expect(() => LIMIT_PARAM.parse(2.5)).toThrow();
-  });
-
-  it("describes both parameters, since the description is the agent's only guide", () => {
-    for (const schema of Object.values(PAGINATION_SCHEMA)) {
-      const described = schema as unknown as { description?: string };
-      expect(described.description ?? "").not.toEqual("");
-    }
+  it("describes the cursor, since the description is the agent's only guide", () => {
+    expect((CURSOR_PARAM as unknown as { description?: string }).description ?? "").not.toEqual("");
   });
 });
 
