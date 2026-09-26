@@ -158,7 +158,6 @@ private:
 	static EAppReturnType::Type ParseResponseType(const FString& ResponseStr, bool& bOutValid);
 	static FString ValidResponseList();
 	static FString ResponseTypeToString(EAppReturnType::Type Response);
-	static FString MsgTypeToString(EAppMsgType::Type MsgType);
 
 	// Shared modal walk. One traversal answers DescribeActiveModal,
 	// list_dialogs, respond_to_dialog and the policy applier, so the four

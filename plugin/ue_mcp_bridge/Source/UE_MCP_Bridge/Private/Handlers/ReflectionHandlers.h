@@ -37,5 +37,4 @@ private:
 	static UClass* FindClass(const FString& ClassName);
 	static UScriptStruct* FindStruct(const FString& StructName, FString* OutError = nullptr);
 	static UEnum* FindEnum(const FString& EnumName);
-	static TSharedPtr<FJsonValue> SerializeProperty(FProperty* Prop, void* Data);
 };

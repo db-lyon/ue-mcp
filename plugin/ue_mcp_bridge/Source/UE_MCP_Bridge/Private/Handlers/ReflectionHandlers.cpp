@@ -1288,28 +1288,6 @@ static TArray<FString> SuggestEnumNames(const FString& EnumName, int32 MaxSugges
 	return Suggestions;
 }
 
-TSharedPtr<FJsonValue> FReflectionHandlers::SerializeProperty(FProperty* Prop, void* Data)
-{
-	// Basic property serialization - can be extended
-	if (CastField<FStrProperty>(Prop))
-	{
-		return MakeShared<FJsonValueString>(CastField<FStrProperty>(Prop)->GetPropertyValue(Data));
-	}
-	else if (CastField<FIntProperty>(Prop))
-	{
-		return MakeShared<FJsonValueNumber>(CastField<FIntProperty>(Prop)->GetPropertyValue(Data));
-	}
-	else if (CastField<FFloatProperty>(Prop))
-	{
-		return MakeShared<FJsonValueNumber>(CastField<FFloatProperty>(Prop)->GetPropertyValue(Data));
-	}
-	else if (CastField<FBoolProperty>(Prop))
-	{
-		return MakeShared<FJsonValueBoolean>(CastField<FBoolProperty>(Prop)->GetPropertyValue(Data));
-	}
-	return MakeShared<FJsonValueString>(TEXT("(unserializable)"));
-}
-
 // ─── #274  create_enum  ────────────────────────────────────────────────
 // Creates a UUserDefinedEnum asset and (optionally) populates entries.
 TSharedPtr<FJsonValue> FReflectionHandlers::CreateEnum(const TSharedPtr<FJsonObject>& Params)

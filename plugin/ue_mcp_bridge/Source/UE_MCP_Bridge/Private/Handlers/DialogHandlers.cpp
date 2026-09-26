@@ -1290,19 +1290,3 @@ FString FDialogHandlers::ResponseTypeToString(EAppReturnType::Type Response)
 	default:                       return TEXT("unknown");
 	}
 }
-
-FString FDialogHandlers::MsgTypeToString(EAppMsgType::Type MsgType)
-{
-	switch (MsgType)
-	{
-	case EAppMsgType::Ok:                         return TEXT("Ok");
-	case EAppMsgType::YesNo:                      return TEXT("YesNo");
-	case EAppMsgType::OkCancel:                   return TEXT("OkCancel");
-	case EAppMsgType::YesNoCancel:                return TEXT("YesNoCancel");
-	case EAppMsgType::CancelRetryContinue:        return TEXT("CancelRetryContinue");
-	case EAppMsgType::YesNoYesAllNoAll:            return TEXT("YesNoYesAllNoAll");
-	case EAppMsgType::YesNoYesAllNoAllCancel:      return TEXT("YesNoYesAllNoAllCancel");
-	case EAppMsgType::YesNoYesAll:                return TEXT("YesNoYesAll");
-	default:                                      return TEXT("Unknown");
-	}
-}
