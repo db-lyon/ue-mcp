@@ -212,6 +212,8 @@ describe("feedback(submit, confirmToken)", () => {
     const r = await call(makeCtx(undefined), { confirmToken: token });
     if (!isDirectiveResponse(r)) throw new Error("expected a directive");
     expect((r.result as { code?: string }).code).toBe("repo_unavailable");
+    expect((r.result as { pending_id?: string }).pending_id).toBe(listDeferred()[0].id);
+    expect(r.directive).toContain("its token still works");
     expect(listDeferred()).toHaveLength(1);
     expect(findByConfirmToken(token)).not.toBeNull();
   });

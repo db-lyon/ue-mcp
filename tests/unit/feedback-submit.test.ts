@@ -435,6 +435,21 @@ describe("feedback(submit) elicitation gate", () => {
       expect((r as { mode?: string }).mode).toBe("auto-approve");
     });
 
+    it("auto-approve renders an unavailable anonymous path the way an approved post does", async () => {
+      mockSubmitFeedback.mockResolvedValue({ kind: "bot_unavailable", code: "unreachable", message: "signing service down" });
+      process.env.UE_MCP_FEEDBACK_MODE = "auto-approve";
+      const r = await call(makeCtx(vi.fn<ElicitFn>(), "Vale"), {
+        title: realTitle,
+        summary: realSummary,
+        author: "bot",
+      });
+
+      if (!isDirectiveResponse(r)) throw new Error("expected a directive");
+      expect(r.directive).toContain("[FEEDBACK NOT POSTED - ANONYMOUS SUBMISSION UNAVAILABLE]");
+      expect(r.result).toMatchObject({ submitted: false, code: "bot_unreachable" });
+      expect((r.result as { manual_url?: string }).manual_url).toContain("github.com");
+    });
+
     it("auto-approve preserves the privacy scrub", async () => {
       mockSubmitFeedback.mockResolvedValue({
         kind: "submitted",
