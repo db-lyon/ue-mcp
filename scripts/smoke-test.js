@@ -117,7 +117,6 @@ const PARAM_OVERRIDES = {
   save_all:                    { dryRun: true },
   build_lighting:              { dryRun: true },
   build_all:                   { dryRun: true },
-  build_project:               { dryRun: true },
   read_editor_log:             { tailLines: 1 },
   get_crash_reports:           { maxReports: 1 },
   // Discover-only: a no-match filter so smoke doesn't actually run a test suite.
@@ -239,7 +238,7 @@ async function teardown(ws, idGen) {
   // Create a fresh blank MCP_Home; this also switches the editor to it,
   // unloading SCRATCH.
   await rpcRaw(ws, "create_new_level", { levelPath: HOME_LEVEL }, idGen());
-  await rpcRaw(ws, "save_current_level", {}, idGen());
+  await rpcRaw(ws, "save_level", {}, idGen());
   // SCRATCH now unloaded; safe to delete.
   await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());
 }

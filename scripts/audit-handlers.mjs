@@ -150,7 +150,7 @@ for (const [method, sites] of ts) {
 for (const [method, sites] of cpp) {
   if (ts.has(method)) continue;
   // Several handler functions are deliberately registered under more than one
-  // name (add_hismc_instances / add_ismc_instances / add_instances). Only the
+  // name (add_hismc_instances / add_instances). Only the
   // canonical name is bridged, which is fine: the behaviour is reachable.
   // Reporting the spellings as gaps buries the handlers that really are
   // unreachable, so separate the two.

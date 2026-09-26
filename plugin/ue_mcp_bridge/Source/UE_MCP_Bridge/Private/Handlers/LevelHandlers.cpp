@@ -430,9 +430,6 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_hismc_instances"), &AddHismcInstances, {
 		SpecActorLabel, SpecActorPath, SpecComponentName, SpecTransforms, SpecWorldSpace,
 	});
-	Registry.RegisterHandler(TEXT("add_ismc_instances"), &AddHismcInstances, {
-		SpecActorLabel, SpecActorPath, SpecComponentName, SpecTransforms, SpecWorldSpace,
-	});
 	Registry.RegisterHandler(TEXT("add_instances"), &AddHismcInstances, {
 		SpecActorLabel, SpecActorPath, SpecComponentName, SpecTransforms, SpecWorldSpace,
 	});
@@ -493,7 +490,6 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	const FMCPSpecRules SpawnSkeletalRules = MCPSpec::ExactlyOne({ { TEXT("skeletalMesh") }, { TEXT("meshPath") } });
 	Registry.RegisterHandler(TEXT("spawn_skeletal_mesh_actor"), &SpawnSkeletalMeshActor, SpawnSkeletalSpec, SpawnSkeletalRules);
-	Registry.RegisterHandler(TEXT("place_skeletal_actor"), &SpawnSkeletalMeshActor, SpawnSkeletalSpec, SpawnSkeletalRules);
 	// Called once per selector by the contract test; the actor lookup fails first.
 	Registry.RegisterHandler(TEXT("set_component_skeletal_mesh"), &SetComponentSkeletalMesh, {
 		SpecActorLabel, SpecActorPath,

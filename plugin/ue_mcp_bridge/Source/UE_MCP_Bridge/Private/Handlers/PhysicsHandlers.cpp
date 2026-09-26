@@ -83,7 +83,6 @@ void FPhysicsHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world instance (0 = server/primary); omit for the primary world")),
 	};
 	Registry.RegisterHandler(TEXT("add_impulse"), &AddImpulse, PushSpec, OneActor);
-	Registry.RegisterHandler(TEXT("add_force"), &AddImpulse, PushSpec, OneActor);
 }
 
 namespace

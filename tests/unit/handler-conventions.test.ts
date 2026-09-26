@@ -96,18 +96,13 @@ const KNOWN_ORPHANS: Record<string, string> = {
   acquire_lock: "asset(lock) drives this; the raw handler is the lock primitive.",
   release_lock: "as above.",
   release_session_locks: "called on session teardown, not by a caller.",
-  build_project: "editor(build_project) is a local handler that shells out to UBT instead.",
   execute_python: "editor(execute_python) wraps this with the workaround tracker and the search gate.",
   pie_start_ignoring_blueprint_errors:
     "editor(play_in_editor_ignore_blueprint_errors) calls it only after its approval gate, so no action "
     + "declares it and play_in_editor's pie_control never reads an authorization (#1057).",
   request_editor_shutdown: "editor(stop_editor) drives it through the lifecycle path.",
-  save_current_level: "level(save) supersedes it and reports per-package results.",
   search_assets: "asset(search) supersedes it.",
-  delete_datatable_row: "asset(remove_datatable_row) is the shipped spelling.",
-  get_applied_imcs: "gameplay(get_applied_imcs) reaches it under the get_input_mapping_contexts name.",
   add_instances: "level(add_hismc_instances) is the shipped spelling.",
-  add_ismc_instances: "as above.",
   list_sockets: "asset(list_sockets) reaches it under a different bridge name.",
 
   // Alias registrations: a SECOND RegisterHandler line pointing at the same
@@ -115,20 +110,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
   // were first annotated as holes; reading each function pointer showed
   // otherwise, which is why "unreferenced by name" is not the same question as
   // "unreachable".
-  add_material_function_expression:
-    "Alias of AddMaterialFunctionExpression; material(add_function_expression) calls it as add_expression_in_function.",
-  connect_material_function_expressions:
-    "Alias of ConnectMaterialFunctionExpressions; material(connect_function_expressions) calls it as connect_expressions_in_function.",
-  list_material_function_expressions:
-    "Alias of ListMaterialFunctionExpressions; material(list_function_expressions) calls it as list_expressions_in_function.",
-  populate_blendspace_1d:
-    "Alias of PopulateBlendspace, which already branches on UBlendSpace1D; animation(populate_blendspace) calls it.",
-  remove_animation_notify:
-    "Alias of RemoveAnimNotify; animation(remove_notify) calls it as remove_anim_notify. CRUD is complete.",
-  add_force:
-    "Alias of AddImpulse; gameplay(add_impulse) with mode='force' calls it.",
-  place_skeletal_actor:
-    "Alias of SpawnSkeletalMeshActor; level(spawn_skeletal_mesh_actor) calls it.",
   add_curve:
     "Alias of AddCurve; animation(add_curve) calls it under the identical name.",
 };

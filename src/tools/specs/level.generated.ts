@@ -139,42 +139,6 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
-  "add_ismc_instances": {
-    "category": "level",
-    "params": [
-      {
-        "name": "actorLabel",
-        "type": "string",
-        "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
-      },
-      {
-        "name": "actorPath",
-        "type": "string",
-        "required": false,
-        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
-      },
-      {
-        "name": "componentName",
-        "type": "string",
-        "required": false,
-        "description": "Component instance name"
-      },
-      {
-        "name": "transforms",
-        "type": "array",
-        "required": true,
-        "description": "Transforms {location, rotation?, scale?} to add",
-        "items": "object"
-      },
-      {
-        "name": "worldSpace",
-        "type": "boolean",
-        "required": false,
-        "description": "Treat transforms as world space (default true)"
-      }
-    ]
-  },
   "add_post_process_blendable": {
     "category": "level",
     "params": [
@@ -2261,111 +2225,6 @@ export const handlerSpecs: HandlerSpecs = {
             "required": false,
             "description": "Actor label"
           }
-        ]
-      }
-    ]
-  },
-  "place_skeletal_actor": {
-    "category": "level",
-    "params": [
-      {
-        "name": "skeletalMesh",
-        "type": "string",
-        "required": false,
-        "description": "SkeletalMesh asset path to spawn; null is refused here",
-        "nullable": true
-      },
-      {
-        "name": "meshPath",
-        "type": "string",
-        "required": false,
-        "description": "The older spelling of skeletalMesh"
-      },
-      {
-        "name": "label",
-        "type": "string",
-        "required": false,
-        "description": "Actor label; an existing actor with this label is reported rather than duplicated"
-      },
-      {
-        "name": "onConflict",
-        "type": "string",
-        "required": false,
-        "description": "When the label or name is taken: skip (default) | error"
-      },
-      {
-        "name": "transform",
-        "type": "object",
-        "required": false,
-        "description": "Spawn transform; location, rotation and scale given on their own win over its parts",
-        "fields": [
-          {
-            "name": "location",
-            "type": "vec3",
-            "required": false,
-            "description": "World location"
-          },
-          {
-            "name": "rotation",
-            "type": "rotator",
-            "required": false,
-            "description": "World rotation"
-          },
-          {
-            "name": "scale",
-            "type": "vec3",
-            "required": false,
-            "description": "Actor scale"
-          }
-        ]
-      },
-      {
-        "name": "location",
-        "type": "vec3",
-        "required": false,
-        "description": "World location"
-      },
-      {
-        "name": "rotation",
-        "type": "rotator",
-        "required": false,
-        "description": "World rotation"
-      },
-      {
-        "name": "scale",
-        "type": "vec3",
-        "required": false,
-        "description": "Actor scale"
-      },
-      {
-        "name": "materials",
-        "type": "array",
-        "required": false,
-        "description": "Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone"
-      },
-      {
-        "name": "animSequence",
-        "type": "string",
-        "required": false,
-        "description": "Single-node preview animation"
-      },
-      {
-        "name": "loop",
-        "type": "boolean",
-        "required": false,
-        "description": "Loop the preview animation (default true)"
-      }
-    ],
-    "choices": [
-      {
-        "mode": "exactlyOne",
-        "branches": [
-          [
-            "skeletalMesh"
-          ],
-          [
-            "meshPath"
-          ]
         ]
       }
     ]
@@ -5095,7 +4954,6 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_component_to_actor: "Params: actorLabel?, actorPath?, componentClass, componentName, onConflict?",
   add_hismc_instances: "Params: actorLabel?, actorPath?, componentName?, transforms, worldSpace?",
   add_instances: "Params: actorLabel?, actorPath?, componentName?, transforms, worldSpace?",
-  add_ismc_instances: "Params: actorLabel?, actorPath?, componentName?, transforms, worldSpace?",
   add_post_process_blendable: "Params: actorLabel?, actorPath?, materialPath (or material), weight?",
   add_runtime_cell_transformer: "Params: transformerClass (or className), properties?, position?, skipIfPresent?",
   add_streaming_sublevel: "Params: levelPath, streamingClass?, location?, initiallyLoaded?, initiallyVisible?",
@@ -5149,7 +5007,6 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   nudge_component: "Params: actorLabel OR actorPath, componentName, frame?, translationDelta?, axisRotation?, viewRotation?, scaleMultiplier?, dryRun?, world?, pieInstance?",
   place_actor: "Params: actorClass, label?, onConflict?, location?, rotation?, scale?, staticMesh?, material?, world?, pieInstance?",
   place_actors_batch: "Params: actors",
-  place_skeletal_actor: "Params: skeletalMesh OR meshPath, label?, onConflict?, transform?, location?, rotation?, scale?, materials?, animSequence?, loop?",
   query_components: "Params: componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, fields?, propertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?",
   read_actor_motion: "Params: actorLabel?, actorLabels?, actorPath?, actorPaths?, world?, pieInstance?",
   rebuild_water_zone: "Params: actorLabel?, actorPath?, zoneExtent?, tileSize?, maxPasses?",
@@ -5203,13 +5060,13 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   actorClass: z.string().optional().describe("Actor class: short name, /Script path or Blueprint class path (place_actor, spawn_actors_batch, spawn_transient_actor). Owning actor class, resolved as a class or matched as a substring (query_components)"),
   actorClassFilter: z.string().optional().describe("Alias for classFilter"),
-  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_ismc_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor)"),
+  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor)"),
   actorLabelA: z.string().optional().describe("First actor label; pass actorLabelA or actorPathA"),
   actorLabelB: z.string().optional().describe("Second actor label; pass actorLabelB or actorPathB"),
   actorLabelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   actorLabelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"),
   actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_ismc_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor)"),
+  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor)"),
   actorPathA: z.string().optional().describe("First actor object path"),
   actorPathB: z.string().optional().describe("Second actor object path"),
   actorPaths: z.array(z.string()).optional().describe("Full actor object paths"),
@@ -5240,7 +5097,7 @@ export const schema: Record<string, z.ZodType> = {
   color: z.record(z.unknown()).optional().describe("Alias for fogInscatteringColor (set_fog_properties). Colour {r, g, b} in 0-255 (set_light_properties, spawn_light)"),
   commitDeletes: z.boolean().optional().describe("Save through the editor's dirty-package save, which deletes the packages of deleted World Partition actors (default false)"),
   componentClass: z.string().optional().describe("Component class: short name or full path (add_component_to_actor). Component class name, exact or substring (get_actors_by_component_class). Case-insensitive substring over the component class name (get_component_tree). Component class, resolved as a class or matched as a substring (query_components). Primitive component class to rebuild (recreate_physics_state). Component class to remove (remove_components_by_class)"),
-  componentName: z.string().optional().describe("Name of the new component (add_component_to_actor). Component instance name (add_hismc_instances, add_instances, add_ismc_instances, get_component_details, get_instance_transforms, remove_instance, set_component_property, snap_instances_to_surface, update_instance_transform). Component name looked up on every matched actor (bulk_set_component_property). Only this component, by instance name (get_component_tree). Component holding the post-process settings, when the actor is not a PostProcessVolume (get_post_process_settings, set_fixed_exposure, set_post_process_settings). Spline component, when the actor has several (get_spline_info). Exact SceneComponent instance name (nudge_component, restore_component_relative_transform). Component to remove (remove_component_from_actor). Mesh component (default: the actor's first mesh component) (set_component_materials). Skinned mesh component (default: the first on the actor) (set_component_skeletal_mesh). Spline component, when the actor has several; matched exactly (set_spline_points)"),
+  componentName: z.string().optional().describe("Name of the new component (add_component_to_actor). Component instance name (add_hismc_instances, add_instances, get_component_details, get_instance_transforms, remove_instance, set_component_property, snap_instances_to_surface, update_instance_transform). Component name looked up on every matched actor (bulk_set_component_property). Only this component, by instance name (get_component_tree). Component holding the post-process settings, when the actor is not a PostProcessVolume (get_post_process_settings, set_fixed_exposure, set_post_process_settings). Spline component, when the actor has several (get_spline_info). Exact SceneComponent instance name (nudge_component, restore_component_relative_transform). Component to remove (remove_component_from_actor). Mesh component (default: the actor's first mesh component) (set_component_materials). Skinned mesh component (default: the first on the actor) (set_component_skeletal_mesh). Spline component, when the actor has several; matched exactly (set_spline_points)"),
   componentNameA: z.string().optional().describe("Component on actor A; omitted selects its root"),
   componentNameB: z.string().optional().describe("Component on actor B; omitted selects its root"),
   componentNameContains: z.string().optional().describe("Case-insensitive substring over the component instance name"),
@@ -5307,7 +5164,7 @@ export const schema: Record<string, z.ZodType> = {
   internalName: z.string().optional().describe("Internal UObject name, such as StaticMeshActor_141"),
   jitter: z.number().optional().describe("Per-axis location jitter"),
   killZ: z.number().optional().describe("KillZ height"),
-  label: z.string().optional().describe("Actor label; an existing actor with this label is reported rather than duplicated (place_actor, place_skeletal_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_volume). Actor label (spawn_transient_actor)"),
+  label: z.string().optional().describe("Actor label; an existing actor with this label is reported rather than duplicated (place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_volume). Actor label (spawn_transient_actor)"),
   labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_actors_by_class, recreate_physics_state, remove_components_by_class, set_actor_folder_path, set_actor_hlod_layer, set_component_materials). Label prefix for the spawned actors (spawn_actors_batch). Label prefix for the spawned actors (default Grid) (spawn_grid)"),
   levelName: z.string().optional().describe("Streaming sub-level name or package path (remove_streaming_sublevel, set_streaming_sublevel_properties). Loaded sub-level to make current (set_current_edit_level)"),
@@ -5317,7 +5174,7 @@ export const schema: Record<string, z.ZodType> = {
   limit: z.number().int().optional().describe("Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_transient_actors, list_volumes). Rows returned (default 200, max 2000) (query_components)"),
   loadedOnly: z.boolean().optional().describe("Only actors currently streamed in"),
   loadingRange: z.number().optional().describe("Streaming loading range in world centimetres"),
-  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Sub-level offset (add_streaming_sublevel, set_streaming_sublevel_properties). World location (move_actor, place_actor, place_skeletal_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, spawn_volume, update_instance_transform)"),
+  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Sub-level offset (add_streaming_sublevel, set_streaming_sublevel_properties). World location (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, spawn_volume, update_instance_transform)"),
   loop: z.boolean().optional().describe("Loop the preview animation (default true)"),
   loopPosition: z.number().optional().describe("Input key a closed loop closes at, with loopPositionOverride"),
   loopPositionOverride: z.boolean().optional().describe("Close at loopPosition rather than after the last key"),
@@ -5325,7 +5182,7 @@ export const schema: Record<string, z.ZodType> = {
   matchSubclasses: z.boolean().optional().describe("Match subclasses of the class filter (default true)"),
   material: z.string().optional().describe("Alias for materialPath (add_post_process_blendable). Material applied at slot 0 (place_actor). One material path applied to every slot (set_component_materials)"),
   materialPath: z.string().optional().describe("Material to add as a blendable (add_post_process_blendable). Material asset path (set_actor_material)"),
-  materials: z.array(z.unknown()).optional().describe("Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone (place_skeletal_actor, spawn_skeletal_mesh_actor). Per-slot material paths; index is the slot, and a null or empty entry clears that slot's override (set_component_materials)"),
+  materials: z.array(z.unknown()).optional().describe("Per-slot material paths; index is the slot, and a null or empty entry clears that slot's override (set_component_materials). Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone (spawn_skeletal_mesh_actor)"),
   max: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Grid upper bound"),
   maxActors: z.number().int().optional().describe("Refuse to act on more than this many actors (default 256)"),
   maxComponents: z.number().int().optional().describe("Refuse to rebuild more than this many components (default 2000, max 20000)"),
@@ -5335,7 +5192,7 @@ export const schema: Record<string, z.ZodType> = {
   maxPasses: z.number().int().optional().describe("Rebuild passes before giving up on a stable QuadTreeResolution, 2..8 (default 4)"),
   maxResults: z.number().int().optional().describe("Cap on result rows; full-scan totals are still reported"),
   maxSpawn: z.number().int().optional().describe("Refuse a plan larger than this (default 500, max 5000)"),
-  meshPath: z.string().optional().describe("Alias for assetPath (get_nanite_info, set_nanite_settings). The older spelling of skeletalMesh (place_skeletal_actor, spawn_skeletal_mesh_actor)"),
+  meshPath: z.string().optional().describe("Alias for assetPath (get_nanite_info, set_nanite_settings). The older spelling of skeletalMesh (spawn_skeletal_mesh_actor)"),
   method: z.string().optional().describe("OBB (oriented, default) | AABB (axis-aligned world bounds)"),
   min: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Grid lower bound"),
   mobility: z.string().optional().describe("static | stationary | movable"),
@@ -5371,13 +5228,13 @@ export const schema: Record<string, z.ZodType> = {
   relativeTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Relative location"), quaternion: z.record(z.unknown()).describe("Relative rotation {x, y, z, w}; this is what is applied"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Relative scale"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("The same rotation as a rotator, for reading only") }).optional().describe("The relative transform to put back, as nudge_component's rollback records it"),
   restoreOriginalLevel: z.boolean().optional().describe("Reopen the map that was open before the call (default true)"),
   roll: z.number().optional().describe("Roll in degrees (default 0)"),
-  rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation (move_actor, place_actor, place_skeletal_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, update_instance_transform). DirectionalLight sun angle (set_light_properties)"),
+  rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, update_instance_transform). DirectionalLight sun angle (set_light_properties)"),
   sampleLimit: z.number().int().optional().describe("Sample labels per group (default 5, max 25)"),
   save: z.boolean().optional().describe("Save only the current level after a successful clear and compile (default false) (clear_level_script). Save the level after a committed removal (default false) (remove_components_by_class)"),
   scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale"),
   scaleMultiplier: z.number().optional().describe("Uniform relative-scale multiplier, greater than zero"),
   settings: z.record(z.unknown()).optional().describe("Setting name to value; each setting's bOverride flag is enabled too (set_post_process_settings). Dotted path rooted at the world partition to value (set_world_partition_settings)"),
-  skeletalMesh: z.string().nullable().optional().describe("SkeletalMesh asset path to spawn; null is refused here (place_skeletal_actor, spawn_skeletal_mesh_actor). SkeletalMesh asset path, or null to clear the mesh (set_component_skeletal_mesh)"),
+  skeletalMesh: z.string().nullable().optional().describe("SkeletalMesh asset path, or null to clear the mesh (set_component_skeletal_mesh). SkeletalMesh asset path to spawn; null is refused here (spawn_skeletal_mesh_actor)"),
   skipIfPresent: z.boolean().optional().describe("Report an existing transformer of this class instead of adding a duplicate (default true)"),
   slotIndex: z.number().int().optional().describe("Material slot (default 0)"),
   socketName: z.string().optional().describe("Socket or bone on the resolved parent component"),

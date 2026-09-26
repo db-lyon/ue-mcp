@@ -3283,152 +3283,6 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
-  "populate_blendspace_1d": {
-    "category": "animation",
-    "params": [
-      {
-        "name": "assetPath",
-        "type": "string",
-        "required": true,
-        "description": "BlendSpace or BlendSpace1D asset path",
-        "aliases": [
-          "path"
-        ]
-      },
-      {
-        "name": "axis",
-        "type": "object",
-        "required": false,
-        "description": "Axis params for axisIndex (default axis 0)",
-        "fields": [
-          {
-            "name": "name",
-            "type": "string",
-            "required": false,
-            "description": "Axis display name"
-          },
-          {
-            "name": "min",
-            "type": "number",
-            "required": false,
-            "description": "Axis minimum"
-          },
-          {
-            "name": "max",
-            "type": "number",
-            "required": false,
-            "description": "Axis maximum"
-          },
-          {
-            "name": "gridNum",
-            "type": "integer",
-            "required": false,
-            "description": "Grid divisions"
-          }
-        ]
-      },
-      {
-        "name": "axisIndex",
-        "type": "integer",
-        "required": false,
-        "description": "Axis the axis object applies to (default 0)"
-      },
-      {
-        "name": "blendspaceAxes",
-        "type": "array",
-        "required": false,
-        "description": "Per-axis params, in axis order",
-        "items": "object",
-        "fields": [
-          {
-            "name": "name",
-            "type": "string",
-            "required": false,
-            "description": "Axis display name"
-          },
-          {
-            "name": "min",
-            "type": "number",
-            "required": false,
-            "description": "Axis minimum"
-          },
-          {
-            "name": "max",
-            "type": "number",
-            "required": false,
-            "description": "Axis maximum"
-          },
-          {
-            "name": "gridNum",
-            "type": "integer",
-            "required": false,
-            "description": "Grid divisions"
-          }
-        ]
-      },
-      {
-        "name": "axisHorizontal",
-        "type": "string",
-        "required": false,
-        "description": "Horizontal axis name"
-      },
-      {
-        "name": "horizontalMin",
-        "type": "number",
-        "required": false,
-        "description": "Horizontal axis minimum"
-      },
-      {
-        "name": "horizontalMax",
-        "type": "number",
-        "required": false,
-        "description": "Horizontal axis maximum"
-      },
-      {
-        "name": "gridNumHorizontal",
-        "type": "integer",
-        "required": false,
-        "description": "Horizontal axis grid divisions"
-      },
-      {
-        "name": "axisVertical",
-        "type": "string",
-        "required": false,
-        "description": "Vertical axis name; ignored on a BlendSpace1D"
-      },
-      {
-        "name": "verticalMin",
-        "type": "number",
-        "required": false,
-        "description": "Vertical axis minimum; ignored on a BlendSpace1D"
-      },
-      {
-        "name": "verticalMax",
-        "type": "number",
-        "required": false,
-        "description": "Vertical axis maximum; ignored on a BlendSpace1D"
-      },
-      {
-        "name": "gridNumVertical",
-        "type": "integer",
-        "required": false,
-        "description": "Vertical axis grid divisions; ignored on a BlendSpace1D"
-      },
-      {
-        "name": "samples",
-        "type": "array",
-        "required": false,
-        "description": "Samples to add as [{animationPath, x, y?}]; an unloadable animation is reported under failed",
-        "items": "object"
-      },
-      {
-        "name": "clearExisting",
-        "type": "boolean",
-        "required": false,
-        "description": "Clear the existing samples first (default true)"
-      }
-    ]
-  },
   "preview_animation": {
     "category": "animation",
     "params": [
@@ -3926,32 +3780,6 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Notify state class to match. Pass at least one of notifyName and notifyStateClass; both filters apply together"
-      }
-    ]
-  },
-  "remove_animation_notify": {
-    "category": "animation",
-    "params": [
-      {
-        "name": "assetPath",
-        "type": "string",
-        "required": true,
-        "description": "AnimSequence or AnimMontage asset path",
-        "aliases": [
-          "path"
-        ]
-      },
-      {
-        "name": "notifyName",
-        "type": "string",
-        "required": false,
-        "description": "Notify name to match"
-      },
-      {
-        "name": "notifyClass",
-        "type": "string",
-        "required": false,
-        "description": "Notify class to match. Pass at least one of notifyName and notifyClass; both filters apply together"
       }
     ]
   },
@@ -5237,7 +5065,6 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   list_skeletal_meshes: "Params: directory?, recursive?, cursor?, limit?",
   measure_natural_speed: "Params: assetPath (or path), footBones, contactThreshold?, skeletalMeshPath?, frames?, times?, blendPosition?",
   populate_blendspace: "Params: assetPath (or path), axis?, axisIndex?, blendspaceAxes?, axisHorizontal?, horizontalMin?, horizontalMax?, gridNumHorizontal?, axisVertical?, verticalMin?, verticalMax?, gridNumVertical?, samples?, clearExisting?",
-  populate_blendspace_1d: "Params: assetPath (or path), axis?, axisIndex?, blendspaceAxes?, axisHorizontal?, horizontalMin?, horizontalMax?, gridNumHorizontal?, axisVertical?, verticalMin?, verticalMax?, gridNumVertical?, samples?, clearExisting?",
   preview_animation: "Params: actorLabel?, actorPath?, enabled?",
   read_anim_blueprint: "Params: assetPath (or path)",
   read_anim_graph: "Params: assetPath (or path), graphName?",
@@ -5259,7 +5086,6 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   remove_anim_curve: "Params: assetPath (or path), curveName",
   remove_anim_notify: "Params: assetPath (or path), notifyName?, notifyClass?",
   remove_anim_notify_state: "Params: assetPath (or path), notifyName?, notifyStateClass?",
-  remove_animation_notify: "Params: assetPath (or path), notifyName?, notifyClass?",
   remove_montage_section: "Params: assetPath (or path), sectionName",
   remove_montage_segment: "Params: assetPath (or path), segmentIndex, slotName?, slotIndex?",
   remove_state: "Params: assetPath (or path), stateMachineName, stateName",
@@ -5306,19 +5132,19 @@ export const schema: Record<string, z.ZodType> = {
   animPath: z.string().optional().describe("AnimSequence or PoseAsset whose curve names to compare"),
   animPaths: z.array(z.string()).optional().describe("AnimSequences to bake, without duplicates"),
   animSequencePath: z.string().optional().describe("AnimSequence or AnimComposite to append as a segment (add_montage_segment). AnimSequence the montage plays (create_anim_montage). AnimSequence to put in the slot (set_montage_sequence)"),
-  assetPath: z.string().optional().describe("AnimSequence or AnimMontage asset path (add_anim_notify, add_anim_notify_state, remove_anim_notify, remove_anim_notify_state, remove_animation_notify). BlendSpace or BlendSpace1D asset path (add_blend_sample, populate_blendspace, populate_blendspace_1d, read_blendspace, set_blend_sample). AnimSequence asset path (add_curve, analyze_animation, apply_animation_modifier, bake_keyframes_batch, bake_root_motion_from_bone, list_anim_modifiers, read_bone_track, remove_anim_curve, set_anim_curve_keys, set_bone_keyframes, set_root_motion_settings, set_sync_markers). AnimMontage asset path (add_montage_section, add_montage_segment, list_montage_segments, read_anim_montage, remove_montage_section, remove_montage_segment, set_montage_properties, set_montage_sequence, set_montage_slot). AnimBlueprint asset path (add_motion_matching_node, add_pose_history_node, add_sequence_evaluator, add_state, add_transition, bind_anim_node_function, create_state_machine, inspect_anim_nodes, read_anim_blueprint, read_anim_graph, read_state_machine, remove_state, remove_state_machine, remove_transition, set_anim_blueprint_skeleton, set_motion_matching_chooser, set_state_animation, set_state_machine_entry, set_transition_blend, set_transition_condition). Alias for schemaPath (add_pose_search_schema_pose_channel, add_pose_search_schema_trajectory_channel, read_pose_search_schema). PoseSearchDatabase asset path (add_pose_search_sequence, build_pose_search_index, read_pose_search_database, set_pose_search_clips, set_pose_search_database_settings, set_pose_search_schema). Alias for retargeterPath (auto_align_retarget_pose, batch_retarget_animations, reset_retarget_pose, set_ik_retargeter_rig). Alias for animPath (compare_curves_to_morph_targets). Alias for skeletonPath (get_bone_transforms). SkeletalMesh asset path (get_physics_asset_info, get_skeleton_info, list_animation_sockets). Control Rig Blueprint asset path (list_control_rig_variables, read_control_rig_graph, read_control_rig_hierarchy). AnimSequence or BlendSpace asset path (measure_natural_speed). AnimSequence to read; omit when reading a batch (read_anim_sequence). IKRetargeter asset path (read_ik_retargeter). IKRigDefinition asset path (read_ik_rig). MirrorDataTable asset path (read_mirror_data_table). AnimSequence or BlendSpace asset path; a montage is refused (sample_pose). Alias for rigPath (set_ik_rig_mesh)"),
+  assetPath: z.string().optional().describe("AnimSequence or AnimMontage asset path (add_anim_notify, add_anim_notify_state, remove_anim_notify, remove_anim_notify_state). BlendSpace or BlendSpace1D asset path (add_blend_sample, populate_blendspace, read_blendspace, set_blend_sample). AnimSequence asset path (add_curve, analyze_animation, apply_animation_modifier, bake_keyframes_batch, bake_root_motion_from_bone, list_anim_modifiers, read_bone_track, remove_anim_curve, set_anim_curve_keys, set_bone_keyframes, set_root_motion_settings, set_sync_markers). AnimMontage asset path (add_montage_section, add_montage_segment, list_montage_segments, read_anim_montage, remove_montage_section, remove_montage_segment, set_montage_properties, set_montage_sequence, set_montage_slot). AnimBlueprint asset path (add_motion_matching_node, add_pose_history_node, add_sequence_evaluator, add_state, add_transition, bind_anim_node_function, create_state_machine, inspect_anim_nodes, read_anim_blueprint, read_anim_graph, read_state_machine, remove_state, remove_state_machine, remove_transition, set_anim_blueprint_skeleton, set_motion_matching_chooser, set_state_animation, set_state_machine_entry, set_transition_blend, set_transition_condition). Alias for schemaPath (add_pose_search_schema_pose_channel, add_pose_search_schema_trajectory_channel, read_pose_search_schema). PoseSearchDatabase asset path (add_pose_search_sequence, build_pose_search_index, read_pose_search_database, set_pose_search_clips, set_pose_search_database_settings, set_pose_search_schema). Alias for retargeterPath (auto_align_retarget_pose, batch_retarget_animations, reset_retarget_pose, set_ik_retargeter_rig). Alias for animPath (compare_curves_to_morph_targets). Alias for skeletonPath (get_bone_transforms). SkeletalMesh asset path (get_physics_asset_info, get_skeleton_info, list_animation_sockets). Control Rig Blueprint asset path (list_control_rig_variables, read_control_rig_graph, read_control_rig_hierarchy). AnimSequence or BlendSpace asset path (measure_natural_speed). AnimSequence to read; omit when reading a batch (read_anim_sequence). IKRetargeter asset path (read_ik_retargeter). IKRigDefinition asset path (read_ik_rig). MirrorDataTable asset path (read_mirror_data_table). AnimSequence or BlendSpace asset path; a montage is refused (sample_pose). Alias for rigPath (set_ik_rig_mesh)"),
   assetPaths: z.array(z.string()).optional().describe("Batch: up to 1000 AnimSequence paths, one row each (read_anim_sequence). Scan exactly these AnimSequences instead of a directory (scan_animation_tracks). AnimSequences to write, or montages when resolveFromMontages is on (set_sequence_properties)"),
   autoMapChains: z.boolean().optional().describe("Assign the rigs to every op and auto-map chains (default true)"),
   autoMapMode: z.string().optional().describe("Native chain auto-map: exact | fuzzy | clear"),
   autoSetup: z.string().optional().describe("Native setup pass: retarget | full_body, which installs the retarget definition and then Full Body IK"),
   axes: z.array(z.string()).optional().describe("Axes to bake: x, y, z (default [x, y])"),
   axis: z.object({ name: z.string().optional().describe("Axis display name"), min: z.number().optional().describe("Axis minimum"), max: z.number().optional().describe("Axis maximum"), gridNum: z.number().int().optional().describe("Grid divisions") }).optional().describe("Axis params for axisIndex (default axis 0)"),
-  axisHorizontal: z.string().optional().describe("Horizontal axis name (default Speed) (create_blendspace). Horizontal axis name (populate_blendspace, populate_blendspace_1d)"),
+  axisHorizontal: z.string().optional().describe("Horizontal axis name (default Speed) (create_blendspace). Horizontal axis name (populate_blendspace)"),
   axisIndex: z.number().int().optional().describe("Axis the axis object applies to (default 0)"),
   axisMax: z.number().optional().describe("Axis maximum (default 500)"),
   axisMin: z.number().optional().describe("Axis minimum (default 0)"),
   axisName: z.string().optional().describe("Axis display name (default Speed)"),
-  axisVertical: z.string().optional().describe("Vertical axis name (default Direction) (create_blendspace). Vertical axis name; ignored on a BlendSpace1D (populate_blendspace, populate_blendspace_1d)"),
+  axisVertical: z.string().optional().describe("Vertical axis name (default Direction) (create_blendspace). Vertical axis name; ignored on a BlendSpace1D (populate_blendspace)"),
   baseCostBias: z.number().optional().describe("Flat cost added to every pose"),
   binding: z.string().optional().describe("update (default) | becomeRelevant | initialUpdate"),
   bindingTag: z.string().optional().describe("Edit-session natural key from begin_control_rig_edit (apply_control_rig_edits, bake_control_rig_edit, capture_control_rig_pose, read_control_rig_edit). Stable natural key the later calls address (default derived from the mesh name) (begin_control_rig_edit)"),
@@ -5339,7 +5165,7 @@ export const schema: Record<string, z.ZodType> = {
   chains: z.array(z.object({ name: z.string().describe("Retarget chain name"), startBone: z.string().describe("First bone of the chain"), endBone: z.string().describe("Last bone of the chain"), goal: z.string().optional().describe("IK goal the chain drives") })).optional().describe("Retarget chains to upsert, at most 256 (configure_ik_rig). Retarget chains to add (create_ik_rig)"),
   chooserPath: z.string().optional().describe("ChooserTable that selects the database"),
   clear: z.boolean().optional().describe("Clear the transient override and fall back to the skeletal mesh asset's post-process AnimBP"),
-  clearExisting: z.boolean().optional().describe("Clear the existing samples first (default true) (populate_blendspace, populate_blendspace_1d). Replace the clip list rather than append to it (default true) (set_pose_search_clips)"),
+  clearExisting: z.boolean().optional().describe("Clear the existing samples first (default true) (populate_blendspace). Replace the clip list rather than append to it (default true) (set_pose_search_clips)"),
   clips: z.array(z.unknown()).optional().describe("Clips, each an animation asset path or {sequencePath (or asset, assetPath, animationPath), mirror?: original | mirrored | both, disableReselection?, sampleStart?, sampleEnd?, enabled?}"),
   compatibleSkeletonPath: z.string().optional().describe("Skeleton to mark compatible"),
   compatibleSkeletonPaths: z.array(z.string()).optional().describe("Several skeletons at once; wins over compatibleSkeletonPath"),
@@ -5391,8 +5217,8 @@ export const schema: Record<string, z.ZodType> = {
   gridNum: z.number().optional().describe("Grid divisions (default 4)"),
   gridNumHorizontal: z.number().int().optional().describe("Horizontal axis grid divisions"),
   gridNumVertical: z.number().int().optional().describe("Vertical axis grid divisions; ignored on a BlendSpace1D"),
-  horizontalMax: z.number().optional().describe("Horizontal axis maximum (default 500) (create_blendspace). Horizontal axis maximum (populate_blendspace, populate_blendspace_1d)"),
-  horizontalMin: z.number().optional().describe("Horizontal axis minimum (default 0) (create_blendspace). Horizontal axis minimum (populate_blendspace, populate_blendspace_1d)"),
+  horizontalMax: z.number().optional().describe("Horizontal axis maximum (default 500) (create_blendspace). Horizontal axis maximum (populate_blendspace)"),
+  horizontalMin: z.number().optional().describe("Horizontal axis minimum (default 0) (create_blendspace). Horizontal axis minimum (populate_blendspace)"),
   ikRig: z.string().optional().describe("Alias for rigPath"),
   includeChildren: z.boolean().optional().describe("Apply recursively down the bone tree (default false)"),
   includeDefaults: z.boolean().optional().describe("Include pin default values (default true)"),
@@ -5432,8 +5258,8 @@ export const schema: Record<string, z.ZodType> = {
   nodeGuid: z.string().optional().describe("Anim graph node to bind, from add_sequence_evaluator or an add_*_node action"),
   nodeId: z.string().optional().describe("Alias for nodeGuid"),
   normalizationSetPath: z.string().optional().describe("PoseSearchNormalizationSet to assign"),
-  notifyClass: z.string().optional().describe("UAnimNotify class to spawn: a class name, a name without the AnimNotify_ prefix, or a path (add_anim_notify). Notify class to match. Pass at least one of notifyName and notifyClass; both filters apply together (remove_anim_notify, remove_animation_notify)"),
-  notifyName: z.string().optional().describe("Notify name (add_anim_notify, add_anim_notify_state). Notify name to match (remove_anim_notify, remove_anim_notify_state, remove_animation_notify)"),
+  notifyClass: z.string().optional().describe("UAnimNotify class to spawn: a class name, a name without the AnimNotify_ prefix, or a path (add_anim_notify). Notify class to match. Pass at least one of notifyName and notifyClass; both filters apply together (remove_anim_notify)"),
+  notifyName: z.string().optional().describe("Notify name (add_anim_notify, add_anim_notify_state). Notify name to match (remove_anim_notify, remove_anim_notify_state)"),
   notifyProperties: z.record(z.unknown()).optional().describe("EditAnywhere fields to set on the spawned notify object; requires a notifyClass that resolves (add_anim_notify). EditAnywhere fields to set on the spawned notify state object, validated against the class first (add_anim_notify_state)"),
   notifyStateClass: z.string().optional().describe("UAnimNotifyState subclass: a class name, a bare suffix such as TimedParticleEffect, or a full path (add_anim_notify_state). Notify state class to match. Pass at least one of notifyName and notifyStateClass; both filters apply together (remove_anim_notify_state)"),
   numberOfPrincipalComponents: z.number().optional().describe("PCA components for PCAKDTree mode"),
@@ -5448,7 +5274,7 @@ export const schema: Record<string, z.ZodType> = {
   overwrite: z.literal(false).optional().describe("Overwriting is not supported; omit or pass false"),
   packagePath: z.string().optional().describe("Destination folder (default /Game/Animations) (create_anim_blueprint, create_anim_composite, create_anim_montage, create_blendspace, create_blendspace_1d, create_sequence). Destination folder (default the source's folder) (create_control_rig). Destination folder (default /Game) (create_ik_retargeter, create_ik_rig, create_skeleton). Destination folder (default /Game/MotionMatching) (create_mirror_data_table, create_pose_search_database, create_pose_search_normalization_set, create_pose_search_schema). Folder of the reversed copy (default the source's folder) (reverse_sequence)"),
   parentClass: z.string().optional().describe("Parent AnimInstance class name"),
-  path: z.string().optional().describe("Alias for assetPath (add_anim_notify, add_anim_notify_state, add_blend_sample, add_curve, add_montage_section, add_montage_segment, add_motion_matching_node, add_pose_history_node, add_pose_search_sequence, add_sequence_evaluator, add_state, add_transition, analyze_animation, apply_animation_modifier, bake_keyframes_batch, bake_root_motion_from_bone, bind_anim_node_function, build_pose_search_index, create_state_machine, get_physics_asset_info, get_skeleton_info, inspect_anim_nodes, list_anim_modifiers, list_animation_sockets, list_control_rig_variables, list_montage_segments, measure_natural_speed, populate_blendspace, populate_blendspace_1d, read_anim_blueprint, read_anim_graph, read_anim_montage, read_anim_sequence, read_blendspace, read_control_rig_graph, read_control_rig_hierarchy, read_ik_retargeter, read_ik_rig, read_mirror_data_table, read_pose_search_database, read_state_machine, remove_anim_curve, remove_anim_notify, remove_anim_notify_state, remove_animation_notify, remove_montage_section, remove_montage_segment, remove_state, remove_state_machine, remove_transition, sample_pose, set_anim_curve_keys, set_blend_sample, set_bone_keyframes, set_montage_properties, set_montage_sequence, set_montage_slot, set_motion_matching_chooser, set_pose_search_clips, set_pose_search_database_settings, set_pose_search_schema, set_root_motion_settings, set_state_animation, set_state_machine_entry, set_sync_markers, set_transition_blend, set_transition_condition). Alias for skeletonPath (get_bone_transforms)"),
+  path: z.string().optional().describe("Alias for assetPath (add_anim_notify, add_anim_notify_state, add_blend_sample, add_curve, add_montage_section, add_montage_segment, add_motion_matching_node, add_pose_history_node, add_pose_search_sequence, add_sequence_evaluator, add_state, add_transition, analyze_animation, apply_animation_modifier, bake_keyframes_batch, bake_root_motion_from_bone, bind_anim_node_function, build_pose_search_index, create_state_machine, get_physics_asset_info, get_skeleton_info, inspect_anim_nodes, list_anim_modifiers, list_animation_sockets, list_control_rig_variables, list_montage_segments, measure_natural_speed, populate_blendspace, read_anim_blueprint, read_anim_graph, read_anim_montage, read_anim_sequence, read_blendspace, read_control_rig_graph, read_control_rig_hierarchy, read_ik_retargeter, read_ik_rig, read_mirror_data_table, read_pose_search_database, read_state_machine, remove_anim_curve, remove_anim_notify, remove_anim_notify_state, remove_montage_section, remove_montage_segment, remove_state, remove_state_machine, remove_transition, sample_pose, set_anim_curve_keys, set_blend_sample, set_bone_keyframes, set_montage_properties, set_montage_sequence, set_montage_slot, set_motion_matching_chooser, set_pose_search_clips, set_pose_search_database_settings, set_pose_search_schema, set_root_motion_settings, set_state_animation, set_state_machine_entry, set_sync_markers, set_transition_blend, set_transition_condition). Alias for skeletonPath (get_bone_transforms)"),
   playRate: z.number().optional().describe("Segment play rate; negative plays in reverse (default 1)"),
   pose: z.object({ side: z.string().describe("source | target"), name: z.string().describe("Retarget pose name"), create: z.boolean().optional().describe("Create the pose (default false)"), reset: z.boolean().optional().describe("Reset the pose first, which whole-pose auto-align requires on an existing pose"), autoAlign: z.string().optional().describe("chain_to_chain | mesh_to_mesh | local_axes | global_axes; needs both preview meshes"), bones: z.array(z.string()).optional().describe("Bones to auto-align; omitted aligns every bone, which replaces the pose"), rotationOffsets: z.array(z.record(z.unknown())).optional().describe("Offsets as [{bone, rotationQuaternion {x, y, z, w}}], normalized"), rootOffsetZ: z.number().optional().describe("Root height offset; exclusive with snapBoneToGround"), snapBoneToGround: z.string().optional().describe("Bone to snap to the ground; exclusive with rootOffsetZ") }).optional().describe("Named source or target retarget pose to author"),
   poseCount: z.number().optional().describe("History poses to retain"),
@@ -5478,7 +5304,7 @@ export const schema: Record<string, z.ZodType> = {
   sampleEnd: z.number().optional().describe("Sampling range end in seconds"),
   sampleIndex: z.number().int().optional().describe("Sample to edit, as read_blendspace lists it"),
   sampleRate: z.number().optional().describe("Samples per second when frames is omitted, 1 to 240 (default the source rate) (analyze_animation). Schema sample rate (default 30) (create_pose_search_schema)"),
-  samples: z.array(z.record(z.unknown())).optional().describe("[{offset, flags?, weight?}]: offset in seconds, negative for history and positive for prediction; flags from position, velocity, facingDirection, velocityDirection and their XY variants (add_pose_search_schema_trajectory_channel). Samples to add as [{animationPath, x, y?}]; an unloadable animation is reported under failed (populate_blendspace, populate_blendspace_1d)"),
+  samples: z.array(z.record(z.unknown())).optional().describe("[{offset, flags?, weight?}]: offset in seconds, negative for history and positive for prediction; flags from position, velocity, facingDirection, velocityDirection and their XY variants (add_pose_search_schema_trajectory_channel). Samples to add as [{animationPath, x, y?}]; an unloadable animation is reported under failed (populate_blendspace)"),
   sampleStart: z.number().optional().describe("Sampling range start in seconds"),
   samplingInterval: z.number().optional().describe("Seconds between history samples"),
   save: z.boolean().optional().describe("Save the asset after baking (default true)"),
@@ -5526,8 +5352,8 @@ export const schema: Record<string, z.ZodType> = {
   triggerTime: z.number().optional().describe("Trigger time in seconds, clamped to the asset length (add_anim_notify). Window start in seconds (add_anim_notify_state)"),
   useNormalizedRootMotionScale: z.boolean().optional().describe("Normalize root motion scale"),
   variableName: z.string().optional().describe("Existing bool variable the condition reads"),
-  verticalMax: z.number().optional().describe("Vertical axis maximum (default 180) (create_blendspace). Vertical axis maximum; ignored on a BlendSpace1D (populate_blendspace, populate_blendspace_1d)"),
-  verticalMin: z.number().optional().describe("Vertical axis minimum (default -180) (create_blendspace). Vertical axis minimum; ignored on a BlendSpace1D (populate_blendspace, populate_blendspace_1d)"),
+  verticalMax: z.number().optional().describe("Vertical axis maximum (default 180) (create_blendspace). Vertical axis maximum; ignored on a BlendSpace1D (populate_blendspace)"),
+  verticalMin: z.number().optional().describe("Vertical axis minimum (default -180) (create_blendspace). Vertical axis minimum; ignored on a BlendSpace1D (populate_blendspace)"),
   virtualBoneName: z.string().optional().describe("Virtual bone to remove"),
   wait: z.boolean().optional().describe("Block until the build resolves (default true)"),
   weight: z.number().optional().describe("Channel weight"),

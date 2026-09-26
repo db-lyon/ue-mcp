@@ -327,7 +327,6 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("clearExisting"), EType::Boolean, TEXT("Clear the existing samples first (default true)")),
 	};
 	Registry.RegisterHandler(TEXT("populate_blendspace"), &PopulateBlendspace, PopulateBlendspaceSpec);
-	Registry.RegisterHandler(TEXT("populate_blendspace_1d"), &PopulateBlendspace, PopulateBlendspaceSpec);
 	Registry.RegisterHandler(TEXT("add_anim_notify"), &AddAnimNotify, {
 		AssetPath(TEXT("AnimSequence or AnimMontage asset path")),
 		MCPParam::Required(TEXT("notifyName"), EType::String, TEXT("Notify name")),
@@ -337,11 +336,6 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("branchingPoint"), EType::Boolean, TEXT("Force the montage notify's tick type. The PlayMontageNotify classes default to true on a montage, everything else to the engine's queued tick (#880)")),
 	});
 	Registry.RegisterHandler(TEXT("remove_anim_notify"), &RemoveAnimNotify, {
-		AssetPath(TEXT("AnimSequence or AnimMontage asset path")),
-		MCPParam::Optional(TEXT("notifyName"), EType::String, TEXT("Notify name to match")),
-		MCPParam::Optional(TEXT("notifyClass"), EType::String, TEXT("Notify class to match. Pass at least one of notifyName and notifyClass; both filters apply together")),
-	});
-	Registry.RegisterHandler(TEXT("remove_animation_notify"), &RemoveAnimNotify, {
 		AssetPath(TEXT("AnimSequence or AnimMontage asset path")),
 		MCPParam::Optional(TEXT("notifyName"), EType::String, TEXT("Notify name to match")),
 		MCPParam::Optional(TEXT("notifyClass"), EType::String, TEXT("Notify class to match. Pass at least one of notifyName and notifyClass; both filters apply together")),

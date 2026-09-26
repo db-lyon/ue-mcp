@@ -426,16 +426,6 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecOnConflict(),
 		MCPParam::Optional(TEXT("description"), EType::String, TEXT("MaterialFunction description (#463)")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a MaterialFunction under the contract values; nothing it reads fails first")));
-	Registry.RegisterHandler(TEXT("add_material_function_expression"), &AddMaterialFunctionExpression, {
-		SpecFunctionPath(),
-		MCPParam::Required(TEXT("expressionType"), EType::String, TEXT("Expression type, e.g. Constant3Vector, FunctionInput, FunctionOutput, If")),
-		SpecPositionX(),
-		SpecPositionY(),
-		MCPParam::Optional(TEXT("inputName"), EType::String, TEXT("FunctionInput name (#463)")),
-		MCPParam::Optional(TEXT("inputType"), EType::String, TEXT("FunctionInput type: Scalar|Vector2|Vector3|Vector4|Texture2D|TextureCube|StaticBool|MaterialAttributes (#463)")),
-		MCPParam::Optional(TEXT("outputName"), EType::String, TEXT("FunctionOutput name")),
-		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Fallback for inputName on a FunctionInput and outputName on a FunctionOutput")),
-	});
 	Registry.RegisterHandler(TEXT("add_expression_in_function"), &AddMaterialFunctionExpression, {
 		SpecFunctionPath(),
 		MCPParam::Required(TEXT("expressionType"), EType::String, TEXT("Expression type, e.g. Constant3Vector, FunctionInput, FunctionOutput, If")),
@@ -446,22 +436,12 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("outputName"), EType::String, TEXT("FunctionOutput name")),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Fallback for inputName on a FunctionInput and outputName on a FunctionOutput")),
 	});
-	Registry.RegisterHandler(TEXT("connect_material_function_expressions"), &ConnectMaterialFunctionExpressions, {
-		SpecFunctionPath(),
-		SpecSourceExpression(),
-		SpecSourceOutput(),
-		SpecTargetExpression(),
-		SpecTargetInput(),
-	});
 	Registry.RegisterHandler(TEXT("connect_expressions_in_function"), &ConnectMaterialFunctionExpressions, {
 		SpecFunctionPath(),
 		SpecSourceExpression(),
 		SpecSourceOutput(),
 		SpecTargetExpression(),
 		SpecTargetInput(),
-	});
-	Registry.RegisterHandler(TEXT("list_material_function_expressions"), &ListMaterialFunctionExpressions, {
-		SpecFunctionPath(),
 	});
 	Registry.RegisterHandler(TEXT("list_expressions_in_function"), &ListMaterialFunctionExpressions, {
 		SpecFunctionPath(),

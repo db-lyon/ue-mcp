@@ -236,62 +236,6 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
-  "add_material_function_expression": {
-    "category": "material",
-    "params": [
-      {
-        "name": "functionPath",
-        "type": "string",
-        "required": true,
-        "description": "MaterialFunction asset path (#463)",
-        "aliases": [
-          "materialFunctionPath"
-        ]
-      },
-      {
-        "name": "expressionType",
-        "type": "string",
-        "required": true,
-        "description": "Expression type, e.g. Constant3Vector, FunctionInput, FunctionOutput, If"
-      },
-      {
-        "name": "positionX",
-        "type": "number",
-        "required": false,
-        "description": "Graph editor X position for a new node"
-      },
-      {
-        "name": "positionY",
-        "type": "number",
-        "required": false,
-        "description": "Graph editor Y position for a new node"
-      },
-      {
-        "name": "inputName",
-        "type": "string",
-        "required": false,
-        "description": "FunctionInput name (#463)"
-      },
-      {
-        "name": "inputType",
-        "type": "string",
-        "required": false,
-        "description": "FunctionInput type: Scalar|Vector2|Vector3|Vector4|Texture2D|TextureCube|StaticBool|MaterialAttributes (#463)"
-      },
-      {
-        "name": "outputName",
-        "type": "string",
-        "required": false,
-        "description": "FunctionOutput name"
-      },
-      {
-        "name": "name",
-        "type": "string",
-        "required": false,
-        "description": "Fallback for inputName on a FunctionInput and outputName on a FunctionOutput"
-      }
-    ]
-  },
   "add_rvt_output": {
     "category": "material",
     "params": [
@@ -655,44 +599,6 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
-      },
-      {
-        "name": "sourceExpression",
-        "type": "string",
-        "required": true,
-        "description": "Expression the wire leaves (name, or index inside a MaterialFunction)"
-      },
-      {
-        "name": "sourceOutput",
-        "type": "string",
-        "required": false,
-        "description": "Output of the source expression, by name or index (default: its first output)"
-      },
-      {
-        "name": "targetExpression",
-        "type": "string",
-        "required": true,
-        "description": "Expression the wire enters (name, or index inside a MaterialFunction)"
-      },
-      {
-        "name": "targetInput",
-        "type": "string",
-        "required": false,
-        "description": "Input of the target expression, by name or index (default: its first input)"
-      }
-    ]
-  },
-  "connect_material_function_expressions": {
-    "category": "material",
-    "params": [
-      {
-        "name": "functionPath",
-        "type": "string",
-        "required": true,
-        "description": "MaterialFunction asset path (#463)",
-        "aliases": [
-          "materialFunctionPath"
         ]
       },
       {
@@ -1198,20 +1104,6 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "integer",
         "required": false,
         "description": "Rows to return on this page"
-      }
-    ]
-  },
-  "list_material_function_expressions": {
-    "category": "material",
-    "params": [
-      {
-        "name": "functionPath",
-        "type": "string",
-        "required": true,
-        "description": "MaterialFunction asset path (#463)",
-        "aliases": [
-          "materialFunctionPath"
-        ]
       }
     ]
   },
@@ -2282,7 +2174,6 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_expression_in_function: "Params: functionPath (or materialFunctionPath), expressionType, positionX?, positionY?, inputName?, inputType?, outputName?, name?",
   add_material_designer_layer: "Params: assetPath OR actorLabel OR actorPath, componentName?, slotIndex?, slotName?, world?, pieInstance?, designerSlot?, materialProperty?, layerName?",
   add_material_expression: "Params: materialPath (or path, or assetPath), expressionType, name? (or expressionName), parameterName?, group?, sortPriority?, defaultValue?, value?, channels?, positionX?, positionY?",
-  add_material_function_expression: "Params: functionPath (or materialFunctionPath), expressionType, positionX?, positionY?, inputName?, inputType?, outputName?, name?",
   add_rvt_output: "Params: materialPath (or assetPath), expressionName?, mirrorProperties?, positionX?, positionY?, recompile?",
   add_rvt_sampler: "Params: materialPath (or assetPath), rvtPath, expressionName?, connectOutputs?, positionX?, positionY?, recompile?",
   add_rvt_volume: "Params: rvtPath (or assetPath), actorLabel?, boundsMode?, boundsAlignActor?",
@@ -2294,7 +2185,6 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   clear_material_instance_parameters: "Params: assetPath (or path, or materialPath)",
   connect_expressions_in_function: "Params: functionPath (or materialFunctionPath), sourceExpression, sourceOutput?, targetExpression, targetInput?",
   connect_material_expressions: "Params: materialPath (or path, or assetPath), sourceExpression, sourceOutput?, targetExpression, targetInput?",
-  connect_material_function_expressions: "Params: functionPath (or materialFunctionPath), sourceExpression, sourceOutput?, targetExpression, targetInput?",
   connect_texture_to_material: "Params: materialPath (or path, or assetPath), texturePath, property? (or materialProperty)",
   connect_to_material_property: "Params: materialPath (or path, or assetPath), expressionName, outputName?, property",
   create_material: "Params: name, packagePath?, onConflict?",
@@ -2314,7 +2204,6 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   list_expression_types: "Params: cursor?, limit?",
   list_expressions_in_function: "Params: functionPath (or materialFunctionPath)",
   list_material_expressions: "Params: materialPath (or path, or assetPath), includeInputs?, cursor?, limit?",
-  list_material_function_expressions: "Params: functionPath (or materialFunctionPath)",
   list_material_parameters: "Params: assetPath (or path, or materialPath)",
   list_material_static_switches: "Params: assetPath (or path, or materialPath)",
   read_material: "Params: assetPath (or path, or materialPath)",
@@ -2371,8 +2260,8 @@ export const schema: Record<string, z.ZodType> = {
   emissive: z.number().optional().describe("Emissive strength"),
   expressionIndex: z.number().optional().describe("Read just this node (a nodeId) and the source expressions its inputs link to, unpaged (read_material_graph). Node position in the graph's expression list, as list_expressions reports it (set_custom_expression, set_expression_value)"),
   expressionName: z.string().optional().describe("Alias for name (add_material_expression). Node name; an existing node of that name is reused (add_rvt_output, add_rvt_sampler). Expression to wire (connect_to_material_property). A description, class, parameter name, FunctionInput/FunctionOutput name, index or engine name (delete_material_expression)"),
-  expressionType: z.string().optional().describe("Expression type, e.g. Constant3Vector, FunctionInput, FunctionOutput, If (add_expression_in_function, add_material_function_expression). Expression type: Constant, TextureSample, Multiply, Lerp, ScalarParameter, etc. (add_material_expression)"),
-  functionPath: z.string().optional().describe("MaterialFunction asset path (#463) (add_expression_in_function, add_material_function_expression, connect_expressions_in_function, connect_material_function_expressions, list_expressions_in_function, list_material_function_expressions). MaterialFunction asset path, instead of materialPath (#1138) (delete_material_expression, set_custom_expression, set_expression_value)"),
+  expressionType: z.string().optional().describe("Expression type, e.g. Constant3Vector, FunctionInput, FunctionOutput, If (add_expression_in_function). Expression type: Constant, TextureSample, Multiply, Lerp, ScalarParameter, etc. (add_material_expression)"),
+  functionPath: z.string().optional().describe("MaterialFunction asset path (#463) (add_expression_in_function, connect_expressions_in_function, list_expressions_in_function). MaterialFunction asset path, instead of materialPath (#1138) (delete_material_expression, set_custom_expression, set_expression_value)"),
   group: z.string().optional().describe("Parameter Group, on a parameter node (#318)"),
   height: z.number().optional().describe("Image height in pixels (default 256)"),
   includeInputs: z.boolean().optional().describe("Include each node's input pin wiring (default false)"),
@@ -2394,12 +2283,12 @@ export const schema: Record<string, z.ZodType> = {
   meshSlots: z.array(z.unknown()).optional().describe("Mesh material slot names or indices to assign (default every slot) (#946)"),
   metallic: z.number().optional().describe("Metallic constant"),
   mirrorProperties: z.boolean().optional().describe("Mirror the material's own property connections into the RVT output node (default true)"),
-  name: z.string().optional().describe("Fallback for inputName on a FunctionInput and outputName on a FunctionOutput (add_expression_in_function, add_material_function_expression). Node description (add_material_expression). Name of a new material to create and build (build_material). Material asset name (create_material, create_material_designer, create_material_simple). MaterialFunction asset name (create_material_function). Material instance asset name (create_material_instance). RuntimeVirtualTexture asset name, with no '/' or '.' (create_runtime_virtual_texture)"),
+  name: z.string().optional().describe("Fallback for inputName on a FunctionInput and outputName on a FunctionOutput (add_expression_in_function). Node description (add_material_expression). Name of a new material to create and build (build_material). Material asset name (create_material, create_material_designer, create_material_simple). MaterialFunction asset name (create_material_function). Material instance asset name (create_material_instance). RuntimeVirtualTexture asset name, with no '/' or '.' (create_runtime_virtual_texture)"),
   newParentPath: z.string().optional().describe("New parent material or material instance path"),
   nodes: z.array(z.record(z.unknown())).optional().describe("Graph spec: [{name,class,posX,posY,...}]"),
   objectPath: z.string().optional().describe("Full object path of the layer, as read_material_designer reports it (remove_material_designer_layer). Full object path of the component, as read_material_designer reports it (set_material_designer_value)"),
   onConflict: z.string().optional().describe("When the asset exists: skip (default, report it) | error"),
-  outputName: z.string().optional().describe("FunctionOutput name (add_expression_in_function, add_material_function_expression). Output of the expression, by name or index (default: its first output) (connect_to_material_property)"),
+  outputName: z.string().optional().describe("FunctionOutput name (add_expression_in_function). Output of the expression, by name or index (default: its first output) (connect_to_material_property)"),
   outputPath: z.string().optional().describe("Absolute file path for the PNG output"),
   outputType: z.string().optional().describe("float1 | float2 | float3 | float4 | materialAttributes (#617)"),
   packagePath: z.string().optional().describe("Folder for a new material (default /Game/Materials) (build_material). Folder for the new material (default /Game/Materials) (create_material, create_material_designer, create_material_simple). Folder for the new function (default /Game/Materials/Functions) (create_material_function). Folder for the new instance (default /Game/Materials) (create_material_instance). Folder for the new RVT (default /Game/Textures/RVT) (create_runtime_virtual_texture)"),

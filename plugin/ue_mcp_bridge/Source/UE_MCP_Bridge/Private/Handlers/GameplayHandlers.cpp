@@ -282,12 +282,6 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// mappingContexts (was appliedContexts, with imc -> path). A caller reading
 	// the old shape must be updated - this is name compatibility, not contract
 	// compatibility.
-	Registry.RegisterHandler(TEXT("get_applied_imcs"), &GetInputMappingContexts, {
-		PieInstance(TEXT("PIE world instance (0 = server/primary); omit for every running PIE world")),
-		MCPParam::Optional(TEXT("playerIndex"), EType::Number, TEXT("Player index; omit for every player")),
-		MCPParam::Optional(TEXT("mappingContext"), EType::String, TEXT("Name or path of one context to answer yes/no about")),
-		MCPParam::Optional(TEXT("includeActions"), EType::Boolean, TEXT("Include each context's action/key mappings")),
-	});
 	Registry.RegisterHandler(TEXT("list_imc_mappings"), &ReadImc, {
 		ImcPath(),
 	});

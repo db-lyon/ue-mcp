@@ -792,10 +792,6 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to remove")),
 	});
-	Registry.RegisterHandler(TEXT("delete_datatable_row"), &RemoveDataTableRow, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
-		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to remove")),
-	});
 	// #535: single-row read, single-cell write, row rename, and bulk JSON fill.
 	Registry.RegisterHandler(TEXT("get_datatable_row"), &GetDataTableRow, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
