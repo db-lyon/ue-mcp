@@ -178,9 +178,9 @@ describe("args is declared once, in each handler's C++ spec (#1057)", () => {
 
 describe("the C++ normalizers", () => {
   const read = (rel: string): string => readFileSync(new URL(`../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/${rel}`, import.meta.url), "utf8");
-  const utils = read("Public/HandlerUtils.h");
+  const utils = read("Public/HandlerFunctionCall.h");
 
-  it("live in HandlerUtils.h, once, with the refusals the TS normalizers had", () => {
+  it("live in HandlerFunctionCall.h, once, with the refusals the TS normalizers had", () => {
     for (const refusal of [
       "was a string, but it is not valid JSON",
       "decoded to a string, not a parameter map",

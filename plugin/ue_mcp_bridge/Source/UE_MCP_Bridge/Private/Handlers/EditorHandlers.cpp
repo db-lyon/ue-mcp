@@ -1,6 +1,7 @@
 #include "EditorHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerFunctionCall.h"
 #include "HandlerCommitSave.h"
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
