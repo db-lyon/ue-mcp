@@ -3,7 +3,7 @@ import { checkBridgeParity, deployedPlugin } from "../bridge-parity.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
-import { categoryTool, type ToolContext, type ToolDef } from "../types.js";
+import { categoryTool, toolGraphOf, type ToolContext, type ToolDef } from "../types.js";
 import { deploy, deploySummary, attach, attachSummary } from "../deployer.js";
 import { selectEngine } from "../engine-root.js";
 import { collapsingEnvWarnings } from "../session-env.js";
@@ -28,7 +28,7 @@ import {
 } from "../engine-analysis.js";
 import { readDeployedBridgeApiVersion } from "../plugin/bridge-api.js";
 import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../bridge.js";
-import { searchTools, searchToolGraph, type ToolSearchHit } from "../tool-search.js";
+import { searchToolGraph, type ToolSearchHit } from "../tool-search.js";
 import { actionSchema, resolveActionRef, suggestActions } from "../action-schema.js";
 import { availabilityReport } from "../offline.js";
 import { inspectInstall } from "../install-check.js";
@@ -179,7 +179,7 @@ export const projectTool: ToolDef = categoryTool(
         // came one failed call at a time. The handshake carries the method
         // list the running binary registered, so the surface is compared
         // against it here instead of being taken on trust.
-        const parity = checkBridgeParity(ctx.getToolGraph?.() ?? [], ctx.bridge.capabilities);
+        const parity = checkBridgeParity(await toolGraphOf(ctx), ctx.bridge.capabilities);
 
         // "disconnected" on its own has never been actionable: it is the same
         // word for "no editor", "editor still loading shaders", and "editor
@@ -788,9 +788,8 @@ export const projectTool: ToolDef = categoryTool(
       handler: async (_ctx, p) => {
         const query = (p.query as string) ?? "";
         if (!query.trim()) throw new Error("Missing 'query'");
-        const graph = _ctx.getToolGraph?.();
         const limit = (p.limit as number) ?? 20;
-        const results = graph ? searchToolGraph(graph, query, limit) : await searchTools(query, limit);
+        const results = searchToolGraph(await toolGraphOf(_ctx), query, limit);
         return {
           query,
           resultCount: results.length,
@@ -817,8 +816,7 @@ export const projectTool: ToolDef = categoryTool(
         + "harness that gates writes reads it from here. "
         + "Params: name (required), category? (return every action of one category instead of one action)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
-        const { getLiveToolGraph } = await import("../tools.js");
-        const graph: ToolDef[] = ctx.getToolGraph?.() ?? getLiveToolGraph();
+        const graph = await toolGraphOf(ctx);
 
         const category = (p.category as string | undefined)?.trim();
         if (category) {
@@ -878,8 +876,7 @@ export const projectTool: ToolDef = categoryTool(
         + "what keeps working once the editor is stopped for a rebuild. "
         + "Params: category?, includeNames? (default false), state? (available|blocked|all, default available)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
-        const { getLiveToolGraph } = await import("../tools.js");
-        const graph: ToolDef[] = getLiveToolGraph();
+        const graph = await toolGraphOf(ctx);
 
         const category = (p.category as string | undefined)?.trim();
         if (category && !graph.some((t) => t.name === category.toLowerCase())) {
@@ -957,11 +954,12 @@ export const projectTool: ToolDef = categoryTool(
       description: "Measurement for #704: reads this session's execute_python calls and, for each, runs its taskSummary back through search_tools to flag calls that OVERLAPPED an existing dedicated action ('you used Python for X, but tool Y does X'). Returns totalCalls, overlapping[] and an overlapRate. Params: none (#704)",
       handler: async (ctx) => {
         const entries = getWorkarounds(ctx);
+        const graph = await toolGraphOf(ctx);
         const overlapping: Array<{ taskSummary: string; suggestion: ToolSearchHit; codeSnippet: string }> = [];
         for (const e of entries) {
           const q = (e.taskSummary ?? "").trim();
           if (!q) continue;
-          const hits = await searchTools(q, 1);
+          const hits = searchToolGraph(graph, q, 1);
           if (hits.length > 0 && hits[0].score >= 4) {
             overlapping.push({ taskSummary: q, suggestion: hits[0], codeSnippet: e.code.slice(0, 120) });
           }

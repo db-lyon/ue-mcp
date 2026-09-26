@@ -369,4 +369,21 @@ describe("project(list_available_actions) over the real dispatcher", () => {
       projectTool.handler(ctx as never, { action: "list_available_actions", state: "sideways" }),
     ).rejects.toThrow(/'state' must be 'available', 'blocked' or 'all'/);
   });
+
+  it("reads the addressed editor's graph, not the union of every editor", async () => {
+    const ctx = { ...contextWith(false), getToolGraph: () => [projectTool] };
+    const result = (await projectTool.handler(ctx as never, {
+      action: "list_available_actions",
+      state: "all",
+    })) as Record<string, unknown>;
+    const whole = (await projectTool.handler(contextWith(false) as never, {
+      action: "list_available_actions",
+      state: "all",
+    })) as Record<string, unknown>;
+
+    expect(result.blocked).toBeLessThan(whole.blocked as number);
+    await expect(
+      projectTool.handler(ctx as never, { action: "list_available_actions", category: "blueprint" }),
+    ).rejects.toThrow(/Unknown category 'blueprint'\. Available: project$/);
+  });
 });

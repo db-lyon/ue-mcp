@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef, type ToolContext } from "../types.js";
+import { categoryTool, toolGraphOf, type ToolDef, type ToolContext } from "../types.js";
 import { directive } from "../directive.js";
 import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, connectedEditorOf } from "../editor-control.js";
 import { clientAdvertisesElicitation } from "../dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../engine-observer.js";
 import { progressRenderingNote } from "../client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
-import { searchTools } from "../tool-search.js";
+import { searchToolGraph } from "../tool-search.js";
 import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../python-gate.js";
 import { checkBridgeParity } from "../bridge-parity.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge.js";
@@ -19,7 +19,7 @@ import { specBp, schema as specSchema } from "./specs/editor.generated.js";
  * plugin published no action list, since then nothing is known.
  */
 async function notInRunningPlugin(ctx: ToolContext): Promise<(c: GateCandidate) => boolean> {
-  const graph = ctx.getToolGraph?.() ?? (await import("../tools.js")).getLiveToolGraph();
+  const graph = await toolGraphOf(ctx);
   const missing = new Set(checkBridgeParity(graph, ctx.bridge.capabilities).missing);
   if (missing.size === 0) return () => false;
   return (c) => {
@@ -150,7 +150,7 @@ export const editorTool: ToolDef = categoryTool(
         }
 
         // Candidates = meaningful matches (a name/phrase hit), capped at 5.
-        const candidates = (await searchTools(taskSummary, 5)).filter((h) => h.score >= 4);
+        const candidates = searchToolGraph(await toolGraphOf(ctx), taskSummary, 5).filter((h) => h.score >= 4);
         if (candidates.length > 0) {
           // #938 / #960: matching is spelling-insensitive and rulings persist
           // for the session, so the strings this refusal prints are exactly the

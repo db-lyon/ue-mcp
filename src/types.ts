@@ -740,6 +740,17 @@ export function sessionContext(ctx: ToolContext, session: EditorSession): ToolCo
   };
 }
 
+/**
+ * The tool graph a call is answered against: the addressed editor's own, or
+ * the process-wide live graph when the context carries no accessor (CLI,
+ * scripts, direct unit calls). Every surface-introspection reader goes here.
+ */
+export async function toolGraphOf(ctx: ToolContext): Promise<ToolDef[]> {
+  if (ctx.getToolGraph) return ctx.getToolGraph();
+  const { getLiveToolGraph } = await import("./tools.js");
+  return getLiveToolGraph();
+}
+
 /** Drop the routing parameter from a param bag. */
 export function stripEditorTarget(params: Record<string, unknown>): Record<string, unknown> {
   if (!(EDITOR_TARGET_PARAM in params)) return params;
