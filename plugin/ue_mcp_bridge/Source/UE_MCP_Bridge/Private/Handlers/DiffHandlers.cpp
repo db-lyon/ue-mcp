@@ -87,14 +87,6 @@ namespace
 		return Out;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& In)
-	{
-		TArray<TSharedPtr<FJsonValue>> Out;
-		Out.Reserve(In.Num());
-		for (const FString& S : In) Out.Add(MakeShared<FJsonValueString>(S));
-		return Out;
-	}
-
 	struct FVirtualBoneDiffRecord
 	{
 		FName Name;
@@ -264,8 +256,8 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprint(const TSharedPtr<FJsonObject
 		if (Added.Num() || Removed.Num() || Changed.Num())
 		{
 			TSharedPtr<FJsonObject> V = MakeShared<FJsonObject>();
-			V->SetArrayField(TEXT("added"), StringsToJson(Added));
-			V->SetArrayField(TEXT("removed"), StringsToJson(Removed));
+			V->SetArrayField(TEXT("added"), MCPStringListToJson(Added));
+			V->SetArrayField(TEXT("removed"), MCPStringListToJson(Removed));
 			V->SetArrayField(TEXT("changed"), Changed);
 			Result->SetObjectField(TEXT("variables"), V);
 			ChangeCount += Added.Num() + Removed.Num() + Changed.Num();
@@ -342,8 +334,8 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprint(const TSharedPtr<FJsonObject
 		if (GraphsAdded.Num() || GraphsRemoved.Num())
 		{
 			TSharedPtr<FJsonObject> G = MakeShared<FJsonObject>();
-			G->SetArrayField(TEXT("added"), StringsToJson(GraphsAdded));
-			G->SetArrayField(TEXT("removed"), StringsToJson(GraphsRemoved));
+			G->SetArrayField(TEXT("added"), MCPStringListToJson(GraphsAdded));
+			G->SetArrayField(TEXT("removed"), MCPStringListToJson(GraphsRemoved));
 			Result->SetObjectField(TEXT("graphsAddedRemoved"), G);
 			ChangeCount += GraphsAdded.Num() + GraphsRemoved.Num();
 		}
@@ -376,8 +368,8 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprint(const TSharedPtr<FJsonObject
 				GD->SetStringField(TEXT("graph"), Pair.Key);
 				GD->SetArrayField(TEXT("nodesAdded"), NodesAdded);
 				GD->SetArrayField(TEXT("nodesRemoved"), NodesRemoved);
-				GD->SetArrayField(TEXT("connectionsAdded"), StringsToJson(ConnAdded));
-				GD->SetArrayField(TEXT("connectionsRemoved"), StringsToJson(ConnRemoved));
+				GD->SetArrayField(TEXT("connectionsAdded"), MCPStringListToJson(ConnAdded));
+				GD->SetArrayField(TEXT("connectionsRemoved"), MCPStringListToJson(ConnRemoved));
 				GraphDeltas.Add(MakeShared<FJsonValueObject>(GD));
 				ChangeCount += NodesAdded.Num() + NodesRemoved.Num() + ConnAdded.Num() + ConnRemoved.Num();
 			}
@@ -549,8 +541,8 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffSkeleton(const TSharedPtr<FJsonObject>
 	Result->SetStringField(TEXT("virtualBoneSourceFrom"), GetPathNameSafe(PolicySkeletonA));
 	Result->SetStringField(TEXT("virtualBoneSourceTo"), GetPathNameSafe(PolicySkeletonB));
 	Result->SetNumberField(TEXT("sharedRawBoneCount"), SharedRawBones.Num());
-	Result->SetArrayField(TEXT("rawBonesAdded"), StringsToJson(RawBonesAdded));
-	Result->SetArrayField(TEXT("rawBonesRemoved"), StringsToJson(RawBonesRemoved));
+	Result->SetArrayField(TEXT("rawBonesAdded"), MCPStringListToJson(RawBonesAdded));
+	Result->SetArrayField(TEXT("rawBonesRemoved"), MCPStringListToJson(RawBonesRemoved));
 	Result->SetArrayField(TEXT("reparented"), Reparented);
 	Result->SetArrayField(TEXT("rawBoneIndexChanges"), RawBoneIndexChanges);
 	Result->SetArrayField(TEXT("virtualBonesAdded"), VirtualBonesToJson(VirtualBonesAdded));
