@@ -62,7 +62,7 @@ export interface UeMcpConfig {
   /** Context-seeding strategy. `micro` (default) collapses everything behind
    *  one gateway tool; `lean` keeps the category tools and action names with
    *  signatures on demand; `full` lists every action's signature inline. See
-   *  lean-context.ts. */
+   *  lean-context.ts and micro-context.ts. */
   context?: {
     strategy?: "full" | "lean" | "micro";
   };

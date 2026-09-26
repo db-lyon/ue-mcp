@@ -151,6 +151,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "tools.ts": "The pristine tool declaration; per-session graphs are clones of it, built in session-surface.",
   "tool-search.ts": "Searches the graph it is handed.",
   "lean-context.ts": "Pure transforms over a graph. The strategy is one answer per transport, since there is one transport.",
+  "micro-context.ts": "Builds the gateway over the graph it is handed and resolves calls through it; holds nothing per editor.",
   "instructions.ts": "The initialize payload is sent once per process and cannot be renegotiated.",
   "global-config.ts": "The user-global config layer, which applies to every project by definition.",
   "log.ts": "Process-wide stderr logging.",

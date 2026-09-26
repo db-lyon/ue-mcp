@@ -19,7 +19,8 @@ import {
   usesArgsEnvelope,
   validateCategoryParams,
 } from "../../src/call-envelope.js";
-import { buildCatalogTool, buildMicroGateway, describeCategory, DESCRIBE_PAGE_CHARS, resolveMicroCall } from "../../src/lean-context.js";
+import { buildCatalogTool, describeCategory, DESCRIBE_PAGE_CHARS } from "../../src/lean-context.js";
+import { buildMicroGateway, resolveMicroCall } from "../../src/micro-context.js";
 import type { ToolDef } from "../../src/types.js";
 import { bp, categoryTool } from "../../src/category-tool.js";
 import { injectEditorTarget } from "../../src/target-params.js";

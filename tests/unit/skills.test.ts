@@ -11,7 +11,7 @@ import * as path from "node:path";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import { flowCategoryForCheck } from "../../src/flow/flow-surface.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
+import { buildMicroGateway } from "../../src/micro-context.js";
 import type { FlowConfig } from "../../src/flow/schema.js";
 import {
   CORE_OWNER,

@@ -3,7 +3,7 @@ import { classifyAction, resolveLockingConfig, withAssetLocks } from "../../src/
 import type { IBridge } from "../../src/bridge.js";
 import { McpError, ErrorCode } from "../../src/errors.js";
 import { callSubject } from "../../src/editor-gate.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
+import { buildMicroGateway } from "../../src/micro-context.js";
 import { assetTool } from "../../src/tools/asset.js";
 import type { ToolDef } from "../../src/types.js";
 

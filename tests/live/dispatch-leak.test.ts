@@ -25,7 +25,7 @@ import { SessionRegistry, type EditorSession } from "../../src/session.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { niagaraTool } from "../../src/tools/niagara.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
+import { buildMicroGateway } from "../../src/micro-context.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { loadFlowConfig } from "../../src/flow/loader.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";

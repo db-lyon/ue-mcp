@@ -32,7 +32,8 @@ The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), r
 | `deployer.ts` | First-run deployment: copy plugin, mutate `.uproject` |
 | `editor-control.ts` | Start/stop/restart the Unreal Editor process |
 | `instructions.ts` | AI-facing server instructions (embedded documentation), one variant per context strategy |
-| `lean-context.ts` | The context strategies: the micro `tools` gateway, the lean `catalog` tool, paged `describe` and signature `search` |
+| `lean-context.ts` | Choosing a context strategy, the lean `catalog` tool, paged `describe` and signature `search` |
+| `micro-context.ts` | The micro `tools` gateway and how a call through it resolves to its target |
 | `action-signature.ts` | One-line action signatures and the legend that explains them |
 | `call-envelope.ts` | The `action` + `args` call shape and the server-side validation behind it |
 | `auth.ts` | GitHub OAuth device flow + `~/.ue-mcp/auth.json` token cache (default authorship path for feedback issues) |

@@ -7,8 +7,8 @@ import {
   splitDescription,
   buildCatalogTool,
   applyLeanContext,
-  buildMicroGateway,
 } from "../../src/lean-context.js";
+import { buildMicroGateway } from "../../src/micro-context.js";
 import { searchToolGraph } from "../../src/tool-search.js";
 import { actionSignature } from "../../src/action-signature.js";
 import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO } from "../../src/instructions.js";

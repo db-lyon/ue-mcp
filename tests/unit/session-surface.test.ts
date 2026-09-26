@@ -18,7 +18,7 @@ import {
   type SessionSurface,
 } from "../../src/session-surface.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
+import { buildMicroGateway } from "../../src/micro-context.js";
 import { callSubject } from "../../src/editor-gate.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 

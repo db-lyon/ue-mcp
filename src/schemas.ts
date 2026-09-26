@@ -81,7 +81,7 @@ export const UeMcpConfigSchema = z
     // gateway tool. `lean` advertises the category tools with a one-line
     // summary and moves the signatures behind on-demand discovery (the
     // `catalog` tool + per-category `describe` action). `full` lists one
-    // signature per action inline. See lean-context.ts.
+    // signature per action inline. See lean-context.ts and micro-context.ts.
     context: z
       .object({
         strategy: z.enum(["full", "lean", "micro"]).optional(),
