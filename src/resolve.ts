@@ -39,10 +39,6 @@ function run(cmd: string): string {
   return execSync(cmd, { encoding: "utf-8" }).trim();
 }
 
-function currentBranch(): string {
-  return run("git rev-parse --abbrev-ref HEAD");
-}
-
 /* ── Main ────────────────────────────────────────────────────────── */
 
 async function resolve() {
@@ -91,9 +87,8 @@ async function resolve() {
     fail("Not a git repository. Clone ue-mcp first.");
   }
 
-  // Detect repo owner/name from git remote. If the remote is missing or
-  // unparseable, fall back to the upstream repo but make it loud so contributors
-  // working in a fork know the gh calls below will target db-lyon/ue-mcp.
+  // Every gh call targets the origin repo. An unreadable origin falls back to
+  // upstream, loudly.
   const YELLOW = "\x1b[33m";
   let repo: string;
   try {
@@ -118,18 +113,17 @@ async function resolve() {
   let issue: { title: string; body: string; labels: { name: string }[] };
   try {
     const raw = run(
-      `gh issue view ${issueNum} --repo db-lyon/ue-mcp --json title,body,labels`,
+      `gh issue view ${issueNum} --repo ${repo} --json title,body,labels`,
     );
     issue = JSON.parse(raw);
   } catch {
-    fail(`Could not fetch issue #${issueNum} from db-lyon/ue-mcp`);
+    fail(`Could not fetch issue #${issueNum} from ${repo}`);
     return; // unreachable, but satisfies TS
   }
 
   ok(`Issue #${issueNum}: ${issue.title}`);
 
   // Create branch from main
-  const startBranch = currentBranch();
   const branch = `resolve/${issueNum}`;
 
   try {
@@ -239,7 +233,7 @@ async function resolve() {
     ].join("\n");
 
     const prUrl = run(
-      `gh pr create --title "${prTitle.replace(/"/g, '\\"')}" --body "${prBody.replace(/"/g, '\\"')}" --repo db-lyon/ue-mcp --head ${branch}`,
+      `gh pr create --title "${prTitle.replace(/"/g, '\\"')}" --body "${prBody.replace(/"/g, '\\"')}" --repo ${repo} --head ${branch}`,
     );
     console.log("");
     ok(`PR created: ${prUrl}`);
