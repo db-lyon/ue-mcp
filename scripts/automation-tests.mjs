@@ -13,16 +13,7 @@
  *   node scripts/automation-tests.mjs [--filter UE.MCP.] [--max 500]
  *                                     [--timeout 900000] [--verbose]
  */
-import WebSocket from "ws";
-import {
-  assertLoopbackHost,
-  bridgePortCandidates,
-  describeMissingBridge,
-  assertTestProjectDir,
-  extractReportedProjectDir,
-  PROJECT_IDENTITY_PYTHON,
-  TEST_PROJECT_UPROJECT,
-} from "./bridge-target.mjs";
+import { connectTestBridge, TEST_PROJECT_UPROJECT } from "./bridge-target.mjs";
 
 const args = process.argv.slice(2);
 function flag(name, fallback) {
@@ -41,89 +32,39 @@ const VERBOSE = args.includes("--verbose");
 const RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m", BOLD = "\x1b[1m", DIM = "\x1b[2m";
 
-function connect(url, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
-    const timer = setTimeout(() => { ws.terminate(); reject(new Error("connect timeout")); }, timeoutMs);
-    ws.on("open", () => { clearTimeout(timer); resolve(ws); });
-    ws.on("error", (e) => { clearTimeout(timer); reject(e); });
-  });
-}
-
-let nextId = 1;
-function rpc(ws, method, params, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const id = nextId++;
-    const timer = setTimeout(() => reject(new Error(`timeout waiting for ${method}`)), timeoutMs);
-    const onMessage = (data) => {
-      let msg;
-      try { msg = JSON.parse(data.toString()); } catch { return; }
-      if (msg.id !== id) return;
-      clearTimeout(timer);
-      ws.removeListener("message", onMessage);
-      if (msg.error) reject(new Error(msg.error.message ?? String(msg.error)));
-      else resolve(msg.result);
-    };
-    ws.on("message", onMessage);
-    ws.send(JSON.stringify({ id, method, params: params ?? {} }));
-  });
-}
-
-async function connectToTestBridge() {
-  assertLoopbackHost(HOST);
-  const { candidates, lockfile } = bridgePortCandidates({
-    explicitPort: Number.isInteger(EXPLICIT_PORT) ? EXPLICIT_PORT : null,
-  });
-  let lastError = null;
-  for (const c of candidates) {
-    const url = `ws://${HOST}:${c.port}`;
-    try {
-      const ws = await connect(url, 3000);
-      console.log(`${GREEN}Connected to ${url}${RESET} ${DIM}(${c.source})${RESET}`);
-      return ws;
-    } catch (err) {
-      lastError = err.message;
-    }
-  }
-  throw new Error(describeMissingBridge({ host: HOST, candidates, lockfile, lastError }));
-}
-
 async function main() {
   console.log(`\n${BOLD}UE MCP Bridge - C++ automation suite${RESET}`);
   console.log(`${DIM}Project : ${TEST_PROJECT_UPROJECT}${RESET}`);
   console.log(`${DIM}Filter  : ${FILTER}${RESET}\n`);
 
-  let ws;
-  try {
-    ws = await connectToTestBridge();
-  } catch (err) {
-    console.error(`${RED}${BOLD}${err.message}${RESET}\n`);
-    process.exit(1);
-  }
-
   // The same guard the smoke harness applies. These tests write into temp
   // mounts, but run_automation_tests dispatches every EditorContext test in
   // the process against whatever project is attached.
+  let bridge;
   try {
-    const identity = await rpc(ws, "execute_python", { code: PROJECT_IDENTITY_PYTHON }, 60000);
-    const reported = assertTestProjectDir(extractReportedProjectDir(identity));
-    console.log(`${DIM}  target confirmed: ${reported}${RESET}\n`);
+    bridge = await connectTestBridge({
+      host: HOST,
+      explicitPort: Number.isInteger(EXPLICIT_PORT) ? EXPLICIT_PORT : null,
+      log: (m) => console.log(`${GREEN}${m}${RESET}`),
+    });
+    console.log(`${DIM}  target confirmed: ${bridge.projectDir}${RESET}
+`);
   } catch (err) {
-    console.error(`\n${RED}${BOLD}Aborting: could not confirm the connected editor's project (${err.message}).${RESET}\n`);
-    ws.close();
+    console.error(`${RED}${BOLD}${err.message}${RESET}
+`);
     process.exit(1);
   }
 
   let result;
   try {
-    result = await rpc(ws, "run_automation_tests", { filter: FILTER, maxTests: MAX_TESTS }, TIMEOUT_MS);
+    result = await bridge.call("run_automation_tests", { filter: FILTER, maxTests: MAX_TESTS }, TIMEOUT_MS);
   } catch (err) {
     console.error(`${RED}${BOLD}The run did not complete: ${err.message}${RESET}`);
     console.error(`${DIM}A test that takes the editor down looks exactly like this. Check the editor log.${RESET}\n`);
-    ws.close();
+    bridge.close();
     process.exit(1);
   }
-  ws.close();
+  bridge.close();
 
   const results = result.results ?? [];
   const failures = results.filter((r) => !r.passed);

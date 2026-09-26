@@ -40,7 +40,7 @@ const RECORD_GOLDEN = argv.includes("--record-golden");
 const onlyIndex = argv.indexOf("--only");
 const ONLY = onlyIndex !== -1 ? argv[onlyIndex + 1] : null;
 
-const HOST = process.env.UE_MCP_LIVE_HOST ?? "127.0.0.1";
+const HOST = process.env.UE_MCP_LIVE_HOST ?? process.env.UE_MCP_TEST_HOST ?? "127.0.0.1";
 const CONNECT_TIMEOUT_MS = 5000;
 const CALL_TIMEOUT_MS = 60_000;
 

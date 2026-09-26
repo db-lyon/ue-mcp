@@ -21,75 +21,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import WebSocket from "ws";
-import {
-  assertLoopbackHost,
-  assertTestProjectDir,
-  bridgePortCandidates,
-  describeMissingBridge,
-  extractReportedProjectDir,
-  PROJECT_IDENTITY_PYTHON,
-} from "./bridge-target.mjs";
+import { connectTestBridge } from "./bridge-target.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "tests", "golden", "handler-specs.json");
-const HOST = "127.0.0.1";
-const TIMEOUT_MS = 60_000;
-
-function connect(url, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
-    const timer = setTimeout(() => {
-      ws.terminate();
-      reject(new Error(`Connection to ${url} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    ws.on("open", () => { clearTimeout(timer); resolve(ws); });
-    ws.on("error", (err) => { clearTimeout(timer); reject(err); });
-  });
-}
-
-let nextId = 1;
-function rpc(ws, method, params) {
-  const id = nextId++;
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${method} timed out`)), TIMEOUT_MS);
-    const onMessage = (raw) => {
-      let msg;
-      try { msg = JSON.parse(raw.toString()); } catch { return; }
-      if (msg.id !== id) return;
-      clearTimeout(timer);
-      ws.off("message", onMessage);
-      resolve(msg);
-    };
-    ws.on("message", onMessage);
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-}
 
 async function main() {
-  assertLoopbackHost(HOST);
-  const { candidates, lockfile } = bridgePortCandidates({});
-  let ws = null;
-  let lastError = null;
-  for (const c of candidates) {
-    try {
-      ws = await connect(`ws://${HOST}:${c.port}`, 3000);
-      console.log(`connected to ws://${HOST}:${c.port} (${c.source})`);
-      break;
-    } catch (e) {
-      lastError = e.message;
-    }
-  }
-  if (!ws) throw new Error(describeMissingBridge({ host: HOST, candidates, lockfile, lastError }));
+  const bridge = await connectTestBridge({ log: console.log });
+  console.log(`target confirmed: ${bridge.projectDir}`);
 
-  const ident = await rpc(ws, "execute_python", { code: PROJECT_IDENTITY_PYTHON });
-  if (ident.error) throw new Error(`could not identify the connected editor: ${ident.error.message}`);
-  const projectDir = assertTestProjectDir(extractReportedProjectDir(ident.result));
-  console.log(`target confirmed: ${projectDir}`);
-
-  const answered = await rpc(ws, "get_bridge_capabilities", {});
-  if (answered.error) throw new Error(`get_bridge_capabilities failed: ${answered.error.message}`);
-  const specs = answered.result?.handlerSpecs;
+  const answered = await bridge.call("get_bridge_capabilities");
+  const specs = answered?.handlerSpecs;
   if (!specs || typeof specs !== "object" || Object.keys(specs).length === 0) {
     throw new Error(
       "The connected plugin published no handler specs. Recording that would delete every generated "
@@ -104,7 +46,7 @@ async function main() {
   fs.writeFileSync(OUT, `${JSON.stringify(snapshot, null, 2)}\n`);
   console.log(`recorded ${snapshot.handlerCount} spec'd handlers`);
   console.log(`wrote ${path.relative(ROOT, OUT)}; now run npm run specs:generate`);
-  ws.close();
+  bridge.close();
 }
 
 main().catch((err) => {
