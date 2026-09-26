@@ -7,6 +7,7 @@
 #include "Components/PanelWidget.h"
 #include "EditorAssetLibrary.h"
 #include "HandlerUtils.h"
+#include "WidgetGuidMap.h"
 #include "IAssetTools.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"

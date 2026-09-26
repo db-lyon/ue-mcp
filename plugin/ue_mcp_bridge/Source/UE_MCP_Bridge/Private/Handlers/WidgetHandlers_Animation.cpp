@@ -37,6 +37,7 @@
 #include "WidgetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "WidgetGuidMap.h"
 
 #include "WidgetBlueprint.h"
 #include "Blueprint/UserWidget.h"

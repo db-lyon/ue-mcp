@@ -6,6 +6,7 @@
 #include "WidgetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "WidgetGuidMap.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerQuery.h"
 #include "WidgetBlueprint.h"

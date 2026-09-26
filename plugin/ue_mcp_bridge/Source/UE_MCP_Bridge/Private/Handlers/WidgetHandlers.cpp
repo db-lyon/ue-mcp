@@ -1,6 +1,7 @@
 #include "WidgetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "WidgetGuidMap.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
 #include <type_traits>
