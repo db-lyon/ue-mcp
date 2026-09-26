@@ -19,6 +19,11 @@ public class UE_MCP_Bridge : ModuleRules
 				"Json",
 				"JsonUtilities",
 				"GameplayTags",
+				// Public/HandlerUtils.h includes EditorAssetLibrary.h, the Asset
+				// Registry and Kismet2 headers, so a module including it needs these.
+				"AssetRegistry",
+				"EditorScriptingUtilities",
+				"UnrealEd",
 			}
 		);
 
@@ -40,17 +45,14 @@ public class UE_MCP_Bridge : ModuleRules
 				"MessageLog",
 				"AnimationCore",
 				"AnimGraph",
-				"AnimationEditor",
 				// UAnimPoseExtensions / FAnimPoseEvaluationOptions (AnimPose.h),
 				// the engine's own pose evaluator, used by animation(sample_pose)
 				// and animation(measure_natural_speed).
 				"AnimationBlueprintLibrary",
 				"AnimationModifiers",
-				"AssetRegistry",
 				"AssetTools",
 				"AudioEditor",
 				"AudioMixer",
-				"AudioExtensions",
 				"MetasoundEngine",
 				"MetasoundFrontend",
 				"MetasoundGraphCore",
@@ -60,16 +62,12 @@ public class UE_MCP_Bridge : ModuleRules
 				"BlueprintGraph",
 				"Blutility",
 				"Chooser",
-				"ContentBrowser",
 				"ControlRig",
 				"ControlRigDeveloper",
 				"ControlRigEditor",
 				"RigVMDeveloper",
 				"DataValidation",
-				"EditorScriptingUtilities",
-				"EditorStyle",
 				"EditorSubsystem",
-				"EditorWidgets",
 				"EnhancedInput",
 				"Foliage",
 				"GameProjectGeneration",
@@ -77,15 +75,10 @@ public class UE_MCP_Bridge : ModuleRules
 				// IGameplayTagsEditorModule::AddNewGameplayTagToINI, which
 				// reflection(create_tag) uses to register a tag without a restart.
 				"GameplayTagsEditor",
-				"GameplayTasks",
-				"HTTP",
 				"IKRig",
-				"IKRigDeveloper",
 				"IKRigEditor",
 				"ImageWrapper",
 				"InputCore",
-				"Kismet",
-				"KismetCompiler",
 				"Landscape",
 				"LevelEditor",
 				"LevelSequence",
@@ -103,11 +96,9 @@ public class UE_MCP_Bridge : ModuleRules
 				// generated its reflection data, not just the header.
 				"NiagaraShader",
 				"PCG",
-				"PCGEditor",
 				"PoseSearch",
 				"PoseSearchEditor",
 				"PropertyBindingUtils",
-				"PropertyEditor",
 				// IPluginManager, IProjectManager and FProjectDescriptor, which
 				// project(enable_plugin) writes and widget(audit_commonui) reads.
 				// UnrealEd exposes these headers transitively but does not export
@@ -126,7 +117,6 @@ public class UE_MCP_Bridge : ModuleRules
 				"ClothingSystemRuntimeCommon",
 				"ClothingSystemRuntimeInterface",
 				"SubobjectDataInterface",
-				"ToolMenus",
 				// UE::Trace::IsChannel, ToggleChannel, EnumerateChannels and
 				// GetStatistics, which editor(start_trace) and its channel actions
 				// call. Core includes the header but does not re-export these.
@@ -139,9 +129,6 @@ public class UE_MCP_Bridge : ModuleRules
 				"RHI",
 				"UMG",
 				"UMGEditor",
-				"UnrealEd",
-				"WebSockets",
-				"WorkspaceMenuStructure",
 			}
 		);
 

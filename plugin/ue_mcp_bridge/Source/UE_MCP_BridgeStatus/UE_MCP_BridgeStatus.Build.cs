@@ -26,14 +26,6 @@ public class UE_MCP_BridgeStatus : ModuleRules
 				"Json",
 			}
 		);
-
-		PrivateDependencyModuleNames.AddRange(
-			new string[]
-			{
-				"CoreUObject",
-				"Projects",
-			}
-		);
 	}
 }
 
