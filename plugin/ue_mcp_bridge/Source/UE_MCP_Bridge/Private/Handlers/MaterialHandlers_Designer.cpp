@@ -1324,7 +1324,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialDesigner(const TSharedPt
 		}
 	}
 	const bool bBuildRequested = EditorOnlyData ? RequestBuild(EditorOnlyData) : false;
-	const bool bSaved = SaveAssetPackage(Instance);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Instance, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -1336,7 +1337,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialDesigner(const TSharedPt
 	Result->SetNumberField(TEXT("slotCount"), EditorOnlyData ? GetObjectArrayProp(EditorOnlyData, TEXT("Slots")).Num() : 0);
 	Result->SetBoolField(TEXT("seededBaseColorSlot"), bSeeded);
 	Result->SetBoolField(TEXT("buildRequested"), bBuildRequested);
-	Result->SetBoolField(TEXT("saved"), bSaved);
 	MCPSetDeleteAssetRollback(Result, Instance->GetPathName());
+	MCPNoteSaveOutcome(Result, Instance->GetPathName(), bSaved, SaveError);
 	return MCPResult(Result);
 }

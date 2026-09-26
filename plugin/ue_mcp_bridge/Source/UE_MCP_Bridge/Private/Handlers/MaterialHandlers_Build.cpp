@@ -484,7 +484,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 	UMaterialEditingLibrary::RecompileMaterial(Material);
 	const TArray<FString> CompileErrors;
 #endif
-	const bool bSaved = SaveAssetPackage(Material);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
 	// Re-read the editor-only data: RecompileMaterial can rebuild it, so the
 	// pointer taken before the recompile is not the one to inspect after it.
@@ -516,7 +517,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 	Result->SetArrayField(TEXT("samplers"), SamplerReport);
 	Result->SetObjectField(TEXT("connectedAfterRecompile"), Persisted);
 	Result->SetNumberField(TEXT("droppedConnections"), DroppedCount);
-	Result->SetBoolField(TEXT("saved"), bSaved);
+	MCPNoteSaveOutcome(Result, Material->GetPathName(), bSaved, SaveError);
 
 	if (CompileErrors.Num() > 0)
 	{
@@ -555,6 +556,19 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 		}
 		const bool bAllSlots = WantedNames.Num() == 0 && WantedIndices.Num() == 0;
 
+		// The mesh write is part of the call, so a mesh that stays unsaved fails it (#931).
+		auto NoteMeshSave = [&Result](UObject* Mesh)
+		{
+			FString MeshSaveError;
+			const bool bMeshSaved = SaveAssetPackageChecked(Mesh, MeshSaveError);
+			Result->SetBoolField(TEXT("meshSaved"), bMeshSaved);
+			if (bMeshSaved) return;
+			Result->SetStringField(TEXT("meshSaveError"), MeshSaveError);
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("The material was assigned in memory but '%s' was not written: %s"), *Mesh->GetPathName(), *MeshSaveError));
+		};
+
 		auto SlotWanted = [&](int32 Index, const FName& SlotName) -> bool
 		{
 			if (bAllSlots) return true;
@@ -586,7 +600,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 			StaticMesh->PostEditChange();
 			Result->SetStringField(TEXT("meshPath"), StaticMesh->GetPathName());
 			Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
-			Result->SetBoolField(TEXT("meshSaved"), SaveAssetPackage(StaticMesh));
+			NoteMeshSave(StaticMesh);
 		}
 		else if (USkeletalMesh* SkeletalMesh = LoadAssetByPath<USkeletalMesh>(MeshPath))
 		{
@@ -608,7 +622,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 			SkeletalMesh->PostEditChange();
 			Result->SetStringField(TEXT("meshPath"), SkeletalMesh->GetPathName());
 			Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
-			Result->SetBoolField(TEXT("meshSaved"), SaveAssetPackage(SkeletalMesh));
+			NoteMeshSave(SkeletalMesh);
 		}
 		else
 		{

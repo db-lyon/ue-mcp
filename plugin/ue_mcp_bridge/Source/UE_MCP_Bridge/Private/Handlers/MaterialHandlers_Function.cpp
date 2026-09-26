@@ -42,9 +42,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFunction(const TSharedPt
 		MF->Description = Description;
 	}
 
-	UEditorAssetLibrary::SaveAsset(MF->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(MF, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, MF->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), MF->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -118,11 +120,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialFunctionExpression(const TS
 	}
 
 	UMaterialEditingLibrary::UpdateMaterialFunction(MF, nullptr);
-	UEditorAssetLibrary::SaveAsset(MF->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(MF, SaveError);
 
 	int32 Index = MF->GetExpressions().IndexOfByKey(NewExpr);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, MF->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("functionPath"), MF->GetPathName());
 	Result->SetStringField(TEXT("expressionClass"), NewExpr->GetClass()->GetName());
@@ -261,9 +265,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialFunctionExpressions(con
 	}
 
 	UMaterialEditingLibrary::UpdateMaterialFunction(MF, nullptr);
-	UEditorAssetLibrary::SaveAsset(MF->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(MF, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, MF->GetPathName(), bSaved, SaveError);
 	Result->SetStringField(TEXT("functionPath"), MF->GetPathName());
 	Result->SetStringField(TEXT("sourceExpression"), From->GetName());
 	Result->SetStringField(TEXT("targetExpression"), To->GetName());
@@ -424,7 +430,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteFunctionExpression(UMaterialFunc
 	// Breaks every link to the node before removing it.
 	UMaterialEditingLibrary::DeleteMaterialExpressionInFunction(Function, Expression);
 	UMaterialEditingLibrary::UpdateMaterialFunction(Function, nullptr);
-	const bool bSaved = UEditorAssetLibrary::SaveAsset(Function->GetPathName(), /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Function, SaveError);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("functionPath"), Function->GetPathName());
@@ -432,8 +439,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteFunctionExpression(UMaterialFunc
 	Result->SetStringField(TEXT("deletedClass"), DeletedClass);
 	Result->SetNumberField(TEXT("expressionCount"), Function->GetExpressions().Num());
 	Result->SetBoolField(TEXT("deleted"), true);
-	Result->SetBoolField(TEXT("saved"), bSaved);
 	Result->SetArrayField(TEXT("severedExpressionInputs"), SeveredWires);
+	MCPNoteSaveOutcome(Result, Function->GetPathName(), bSaved, SaveError);
 
 	// Rollback: a fresh node of the same class at the same spot. Values and wires are not restored.
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();

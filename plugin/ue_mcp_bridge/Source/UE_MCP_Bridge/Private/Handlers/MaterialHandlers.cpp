@@ -1472,7 +1472,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterial(const TSharedPtr<FJsonO
 	auto Created = MCPCreateAssetIdempotent<UMaterial>(Name, PackagePath, OnConflict, TEXT("Material"), MaterialFactory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	SaveAssetPackage(Created.Asset);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 	const FString AssetPath = Created.Asset->GetPathName();
 
 	auto Result = MCPSuccess();
@@ -1481,6 +1482,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterial(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
 	MCPSetDeleteAssetRollback(Result, AssetPath);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -2082,7 +2084,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	Material->PostEditChange();
 
 	// Save the package so subsequent list/connect calls see the expression
-	SaveAssetPackage(Material);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
 	// Return the index as nodeId for use with connect_expressions and other operations
 	int32 NodeIndex = Material->GetExpressions().Num() - 1;
@@ -2110,6 +2113,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	MCPSetRollback(Result, TEXT("delete_material_expression"), Payload);
 	Result->SetStringField(TEXT("expressionName"), NewExpression->GetName());
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
+	MCPNoteSaveOutcome(Result, Material->GetPathName(), bSaved, SaveError);
 
 	return MCPResult(Result);
 }
@@ -2433,7 +2437,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 	auto Created = MCPCreateAssetIdempotent<UMaterialInstanceConstant>(Name, PackagePath, OnConflict, TEXT("Material instance"), Factory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	SaveAssetPackage(Created.Asset);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -2442,6 +2447,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 	Result->SetStringField(TEXT("parentPath"), ParentMaterial->GetPathName());
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
 	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -2566,7 +2572,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 
 		// Persist, then read the value straight back off the instance so the
 		// caller never has to take "success" on trust (#952).
-		Result->SetBoolField(TEXT("saved"), SaveAssetPackage(MaterialInstance));
+		{
+			FString SaveError;
+			const bool bSaved = SaveAssetPackageChecked(MaterialInstance, SaveError);
+			MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+		}
 		float ReadBack = 0.0f;
 		if (MaterialInstance->GetScalarParameterValue(ParameterInfo, ReadBack))
 		{
@@ -2628,7 +2638,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		}
 		Result->SetBoolField(TEXT("declaredByParent"), bApplied);
 
-		Result->SetBoolField(TEXT("saved"), SaveAssetPackage(MaterialInstance));
+		{
+			FString SaveError;
+			const bool bSaved = SaveAssetPackageChecked(MaterialInstance, SaveError);
+			MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+		}
 		FLinearColor ReadBack;
 		if (MaterialInstance->GetVectorParameterValue(ParameterInfo, ReadBack))
 		{
@@ -2700,7 +2714,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		}
 		Result->SetBoolField(TEXT("declaredByParent"), bApplied);
 
-		Result->SetBoolField(TEXT("saved"), SaveAssetPackage(MaterialInstance));
+		{
+			FString SaveError;
+			const bool bSaved = SaveAssetPackageChecked(MaterialInstance, SaveError);
+			MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+		}
 		UTexture* ReadBack = nullptr;
 		if (MaterialInstance->GetTextureParameterValue(ParameterInfo, ReadBack) && ReadBack)
 		{
@@ -2939,7 +2957,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialInstanceParent(const TShare
 	Instance->Modify(true);
 	Instance->SetParentEditorOnly(NewParent, true);
 	Instance->PostEditChange();
-	SaveAssetPackage(Instance);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Instance, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2954,6 +2973,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialInstanceParent(const TShare
 		Payload->SetStringField(TEXT("newParentPath"), OldParentPath);
 		MCPSetRollback(Result, TEXT("set_material_instance_parent"), Payload);
 	}
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 
 	return MCPResult(Result);
 }
@@ -2980,7 +3000,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BatchSetInstances(const TSharedPtr<FJs
 	// expressible inverse, and it reaches the same "nothing to write back"
 	// branch as a batch that changed nothing. The two must not share a note.
 	bool bParentSetFromNull = false;
-	int32 Updated = 0, Failed = 0, Changed = 0;
+	int32 Updated = 0, Failed = 0, Changed = 0, SaveFailed = 0;
 	for (const TSharedPtr<FJsonValue>& Entry : *Instances)
 	{
 		const TSharedPtr<FJsonObject>* Obj = nullptr;
@@ -3132,7 +3152,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BatchSetInstances(const TSharedPtr<FJs
 		}
 
 		MIC->PostEditChange();
-		SaveAssetPackage(MIC);
+		FString RowSaveError;
+		const bool bRowSaved = SaveAssetPackageChecked(MIC, RowSaveError);
+		Row->SetBoolField(TEXT("saved"), bRowSaved);
+		if (!bRowSaved)
+		{
+			Row->SetStringField(TEXT("saveError"), RowSaveError);
+			++SaveFailed;
+		}
 		Row->SetBoolField(TEXT("ok"), true);
 		Row->SetNumberField(TEXT("parametersSet"), ParamsSet);
 		Row->SetBoolField(TEXT("changed"), bRowChanged);
@@ -3155,6 +3182,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BatchSetInstances(const TSharedPtr<FJs
 	Result->SetNumberField(TEXT("changed"), Changed);
 	Result->SetNumberField(TEXT("total"), Instances->Num());
 	if (Changed == 0) Result->SetBoolField(TEXT("unchanged"), true);
+	if (SaveFailed > 0)
+	{
+		// A write that stayed in memory is lost on restart, so the batch fails (#931).
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetNumberField(TEXT("saveFailed"), SaveFailed);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d instance(s) were changed in memory but not written to disk; each such row carries saveError."), SaveFailed));
+	}
 
 	if (InverseInstances.Num() > 0)
 	{
@@ -3244,9 +3279,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ClearMaterialInstanceParameters(const 
 	Instance->Modify(true);
 	Instance->ClearParameterValuesEditorOnly();
 	Instance->PostEditChange();
-	SaveAssetPackage(Instance);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Instance, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, InstancePath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	SetMaterialInstanceSummaryFields(Result, Instance);
 	Result->SetNumberField(TEXT("clearedOverrideCount"), BeforeCount);
@@ -3337,9 +3374,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialStaticSwitch(const TSharedP
 	Instance->Modify(true);
 	Instance->SetStaticSwitchParameterValueEditorOnly(ParameterInfo, bValue);
 	Instance->PostEditChange();
-	SaveAssetPackage(Instance);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Instance, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Instance->GetPathName(), bSaved, SaveError);
 	MCPSetUpdated(Result);
 	SetMaterialInstanceSummaryFields(Result, Instance);
 	Result->SetStringField(TEXT("parameterName"), ParameterName);
@@ -3716,10 +3755,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	// #979: the value was written in memory and the package only marked dirty,
 	// so a caller who then asked something else to save it could be told the
 	// save failed while the write had in fact landed - two answers, neither of
-	// them the whole truth. Persist here, and report whether that worked
-	// alongside the value that was written either way.
+	// them the whole truth. Persist here; a write that did not reach disk fails
+	// the call (#931) and still reports the value that was written.
 	MCPSetUpdated(Result);
-	Result->SetBoolField(TEXT("saved"), SaveAssetPackage(Target.GetAsset()));
+	{
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(Target.GetAsset(), SaveError);
+		MCPNoteSaveOutcome(Result, Target.GetPathName(), bSaved, SaveError);
+	}
 	Result->SetStringField(Target.GetPathKey(), Target.GetPathName());
 	Result->SetNumberField(TEXT("expressionIndex"), ExpressionIndex);
 	Result->SetStringField(TEXT("expressionClass"), ExpressionClass);
@@ -4148,16 +4191,22 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 		bInputsRebuilt = true;
 	}
 
+	bool bSaved = true;
+	FString SaveError;
 	if (bChanged)
 	{
 		Custom->PostEditChange();
 		Target.PostEdit();
 		Target.GetAsset()->MarkPackageDirty();
-		SaveAssetPackage(Target.GetAsset());
+		bSaved = SaveAssetPackageChecked(Target.GetAsset(), SaveError);
 	}
 
 	auto Result = MCPSuccess();
-	if (bChanged) MCPSetUpdated(Result);
+	if (bChanged)
+	{
+		MCPSetUpdated(Result);
+		MCPNoteSaveOutcome(Result, MaterialPath, bSaved, SaveError);
+	}
 	else Result->SetBoolField(TEXT("unchanged"), true);
 	Result->SetStringField(Target.GetPathKey(), MaterialPath);
 	Result->SetNumberField(TEXT("expressionIndex"), ExpressionIndex);
@@ -4337,9 +4386,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJso
 	Material->PreEditChange(nullptr);
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Material, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Material->GetPathName(), bSaved, SaveError);
 	if (Applied.Num() > 0) MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), Material->GetPathName());
 	TArray<TSharedPtr<FJsonValue>> AppliedJ, UnknownJ, AlreadyJ;
@@ -4474,9 +4525,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialSimple(const TSharedPtr<
 	Material->PreEditChange(nullptr);
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Material, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Material->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);

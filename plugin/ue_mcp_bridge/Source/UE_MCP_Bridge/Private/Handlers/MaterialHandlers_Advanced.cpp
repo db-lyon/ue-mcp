@@ -436,9 +436,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	Material->PreEditChange(nullptr);
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Material);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("expressionsCreated"), Created);
