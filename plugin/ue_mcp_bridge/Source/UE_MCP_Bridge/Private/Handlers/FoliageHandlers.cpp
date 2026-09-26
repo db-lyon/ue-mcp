@@ -500,16 +500,18 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SetFoliageTypeSettings(const TSharedPtr
 	// Dirty and save only when a value actually moved. A call that wrote the
 	// values the asset already held has nothing to persist, and dirtying the
 	// package anyway would hand the user an unsaved asset for a no-op.
+	bool bSaveAttempted = false;
+	bool bSaved = false;
+	FString SaveError;
 	if (ChangedCount > 0)
 	{
-		// Mark the foliage type as dirty
 		FoliageType->MarkPackageDirty();
 
-		// Save the asset if it has a valid package path
-		FString PackagePath = FoliageType->GetPathName();
-		if (PackagePath.Contains(TEXT("/Game/")))
+		// A foliage type embedded in a level is saved with the level, not here.
+		if (FoliageType->GetPathName().Contains(TEXT("/Game/")))
 		{
-			UEditorAssetLibrary::SaveAsset(FoliageType->GetOutermost()->GetName(), false);
+			bSaveAttempted = true;
+			bSaved = SaveAssetPackageChecked(FoliageType, SaveError);
 		}
 	}
 
@@ -567,6 +569,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SetFoliageTypeSettings(const TSharedPtr
 	}
 
 	Result->SetBoolField(TEXT("success"), FailedSettings.Num() == 0);
+	if (bSaveAttempted) MCPNoteSaveOutcome(Result, FoliageType->GetPathName(), bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -646,8 +649,8 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJso
 
 	// Notify asset registry and save
 	FAssetRegistryModule::AssetCreated(FoliageType);
-	Package->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(PackageFullPath, false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(FoliageType, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -657,6 +660,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("meshPath"), MeshPath);
 	Result->SetStringField(TEXT("meshName"), Mesh->GetName());
 	MCPSetDeleteAssetRollback(Result, FoliageType->GetPathName());
+	MCPNoteSaveOutcome(Result, PackageFullPath, bSaved, SaveError);
 
 	return MCPResult(Result);
 }
