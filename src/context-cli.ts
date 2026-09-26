@@ -5,6 +5,7 @@ import yaml from "js-yaml";
 import { dumpYaml } from "./yaml-dump.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "./uproject-path.js";
+import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
 
 /**
  * `ue-mcp context [full|lean|micro|status] [project]` - read or set the context
@@ -14,14 +15,6 @@ import { findUProject } from "./uproject-path.js";
  *   full  advertises every action's signature inline
  * Restart the MCP client to apply.
  */
-
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const DIM = "\x1b[2m";
-const GREEN = "\x1b[32m";
-const RED = "\x1b[31m";
-const CYAN = "\x1b[36m";
-const YELLOW = "\x1b[33m";
 
 const ACTIONS = new Set(["full", "lean", "micro", "status"]);
 

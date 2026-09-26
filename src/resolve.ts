@@ -11,15 +11,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { projectDirOf } from "./uproject-path.js";
+import { RESET, BOLD, DIM, RED, CYAN, YELLOW, ok } from "./ui/ansi.js";
 
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const DIM = "\x1b[2m";
-const GREEN = "\x1b[32m";
-const RED = "\x1b[31m";
-const CYAN = "\x1b[36m";
-
-const ok = (msg: string) => console.log(`  ${GREEN}✓${RESET} ${msg}`);
 const fail = (msg: string) => {
   console.error(`  ${RED}✗${RESET} ${msg}`);
   process.exit(1);
@@ -88,7 +81,6 @@ async function resolve() {
 
   // Every gh call targets the origin repo. An unreadable origin falls back to
   // upstream, loudly.
-  const YELLOW = "\x1b[33m";
   let repo: string;
   try {
     const remote = run("git remote get-url origin");

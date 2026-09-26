@@ -5,16 +5,7 @@ import { deploy } from "./deployer.js";
 import { coreSkillsInstalled, conflictMessages, installCoreSkills, syncPluginSkills } from "./skills.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "./uproject-path.js";
-
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const GREEN = "\x1b[32m";
-const RED = "\x1b[31m";
-const DIM = "\x1b[2m";
-const CYAN = "\x1b[36m";
-
-const ok = (msg: string) => console.log(`  ${GREEN}\u2713${RESET} ${msg}`);
-const fail = (msg: string) => console.log(`  ${RED}\u2717${RESET} ${msg}`);
+import { RESET, BOLD, RED, DIM, CYAN, ok, fail } from "./ui/ansi.js";
 
 async function deployCmd() {
   console.log("");

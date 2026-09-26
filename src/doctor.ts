@@ -16,14 +16,7 @@ import { isNewer } from "./version-check.js";
 import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
 import { packageVersion } from "./package-root.js";
 import { findUProject, isUProjectPath, projectDirOf } from "./uproject-path.js";
-
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const GREEN = "\x1b[32m";
-const RED = "\x1b[31m";
-const DIM = "\x1b[2m";
-const CYAN = "\x1b[36m";
-const YELLOW = "\x1b[33m";
+import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
 
 export interface DoctorReport {
   selfVersion: string;            // the ue-mcp currently executing this command
@@ -63,7 +56,6 @@ function readJsonVersion(pkgJsonPath: string): string | null {
     return null;
   }
 }
-
 
 function registryLatest(): string | null {
   return safeExec("npm view ue-mcp version");

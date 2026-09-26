@@ -3,12 +3,7 @@ import * as path from "node:path";
 import { buildProject } from "./editor-control.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject, isUProjectPath } from "./uproject-path.js";
-
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const GREEN = "\x1b[32m";
-const RED = "\x1b[31m";
-const CYAN = "\x1b[36m";
+import { RESET, BOLD, GREEN, RED, CYAN } from "./ui/ansi.js";
 
 function targetUProject(): string | null {
   // --editor names one of the editors this server drives; it wins over the

@@ -11,19 +11,7 @@ import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
 import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "./version-check.js";
 import { packageModulePath, packageRoot, packageVersion } from "./package-root.js";
 import { findUProject, isUProjectPath } from "./uproject-path.js";
-
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const GREEN = "\x1b[32m";
-const RED = "\x1b[31m";
-const DIM = "\x1b[2m";
-const CYAN = "\x1b[36m";
-const YELLOW = "\x1b[33m";
-
-const ok = (msg: string) => console.log(`  ${GREEN}✓${RESET} ${msg}`);
-const fail = (msg: string) => console.log(`  ${RED}✗${RESET} ${msg}`);
-const step = (msg: string) => console.log(`  ${DIM}${msg}${RESET}`);
-
+import { RESET, BOLD, RED, DIM, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
 
 /** The version behind the `latest` dist-tag, which is the stable line. */
 function getLatestVersion(): string | null {
@@ -33,7 +21,6 @@ function getLatestVersion(): string | null {
     return null;
   }
 }
-
 
 function isGlobalInstall(): boolean {
   try {
