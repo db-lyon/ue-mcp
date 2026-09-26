@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
 import type { EditorProcess } from "../../src/editor/engine-observer.js";
 import type { ElicitFn, ElicitParams, ElicitResult } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 vi.mock("../../src/editor/engine-observer.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/editor/engine-observer.js")>();
@@ -421,12 +422,12 @@ describe("the plugin arms no policy and invents no answer", () => {
   });
 
   it("offers no way for the module to add a policy at all", () => {
-    expect(read("Private/Handlers/DialogHandlers.h")).not.toContain("AddDefaultPolicy");
-    expect(read("Private/Handlers/DialogHandlers.cpp")).not.toContain("AddDefaultPolicy");
+    expect(readHandlerFile("DialogHandlers.h")).not.toContain("AddDefaultPolicy");
+    expect(readHandlerFile("DialogHandlers.cpp")).not.toContain("AddDefaultPolicy");
   });
 
   it("hands an unarmed dialog back to the user instead of synthesizing a reply", () => {
-    const source = read("Private/Handlers/DialogHandlers.cpp");
+    const source = readHandlerFile("DialogHandlers.cpp");
     const handler = source.slice(
       source.indexOf("EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgType::Type"),
       source.indexOf("TSharedPtr<FJsonValue> FDialogHandlers::SetDialogPolicy"),
@@ -439,7 +440,7 @@ describe("the plugin arms no policy and invents no answer", () => {
   });
 
   it("reports a dialog's message whole", () => {
-    const source = read("Private/Handlers/DialogHandlers.cpp");
+    const source = readHandlerFile("DialogHandlers.cpp");
     const listDialogs = source.slice(
       source.indexOf("TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs"),
       source.indexOf("TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog"),

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 const handlers = "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/";
 const read = (rel: string) => readFileSync(new URL(handlers + rel, import.meta.url), "utf8");
@@ -14,7 +15,7 @@ describe("animation.read_montage notify objects (#1117)", () => {
   });
 
   it("reports each notify's instance path and editable properties", () => {
-    const source = read("Handlers/AnimationHandlers.cpp");
+    const source = readHandlerFile("AnimationHandlers.cpp");
     const body = source.slice(
       source.indexOf("FAnimationHandlers::ReadAnimMontage("),
       source.indexOf("FAnimationHandlers::CreateAnimBlueprint("),
@@ -26,7 +27,7 @@ describe("animation.read_montage notify objects (#1117)", () => {
 
   it("shares one notify-state lister through a header", () => {
     expect(read("HandlerAnimNotify.h")).toContain("inline TArray<TSharedPtr<FJsonValue>> ListNotifyStates(");
-    const depth = read("Handlers/AnimationHandlers_Depth.cpp");
+    const depth = readHandlerFile("AnimationHandlers_Depth.cpp");
     expect(depth).not.toContain("static TArray<TSharedPtr<FJsonValue>> MCPAnimDepthListNotifyStates(");
     expect(depth).toContain("MCPAnimNotify::ListNotifyStates(AnimAsset)");
   });

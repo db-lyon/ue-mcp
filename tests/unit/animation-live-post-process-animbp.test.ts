@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { animationTool } from "../../src/tools/animation.js";
 import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("animation.set_live_post_process_anim_blueprint", () => {
   it("forwards the live-only selector, generated class path, and clear flag", async () => {
@@ -39,18 +40,9 @@ describe("animation.set_live_post_process_anim_blueprint", () => {
   });
 
   it("keeps the native action transient and validates generated classes before mutation", () => {
-    const registry = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers.cpp",
-      import.meta.url,
-    ), "utf8");
-    const header = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers.h",
-      import.meta.url,
-    ), "utf8");
-    const live = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_SkeletalLive.cpp",
-      import.meta.url,
-    ), "utf8");
+    const registry = readHandlerFile("AnimationHandlers.cpp");
+    const header = readHandlerFile("AnimationHandlers.h");
+    const live = readHandlerFile("AnimationHandlers_SkeletalLive.cpp");
     const nativeTest = readFileSync(new URL(
       "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LivePostProcessAnimBlueprintTests.cpp",
       import.meta.url,

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import { handlerSpecs } from "../../src/tools/specs/animation.generated.js";
 import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 const workflowActions = [
   "begin_control_rig_edit",
@@ -14,13 +15,7 @@ const workflowActions = [
 
 describe("animation Control Rig edit workflow", () => {
   it("filters read metadata without narrowing begin, skip, or unfiltered session responses", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
     const readHandler = source.slice(
       source.indexOf("FAnimationHandlers::ReadControlRigEdit"),
       source.indexOf("FAnimationHandlers::ApplyControlRigEdits"),
@@ -35,13 +30,7 @@ describe("animation Control Rig edit workflow", () => {
   });
 
   it("keeps the source animation active when layered conversion clears baked rig keys", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
 
     expect(source).toContain('SetBoolField(TEXT("layered"), Session.ControlRig->IsAdditive())');
     expect(source).toContain("SetControlRigLayeredMode(RigTrack, true)");
@@ -49,13 +38,7 @@ describe("animation Control Rig edit workflow", () => {
   });
 
   it("keeps a support frame for the exporter's exact-end sample", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
 
     expect(source).toContain("FFrameNumber(EndFrameExclusive + 1)");
     expect(source).toContain("RigSections[0]->SetEndFrame");
@@ -63,13 +46,7 @@ describe("animation Control Rig edit workflow", () => {
   });
 
   it("cancels AnimSequence RateScale so a session maps the raw timeline once", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
     const nativeTest = readFileSync(
       new URL(
         "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AnimationControlRigTimelineTests.cpp",
@@ -86,13 +63,7 @@ describe("animation Control Rig edit workflow", () => {
   });
 
   it("validates offset ranges before expanding them into frames", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
 
     const validation = source.indexOf("Start < RangeStart || End >= RangeEndExclusive");
     const expansion = source.indexOf("for (int64 Frame = Start; Frame <= End; ++Frame)");
@@ -105,13 +76,7 @@ describe("animation Control Rig edit workflow", () => {
   });
 
   it("keeps validation artifacts inside their native root and never overwrites a run", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_Validation.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_Validation.cpp");
 
     expect(source).toContain("FPaths::IsUnderDirectory(Candidate, NormalizedRoot)");
     expect(source).toContain("outputDirectory already contains animation validation artifacts");
@@ -121,13 +86,7 @@ describe("animation Control Rig edit workflow", () => {
   });
 
   it("reports asset-rate-scaled duration and notify timing from the native analyzer", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_Validation.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_Validation.cpp");
 
     expect(source).toContain("const double RateScale = static_cast<double>(Sequence->RateScale)");
     expect(source).toContain("const double PlaybackRateMagnitude = FMath::Abs(RateScale)");
@@ -141,13 +100,7 @@ describe("animation Control Rig edit workflow", () => {
   });
 
   it("routes scalar controls through native Sequencer APIs with metadata and readback", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
 
     expect(source).toContain("GetLocalControlRigBools(");
     expect(source).toContain("SetLocalControlRigBools(");
@@ -168,13 +121,7 @@ describe("animation Control Rig edit workflow", () => {
   });
 
   it("implements component-space contact locking with transactional key QA", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
 
     expect(source).toContain('Op == TEXT("contact_lock")');
     expect(source).toContain("ControlRigSequencerSmoothStep");
@@ -202,13 +149,7 @@ describe("animation Control Rig edit workflow", () => {
   });
 
   it("makes partial IK retarget mappings explicit in batch results", () => {
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_StateMachine.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_StateMachine.cpp");
 
     expect(source).toContain('SetArrayField(TEXT("unmappedTargetChains"), UnmappedTargetChains)');
     expect(source).toContain('SetBoolField(TEXT("mappingComplete"), UnmappedTargetChains.IsEmpty())');
@@ -240,13 +181,7 @@ describe("animation Control Rig edit workflow", () => {
     expect(analysis.description).toContain("Cross-version");
     expect(analysis.description).not.toContain("unsupported_engine_version");
 
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_Validation.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_Validation.cpp");
     expect(source).toContain("UE_MCP_HAS_5_6_API");
     expect(source).toContain("static_cast<UObject&>(*SkeletalMesh)");
   });
@@ -403,13 +338,7 @@ describe("animation Control Rig edit workflow", () => {
     // The rules between fields are the handler's (#1057): the spec declares
     // each op's fields, and the handler refuses what the fields cannot say
     // before it samples or keys anything.
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
     for (const refusal of [
       "requires exactly one of frame or frames",
       "Specify 'frame' or a non-empty 'frames' array",
@@ -484,13 +413,7 @@ describe("animation Control Rig edit workflow", () => {
     expect(animationTool.schema.operations.safeParse([operation]).success).toBe(true);
     expect(animationTool.schema.operations.safeParse([{ ...operation, accepted: { ...operation.accepted, bindingGuid: "other" } }]).success).toBe(true);
 
-    const source = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
     // A snapshot is an object the handler reads field by field, and the
     // rules over its contents and the donor frames are the handler's (#1057).
     expect(animationTool.schema.operations.safeParse([{ ...operation, baseline: undefined }]).success).toBe(false);

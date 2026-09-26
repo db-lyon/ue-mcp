@@ -8,6 +8,7 @@ import { applyLeanContext } from "../../src/surface/context/lean-context.js";
 import { handlerSpecs } from "../../src/tools/specs/editor.generated.js";
 import { paramZod, zodSignature } from "../../src/surface/handler-spec.js";
 import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 /**
  * #811: `args` was advertised as a union whose object branch carried an empty
@@ -194,9 +195,9 @@ describe("the C++ normalizers", () => {
   });
 
   it("are how every handler taking args reads it", () => {
-    const editor = read("Private/Handlers/EditorHandlers.cpp");
-    const pie = read("Private/Handlers/EditorHandlers_PIE.cpp");
-    const runtime = read("Private/Handlers/EditorHandlers_PIERuntime.cpp");
+    const editor = readHandlerFile("EditorHandlers.cpp");
+    const pie = readHandlerFile("EditorHandlers_PIE.cpp");
+    const runtime = readHandlerFile("EditorHandlers_PIERuntime.cpp");
     expect(editor).toContain('MCPReadPythonArgs(Params, TEXT("args"), ExtraArgs)');
     expect(pie.match(/MCPReadFunctionArgs\(Params, TEXT\("args"\), ArgsMap\)/g)).toHaveLength(2);
     expect(runtime).toContain('MCPReadFunctionArgs(Params, TEXT("args"), ArgsMap)');

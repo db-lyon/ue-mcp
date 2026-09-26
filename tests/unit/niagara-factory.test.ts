@@ -1,18 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const HANDLERS = path.join(
-  REPO,
-  "plugin",
-  "ue_mcp_bridge",
-  "Source",
-  "UE_MCP_Bridge",
-  "Private",
-  "Handlers",
-);
+import { listHandlerFiles } from "../../scripts/lib/cpp-registrations.mjs";
 
 /**
  * Every handler source, not only the ones named after Niagara.
@@ -22,10 +10,7 @@ const HANDLERS = path.join(
  * while assembling a scene.
  */
 function handlerSources(): Array<{ file: string; text: string }> {
-  return fs
-    .readdirSync(HANDLERS)
-    .filter((n) => n.endsWith(".cpp"))
-    .map((n) => ({ file: n, text: fs.readFileSync(path.join(HANDLERS, n), "utf8") }));
+  return listHandlerFiles().map(({ name, path }) => ({ file: name, text: fs.readFileSync(path, "utf8") }));
 }
 
 /**

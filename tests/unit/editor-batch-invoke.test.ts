@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("editor.invoke_object_functions", () => {
   const calls = [
@@ -16,10 +16,7 @@ describe("editor.invoke_object_functions", () => {
   });
 
   it("bounds the list in the handler, before any call runs (#1057)", () => {
-    const source = readFileSync(
-      new URL("../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/EditorHandlers_PIERuntime.cpp", import.meta.url),
-      "utf8",
-    );
+    const source = readHandlerFile("EditorHandlers_PIERuntime.cpp");
     expect(source).toContain("Missing required non-empty array parameter 'calls'");
     expect(source).toContain("'calls' accepts at most 64 entries");
   });

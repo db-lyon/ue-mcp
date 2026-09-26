@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("animation.add_transition blend settings (#1149)", () => {
   it("advertises blendDuration and blendLogic", () => {
@@ -31,10 +31,7 @@ describe("animation.add_transition blend settings (#1149)", () => {
   });
 
   it("writes and echoes the blend on the new transition node", () => {
-    const source = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_StateMachine.cpp",
-      import.meta.url,
-    ), "utf8");
+    const source = readHandlerFile("AnimationHandlers_StateMachine.cpp");
     const body = source.slice(
       source.indexOf("FAnimationHandlers::AddTransition("),
       source.indexOf("FAnimationHandlers::SetStateAnimation("),

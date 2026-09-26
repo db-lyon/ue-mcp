@@ -1,16 +1,10 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
 import { classifyAction } from "../../src/dispatch/locking.js";
 import { classifyWrite } from "../../src/flow/write-methods.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
-const handlerSource = readFileSync(
-  new URL(
-    "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/SkeletalMeshHandlers.cpp",
-    import.meta.url,
-  ),
-  "utf8",
-);
+const handlerSource = readHandlerFile("SkeletalMeshHandlers.cpp");
 
 describe("skeletal mesh skin-weight actions", () => {
   it("publishes bounded selected-vertex payloads", () => {

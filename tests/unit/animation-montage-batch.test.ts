@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("animation.author_montages_batch", () => {
   it("exposes a structured montage batch schema", () => {
@@ -33,10 +33,7 @@ describe("animation.author_montages_batch", () => {
 
     // create_montage treats every onConflict but "error" as skip, so the batch
     // refuses anything else per item rather than skipping silently.
-    const source = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers.cpp",
-      import.meta.url,
-    ), "utf8");
+    const source = readHandlerFile("AnimationHandlers.cpp");
     expect(source).toContain('if (ItemOnConflict != TEXT("skip") && ItemOnConflict != TEXT("error"))');
   });
 

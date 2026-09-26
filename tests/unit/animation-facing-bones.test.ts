@@ -1,12 +1,9 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
-const source = readFileSync(
-  new URL("../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_Validation.cpp", import.meta.url),
-  "utf8",
-);
+const source = readHandlerFile("AnimationHandlers_Validation.cpp");
 
 describe("animation(analyze_animation) facingBones (#1163)", () => {
   it("forwards facingBones under the name the handler reads", async () => {

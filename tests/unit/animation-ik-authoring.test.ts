@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("animation IK and retarget authoring", () => {
   it("publishes the native UE 5.8 authoring boundary", () => {
@@ -41,10 +42,7 @@ describe("animation IK and retarget authoring", () => {
     expect(animationTool.schema.fullBodyIK.safeParse({ goals: [] }).success).toBe(false);
     expect(animationTool.schema.chains.safeParse([{ name: "Spine", startBone: "pelvis" }]).success).toBe(false);
     expect(animationTool.schema.exclusions.safeParse([{ bone: "neck_01" }]).success).toBe(false);
-    const ik = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_IKRigAuthoring.cpp",
-      import.meta.url,
-    ), "utf8");
+    const ik = readHandlerFile("AnimationHandlers_IKRigAuthoring.cpp");
     expect(ik).toContain("constexpr int32 MaxChains = 256;");
     expect(ik).toContain("constexpr int32 MaxGoals = 256;");
     expect(ik).toContain("constexpr int32 MaxExclusions = 2048;");
@@ -67,10 +65,7 @@ describe("animation IK and retarget authoring", () => {
       rootOffsetZ: 2.5,
     }).success).toBe(true);
     expect(animationTool.schema.pose.safeParse({ name: "bad" }).success).toBe(false);
-    const retarget = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_IKRetargeterAuthoring.cpp",
-      import.meta.url,
-    ), "utf8");
+    const retarget = readHandlerFile("AnimationHandlers_IKRetargeterAuthoring.cpp");
     expect(retarget).toContain("pose.rootOffsetZ and pose.snapBoneToGround are mutually exclusive");
     expect(retarget).toContain("FMath::Abs(Length - 1.0) > NormalizedTolerance");
   });
@@ -116,22 +111,10 @@ describe("animation IK and retarget authoring", () => {
   });
 
   it("registers guarded native handlers with transactions and checked saves", () => {
-    const registry = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers.cpp",
-      import.meta.url,
-    ), "utf8");
-    const ik = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_IKRigAuthoring.cpp",
-      import.meta.url,
-    ), "utf8");
-    const retarget = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_IKRetargeterAuthoring.cpp",
-      import.meta.url,
-    ), "utf8");
-    const legacy = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_StateMachine.cpp",
-      import.meta.url,
-    ), "utf8");
+    const registry = readHandlerFile("AnimationHandlers.cpp");
+    const ik = readHandlerFile("AnimationHandlers_IKRigAuthoring.cpp");
+    const retarget = readHandlerFile("AnimationHandlers_IKRetargeterAuthoring.cpp");
+    const legacy = readHandlerFile("AnimationHandlers_StateMachine.cpp");
     const handlerUtils = readFileSync(new URL(
       "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerUtils.h",
       import.meta.url,
