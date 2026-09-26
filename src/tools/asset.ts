@@ -3,6 +3,7 @@ import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { paged } from "../surface/pagination.js";
 import { SESSION_ID } from "../dispatch/lock-owner.js";
+import { callOwnBridgeMethod } from "../flow/action-call.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import type { EditorSession } from "../sessions/session.js";
 import type { ToolContext } from "../core/types.js";
@@ -81,7 +82,8 @@ async function migrateAssets(
     destinationContentDir = dir;
   }
 
-  const result = (await ctx.bridge.call("migrate", {
+  // `migrate` is this handler's own primitive; no other action wraps it.
+  const result = (await callOwnBridgeMethod(ctx, "migrate", {
     assetPaths: p.assetPaths,
     assetPath: p.assetPath,
     destinationContentDir,
@@ -200,7 +202,8 @@ export const assetTool: ToolDef = categoryTool(
           const allResults: Array<Record<string, unknown>> = [];
           const perRoot: Array<Record<string, unknown>> = [];
           for (const root of roots) {
-            const res = await ctx.bridge.call("search_assets", { ...call, directory: root }) as Record<string, unknown>;
+            // `search_assets` is this handler's own primitive; no other action wraps it.
+            const res = await callOwnBridgeMethod(ctx, "search_assets", { ...call, directory: root }) as Record<string, unknown>;
             if (res.results && Array.isArray(res.results)) {
               allResults.push(...(res.results as Array<Record<string, unknown>>));
             }
@@ -229,7 +232,7 @@ export const assetTool: ToolDef = categoryTool(
             success: true,
           };
         }
-        return ctx.bridge.call("search_assets", call);
+        return callOwnBridgeMethod(ctx, "search_assets", call);
       },
     },
     read:           specBp("read", "Read asset via reflection.", "read_asset"),
@@ -396,7 +399,9 @@ export const assetTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       description: "Acquire an exclusive lock on an asset for this editor. Returns acquired=true, or acquired=false with holder{sessionId,ttlSecondsRemaining} when another session holds it. Params: assetPath, ttlSeconds? (default 300), sessionId?",
-      handler: async (ctx, p) => ctx.bridge.call("acquire_lock", {
+      // The lock subsystem's own methods, which no action wraps and which
+      // must never take a lock themselves.
+      handler: async (ctx, p) => callOwnBridgeMethod(ctx, "acquire_lock", {
         path: p.assetPath ?? p.path,
         sessionId: lockOwner(ctx, p),
         ttlSeconds: p.ttlSeconds,
@@ -406,7 +411,7 @@ export const assetTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       description: "Release an asset lock held by this editor (or force=true to break any holder's lock). Params: assetPath, force?, sessionId?",
-      handler: async (ctx, p) => ctx.bridge.call("release_lock", {
+      handler: async (ctx, p) => callOwnBridgeMethod(ctx, "release_lock", {
         path: p.assetPath ?? p.path,
         sessionId: lockOwner(ctx, p),
         force: p.force,
@@ -417,7 +422,7 @@ export const assetTool: ToolDef = categoryTool(
       kind: "handler",
       effect: "mutate",
       description: "Release every lock held by one session in a single call, returning the number released. Defaults to the addressed editor's own session; pass sessionId to clear a different one (for example after a crashed session left assets wedged). Params: sessionId?",
-      handler: async (ctx, p) => ctx.bridge.call("release_session_locks", {
+      handler: async (ctx, p) => callOwnBridgeMethod(ctx, "release_session_locks", {
         sessionId: lockOwner(ctx, p),
       }),
     },

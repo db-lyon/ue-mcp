@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDef, ToolContext } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
+import { callOwnBridgeMethod } from "../flow/action-call.js";
 import { toolGraphOf } from "../surface/target-params.js";
 import { directive } from "../core/directive.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
@@ -94,7 +95,8 @@ export const editorTool: ToolDef = categoryTool(
         let live: EngineSnapshot | null = null;
         if (ctx.bridge.isConnected) {
           try {
-            const answered = await ctx.bridge.call("get_engine_state", {});
+            // This handler's own primitive, answered off the game thread; no other action wraps it.
+            const answered = await callOwnBridgeMethod(ctx, "get_engine_state", {});
             live = answered && typeof answered === "object" ? (answered as EngineSnapshot) : null;
           } catch {
             live = null;
@@ -179,7 +181,8 @@ export const editorTool: ToolDef = categoryTool(
         // Gate passed (no candidates, or every candidate ruled out) - run Python.
         // #732: forward an optional resultVariable so scripts can return a value
         // through a first-class `result` channel instead of print()/log.
-        const result = await ctx.bridge.call("execute_python", {
+        // This handler's own primitive: the gate above is the only way in.
+        const result = await callOwnBridgeMethod(ctx, "execute_python", {
           code,
           resultVariable: params.resultVariable,
           captureLog: params.captureLog,
@@ -313,7 +316,7 @@ export const editorTool: ToolDef = categoryTool(
 
         // A method of its own: play_in_editor's pie_control never reads an
         // authorization, so the bypass is reachable only through this gate.
-        return ctx.bridge.call("pie_start_ignoring_blueprint_errors", {
+        return callOwnBridgeMethod(ctx, "pie_start_ignoring_blueprint_errors", {
           authorizationSource,
           waitForAssetRegistry: p.waitForAssetRegistry,
           assetRegistryTimeoutSeconds: p.assetRegistryTimeoutSeconds,
@@ -450,7 +453,8 @@ export const editorTool: ToolDef = categoryTool(
             error: ownership.message,
           };
         }
-        const result = await ctx.bridge.call("request_editor_shutdown", {
+        // This handler's own primitive, reached only after the ownership check above.
+        const result = await callOwnBridgeMethod(ctx, "request_editor_shutdown", {
           requireClean: p.requireClean,
           endPIE: p.endPIE,
         });

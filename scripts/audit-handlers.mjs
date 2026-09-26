@@ -58,7 +58,9 @@ function tsBridgeMethods() {
       }
       // ctx.bridge.call("method_name", ...) and bridge.call("...", ...)
       // are direct calls in custom handlers (asset.list, asset.search, etc.).
-      for (const m of src.matchAll(/\bbridge\.call\(\s*"([a-z_][a-z0-9_]*)"/g)) {
+      // callOwnBridgeMethod(ctx, "method_name", ...) is the same call, made by
+      // a handler whose method has no action of its own.
+      for (const m of src.matchAll(/\b(?:bridge\.call\(|callOwnBridgeMethod\(\s*[\w$.]+\s*,)\s*"([a-z_][a-z0-9_]*)"/g)) {
         const method = m[1];
         if (!methods.has(method)) methods.set(method, []);
         methods.get(method).push({ file: rel });
