@@ -77,9 +77,6 @@ bool FMCPParamReadTrackingTest::RunTest(const FString& Parameters)
 	const FMCPParamReadScope* const OuterScope = FMCPParamReadScope::Active();
 	using namespace MCPParamReadTests;
 
-	TestTrue(TEXT("animation is a reporting category"), FMCPHandlerRegistry::ReportsUnreadParams(TEXT("animation")));
-	TestFalse(TEXT("an unlisted category is not"), FMCPHandlerRegistry::ReportsUnreadParams(TEXT("unlisted_probe")));
-
 	FMCPHandlerRegistry Registry;
 	{
 		FMCPHandlerRegistry::FCategoryScope Scope(Registry, TEXT("animation"));
@@ -127,11 +124,11 @@ bool FMCPParamReadTrackingTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("a failed call carries no paramsNotRead"), bPresent);
 	}
 
-	// Outside the pilot, the same handler reports nothing.
+	// Any category scope arms the tracking; a handler registered outside one reports nothing.
 	{
-		bool bPresent = true;
+		bool bPresent = false;
 		NotReadOf(Registry.ExecuteHandler(TEXT("mcp_test_unlisted_probe"), MakeProbeParams()), bPresent);
-		TestFalse(TEXT("a non-pilot category reports nothing"), bPresent);
+		TestTrue(TEXT("any category scope reports paramsNotRead"), bPresent);
 		bPresent = true;
 		NotReadOf(Registry.ExecuteHandler(TEXT("mcp_test_untagged_probe"), MakeProbeParams()), bPresent);
 		TestFalse(TEXT("an untagged handler reports nothing"), bPresent);

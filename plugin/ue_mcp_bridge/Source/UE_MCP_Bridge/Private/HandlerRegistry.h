@@ -340,9 +340,6 @@ public:
 		FString Previous;
 	};
 
-	// Categories whose handlers report the parameters they never read (#1057).
-	static bool ReportsUnreadParams(const FString& Category);
-
 	// Register a C++ handler
 	void RegisterHandler(const FString& MethodName, FHandlerFunction Handler);
 

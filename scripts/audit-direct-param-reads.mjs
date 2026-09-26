@@ -4,11 +4,10 @@
 // `node scripts/audit-direct-param-reads.mjs` (the `audit:param-reads` shape),
 // with `--verbose` to list every read.
 //
-// A handler of a reporting category answers with `paramsNotRead` for keys that
-// arrived and were never read. Only the helpers in HandlerUtils.h note a read,
-// so a direct `Params->TryGet*Field` call is invisible and its key would be
-// reported as unread. This lists those calls per category, so a category can be
-// converted to the helpers before it joins the allowlist in HandlerRegistry.cpp.
+// A handler registered under a category scope answers with `paramsNotRead` for
+// keys that arrived and were never read. Only the helpers in HandlerParams.h note
+// a read, so a direct `Params->TryGet*Field` call is invisible and its key would
+// be reported as unread. This lists those calls per file category.
 //
 // Report-only. The unit test holds the reporting categories at zero.
 // It sees the handler's own `Params` only: a helper that takes the object under
@@ -23,7 +22,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const moduleRoot = path.join(repoRoot, 'plugin', 'ue_mcp_bridge', 'Source', 'UE_MCP_Bridge');
 export const HANDLERS_DIR = path.join(moduleRoot, 'Private', 'Handlers');
-export const REGISTRY_CPP = path.join(moduleRoot, 'Private', 'HandlerRegistry.cpp');
 
 const DIRECT_READ = /(?<![\w.>])Params->(TryGet\w*Field|Get\w*Field|HasField|HasTypedField|TryGetField|Values)\b/g;
 
@@ -98,11 +96,18 @@ export function findDirectReads(source) {
   return reads;
 }
 
-/** The categories HandlerRegistry.cpp reports unread parameters for. */
-export function reportingCategories(registrySource = fs.readFileSync(REGISTRY_CPP, 'utf8')) {
-  const block = registrySource.match(/Reporting\[\]\s*=\s*\{([^}]*)\}/);
-  if (!block) return [];
-  return [...block[1].matchAll(/TEXT\(\s*"([^"]+)"\s*\)/g)].map((m) => m[1]);
+const CATEGORY_SCOPE = /FCategoryScope\s+\w+\s*\(\s*\w+\s*,\s*TEXT\(/;
+
+/** The file categories whose handlers report unread parameters: every category
+ *  one of whose files registers under an FCategoryScope, which is what arms the
+ *  tracking in HandlerRegistry.cpp. */
+export function reportingCategories(dir = HANDLERS_DIR) {
+  const out = new Set();
+  for (const { name, path: filePath } of listHandlerFiles(dir)) {
+    const category = categoryOfFile(name);
+    if (category && CATEGORY_SCOPE.test(stripComments(fs.readFileSync(filePath, 'utf8')))) out.add(category);
+  }
+  return [...out].sort();
 }
 
 /** Direct reads grouped by category, largest first. */
