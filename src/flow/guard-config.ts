@@ -1,7 +1,7 @@
 import { readEnv } from "../env.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { globalConfigPath } from "../global-config.js";
+import { globalConfigPath } from "../ue-mcp-config.js";
 import type { ToolDef } from "../types.js";
 import type { GuardDeclarations } from "./guard-schema.js";
 import type { GuardSource } from "./guards.js";

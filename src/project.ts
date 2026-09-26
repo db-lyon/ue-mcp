@@ -1,13 +1,20 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import yaml from "js-yaml";
 import { deepMerge } from "@db-lyon/flowkit";
-import { dumpYaml } from "./yaml-dump.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { info, warn } from "./log.js";
 import { UProjectSchema, UeMcpConfigSchema } from "./schemas.js";
 import { resolveEngineRoot, type EngineLookup } from "./engine-root.js";
-import { readGlobalUeMcpBlock } from "./global-config.js";
+import {
+  configLayerFiles,
+  localConfigPath,
+  overlayConfigPath,
+  projectConfigPath,
+  readConfigDoc,
+  readGlobalUeMcpBlock,
+  readUeMcpBlock,
+  writeConfigDoc,
+} from "./ue-mcp-config.js";
 import { setInstalledHooks, setFeedbackMode, type FeedbackMode } from "./user-state.js";
 import { resolveUProjectPath } from "./uproject-path.js";
 import { readEnv } from "./env.js";
@@ -451,12 +458,12 @@ export class ProjectContext {
  */
 function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
   const global = readGlobalUeMcpBlock();
-  const project = readUeMcpBlock(path.join(projectDir, "ue-mcp.yml"));
+  const project = readUeMcpBlock(projectConfigPath(projectDir));
 
   const layers: Record<string, unknown>[] = [global, project];
-  const overlayName = overlayFor(projectDir, global, project);
-  if (overlayName) layers.push(readUeMcpBlock(path.join(projectDir, `ue-mcp.${overlayName}.yml`)));
-  layers.push(readUeMcpBlock(path.join(projectDir, "ue-mcp.local.yml")));
+  for (const layer of configLayerFiles(projectDir, overlayFor(projectDir, global, project))) {
+    if (layer.target === "env" || layer.target === "local") layers.push(readUeMcpBlock(layer.file));
+  }
 
   return layers.reduce(
     (acc, layer) => deepMerge(acc, layer) as Record<string, unknown>,
@@ -486,11 +493,11 @@ function overlayFor(
   const fromVariable = firstString(readEnv("env"));
   if (fromVariable) return fromVariable;
 
-  const local = readUeMcpBlock(path.join(projectDir, "ue-mcp.local.yml"));
+  const local = readUeMcpBlock(localConfigPath(projectDir));
   const named = firstString(local.env, project.env, global.env);
   if (!named) return undefined;
 
-  const overlay = readUeMcpBlock(path.join(projectDir, `ue-mcp.${named}.yml`));
+  const overlay = readUeMcpBlock(overlayConfigPath(projectDir, named));
   if ((overlay.bridge as { port?: unknown } | undefined)?.port !== undefined) {
     warn(
       "project",
@@ -508,26 +515,6 @@ function firstString(...values: unknown[]): string | undefined {
     if (typeof v === "string" && v.trim() !== "") return v.trim();
   }
   return undefined;
-}
-
-/**
- * Extract the `ue-mcp:` block from a YAML file. Returns {} if the file
- * doesn't exist, doesn't parse, or doesn't have the block. Caller validates.
- */
-function readUeMcpBlock(filePath: string): Record<string, unknown> {
-  if (!fs.existsSync(filePath)) return {};
-  try {
-    const raw = yaml.load(fs.readFileSync(filePath, "utf-8")) as
-      | { "ue-mcp"?: Record<string, unknown> }
-      | null
-      | undefined;
-    return (raw && typeof raw === "object" && raw["ue-mcp"] && typeof raw["ue-mcp"] === "object")
-      ? (raw["ue-mcp"] as Record<string, unknown>)
-      : {};
-  } catch (e) {
-    warn("project", `failed to parse ${filePath} - skipping ue-mcp: block from this file`, e);
-    return {};
-  }
 }
 
 /**
@@ -550,24 +537,17 @@ function migrateLegacyJsonConfig(projectDir: string): void {
     return;
   }
 
-  const ymlPath = path.join(projectDir, "ue-mcp.yml");
+  const ymlPath = projectConfigPath(projectDir);
   const { installedHooks, ...tracked } = legacy as {
     installedHooks?: string[];
   } & Record<string, unknown>;
 
   // Tracked fields → ue-mcp.yml's `ue-mcp:` block.
   if (Object.keys(tracked).length > 0) {
-    let existing: Record<string, unknown> = {};
-    if (fs.existsSync(ymlPath)) {
-      try {
-        existing = (yaml.load(fs.readFileSync(ymlPath, "utf-8")) as Record<string, unknown>) ?? {};
-      } catch {
-        existing = {};
-      }
-    }
+    const existing = readConfigDoc(ymlPath, () => undefined);
     const existingBlock = (existing["ue-mcp"] as Record<string, unknown>) ?? {};
     existing["ue-mcp"] = { version: 1, ...existingBlock, ...tracked };
-    fs.writeFileSync(ymlPath, dumpYaml(existing), "utf-8");
+    writeConfigDoc(ymlPath, existing);
   }
 
   // installedHooks → ~/.ue-mcp/state.json under this project's key.
@@ -593,12 +573,12 @@ function migrateLegacyJsonConfig(projectDir: string): void {
  * from the YAML after copying it. Idempotent.
  */
 function migrateLegacyFeedbackModeInYaml(projectDir: string): void {
-  const ymlPath = path.join(projectDir, "ue-mcp.yml");
+  const ymlPath = projectConfigPath(projectDir);
   if (!fs.existsSync(ymlPath)) return;
 
-  let doc: Record<string, unknown> = {};
+  let doc: Record<string, unknown>;
   try {
-    doc = (yaml.load(fs.readFileSync(ymlPath, "utf-8")) as Record<string, unknown>) ?? {};
+    doc = readConfigDoc(ymlPath);
   } catch {
     return;
   }
@@ -613,7 +593,7 @@ function migrateLegacyFeedbackModeInYaml(projectDir: string): void {
   // Strip from yaml.
   delete (block as Record<string, unknown>).feedback;
   doc["ue-mcp"] = block;
-  fs.writeFileSync(ymlPath, dumpYaml(doc), "utf-8");
+  writeConfigDoc(ymlPath, doc);
 
   info(
     "project",
@@ -632,12 +612,12 @@ function migrateLegacyFeedbackModeInYaml(projectDir: string): void {
  * genuine 1.0.29 artifact). Idempotent: no-op when there is nothing to move.
  */
 function migrateLegacyLocalYaml(projectDir: string): void {
-  const localPath = path.join(projectDir, "ue-mcp.local.yml");
+  const localPath = localConfigPath(projectDir);
   if (!fs.existsSync(localPath)) return;
 
-  let doc: Record<string, unknown> = {};
+  let doc: Record<string, unknown>;
   try {
-    doc = (yaml.load(fs.readFileSync(localPath, "utf-8")) as Record<string, unknown>) ?? {};
+    doc = readConfigDoc(localPath);
   } catch (e) {
     warn("project", `ue-mcp.local.yml failed to parse during migration - leaving in place`, e);
     return;
@@ -662,7 +642,7 @@ function migrateLegacyLocalYaml(projectDir: string): void {
     return;
   }
   try {
-    fs.writeFileSync(localPath, dumpYaml(doc), "utf-8");
+    writeConfigDoc(localPath, doc);
     info("project", `moved ue-mcp.local.yml installedHooks → ~/.ue-mcp/state.json (kept your other overrides in place)`);
   } catch (e) {
     warn("project", `couldn't rewrite ue-mcp.local.yml after stripping installedHooks`, e);

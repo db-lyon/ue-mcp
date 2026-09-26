@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-import * as fs from "node:fs";
 import * as path from "node:path";
-import yaml from "js-yaml";
-import { dumpYaml } from "./yaml-dump.js";
+import { projectConfigPath, readConfigDoc, writeConfigDoc } from "./ue-mcp-config.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "./uproject-path.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
@@ -68,13 +66,9 @@ function findProjectDir(projectArg?: string): string | null {
 }
 
 function loadYaml(configPath: string): Record<string, unknown> {
-  if (!fs.existsSync(configPath)) return {};
-  try {
-    return (yaml.load(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>) ?? {};
-  } catch (e) {
+  return readConfigDoc(configPath, () => {
     console.log(`  ${YELLOW}Warning: ue-mcp.yml is not valid YAML, it will be rewritten${RESET}`);
-    return {};
-  }
+  });
 }
 
 function currentStrategy(existing: Record<string, unknown>): "full" | "lean" | "micro" {
@@ -97,7 +91,7 @@ function main(argv: string[]): void {
     process.exit(1);
   }
 
-  const configPath = path.join(projectDir, "ue-mcp.yml");
+  const configPath = projectConfigPath(projectDir);
   const existing = loadYaml(configPath);
   const before = currentStrategy(existing);
   const want = action;
@@ -123,7 +117,7 @@ function main(argv: string[]): void {
   existing["ue-mcp"] = block;
   if (!("tasks" in existing)) existing.tasks = {};
   if (!("flows" in existing)) existing.flows = {};
-  fs.writeFileSync(configPath, dumpYaml(existing), "utf-8");
+  writeConfigDoc(configPath, existing);
 
   console.log("");
   if (before === want) {

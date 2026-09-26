@@ -154,7 +154,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "lean-context.ts": "Pure transforms over a graph. The strategy is one answer per transport, since there is one transport.",
   "micro-context.ts": "Builds the gateway over the graph it is handed and resolves calls through it; holds nothing per editor.",
   "instructions.ts": "The initialize payload is sent once per process and cannot be renegotiated.",
-  "global-config.ts": "The user-global config layer, which applies to every project by definition.",
+  "ue-mcp-config.ts": "Parses and writes whichever config file it is handed, and the user-global layer that applies to every project by definition.",
   "log.ts": "Process-wide stderr logging.",
   "user-dir.ts": "Where per-user state lives. A leaf with no state.",
   "uproject-path.ts": "Pure path handling for a .uproject or the directory holding one.",

@@ -4,8 +4,7 @@ import * as fs from "node:fs";
 import { EPIC_CATEGORIES } from "./tools/epic/index.js";
 import * as path from "node:path";
 import * as readline from "node:readline";
-import yaml from "js-yaml";
-import { dumpYaml } from "./yaml-dump.js";
+import { projectConfigPath, readConfigDoc, writeConfigDoc } from "./ue-mcp-config.js";
 import { ProjectContext } from "./project.js";
 import { deploy } from "./deployer.js";
 import { inspectInstall, installWarning } from "./install-check.js";
@@ -82,16 +81,8 @@ function writeProjectConfig(
   nativeTools?: { enabled: boolean; exclude: string[] },
   contextStrategy?: "full" | "lean" | "micro",
 ): void {
-  const configPath = path.join(projectDir, "ue-mcp.yml");
-  let existing: Record<string, unknown> = {};
-  if (fs.existsSync(configPath)) {
-    try {
-      existing = (yaml.load(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>) ?? {};
-    } catch (e) {
-      logWarn("init", `ue-mcp.yml was not valid YAML - overwriting`, e);
-      existing = {};
-    }
-  }
+  const configPath = projectConfigPath(projectDir);
+  const existing = readConfigDoc(configPath, (e) => logWarn("init", `ue-mcp.yml was not valid YAML - overwriting`, e));
 
   const block = ((existing["ue-mcp"] as Record<string, unknown>) ?? {});
   if (typeof block.version !== "number") block.version = 1;
@@ -132,7 +123,7 @@ function writeProjectConfig(
   if (!("tasks" in existing)) existing.tasks = {};
   if (!("flows" in existing)) existing.flows = {};
 
-  fs.writeFileSync(configPath, dumpYaml(existing), "utf-8");
+  writeConfigDoc(configPath, existing);
 }
 
 

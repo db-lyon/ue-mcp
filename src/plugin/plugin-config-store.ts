@@ -13,11 +13,15 @@
  *   ue-mcp.local.yml      (local, untracked)
  */
 import { readEnv } from "../env.js";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import yaml from "js-yaml";
-import { dumpYaml } from "../yaml-dump.js";
-import { globalConfigPath } from "../global-config.js";
+import {
+  configLayerFiles,
+  globalConfigPath,
+  localConfigPath,
+  projectConfigPath,
+  readConfigDoc,
+  writeConfigDoc,
+  type ConfigLayerFile,
+} from "../ue-mcp-config.js";
 
 export type ConfigTarget = "global" | "local" | "project";
 
@@ -34,36 +38,27 @@ export function targetFile(projectDir: string, target: ConfigTarget): string {
     case "global":
       return globalConfigPath();
     case "local":
-      return path.join(projectDir, "ue-mcp.local.yml");
+      return localConfigPath(projectDir);
     case "project":
-      return path.join(projectDir, "ue-mcp.yml");
+      return projectConfigPath(projectDir);
   }
 }
 
 /** All read layers in precedence order (low -> high), including the env overlay. */
 export function readLayers(projectDir: string): ConfigLayer[] {
-  const layers: ConfigLayer[] = [
-    { target: "global", label: "~/.ue-mcp/config.yml (you, all projects)", file: globalConfigPath() },
-    { target: "project", label: "ue-mcp.yml (team, tracked)", file: path.join(projectDir, "ue-mcp.yml") },
-  ];
   const env = readEnv("env");
-  if (env) {
-    layers.push({ target: "env", label: `ue-mcp.${env}.yml (env overlay)`, file: path.join(projectDir, `ue-mcp.${env}.yml`) });
-  }
-  layers.push({ target: "local", label: "ue-mcp.local.yml (you, this project)", file: path.join(projectDir, "ue-mcp.local.yml") });
-  return layers;
+  const labels: Record<ConfigLayerFile["target"], string> = {
+    global: "~/.ue-mcp/config.yml (you, all projects)",
+    project: "ue-mcp.yml (team, tracked)",
+    env: `ue-mcp.${env}.yml (env overlay)`,
+    local: "ue-mcp.local.yml (you, this project)",
+  };
+  return configLayerFiles(projectDir, env).map((l) => ({ ...l, label: labels[l.target] }));
 }
 
+/** A layer file that does not parse reads as empty here. */
 function loadDoc(file: string): Record<string, unknown> {
-  if (!fs.existsSync(file)) return {};
-  try {
-    const raw = yaml.load(fs.readFileSync(file, "utf-8"));
-    return raw && typeof raw === "object" && !Array.isArray(raw)
-      ? (raw as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
+  return readConfigDoc(file, () => undefined);
 }
 
 /** The `groups` map a single layer file declares for one plugin slug, or {}. */
@@ -153,7 +148,5 @@ export function writeLayerGroups(
     doc["ue-mcp"] = block;
   }
 
-  const dir = path.dirname(file);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(file, dumpYaml(doc), "utf-8");
+  writeConfigDoc(file, doc);
 }

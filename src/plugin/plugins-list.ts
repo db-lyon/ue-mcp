@@ -1,5 +1,4 @@
-import * as fs from "node:fs";
-import yaml from "js-yaml";
+import { readConfigDoc } from "../ue-mcp-config.js";
 import { PluginEntrySchema, type PluginEntry } from "../flow/schema.js";
 
 export type { PluginEntry } from "../flow/schema.js";
@@ -9,9 +8,8 @@ export type { PluginEntry } from "../flow/schema.js";
  * as empty; an entry that fails PluginEntrySchema is skipped.
  */
 export function readPluginsList(configPath: string): PluginEntry[] {
-  if (!fs.existsSync(configPath)) return [];
-  const raw = yaml.load(fs.readFileSync(configPath, "utf-8")) as { plugins?: unknown } | null;
-  if (!raw || !Array.isArray(raw.plugins)) return [];
+  const raw = readConfigDoc(configPath);
+  if (!Array.isArray(raw.plugins)) return [];
   const out: PluginEntry[] = [];
   for (const entry of raw.plugins) {
     const parsed = PluginEntrySchema.safeParse(entry);

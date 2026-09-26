@@ -7,7 +7,8 @@ import { UeMcpConfigSchema } from "../../src/schemas.js";
 /**
  * `ue-mcp.bridge.port` is read twice.
  *
- * The client reads it through the layered YAML cascade in src/project.ts. The
+ * The client reads it through the layered YAML cascade src/project.ts builds
+ * from the file list in src/ue-mcp-config.ts. The
  * C++ bridge reads it with its own single-key reader, because Unreal ships no
  * YAML parser and one integer does not justify a dependency. If the two
  * disagree about which files they consult, in what order, or what counts as a
@@ -30,6 +31,7 @@ const BRIDGE_SERVER_CPP = path.join(
   "BridgeServer.cpp",
 );
 const PROJECT_TS = path.join(REPO_ROOT, "src", "project.ts");
+const CONFIG_TS = path.join(REPO_ROOT, "src", "ue-mcp-config.ts");
 
 /** The body of a function, from its signature to the closing brace at column zero (TS) or one tab (C++). */
 function functionBody(file: string, signature: string, closer: string): string {
@@ -51,10 +53,10 @@ function layerOrder(body: string, markers: Array<[string, string]>): string[] {
 }
 
 const TS_LAYERS: Array<[string, string]> = [
-  ["user-global", "readGlobalUeMcpBlock()"],
-  ["project", `"ue-mcp.yml"`],
-  ["env-overlay", "ue-mcp.${overlayName}.yml"],
-  ["local", `"ue-mcp.local.yml"`],
+  ["user-global", "globalConfigPath()"],
+  ["project", "projectConfigPath("],
+  ["env-overlay", "overlayConfigPath("],
+  ["local", "localConfigPath("],
 ];
 
 const CPP_LAYERS: Array<[string, string]> = [
@@ -66,8 +68,10 @@ const CPP_LAYERS: Array<[string, string]> = [
 
 describe("bridge.port config parity between the client and the plugin", () => {
   it("consults the same config layers, and the plugin walks them highest-first", () => {
+    // project.ts merges exactly the files configLayerFiles lists, in its order.
+    expect(functionBody(PROJECT_TS, "function loadLayeredUeMcpBlock(", "\n}")).toContain("configLayerFiles(");
     const tsOrder = layerOrder(
-      functionBody(PROJECT_TS, "function loadLayeredUeMcpBlock(", "\n}"),
+      functionBody(CONFIG_TS, "export function configLayerFiles(", "\n}"),
       TS_LAYERS,
     );
     const cppOrder = layerOrder(

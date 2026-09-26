@@ -124,17 +124,15 @@ function str(v: unknown): string | null {
 export async function feedbackDisabledForDir(dir: string | null): Promise<boolean> {
   if (!dir) return true;
   try {
-    const yaml = (await import("js-yaml")).default;
+    // Loaded only once a hook has a project to ask about.
+    const { projectConfigPath, readConfigDoc, ueMcpBlockOf } = await import("./ue-mcp-config.js");
     let cursor = dir;
     for (let i = 0; i < 32; i++) {
-      const ymlPath = path.join(cursor, "ue-mcp.yml");
+      const ymlPath = projectConfigPath(cursor);
       if (fs.existsSync(ymlPath)) {
         try {
-          const doc = yaml.load(fs.readFileSync(ymlPath, "utf-8")) as
-            | { "ue-mcp"?: { disable?: unknown } }
-            | null;
-          const block = doc && typeof doc === "object" ? doc["ue-mcp"] : undefined;
-          const list = block && Array.isArray(block.disable) ? block.disable : [];
+          const block = ueMcpBlockOf(readConfigDoc(ymlPath));
+          const list = Array.isArray(block.disable) ? block.disable : [];
           return list.includes("feedback");
         } catch {
           // Malformed config: don't nudge, safer to no-op.
