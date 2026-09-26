@@ -261,7 +261,7 @@ function resolveImportedActions(categoryFile, localName) {
     ...a,
     // Read in the module that declares it, as for a generated action: the
     // span points into that file, not the category's.
-    description: describeAction(src, masked, a.start, a.end, specBuilders),
+    description: describeValue(modulePath, src, masked, a.start, a.end, specBuilders),
     paged: /(?:^|[^\w$])paged\s*\(/.test(masked.slice(a.start, a.end)),
     external: true,
   }));
@@ -457,7 +457,7 @@ export function readCategory(file) {
       // through. Re-deriving it here would read whatever happens to sit at
       // that offset in the category source, which pairs an engine tool's name
       // with a native action's prose.
-      description: a.generated || a.external ? a.description : describeAction(src, masked, a.start, a.end, specBuilders),
+      description: a.generated || a.external ? a.description : describeValue(file, src, masked, a.start, a.end, specBuilders),
       generated: a.generated === true,
       // `paged()` rewrites the description at runtime to add `cursor?, limit?`
       // to its Params clause, so the generated doc row lists two parameters the
@@ -545,6 +545,38 @@ function describeAction(src, masked, start, end, specBuilders = new Map()) {
     return concatenatedLiterals(src, masked, from, to);
   }
   return "";
+}
+
+/**
+ * An action's description, following a bare reference to a spec declared
+ * elsewhere (`build_project: buildProjectAction`) to the object that declares
+ * it, in this file or in the module this file imports it from.
+ */
+function describeValue(file, src, masked, start, end, specBuilders) {
+  const direct = describeAction(src, masked, start, end, specBuilders);
+  const ref = masked.slice(start, end).trim();
+  if (direct !== "" || !/^[A-Za-z_$][\w$]*$/.test(ref)) return direct;
+
+  let target = { file, src, masked, name: ref };
+  const declared = (m, name) => m.search(new RegExp(`(?:^|\\n)(?:export\\s+)?const\\s+${name}\\b`));
+  if (declared(masked, ref) === -1) {
+    for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"(\.\.?\/[^"]+)\.js"/g)) {
+      for (const spec of m[1].split(",").map((x) => x.trim()).filter(Boolean)) {
+        const [name, alias] = spec.split(/\s+as\s+/);
+        if ((alias ?? name) !== ref) continue;
+        const modulePath = path.resolve(path.dirname(file), `${m[2]}.ts`);
+        if (!fs.existsSync(modulePath)) return "";
+        const msrc = fs.readFileSync(modulePath, "utf8");
+        target = { file: modulePath, src: msrc, masked: maskLiterals(msrc), name };
+      }
+    }
+  }
+  const decl = declared(target.masked, target.name);
+  if (decl === -1) return "";
+  const brace = target.masked.indexOf("{", target.masked.indexOf("=", decl));
+  const close = brace === -1 ? -1 : matchingBrace(target.masked, brace);
+  if (close === -1) return "";
+  return describeAction(target.src, target.masked, brace, close, readSpecBuilders(target.file, target.src));
 }
 
 /**
