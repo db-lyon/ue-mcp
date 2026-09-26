@@ -35,23 +35,11 @@
 
 namespace
 {
-	/** Load an EQS asset by content path, with the object-path retry the rest
-	 *  of this bridge accepts. */
+	/** Load an EQS asset through the shared asset resolver. */
 	UEnvQuery* LoadQuery(const FString& Path, TSharedPtr<FJsonValue>& OutError)
 	{
-		UEnvQuery* Query = LoadObject<UEnvQuery>(nullptr, *Path);
-		if (!Query && !Path.Contains(TEXT(".")))
-		{
-			FString AssetName;
-			Path.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-			Query = LoadObject<UEnvQuery>(nullptr, *(Path + TEXT(".") + AssetName));
-		}
-		if (!Query)
-		{
-			OutError = MCPError(FString::Printf(
-				TEXT("EnvQuery not found: %s. Create one with gameplay(create_eqs_query), or list "
-					 "the existing ones with gameplay(list_eqs_queries)."), *Path));
-		}
+		UEnvQuery* Query = LoadAssetByPath<UEnvQuery>(Path);
+		if (!Query) OutError = MCPAssetLoadError(Path, TEXT("UEnvQuery"));
 		return Query;
 	}
 

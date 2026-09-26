@@ -797,8 +797,7 @@ namespace
 	{
 		FString AssetPath;
 		if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
-		UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
-		if (!Asset) return MCPError(FString::Printf(TEXT("SmartObjectDefinition not found: %s"), *AssetPath));
+		REQUIRE_ASSET(UObject, Asset, AssetPath);
 		UClass* Cls = Asset->GetClass();
 		if (Cls->GetName() != TEXT("SmartObjectDefinition"))
 		{
@@ -1806,8 +1805,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJ
 	UBlackboardData* BB = nullptr;
 	if (!BlackboardPath.IsEmpty())
 	{
-		BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
-		if (!BB) return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+		BB = LoadAssetByPath<UBlackboardData>(BlackboardPath);
+		if (!BB) return MCPAssetLoadError(BlackboardPath, TEXT("UBlackboardData"));
 	}
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("BehaviorTree"), BTClass, nullptr);
@@ -2487,11 +2486,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 	FString EnumTypeParam;
 	const bool bHasEnumType = TryGetStringParam(Params, TEXT("enumType"), EnumTypeParam);
 
-	UBlackboardData* BlackboardAsset = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
-	if (!BlackboardAsset)
-	{
-		return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
-	}
+	REQUIRE_ASSET(UBlackboardData, BlackboardAsset, BlackboardPath);
 
 	// Idempotency: key with this name already present?
 	const FName KeyFName(*KeyName);
@@ -2665,16 +2660,15 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBlackboardParent(const TSharedPtr<F
 
 	const bool bAutoPrune = OptionalBool(Params, TEXT("autoPruneDuplicateKeys"), true);
 
-	UBlackboardData* Child = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
-	if (!Child) return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+	REQUIRE_ASSET(UBlackboardData, Child, BlackboardPath);
 
 	const FString PrevParentPath = Child->Parent ? Child->Parent->GetPathName() : TEXT("None");
 
 	UBlackboardData* Parent = nullptr;
 	if (bHasParent && !ParentPath.IsEmpty() && !ParentPath.Equals(TEXT("None"), ESearchCase::IgnoreCase))
 	{
-		Parent = LoadObject<UBlackboardData>(nullptr, *ParentPath);
-		if (!Parent) return MCPError(FString::Printf(TEXT("Parent BlackboardData not found: %s"), *ParentPath));
+		Parent = LoadAssetByPath<UBlackboardData>(ParentPath);
+		if (!Parent) return MCPAssetLoadError(ParentPath, TEXT("UBlackboardData"));
 		if (Parent == Child) return MCPError(TEXT("Cannot set blackboard parent to itself"));
 		// Walk parent chain to guard against cycles.
 		for (UBlackboardData* Walk = Parent->Parent; Walk; Walk = Walk->Parent)
@@ -2738,8 +2732,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBlackboardKey(const TSharedPtr<F
 	FString KeyName;
 	if (auto Err = RequireString(Params, TEXT("keyName"), KeyName)) return Err;
 
-	UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
-	if (!BB) return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+	REQUIRE_ASSET(UBlackboardData, BB, BlackboardPath);
 
 	const FName KeyFName(*KeyName);
 	int32 RemovedIdx = INDEX_NONE;
@@ -2874,8 +2867,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadBlackboard(const TSharedPtr<FJsonO
 	// `assetPath` is an alias the registry resolves to blackboardPath (#1057).
 	if (auto Err = RequireString(Params, TEXT("blackboardPath"), BlackboardPath)) return Err;
 
-	UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
-	if (!BB) return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+	REQUIRE_ASSET(UBlackboardData, BB, BlackboardPath);
 
 	auto KeyArrayFor = [](UBlackboardData* From) -> TArray<TSharedPtr<FJsonValue>>
 	{
@@ -3024,11 +3016,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBehaviorTreeBlackboard(const TShare
 	FString BlackboardPath;
 	if (auto Err = RequireString(Params, TEXT("blackboardPath"), BlackboardPath)) return Err;
 
-	UBehaviorTree* BT = LoadObject<UBehaviorTree>(nullptr, *BehaviorTreePath);
-	if (!BT) return MCPError(FString::Printf(TEXT("BehaviorTree not found: %s"), *BehaviorTreePath));
+	REQUIRE_ASSET(UBehaviorTree, BT, BehaviorTreePath);
 
-	UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
-	if (!BB) return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+	REQUIRE_ASSET(UBlackboardData, BB, BlackboardPath);
 
 	FObjectProperty* BBProp = CastField<FObjectProperty>(BT->GetClass()->FindPropertyByName(TEXT("BlackboardAsset")));
 	if (!BBProp)
@@ -3071,11 +3061,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 	const TArray<TSharedPtr<FJsonValue>>* SenseArray = nullptr;
 	const bool bHasSenses = TryGetArrayParam(Params, TEXT("senses"), SenseArray) && SenseArray;
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
-	if (!BP)
-	{
-		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
-	}
+	REQUIRE_ASSET(UBlueprint, BP, BPPath);
 
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.AIPerceptionComponent"));
 	if (!CompClass)
@@ -3238,8 +3224,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 		return MCPError(FString::Printf(TEXT("Sense config class not found: %s. Enable AIModule."), **SenseClassName));
 	}
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
-	if (!BP) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
+	REQUIRE_ASSET(UBlueprint, BP, BPPath);
 
 	// Locate the AIPerceptionComponent template on the construction script.
 	UClass* PercClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.AIPerceptionComponent"));
@@ -3504,11 +3489,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 	FString BPPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
-	if (!BP)
-	{
-		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
-	}
+	REQUIRE_ASSET(UBlueprint, BP, BPPath);
 
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTreeComponent"));
 	if (!CompClass)
@@ -3560,11 +3541,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 	FString BPPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
-	if (!BP)
-	{
-		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
-	}
+	REQUIRE_ASSET(UBlueprint, BP, BPPath);
 
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectComponent"));
 	if (!CompClass)

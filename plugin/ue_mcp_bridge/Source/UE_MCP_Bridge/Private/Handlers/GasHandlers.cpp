@@ -473,11 +473,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<
 	// Read before anything can fail (#1057).
 	FString CompName = OptionalString(Params, TEXT("componentName"), TEXT("AbilitySystemComp"));
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
-	if (!BP)
-	{
-		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
-	}
+	REQUIRE_ASSET(UBlueprint, BP, BPPath);
 
 	UClass* ASCClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AbilitySystemComponent"));
 	if (!ASCClass)
@@ -534,11 +530,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAttribute(const TSharedPtr<FJsonObject>&
 	FString AttrName;
 	if (auto Err = RequireString(Params, TEXT("attributeName"), AttrName)) return Err;
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
-	if (!BP)
-	{
-		return MCPError(FString::Printf(TEXT("AttributeSet Blueprint not found: %s"), *BPPath));
-	}
+	REQUIRE_ASSET(UBlueprint, BP, BPPath);
 
 	// Idempotency: member variable with this name already present?
 	const FName AttrFName(*AttrName);
@@ -866,8 +858,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAscDefaults(const TSharedPtr<FJsonObject
 	const FString CompName = OptionalString(Params, TEXT("componentName"));
 	const FString TablePath = OptionalString(Params, TEXT("initDataTable"));
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
-	if (!BP) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
+	REQUIRE_ASSET(UBlueprint, BP, BPPath);
 
 	UClass* ASCClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AbilitySystemComponent"));
 	if (!ASCClass) return MCPError(TEXT("AbilitySystemComponent not found. Enable GameplayAbilities plugin."));
@@ -898,8 +889,8 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAscDefaults(const TSharedPtr<FJsonObject
 	UDataTable* InitTable = nullptr;
 	if (!TablePath.IsEmpty())
 	{
-		InitTable = LoadObject<UDataTable>(nullptr, *TablePath);
-		if (!InitTable) return MCPError(FString::Printf(TEXT("initDataTable not found: %s"), *TablePath));
+		InitTable = LoadAssetByPath<UDataTable>(TablePath);
+		if (!InitTable) return MCPAssetLoadError(TablePath, TEXT("UDataTable"));
 	}
 
 	// Idempotency: already wired for this attribute set?

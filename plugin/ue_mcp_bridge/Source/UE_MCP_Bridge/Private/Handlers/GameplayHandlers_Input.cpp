@@ -261,11 +261,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>&
 	FString ImcPath;
 	if (auto Err = RequireString(Params, TEXT("imcPath"), ImcPath)) return Err;
 
-	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
-	if (!IMC)
-	{
-		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
-	}
+	REQUIRE_ASSET(UInputMappingContext, IMC, ImcPath);
 
 	auto Result = MCPSuccess();
 
@@ -328,17 +324,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonOb
 	// FinishEdit and RefuseUnwritable read save again; this read comes before anything can fail (#1057).
 	ImcEdit_Internal::ReadSaveFlag(Params);
 
-	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
-	if (!IMC)
-	{
-		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
-	}
+	REQUIRE_ASSET(UInputMappingContext, IMC, ImcPath);
 
-	UInputAction* InputAction = LoadObject<UInputAction>(nullptr, *InputActionPath);
-	if (!InputAction)
-	{
-		return MCPError(FString::Printf(TEXT("InputAction not found: %s"), *InputActionPath));
-	}
+	REQUIRE_ASSET(UInputAction, InputAction, InputActionPath);
 
 	FKey Key(*KeyName);
 	if (!Key.IsValid())
@@ -415,11 +403,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 	const bool bHasTriggersArr = TryGetArrayParam(Params, TEXT("triggers"), TriggersArr) && TriggersArr;
 	ImcEdit_Internal::ReadSaveFlag(Params);
 
-	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
-	if (!IMC)
-	{
-		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
-	}
+	REQUIRE_ASSET(UInputMappingContext, IMC, ImcPath);
 
 	TArray<FEnhancedActionKeyMapping>& Mappings = const_cast<TArray<FEnhancedActionKeyMapping>&>(IMC->GetMappings());
 	if (!Mappings.IsValidIndex(MappingIndex))
@@ -845,7 +829,7 @@ namespace ImcEdit_Internal
 			return INDEX_NONE;
 		}
 
-		UInputAction* Action = bHasAction ? LoadObject<UInputAction>(nullptr, *ActionPath) : nullptr;
+		UInputAction* Action = bHasAction ? LoadAssetByPath<UInputAction>(ActionPath) : nullptr;
 		FKey Key = bHasKey ? FKey(*KeyName) : FKey();
 
 		for (int32 i = 0; i < Mappings.Num(); ++i)
@@ -871,11 +855,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveImcMapping(const TSharedPtr<FJso
 	ImcEdit_Internal::ReadMappingSelector(Params);
 	ImcEdit_Internal::ReadSaveFlag(Params);
 
-	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
-	if (!IMC)
-	{
-		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
-	}
+	REQUIRE_ASSET(UInputMappingContext, IMC, ImcPath);
 
 	FString ResolveError;
 	int32 Idx = ImcEdit_Internal::ResolveMappingIndex(IMC, Params, ResolveError);
@@ -974,11 +954,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetImcMappingKey(const TSharedPtr<FJso
 	ImcEdit_Internal::ReadMappingSelector(Params);
 	ImcEdit_Internal::ReadSaveFlag(Params);
 
-	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
-	if (!IMC)
-	{
-		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
-	}
+	REQUIRE_ASSET(UInputMappingContext, IMC, ImcPath);
 
 	FKey NewKey(*NewKeyName);
 	if (!NewKey.IsValid())
@@ -1046,17 +1022,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetImcMappingAction(const TSharedPtr<F
 	ImcEdit_Internal::ReadMappingSelector(Params);
 	ImcEdit_Internal::ReadSaveFlag(Params);
 
-	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
-	if (!IMC)
-	{
-		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
-	}
+	REQUIRE_ASSET(UInputMappingContext, IMC, ImcPath);
 
-	UInputAction* NewAction = LoadObject<UInputAction>(nullptr, *NewActionPath);
-	if (!NewAction)
-	{
-		return MCPError(FString::Printf(TEXT("InputAction not found: %s"), *NewActionPath));
-	}
+	REQUIRE_ASSET(UInputAction, NewAction, NewActionPath);
 
 	// Selector: mappingIndex | key | inputActionPath (current action).
 	FString ResolveError;

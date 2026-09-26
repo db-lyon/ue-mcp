@@ -666,10 +666,7 @@ namespace
 		if (auto Err = RequireString(Params, TEXT("assetPath"), OutAssetPath)) return Err;
 
 		OutTree = FGameplayHandlers::LoadBehaviorTree(OutAssetPath);
-		if (!OutTree)
-		{
-			return MCPError(FString::Printf(TEXT("BehaviorTree not found: %s"), *OutAssetPath));
-		}
+		if (!OutTree) return MCPAssetLoadError(OutAssetPath, TEXT("UBehaviorTree"));
 
 		if (bCreateGraph)
 		{

@@ -370,13 +370,6 @@ namespace
 		}
 		return Joined;
 	}
-
-	// Load one BehaviorTree from a caller-supplied path.
-	UBehaviorTree* MCPBTLoad(const FString& AssetPath)
-	{
-		if (UBehaviorTree* Direct = LoadObject<UBehaviorTree>(nullptr, *AssetPath)) return Direct;
-		return Cast<UBehaviorTree>(UEditorAssetLibrary::LoadAsset(AssetPath));
-	}
 }
 
 // -----------------------------------------------------------------
@@ -385,7 +378,7 @@ namespace
 
 UBehaviorTree* FGameplayHandlers::LoadBehaviorTree(const FString& AssetPath)
 {
-	return MCPBTLoad(AssetPath);
+	return LoadAssetByPath<UBehaviorTree>(AssetPath);
 }
 
 void FGameplayHandlers::MapBTNodeAddresses(UBehaviorTree* Tree, TMap<UBTNode*, FString>& OutAddresses)
@@ -660,11 +653,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetBehaviorTreeInfo(const TSharedPtr<F
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
-	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	if (!Asset)
-	{
-		return MCPError(FString::Printf(TEXT("BehaviorTree not found: %s"), *AssetPath));
-	}
+	UObject* Asset = MCPLoadAssetObject(AssetPath);
+	if (!Asset) return MCPAssetNotFoundError(AssetPath);
 
 	UBehaviorTree* BT = Cast<UBehaviorTree>(Asset);
 	if (!BT)
@@ -737,8 +727,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadBehaviorTreeGraph(const TSharedPtr
 	const bool bIncludeInherited = OptionalBool(Params, TEXT("includeInherited"), false);
 	const TSet<FString> Filter = MCPBTPropertyFilter(Params);
 
-	UBehaviorTree* BT = MCPBTLoad(AssetPath);
-	if (!BT) return MCPError(FString::Printf(TEXT("BehaviorTree not found: %s"), *AssetPath));
+	REQUIRE_ASSET(UBehaviorTree, BT, AssetPath);
 
 	int32 DecoratorCount = 0;
 	int32 ServiceCount = 0;
@@ -870,8 +859,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadBTNodeProperties(const TSharedPtr<
 	const bool bIncludeInherited = OptionalBool(Params, TEXT("includeInherited"), false);
 	const TSet<FString> Filter = MCPBTPropertyFilter(Params);
 
-	UBehaviorTree* BT = MCPBTLoad(AssetPath);
-	if (!BT) return MCPError(FString::Printf(TEXT("BehaviorTree not found: %s"), *AssetPath));
+	REQUIRE_ASSET(UBehaviorTree, BT, AssetPath);
 
 	TArray<FMCPBTNodeRef> Nodes;
 	MCPBTCollectTree(BT, Nodes);
@@ -917,8 +905,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListBTTasks(const TSharedPtr<FJsonObje
 
 	if (!AssetPath.IsEmpty())
 	{
-		UBehaviorTree* BT = MCPBTLoad(AssetPath);
-		if (!BT) return MCPError(FString::Printf(TEXT("BehaviorTree not found: %s"), *AssetPath));
+		REQUIRE_ASSET(UBehaviorTree, BT, AssetPath);
 		Trees.Add(BT);
 	}
 	else
@@ -1043,8 +1030,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 	const FString SingleProperty = OptionalString(Params, TEXT("property")).TrimStartAndEnd();
 	const TSharedPtr<FJsonValue> SingleValue = TryGetParam(Params, TEXT("value"));
 
-	UBehaviorTree* BT = MCPBTLoad(AssetPath);
-	if (!BT) return MCPError(FString::Printf(TEXT("BehaviorTree not found: %s"), *AssetPath));
+	REQUIRE_ASSET(UBehaviorTree, BT, AssetPath);
 
 	TArray<FMCPBTNodeRef> Nodes;
 	MCPBTCollectTree(BT, Nodes);
