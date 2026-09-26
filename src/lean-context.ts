@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { actionEnum, categoryTool, stripAction, takeTimeout, type ActionSpec, type ToolDef } from "./types.js";
+import { actionEnum, categoryTool, stripAction, type ActionSpec, type ToolDef } from "./types.js";
+import { takeTimeout } from "./call-pipeline.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { actionSchema } from "./action-schema.js";
 import { searchToolGraph } from "./tool-search.js";

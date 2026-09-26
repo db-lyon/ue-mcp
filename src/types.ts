@@ -12,12 +12,6 @@ import type { FlowContext } from "./flow/context.js";
 import { runAction, actionPreparation } from "./flow/run-action.js";
 
 /**
- * Re-exported from its home in `call-pipeline.ts`, where the whole inbound
- * half of a call lives. Importers are unaffected by the move.
- */
-export { takeTimeout } from "./call-pipeline.js";
-
-/**
  * Elicit a deterministic, user-mediated form response via the MCP client.
  * The server blocks until the client returns one of accept / decline / cancel.
  * Returns null when the connected client did not advertise the `elicitation`

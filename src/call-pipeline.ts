@@ -45,10 +45,6 @@ import { choiceViolation, type ParamChoice, type ParamSpec } from "./handler-spe
  * Separate the per-call timeout budget from the action's own parameters.
  * A non-positive or non-numeric value is discarded rather than refused: the
  * schema already rejects it, and a direct caller gets the default.
- *
- * Lives here rather than in `types.ts` so `prepareCall` can own the whole
- * inbound half without importing back from the module that imports it.
- * `types.ts` re-exports it, so every existing importer is unaffected.
  */
 export function takeTimeout(
   params: Record<string, unknown>,
