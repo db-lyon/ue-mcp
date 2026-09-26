@@ -157,7 +157,6 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "flow/rollback.ts": "Pure shaping of a rollback record.",
   "flow/handler-outcome.ts": "Pure reading of a handler's own verdict off the body it answered with.",
   "flow/write-methods.ts": "Pure classification of a bridge method name.",
-  "flow/index.ts": "Re-export barrel with no behaviour.",
 
   "plugin/manifest.ts": "Parses and validates a plugin manifest file.",
   "plugin/injection.ts": "Builds an injection plan from a manifest.",
