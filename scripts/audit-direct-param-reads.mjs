@@ -77,8 +77,14 @@ function insideString(line, index) {
   return open;
 }
 
+/**
+ * @typedef {{ line: number, method: string, key: string | null }} DirectRead
+ * @typedef {{ category: string, count: number, files: Array<{ file: string, reads: DirectRead[] }> }} CategoryReads
+ */
+
 /** Every direct read of `Params` in one source text. */
 export function findDirectReads(source) {
+  /** @type {DirectRead[]} */
   const reads = [];
   const lines = stripComments(source).split('\n');
   lines.forEach((line, index) => {
@@ -100,6 +106,7 @@ export function reportingCategories(registrySource = fs.readFileSync(REGISTRY_CP
 
 /** Direct reads grouped by category, largest first. */
 export function auditDirectParamReads(dir = HANDLERS_DIR) {
+  /** @type {Map<string, CategoryReads>} */
   const byCategory = new Map();
   for (const fileName of fs.readdirSync(dir).sort()) {
     const category = categoryOfFile(fileName);

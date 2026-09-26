@@ -328,6 +328,8 @@ export function assertLiveTestProjectDir(reportedDir, allowed = liveTestProjectD
  * Run the guard over any RPC caller. `call` takes (method, params) and resolves
  * to the raw handler result (or anything containing it); the identity marker is
  * matched out of the stringified value.
+ *
+ * @param {(method: string, params: Record<string, unknown>) => Promise<unknown>} call
  */
 export async function verifyTestProjectTarget(call) {
   let result;

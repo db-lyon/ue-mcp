@@ -56,7 +56,7 @@ describe("budget arithmetic", () => {
 describe("the shipped surface", () => {
   let rows: Rows;
   beforeAll(async () => {
-    rows = (await measureContextTax()) as Rows;
+    rows = await measureContextTax();
   }, 240_000);
 
   it("keeps every seed and discovery answer within its budget", () => {
