@@ -33,10 +33,10 @@ import {
   findCallers,
   findReferences,
   looksLikeCall,
-  moduleDirFor,
   symbolContext,
   treeRoots,
 } from "../../src/engine-analysis.js";
+import { moduleDirFor } from "../../src/engine-index.js";
 
 /* ── the fixture engine ────────────────────────────────────────────── */
 

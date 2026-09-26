@@ -41,7 +41,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  DEFAULT_TREES,
   lookupMember,
+  moduleDirFor,
+  moduleFor,
   lookupSymbol,
   splitQualified,
   type EngineIndex,
@@ -91,32 +94,6 @@ const NOT_CALLS = new Set([
 ]);
 
 /**
- * The directory of the module owning a header.
- *
- * The engine and its plugins are laid out differently, and both have to give a
- * single directory that holds the module's Public, Private and Classes:
- *
- *   Engine/Source/Runtime/Engine/Classes/GameFramework/Actor.h
- *     -> Engine/Source/Runtime/Engine
- *   Engine/Plugins/Runtime/GameplayAbilities/Source/GameplayAbilities/Public/X.h
- *     -> Engine/Plugins/Runtime/GameplayAbilities/Source/GameplayAbilities
- *
- * It is what makes a definition search cheap: a member of `UAbilitySystem
- * Component` is defined in its own module or nowhere, so one module directory
- * is read instead of the whole tree.
- */
-export function moduleDirFor(relHeader: string): string {
-  const parts = relHeader.split("/");
-  if (parts[0] === "Engine" && parts[1] === "Plugins") {
-    const at = parts.lastIndexOf("Source");
-    if (at >= 0 && at + 1 < parts.length) return parts.slice(0, at + 2).join("/");
-    return parts.slice(0, -1).join("/");
-  }
-  // Engine/Source/<Tree>/<Module>/...
-  return parts.slice(0, 4).join("/");
-}
-
-/**
  * The engine directories named by a `trees` list.
  *
  * `Plugins` is `Engine/Plugins`, a sibling of `Engine/Source` rather than a
@@ -125,7 +102,7 @@ export function moduleDirFor(relHeader: string): string {
  */
 export function treeRoots(engineRoot: string, trees: readonly string[]): string[] {
   const wanted = trees.length === 1 && trees[0] === "all"
-    ? ["Runtime", "Editor", "Developer", "Plugins"]
+    ? [...DEFAULT_TREES]
     : trees;
   const out: string[] = [];
   for (const tree of wanted) {
@@ -471,13 +448,7 @@ function buildTargets(
 
 /** The module a scanned file belongs to, for an engine path. */
 function moduleOfFile(rel: string, kind: "engine" | "project"): string | undefined {
-  if (kind === "project") return undefined;
-  const parts = rel.split("/");
-  if (parts[0] === "Engine" && parts[1] === "Plugins") {
-    const at = parts.lastIndexOf("Source");
-    return at >= 0 && at + 1 < parts.length ? parts[at + 1] : undefined;
-  }
-  return parts[3];
+  return kind === "project" ? undefined : moduleFor(rel) || undefined;
 }
 
 const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*|#)/;

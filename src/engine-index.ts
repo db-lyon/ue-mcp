@@ -39,6 +39,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getUserStatePath } from "./user-state.js";
+import { normalizeProjectRoot } from "./port.js";
 
 export type SymbolKind = "class" | "struct" | "enum" | "alias" | "function";
 
@@ -143,14 +144,40 @@ export function includePathFor(relHeader: string): string {
  */
 export function moduleFor(relHeader: string): string {
   const parts = relHeader.split("/");
+  return parts[moduleSegment(parts)] ?? "";
+}
+
+/** Index of the module-name segment in a split engine-relative path. */
+function moduleSegment(parts: string[]): number {
   if (parts[0] === "Engine" && parts[1] === "Plugins") {
     const at = parts.lastIndexOf("Source");
-    if (at >= 0 && at + 1 < parts.length) return parts[at + 1];
-    return parts[parts.length - 2] ?? "";
+    if (at >= 0 && at + 1 < parts.length) return at + 1;
+    return parts.length - 2;
   }
   // Engine/Source/<Tree>/<Module>/...
-  return parts[3] ?? parts[parts.length - 2] ?? "";
+  return parts.length > 3 ? 3 : parts.length - 2;
 }
+
+/**
+ * The directory of the module owning a header.
+ *
+ * The engine and its plugins are laid out differently, and both have to give a
+ * single directory that holds the module's Public, Private and Classes:
+ *
+ *   Engine/Source/Runtime/Engine/Classes/GameFramework/Actor.h
+ *     -> Engine/Source/Runtime/Engine
+ *   Engine/Plugins/Runtime/GameplayAbilities/Source/GameplayAbilities/Public/X.h
+ *     -> Engine/Plugins/Runtime/GameplayAbilities/Source/GameplayAbilities
+ *
+ * It is what makes a definition search cheap: a member of `UAbilitySystem
+ * Component` is defined in its own module or nowhere, so one module directory
+ * is read instead of the whole tree.
+ */
+export function moduleDirFor(relHeader: string): string {
+  const parts = relHeader.split("/");
+  return parts.slice(0, moduleSegment(parts) + 1).join("/");
+}
+
 
 /** Whether a header can be included from another module at all. */
 export function isPrivateHeader(relHeader: string): boolean {
@@ -383,7 +410,7 @@ export function indexCacheDir(): string {
 
 /** A stable filename for one engine root, so two installs never collide. */
 export function indexCacheFile(engineRoot: string, trees: readonly string[] = DEFAULT_TREES): string {
-  const normalized = engineRoot.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const normalized = normalizeProjectRoot(engineRoot);
   let hash = 5381;
   for (let i = 0; i < normalized.length; i++) hash = ((hash * 33) ^ normalized.charCodeAt(i)) >>> 0;
   const label = path.basename(normalized) || "engine";
