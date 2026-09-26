@@ -17,6 +17,8 @@ DEFINE_LOG_CATEGORY(LogMCPBridge);
 IMPLEMENT_MODULE(FUE_MCP_BridgeModule, UE_MCP_Bridge)
 
 static TSharedPtr<FMCPBridgeServer> G_BridgeServer;
+// The editor-ready poll; removed in ShutdownModule if the editor never became ready.
+static FTSTicker::FDelegateHandle G_EditorReadyTicker;
 
 namespace
 {
@@ -165,7 +167,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 	// Defer the editor-ready signal until GEditor is available and has at least one world.
 	// GetEditorWorldContext(false) can fail if no editor world context exists yet,
 	// so we iterate all world contexts instead (#162).
-	FTSTicker::GetCoreTicker().AddTicker(
+	G_EditorReadyTicker = FTSTicker::GetCoreTicker().AddTicker(
 		FTickerDelegate::CreateLambda([](float) -> bool
 		{
 			if (!GEditor)
@@ -195,6 +197,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 			}
 			FMCPEngineStatus::Get().SetPhase(TEXT("ready"));
 
+			G_EditorReadyTicker.Reset();
 			return false; // done
 		})
 	);
@@ -202,6 +205,11 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	if (G_EditorReadyTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(G_EditorReadyTicker);
+		G_EditorReadyTicker.Reset();
+	}
 	FDialogHandlers::RemoveDialogHook();
 	// The snapshot itself outlives this module (its own module owns it and
 	// keeps publishing until PostConfigInit teardown); only the Slate and
