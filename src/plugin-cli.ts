@@ -59,6 +59,7 @@ import { resolvePublishToken } from "./registry-auth.js";
 import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
 import { packageVersion } from "./package-root.js";
 import { ProjectContext } from "./project.js";
+import { registryBase } from "./registry-catalog.js";
 
 // --editor names one of the editors this server drives; every project lookup
 // below starts from it instead of cwd. Taken before the subcommand is shifted
@@ -189,7 +190,7 @@ function writePluginsList(configPath: string, plugins: PluginEntry[]): void {
 function resolveFromRegistry(name: string): string | null {
   // A scoped or path-qualified spec is already a real npm name, not a slug.
   if (name.startsWith("@") || name.includes("/")) return null;
-  const base = (process.env.UE_MCP_REGISTRY ?? "https://plugins.ue-mcp.com").replace(/\/+$/, "");
+  const base = registryBase();
   const url = `${base}/api/resolve?name=${encodeURIComponent(name)}`;
   const script =
     `fetch(${JSON.stringify(url)}).then(async r=>{if(!r.ok)process.exit(3);` +
@@ -1132,7 +1133,7 @@ async function cmdPublish(): Promise<void> {
   const readme = readmePath ? fs.readFileSync(readmePath, "utf-8").trim() : "";
   if (!readme) note(`WARNING: no README.md in ${dir}; publishing with an empty README.`);
 
-  const base = (process.env.UE_MCP_REGISTRY ?? "https://plugins.ue-mcp.com").replace(/\/+$/, "");
+  const base = registryBase();
   // Precedence: --token, then env (CI), then the token cached by `ue-mcp login`.
   const token = await resolvePublishToken(tokenFlag);
   if (!token && !dryRun) {

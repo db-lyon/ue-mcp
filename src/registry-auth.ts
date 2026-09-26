@@ -22,6 +22,7 @@ import {
   writeUserAuth,
   type UserAuth,
 } from "./auth.js";
+import { registryBase } from "./registry-catalog.js";
 
 const AUTH_DIR = process.env.UE_MCP_AUTH_DIR || join(homedir(), ".ue-mcp");
 const REGISTRY_FILE = join(AUTH_DIR, "registry.json");
@@ -35,9 +36,6 @@ export interface RegistryAuth {
   authorized_at: string;
 }
 
-export function registryBase(): string {
-  return (process.env.UE_MCP_REGISTRY ?? "https://plugins.ue-mcp.com").replace(/\/+$/, "");
-}
 
 export async function readRegistryAuth(): Promise<RegistryAuth | null> {
   try {

@@ -11,8 +11,8 @@ import {
   clearRegistryAuth,
   loginToRegistry,
   readRegistryAuth,
-  registryBase,
 } from "./registry-auth.js";
+import { registryBase } from "./registry-catalog.js";
 
 const args = process.argv.slice(2);
 

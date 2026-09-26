@@ -44,6 +44,7 @@ export interface GitHubRepo {
 /** ue-mcp core. Everything that is not plugin-owned lands here. */
 export const CORE_REPO: GitHubRepo = { owner: "db-lyon", repo: "ue-mcp" };
 
+/** The plugin registry's origin: UE_MCP_REGISTRY, else the public registry. */
 export function registryBase(): string {
   return (process.env.UE_MCP_REGISTRY ?? "https://plugins.ue-mcp.com").replace(/\/+$/, "");
 }
