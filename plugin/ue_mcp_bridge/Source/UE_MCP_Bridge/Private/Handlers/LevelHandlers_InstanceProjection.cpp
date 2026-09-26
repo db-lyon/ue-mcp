@@ -82,45 +82,6 @@ namespace
 		return nullptr;
 	}
 
-	bool ResolveProjectionTraceChannel(const FString& InName, ECollisionChannel& OutChannel, FString& OutResolvedName)
-	{
-		FString Name = InName.TrimStartAndEnd();
-		if (Name.StartsWith(TEXT("ECC_"))) Name = Name.RightChop(4);
-		if (Name.IsEmpty()) Name = TEXT("Visibility");
-
-		if (const UCollisionProfile* Profile = UCollisionProfile::Get())
-		{
-			for (int32 Index = 0; Index < ECC_MAX; ++Index)
-			{
-				const FName ChannelName = Profile->ReturnChannelNameFromContainerIndex(Index);
-				if (!ChannelName.IsNone() && ChannelName.ToString().Equals(Name, ESearchCase::IgnoreCase))
-				{
-					OutChannel = static_cast<ECollisionChannel>(Index);
-					OutResolvedName = ChannelName.ToString();
-					return true;
-				}
-			}
-		}
-
-		struct FBuiltInChannel { const TCHAR* Name; ECollisionChannel Channel; };
-		static const FBuiltInChannel BuiltIns[] = {
-			{ TEXT("WorldStatic"), ECC_WorldStatic }, { TEXT("WorldDynamic"), ECC_WorldDynamic },
-			{ TEXT("Pawn"), ECC_Pawn }, { TEXT("Visibility"), ECC_Visibility },
-			{ TEXT("Camera"), ECC_Camera }, { TEXT("PhysicsBody"), ECC_PhysicsBody },
-			{ TEXT("Vehicle"), ECC_Vehicle }, { TEXT("Destructible"), ECC_Destructible },
-		};
-		for (const FBuiltInChannel& Entry : BuiltIns)
-		{
-			if (Name.Equals(Entry.Name, ESearchCase::IgnoreCase))
-			{
-				OutChannel = Entry.Channel;
-				OutResolvedName = Entry.Name;
-				return true;
-			}
-		}
-		return false;
-	}
-
 	TSharedPtr<FJsonValue> ParseInstanceIndices(
 		const TSharedPtr<FJsonObject>& Params,
 		int32 InstanceCount,
@@ -453,7 +414,8 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 	{
 		return MCPError(TEXT("channel must be a string"));
 	}
-	if (!ResolveProjectionTraceChannel(RequestedChannel, Channel, ChannelName))
+	if (RequestedChannel.TrimStartAndEnd().IsEmpty()) RequestedChannel = TEXT("Visibility");
+	if (!MCPResolveCollisionChannel(RequestedChannel, Channel, ChannelName))
 	{
 		return MCPError(FString::Printf(TEXT("Unknown collision channel '%s'"), *RequestedChannel));
 	}

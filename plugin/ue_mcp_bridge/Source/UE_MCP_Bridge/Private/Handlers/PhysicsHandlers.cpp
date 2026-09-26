@@ -88,23 +88,6 @@ void FPhysicsHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 namespace
 {
-	// Resolve a collision channel by canonical enum name ("ECC_Visibility",
-	// "Visibility", "WorldStatic", "Pawn", "GameTraceChannel1"). Bare names are
-	// retried with the ECC_ prefix the enum uses.
-	bool ResolveCollisionChannel(const FString& Name, ECollisionChannel& Out)
-	{
-		if (UEnum* E = StaticEnum<ECollisionChannel>())
-		{
-			int64 V = E->GetValueByNameString(Name);
-			if (V == INDEX_NONE && !Name.StartsWith(TEXT("ECC_")))
-			{
-				V = E->GetValueByNameString(FString(TEXT("ECC_")) + Name);
-			}
-			if (V != INDEX_NONE) { Out = static_cast<ECollisionChannel>(V); return true; }
-		}
-		return false;
-	}
-
 	bool ResolveCollisionResponse(const FString& Name, ECollisionResponse& Out)
 	{
 		if (Name.Equals(TEXT("Block"), ESearchCase::IgnoreCase) || Name.Equals(TEXT("ECR_Block"), ESearchCase::IgnoreCase)) { Out = ECR_Block; return true; }
@@ -556,7 +539,8 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 
 	ECollisionChannel ObjectType = ECC_WorldStatic;
 	const bool bSetObjectType = !ObjectTypeStr.IsEmpty();
-	if (bSetObjectType && !ResolveCollisionChannel(ObjectTypeStr, ObjectType))
+	FString ResolvedObjectType;
+	if (bSetObjectType && !MCPResolveCollisionChannel(ObjectTypeStr, ObjectType, ResolvedObjectType))
 	{
 		return MCPError(FString::Printf(TEXT("Unknown objectType channel '%s'"), *ObjectTypeStr));
 	}
@@ -578,7 +562,8 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 		{
 			const FString ChannelName(*Pair.Key);
 			ECollisionChannel Ch;
-			if (!ResolveCollisionChannel(ChannelName, Ch))
+			FString ResolvedChannelName;
+			if (!MCPResolveCollisionChannel(ChannelName, Ch, ResolvedChannelName))
 			{
 				return MCPError(FString::Printf(TEXT("Unknown response channel '%s'"), *ChannelName));
 			}
