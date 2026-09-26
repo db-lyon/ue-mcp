@@ -866,16 +866,6 @@ namespace
 		return Obj;
 	}
 
-	TSharedPtr<FJsonObject> LinearColorToJson(const FLinearColor& Color)
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetNumberField(TEXT("r"), Color.R);
-		Obj->SetNumberField(TEXT("g"), Color.G);
-		Obj->SetNumberField(TEXT("b"), Color.B);
-		Obj->SetNumberField(TEXT("a"), Color.A);
-		return Obj;
-	}
-
 	// A colour object, in any of the spellings a client might use: {r,g,b,a},
 	// {R,G,B,A} or {x,y,z,w}. Missing components fall back to 0, with alpha 1.
 	bool TryReadMaterialColorObject(const TSharedPtr<FJsonObject>& Obj, FLinearColor& OutColor)
@@ -1140,12 +1130,12 @@ namespace
 				FLinearColor Value;
 				if (Material->GetVectorParameterValue(Info, Value))
 				{
-					Obj->SetObjectField(TEXT("value"), LinearColorToJson(Value));
+					Obj->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(Value));
 				}
 				FLinearColor Default;
 				if (Parent && Parent->GetVectorParameterValue(Info, Default))
 				{
-					Obj->SetObjectField(TEXT("defaultValue"), LinearColorToJson(Default));
+					Obj->SetObjectField(TEXT("defaultValue"), MCPLinearColorToJsonObject(Default));
 				}
 
 				bool bOverridden = false;
@@ -1285,7 +1275,7 @@ namespace
 			for (const FVectorParameterValue& Parameter : Instance->VectorParameterValues)
 			{
 				TSharedPtr<FJsonObject> Obj = MaterialParameterInfoToJson(Parameter.ParameterInfo);
-				Obj->SetObjectField(TEXT("value"), LinearColorToJson(Parameter.ParameterValue));
+				Obj->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(Parameter.ParameterValue));
 				Obj->SetStringField(TEXT("expressionGuid"), Parameter.ExpressionGUID.ToString(EGuidFormats::DigitsWithHyphens));
 				VectorOverrides.Add(MakeShared<FJsonValueObject>(Obj));
 			}
@@ -2634,14 +2624,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		Result->SetStringField(TEXT("parameterType"), TEXT("vector"));
 		Result->SetStringField(TEXT("association"), AssociationName);
 		Result->SetStringField(TEXT("valueField"), SourceField);
-		Result->SetObjectField(TEXT("value"), LinearColorToJson(ColorValue));
+		Result->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(ColorValue));
 		Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
 
 		if (bHadPrev && PrevColor.Equals(ColorValue))
 		{
 			MCPSetExisted(Result);
 			Result->SetBoolField(TEXT("updated"), false);
-			Result->SetObjectField(TEXT("readBack"), LinearColorToJson(PrevColor));
+			Result->SetObjectField(TEXT("readBack"), MCPLinearColorToJsonObject(PrevColor));
 			return MCPResult(Result);
 		}
 
@@ -2659,13 +2649,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		FLinearColor ReadBack;
 		if (MaterialInstance->GetVectorParameterValue(ParameterInfo, ReadBack))
 		{
-			Result->SetObjectField(TEXT("readBack"), LinearColorToJson(ReadBack));
+			Result->SetObjectField(TEXT("readBack"), MCPLinearColorToJsonObject(ReadBack));
 		}
 
 		MCPSetUpdated(Result);
 		if (bHadPrev)
 		{
-			TSharedPtr<FJsonObject> PrevValueObj = LinearColorToJson(PrevColor);
+			TSharedPtr<FJsonObject> PrevValueObj = MCPLinearColorToJsonObject(PrevColor);
 			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 			Payload->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
 			Payload->SetStringField(TEXT("parameterName"), ParameterName);
@@ -2906,11 +2896,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterialParameterCollection(const 
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("name"), Parameter.ParameterName.ToString());
 		Obj->SetStringField(TEXT("id"), Parameter.Id.ToString(EGuidFormats::DigitsWithHyphens));
-		Obj->SetObjectField(TEXT("defaultValue"), LinearColorToJson(Parameter.DefaultValue));
+		Obj->SetObjectField(TEXT("defaultValue"), MCPLinearColorToJsonObject(Parameter.DefaultValue));
 		FLinearColor Value;
 		if (Live && Live->GetVectorParameterValue(Parameter.ParameterName, Value))
 		{
-			Obj->SetObjectField(TEXT("liveValue"), LinearColorToJson(Value));
+			Obj->SetObjectField(TEXT("liveValue"), MCPLinearColorToJsonObject(Value));
 			Obj->SetBoolField(TEXT("differsFromDefault"), !Value.Equals(Parameter.DefaultValue, 0.0f));
 		}
 		Vectors.Add(MakeShared<FJsonValueObject>(Obj));
@@ -3127,7 +3117,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BatchSetInstances(const TSharedPtr<FJs
 							TSharedPtr<FJsonObject> Inv = MakeShared<FJsonObject>();
 							Inv->SetStringField(TEXT("name"), PName);
 							Inv->SetStringField(TEXT("type"), TEXT("vector"));
-							Inv->SetObjectField(TEXT("value"), LinearColorToJson(PrevColor));
+							Inv->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(PrevColor));
 							InverseParameters.Add(MakeShared<FJsonValueObject>(Inv));
 						}
 						else { bLossy = true; }
@@ -3252,7 +3242,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ClearMaterialInstanceParameters(const 
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("name"), Param.ParameterInfo.Name.ToString());
 		Entry->SetStringField(TEXT("type"), TEXT("vector"));
-		Entry->SetObjectField(TEXT("value"), LinearColorToJson(Param.ParameterValue));
+		Entry->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(Param.ParameterValue));
 		RestorableParameters.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 	for (const FTextureParameterValue& Param : Instance->TextureParameterValues)
@@ -3488,11 +3478,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 		FString SourceField;
 		if (TryParseMaterialColorParam(Params, Color, SourceField, /*bAllowTopLevelComponents*/ true, /*bColourSpelling*/ false))
 		{
-			RollbackPayload->SetObjectField(TEXT("value"), LinearColorToJson(Const3Expr->Constant));
+			RollbackPayload->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(Const3Expr->Constant));
 			bRollbackExpressible = true;
 			Const3Expr->Constant = Color;
 			bValueSet = true;
-			Result->SetObjectField(TEXT("value"), LinearColorToJson(Const3Expr->Constant));
+			Result->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(Const3Expr->Constant));
 		}
 	}
 	// Handle UMaterialExpressionConstant4Vector
@@ -3502,11 +3492,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 		FString SourceField;
 		if (TryParseMaterialColorParam(Params, Color, SourceField, /*bAllowTopLevelComponents*/ true, /*bColourSpelling*/ false))
 		{
-			RollbackPayload->SetObjectField(TEXT("value"), LinearColorToJson(Const4Expr->Constant));
+			RollbackPayload->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(Const4Expr->Constant));
 			bRollbackExpressible = true;
 			Const4Expr->Constant = Color;
 			bValueSet = true;
-			Result->SetObjectField(TEXT("value"), LinearColorToJson(Const4Expr->Constant));
+			Result->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(Const4Expr->Constant));
 		}
 	}
 	// Handle UMaterialExpressionScalarParameter - has float DefaultValue
@@ -3539,11 +3529,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 		FString SourceField;
 		if (TryParseMaterialColorParam(Params, Color, SourceField, /*bAllowTopLevelComponents*/ false, /*bColourSpelling*/ false))
 		{
-			RollbackPayload->SetObjectField(TEXT("value"), LinearColorToJson(VectorParamExpr->DefaultValue));
+			RollbackPayload->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(VectorParamExpr->DefaultValue));
 			bRollbackExpressible = true;
 			VectorParamExpr->DefaultValue = Color;
 			bValueSet = true;
-			Result->SetObjectField(TEXT("value"), LinearColorToJson(VectorParamExpr->DefaultValue));
+			Result->SetObjectField(TEXT("value"), MCPLinearColorToJsonObject(VectorParamExpr->DefaultValue));
 		}
 
 		FString ParamName;

@@ -316,24 +316,6 @@ namespace
 		Result->SetStringField(TEXT("viewportSelectedBy"), Target.SelectedBy);
 	}
 
-	void MCPViewportCtlWriteVector(TSharedPtr<FJsonObject> Result, const TCHAR* Key, const FVector& Value)
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetNumberField(TEXT("x"), Value.X);
-		Obj->SetNumberField(TEXT("y"), Value.Y);
-		Obj->SetNumberField(TEXT("z"), Value.Z);
-		Result->SetObjectField(Key, Obj);
-	}
-
-	void MCPViewportCtlWriteRotator(TSharedPtr<FJsonObject> Result, const TCHAR* Key, const FRotator& Value)
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetNumberField(TEXT("pitch"), Value.Pitch);
-		Obj->SetNumberField(TEXT("yaw"), Value.Yaw);
-		Obj->SetNumberField(TEXT("roll"), Value.Roll);
-		Result->SetObjectField(Key, Obj);
-	}
-
 	void MCPViewportCtlWriteExposure(TSharedPtr<FJsonObject> Result, const FExposureSettings& Settings)
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -372,8 +354,8 @@ namespace
 		Result->SetBoolField(TEXT("realtime"), Client->IsRealtime());
 		Result->SetBoolField(TEXT("realtimeOverridden"), Client->IsRealtimeOverrideSet());
 
-		MCPViewportCtlWriteVector(Result, TEXT("location"), Client->GetViewLocation());
-		MCPViewportCtlWriteRotator(Result, TEXT("rotation"), Client->GetViewRotation());
+		Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Client->GetViewLocation()));
+		Result->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Client->GetViewRotation()));
 	}
 
 	// ── Transactions ─────────────────────────────────────────────────────────

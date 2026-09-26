@@ -365,15 +365,6 @@ namespace
 		return FTransform(Rotation, Rotation.RotateVector(TranslationInFrame), Scale);
 	}
 
-	TSharedPtr<FJsonObject> MCPRvtVec(const FVector& V)
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetNumberField(TEXT("x"), V.X);
-		Obj->SetNumberField(TEXT("y"), V.Y);
-		Obj->SetNumberField(TEXT("z"), V.Z);
-		return Obj;
-	}
-
 	/** Report a volume actor and its component: transform, bound RVT, and the
 	 *  component objectPath every remaining setting is written through. */
 	void MCPRvtWriteVolume(TSharedPtr<FJsonObject> Result, ARuntimeVirtualTextureVolume* Volume)
@@ -390,8 +381,8 @@ namespace
 		}
 		const FTransform Xform = Comp->GetComponentTransform();
 		TSharedPtr<FJsonObject> XformObj = MakeShared<FJsonObject>();
-		XformObj->SetObjectField(TEXT("location"), MCPRvtVec(Xform.GetLocation()));
-		XformObj->SetObjectField(TEXT("scale"), MCPRvtVec(Xform.GetScale3D()));
+		XformObj->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Xform.GetLocation()));
+		XformObj->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Xform.GetScale3D()));
 		const FRotator Rot = Xform.Rotator();
 		TSharedPtr<FJsonObject> RotObj = MakeShared<FJsonObject>();
 		RotObj->SetNumberField(TEXT("pitch"), Rot.Pitch);
@@ -940,12 +931,12 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetRvtVolumeBounds(const TSharedPtr<FJ
 	Result->SetBoolField(TEXT("changed"), bChanged);
 	Result->SetStringField(TEXT("boundsMode"), BoundsMode);
 	Result->SetNumberField(TEXT("sourceComponentCount"), Sources.Num());
-	Result->SetObjectField(TEXT("fittedBoxSize"), MCPRvtVec(TargetInFrame.GetSize()));
+	Result->SetObjectField(TEXT("fittedBoxSize"), MCPVec3ToJsonObject(TargetInFrame.GetSize()));
 	MCPRvtWriteVolume(Result, Volume);
 
 	TSharedPtr<FJsonObject> PrevObj = MakeShared<FJsonObject>();
-	PrevObj->SetObjectField(TEXT("location"), MCPRvtVec(Previous.GetLocation()));
-	PrevObj->SetObjectField(TEXT("scale"), MCPRvtVec(Previous.GetScale3D()));
+	PrevObj->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Previous.GetLocation()));
+	PrevObj->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Previous.GetScale3D()));
 	Result->SetObjectField(TEXT("previousTransform"), PrevObj);
 
 	Result->SetBoolField(TEXT("texelSnapApplied"), false);
@@ -966,8 +957,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetRvtVolumeBounds(const TSharedPtr<FJ
 	// ordinary actor transform - lossless, unlike most rollbacks here.
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("actorPath"), Volume->GetPathName());
-	Payload->SetObjectField(TEXT("location"), MCPRvtVec(Previous.GetLocation()));
-	Payload->SetObjectField(TEXT("scale"), MCPRvtVec(Previous.GetScale3D()));
+	Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Previous.GetLocation()));
+	Payload->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Previous.GetScale3D()));
 	const FRotator PrevRot = Previous.Rotator();
 	TSharedPtr<FJsonObject> PrevRotObj = MakeShared<FJsonObject>();
 	PrevRotObj->SetNumberField(TEXT("pitch"), PrevRot.Pitch);

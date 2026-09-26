@@ -45,33 +45,6 @@
 
 namespace
 {
-	TSharedPtr<FJsonObject> VectorJson(const FVector& V)
-	{
-		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-		O->SetNumberField(TEXT("x"), V.X);
-		O->SetNumberField(TEXT("y"), V.Y);
-		O->SetNumberField(TEXT("z"), V.Z);
-		return O;
-	}
-
-	TSharedPtr<FJsonObject> RotatorJson(const FRotator& R)
-	{
-		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-		O->SetNumberField(TEXT("pitch"), R.Pitch);
-		O->SetNumberField(TEXT("yaw"), R.Yaw);
-		O->SetNumberField(TEXT("roll"), R.Roll);
-		return O;
-	}
-
-	TSharedPtr<FJsonObject> TransformJson(const FTransform& T)
-	{
-		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-		O->SetObjectField(TEXT("location"), VectorJson(T.GetLocation()));
-		O->SetObjectField(TEXT("rotation"), RotatorJson(T.Rotator()));
-		O->SetObjectField(TEXT("scale"), VectorJson(T.GetScale3D()));
-		return O;
-	}
-
 	/**
 	 * #739: resolve any UObject a caller might want to call into, not just a
 	 * placed actor. Accepts an explicit object path, or one of the well-known
@@ -925,7 +898,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ReadBoneTransforms(const TSharedPtr<FJso
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("name"), Name);
 		Entry->SetBoolField(TEXT("isSocket"), bIsSocket);
-		Entry->SetObjectField(TEXT("transform"), TransformJson(OutputTransform));
+		Entry->SetObjectField(TEXT("transform"), MCPTransformToJsonObject(OutputTransform));
 		Samples.Add(MakeShared<FJsonValueObject>(Entry));
 	};
 
@@ -1051,17 +1024,17 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
 	Result->SetBoolField(TEXT("teleported"), bMoved);
 	Result->SetBoolField(TEXT("movementStopped"), bStopMovement && Movement != nullptr);
-	Result->SetObjectField(TEXT("requestedLocation"), VectorJson(Location));
+	Result->SetObjectField(TEXT("requestedLocation"), MCPVec3ToJsonObject(Location));
 	// Read the transform back rather than reporting what was asked for.
-	Result->SetObjectField(TEXT("actualLocation"), VectorJson(Actor->GetActorLocation()));
-	Result->SetObjectField(TEXT("actualRotation"), RotatorJson(Actor->GetActorRotation()));
+	Result->SetObjectField(TEXT("actualLocation"), MCPVec3ToJsonObject(Actor->GetActorLocation()));
+	Result->SetObjectField(TEXT("actualRotation"), MCPRotatorToJsonObject(Actor->GetActorRotation()));
 	if (!Movement)
 	{
 		Result->SetStringField(TEXT("note"),
 			TEXT("Actor has no movement component; nothing would have fought the move."));
 	}
-	Result->SetObjectField(TEXT("previousLocation"), VectorJson(StartLocation));
-	Result->SetObjectField(TEXT("previousRotation"), RotatorJson(StartRotation));
+	Result->SetObjectField(TEXT("previousLocation"), MCPVec3ToJsonObject(StartLocation));
+	Result->SetObjectField(TEXT("previousRotation"), MCPRotatorToJsonObject(StartRotation));
 	// Compared against the transform read back, not against what was requested:
 	// a blocked sweep or a clamped placement can leave the actor where it was.
 	const bool bChanged = !Actor->GetActorLocation().Equals(StartLocation)
@@ -1076,8 +1049,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 	// leaving the actor somewhere neither the caller nor the flow chose.
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
-	Payload->SetObjectField(TEXT("location"), VectorJson(StartLocation));
-	Payload->SetObjectField(TEXT("rotation"), RotatorJson(StartRotation));
+	Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(StartLocation));
+	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(StartRotation));
 	Payload->SetBoolField(TEXT("stopMovement"), bStopMovement);
 	if (HasParam(Params, TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
 	if (HasParam(Params, TEXT("pieInstance"))) Payload->SetNumberField(TEXT("pieInstance"), OptionalInt(Params, TEXT("pieInstance"), 0));
@@ -1214,14 +1187,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
 	Result->SetStringField(TEXT("previousMode"), PrevMode);
 	Result->SetNumberField(TEXT("previousCustomMode"), PrevCustom);
-	Result->SetObjectField(TEXT("previousVelocity"), VectorJson(PrevVelocity));
+	Result->SetObjectField(TEXT("previousVelocity"), MCPVec3ToJsonObject(PrevVelocity));
 	// Read back rather than echoing the request. SetMovementMode substitutes
 	// MOVE_NavWalking with MOVE_Walking when there is no nav data; that is the
 	// only substitution it makes, so this catches that one case honestly
 	// instead of implying a broader validation the engine does not do.
 	Result->SetStringField(TEXT("mode"), UEnum::GetValueAsString(Movement->MovementMode));
 	Result->SetNumberField(TEXT("customMode"), Movement->CustomMovementMode);
-	Result->SetObjectField(TEXT("velocity"), VectorJson(Movement->Velocity));
+	Result->SetObjectField(TEXT("velocity"), MCPVec3ToJsonObject(Movement->Velocity));
 	if (!Result_VelocityNote.IsEmpty()) Result->SetStringField(TEXT("velocityNote"), Result_VelocityNote);
 	if (bModeChanged && Movement->MovementMode != RequestedMode)
 	{
@@ -1267,7 +1240,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 		// customMode is refused with any other mode, so it is sent only for the
 		// one mode that accepts it.
 		if (PrevModeEnum == MOVE_Custom) Payload->SetNumberField(TEXT("customMode"), PrevCustom);
-		Payload->SetObjectField(TEXT("velocity"), VectorJson(PrevVelocity));
+		Payload->SetObjectField(TEXT("velocity"), MCPVec3ToJsonObject(PrevVelocity));
 		if (HasParam(Params, TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
 		if (HasParam(Params, TEXT("pieInstance"))) Payload->SetNumberField(TEXT("pieInstance"), OptionalInt(Params, TEXT("pieInstance"), 0));
 		MCPSetRollback(Result, TEXT("set_movement_mode"), Payload);
