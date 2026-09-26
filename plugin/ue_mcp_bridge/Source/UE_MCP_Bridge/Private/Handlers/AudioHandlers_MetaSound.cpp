@@ -38,6 +38,7 @@
 #include "AudioHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "AudioHandlers_Internal.h"
 
 #if UE_MCP_HAS_5_5_API
 #include "HandlerAssetCreate.h"
@@ -1210,90 +1211,71 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundListNodeClasses(const TSharedPtr
 
 #else
 
-// The MetaSound authoring and introspection surface this file writes through
-// is 5.5 and newer. 5.4 has a different document model (no graph pages, no
-// document builder registry, protected builder access, and four-argument
-// finders instead of five), so the same calls cannot be spelled against it.
-// Rather than half-author a document on 5.4, the actions stay registered and
-// report the engine requirement, which is what an agent can act on.
-
-namespace
-{
-	TSharedPtr<FJsonValue> MSAuthorUnsupportedEngine(const TCHAR* Action)
-	{
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
-		Result->SetStringField(TEXT("error"), FString::Printf(
-			TEXT("audio(%s) requires Unreal Engine 5.5 or newer. %s"), Action,
-			TEXT("The MetaSound document model it drives (graph pages and the document builder registry) does not exist in 5.4.")));
-		return MCPResult(Result);
-	}
-}
+// Below 5.5 these actions stay registered and name the engine requirement.
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateMetaSoundSource(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("create_metasound_source"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("create_metasound_source"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAuthor(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_author"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_author"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAddNode(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_add_node"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_add_node"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAddGraphInput(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_add_graph_input"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_add_graph_input"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAddGraphOutput(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_add_graph_output"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_add_graph_output"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundConnect(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_connect"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_connect"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundConnectGraphInput(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_connect_graph_input"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_connect_graph_input"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundConnectGraphOutput(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_connect_graph_output"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_connect_graph_output"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundConnectAudioOut(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_connect_audio_out"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_connect_audio_out"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundSetInputDefault(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_set_input_default"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_set_input_default"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundBuild(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_build"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_build"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundGetGraph(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_get_graph"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_get_graph"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundListNodeClasses(const TSharedPtr<FJsonObject>&)
 {
-	return MSAuthorUnsupportedEngine(TEXT("metasound_list_node_classes"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_list_node_classes"));
 }
 
 #endif

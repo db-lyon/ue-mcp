@@ -1004,45 +1004,26 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundRenameMember(const TSharedPtr<FJ
 // ─────────────────────────────────────────────────────────────────────────────
 #else
 
-// The MetaSound authoring and introspection surface this file writes through
-// is 5.5 and newer. 5.4 has a different document model (no graph pages, no
-// document builder registry, protected builder access, and four-argument
-// finders instead of five), so the same calls cannot be spelled against it.
-// Rather than half-author a document on 5.4, the actions stay registered and
-// report the engine requirement, which is what an agent can act on.
-
-namespace
-{
-	TSharedPtr<FJsonValue> MSEditUnsupportedEngine(const TCHAR* Action)
-	{
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
-		Result->SetStringField(TEXT("error"), FString::Printf(
-			TEXT("audio(%s) requires Unreal Engine 5.5 or newer. %s"), Action,
-			TEXT("The MetaSound document model it drives (graph pages and the document builder registry) does not exist in 5.4.")));
-		return MCPResult(Result);
-	}
-}
+// Below 5.5 these actions stay registered and name the engine requirement.
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundRemoveNode(const TSharedPtr<FJsonObject>&)
 {
-	return MSEditUnsupportedEngine(TEXT("metasound_remove_node"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_remove_node"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundDisconnect(const TSharedPtr<FJsonObject>&)
 {
-	return MSEditUnsupportedEngine(TEXT("metasound_disconnect"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_disconnect"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundRemoveMember(const TSharedPtr<FJsonObject>&)
 {
-	return MSEditUnsupportedEngine(TEXT("metasound_remove_member"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_remove_member"));
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundRenameMember(const TSharedPtr<FJsonObject>&)
 {
-	return MSEditUnsupportedEngine(TEXT("metasound_rename_member"));
+	return MCPAudio::MetaSoundUnsupportedEngine(TEXT("metasound_rename_member"));
 }
 
 #endif
