@@ -2305,10 +2305,8 @@ inline TSharedPtr<FJsonValue> MCPCheckClassUsable(
 
 // ── Common helpers ───────────────────────────────────────────────────────────
 
-/** Find a UClass by short name, handling UE type prefix resolution in both
- *  directions: "StaticMeshActor" finds AStaticMeshActor and "UMyConfig" finds
- *  the class registered as "MyConfig". Thin wrapper over MCPResolveClass so
- *  every existing caller inherits the full resolution order. */
+/** Alias of MCPResolveClass, kept for plugins built against this header. */
+UE_DEPRECATED(5.4, "FindClassByShortName is an alias of MCPResolveClass. Call MCPResolveClass.")
 inline UClass* FindClassByShortName(const FString& ClassName)
 {
 	return MCPResolveClass(ClassName);
