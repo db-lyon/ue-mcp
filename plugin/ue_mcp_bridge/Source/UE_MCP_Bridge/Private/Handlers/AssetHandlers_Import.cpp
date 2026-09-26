@@ -3426,9 +3426,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 		}
 		if (MissingKeys.Num() > 0 || UnexpectedKeys.Num() > 0)
 		{
-			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-			Obj->SetBoolField(TEXT("success"), false);
-			Obj->SetStringField(TEXT("error"), FString::Printf(
+			TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 				TEXT("'%s' does not match the expected key set, so the String Table was not touched: %d expected key(s) missing%s."),
 				*CsvPath, MissingKeys.Num(),
 				bRequireExactKeys

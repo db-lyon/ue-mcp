@@ -80,11 +80,11 @@ static TSharedPtr<FJsonValue> SkeletonError(
 	const FString& Message,
 	TSharedPtr<FJsonObject> Detail = nullptr)
 {
-	TSharedPtr<FJsonObject> Result = Detail.IsValid() ? Detail : MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("success"), false);
-	Result->SetStringField(TEXT("errorCode"), Code);
-	Result->SetStringField(TEXT("error"), Message);
-	return MCPResult(Result);
+	if (!Detail.IsValid()) return MCPErrorWithCode(Code, Message);
+	Detail->SetBoolField(TEXT("success"), false);
+	Detail->SetStringField(TEXT("errorCode"), Code);
+	Detail->SetStringField(TEXT("error"), Message);
+	return MCPResult(Detail);
 }
 
 // ── Name suggestion ──────────────────────────────────────────────────────────

@@ -202,9 +202,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 		MCPApplySubobjectProperties(Probe, Properties, ProbeApplied, ProbeErrors);
 		if (ProbeErrors.Num() > 0)
 		{
-			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-			Obj->SetBoolField(TEXT("success"), false);
-			Obj->SetStringField(TEXT("error"), FString::Printf(
+			TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 				TEXT("%d of %d properties would not apply to a %s, so nothing was created: %s"),
 				ProbeErrors.Num(), Properties->Values.Num(), *Class->GetName(),
 				*FString::Join(ProbeErrors, TEXT("; "))));

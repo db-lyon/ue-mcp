@@ -132,9 +132,7 @@ TSharedPtr<FJsonValue> MCPUvUnsupported(
 	const TCHAR* Reason,
 	const FString& Message)
 {
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), Message);
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(Message);
 	Obj->SetStringField(TEXT("reason"), Reason);
 	Obj->SetStringField(TEXT("assetPath"), AssetPath);
 	Obj->SetBoolField(TEXT("supported"), false);
@@ -233,9 +231,7 @@ TSharedPtr<FJsonValue> MCPUvBadChannel(
 	int32 ChannelCount,
 	int32 LodIndex)
 {
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), FString::Printf(
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 		TEXT("%s %d does not exist: LOD %d of '%s' has %d UV channel(s), so valid indices are 0..%d. ")
 			TEXT("Add channels with asset(set_uv_channel_count)."),
 		ParamName, Requested, LodIndex, *AssetPath, ChannelCount, FMath::Max(ChannelCount - 1, 0)));
@@ -1793,9 +1789,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 
 		if (CopyIn.GetEnumName(TEXT("Outcome")) != TEXT("Success"))
 		{
-			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-			Obj->SetBoolField(TEXT("success"), false);
-			Obj->SetStringField(TEXT("error"), FString::Printf(
+			TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 				TEXT("LOD %d of '%s' could not be read into a DynamicMesh, so nothing was unwrapped and the asset ")
 					TEXT("is untouched."),
 				Target.LodIndex, *Target.AssetPath));
@@ -1821,9 +1815,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 	// ── The unwrap itself ───────────────────────────────────────────────────
 	auto UnwrapFailed = [&](const FString& Detail) -> TSharedPtr<FJsonValue>
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 			TEXT("The '%s' unwrap of LOD %d channel %d on '%s' failed: %s Nothing was written back."),
 			*Method, Target.LodIndex, Channel, *Target.AssetPath, *Detail));
 		Obj->SetStringField(TEXT("reason"), TEXT("unwrap_failed"));

@@ -810,9 +810,7 @@ namespace
 				Listed.Add(MakeShared<FJsonValueObject>(MCPGraphAuthorActionJson(Info)));
 			}
 		}
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), Message);
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(Message);
 		Obj->SetNumberField(TEXT("actionCount"), Infos.Num());
 		Obj->SetArrayField(TEXT("availableActions"), Listed);
 		return MakeShared<FJsonValueObject>(Obj);
@@ -952,9 +950,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ConnectGraphPins(const TSharedPtr<FJsonOb
 	const FPinConnectionResponse Response = Schema->CanCreateConnection(A, B);
 	if (Response.Response == CONNECT_RESPONSE_DISALLOW)
 	{
-		TSharedPtr<FJsonObject> Refused = MakeShared<FJsonObject>();
-		Refused->SetBoolField(TEXT("success"), false);
-		Refused->SetStringField(TEXT("error"), FString::Printf(TEXT("The %s refused the connection: %s"),
+		TSharedPtr<FJsonObject> Refused = MCPErrorObject(FString::Printf(TEXT("The %s refused the connection: %s"),
 			*Schema->GetClass()->GetName(),
 			Response.Message.IsEmpty() ? TEXT("no reason given") : *Response.Message.ToString()));
 		Refused->SetStringField(TEXT("reason"), TEXT("schema_disallowed"));

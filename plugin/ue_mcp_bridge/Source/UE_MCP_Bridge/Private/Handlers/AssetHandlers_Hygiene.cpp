@@ -1395,9 +1395,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixAssetHygiene(const TSharedPtr<FJsonObj
 	// ── The batch ceiling, before anything runs ─────────────────────────────
 	if (EligibleCount > MaxFixes)
 	{
-		TSharedPtr<FJsonObject> Refusal = MakeShared<FJsonObject>();
-		Refusal->SetBoolField(TEXT("success"), false);
-		Refusal->SetStringField(TEXT("error"), FString::Printf(
+		TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
 			TEXT("This call would %s %d assets and maxFixes is %d, so nothing was done. Review the audit ")
 				TEXT("first, then either narrow 'directories', pass the approved paths in 'assetPaths', or ")
 				TEXT("raise 'maxFixes' deliberately."),
@@ -1467,9 +1465,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixAssetHygiene(const TSharedPtr<FJsonObj
 
 	if (!bPreflightPassed && !bContinueOnError)
 	{
-		TSharedPtr<FJsonObject> Refusal = MakeShared<FJsonObject>();
-		Refusal->SetBoolField(TEXT("success"), false);
-		Refusal->SetStringField(TEXT("error"), FString::Printf(
+		TSharedPtr<FJsonObject> Refusal = MCPErrorObject(FString::Printf(
 			TEXT("%d of %d candidates failed preflight, so nothing was changed. The first problem was: %s ")
 				TEXT("Pass continueOnError=true to apply the %d that did pass and keep the rejects reported ")
 				TEXT("alongside them."),

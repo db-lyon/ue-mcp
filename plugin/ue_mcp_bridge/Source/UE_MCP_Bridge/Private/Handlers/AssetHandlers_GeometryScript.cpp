@@ -665,9 +665,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 
 	if (!MCPGeoCopyMeshIn(Request, Dynamic, Debug, Messages, Failure))
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Source mesh could not be read: %s"), *Failure));
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(TEXT("Source mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("source_read_failed"));
 		MCPGeoDescribeRequest(Obj, Request);
 		MCPGeometryScript::AttachMessages(Obj, Messages);
@@ -678,9 +676,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 
 	if (!Operate(Dynamic, Debug, Messages, Failure))
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 			TEXT("%s failed on '%s': %s"), OperationName, *Request.AssetPath, *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("operation_failed"));
 		MCPGeoDescribeRequest(Obj, Request);
@@ -694,9 +690,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 
 	if (After.Triangles == 0)
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 			TEXT("%s left '%s' with no triangles at all, so nothing was written. The parameters removed the ")
 				TEXT("whole mesh rather than reshaping it."),
 			OperationName, *Request.AssetPath));
@@ -1659,9 +1653,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	FString Failure;
 	if (!MCPGeoCopyMeshIn(ReadRequest, Dynamic, Debug, Messages, Failure))
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Mesh could not be read: %s"), *Failure));
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(TEXT("Mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("source_read_failed"));
 		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
@@ -1986,9 +1978,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 	FString Failure;
 	if (!MCPGeoCopyMeshIn(Request, Dynamic, Debug, Messages, Failure))
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Source mesh could not be read: %s"), *Failure));
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(TEXT("Source mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("source_read_failed"));
 		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
@@ -1999,9 +1989,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 	FBox Bounds;
 	if (!MCPGeoReadBounds(Dynamic, Bounds))
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 			TEXT("'%s' has no valid bounding box, so no cut planes could be placed inside it."), *AssetPath));
 		Obj->SetStringField(TEXT("reason"), TEXT("no_bounds"));
 		MCPGeometryScript::AttachMessages(Obj, Messages);
@@ -2111,9 +2099,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 		}
 		if (Occupied.Num() > 0)
 		{
-			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-			Obj->SetBoolField(TEXT("success"), false);
-			Obj->SetStringField(TEXT("error"), FString::Printf(
+			TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 				TEXT("%d asset(s) already occupy the piece paths this fracture would write, starting at '%s'. ")
 					TEXT("Pass onConflict='replace' to overwrite them, or name a different outputBasePath."),
 				Occupied.Num(), *Occupied[0]));

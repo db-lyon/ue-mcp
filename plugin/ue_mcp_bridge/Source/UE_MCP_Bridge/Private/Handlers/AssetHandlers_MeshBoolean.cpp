@@ -327,18 +327,14 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	FString Failure;
 	if (!CopyMeshIn(TargetMesh, TargetDynamic, TargetPath, Failure))
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Target mesh could not be read: %s"), *Failure));
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(TEXT("Target mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("target_read_failed"));
 		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 	if (!CopyMeshIn(ToolMesh, ToolDynamic, ToolPath, Failure))
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Tool mesh could not be read: %s"), *Failure));
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(TEXT("Tool mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("tool_read_failed"));
 		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
@@ -369,9 +365,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	// ── Validate before writing ─────────────────────────────────────────────
 	if (ResultTriangles == 0 && !bAllowEmptyResult)
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetBoolField(TEXT("success"), false);
-		Obj->SetStringField(TEXT("error"), FString::Printf(
+		TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 			TEXT("The %s of '%s' and '%s' is empty, so nothing was written. The two meshes may not overlap ")
 				TEXT("in the space the transforms put them in, or the operation may have removed everything. ")
 				TEXT("Pass allowEmptyResult=true if an empty result is what you meant."),
@@ -436,9 +430,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 
 		if (CopyOut.GetEnumName(TEXT("Outcome")) != TEXT("Success"))
 		{
-			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-			Obj->SetBoolField(TEXT("success"), false);
-			Obj->SetStringField(TEXT("error"), FString::Printf(
+			TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 				TEXT("The boolean produced %d triangles but writing them into '%s' failed."),
 				ResultTriangles, *OutputPath));
 			Obj->SetStringField(TEXT("reason"), TEXT("write_failed"));
@@ -472,9 +464,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 		Written = Cast<UStaticMesh>(Create.ReturnObject());
 		if (Create.GetEnumName(TEXT("Outcome")) != TEXT("Success") || !Written)
 		{
-			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-			Obj->SetBoolField(TEXT("success"), false);
-			Obj->SetStringField(TEXT("error"), FString::Printf(
+			TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 				TEXT("The boolean produced %d triangles but the new StaticMesh asset at '%s' could not be ")
 					TEXT("created. The path may be invalid or already taken by another asset type."),
 				ResultTriangles, *OutputPath));

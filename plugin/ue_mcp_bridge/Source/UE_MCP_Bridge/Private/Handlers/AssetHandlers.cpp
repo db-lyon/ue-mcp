@@ -2942,9 +2942,7 @@ static TSharedPtr<FJsonValue> MCPRefuseSplitPackages(const TArray<FAssetRenameDa
 	}
 	if (SplitPackages.Num() == 0) return nullptr;
 
-	TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
-	Body->SetBoolField(TEXT("success"), false);
-	Body->SetStringField(TEXT("error"), FString::Printf(
+	TSharedPtr<FJsonObject> Body = MCPErrorObject(FString::Printf(
 		TEXT("Refusing %s: %d package(s) hold objects this move does not cover, and they would stay at the old path while the rest moves: %s. ")
 		TEXT("Nothing was changed. Name every one of them in a single asset(bulk_rename) batch so they move together, ")
 		TEXT("or move the package's objects out first. A private object (isAsset=false) cannot be moved on its own: clear the reference to it before moving."),
