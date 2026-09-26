@@ -17,11 +17,8 @@ concurrency:
 permissions:
   contents: read
 
-# The em dash gate is not here, and no longer has a workflow of its own. It is
-# a two-second check that was costing a hosted-runner slot on every branch push,
-# and when runners are unavailable that turns a release into a fifteen-minute
-# wait on a queue. It runs in .husky/pre-commit and .husky/commit-msg instead,
-# which rejects the character before the commit exists.
+# Prose rules run here over the tracked tree and again in .husky/pre-commit and
+# .husky/commit-msg, which reject a bad character before the commit exists.
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -4,7 +4,7 @@
 
 ## Why
 
-<!-- The problem. Link the issue: Closes #NNN. Delete if the title says it. -->
+<!-- The problem. Link the issue: Refs #NNN (issues close at release, not at merge). Delete if the title says it. -->
 
 ## Verification
 
