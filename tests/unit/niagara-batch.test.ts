@@ -135,8 +135,11 @@ describe("niagara batch dispatch (#1081)", () => {
     const bridge = recordingBridge({ ok: true });
     const tool = rebuilt();
     injectEditorTarget(tool, ["A", "B"]);
-    const sessionA = { name: "A" } as ToolContext["session"];
-    const sessionB = { name: "B" } as ToolContext["session"];
+    // Disconnected with no status file, so the per-call modal check has
+    // nothing to probe and lets the batch run.
+    const offline = { isConnected: false, getTarget: () => ({ projectPath: null }) };
+    const sessionA = { name: "A", bridge: offline, project: { projectPath: null } } as unknown as ToolContext["session"];
+    const sessionB = { name: "B", bridge: offline, project: { projectPath: null } } as unknown as ToolContext["session"];
     const ctx = {
       ...activeContext(bridge, tool),
       session: sessionA,

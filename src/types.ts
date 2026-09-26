@@ -7,8 +7,9 @@ import type { EpicInputSchema } from "./epic-input.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { MAX_BRIDGE_TIMEOUT_MS } from "./bridge-timeouts.js";
 import { unknownActionMessage } from "./action-schema.js";
-import { prepareCall, finishCall, forwardToBridge } from "./call-pipeline.js";
 import { EDITOR_TARGET_PARAM, MIGRATE_TARGET_PARAM } from "./routing-params.js";
+import type { FlowContext } from "./flow/context.js";
+import { runAction, actionPreparation } from "./flow/run-action.js";
 
 /**
  * Re-exported from its home in `call-pipeline.ts`, where the whole inbound
@@ -659,48 +660,21 @@ export function categoryTool(
         // and name the two ways to see the rest.
         throw new McpError(ErrorCode.UNKNOWN_ACTION, unknownActionMessage(action, name, Object.keys(actions)));
       }
-      // THE per-call preparation, in the one place it is written: the routing
-      // parameters (`timeoutMs`, `select`, `omit`) come off so no mapParams can
-      // forward one into a bridge call, the paths are repaired before anything
-      // reads them, and the category's own folding runs last over the repaired
-      // bag. flow/task-factory.ts calls the same function. `action` is stripped
-      // separately on both routes, because prepareCall leaves a bag that
-      // already carries it alone.
-      const pipeline = prepareCall(params, {
-        action,
-        normalizeParams: options?.normalizeParams,
-        paramGroups: options?.paramGroups,
-        nestedParamsKey: options?.nestedParamsKey,
-        paramChoices: spec.kind === "bridge" && spec.paramSpec && spec.paramChoices?.length
-          ? { params: spec.paramSpec, choices: spec.paramChoices }
-          : undefined,
-      });
-      const requestedTimeout = pipeline.timeoutMs;
-      const normalized = pipeline.params;
-      const finish = (raw: unknown): unknown => finishCall(raw, pipeline);
-
-      // Dispatch reads the tag rather than probing for whichever field happens
-      // to be set. The two are the same answer today and only one of them
-      // stays the same answer when a variant is added.
-      if (spec.kind === "handler") {
-        // The budget travels on the context, not in the parameters: a custom
-        // handler that forwards its params to the bridge must not turn it into
-        // a bridge argument (#989).
-        return finish(
-          await spec.handler(requestedTimeout === undefined ? ctx : { ...ctx, callTimeoutMs: requestedTimeout }, normalized),
-        );
-      }
-      if (spec.kind === "bridge") {
-        // Stripped BEFORE mapParams, not instead of it: a mapParams that
-        // forwards its whole bag would otherwise send the action's own name to
-        // the bridge as an argument. Nothing here reads the key.
-        const mapped = forwardToBridge(pipeline, stripAction(normalized), spec.mapParams, `${name}.${action}`);
-        // The caller's budget wins over the action's authored one: an action
-        // that declares 120s is stating a floor it needs, not a ceiling the
-        // caller may not raise.
-        return finish(await ctx.bridge.call(spec.bridge, mapped, requestedTimeout ?? spec.timeoutMs));
-      }
-      throw new McpError(ErrorCode.NO_HANDLER, `Action '${action}' has no handler or bridge method`);
+      // The same run path a live call's task takes (flow/run-action.ts): one
+      // preparation, the verdict read off the body, the modal check on a
+      // handler. `action` names the task there, so it comes off here too.
+      const result = await runAction(
+        ctx as FlowContext,
+        `${name}.${action}`,
+        spec,
+        stripAction(params),
+        actionPreparation(options, action, spec),
+      );
+      // A failed run still carries the body that says why (a modal refusal,
+      // or a handler's own verdict inside a flow); hand that back as the
+      // live route does.
+      if (result.success || result.data !== undefined) return result.data;
+      throw result.error ?? new Error(`Action '${name}.${action}' failed`);
     },
   };
   // Rebuilding through the same constructor is what makes a per-session copy

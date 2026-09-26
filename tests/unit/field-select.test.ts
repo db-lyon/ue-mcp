@@ -164,10 +164,10 @@ describe("dispatch integration", () => {
   });
 
   it("never forwards the routing parameters to the handler", async () => {
-    // `action` does reach a custom handler, which is long-standing behaviour;
-    // the three the dispatcher consumes must not.
+    // Nor does `action`: the task a live call runs is named by it, and the
+    // handler route runs the same path.
     const out = await tool.handler(ctx, { action: "echo", select: ["seen"], omit: ["nothing"], timeoutMs: 5 }) as { seen: string[] };
-    expect(out.seen).toEqual(["action"]);
+    expect(out.seen).toEqual([]);
   });
 
   it("keeps the path repair report visible through a narrow selection", async () => {

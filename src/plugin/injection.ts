@@ -105,17 +105,12 @@ export function mergeInjectionsIntoTool(
     ...extraSchema,
   };
 
-  // Keep the original handler - it is no longer called by index.ts (dispatch
-  // goes through the registry) but other call sites (tests, the HTTP flow
-  // surface) may still invoke ToolDef.handler directly.
-  return {
-    tool: {
-      ...orig,
-      description: newDescription,
-      schema: newSchema,
-      actions: newActions,
-    },
-    added,
-    skipped,
-  };
+  // Rebuilt, not copied: the handler closes over the actions it was built
+  // with, so a copy of the original would refuse every injected action.
+  const tool: ToolDef = orig.rebuild
+    ? { ...orig.rebuild(newActions), injectedEditorParam: orig.injectedEditorParam, injectedMigrateParam: orig.injectedMigrateParam }
+    : { ...orig, actions: newActions };
+  tool.description = newDescription;
+  tool.schema = newSchema;
+  return { tool, added, skipped };
 }

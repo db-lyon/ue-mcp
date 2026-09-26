@@ -83,7 +83,7 @@ describe("timeoutMs on a category call (#989)", () => {
       local: { kind: "handler", effect: "read", description: "Local handler", handler: async (_ctx, p) => { seen = p; return { ok: true }; } },
     });
     await tool.handler!(ctxFor(recordingBridge()), { action: "local", name: "x", timeoutMs: 600_000 });
-    expect(seen).toEqual({ action: "local", name: "x" });
+    expect(seen).toEqual({ name: "x" });
   });
 
   it("is honoured through the micro-context gateway, beside args or inside them", async () => {

@@ -1,6 +1,5 @@
 import { z } from "zod";
-import type { ToolDef, ActionSpec } from "../types.js";
-import { actionEnum } from "../types.js";
+import { categoryTool, type ToolDef, type ActionSpec } from "../types.js";
 import {
   compileSchemaFields,
   type ManifestProvidedCategory,
@@ -27,7 +26,8 @@ export interface ProvisionPlan {
 /**
  * Build a top-level ToolDef from one plugin-provided category. Dispatch is
  * via the task registry under `${category}.${action}`, matching how built-in
- * categories route inside index.ts.
+ * categories route inside index.ts; the tool's own handler refuses a direct
+ * call with NO_HANDLER, as for any registry action.
  */
 export function buildProvidedTool(plan: ProvisionPlan): ToolDef {
   const actions: Record<string, ActionSpec> = {};
@@ -55,26 +55,11 @@ export function buildProvidedTool(plan: ProvisionPlan): ToolDef {
     }
   }
 
-  const actionNames = Object.keys(actions) as [string, ...string[]];
   const summary =
     plan.description ?? `Plugin-provided category from ${plan.pluginName}`;
-  const description = `${summary}\n\nActions:\n${docLines.join("\n")}`;
-
-  return {
-    name: plan.category,
-    description,
-    schema: {
-      action: actionEnum(actionNames),
-      ...extraSchema,
-    },
-    actions,
-    // Same fallback handler shape as categoryTool() so direct invocations
-    // (tests, HTTP surface) keep working even though index.ts dispatches
-    // through the registry.
-    handler: async () => {
-      throw new Error(
-        `provided category '${plan.category}' must be dispatched through the task registry; direct handler invocation is not supported`,
-      );
-    },
-  };
+  // Built like any category, so it takes the routing parameters (timeoutMs,
+  // select, omit) and a rebuilder. Its doc lines keep the manifest's wording.
+  const tool = categoryTool(plan.category, summary, actions, extraSchema);
+  tool.description = `${summary}\n\nActions:\n${docLines.join("\n")}`;
+  return tool;
 }
