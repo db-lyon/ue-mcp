@@ -26,6 +26,13 @@ const MAX_TASK_DEPTH = 32;
 /** Context key holding the task classes on the current call path. */
 const CHAIN_KEY = "__ueMcpTaskChain";
 
+/**
+ * Context key for the reference scope of a live call. Not flowkit's
+ * `taskReferenceContext`: that key marks a runner-driven context, and a live
+ * call must keep its own success verdict (see handler-outcome.ts).
+ */
+export const LIVE_REFERENCES_KEY = "__ueMcpLiveReferences";
+
 type TaskClass = abstract new (...args: never[]) => BaseTask<unknown>;
 
 /** A task call that would re-enter a class already on the call path. */
@@ -65,7 +72,8 @@ export async function createConfiguredTask(
   if (!registry) {
     throw new Error(`Cannot resolve task "${taskName}": no task registry in this context.`);
   }
-  const resolved = resolveConfiguredTask(taskName, ctx.taskDefinitions, options, ctx.taskReferenceContext);
+  const references = ctx.taskReferenceContext ?? (ctx[LIVE_REFERENCES_KEY] as ReferenceContext | undefined);
+  const resolved = resolveConfiguredTask(taskName, ctx.taskDefinitions, options, references);
   const chain = [...((ctx[CHAIN_KEY] as TaskClass[] | undefined) ?? []), ...(caller ? [caller] : [])];
   const target = await registry.resolve(resolved.classPath);
   if (chain.includes(target as unknown as TaskClass) || chain.length >= MAX_TASK_DEPTH) {

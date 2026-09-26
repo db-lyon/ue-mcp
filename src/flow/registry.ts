@@ -1,5 +1,5 @@
 import { TaskRegistry, ShellTask } from "@db-lyon/flowkit";
-import type { TaskConstructor, TaskContextInput } from "@db-lyon/flowkit";
+import type { ReferenceContext, TaskConstructor, TaskContext, TaskContextInput } from "@db-lyon/flowkit";
 import type { ToolDef } from "../core/types.js";
 import type { FlowContext } from "./context.js";
 import { BridgeTask } from "./bridge-task.js";
@@ -8,7 +8,7 @@ import { actionPreparation } from "./run-action.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../surface/context/micro-context.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { paramMapperOf } from "../surface/epic-input.js";
-import { builtinClassPath } from "./task-call.js";
+import { builtinClassPath, LIVE_REFERENCES_KEY, resolveConfiguredTask } from "./task-call.js";
 
 /** A gateway call is an alias for the target task, not a handler that executes
  *  another action and repackages its result. Both MCP and FlowRunner create
@@ -26,7 +26,11 @@ class MicroTaskRegistry extends TaskRegistry {
       if (!this.listRegistered().includes(call.taskName)) {
         throw new McpError(ErrorCode.NO_HANDLER, `Action ${call.taskName} has no registered task.`);
       }
-      return super.create(call.taskName, ctx, call.params);
+      // The target resolves through the same `tasks:` definitions as a direct call.
+      const c = ctx as TaskContext;
+      const references = c.taskReferenceContext ?? (c[LIVE_REFERENCES_KEY] as ReferenceContext | undefined);
+      const target = resolveConfiguredTask(call.taskName, c.taskDefinitions, call.params, references);
+      return super.create(target.classPath, ctx, target.options);
     }
     return super.create(name, ctx, options);
   }

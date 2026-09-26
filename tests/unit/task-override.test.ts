@@ -10,6 +10,8 @@ import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { buildDefaults } from "../../src/flow/loader.js";
 import { bp, categoryTool } from "../../src/surface/category-tool.js";
 import { UeMcpTask } from "../../src/task.js";
+import { createLiveTask } from "../../src/flow/live-task.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import type { FlowContext } from "../../src/flow/context.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
 
@@ -127,5 +129,72 @@ describe("built-in base aliases", () => {
     const result = await r.run({ flowName: "go" });
     expect(result.success).toBe(false);
     expect(result.steps[0].result?.error?.message).toMatch(/already running on this call path/);
+  });
+});
+
+describe("live calls resolve through the task definitions", () => {
+  it("runs the override for a live call, with its option defaults under the caller's", async () => {
+    const { registry, tasks } = setup(
+      { "asset.list": { class_path: "tests.FilteredList", options: { excludePrefix: "/Game/Keep/", directory: "/Default" } } },
+      { "tests.FilteredList": FilteredList },
+    );
+    const { ctx, calls } = context();
+    const task = await createLiveTask({ registry, definitions: tasks }, ctx, "asset.list", { directory: "/Game" });
+    const result = await task.run();
+    expect(result.data).toEqual({ assets: [{ path: "/Game/Developers/B" }] });
+    expect(calls).toEqual([{ method: "list_assets", params: { directory: "/Game" } }]);
+  });
+
+  it("gives a live task a registry, so call() works outside a flow", async () => {
+    class Composite extends UeMcpTask {
+      get taskName() { return "asset.delete"; }
+      async execute(): Promise<TaskResult> { return this.call("asset.list", { directory: "/Game" }); }
+    }
+    const { registry, tasks } = setup({ "asset.delete": { class_path: "tests.Composite" } }, { "tests.Composite": Composite });
+    const { ctx, calls } = context();
+    const result = await (await createLiveTask({ registry, definitions: tasks }, ctx, "asset.delete", {})).run();
+    expect(result.success).toBe(true);
+    expect(calls.map((c) => c.method)).toEqual(["list_assets"]);
+  });
+
+  it("refuses a self-calling override on a live call instead of recursing", async () => {
+    const { registry, tasks } = setup({ "asset.list": { class_path: "tests.SelfCalling" } }, { "tests.SelfCalling": SelfCalling });
+    const { ctx, calls } = context();
+    const result = await (await createLiveTask({ registry, definitions: tasks }, ctx, "asset.list", {})).run();
+    expect(result.success).toBe(false);
+    expect(result.error?.name).toBe("TaskCycleError");
+    expect(calls).toEqual([]);
+  });
+
+  it("keeps a success:false body on a successful result, as the live route renders it", async () => {
+    const { registry, tasks } = setup({}, {});
+    const refusing = {
+      project: {},
+      bridge: { isConnected: true, call: async () => ({ success: false, error: "no such asset" }) } as unknown as IBridge,
+    } as FlowContext;
+    const result = await (await createLiveTask({ registry, definitions: tasks, namespaces: {} }, refusing, "asset.list", {})).run();
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ success: false, error: "no such asset" });
+  });
+
+  it("runs the built-in by name when there are no definitions", async () => {
+    const { registry } = setup({}, {});
+    const { ctx, calls } = context();
+    const result = await (await createLiveTask({ registry }, ctx, "asset.list", { directory: "/Game" })).run();
+    expect(result.success).toBe(true);
+    expect(calls).toEqual([{ method: "list_assets", params: { directory: "/Game" } }]);
+  });
+
+  it("applies the override behind the micro gateway too", async () => {
+    const registry = buildFlowRegistry([buildMicroGateway([assetTool]), assetTool]);
+    registry.registerClassPath("tests.FilteredList", FilteredList as unknown as TaskConstructor);
+    const defaults = buildDefaults([assetTool]).tasks as Record<string, TaskDefinition>;
+    const tasks = { ...defaults, "asset.list": { class_path: "tests.FilteredList", options: {} } };
+    const { ctx } = context();
+    const task = await createLiveTask({ registry, definitions: tasks }, ctx, "tools.call", {
+      category: "asset", method: "list", args: { directory: "/Game" },
+    });
+    expect(task.constructor).toBe(FilteredList);
+    expect((await task.run()).data).toEqual({ assets: [{ path: "/Game/Keep/A" }] });
   });
 });

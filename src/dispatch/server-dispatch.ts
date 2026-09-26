@@ -34,6 +34,8 @@ import { withAssetLocks, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "../surface/action-schema.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
+import { createLiveTask } from "../flow/live-task.js";
+import type { TaskDefinition } from "@db-lyon/flowkit";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 
 type TextBlock = { type: "text"; text: string };
@@ -179,6 +181,20 @@ export function attribution(sessions: SessionRegistry, session: EditorSession): 
 }
 
 /**
+ * The addressed session's task definitions for a live call. A config that does
+ * not parse leaves every name resolving to its built-in, so a bad ue-mcp.yml
+ * cannot take the category tools down with it; flow calls still report it.
+ */
+function liveDefinitions(loads: SessionLoads, ctx: FlowContext): Record<string, TaskDefinition> | undefined {
+  try {
+    return loads.reloadConfigFor(ctx).tasks as Record<string, TaskDefinition>;
+  } catch (e) {
+    debug("flow", "flow config unreadable; live call runs the built-in task", e);
+    return undefined;
+  }
+}
+
+/**
  * One call to a category tool (or the micro gateway). `envelope` says the
  * tool is advertised as `action` + `args`, so the flat shape is validated here
  * rather than by the SDK.
@@ -272,7 +288,13 @@ export async function dispatchCategoryCall(
 
   const served = attribution(sessions, session);
   try {
-    const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
+    // Resolved through the session's `tasks:` definitions, as a flow step is.
+    const task = await createLiveTask(
+      { registry: sessionRegistry, definitions: liveDefinitions(loads, flowCtx) },
+      flowCtx,
+      taskName,
+      taskParams,
+    );
     // Locks are taken in the editor the call runs in, through the GUARDED
     // bridge, so a lock request made while a modal is up is refused as a dialog.
     const result = await withAssetLocks(

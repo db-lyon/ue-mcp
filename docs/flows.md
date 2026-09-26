@@ -522,7 +522,7 @@ tasks:
       excludePrefix: /Game/Developers/
 ```
 
-The built-in `asset.list` is now replaced by your class, wherever a flow resolves `asset.list`: a flow step, and another task's `this.call('asset.list')`. The definition's `options` are defaults under the caller's own options. The loader imports `tasks/FilteredAssetList.js` (see [Dynamic Class Loading](#dynamic-class-loading)).
+The built-in `asset.list` is now replaced by your class, wherever `asset.list` is called: a flow step, another task's `this.call('asset.list')`, and a live `asset(action="list")` call from an MCP client, including one made through the micro gateway. A config that fails to parse leaves live calls on the built-ins while flow calls report the error. The definition's `options` are defaults under the caller's own options. The loader imports `tasks/FilteredAssetList.js` (see [Dynamic Class Loading](#dynamic-class-loading)).
 
 ### Writing a Custom Task
 
