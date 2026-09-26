@@ -982,26 +982,11 @@ inline bool MCPIsAmbiguousActorError(const TSharedPtr<FJsonValue>& Error)
 	return Obj.IsValid() && Obj->TryGetBoolField(TEXT("ambiguous"), bAmbiguous) && bAmbiguous;
 }
 
-// FindActorByLabel, FindActorByLabelOrName, FindActorByLabelOrPath and
-// FindActorByLabelNameOrPath each answered a duplicate label with the first
-// match the actor iterator produced, which is the silent wrong write #983
-// reported, and four spellings of one search is how the rules drift apart.
-// Nothing in THIS plugin calls them any more: core goes through
-// MCPResolveActor, or MCPCollectActorsByToken where the plural answer is the
-// correct one.
-//
-// They survive as compatibility shims because this is a PUBLIC header shipped
-// to plugin authors, and deleting them outright is a breaking change for every
-// plugin built against it. PIE_Studio calls FindActorByLabelOrName today and
-// broke the moment they went; a third-party plugin nobody here can see would
-// have broken the same way, and only after publishing.
-//
-// They now share the consolidated search, so they cannot drift from it, and
-// they keep first-match semantics because that is the contract callers already
-// have. New code should use MCPResolveActor, which refuses an ambiguous label
-// rather than picking one.
-
+// Legacy first-match actor lookups, kept only for plugins built against this
+// public header (#983). They pick one of several same-labelled actors silently;
+// use MCPResolveActor, which refuses an ambiguous label.
 /** Legacy: first actor whose editor label matches. Prefer MCPResolveActor. */
+UE_DEPRECATED(5.4, "FindActorByLabel picks the first of several same-labelled actors. Use MCPResolveActor.")
 inline AActor* FindActorByLabel(UWorld* World, const FString& Label)
 {
 	TArray<AActor*> Matches;
@@ -1011,6 +996,7 @@ inline AActor* FindActorByLabel(UWorld* World, const FString& Label)
 
 /** Legacy: first actor matching an editor label or internal name.
  *  Prefer MCPResolveActor. */
+UE_DEPRECATED(5.4, "FindActorByLabelOrName picks the first of several matching actors. Use MCPResolveActor.")
 inline AActor* FindActorByLabelOrName(UWorld* World, const FString& LabelOrName)
 {
 	TArray<AActor*> Matches;
@@ -1020,6 +1006,7 @@ inline AActor* FindActorByLabelOrName(UWorld* World, const FString& LabelOrName)
 
 /** Legacy: an actor by label, or by full object path when the label is empty.
  *  Prefer MCPResolveActor. */
+UE_DEPRECATED(5.4, "FindActorByLabelOrPath picks the first of several same-labelled actors. Use MCPResolveActor.")
 inline AActor* FindActorByLabelOrPath(UWorld* World, const FString& Label, const FString& Path)
 {
 	if (!Path.IsEmpty())
@@ -1027,11 +1014,14 @@ inline AActor* FindActorByLabelOrPath(UWorld* World, const FString& Label, const
 		if (AActor* ByPath = MCPFindActorByPath(World, Path)) return ByPath;
 	}
 	if (Label.IsEmpty()) return nullptr;
-	return FindActorByLabel(World, Label);
+	TArray<AActor*> Matches;
+	MCPCollectActorsByToken(World, Label, EMCPActorMatch::Label, Matches);
+	return Matches.Num() > 0 ? Matches[0] : nullptr;
 }
 
 /** Legacy: first actor matching a label, internal name or object path.
  *  Prefer MCPResolveActor. */
+UE_DEPRECATED(5.4, "FindActorByLabelNameOrPath picks the first of several matching actors. Use MCPResolveActor.")
 inline AActor* FindActorByLabelNameOrPath(UWorld* World, const FString& Token)
 {
 	TArray<AActor*> Matches;
