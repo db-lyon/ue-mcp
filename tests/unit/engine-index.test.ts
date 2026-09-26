@@ -27,7 +27,7 @@ import {
   unprefixed,
   type EngineIndex,
   type EngineSymbol,
-} from "../../src/engine-index.js";
+} from "../../src/codeintel/engine-index.js";
 
 const ACTOR_H = "Engine/Source/Runtime/Engine/Classes/GameFramework/Actor.h";
 const ASC_H =

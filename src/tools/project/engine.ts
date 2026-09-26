@@ -1,22 +1,22 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { selectEngine } from "../../engine-root.js";
-import { parseHeader } from "../../cpp-parser.js";
-import { loadEngineIndex, type EngineIndex } from "../../engine-index.js";
+import { parseHeader } from "../../codeintel/cpp-parser.js";
+import { loadEngineIndex, type EngineIndex } from "../../codeintel/engine-index.js";
 import {
   verifySymbols,
   suggestBuildDeps,
   findExampleUsage,
   lintHeader,
   findBuildCs,
-} from "../../cpp-correctness.js";
+} from "../../codeintel/cpp-correctness.js";
 import {
   classHierarchy,
   findCallees,
   findCallers,
   findReferences,
   symbolContext,
-} from "../../engine-analysis.js";
+} from "../../codeintel/engine-analysis.js";
 import { specBp as reflectionSpecBp } from "../specs/reflection.generated.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
 

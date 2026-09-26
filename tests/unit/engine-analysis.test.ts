@@ -21,7 +21,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildEngineIndex, type EngineIndex } from "../../src/engine-index.js";
+import { buildEngineIndex, type EngineIndex } from "../../src/codeintel/engine-index.js";
 import {
   baseTypeName,
   callsIn,
@@ -35,8 +35,8 @@ import {
   looksLikeCall,
   symbolContext,
   treeRoots,
-} from "../../src/engine-analysis.js";
-import { moduleDirFor } from "../../src/engine-index.js";
+} from "../../src/codeintel/engine-analysis.js";
+import { moduleDirFor } from "../../src/codeintel/engine-index.js";
 
 /* ── the fixture engine ────────────────────────────────────────────── */
 

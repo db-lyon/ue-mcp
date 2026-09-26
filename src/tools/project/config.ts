@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { resolveConfigPath, findIniFiles, parseIni, buildTagTree } from "../../config-parser.js";
+import { resolveConfigPath, findIniFiles, parseIni, buildTagTree } from "../../codeintel/ue-ini.js";
 import { specBp } from "../specs/project.generated.js";
 import { specBp as blueprintSpecBp } from "../specs/blueprint.generated.js";
 import type { ActionSpec } from "../../core/types.js";

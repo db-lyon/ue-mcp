@@ -17,7 +17,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { findExampleUsage } from "../../src/cpp-correctness.js";
+import { findExampleUsage } from "../../src/codeintel/cpp-correctness.js";
 
 const RUNTIME = "Engine/Source/Runtime";
 

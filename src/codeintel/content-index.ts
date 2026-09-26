@@ -22,7 +22,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ProjectContext } from "./config/project.js";
+import type { ProjectContext } from "../config/project.js";
 
 /** What a package file is, from its extension. */
 export type PackageKind = "asset" | "map";
