@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, experimental]
   pull_request:
-    branches: [main]
+    branches: [main, experimental]
 
 # Prevent two concurrent publish/docs runs from racing on the same main.
 # Do not cancel in-progress publishes - canceling mid-npm-publish leaves
@@ -122,7 +122,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/experimental')
     permissions:
       contents: write   # for git tag push and gh-release
       id-token: write   # for npm provenance
@@ -211,7 +211,18 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/release-version.mjs --version "${{ steps.version.outputs.local }}" \
-            | tee -a "$GITHUB_OUTPUT"
+            | tee -a "$GITHUB_OUTPUT" > /tmp/channel.txt
+          TAG=$(sed -n 's/^dist_tag=//p' /tmp/channel.txt)
+          # The experimental branch publishes -experimental.N only, and main
+          # never does, so an experimental line can be dropped cleanly.
+          if [ "$GITHUB_REF" = "refs/heads/experimental" ] && [ "$TAG" != "experimental" ]; then
+            echo "::error::The experimental branch publishes -experimental.N versions only; got dist-tag $TAG."
+            exit 1
+          fi
+          if [ "$GITHUB_REF" = "refs/heads/main" ] && [ "$TAG" = "experimental" ]; then
+            echo "::error::main never publishes to the experimental dist-tag."
+            exit 1
+          fi
 
       - name: Validate release inputs
         # Single required pre-publish input: a draft release tagged vX.Y.Z

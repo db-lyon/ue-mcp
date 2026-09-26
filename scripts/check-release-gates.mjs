@@ -95,7 +95,8 @@ export function versionDeltaProblem(fromRaw, toRaw) {
  *
  *   pull request  the base branch, so the gate sees the delta the merge
  *                 introduces
- *   push to main  the PREVIOUS commit on main. origin/main is HEAD here, so
+ *   push to a release branch (main, experimental)
+ *                 the PREVIOUS commit on that branch. The branch is HEAD here, so
  *                 comparing against it compares a version to itself and every
  *                 gate passes whatever the bump was
  *   local branch  the merge base with main, so a stale local main does not
@@ -104,6 +105,9 @@ export function versionDeltaProblem(fromRaw, toRaw) {
  * Returns null only when there genuinely is no baseline, which is a fresh
  * repository with one commit.
  */
+/** Branches CI publishes from. `experimental` carries -experimental.N versions only. */
+export const RELEASE_BRANCHES = ["main", "experimental"];
+
 export function baselineRef(env = process.env, run = git) {
   const tryRev = (ref) => {
     try {
@@ -126,7 +130,8 @@ export function baselineRef(env = process.env, run = git) {
     }
   })();
 
-  if (head === "main" || env.GITHUB_REF === "refs/heads/main") {
+  const releaseBranch = (b) => RELEASE_BRANCHES.includes(b);
+  if (releaseBranch(head) || releaseBranch((env.GITHUB_REF ?? "").replace("refs/heads/", ""))) {
     return tryRev("HEAD~1");
   }
 
