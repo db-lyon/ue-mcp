@@ -10,6 +10,7 @@ export const configActions: Record<string, ActionSpec> = {
   read_config: {
     kind: "handler",
     effect: "read",
+    options: { params: ["configName"] },
     description: "Read INI config. Params: configName (e.g. 'Engine', 'Game')",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -22,6 +23,7 @@ export const configActions: Record<string, ActionSpec> = {
   search_config: {
     kind: "handler",
     effect: "read",
+    options: { params: ["query"] },
     description: "Search INI files. Params: query",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -43,6 +45,7 @@ export const configActions: Record<string, ActionSpec> = {
   list_config_tags: {
     kind: "handler",
     effect: "read",
+    options: { params: [] },
     description: "Extract gameplay tags from config. Params: none",
     handler: async (ctx) => {
       ctx.project.ensureLoaded();

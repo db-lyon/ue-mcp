@@ -369,6 +369,7 @@ export const assetTool: ToolDef = categoryTool(
     migrate: {
       kind: "handler",
       effect: "mutate",
+      options: { params: ["assetPaths", "assetPath", "toEditor", "destinationContentDir", "includeDependencies?", "onConflict?", "allowDirty?", "dryRun?"], choices: [{ branches: [["assetPaths"], ["assetPath"]], required: true }, { branches: [["toEditor"], ["destinationContentDir"]], required: true }] },
       description:
         "Copy assets and their dependencies into ANOTHER project's Content directory - the scripted form of the content browser's Migrate (#760). " +
         "destinationContentDir is the TARGET project's Content folder. " +
@@ -398,6 +399,7 @@ export const assetTool: ToolDef = categoryTool(
     lock: {
       kind: "handler",
       effect: "mutate",
+      options: { params: ["assetPath", "ttlSeconds?", "sessionId?"] },
       description: "Acquire an exclusive lock on an asset for this editor. Returns acquired=true, or acquired=false with holder{sessionId,ttlSecondsRemaining} when another session holds it. Params: assetPath, ttlSeconds? (default 300), sessionId?",
       // The lock subsystem's own methods, which no action wraps and which
       // must never take a lock themselves.
@@ -410,6 +412,7 @@ export const assetTool: ToolDef = categoryTool(
     unlock: {
       kind: "handler",
       effect: "mutate",
+      options: { params: ["assetPath", "force?", "sessionId?"] },
       description: "Release an asset lock held by this editor (or force=true to break any holder's lock). Params: assetPath, force?, sessionId?",
       handler: async (ctx, p) => callOwnBridgeMethod(ctx, "release_lock", {
         path: p.assetPath ?? p.path,
@@ -421,6 +424,7 @@ export const assetTool: ToolDef = categoryTool(
     unlock_all: {
       kind: "handler",
       effect: "mutate",
+      options: { params: ["sessionId?"] },
       description: "Release every lock held by one session in a single call, returning the number released. Defaults to the addressed editor's own session; pass sessionId to clear a different one (for example after a crashed session left assets wedged). Params: sessionId?",
       handler: async (ctx, p) => callOwnBridgeMethod(ctx, "release_session_locks", {
         sessionId: lockOwner(ctx, p),

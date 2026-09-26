@@ -333,10 +333,25 @@ export interface BridgeActionSpec extends ActionSpecBase {
   handler?: never;
 }
 
+/**
+ * The parameters an in-process action takes: the source of its describe
+ * schema, its signature and its task's option schema.
+ *
+ * `params` names keys of the category's zod shape, which owns their types and
+ * descriptions; a trailing `?` marks one optional. A `choices` entry is a set
+ * of branches of which the caller supplies one.
+ */
+export interface HandlerOptions {
+  params: readonly string[];
+  choices?: readonly { branches: readonly (readonly string[])[]; required: boolean }[];
+}
+
 /** Runs in this Node process. It may still call the bridge itself. */
 export interface HandlerActionSpec extends ActionSpecBase {
   kind: "handler";
   handler: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
+  /** Declared parameters. Every built-in handler has one; tests hold them to it. */
+  options?: HandlerOptions;
   bridge?: never;
   mapParams?: never;
 }

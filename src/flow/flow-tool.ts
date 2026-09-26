@@ -65,6 +65,7 @@ export function createFlowTool(
     run: {
       kind: "handler",
       effect: "mutate",
+      options: { params: ["flowName", "skip?", "params?", "rollback_on_failure?"] },
       description:
         "Execute a named flow from ue-mcp.yml. Params: flowName, "
         + "skip? (step names or numbers), params? (runtime options merged into every step's options, "
@@ -86,6 +87,7 @@ export function createFlowTool(
     plan: {
       kind: "handler",
       effect: "read",
+      options: { params: ["flowName"] },
       description:
         "Show a flow's execution plan without running a step of it. Params: flowName. Returns the ordered plan.",
       handler: async (ctx, params) => planFlow(registryFor(ctx), configFor(ctx), ctx, params),
@@ -93,6 +95,7 @@ export function createFlowTool(
     list: {
       kind: "handler",
       effect: "read",
+      options: { params: [] },
       description:
         "List the flows available to this project, merged from ue-mcp.yml, the user-global config "
         + "and any loaded plugin. Params: none",

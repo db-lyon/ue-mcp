@@ -11,7 +11,8 @@
  *
  * This module answers the question directly, from three independent sources:
  *
- *   documented  the `Params:` clause authored in the action's description
+ *   documented  an in-process action's declared `options`, or else the
+ *               `Params:` clause authored in the action's description
  *   forwards    the keys the action's `mapParams` closure actually reads
  *   declared    the category's zod shape, which is what the wire accepts
  *
@@ -22,7 +23,7 @@
  */
 import { z } from "zod";
 import { ROUTING_PARAM_NAMES } from "./routing-params.js";
-import type { ActionEffectSource, ActionSpec, ToolDef } from "../core/types.js";
+import type { ActionEffectSource, ActionSpec, HandlerOptions, ToolDef } from "../core/types.js";
 import type { ParamSpec, ValueForm } from "./handler-spec.js";
 import type { ActionClass } from "./action-class.js";
 import { epicForwardedParams } from "./epic-input.js";
@@ -664,6 +665,52 @@ export function parseParams(description: string, known?: ReadonlySet<string>): D
 
 
 /**
+ * An in-process action's declared parameters, in the shape the prose reading
+ * produces, so both feed one schema builder.
+ */
+export function declaredOptions(options: HandlerOptions): DocumentedParams {
+  const alternatives: AlternativeGroup[] = (options.choices ?? []).map((choice) => ({
+    branches: choice.branches.map((branch) => [...branch]),
+    required: choice.required,
+  }));
+  const params = options.params.map((raw): DocumentedParam => {
+    const name = raw.endsWith("?") ? raw.slice(0, -1) : raw;
+    const param: DocumentedParam = { name, optional: raw.endsWith("?") };
+    const group = alternatives.findIndex((alt) => alt.branches.some((branch) => branch.includes(name)));
+    if (group >= 0) param.group = group;
+    return param;
+  });
+  return { params, alternatives };
+}
+
+/**
+ * The parameters an action declares in structured form: a handler's options,
+ * a bridge method's recorded C++ spec, an Epic tool's input schema. Undefined
+ * for an action that only describes them in prose, whose clause is read.
+ */
+function structuredParams(spec: ActionSpec): DocumentedParams | undefined {
+  if (spec.kind === "handler") return spec.options ? declaredOptions(spec.options) : undefined;
+  if (spec.kind !== "bridge") return undefined;
+  if (spec.paramSpec) {
+    // Aliases are named too: the category declares them, and describe folds them onto their parameter.
+    const params = spec.paramSpec.flatMap((p) =>
+      [p.name, ...(p.aliases ?? [])].map((name) => ({ name, optional: !p.required })));
+    return { params, alternatives: [] };
+  }
+  if (spec.epicSchema) {
+    const required = new Set(spec.epicSchema.required ?? []);
+    const names = Object.keys(spec.epicSchema.properties ?? {});
+    const params: DocumentedParam[] = names
+      .filter((name) => !ROUTING_PARAMS.has(name))
+      .map((name) => ({ name, optional: !required.has(name) }));
+    // A tool argument named like a dispatcher key travels inside `input`.
+    if (names.some((name) => ROUTING_PARAMS.has(name))) params.push({ name: "input", optional: true });
+    return { params, alternatives: [] };
+  }
+  return undefined;
+}
+
+/**
  * The parameter keys an action's `mapParams` closure reads.
  *
  * Reading the compiled source is the only way to see this: `mapParams` is an
@@ -749,7 +796,7 @@ export function actionSchema(tool: ToolDef, action: string): ActionSchema {
   // The category's declared keys settle the two spots where the clause alone
   // is ambiguous, so the parse is done against them rather than in the dark.
   const declaredNames = new Set(Object.keys(tool.schema));
-  const parsed = parseParams(description, declaredNames);
+  const parsed = structuredParams(spec) ?? parseParams(description, declaredNames);
   const documented = parsed.params;
   const forwards = new Set(forwardedParams(spec));
   const documentedByName = new Map(documented.map((d) => [d.name, d]));
