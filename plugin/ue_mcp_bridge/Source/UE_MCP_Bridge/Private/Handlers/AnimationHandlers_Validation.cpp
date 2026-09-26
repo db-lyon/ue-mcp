@@ -30,41 +30,13 @@
 
 namespace
 {
-	TSharedPtr<FJsonObject> AnimQaVectorJson(const FVector& Value)
-	{
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetNumberField(TEXT("x"), Value.X);
-		Result->SetNumberField(TEXT("y"), Value.Y);
-		Result->SetNumberField(TEXT("z"), Value.Z);
-		return Result;
-	}
-
-	TSharedPtr<FJsonObject> AnimQaQuatJson(const FQuat& Value)
-	{
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetNumberField(TEXT("x"), Value.X);
-		Result->SetNumberField(TEXT("y"), Value.Y);
-		Result->SetNumberField(TEXT("z"), Value.Z);
-		Result->SetNumberField(TEXT("w"), Value.W);
-		return Result;
-	}
-
-	TSharedPtr<FJsonObject> AnimQaRotatorJson(const FRotator& Value)
-	{
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetNumberField(TEXT("pitch"), Value.Pitch);
-		Result->SetNumberField(TEXT("yaw"), Value.Yaw);
-		Result->SetNumberField(TEXT("roll"), Value.Roll);
-		return Result;
-	}
-
 	TSharedPtr<FJsonObject> AnimQaTransformJson(const FTransform& Value)
 	{
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetObjectField(TEXT("translation"), AnimQaVectorJson(Value.GetTranslation()));
-		Result->SetObjectField(TEXT("rotation"), AnimQaQuatJson(Value.GetRotation()));
-		Result->SetObjectField(TEXT("rotationDegrees"), AnimQaRotatorJson(Value.Rotator()));
-		Result->SetObjectField(TEXT("scale"), AnimQaVectorJson(Value.GetScale3D()));
+		Result->SetObjectField(TEXT("translation"), MCPVec3ToJsonObject(Value.GetTranslation()));
+		Result->SetObjectField(TEXT("rotation"), MCPQuatToJsonObject(Value.GetRotation()));
+		Result->SetObjectField(TEXT("rotationDegrees"), MCPRotatorToJsonObject(Value.Rotator()));
+		Result->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Value.GetScale3D()));
 		return Result;
 	}
 
@@ -673,8 +645,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 	Summary->SetBoolField(TEXT("hasRootMotion"), bHasRootMotion);
 	Summary->SetNumberField(TEXT("rootDisplacementCm"), RootDisplacement);
 	Summary->SetNumberField(TEXT("maxRootSpeedCmPerSecond"), MaxRootSpeed);
-	Summary->SetObjectField(TEXT("boundsMinCm"), AnimQaVectorJson(BoundsMin));
-	Summary->SetObjectField(TEXT("boundsMaxCm"), AnimQaVectorJson(BoundsMax));
+	Summary->SetObjectField(TEXT("boundsMinCm"), MCPVec3ToJsonObject(BoundsMin));
+	Summary->SetObjectField(TEXT("boundsMaxCm"), MCPVec3ToJsonObject(BoundsMax));
 	TSharedPtr<FJsonObject> LoopSummary = MakeShared<FJsonObject>();
 	LoopSummary->SetBoolField(TEXT("evaluated"), bLoop);
 	LoopSummary->SetBoolField(TEXT("rootExcludedFromPoseSeam"), bHasRootMotion);

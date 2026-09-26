@@ -74,31 +74,12 @@
 #define UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
 
 #if UE_MCP_HAS_5_8_API
-static TSharedPtr<FJsonObject> AnimationVectorToJson(const FVector& Value)
-{
-	TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
-	Json->SetNumberField(TEXT("x"), Value.X);
-	Json->SetNumberField(TEXT("y"), Value.Y);
-	Json->SetNumberField(TEXT("z"), Value.Z);
-	return Json;
-}
-
-static TSharedPtr<FJsonObject> AnimationQuaternionToJson(const FQuat& Value)
-{
-	TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
-	Json->SetNumberField(TEXT("x"), Value.X);
-	Json->SetNumberField(TEXT("y"), Value.Y);
-	Json->SetNumberField(TEXT("z"), Value.Z);
-	Json->SetNumberField(TEXT("w"), Value.W);
-	return Json;
-}
-
 static TSharedPtr<FJsonObject> AnimationTransformToJson(const FTransform& Value)
 {
 	TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
-	Json->SetObjectField(TEXT("translation"), AnimationVectorToJson(Value.GetTranslation()));
-	Json->SetObjectField(TEXT("rotationQuaternion"), AnimationQuaternionToJson(Value.GetRotation()));
-	Json->SetObjectField(TEXT("scale"), AnimationVectorToJson(Value.GetScale3D()));
+	Json->SetObjectField(TEXT("translation"), MCPVec3ToJsonObject(Value.GetTranslation()));
+	Json->SetObjectField(TEXT("rotationQuaternion"), MCPQuatToJsonObject(Value.GetRotation()));
+	Json->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Value.GetScale3D()));
 	return Json;
 }
 
@@ -1997,7 +1978,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRetargeter(const TSharedPtr<FJs
 			TSharedPtr<FJsonObject> PoseObj = MakeShared<FJsonObject>();
 			PoseObj->SetStringField(TEXT("name"), PoseName.ToString());
 			PoseObj->SetBoolField(TEXT("current"), PoseName == CurrentPoseName);
-			PoseObj->SetObjectField(TEXT("rootTranslationOffset"), AnimationVectorToJson(Pose->GetRootTranslationDelta()));
+			PoseObj->SetObjectField(TEXT("rootTranslationOffset"), MCPVec3ToJsonObject(Pose->GetRootTranslationDelta()));
 
 			TArray<FName> OffsetBones;
 			Pose->GetAllDeltaRotations().GetKeys(OffsetBones);
@@ -2013,7 +1994,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRetargeter(const TSharedPtr<FJs
 				if (!Rotation) continue;
 				TSharedPtr<FJsonObject> OffsetObj = MakeShared<FJsonObject>();
 				OffsetObj->SetStringField(TEXT("bone"), BoneName.ToString());
-				OffsetObj->SetObjectField(TEXT("rotationQuaternion"), AnimationQuaternionToJson(*Rotation));
+				OffsetObj->SetObjectField(TEXT("rotationQuaternion"), MCPQuatToJsonObject(*Rotation));
 				RotationOffsets.Add(MakeShared<FJsonValueObject>(OffsetObj));
 			}
 			PoseObj->SetArrayField(TEXT("rotationOffsets"), RotationOffsets);
@@ -2746,7 +2727,7 @@ static TSharedPtr<FJsonObject> CaptureRetargetPosePayload(
 		Offset->SetStringField(TEXT("bone"), Delta.Key.ToString());
 		// configure_ik_retargeter rejects a quaternion that is not normalized
 		// within 1e-4, so normalize on the way out rather than on replay.
-		Offset->SetObjectField(TEXT("rotationQuaternion"), AnimationQuaternionToJson(Delta.Value.GetNormalized()));
+		Offset->SetObjectField(TEXT("rotationQuaternion"), MCPQuatToJsonObject(Delta.Value.GetNormalized()));
 		Offsets.Add(MakeShared<FJsonValueObject>(Offset));
 	}
 	PoseJson->SetArrayField(TEXT("rotationOffsets"), Offsets);

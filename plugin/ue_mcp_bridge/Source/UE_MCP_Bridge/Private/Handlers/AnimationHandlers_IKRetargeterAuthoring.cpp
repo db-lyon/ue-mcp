@@ -292,16 +292,6 @@ namespace
 		return Count;
 	}
 
-	TSharedPtr<FJsonObject> QuaternionJson(const FQuat& Rotation)
-	{
-		auto Result = MakeShared<FJsonObject>();
-		Result->SetNumberField(TEXT("x"), Rotation.X);
-		Result->SetNumberField(TEXT("y"), Rotation.Y);
-		Result->SetNumberField(TEXT("z"), Rotation.Z);
-		Result->SetNumberField(TEXT("w"), Rotation.W);
-		return Result;
-	}
-
 	TArray<TSharedPtr<FJsonValue>> TextArrayJson(const TArray<FText>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Result;
@@ -672,7 +662,7 @@ namespace
 		{
 			auto Offset = MakeShared<FJsonObject>();
 			Offset->SetStringField(TEXT("bone"), Bone.ToString());
-			Offset->SetObjectField(TEXT("rotationQuaternion"), QuaternionJson(Pose.GetDeltaRotationForBone(Bone)));
+			Offset->SetObjectField(TEXT("rotationQuaternion"), MCPQuatToJsonObject(Pose.GetDeltaRotationForBone(Bone)));
 			RotationOffsets.Add(MakeShared<FJsonValueObject>(Offset));
 		}
 		Result->SetArrayField(TEXT("rotationOffsets"), RotationOffsets);
