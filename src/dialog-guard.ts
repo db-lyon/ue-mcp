@@ -30,7 +30,6 @@ import type { ElicitFn, ElicitPrimitiveSchema } from "./types.js";
 import type { DialogMode } from "./user-state.js";
 import { elicitationNeedsRelay } from "./client-quirks.js";
 
-/** The dialog, as every layer describes it. */
 /** One tickable row of a dialog that asks a question per item. */
 export interface DialogItem {
   index: number;

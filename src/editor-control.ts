@@ -22,7 +22,7 @@ import {
 import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "./editor-target.js";
 import { startProgress } from "./ui/progress.js";
 import { getDialogMode, getUserStatePath, type DialogMode } from "./user-state.js";
-import { DialogGuard, STATUS_STALE_AFTER_MS, oneLine, type DialogPhase } from "./dialog-guard.js";
+import { oneLine } from "./dialog-guard.js";
 import type { ElicitFn, ProgressFn } from "./types.js";
 
 // Process control is cross-platform: the editor binary path and the running-
@@ -601,11 +601,6 @@ export async function startEditor(
     };
   }
 
-  // Past both "one is already up" checks, so this call really is launching a
-  // new editor. Whatever the previous one was told or was in the middle of
-  // does not belong to it, and its port is very likely the same one.
-  forgetPreviousEditors();
-
   const editorExe = findEditorExecutable(project);
   if (!editorExe) {
     return {
@@ -833,49 +828,6 @@ function requestPythonSelfQuit(port: number, host: string): Promise<boolean> {
 }
 
 /**
- * A modal dialog blocking the editor, read straight out of the engine.
- *
- * `list_dialogs` is modal-safe, so it answers while the game thread is parked
- * inside the modal loop, which is exactly when every other handler times out.
- * The message is carried WHOLE: this is the text a person reads to decide, and
- * a question cut off mid-sentence is a question answered on incomplete
- * information.
- */
-export interface BlockingDialog {
-  title: string;
-  /** The complete message text, never truncated. */
-  message: string;
-  /** Every button label, in the order the dialog lays them out. */
-  buttons: string[];
-  /**
-   * Each button paired with the exact call that presses it.
-   *
-   * `respondWith` is the ACTUATION half and it is omitted in defer mode, where
-   * the report exists so a person can recognise the window in front of them
-   * and answer it there. Handing the call back in defer left the mode differing
-   * from auto in prose alone, and an agent optimising for completion uses what
-   * it is given.
-   */
-  choices: { buttonLabel: string; respondWith?: string }[];
-}
-
-/**
- * What is blocking this editor: a dialog, nothing, or no answer at all.
- *
- * The third case used to be folded into the second. Silence, a socket error
- * and an 8s timeout were all reported as "no dialog", and the caller acts on
- * that answer by sending a quit, so a slow reply from an editor sitting on a
- * modal was enough to send one anyway. The guard treats identical silence as
- * "not evidence"; two readings of one question with opposite failure
- * semantics, on the route where being wrong closes an editor.
- *
- * Callers must handle `unreadable`. Nothing may be quit on the strength of it.
- */
-type DialogRead = { dialog: BlockingDialog | null; readable: boolean };
-
-const UNREADABLE: DialogRead = { dialog: null, readable: false };
-
-/**
  * The dialog handling mode that applied, and why it applied.
  *
  * The "why" is reported because the mode is resolved from three places and a
@@ -957,73 +909,6 @@ export function resolveDialogMode(opts: {
           "default, because this MCP client did not advertise elicitation, and the fallback is defer" +
           ` rather than auto${ignored}`,
       };
-}
-
-/**
- * What happened to the button the user picked.
- *
- * Three outcomes, not two. `confirmed` separates "the editor acknowledged the
- * press" from "the frame went out and nothing came back", which is what an 8s
- * timeout or a socket error on callBridgeOnce leaves behind - AFTER the press
- * has been sent. Collapsing the second into "nothing happened" is how a report
- * came to say the editor was untouched after the user chose Save All and
- * packages were written.
- */
-export interface DialogPress {
-  /** The label the user picked, which is the label that was sent. */
-  button: string;
-  /** True when the editor answered that it pressed it. */
-  confirmed: boolean;
-}
-
-/**
- * The fallback guards, one per editor rather than one per call.
- *
- * A guard built fresh for each call remembers nothing it was told, and two of
- * the guard's rules need a record that OUTLIVES the call that wrote it: a
- * dialog is handed back whole on one call and its form goes up on the next,
- * and a dialog already put to somebody is not asked about twice. Rebuilding
- * the guard per call restarts both, so interactive relayed the same dialog
- * forever and its form never went up at all.
- *
- * Keyed by the editor this talks to, so two editors do not share a record.
- * Deps are replaced on reuse because they carry the CURRENT call's elicit
- * function and resolved mode, while what the guard knows is what must persist.
- *
- * A caller with a session passes its own guard and never gets here.
- */
-const fallbackGuards = new Map<string, DialogGuard>();
-
-/**
- * Editors that have been asked to quit and have not gone yet.
- *
- * Whether a quit went out is a fact about the EDITOR, not about the call that
- * sent it, and handing the dialog over before asking about it splits one stop
- * across two calls: the quit goes out on the first, and the second writes the
- * report. Read per call, that second call says the editor was never asked to
- * quit, which is the opposite of what happened, next to a dialog that only
- * exists because it was.
- *
- * Keyed by editor and cleared when it goes, so a relaunched one starts clean.
- */
-const quitsInFlight = new Set<string>();
-
-/**
- * Drop everything remembered about the editors that were here before.
- *
- * Both records above are keyed by where an editor listens, and a port is
- * reused: the next editor for a project usually publishes the same one. A
- * relaunched editor would otherwise inherit its predecessor's records and be
- * told a quit is in flight for a process that no longer exists, or skip
- * handing over the first dialog it raises because the previous editor's was
- * already handed over.
- *
- * A launch is the one moment that is certainly a new editor, whatever killed
- * the last one, so it is where both are cleared.
- */
-function forgetPreviousEditors(): void {
-  quitsInFlight.clear();
-  fallbackGuards.clear();
 }
 
 /**
@@ -1480,9 +1365,6 @@ export async function stopEditor(
 
   // No dialog handling and no dialog state. The gate refuses this action while a
   // modal is up, and reports a prompt the quit raises on the next call.
-  /** This editor, for the records that outlive one call. */
-  const editorKey = `${host}:${port}`;
-
   // The quit goes out, and the EDITOR decides what to do about unsaved work.
   //
   // This used to pass requireClean, which makes the handler refuse and name
@@ -1564,18 +1446,12 @@ export async function stopEditor(
     }
   }
 
-  // The quit is out. Remembered against the editor rather than this call, so a
-  // retry that finds a dialog raised behind it reports that the quit went out
-  // instead of claiming the editor was never asked.
-  quitsInFlight.add(editorKey);
-
   // Confirm via the project's own bridge port closing - specific to this editor.
   //
   // Polls the socket and nothing else.
   for (let i = 0; i < 20; i++) {
     await new Promise((resolve) => setTimeout(resolve, confirmPollMs));
     if (!(await isBridgeAvailable(host, port))) {
-      quitsInFlight.delete(editorKey);
       if (exitPid !== null && !(await waitForEditorExit(projectPath, exitPid, confirmPollMs))) {
         const exitState = await readEngineState(projectPath, { probeWindows: false });
         return {
@@ -1628,7 +1504,6 @@ export async function stopEditor(
 export async function restartEditor(
   project: ProjectContext,
   bridge?: { connect: (timeoutMs?: number) => Promise<void> } & ConnectedEditorSource,
-  opts: { confirmPollMs?: number } = {},
 ): Promise<RestartEditorResult> {
   // Same rule as start and stop: without a loaded project there is no editor
   // this is about, and the machine-wide answer is somebody else's editor (#819).
