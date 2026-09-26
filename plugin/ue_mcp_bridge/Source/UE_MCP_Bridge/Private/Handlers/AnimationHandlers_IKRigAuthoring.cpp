@@ -869,10 +869,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 	}
 
 	Rig->MarkPackageDirty();
-	if (!UEditorAssetLibrary::SaveLoadedAsset(Rig, false))
+	FString RigSaveError;
+	if (!SaveAssetPackageChecked(Rig, RigSaveError))
 	{
 		const bool bUndone = Undo();
-		return Error(TEXT("save_failed"), TEXT("IK Rig changes could not be saved"), bUndone);
+		return Error(TEXT("save_failed"), TEXT("IK Rig changes could not be saved: ") + RigSaveError, bUndone);
 	}
 
 	const FIKRigSkeleton& FinalSkeleton = Controller->GetIKRigSkeleton();

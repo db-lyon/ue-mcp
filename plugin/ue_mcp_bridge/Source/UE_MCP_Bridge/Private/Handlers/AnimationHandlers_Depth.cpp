@@ -583,9 +583,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveMontageSection(const TSharedPtr
 	Montage->RefreshCacheData();
 	Montage->PostEditChange();
 	Montage->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Montage, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("alreadyDeleted"), false);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -680,9 +680,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveAnimCurve(const TSharedPtr<FJso
 	}
 
 	AnimSeq->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, AnimSeq, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("alreadyDeleted"), false);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -871,9 +871,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddNotifyState(const TSharedPtr<FJson
 	AnimAsset->RefreshCacheData();
 	AnimAsset->PostEditChange();
 	AnimAsset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, AnimAsset, AssetPath);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("notifyName"), NotifyName);
@@ -971,9 +971,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveNotifyState(const TSharedPtr<FJ
 	AnimAsset->RefreshCacheData();
 	AnimAsset->PostEditChange();
 	AnimAsset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, AnimAsset, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("alreadyDeleted"), false);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -1167,6 +1167,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSyncMarkers(const TSharedPtr<FJson
 
 	TArray<TSharedPtr<FJsonValue>> After;
 	TArray<TSharedPtr<FJsonValue>> RegisteredOnSkeleton;
+	bool bSaved = true;
+	FString SaveError;
+	FString UnsavedPath = AssetPath;
 
 	if (!bUnchanged)
 	{
@@ -1190,7 +1193,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSyncMarkers(const TSharedPtr<FJson
 			if (RegisteredOnSkeleton.Num() > 0)
 			{
 				Skeleton->MarkPackageDirty();
-				UEditorAssetLibrary::SaveLoadedAsset(Skeleton, /*bOnlyIfIsDirty*/ true);
+				if (!SaveAssetPackageChecked(Skeleton, SaveError))
+				{
+					bSaved = false;
+					UnsavedPath = Skeleton->GetPathName();
+				}
 			}
 		}
 #endif
@@ -1199,7 +1206,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSyncMarkers(const TSharedPtr<FJson
 		AnimSeq->RefreshSyncMarkerDataFromAuthored();
 		AnimSeq->PostEditChange();
 		AnimSeq->MarkPackageDirty();
-		UEditorAssetLibrary::SaveAsset(AssetPath);
+		FString SequenceSaveError;
+		if (!SaveAssetPackageChecked(AnimSeq, SequenceSaveError) && bSaved)
+		{
+			bSaved = false;
+			SaveError = SequenceSaveError;
+			UnsavedPath = AssetPath;
+		}
 	}
 
 	// Read back what is actually on the asset, rather than what was requested.
@@ -1225,6 +1238,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSyncMarkers(const TSharedPtr<FJson
 	else
 	{
 		MCPSetUpdated(Result);
+		MCPNoteSaveOutcome(Result, UnsavedPath, bSaved, SaveError);
 	}
 	Result->SetBoolField(TEXT("unchanged"), bUnchanged);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);

@@ -2037,10 +2037,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 		return MCPError(BakeError.IsEmpty() ? TEXT("Failed to begin Control Rig edit") : BakeError);
 	}
 
-	if (!UEditorAssetLibrary::SaveLoadedAsset(Sequence, false))
+	FString SequenceSaveError;
+	if (!SaveAssetPackageChecked(Sequence, SequenceSaveError))
 	{
 		if (bCreated) UEditorAssetLibrary::DeleteAsset(PackagePath + TEXT("/") + AssetName);
-		return MCPError(TEXT("Control Rig edit was created in memory but the LevelSequence could not be saved"));
+		return MCPError(TEXT("Control Rig edit was created in memory but the LevelSequence could not be saved: ") + SequenceSaveError);
 	}
 	FControlRigSequenceFocusGuard Focus(Sequence);
 	if (!Focus.IsReady()) return MCPError(TEXT("Control Rig edit was created but the LevelSequence could not be focused for inspection"));
@@ -3808,12 +3809,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 		return MCPError(ApplyError);
 	}
 	Session.Sequence->MarkPackageDirty();
-	if (!UEditorAssetLibrary::SaveLoadedAsset(Session.Sequence, false))
+	FString SequenceSaveError;
+	if (!SaveAssetPackageChecked(Session.Sequence, SequenceSaveError))
 	{
 		const bool bRolledBack = GEditor && GEditor->UndoTransaction();
-		return MCPError(bRolledBack
-			? TEXT("Control Rig edits could not be saved and were rolled back")
-			: TEXT("Control Rig edits could not be saved and the editor transaction could not be rolled back"));
+		return MCPError(FString(bRolledBack
+			? TEXT("Control Rig edits could not be saved and were rolled back: ")
+			: TEXT("Control Rig edits could not be saved and the editor transaction could not be rolled back: "))
+			+ SequenceSaveError);
 	}
 
 	auto Result = MCPSuccess();
@@ -4095,10 +4098,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 		return MCPError(TEXT("Unreal failed to export the Control Rig edit to an AnimSequence"));
 	}
 	Output->MarkPackageDirty();
-	if (!UEditorAssetLibrary::SaveLoadedAsset(Output, false))
+	FString OutputSaveError;
+	if (!SaveAssetPackageChecked(Output, OutputSaveError))
 	{
 		UEditorAssetLibrary::DeleteAsset(PackagePath + TEXT("/") + AssetName);
-		return MCPError(TEXT("AnimSequence export completed in memory but the output asset could not be saved"));
+		return MCPError(TEXT("AnimSequence export completed in memory but the output asset could not be saved: ") + OutputSaveError);
 	}
 
 	auto Result = MCPSuccess();

@@ -268,9 +268,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchSchema(const TSharedP
 		Schema->AddDefaultChannels();
 	}
 	MCPPoseSearch::Finalize(Schema);
-	UEditorAssetLibrary::SaveLoadedAsset(Schema);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Schema, Schema->GetPathName());
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), Schema->GetPathName());
 	Res->SetStringField(TEXT("skeletonPath"), SkeletonPath);
@@ -371,9 +371,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaPoseChannel(const 
 
 	Schema->AddChannel(Channel);
 	MCPPoseSearch::Finalize(Schema);
-	UEditorAssetLibrary::SaveLoadedAsset(Schema);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Schema, AssetPath);
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetStringField(TEXT("channelType"), TEXT("Pose"));
@@ -463,9 +463,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaTrajectoryChannel(
 
 	Schema->AddChannel(Channel);
 	MCPPoseSearch::Finalize(Schema);
-	UEditorAssetLibrary::SaveLoadedAsset(Schema);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Schema, AssetPath);
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetStringField(TEXT("channelType"), TEXT("Trajectory"));
@@ -579,9 +579,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMirrorDataTable(const TSharedPt
 #if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
 	Table->UpdateFromFindReplaceExpressions(UMirrorDataTable::FFindReplaceOptions::Sync());
 #endif
-	UEditorAssetLibrary::SaveLoadedAsset(Table);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Table, Table->GetPathName());
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), Table->GetPathName());
 	Res->SetStringField(TEXT("skeletonPath"), SkeletonPath);
@@ -644,9 +644,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchNormalizationSet(cons
 		}
 	}
 
-	UEditorAssetLibrary::SaveLoadedAsset(NormSet);
-
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, NormSet, NormSet->GetPathName());
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), NormSet->GetPathName());
 	Res->SetNumberField(TEXT("databaseCount"), AddedDatabases.Num());
@@ -728,9 +727,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 #endif
 
 	Database->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(Database);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Database, AssetPath);
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetNumberField(TEXT("continuingPoseCostBias"), Database->ContinuingPoseCostBias);
@@ -849,9 +848,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMotionMatchingNode(const TSharedPt
 	}
 
 	FKismetEditorUtilities::CompileBlueprint(AnimBP);
-	SaveAssetPackage(AnimBP);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("assetPath"), AssetPath);
 	Res->SetStringField(TEXT("graphName"), GraphName);
@@ -950,9 +949,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseHistoryNode(const TSharedPtr<F
 	}
 
 	FKismetEditorUtilities::CompileBlueprint(AnimBP);
-	SaveAssetPackage(AnimBP);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("assetPath"), AssetPath);
 	Res->SetStringField(TEXT("graphName"), GraphName);
@@ -1102,11 +1101,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 	Graph->NotifyGraphChanged();
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
 	FKismetEditorUtilities::CompileBlueprint(AnimBP);
-	SaveAssetPackage(AnimBP);
 
 	const bool bConnected = DatabasePin->LinkedTo.Contains(ReturnPin);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("assetPath"), AssetPath);
 	Res->SetStringField(TEXT("graphName"), GraphName);
@@ -1216,9 +1215,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddSequenceEvaluator(const TSharedPtr
 	}
 
 	FKismetEditorUtilities::CompileBlueprint(AnimBP);
-	SaveAssetPackage(AnimBP);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("assetPath"), AssetPath);
 	Res->SetStringField(TEXT("graphName"), GraphName);
@@ -1309,7 +1308,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BindAnimNodeFunction(const TSharedPtr
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
 	FKismetEditorUtilities::CompileBlueprint(AnimBP);
-	SaveAssetPackage(AnimBP);
 
 	// A bound anim-node function only runs if it is BlueprintThreadSafe with a
 	// compatible signature; the compiler rejects it otherwise. Surface that rather
@@ -1317,6 +1315,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BindAnimNodeFunction(const TSharedPtr
 	const bool bCompiled = (AnimBP->Status != EBlueprintStatus::BS_Error);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("assetPath"), AssetPath);
 	Res->SetStringField(TEXT("graphName"), GraphName);

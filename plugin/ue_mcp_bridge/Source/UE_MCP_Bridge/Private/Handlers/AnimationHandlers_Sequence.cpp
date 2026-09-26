@@ -641,9 +641,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 	NewSeq->PostEditChange();
 	NewSeq->MarkPackageDirty();
 
-	UEditorAssetLibrary::SaveAsset(FullAssetPath);
-
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, NewSeq, FullAssetPath);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), FullAssetPath);
 	Result->SetStringField(TEXT("name"), Name);
@@ -830,7 +829,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 
 	AnimSeq->PostEditChange();
 	AnimSeq->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	// Did the keys actually move? Compare what was written against what was
 	// captured, so a replayed step reports a no-op instead of hollow success.
@@ -844,6 +842,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 	}
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, AnimSeq, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), bUnchanged);
 	Result->SetBoolField(TEXT("trackCreated"), !bTrackExisted);
@@ -1030,9 +1029,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeKeyframesBatch(const TSharedPtr<F
 
 	AnimSeq->PostEditChange();
 	AnimSeq->MarkPackageDirty();
-	if (bSave) UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	if (bSave) MCPAnimSaveOutcome(Result, AnimSeq, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), BonesActuallyChanged == 0);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -1226,7 +1225,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject
 	MCPSetCreated(Result);
 
 	AnimSeq->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	MCPAnimSaveOutcome(Result, AnimSeq, AssetPath);
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("curveName"), CurveName);
@@ -1336,9 +1335,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetAnimCurveKeys(const TSharedPtr<FJs
 	}
 
 	Seq->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Seq, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Seq, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("curveName"), CurveName);
@@ -1549,9 +1548,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyAnimationModifier(const TSharedP
 	Instance->ApplyToAnimationSequence(Seq);
 
 	Seq->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Seq, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Seq, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("modifierClass"), ModClass->GetName());
@@ -1586,9 +1585,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimComposite(const TSharedPtr<
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 	UAnimComposite* Composite = Created.Asset;
 	Composite->SetSkeleton(Skeleton);
-	UEditorAssetLibrary::SaveLoadedAsset(Composite);
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Composite, Composite->GetPathName());
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Composite->GetPathName());
 	MCPSetDeleteAssetRollback(Result, Composite->GetPathName());
@@ -1766,6 +1765,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 	TSharedPtr<FJsonObject> SharedPrevProps;
 	bool bPrevPropsAgree = true;
 	int32 ChangedCount = 0;
+	int32 SaveFailedCount = 0;
+	FString LastSaveError;
 
 	for (const TSharedPtr<FJsonValue>& PathVal : *PathsArr)
 	{
@@ -1837,7 +1838,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 		}
 
 		Seq->PostEditChange();
-		UEditorAssetLibrary::SaveLoadedAsset(Seq, /*bOnlyIfIsDirty=*/false);
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(Seq, SaveError);
+		Entry->SetBoolField(TEXT("saved"), bSaved);
+		if (!bSaved)
+		{
+			Entry->SetStringField(TEXT("saveError"), SaveError);
+			++SaveFailedCount;
+			LastSaveError = FString::Printf(TEXT("'%s': %s"), *ResolvedPath, *SaveError);
+		}
 
 		TSharedPtr<FJsonObject> PrevProps = MakeShared<FJsonObject>();
 		PrevProps->SetBoolField(TEXT("enableRootMotion"), bPrevEnableRootMotion);
@@ -1879,6 +1888,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 	Result->SetNumberField(TEXT("updated"), UpdatedCount);
 	Result->SetNumberField(TEXT("skipped"), SkippedCount);
 	Result->SetArrayField(TEXT("results"), Results);
+	if (SaveFailedCount > 0)
+	{
+		// Each entry carries its own saved/saveError; the call fails when any did not reach disk.
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetNumberField(TEXT("saveFailed"), SaveFailedCount);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d sequence(s) were changed in memory but not written, last %s"), SaveFailedCount, *LastSaveError));
+	}
 
 	if (UpdatedCount > 0 && bPrevPropsAgree && SharedPrevProps.IsValid())
 	{
@@ -2048,9 +2065,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeRootMotionFromBone(const TSharedP
 	Seq->bEnableRootMotion = true;
 	Seq->PostEditChange();
 	Seq->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Seq, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Seq, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("sourceBone"), SourceBoneName);

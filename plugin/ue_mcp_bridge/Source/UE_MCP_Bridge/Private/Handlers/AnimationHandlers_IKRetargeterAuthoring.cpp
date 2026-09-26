@@ -1324,12 +1324,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRetargeter(const TSharedPt
 			? MutationError
 			: MutationError + TEXT("; the editor transaction could not be rolled back"));
 	}
-	if (!SaveAssetPackage(Retargeter))
+	FString RetargeterSaveError;
+	if (!SaveAssetPackageChecked(Retargeter, RetargeterSaveError))
 	{
 		const bool bRolledBack = GEditor && GEditor->UndoTransaction();
-		return MCPError(bRolledBack
-			? TEXT("IK Retargeter configuration could not be saved and was rolled back")
-			: TEXT("IK Retargeter configuration could not be saved and the editor transaction could not be rolled back"));
+		return MCPError(FString(bRolledBack
+			? TEXT("IK Retargeter configuration could not be saved and was rolled back: ")
+			: TEXT("IK Retargeter configuration could not be saved and the editor transaction could not be rolled back: "))
+			+ RetargeterSaveError);
 	}
 
 	auto Result = MCPSuccess();
