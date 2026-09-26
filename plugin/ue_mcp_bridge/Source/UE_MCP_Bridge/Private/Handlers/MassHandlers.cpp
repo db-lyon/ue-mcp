@@ -288,12 +288,8 @@ TSharedPtr<FJsonValue> FMassHandlers::EnsureEntityConfig(const TSharedPtr<FJsonO
 		return MCPError(TEXT("onConflict must be one of: skip, error, update"));
 	}
 
-	const TSharedPtr<FJsonValue> TraitsValue = TryGetParam(Params, TEXT("traits"));
 	const TArray<TSharedPtr<FJsonValue>>* TraitArray = nullptr;
-	if (!TraitsValue.IsValid() || !TraitsValue->TryGetArray(TraitArray) || !TraitArray)
-	{
-		return MCPError(TEXT("Missing required 'traits' array"));
-	}
+	if (auto TraitsErr = RequireArray(Params, TEXT("traits"), TraitArray)) return TraitsErr;
 
 	struct FRequestedTrait { UClass* Class = nullptr; const TSharedPtr<FJsonObject>* Properties = nullptr; };
 	TArray<FRequestedTrait> Requested;

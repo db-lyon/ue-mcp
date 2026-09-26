@@ -667,7 +667,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
 	int32 RowIndex = INDEX_NONE;
-	const bool bHasIndex = TryGetNumberParam(Params, TEXT("index"), RowIndex);
+	const TSharedPtr<FJsonValue> IndexErr = RequireNumber(Params, TEXT("index"), RowIndex);
 	// Every parameter is read before anything can fail (#1057).
 	const FString OutputPath = OptionalString(Params, TEXT("output"));
 	const FString OutputType = OptionalString(Params, TEXT("outputType"), TEXT("asset"));
@@ -677,10 +677,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 	TryGetArrayParam(Params, TEXT("cells"), Cells);
 	const TSharedPtr<FJsonObject>* Inputs = nullptr;
 	TryGetObjectParam(Params, TEXT("inputs"), Inputs);
-	if (!bHasIndex)
-	{
-		return MCPError(TEXT("Missing required parameter 'index'"));
-	}
+	if (IndexErr) return IndexErr;
 
 	UChooserTable* Table = LoadChooserTable(TablePath);
 	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
@@ -809,10 +806,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	FString TablePath;
 	if (auto Err = RequireString(Params, TEXT("table"), TablePath)) return Err;
 	int32 RowIndex = INDEX_NONE;
-	if (!TryGetNumberParam(Params, TEXT("index"), RowIndex))
-	{
-		return MCPError(TEXT("Missing required parameter 'index'"));
-	}
+	if (auto IndexErr = RequireNumber(Params, TEXT("index"), RowIndex)) return IndexErr;
 
 	UChooserTable* Table = LoadChooserTable(TablePath);
 	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
