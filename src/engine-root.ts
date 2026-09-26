@@ -91,6 +91,23 @@ export interface EngineLookup {
 }
 
 /**
+ * The lookup for one project: its .uproject, its association and its
+ * per-project `editor:` config, so the editor and the build tool resolve alike.
+ */
+export function engineLookupFor(
+  projectPath: string | null | undefined,
+  engineAssociation?: string | null,
+  editorConfig?: { path?: string; buildToolPath?: string },
+): EngineLookup {
+  return {
+    projectPath: projectPath ?? null,
+    engineAssociation: engineAssociation ?? null,
+    configBuildToolPath: editorConfig?.buildToolPath ?? null,
+    configEditorPath: editorConfig?.path ?? null,
+  };
+}
+
+/**
  * The I/O the resolver does, injectable so the ordering can be tested against
  * synthetic layouts without a registry, a launcher manifest or an editor log.
  */

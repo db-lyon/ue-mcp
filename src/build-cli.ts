@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as path from "node:path";
-import { buildProject } from "./editor-control.js";
+import { buildProject } from "./editor-build.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject, isUProjectPath } from "./uproject-path.js";
 import { RESET, BOLD, GREEN, RED, CYAN } from "./ui/ansi.js";
@@ -38,7 +38,7 @@ async function main(argv: string[]) {
   console.log(`  Path:    ${uprojectPath}`);
   console.log("");
 
-  const result = await buildProject(uprojectPath);
+  const result = await buildProject(uprojectPath, { onOutput: (text) => process.stdout.write(text) });
 
   console.log("");
   if (result.success) {
