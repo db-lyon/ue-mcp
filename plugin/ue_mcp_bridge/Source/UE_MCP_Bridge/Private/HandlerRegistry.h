@@ -148,13 +148,6 @@ struct FMCPParamSpec
 		return Copy;
 	}
 
-	FMCPParamSpec LiteralNumber(double Value) const
-	{
-		FMCPParamSpec Copy = *this;
-		Copy.LiteralValue = MakeShared<FJsonValueNumber>(Value);
-		return Copy;
-	}
-
 	FMCPParamSpec WithFields(const TArray<FMCPParamField>& InFields) const
 	{
 		FMCPParamSpec Copy = *this;

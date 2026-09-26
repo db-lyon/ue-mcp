@@ -70,7 +70,6 @@ public:
 	// thread that holds the editor open for exactly that long. Once this is set
 	// an in-flight wait gives up at its next slice.
 	void BeginShutdown() { bShuttingDown = true; }
-	bool IsShuttingDown() const { return bShuttingDown; }
 
 private:
 	FThreadSafeBool bEditorReady{false};
