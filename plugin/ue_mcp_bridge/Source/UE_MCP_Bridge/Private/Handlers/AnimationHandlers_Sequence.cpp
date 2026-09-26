@@ -577,11 +577,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ScanAnimationTracks(const TSharedPtr<
 }
 
 // ---------------------------------------------------------------------------
-// create_anim_blueprint
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
 // create_sequence - Create a blank AnimSequence on a skeleton
 // Params: name, skeletonPath, packagePath?, numFrames?, frameRate?
 // ---------------------------------------------------------------------------

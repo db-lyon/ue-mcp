@@ -1308,9 +1308,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadStateMachine(const TSharedPtr<FJs
 
 // ─── #23 / #91  read_anim_graph ─────────────────────────────────────
 
-
-// ─── #23 / #91  read_anim_graph ─────────────────────────────────────
-
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimGraph(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -1397,9 +1394,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimGraph(const TSharedPtr<FJsonO
 
 	return MCPResult(Result);
 }
-
-// ─── #79 / #24  add_curve ───────────────────────────────────────────
-
 
 // ─── #93  create_ik_rig ─────────────────────────────────────────────
 
@@ -1507,9 +1501,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 
 	return MCPResult(Result);
 }
-
-// ─── #93  read_ik_rig ───────────────────────────────────────────────
-
 
 // ─── #93  read_ik_rig ───────────────────────────────────────────────
 
@@ -1711,9 +1702,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObjec
 
 	return MCPResult(Result);
 }
-
-// ─── #11  list_control_rig_variables ────────────────────────────────
-
 
 // ─── #98 create_ik_retargeter ────────────────────────────────────────
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<FJsonObject>& Params)
