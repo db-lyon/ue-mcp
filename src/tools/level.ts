@@ -1,9 +1,9 @@
-import { z } from "zod";
 import { categoryTool, type ToolDef } from "../types.js";
 import { PAGINATION_SCHEMA } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/level.generated.js";
 import { specBp, schema as specSchema } from "./specs/level.generated.js";
-import { specBp as editorSpecBp } from "./specs/editor.generated.js";
+import { specBp as editorSpecBp, schema as editorSpecSchema } from "./specs/editor.generated.js";
+import { borrowSchema } from "../handler-spec.js";
 
 export const levelTool: ToolDef = categoryTool(
   "level",
@@ -148,12 +148,10 @@ export const levelTool: ToolDef = categoryTool(
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
-    // registration. The keys below serve the hand-written create and
-    // build_lighting, which dispatch to editor handlers, and
-    // tests/unit/handler-specs.test.ts holds a shared key to one type.
+    // registration. create and build_lighting dispatch to editor handlers, so
+    // the keys only they read come from the editor spec.
     ...specSchema,
-    templateLevel: z.string().optional(),
-    quality: z.string().optional(),
+    ...borrowSchema(editorSpecSchema, ["templateLevel", "quality"]),
     // The shared cursor and limit, declared once for every paged action in this
     // category. Undeclared keys are stripped, so an action that documents
     // `cursor` without this would return an unpaged first page and call it a

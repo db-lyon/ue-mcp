@@ -391,6 +391,23 @@ export function makeSpecBp(clauses: Readonly<Record<string, string>>, specs: Han
   };
 }
 
+/**
+ * Named keys of another category's generated schema, for an action that
+ * dispatches to that category's handler. Throws on a key the spec lacks.
+ */
+export function borrowSchema(
+  schema: Readonly<Record<string, z.ZodType>>,
+  keys: readonly string[],
+): Record<string, z.ZodType> {
+  const out: Record<string, z.ZodType> = {};
+  for (const key of keys) {
+    const entry = schema[key];
+    if (!entry) throw new Error(`borrowSchema: the generated schema declares no '${key}'`);
+    out[key] = entry;
+  }
+  return out;
+}
+
 const ZOD_BASE: Record<ParamType, () => z.ZodTypeAny> = {
   string: () => z.string(),
   number: () => z.number(),

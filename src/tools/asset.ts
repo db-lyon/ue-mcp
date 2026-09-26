@@ -7,7 +7,8 @@ import type { EditorSession } from "../session.js";
 import type { ToolContext } from "../types.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/asset.generated.js";
 import { specBp, schema as specSchema } from "./specs/asset.generated.js";
-import { specBp as gameplaySpecBp } from "./specs/gameplay.generated.js";
+import { specBp as gameplaySpecBp, schema as gameplaySpecSchema } from "./specs/gameplay.generated.js";
+import { borrowSchema } from "../handler-spec.js";
 
 /**
  * Who a lock belongs to: the addressed editor, or this process when there is
@@ -463,14 +464,12 @@ export const assetTool: ToolDef = categoryTool(
     // stripped, so an action that documents `cursor` without this would return
     // an unpaged first page and call it a success.
     ...PAGINATION_SCHEMA,
-    // Hand-written actions only: search, migrate, the IMC aliases and the locks.
-    searchAll: z.boolean().optional().describe("Search all content roots (plugins, engine content) not just /Game/"),
-    mappingContext: z.string().optional().describe("InputMappingContext asset path for add_input_mapping (#525)"),
-    inputAction: z.string().optional().describe("InputAction asset path for add_input_mapping (#525)"),
-    imcPath: z.string().optional(),
-    inputActionPath: z.string().optional(),
+    // The IMC actions dispatch to gameplay handlers, so their keys come from
+    // that spec. `key` is also the StringTable entry key, so it names both.
+    ...borrowSchema(gameplaySpecSchema, ["mappingContext", "inputAction", "imcPath", "inputActionPath", "mappingIndex"]),
     key: z.string().optional().describe("Key name for add_input_mapping or StringTable entry key (e.g. 'Mouse2D', 'LeftMouseButton') (#525)"),
-    mappingIndex: z.number().optional().describe("Index of an IMC mapping for remove_input_mapping (#525)"),
+    // Hand-written actions only: search, migrate and the locks.
+    searchAll: z.boolean().optional().describe("Search all content roots (plugins, engine content) not just /Game/"),
     exportName: z.string().optional(),
     allowDirty: z.boolean().optional().describe("migrate: migrate the on-disk version of an asset with unsaved edits (#760)"),
     destinationContentDir: z.string().optional().describe("migrate: the TARGET project's Content folder (#760)"),
