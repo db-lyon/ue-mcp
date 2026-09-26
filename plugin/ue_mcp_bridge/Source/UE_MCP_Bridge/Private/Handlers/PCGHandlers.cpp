@@ -1821,12 +1821,7 @@ namespace
 		OutComp = nullptr;
 		OutActor = nullptr;
 
-		UWorld* World = nullptr;
-		if (GEditor && GEditor->GetEditorWorldContext().World())
-		{
-			World = GEditor->GetEditorWorldContext().World();
-		}
-		if (!World) return MCPError(TEXT("Editor world not available"));
+		REQUIRE_EDITOR_WORLD(World);
 
 		TSharedPtr<FJsonValue> ActorErr;
 		OutActor = MCPResolveActor(World, Params, ActorErr);
