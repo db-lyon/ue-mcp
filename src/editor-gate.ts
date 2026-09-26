@@ -20,7 +20,8 @@
  */
 import { requiresExplicitEditor, type ActionClass } from "./action-class.js";
 import { taskEffect } from "./action-effects.js";
-import { EDITOR_TARGET_PARAM, stripAction, stripEditorTarget, type ToolDef } from "./types.js";
+import { stripAction, stripEditorTarget, type ToolDef } from "./types.js";
+import { EDITOR_TARGET_PARAM } from "./routing-params.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microCallParams } from "./lean-context.js";
 import type { EditorSession, SessionRegistry } from "./session.js";
 

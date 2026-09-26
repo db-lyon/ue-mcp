@@ -18,6 +18,7 @@ import {
   type RoutedCall,
 } from "./editor-gate.js";
 import { isDirectiveResponse } from "./directive.js";
+import { EDITOR_TARGET_PARAM } from "./routing-params.js";
 import {
   injectEditorTarget,
   removeEditorTarget,
@@ -25,7 +26,6 @@ import {
   removeMigrateTarget,
   stripEditorTarget,
   sessionContext,
-  EDITOR_TARGET_PARAM,
   type ToolDef,
   type ToolContext,
   type PluginInfo,

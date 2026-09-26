@@ -18,9 +18,9 @@ import {
   injectMigrateTarget,
   removeEditorTarget,
   removeMigrateTarget,
-  MIGRATE_TARGET_PARAM,
   type ToolContext,
 } from "../../src/types.js";
+import { MIGRATE_TARGET_PARAM } from "../../src/routing-params.js";
 
 let root: string;
 let alphaBridge: FakeBridge;

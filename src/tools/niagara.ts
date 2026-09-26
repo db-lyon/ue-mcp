@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { categoryTool, EDITOR_TARGET_PARAM, type ToolContext, type ToolDef } from "../types.js";
+import { categoryTool, type ToolContext, type ToolDef } from "../types.js";
+import { EDITOR_TARGET_PARAM } from "../routing-params.js";
 import { PAGINATION_SCHEMA } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/niagara.generated.js";
 import { specBp, schema as specSchema } from "./specs/niagara.generated.js";

@@ -8,6 +8,7 @@ import { McpError, ErrorCode } from "./errors.js";
 import { MAX_BRIDGE_TIMEOUT_MS } from "./bridge-timeouts.js";
 import { unknownActionMessage } from "./action-schema.js";
 import { prepareCall, finishCall, forwardToBridge } from "./call-pipeline.js";
+import { EDITOR_TARGET_PARAM, MIGRATE_TARGET_PARAM } from "./routing-params.js";
 
 /**
  * Re-exported from its home in `call-pipeline.ts`, where the whole inbound
@@ -375,14 +376,6 @@ export interface RegistryActionSpec extends ActionSpecBase {
  */
 export type ActionSpec = BridgeActionSpec | HandlerActionSpec | RegistryActionSpec;
 
-/**
- * The per-call editor target (#817). Injected into every category tool only
- * while this server drives more than one editor, so a single-editor client
- * sees the schema it has always seen. Declared once here because the flow
- * tool, the micro gateway, and plugin-provided categories inject the same
- * parameter and must describe it identically.
- */
-export const EDITOR_TARGET_PARAM = "editor";
 
 /**
  * Add the target parameter to a tool. Refuses when the tool already declares
@@ -418,11 +411,6 @@ export function removeEditorTarget(tool: ToolDef): boolean {
   return true;
 }
 
-/**
- * The destination editor for an action that moves content between two of them
- * (#817). `editor` says where a call runs; this says where its output lands.
- */
-export const MIGRATE_TARGET_PARAM = "toEditor";
 
 /** Does any of this tool's actions move content into a second editor? */
 export function hasDestinationEditorAction(tool: ToolDef): boolean {
