@@ -162,14 +162,9 @@ the original editor world. Run it through the automation harness against
 Smoke tests run against a **live editor** and verify tool functionality end-to-end.
 
 ```bash
-# Specific suite
-npm run test:level
-npm run test:blueprint
-npm run test:material
-# ... 16 suites total - see scripts in package.json
-
-# All suites (Vitest)
-npm test
+# Every Vitest smoke suite, or the ones whose file name matches a filter
+npm run test:suites
+npm run test:suites -- level
 
 # Full smoke test runner - exercises every registered handler
 npm run test:smoke
