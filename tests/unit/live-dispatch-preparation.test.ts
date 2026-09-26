@@ -37,31 +37,7 @@ import { widgetTool } from "../../src/tools/widget.js";
 import { ProjectContext } from "../../src/project.js";
 import type { IBridge } from "../../src/bridge.js";
 import type { FlowContext } from "../../src/flow/context.js";
-
-interface Recorded {
-  method: string;
-  params: Record<string, unknown>;
-  timeoutMs?: number;
-}
-
-interface RecordingBridge extends IBridge {
-  calls: Recorded[];
-}
-
-function recordingBridge(answer: unknown = { success: true }): RecordingBridge {
-  const calls: Recorded[] = [];
-  return {
-    isConnected: true,
-    connect: async () => {},
-    retargetProject: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
-    getTarget: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
-    call: async (method: string, params?: Record<string, unknown>, timeoutMs?: number) => {
-      calls.push({ method, params: params ?? {}, timeoutMs });
-      return answer;
-    },
-    calls,
-  } as unknown as RecordingBridge;
-}
+import { recordingBridge } from "../fake-bridge.js";
 
 function flowContext(bridge: IBridge): FlowContext {
   return { bridge, project: new ProjectContext() };

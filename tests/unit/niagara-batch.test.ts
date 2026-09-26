@@ -4,27 +4,7 @@ import type { ToolContext, ToolDef } from "../../src/types.js";
 import { bp, categoryTool } from "../../src/category-tool.js";
 import { injectEditorTarget } from "../../src/target-params.js";
 import { niagaraTool } from "../../src/tools/niagara.js";
-
-interface BridgeCall {
-  method: string;
-  params?: Record<string, unknown>;
-  timeoutMs?: number;
-}
-
-function recordingBridge(result: unknown = { kept: 1, dropped: 2 }): IBridge & { calls: BridgeCall[] } {
-  const calls: BridgeCall[] = [];
-  return {
-    calls,
-    isConnected: true,
-    connect: async () => {},
-    retargetProject: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
-    getTarget: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
-    call: async (method, params, timeoutMs) => {
-      calls.push({ method, params, timeoutMs });
-      return result;
-    },
-  };
-}
+import { recordingBridge } from "../fake-bridge.js";
 
 function activeContext(bridge: IBridge, tool: ToolDef): ToolContext {
   return {
@@ -41,8 +21,8 @@ function rebuilt(actions = { ...niagaraTool.actions }): ToolDef {
 describe("niagara batch dispatch (#1081)", () => {
   it("uses the same timeout, path repair, and projection pipeline as a direct call", async () => {
     const tool = rebuilt();
-    const directBridge = recordingBridge();
-    const batchBridge = recordingBridge();
+    const directBridge = recordingBridge({ kept: 1, dropped: 2 });
+    const batchBridge = recordingBridge({ kept: 1, dropped: 2 });
     const op = {
       action: "get_info",
       assetPath: "\\Game\\VFX\\NS_Test",
@@ -70,7 +50,7 @@ describe("niagara batch dispatch (#1081)", () => {
 
   it("hands the batch's timeoutMs to every bridge op that names none of its own", async () => {
     const tool = rebuilt();
-    const bridge = recordingBridge();
+    const bridge = recordingBridge({ kept: 1, dropped: 2 });
 
     await tool.handler(activeContext(bridge, tool), {
       action: "batch",
@@ -104,7 +84,7 @@ describe("niagara batch dispatch (#1081)", () => {
   });
 
   it("does not fall back when the active graph omits the action or category", async () => {
-    const bridge = recordingBridge();
+    const bridge = recordingBridge({ kept: 1, dropped: 2 });
     const { get_info: _removed, ...actions } = niagaraTool.actions;
     const tool = rebuilt(actions);
 
@@ -179,7 +159,7 @@ describe("niagara batch dispatch (#1081)", () => {
   });
 
   it("reports a session with no tool surface per op instead of rejecting the batch", async () => {
-    const bridge = recordingBridge();
+    const bridge = recordingBridge({ kept: 1, dropped: 2 });
     const tool = rebuilt();
     const noSurface = {
       ...activeContext(bridge, tool),
@@ -200,7 +180,7 @@ describe("niagara batch dispatch (#1081)", () => {
   });
 
   it("runs the active category's parameter folding for each operation", async () => {
-    const bridge = recordingBridge();
+    const bridge = recordingBridge({ kept: 1, dropped: 2 });
     const tool = categoryTool(
       "niagara",
       "Test Niagara graph.",
@@ -255,10 +235,10 @@ describe("niagara batch dispatch (#1081)", () => {
 
   it("stops at an op whose handler answered success:false, keeping its body", async () => {
     const failed = { success: false, error: "System not found: /Game/VFX/Missing" };
-    const bridge = recordingBridge();
+    const bridge = recordingBridge({ kept: 1, dropped: 2 });
     let n = 0;
     bridge.call = async (method, params, timeoutMs) => {
-      bridge.calls.push({ method, params, timeoutMs });
+      bridge.calls.push({ method, params: params ?? {}, timeoutMs });
       return ++n === 1 ? failed : { ok: true };
     };
     const tool = rebuilt();

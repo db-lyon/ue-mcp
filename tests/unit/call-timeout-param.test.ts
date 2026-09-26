@@ -18,25 +18,7 @@ import { takeTimeout } from "../../src/call-pipeline.js";
 import { MAX_BRIDGE_TIMEOUT_MS } from "../../src/bridge-timeouts.js";
 import { buildMicroGateway } from "../../src/micro-context.js";
 import type { IBridge } from "../../src/bridge.js";
-
-interface Recorded {
-  method: string;
-  params?: Record<string, unknown>;
-  timeoutMs?: number;
-}
-
-function recordingBridge(): IBridge & { calls: Recorded[] } {
-  const calls: Recorded[] = [];
-  return {
-    calls,
-    isConnected: true,
-    connect: async () => {},
-    call: async (method: string, params?: Record<string, unknown>, timeoutMs?: number) => {
-      calls.push({ method, params, timeoutMs });
-      return { success: true };
-    },
-  } as unknown as IBridge & { calls: Recorded[] };
-}
+import { recordingBridge } from "../fake-bridge.js";
 
 function fixture(): ToolDef {
   return categoryTool("demo", "Demo", {

@@ -16,6 +16,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
+import type { IBridge } from "../src/bridge.js";
 
 /** One call this bridge received. */
 export interface RecordedCall {
@@ -200,4 +201,33 @@ export class FakeBridge {
     this.sockets.clear();
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
   }
+}
+
+/** One call an in-process recording bridge received. */
+export interface RecordedBridgeCall {
+  method: string;
+  params: Record<string, unknown>;
+  timeoutMs?: number;
+}
+
+export type RecordingBridge = IBridge & { calls: RecordedBridgeCall[] };
+
+/**
+ * An in-process bridge, no socket: records every call with its budget and
+ * answers each with `answer`. For tests about what a handler sends.
+ */
+export function recordingBridge(answer: unknown = { success: true }): RecordingBridge {
+  const calls: RecordedBridgeCall[] = [];
+  const target = { projectPath: null, port: 0, portSource: "default" as const, verified: true };
+  return {
+    calls,
+    isConnected: true,
+    connect: async () => {},
+    retargetProject: () => target,
+    getTarget: () => target,
+    call: async (method: string, params?: Record<string, unknown>, timeoutMs?: number) => {
+      calls.push({ method, params: params ?? {}, timeoutMs });
+      return answer;
+    },
+  } as unknown as RecordingBridge;
 }
