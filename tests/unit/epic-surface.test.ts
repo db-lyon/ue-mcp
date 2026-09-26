@@ -71,7 +71,7 @@ describe("native tool surface filtering", () => {
 
     expect(actionEnumValues(mixed.schema.action)).toEqual(expect.arrayContaining(["keep", "describe"]));
     expect(actionEnumValues(mixed.schema.action)).not.toContain("epic_drop");
-    await expect(catalog.actions.describe.handler({} as never, { category: "mixed" }))
+    await expect(catalog.actions.describe.handler!({} as never, { category: "mixed" }))
       .resolves.toMatchObject({ signatures: ["keep(retained, shared)"] });
   });
 
@@ -124,7 +124,7 @@ describe("native tool surface filtering", () => {
     expect(animation.description).toContain("- epic_add_actors:");
 
     const catalog = applyLeanContext(union).find((tool) => tool.name === "catalog")!;
-    await expect(catalog.actions.describe.handler(
+    await expect(catalog.actions.describe.handler!(
       {} as never,
       { category: "animation", method: "epic_add_actors" },
     )).resolves.toMatchObject({ action: "epic_add_actors" });

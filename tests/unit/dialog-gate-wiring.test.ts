@@ -426,7 +426,8 @@ describe("interactive mode, end to end, with a client that can be asked", () => 
     );
     const { ElicitRequestSchema } = await import("@modelcontextprotocol/sdk/types.js");
     liveClient.setRequestHandler(ElicitRequestSchema, async (req) => {
-      const schema = req.params.requestedSchema as {
+      // Only a form-mode elicitation carries a schema; a URL-mode one has no buttons.
+      const schema = ("requestedSchema" in req.params ? req.params.requestedSchema : {}) as {
         properties?: { button?: { enum?: string[] } };
       };
       const buttons = schema.properties?.button?.enum ?? [];

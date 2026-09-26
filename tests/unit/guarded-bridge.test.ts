@@ -47,7 +47,7 @@ describe("GuardedBridge pipeline", () => {
   });
 
   it("runs a write-scoped guard's before with resolved existing files", async () => {
-    const before = vi.fn(async () => {});
+    const before = vi.fn(async (_ctx: CallContext) => {});
     const { inner, gb } = bridgeWith(writeGuard("sc", before));
 
     await gb.call("save_asset", { assetPath: "/Game/Foo" });
@@ -60,7 +60,7 @@ describe("GuardedBridge pipeline", () => {
   });
 
   it("skips a write-scoped guard for reads and for not-yet-existing files", async () => {
-    const before = vi.fn(async () => {});
+    const before = vi.fn(async (_ctx: CallContext) => {});
     const { inner, gb } = bridgeWith(writeGuard("sc", before));
 
     await gb.call("read_asset", { assetPath: "/Game/Foo" });      // read verb -> no write
@@ -71,7 +71,7 @@ describe("GuardedBridge pipeline", () => {
   });
 
   it("an every-call guard runs on reads too", async () => {
-    const before = vi.fn(async () => {});
+    const before = vi.fn(async (_ctx: CallContext) => {});
     const audit: BridgeGuard = { name: "audit", before };
     const { gb } = bridgeWith(audit);
     await gb.call("read_asset", { assetPath: "/Game/Foo" });
