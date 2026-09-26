@@ -21,11 +21,11 @@
 
 #include "Editor.h"
 #include "Runtime/Launch/Resources/Version.h"
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
+#include "MCPEngineCompat.h"
+#if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
 #include "PropertyBindingPath.h"
 #include "PropertyBindingTypes.h"
 #endif
-#include "MCPEngineCompat.h"
 #include "UObject/UObjectIterator.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
@@ -33,12 +33,6 @@
 #include "StateTreeTaskBase.h"
 #include "StateTreeEditorTypes.h"
 #include "HandlerStateTreeSchema.h"
-
-#define UE_MCP_HAS_STATETREE_STATE_DESCRIPTION (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
-#define UE_MCP_HAS_STATETREE_STATE_CUSTOM_TICK_RATE (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
-#define UE_MCP_HAS_STATETREE_COMPILER_TOKENIZED_MESSAGES (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
-#define UE_MCP_HAS_STATETREE_EXECUTION_RUNTIME_DATA (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
-#define UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
 
 #if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
 using FUE_MCPStateTreePropertyPath = FPropertyBindingPath;
@@ -950,7 +944,7 @@ static bool AddEditorNodeToArray(TArray<FStateTreeEditorNode>& Arr, const FStrin
 	// allocates the InstanceObject for UObject-backed (Blueprint-wrapped) nodes -
 	// is UE 5.8+. On 5.7 we fall back to the struct-only path; BP-wrapped nodes
 	// therefore do not get their InstanceObject auto-wired on 5.7 (#681).
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_STATETREE_NODE_OUTER_INIT
 	if (Outer)
 	{
 		EditorNode.InitializeAs(Outer, NodeStruct);
@@ -965,7 +959,7 @@ static bool AddEditorNodeToArray(TArray<FStateTreeEditorNode>& Arr, const FStrin
 			EditorNode.Instance.InitializeAs(InstanceType);
 		}
 	}
-#if !(ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
+#if !UE_MCP_HAS_STATETREE_NODE_OUTER_INIT
 	(void)Outer; // unused on 5.7 (the Outer-based path above is 5.8+ only)
 #endif
 
@@ -2815,7 +2809,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 			{
 				// FStateTreeEditorNode::GetInstanceDataID() is UE 5.8+. On 5.7 the
 				// node's editor ID keys the instance data, so match on that.
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 				if (EN.GetInstanceDataID() != TargetID) continue;
 #else
 				if (EN.ID != TargetID) continue;
