@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { listHandlerFiles } from './lib/cpp-registrations.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -108,10 +109,10 @@ export function reportingCategories(registrySource = fs.readFileSync(REGISTRY_CP
 export function auditDirectParamReads(dir = HANDLERS_DIR) {
   /** @type {Map<string, CategoryReads>} */
   const byCategory = new Map();
-  for (const fileName of fs.readdirSync(dir).sort()) {
+  for (const { name: fileName, path: filePath } of listHandlerFiles(dir)) {
     const category = categoryOfFile(fileName);
     if (!category) continue;
-    const reads = findDirectReads(fs.readFileSync(path.join(dir, fileName), 'utf8'));
+    const reads = findDirectReads(fs.readFileSync(filePath, 'utf8'));
     const entry = byCategory.get(category) ?? { category, count: 0, files: [] };
     if (reads.length > 0) entry.files.push({ file: fileName, reads });
     entry.count += reads.length;

@@ -47,9 +47,8 @@
  * Run: node scripts/audit-handler-conventions.mjs [--json]
  * Gated by tests/unit/handler-conventions.test.ts.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { HANDLERS_DIR, REGISTRATION_RE } from "./lib/cpp-registrations.mjs";
+import { readFileSync } from "node:fs";
+import { HANDLERS_DIR, REGISTRATION_RE, listHandlerFiles } from "./lib/cpp-registrations.mjs";
 
 export { HANDLERS_DIR };
 
@@ -200,9 +199,8 @@ function memberDefinitions(text) {
 export function readRegistrations() {
   const re = new RegExp(REGISTRATION_RE);
   const out = new Map();
-  for (const entry of readdirSync(HANDLERS_DIR)) {
-    if (!entry.endsWith(".cpp")) continue;
-    const body = readFileSync(join(HANDLERS_DIR, entry), "utf8");
+  for (const { name: entry, path } of listHandlerFiles()) {
+    const body = readFileSync(path, "utf8");
     const defs = memberDefinitions(body);
     for (const m of body.matchAll(re)) {
       let className = m[2] ?? null;
@@ -259,9 +257,8 @@ export function findHandlerBody(className, methodName, sources) {
 /** Every handler source, read once. */
 export function readSources() {
   const out = new Map();
-  for (const entry of readdirSync(HANDLERS_DIR)) {
-    if (!entry.endsWith(".cpp")) continue;
-    out.set(entry, readFileSync(join(HANDLERS_DIR, entry), "utf8"));
+  for (const { name, path } of listHandlerFiles()) {
+    out.set(name, readFileSync(path, "utf8"));
   }
   return out;
 }

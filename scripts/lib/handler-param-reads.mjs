@@ -13,8 +13,9 @@
 // depth. A key it cannot resolve to a literal is reported as opaque rather
 // than guessed, so the test fails loudly instead of passing on a partial read.
 
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { listHandlerFiles } from "./cpp-registrations.mjs";
 import {
   HANDLERS_DIR,
   findHandlerBody,
@@ -25,13 +26,11 @@ import {
 
 const MODULE_ROOT = join(HANDLERS_DIR, "..", "..");
 
-/** Every handler source plus the module headers, where shared helpers live. */
+/** Every handler source plus the module headers, subfolders included, where shared helpers live. */
 export function readAllSources() {
   const out = new Map(readSources());
   for (const dir of [join(MODULE_ROOT, "Public"), join(MODULE_ROOT, "Private")]) {
-    for (const entry of readdirSync(dir)) {
-      if (entry.endsWith(".h")) out.set(entry, readFileSync(join(dir, entry), "utf8"));
-    }
+    for (const { name, path } of listHandlerFiles(dir, [".h"])) out.set(name, readFileSync(path, "utf8"));
   }
   return out;
 }
