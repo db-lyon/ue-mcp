@@ -21,7 +21,6 @@ export const chooserTool: ToolDef = categoryTool(
     list_object_references: specBp("read", "List every leaf object reference reachable from a chooser, descending through nested chooser tables. list_rows renders those as an opaque resultType:NestedChooser with an empty output, so the actual PoseSearchDatabase/asset paths were invisible. Each entry reports the owning table, the exact location (e.g. ResultsStructs[3].Asset), the struct type and the current object path. classFilter matches the referenced object's class, pathFilter is a substring on the path (#754).", "chooser_list_object_references"),
     remap_object_references: specBp("mutate", "Repoint object references throughout a chooser's nested structure. Either an exact swap (from + to) or a folder rewrite (fromPrefix + toPrefix), which is the 'adopt vendor choosers into our namespace' case. DRY RUN BY DEFAULT - pass dryRun=false to apply. Object-typed targets are class-checked before assignment; the chooser is recompiled and left dirty rather than saved (#754).", "chooser_remap_object_references"),
   },
-  undefined,
   {
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration.

@@ -1279,7 +1279,6 @@ export const feedbackTool: ToolDef = categoryTool(
       },
     },
   },
-  undefined,
   {
     title: z
       .string()

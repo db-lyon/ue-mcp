@@ -25,7 +25,6 @@ function mixedTool(): ToolDef {
         (p) => ({ nativeOnly: p.nativeOnly, shared: p.shared }),
       ),
     },
-    undefined,
     {
       retained: z.string().optional(),
       shared: z.string().optional(),

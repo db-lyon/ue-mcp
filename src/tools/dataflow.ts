@@ -18,6 +18,5 @@ export const dataflowTool: ToolDef = categoryTool(
   "dataflow",
   "Dataflow graphs: node and pin authoring, variables, comment boxes, templates, and creation of Dataflow-compatible assets (Chaos geometry and simulation graphs). Requires UE 5.8+ with the Dataflow toolsets available.",
   { ...epicActions },
-  undefined,
   { ...epicSchema },
 );

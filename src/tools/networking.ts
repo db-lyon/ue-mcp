@@ -17,7 +17,6 @@ export const networkingTool: ToolDef = categoryTool(
     set_replicate_movement: specBp("mutate", "Set replicated movement on a Blueprint's CDO. Reports existed=true and unchanged=true when the class already had this value, and otherwise rolls back through this same action with the previous flag, with nothing lost.", "set_replicate_movement"),
     get_info:              specBp("read", "Get networking info.", "get_networking_info"),
   },
-  undefined,
   {
     // #1057: every key the networking handlers declare, generated from their
     // C++ registrations.

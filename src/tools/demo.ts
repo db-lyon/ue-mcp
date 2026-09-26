@@ -10,7 +10,6 @@ export const demoTool: ToolDef = categoryTool(
     cleanup: specBp("mutate", "Remove demo assets and actors. Switches editor to /Game/MCP_Home before deleting so the editor is never left on an Untitled map. unchanged=true only when nothing was deleted AND the home level already existed AND the editor was already in it, because anchoring to that level is itself a change this call makes. No inverse of its own - rebuilding means running step 1 through 19 again.", "demo_cleanup"),
     go_home: specBp("mutate", "Switch the editor to /Game/MCP_Home (creating it on first use). Use this before any operation that would leave the editor on an Untitled map. Reports alreadyOpen=true when the home level was already the open one, and otherwise rolls back by reopening the level that WAS open through level(load) - marked lossy when the home level had to be created, since that package stays on disk. A previously open map with no content path (unsaved or Untitled) has no inverse and the response says so.", "demo_go_home"),
   },
-  undefined,
   {
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration.

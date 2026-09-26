@@ -48,7 +48,6 @@ const probeTool = categoryTool(
       }),
     },
   },
-  undefined,
   { note: z.string().optional() } as Record<string, z.ZodType>,
 );
 

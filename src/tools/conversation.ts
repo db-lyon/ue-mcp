@@ -13,6 +13,5 @@ export const conversationTool: ToolDef = categoryTool(
   "conversation",
   "Conversation graphs (UConversationDatabase): dialogue nodes, node connections, sub-nodes, speakers, and entry points. Requires UE 5.8+ with the Conversation toolsets available.",
   { ...epicActions },
-  undefined,
   { ...epicSchema },
 );

@@ -604,15 +604,13 @@ export function categoryTool(
   name: string,
   summary: string,
   actions: Record<string, ActionSpec>,
-  actionDocs?: string,
   extraSchema?: Record<string, z.ZodType>,
   options?: CategoryOptions,
 ): ToolDef {
   const actionNames = Object.keys(actions) as [string, ...string[]];
   const routing = routingSchema(actionNames);
 
-  // Auto-generate action docs from per-action descriptions if not provided
-  const docs = actionDocs ?? actionNames
+  const docs = actionNames
     .map((a) => {
       const desc = actions[a].description;
       return desc ? `- ${a}: ${desc}` : `- ${a}`;
@@ -693,7 +691,7 @@ export function categoryTool(
   // real: the handler closes over `actions`, so a copy that only replaced the
   // record would still dispatch against the original's.
   def.rebuild = (nextActions) =>
-    categoryTool(name, summary, nextActions, actionDocs, extraSchema, options);
+    categoryTool(name, summary, nextActions, extraSchema, options);
   return def;
 }
 

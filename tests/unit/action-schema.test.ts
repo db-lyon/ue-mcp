@@ -172,7 +172,6 @@ describe("action parameter schema", () => {
       "probe",
       "Probe.",
       { alpha: bp("read", "Alpha. Params: none", "probe_alpha") },
-      undefined,
       {
         action: z.string().optional().describe("hostile"),
         timeoutMs: z.string().optional().describe("hostile"),
@@ -396,7 +395,7 @@ describe("actionSchema", () => {
   it("still reads an alias in a hand-written clause as a choice", () => {
     const tool = categoryTool("example", "Example", {
       pick: bp("read", "Pick. Params: actorLabel (or actorPath)", "pick"),
-    }, undefined, { actorLabel: z.string().optional(), actorPath: z.string().optional() });
+    }, { actorLabel: z.string().optional(), actorPath: z.string().optional() });
     const schema = actionSchema(tool, "pick");
     expect(schema.alternatives).toEqual([{ branches: [["actorLabel"], ["actorPath"]], required: true }]);
     expect(schema.params.every((p) => p.aliases === undefined)).toBe(true);
@@ -405,7 +404,7 @@ describe("actionSchema", () => {
   it("preserves nested fields, array items, enums, defaults and required nullable values", () => {
     const tool = categoryTool("example", "Example", {
       inspect: bp("read", "Inspect. Params: request", "inspect"),
-    }, undefined, {
+    }, {
       request: z.object({
         targets: z.array(z.object({
           name: z.string().nullable(),
@@ -427,7 +426,7 @@ describe("actionSchema", () => {
   it("bounds nested discovery and explicitly marks omitted detail", () => {
     let nested: z.ZodTypeAny = z.string();
     for (let i = 0; i < 10; i++) nested = z.object({ child: nested });
-    const tool = categoryTool("example", "Example", { inspect: bp("read", "Inspect. Params: request", "inspect") }, undefined, { request: nested });
+    const tool = categoryTool("example", "Example", { inspect: bp("read", "Inspect. Params: request", "inspect") }, { request: nested });
     let result = actionSchema(tool, "inspect").params.find((p) => p.name === "request")!;
     for (let i = 0; i < 6; i++) result = result.properties!.child as typeof result;
     expect(result.truncated).toBe(true);

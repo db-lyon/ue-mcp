@@ -157,7 +157,6 @@ describe("dispatch integration", () => {
       "probe", "test",
       { go: { kind: "handler", effect: "read", description: "Params: assetPath", handler: async () => ({ ok: true }) } },
       undefined,
-      undefined,
       {
         normalizeParams: (p) => {
           seenByCategory = p.assetPath;

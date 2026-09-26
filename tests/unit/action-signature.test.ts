@@ -127,7 +127,7 @@ describe("signatures from the declared shape", () => {
   it("covers an in-process action with no spec from describe_action's reading", () => {
     const tool = categoryTool("demo", "Demo.", {
       run: { kind: "handler", effect: "read", description: "Run. Params: name, limit?", handler: async () => ({}) },
-    }, undefined, { name: z.string().optional(), limit: z.number().optional() });
+    }, { name: z.string().optional(), limit: z.number().optional() });
     expect(actionSignature(tool, "run")).toBe("run(name, limit?:n)");
   });
 });

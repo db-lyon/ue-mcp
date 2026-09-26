@@ -196,7 +196,6 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
     "catalog",
     "Discovery for lean context mode: search and describe the full action catalog on demand.",
     actions,
-    undefined,
     {
       query: z.string().optional().describe("Keyword query for action=search"),
       category: z.string().optional().describe("Category name for action=describe"),
@@ -373,7 +372,6 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
     MICRO_GATEWAY_TOOL,
     "Gateway to every ue-mcp category (micro context mode). Find actions with search, inspect parameters with describe, then invoke with call.",
     actions,
-    undefined,
     {
       category: z.string().optional().describe('Category name for describe/call, e.g. "blueprint"'),
       method: z.string().optional().describe('Action name for call or a single-action describe, e.g. "create"'),

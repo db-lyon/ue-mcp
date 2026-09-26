@@ -204,7 +204,6 @@ describe("niagara batch dispatch (#1081)", () => {
         fold_probe: bp("read", "Fold probe. Params: legacyPath", "fold_probe"),
       },
       undefined,
-      undefined,
       {
         normalizeParams: (params) => {
           const { legacyPath, ...rest } = params;

@@ -73,7 +73,6 @@ export const materialTool: ToolDef = categoryTool(
     remove_designer_layer: specBp("mutate", "Remove a layer from a Material Designer slot through UDMMaterialSlot::RemoveLayer, after CanRemoveLayer agrees (a slot keeps its base layer). Address it by objectPath, or by layerIndex or layerName in a target's slot. Runs in an editor transaction; the rollback is one editor undo (#1131).", "remove_material_designer_layer"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++

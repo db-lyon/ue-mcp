@@ -149,7 +149,6 @@ export const blueprintTool: ToolDef = categoryTool(
     edit_struct_metadata: specBp("mutate", "Set a UserDefinedStruct's tooltip and its per-member tooltip, editableOnInstance, saveGame, multiLineText, widget3D and arbitrary metadata, in one batched call. All of these live in the struct's editor data rather than as UPROPERTYs, and each has an engine setter that recompiles the struct. fields is [{fieldName or fieldGuid, tooltip?, editableOnInstance?, saveGame?, multiLineText?, widget3D?, metadata?}]. Every member is resolved and every type-gated switch is checked (multiLineText needs a text-like member, widget3D a Vector or Transform) BEFORE the first write, so a refusal on entry nine leaves entries one through eight untouched. Idempotent; the rollback restores every value by GUID, and states the one thing it cannot: a metadata key that did not exist before is restored to an empty string rather than removed.", "edit_struct_metadata"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++

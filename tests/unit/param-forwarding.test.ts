@@ -57,7 +57,7 @@ describe("unforwarded parameters at dispatch", () => {
   const probe = () => categoryTool("probe", "Probe.", {
     by_name: bp("mutate", "Delete. Params: nodeName", "probe_delete", (p) => ({ nodeName: p.nodeName })),
     by_id: bp("mutate", "Delete. Params: nodeId", "probe_delete"),
-  }, undefined, { nodeName: z.string().optional(), nodeId: z.string().optional() });
+  }, { nodeName: z.string().optional(), nodeId: z.string().optional() });
 
   afterEach(() => { delete process.env[STRICT_PARAMS_ENV]; });
 
@@ -85,7 +85,7 @@ describe("unforwarded parameters at dispatch", () => {
 describe("parameters the editor never read", () => {
   const probe = () => categoryTool("probe", "Probe.", {
     add: bp("mutate", "Add. Params: blendDuration", "probe_add"),
-  }, undefined, { blendDuration: z.number().optional() });
+  }, { blendDuration: z.number().optional() });
 
   const answering = (answer: Record<string, unknown>) => ({
     bridge: {

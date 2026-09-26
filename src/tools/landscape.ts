@@ -94,7 +94,6 @@ export const landscapeTool: ToolDef = categoryTool(
       timeoutMs: 600_000,
     },
   },
-  undefined,
   {
     // #1057: every landscape action is spec'd, so every key comes from the C++
     // registrations through the generated module.

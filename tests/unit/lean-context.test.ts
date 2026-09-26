@@ -17,11 +17,11 @@ function fixtureTools(): ToolDef[] {
     categoryTool("blueprint", "Blueprint authoring.", {
       create: bp("read", "Create a new Blueprint asset", "create_blueprint"),
       add_node: bp("read", "Add a node to a graph", "add_node"),
-    }, undefined, {}),
+    }, {}),
     categoryTool("level", "Level actors and volumes.", {
       place_actor: bp("read", "Spawn an actor into the level", "place_actor"),
       delete_actor: bp("read", "Remove an actor from the level", "delete_actor"),
-    }, undefined, {}),
+    }, {}),
   ];
 }
 
@@ -164,10 +164,10 @@ describe("buildMicroGateway", () => {
       categoryTool("blueprint", "Blueprint authoring.", {
         create: { kind: "handler", effect: "read", description: "Create a BP", handler: async (_c, p) => ({ created: p.name }) },
         compile: bp("read", "Compile a BP", "compile_blueprint"),
-      }, undefined, {}),
+      }, {}),
       categoryTool("level", "Level actors.", {
         place_actor: bp("read", "Place an actor", "place_actor"),
-      }, undefined, {}),
+      }, {}),
     ];
   }
 
@@ -266,7 +266,7 @@ describe("compact discovery for spatial requests", () => {
   const tools = [categoryTool("level", "Spatial tools", {
     nudge_component: bp("read", "Adjust a component. Params: componentName, axisRotation?", "nudge_component"),
     irrelevant: bp("read", "Something else. Params: none", "irrelevant"),
-  }, undefined, {
+  }, {
     componentName: z.string().optional(),
     axisRotation: z.object({ axis: z.enum(["forward", "right", "up"]), degrees: z.number() }).optional(),
   })];

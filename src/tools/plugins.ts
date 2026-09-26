@@ -38,7 +38,6 @@ export const pluginsTool: ToolDef = categoryTool(
     },
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     name: z.string().optional().describe("Plugin npm package name (describe action)"),

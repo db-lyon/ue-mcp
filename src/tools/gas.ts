@@ -67,7 +67,6 @@ export const gasTool: ToolDef = categoryTool(
     delete_gas_snapshot: specBp("mutate", "Drop one stored GAS snapshot, returning its contents first so nothing is lost: the returned object can be passed straight back to compare_gas_states as beforeSnapshot. Idempotent: an id that is not stored reports alreadyDeleted=true.", "delete_gas_snapshot"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++

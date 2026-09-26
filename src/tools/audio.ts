@@ -86,7 +86,6 @@ export const audioTool: ToolDef = categoryTool(
     // ── Generic property set (any audio asset) ─────────────────────────
     set_property:      specBp("mutate", "Set any UPROPERTY on an audio asset by (dotted) name, value as JSON. Handles nested structs, arrays, object refs.", "set_audio_property"),
   },
-  undefined,
   {
     // #1057: every key the audio handlers declare, generated from their C++
     // registrations.

@@ -56,7 +56,6 @@ export const statetreeTool: ToolDef = categoryTool(
     request_transition:     specBp("mutate", "Force a running StateTree to transition to a named state, resolved through the COMPILED data - so a state added since the last compile is reported as missing rather than silently ignored. Queued like an event and resolved on the next tick against every other pending request by priority. Refuses when the tree is not Running, naming the status it is in. targetStateTag needs UE 5.8 or later; targetStateId works everywhere. Pass actorLabel OR actorPath, and targetStateId OR targetStateTag.", "request_state_tree_transition"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++

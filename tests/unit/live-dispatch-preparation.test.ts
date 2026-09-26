@@ -182,7 +182,6 @@ describe("normalizeParams on the live dispatch route", () => {
       "Test-only category.",
       { look: { kind: "handler", effect: "read", description: "A direct handler.", handler: async (_ctx, p) => { seen = p; return { ok: true }; } } },
       undefined,
-      undefined,
       { normalizeParams: (p) => ({ ...p, canonical: p.legacy ?? p.canonical }) },
     );
     await callLive([tool], "probe.look", recordingBridge(), { action: "look", legacy: "v" });

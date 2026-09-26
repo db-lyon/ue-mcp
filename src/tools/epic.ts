@@ -19,7 +19,6 @@ export const epicTool: ToolDef = categoryTool(
     call_tool:        specBp("unknown", "Execute a registered Epic tool exactly as its MCP server would. tool takes the qualified name from describe_toolset, e.g. GASToolsets.AttributeSetToolset.ListAttributeSets; pass the arguments as input, or as inputJson to send raw JSON. Returns the tool's JSON result.", "epic_call_tool"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key the discovery handlers and call_tool declare, generated

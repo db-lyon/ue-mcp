@@ -135,7 +135,6 @@ export const animationTool: ToolDef = categoryTool(
     set_live_post_process_anim_blueprint: specBp("mutate", "Set or clear a transient post-process AnimBP override on one live SkeletalMeshComponent in the editor world or PIE. Pass the AnimBlueprintGeneratedClass object path (for example /Game/Animations/ABP_Name.ABP_Name_C), not the AnimBlueprint asset path; pass clear=true to remove the component override and fall back to the skeletal mesh asset setting. Incompatible skeletons and the component's main AnimBP class are refused before mutation. Reads back the override, effective class, and live post-process instance. Repeating the active override is a no-op. This never edits or saves a mesh, Blueprint, or component template.", "set_live_post_process_anim_blueprint"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++

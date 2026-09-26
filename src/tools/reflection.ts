@@ -24,7 +24,6 @@ export const reflectionTool: ToolDef = categoryTool(
     inspect_save_game: specBp("read", "Load a SaveGame slot read-only and return its reflected UPROPERTY(SaveGame) values. Non-serializable properties are listed in skippedProperties instead of failing the call. userIndex defaults to 0.", "inspect_save_game"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++

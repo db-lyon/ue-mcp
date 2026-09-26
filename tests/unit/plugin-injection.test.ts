@@ -13,7 +13,6 @@ function fakePcg(): ToolDef {
       list_graphs: bp("read", "pcg_list_graphs"),
       add_node: bp("read", "Add a node", "pcg_add_node"),
     },
-    undefined,
     { graphPath: z.string().optional() },
   );
 }

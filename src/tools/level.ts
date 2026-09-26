@@ -145,7 +145,6 @@ export const levelTool: ToolDef = categoryTool(
     snap_actor_to_floor: specBp("mutate", "Snap an actor's bounds-bottom to the first downward line-trace hit. Equivalent of the End-key shortcut, works on arbitrary geometry (not just Landscape). The actor lookup and the downward trace both run in the world named by world, so a PIE snap measures against PIE geometry (#933) (#419, #933).", "snap_actor_to_floor"),
     ...epicActions,
   },
-  undefined,  // actionDocs auto-generated from descriptions
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++

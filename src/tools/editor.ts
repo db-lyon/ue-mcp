@@ -468,7 +468,6 @@ export const editorTool: ToolDef = categoryTool(
     },
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
