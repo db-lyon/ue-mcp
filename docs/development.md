@@ -86,52 +86,39 @@ node dist/index.js init C:/path/to/MyGame.uproject
 
 ```
 src/
-├── index.ts              # Entry point, tool registration, MCP server
-├── tools.ts              # ALL_TOOLS registry (consumed by index.ts and tests)
-├── types.ts              # ToolDef, ActionSpec type declarations
-├── category-tool.ts      # categoryTool() factory, bp() action builder
-├── bridge.ts             # EditorBridge - WebSocket JSON-RPC client
-├── project.ts            # ProjectContext - paths, INI, C++ parsing
-├── deployer.ts           # Plugin deployment
-├── editor-control.ts     # Editor process management
-├── instructions.ts       # AI-facing server instructions
-├── github-app.ts         # GitHub App auth for feedback submission (bot fallback)
-├── auth.ts               # GitHub OAuth device flow + ~/.ue-mcp/auth.json token cache
-├── init.ts / update.ts / resolve.ts / hook-handler.ts  # CLI subcommands
+├── index.ts              # `ue-mcp` bin: MCP server, or a CLI subcommand
+├── init.ts, update.ts, deploy-cli.ts  # Other package bins, thin shims over cli/
+├── task.ts, guard-task.ts  # Public `ue-mcp/task` and `ue-mcp/guard` exports
+├── tools.ts              # ALL_TOOLS registry
+├── core/                 # Errors, logging, env, shared types, package root, version check
+├── config/               # ProjectContext, ue-mcp.yml layers, user state, .uproject discovery
+├── bridge/               # EditorBridge WebSocket client, one-shot calls, ports, lockfiles
+├── editor/               # Editor start/stop/build, engine resolution, deploy, dialog guard
+├── sessions/             # Registry of editors and each session's graph and guard
+├── surface/              # categoryTool, action specs, schemas, signatures, parameter routing
+│   └── context/          # micro/lean strategies, instructions, tool search
+├── dispatch/             # Per-call routing, editor gate, locks, offline and Python gates
+├── codeintel/            # Engine symbol index, C++ parsing, .ini reading, Content index
+├── feedback/             # Feedback routing and filing, GitHub auth, scrubbers
+├── extensions/           # ue-mcp extension packages, registry, skills, scaffolding
+├── integrations/claude-code/  # Hooks and MCP client config
+├── cli/                  # Subcommands, --editor parsing, terminal UI (cli/ui/)
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
-└── tools/                # <!-- count:tools -->26<!-- /count --> tool category implementations
-    ├── project.ts
-    ├── asset.ts
-    ├── blueprint.ts
-    ├── level.ts
-    ├── material.ts
-    ├── animation.ts
-    ├── landscape.ts
-    ├── pcg.ts
-    ├── foliage.ts
-    ├── niagara.ts
-    ├── audio.ts
-    ├── widget.ts
-    ├── editor.ts
-    ├── reflection.ts
-    ├── gameplay.ts
-    ├── statetree.ts
-    ├── gas.ts
-    ├── networking.ts
-    ├── demo.ts
-    └── feedback.ts
+└── tools/                # <!-- count:tools -->26<!-- /count --> category tools, one file each
+    ├── project/          # project category, split by action group
+    ├── epic/             # Generated epic_* actions (npm run epic:generate)
+    └── specs/            # Generated parameter specs (npm run specs:generate)
 
 plugin/ue_mcp_bridge/     # C++ bridge plugin (deployed to UE projects)
 └── Source/UE_MCP_Bridge/
     ├── UE_MCP_Bridge.Build.cs
     └── Private/
-        ├── BridgeServer.cpp/.h
-        ├── HandlerRegistry.cpp/.h
-        ├── GameThreadExecutor.cpp/.h
-        └── Handlers/          # 24 C++ handler groups
+        └── Handlers/<Category>/  # C++ handlers, one folder per category
 
-tests/smoke/               # Smoke tests (require live editor)
-tests/unit/                # Pure-TypeScript unit tests (no editor needed)
+tests/unit/                # Unit tests (no editor needed)
+tests/multi-editor/        # Multi-session tests (no editor needed)
+tests/golden/              # Recorded advertised surface
+tests/live/, tests/smoke/  # Need a running editor on tests/ue_mcp
 scripts/                   # Build and run scripts
 docs/                      # Documentation (MkDocs Material)
 ```

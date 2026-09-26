@@ -18,28 +18,28 @@ The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), r
 
 ### Key Modules
 
-| Module | Purpose |
+| Module (under `src/`) | Purpose |
 |--------|---------|
 | `index.ts` | Tool registration, MCP server lifecycle |
 | `tools.ts` | The `ALL_TOOLS` registry consumed by `index.ts` and tests |
-| `bridge.ts` | `EditorBridge` (implements `IBridge`) - WebSocket client, JSON-RPC messaging, auto-reconnect |
-| `project.ts` | `ProjectContext` - path resolution, INI parsing, C++ header parsing |
-| `types.ts` | `ToolDef`, `ActionSpec` and the other shared type declarations |
-| `category-tool.ts` | `categoryTool()` factory, `bp()` action builder, routing parameter schemas |
-| `target-params.ts` | Per-call `editor` / `toEditor` parameter injection |
-| `schemas.ts` | Zod schemas for `.uproject`, `.uplugin` and `ue-mcp.yml` |
-| `errors.ts` | `McpError` class with `ErrorCode` enum for structured error handling |
-| `deployer.ts` | First-run deployment: copy plugin, mutate `.uproject` |
-| `editor-control.ts` | Start/stop/restart the Unreal Editor process |
-| `instructions.ts` | AI-facing server instructions (embedded documentation), one variant per context strategy |
-| `lean-context.ts` | Choosing a context strategy, the lean `catalog` tool, paged `describe` and signature `search` |
-| `micro-context.ts` | The micro `tools` gateway and how a call through it resolves to its target |
-| `action-signature.ts` | One-line action signatures and the legend that explains them |
-| `call-envelope.ts` | The `action` + `args` call shape and the server-side validation behind it |
-| `auth.ts` | GitHub OAuth device flow + `~/.ue-mcp/auth.json` token cache (default authorship path for feedback issues) |
-| `github-app.ts` | GitHub App auth used as the bot fallback when OAuth isn't authorized |
+| `bridge/bridge.ts` | `EditorBridge` (implements `IBridge`) - WebSocket client, JSON-RPC messaging, auto-reconnect |
+| `config/project.ts` | `ProjectContext` - path resolution, INI parsing, C++ header parsing |
+| `core/types.ts` | `ToolDef`, `ActionSpec` and the other shared type declarations |
+| `surface/category-tool.ts` | `categoryTool()` factory, `bp()` action builder, routing parameter schemas |
+| `surface/target-params.ts` | Per-call `editor` / `toEditor` parameter injection |
+| `surface/schemas.ts` | Zod schemas for `.uproject`, `.uplugin` and `ue-mcp.yml` |
+| `core/errors.ts` | `McpError` class with `ErrorCode` enum for structured error handling |
+| `editor/deployer.ts` | First-run deployment: copy plugin, mutate `.uproject` |
+| `editor/editor-control.ts` | Start/stop/restart the Unreal Editor process; `editor/editor-build.ts` compiles the project C++ |
+| `surface/context/instructions.ts` | AI-facing server instructions (embedded documentation), one variant per context strategy |
+| `surface/context/lean-context.ts` | Choosing a context strategy, the lean `catalog` tool, paged `describe` and signature `search` |
+| `surface/context/micro-context.ts` | The micro `tools` gateway and how a call through it resolves to its target |
+| `surface/action-signature.ts` | One-line action signatures and the legend that explains them |
+| `surface/context/call-envelope.ts` | The `action` + `args` call shape and the server-side validation behind it |
+| `feedback/github-auth.ts` | GitHub OAuth device flow + `~/.ue-mcp/auth.json` token cache (default authorship path for feedback issues) |
+| `feedback/github-app.ts` | GitHub App auth used as the bot fallback when OAuth isn't authorized |
 | `flow/` | Flow engine (registry, loader, task factory, HTTP server) - see [Flows](flows.md) |
-| `init.ts` / `update.ts` / `resolve.ts` / `hook-handler.ts` | CLI subcommands (`npx ue-mcp init`, `update`, `resolve`, `hook`) |
+| `cli/` | CLI subcommands (`npx ue-mcp init`, `update`, `resolve`, `hook`) |
 
 ### Tool Registration Pattern
 
