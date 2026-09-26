@@ -66,47 +66,6 @@ const NOTE =
   + "registry and are not in the file, so asset(action='list') and asset(action='search') are "
   + "still the answer once an editor is running.";
 
-/** Resolve a mount path to a directory, through the same resolver the live path uses. */
-function resolveMount(project: ProjectContext, contentPath: string): string {
-  const normalized = contentPath.replace(/\\/g, "/").replace(/\/+$/, "") || "/Game";
-  if (!normalized.startsWith("/")) {
-    throw new Error(
-      `'contentPath' must be a mount path such as /Game or /Game/Characters (got '${contentPath}').`,
-    );
-  }
-  const lower = normalized.toLowerCase();
-  if (lower === "/game" || lower.startsWith("/game/")) {
-    if (!project.contentDir) throw new Error("No project is loaded, so /Game has no directory to read.");
-    const rest = normalized.slice("/Game".length).split("/").filter(Boolean);
-    return path.join(project.contentDir, ...rest);
-  }
-  const plugin = project.resolvePluginPath(normalized);
-  if (plugin) return plugin;
-
-  const mounts = ["/Game", ...project.discoverPlugins().map((p) => p.mountPoint.replace(/\/$/, ""))];
-  throw new Error(
-    `Unknown mount '${normalized}'. This project mounts: ${mounts.join(", ")}.`,
-  );
-}
-
-/** The mount path a package file has, or null when it is under no known mount. */
-function mountPathFor(project: ProjectContext, file: string): string | null {
-  const normalized = file.replace(/\\/g, "/");
-  const withoutExt = normalized.replace(/\.(uasset|umap)$/i, "");
-  if (project.contentDir) {
-    const content = project.contentDir.replace(/\\/g, "/").replace(/\/+$/, "");
-    if (normalized.toLowerCase().startsWith(`${content.toLowerCase()}/`)) {
-      return `/Game/${withoutExt.slice(content.length + 1)}`;
-    }
-  }
-  for (const plugin of project.discoverPlugins()) {
-    const dir = plugin.contentDir.replace(/\\/g, "/").replace(/\/+$/, "");
-    if (normalized.toLowerCase().startsWith(`${dir.toLowerCase()}/`)) {
-      return `${plugin.mountPoint}${withoutExt.slice(dir.length + 1)}`;
-    }
-  }
-  return null;
-}
 
 /**
  * List the packages under one mount path.
@@ -122,7 +81,7 @@ export function listContent(project: ProjectContext, options: ListContentOptions
   const maxResults = Math.max(1, Math.min(options.maxResults ?? 1000, 20_000));
   const pattern = options.namePattern?.trim().toLowerCase();
 
-  const directory = resolveMount(project, contentPath);
+  const directory = project.resolveMountDir(contentPath);
   if (!fs.existsSync(directory)) {
     throw new Error(
       `'${contentPath}' resolves to ${directory}, which does not exist. `
@@ -152,7 +111,7 @@ export function listContent(project: ProjectContext, options: ListContentOptions
       if (!match) continue;
       const name = entry.name.slice(0, entry.name.length - match[0].length);
       if (pattern && !name.toLowerCase().includes(pattern)) continue;
-      const assetPath = mountPathFor(project, full);
+      const assetPath = project.mountPathFor(full);
       if (!assetPath) continue;
       let sizeBytes = 0;
       let modified = "";

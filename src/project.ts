@@ -295,17 +295,45 @@ export class ProjectContext {
     return path.join(this.contentDir!, ...dirPath.replace(/\\/g, "/").replace(/\/+$/, "").split("/"));
   }
 
-  getRelativeContentPath(absolutePath: string): string {
-    if (!this.contentDir) return absolutePath;
-    const normalized = absolutePath.replace(/\\/g, "/");
-    const contentNorm = this.contentDir.replace(/\\/g, "/");
-    if (normalized.startsWith(contentNorm)) {
-      const relative = normalized.slice(contentNorm.length + 1).replace(".uasset", "");
-      return "/Game/" + relative;
+  /**
+   * The directory a mount path (/Game, /Game/Foo, /MyPlugin/Bar) names.
+   * Throws when the path is not a mount path or names no known mount.
+   */
+  resolveMountDir(contentPath: string): string {
+    const normalized = contentPath.replace(/\\/g, "/").replace(/\/+$/, "") || "/Game";
+    if (!normalized.startsWith("/")) {
+      throw new Error(
+        `'contentPath' must be a mount path such as /Game or /Game/Characters (got '${contentPath}').`,
+      );
     }
-    const pluginPath = this.getRelativePluginPath(absolutePath);
-    if (pluginPath) return pluginPath;
-    return absolutePath;
+    if (isGamePath(normalized)) {
+      if (!this.contentDir) throw new Error("No project is loaded, so /Game has no directory to read.");
+      return path.join(this.contentDir, ...stripGamePrefix(normalized).split("/").filter(Boolean));
+    }
+    const plugin = this.resolvePluginPath(normalized);
+    if (plugin) return plugin;
+
+    const mounts = ["/Game", ...this.discoverPlugins().map((p) => p.mountPoint.replace(/\/$/, ""))];
+    throw new Error(`Unknown mount '${normalized}'. This project mounts: ${mounts.join(", ")}.`);
+  }
+
+  /** The mount path of a package file on disk, or null when it is under no known mount. */
+  mountPathFor(file: string): string | null {
+    const normalized = file.replace(/\\/g, "/");
+    const withoutExt = normalized.replace(/\.(uasset|umap)$/i, "");
+    const under = (dir: string): number | null => {
+      const root = dir.replace(/\\/g, "/").replace(/\/+$/, "");
+      return normalized.toLowerCase().startsWith(`${root.toLowerCase()}/`) ? root.length + 1 : null;
+    };
+    if (this.contentDir) {
+      const at = under(this.contentDir);
+      if (at !== null) return `/Game/${withoutExt.slice(at)}`;
+    }
+    for (const plugin of this.discoverPlugins()) {
+      const at = under(plugin.contentDir);
+      if (at !== null) return `${plugin.mountPoint}${withoutExt.slice(at)}`;
+    }
+    return null;
   }
 
   /** Whether the .uproject enables UE plugin `name`; undefined when it cannot be read. */
@@ -396,29 +424,17 @@ export class ProjectContext {
     return plugins;
   }
 
+  /** The directory a plugin mount path names, matched case-insensitively as Unreal does. */
   resolvePluginPath(mountPath: string): string | null {
-    const plugins = this.discoverPlugins();
     const normalized = mountPath.replace(/\\/g, "/");
-    for (const plugin of plugins) {
-      if (normalized.startsWith(plugin.mountPoint)) {
-        const rest = normalized.slice(plugin.mountPoint.length);
+    const lower = normalized.toLowerCase();
+    for (const plugin of this.discoverPlugins()) {
+      const mount = plugin.mountPoint.toLowerCase();
+      if (lower.startsWith(mount)) {
+        const rest = normalized.slice(mount.length);
         return path.join(plugin.contentDir, ...rest.split("/").filter(Boolean));
       }
-      if (normalized === `/${plugin.name}` || normalized === `/${plugin.name}/`) {
-        return plugin.contentDir;
-      }
-    }
-    return null;
-  }
-
-  getRelativePluginPath(absolutePath: string): string | null {
-    const normalized = absolutePath.replace(/\\/g, "/");
-    for (const plugin of this.discoverPlugins()) {
-      const contentNorm = plugin.contentDir.replace(/\\/g, "/");
-      if (normalized.startsWith(contentNorm)) {
-        const relative = normalized.slice(contentNorm.length + 1).replace(".uasset", "");
-        return plugin.mountPoint + relative;
-      }
+      if (lower === mount.replace(/\/$/, "")) return plugin.contentDir;
     }
     return null;
   }
@@ -693,14 +709,12 @@ function migrateLegacyLocalYaml(projectDir: string): void {
   }
 }
 
+/** /Game or anything under it, in any case: Unreal's mount names are case-insensitive. */
 function isGamePath(p: string): boolean {
-  return (
-    p.startsWith("/Game/") || p.toLowerCase() === "/game"
-  );
+  const lower = p.toLowerCase();
+  return lower === "/game" || lower.startsWith("/game/");
 }
 
 function stripGamePrefix(p: string): string {
-  if (p.startsWith("/Game/")) return p.slice(6);
-  if (p.toLowerCase() === "/game") return "";
-  return p;
+  return isGamePath(p) ? p.slice("/game/".length) : p;
 }
