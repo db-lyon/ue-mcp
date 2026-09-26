@@ -23,40 +23,7 @@
 #include "Misc/ScopeLock.h"
 #include "Misc/Char.h"
 #include "Async/Async.h"
-#include "Handlers/EditorHandlers.h"
-#include "Handlers/AssetHandlers.h"
-#include "Handlers/AssetHandlers_Geometry.h"
-#include "Handlers/AssetHandlers_MeshBoolean.h"
-#include "Handlers/AssetHandlers_BulkRead.h"
-#include "Handlers/BlueprintHandlers.h"
-#include "Handlers/BlueprintHandlers_Collision.h"
-#include "Handlers/ProjectHandlers.h"
-#include "Handlers/LevelHandlers.h"
-#include "Handlers/ReflectionHandlers.h"
-#include "Handlers/GasHandlers.h"
-#include "Handlers/GameplayHandlers.h"
-#include "Handlers/DialogHandlers.h"
-#include "Handlers/MaterialHandlers.h"
-#include "Handlers/AnimationHandlers.h"
-#include "Handlers/AudioHandlers.h"
-#include "Handlers/WidgetHandlers.h"
-#include "Handlers/FoliageHandlers.h"
-#include "Handlers/LandscapeHandlers.h"
-#include "Handlers/NetworkingHandlers.h"
-#include "Handlers/NiagaraHandlers.h"
-#include "Handlers/PCGHandlers.h"
-#include "Handlers/SequencerHandlers.h"
-#include "Handlers/SplineHandlers.h"
-#include "Handlers/PhysicsHandlers.h"
-#include "Handlers/DemoHandlers.h"
-#include "Handlers/StateTreeHandlers.h"
-#include "Handlers/ChooserHandlers.h"
-#include "Handlers/EpicHandlers.h"
-#include "Handlers/MassHandlers.h"
-#include "Handlers/SkeletalMeshHandlers.h"
-#include "Handlers/FabHandlers.h"
-#include "Handlers/LockHandlers.h"
-#include "Handlers/DiffHandlers.h"
+#include "HandlerCatalog.h"
 
 #include "MCPSocketPlatform.h"
 
@@ -106,43 +73,7 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port, const FString& InPortSource, bool
 	// an attacker can enable remotely.
 	FMCPParamEcho::Get().SetEnabled(FMCPParamEcho::ResolveEnabledFromEnvironment());
 
-	// Register core handlers
-	FEditorHandlers::RegisterHandlers(HandlerRegistry);
-	FAssetHandlers::RegisterHandlers(HandlerRegistry);
-	FAssetGeometryHandlers::RegisterHandlers(HandlerRegistry);
-	FAssetMeshBooleanHandlers::RegisterHandlers(HandlerRegistry);
-	// #909: bulk_read_asset_properties, in its own translation unit so a
-	// library-wide read lands without reopening AssetHandlers.cpp.
-	FAssetBulkReadHandlers::RegisterHandlers(HandlerRegistry);
-	FBlueprintHandlers::RegisterHandlers(HandlerRegistry);
-	FCollisionQueryHandlers::RegisterHandlers(HandlerRegistry);
-	FLevelHandlers::RegisterHandlers(HandlerRegistry);
-	FReflectionHandlers::RegisterHandlers(HandlerRegistry);
-	FGasHandlers::RegisterHandlers(HandlerRegistry);
-	FGameplayHandlers::RegisterHandlers(HandlerRegistry);
-	FDialogHandlers::RegisterHandlers(HandlerRegistry);
-	FMaterialHandlers::RegisterHandlers(HandlerRegistry);
-	FAnimationHandlers::RegisterHandlers(HandlerRegistry);
-	FAudioHandlers::RegisterHandlers(HandlerRegistry);
-	FWidgetHandlers::RegisterHandlers(HandlerRegistry);
-	FFoliageHandlers::RegisterHandlers(HandlerRegistry);
-	FLandscapeHandlers::RegisterHandlers(HandlerRegistry);
-	FNetworkingHandlers::RegisterHandlers(HandlerRegistry);
-	FNiagaraHandlers::RegisterHandlers(HandlerRegistry);
-	FPCGHandlers::RegisterHandlers(HandlerRegistry);
-	FSequencerHandlers::RegisterHandlers(HandlerRegistry);
-	FSplineHandlers::RegisterHandlers(HandlerRegistry);
-	FPhysicsHandlers::RegisterHandlers(HandlerRegistry);
-	FDemoHandlers::RegisterHandlers(HandlerRegistry);
-	FProjectHandlers::RegisterHandlers(HandlerRegistry);
-	FStateTreeHandlers::RegisterHandlers(HandlerRegistry);
-	FChooserHandlers::RegisterHandlers(HandlerRegistry);
-	FEpicHandlers::RegisterHandlers(HandlerRegistry);
-	FMassHandlers::RegisterHandlers(HandlerRegistry);
-	FSkeletalMeshHandlers::RegisterHandlers(HandlerRegistry);
-	FFabHandlers::RegisterHandlers(HandlerRegistry);
-	FLockHandlers::RegisterHandlers(HandlerRegistry);
-	FDiffHandlers::RegisterHandlers(HandlerRegistry);
+	MCPHandlerCatalog::RegisterAllHandlers(HandlerRegistry);
 }
 
 FMCPBridgeServer::~FMCPBridgeServer()
