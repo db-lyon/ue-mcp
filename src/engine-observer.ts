@@ -308,14 +308,6 @@ export async function findEditorByPid(pid: number): Promise<EditorProcess | null
 // Log tail
 // ---------------------------------------------------------------------------
 
-export interface StartupPhase {
-  /** Short phase label derived from the newest matching marker. */
-  phase: string;
-  /** True when the marker means the editor is waiting on a human. */
-  blocking: boolean;
-  /** The log line the phase was derived from. */
-  evidence: string;
-}
 
 interface Marker {
   re: RegExp;

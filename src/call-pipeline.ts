@@ -326,18 +326,3 @@ export function finishCall(raw: unknown, pipeline: CallPipeline): unknown {
   );
 }
 
-/**
- * True when this call asked for nothing the pipeline does.
- *
- * The task classes return a `TaskResult` whose `data` must stay the same
- * object when nothing was requested, so an untouched call is byte-identical to
- * what it was before any of this existed.
- */
-export function isPipelineNoop(pipeline: CallPipeline): boolean {
-  return (
-    pipeline.repairs.length === 0
-    && (pipeline.unforwarded?.length ?? 0) === 0
-    && pipeline.selection.select === undefined
-    && pipeline.selection.omit === undefined
-  );
-}

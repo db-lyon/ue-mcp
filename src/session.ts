@@ -113,9 +113,6 @@ export class EditorSession {
     return this.project.projectDir;
   }
 
-  get hasProject(): boolean {
-    return this.project.isLoaded;
-  }
 
   info(active: boolean): EditorSessionInfo {
     return {

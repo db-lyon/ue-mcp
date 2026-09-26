@@ -148,10 +148,6 @@ function writeDiskCache(base: string, plugins: RegistryPlugin[]): void {
   }
 }
 
-/** Test seam: drop the in-process cache so a test can control the catalog. */
-export function clearRegistryCatalogCache(): void {
-  memoryCache = null;
-}
 
 /**
  * Fetch the published catalog. Returns [] when the registry is unreachable

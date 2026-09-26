@@ -405,11 +405,6 @@ export function classifyActionClass(tool: string, action: string): ActionClassif
   return { class: "unknown", source: "unresolved" };
 }
 
-/** Convenience over a `category.action` task name. */
-export function classifyTaskClass(taskName: string): ActionClassification {
-  const { tool, action } = splitTaskName(taskName);
-  return classifyActionClass(tool, action);
-}
 
 /**
  * The lexicon's answer for an action nobody declared, as an `ActionEffect`.

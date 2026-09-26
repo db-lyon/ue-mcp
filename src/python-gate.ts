@@ -78,10 +78,6 @@ export function ruledOutKey(raw: unknown): string {
   return s.trim();
 }
 
-/** Every spelling of a candidate the gate will print, for a copy-paste answer. */
-export function candidateSpellings(c: GateCandidate): string[] {
-  return [c.action, `${c.tool}(${c.action})`, `${c.tool}.${c.action}`];
-}
 
 /** Read the caller's `ruledOut` parameter, separating what counts from what does not. */
 export function parseRulings(raw: unknown): ParsedRulings {

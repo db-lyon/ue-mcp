@@ -250,10 +250,6 @@ export function consumeUpgradeNotice(): string | null {
   return out;
 }
 
-/** Test hook. */
-export function _resetForTests(): void {
-  pendingNotice = null;
-}
 
 /** Test hook. */
 export function _setNoticeForTests(notice: string | null): void {

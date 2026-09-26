@@ -1,36 +1,7 @@
 import { z } from "zod";
 
-// ── Composite types ──────────────────────────────────────────────────────────
-// Shared UE geometry types used across many tool schemas.
-
-export const Vec3 = z.object({ x: z.number(), y: z.number(), z: z.number() });
-export const Rotator = z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() });
-export const Color = z.object({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() });
-export const Quat = z.object({ x: z.number(), y: z.number(), z: z.number(), w: z.number() });
-
-// One spline point in the form that keeps what a bare position loses:
-// interpolation type, both tangents, rotation and scale. The position itself
-// is accepted under any of the three names the handler reads, because a point
-// arriving as a bare Vec3 and a point arriving as {position: ...} are the same
-// request (#1029).
-export const SplinePoint = z
-  .object({
-    x: z.number().optional(),
-    y: z.number().optional(),
-    z: z.number().optional(),
-    position: Vec3.optional(),
-    location: Vec3.optional(),
-    pointType: z.enum(["Linear", "Curve", "Constant", "CurveClamped", "CurveCustomTangent"]).optional(),
-    arriveTangent: Vec3.optional(),
-    leaveTangent: Vec3.optional(),
-    rotation: Rotator.optional(),
-    scale: Vec3.optional(),
-    inputKey: z.number().optional(),
-  })
-  .describe("A spline point: a position plus the interpolation, tangents, rotation and scale that a bare {x,y,z} cannot carry");
-
-// ── Project / tooling file shapes ────────────────────────────────────────────
-// Validated at trust boundaries (JSON.parse on files the user can hand-edit).
+// Shapes of the project and tooling files the user can hand-edit, validated
+// where they are parsed.
 
 export const UProjectSchema = z
   .object({
@@ -47,7 +18,7 @@ export const UProjectSchema = z
       .optional(),
   })
   .passthrough();
-export type UProjectFile = z.infer<typeof UProjectSchema>;
+
 
 export const UeMcpConfigSchema = z
   .object({
@@ -144,11 +115,9 @@ export const UeMcpConfigSchema = z
       .optional(),
   })
   .passthrough();
-export type UeMcpConfigFile = z.infer<typeof UeMcpConfigSchema>;
 
 export const UPluginSchema = z
   .object({
     VersionName: z.string().optional(),
   })
   .passthrough();
-export type UPluginFile = z.infer<typeof UPluginSchema>;

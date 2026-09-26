@@ -44,24 +44,3 @@ export const MUTATE_PREFIXES = [
   "bake", "generate", "build",
 ];
 
-/**
- * The leading verb of an action or bridge-method name.
- *
- * "bulk" and "batch" describe the SHAPE of a call, not what it does, and both
- * are in `MUTATE_PREFIXES` because every batch action written so far was a
- * write. `bulk_read_properties` is not. When the shape word is followed by a
- * read verb, that verb is the answer.
- */
-export function leadingVerb(name: string): string {
-  const segments = String(name).toLowerCase().split(/[._]/);
-  const first = segments[0] ?? "";
-  if ((first === "bulk" || first === "batch") && segments[1] && READ_PREFIXES.includes(segments[1])) {
-    return segments[1];
-  }
-  return first;
-}
-
-/** Whether a name's leading verb is a known read. */
-export function leadsWithReadVerb(name: string): boolean {
-  return READ_PREFIXES.includes(leadingVerb(name));
-}

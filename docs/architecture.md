@@ -25,7 +25,7 @@ The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), r
 | `bridge.ts` | `EditorBridge` (implements `IBridge`) - WebSocket client, JSON-RPC messaging, auto-reconnect |
 | `project.ts` | `ProjectContext` - path resolution, INI parsing, C++ header parsing |
 | `types.ts` | `ToolDef`, `ActionSpec`, `categoryTool()` factory |
-| `schemas.ts` | Shared Zod schemas - `Vec3`, `Rotator`, `Color`, `Quat` |
+| `schemas.ts` | Zod schemas for `.uproject`, `.uplugin` and `ue-mcp.yml` |
 | `errors.ts` | `McpError` class with `ErrorCode` enum for structured error handling |
 | `deployer.ts` | First-run deployment: copy plugin, mutate `.uproject` |
 | `editor-control.ts` | Start/stop/restart the Unreal Editor process |

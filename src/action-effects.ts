@@ -144,11 +144,6 @@ function current(): EffectIndex {
   return index;
 }
 
-/** Drop the memo. Only tests that swap the published graph in place need this. */
-export function resetEffectIndex(): void {
-  indexedGraph = null;
-  index = null;
-}
 
 /** What `${tool}.${action}` declares, or undefined when the graph has no such action. */
 export function declaredActionEffect(tool: string, action: string): ActionEffect | undefined {
@@ -175,15 +170,6 @@ export function taskEffect(taskName: string): ResolvedEffect {
   return actionEffect(tool, action);
 }
 
-/**
- * What a `category.action` task name declares, or undefined when the graph has
- * no such action. Never guesses, for the caller that wants to choose its own
- * fallback rather than take the lexicon's.
- */
-export function declaredTaskEffect(taskName: string): ActionEffect | undefined {
-  const { tool, action } = splitTaskName(taskName);
-  return declaredActionEffect(tool, action);
-}
 
 /**
  * Methods whose effect one of their own ARGUMENTS decides, and how to read it.
