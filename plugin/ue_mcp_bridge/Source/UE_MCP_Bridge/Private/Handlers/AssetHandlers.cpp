@@ -925,7 +925,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the table (default true)")),
 	});
 
-	// v0.7.8 stubs - FTS5-backed asset search
+	// Ranked asset search over the Asset Registry.
 	Registry.RegisterHandler(TEXT("search_assets_fts"), &SearchAssetsFTS, {
 		MCPParam::Required(TEXT("query"), EType::String, TEXT("Words scored against each asset's name, class and path")),
 		MCPParam::Optional(TEXT("classFilter"), EType::String, TEXT("Only assets whose class name contains this")),
@@ -1072,12 +1072,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 }
 
 // ---------------------------------------------------------------------------
-// v0.7.8 STUBS - FTS5-backed asset index (Milestone A)
-// Strategy:
-//  - Index lives at <project>/Saved/MCP/asset_index.sqlite (SQLite with FTS5).
-//  - Columns: name, path, class, tags, referencers (tokenized).
-//  - Populate via AssetRegistry scan; refresh via OnAssetAdded/Renamed/Removed hooks.
-//  - search_assets_fts: MATCH on name/tags/class with bm25 ranking, limit/offset paging.
+// Ranked asset search, scored live against the Asset Registry: no persistent
+// index, so reindex_assets_fts only forces a registry rescan.
 // ---------------------------------------------------------------------------
 
 // Tokenize on non-alnum boundaries, lowercase, drop empties.

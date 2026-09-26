@@ -196,7 +196,7 @@ private:
 	static TSharedPtr<FJsonValue> CreateInterchangePipeline(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReloadPackage(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.8 - FTS5-backed asset search (stubs)
+	// Ranked asset search over the Asset Registry
 	static TSharedPtr<FJsonValue> SearchAssetsFTS(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReindexAssetsFTS(const TSharedPtr<FJsonObject>& Params);
 
