@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// @ts-expect-error - plain ESM script, no types
 import { lintText, RULES, EXCLUDED_PATHS, isExcluded, ALLOW_MARKER } from "../../scripts/lint-prose.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");

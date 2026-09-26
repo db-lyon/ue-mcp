@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
-// @ts-expect-error - plain ESM script, no types
 import { flowNames, namespacedPaths, strayCleanupFlows, DEMO_FLOWS, DEMO_PATHS } from "../../scripts/check-flows.mjs";
-// @ts-expect-error - plain ESM script, no types
 import { lintText } from "../../scripts/lint-prose.mjs";
 
 const paths = (src: string) =>

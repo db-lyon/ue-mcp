@@ -3,7 +3,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// @ts-expect-error - plain ESM script, no types
 import { findLiveCodingPatches, findOrphanedSources, runHygiene } from "../../scripts/pre-build-hygiene.mjs";
 import { touchBuildRules } from "../../src/deployer.js";
 

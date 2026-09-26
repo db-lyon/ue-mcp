@@ -55,6 +55,7 @@
     "up:build": "node scripts/build-and-run.js",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
+    "typecheck:tests": "tsc -p tsconfig.test.json",
     "test": "npm run test:unit && npm run test:multi-editor",
     "test:unit": "vitest run tests/unit",
     "test:multi-editor": "vitest run tests/multi-editor",

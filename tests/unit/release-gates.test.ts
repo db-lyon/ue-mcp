@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import fsSync from "node:fs";
-// @ts-expect-error - plain ESM script, no types
 import { parseVersion, versionDeltaProblem, docsFreshnessProblem, docsExemptionReason } from "../../scripts/check-release-gates.mjs";
 
 const problem = (from: string, to: string): string | null =>
