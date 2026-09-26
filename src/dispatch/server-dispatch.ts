@@ -424,6 +424,7 @@ export async function dispatchFlowCall(
   flowTool: ToolDef,
   baseCtx: ToolContext,
   rawParams: Record<string, unknown>,
+  extra: CallExtra = {},
 ): Promise<ToolResult> {
   const { sessions } = deps;
   try {
@@ -456,8 +457,13 @@ export async function dispatchFlowCall(
       "action",
     );
     if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
+    // The request's own progress token and elicitation, so every step can
+    // stream progress and ask the user exactly as the same action called live.
     const flowCtx: ToolContext = {
       ...sessionContext(baseCtx, session),
+      elicit: deps.elicit(),
+      onProgress: makeProgressReporter(extra),
+      client: deps.client(),
       openAssetLocks: lockScopeOpener(deps.lockingCfg, () => deps.loads.dispatchUnion.tools),
     };
     const result = await flowTool.handler(flowCtx, params);

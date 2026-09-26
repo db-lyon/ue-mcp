@@ -260,8 +260,8 @@ async function main() {
   );
   targetable.push(flowTool);
   const flowShape: Record<string, z.ZodType> = { ...flowTool.schema };
-  const flowRegistration = server.tool(flowTool.name, flowTool.description, flowShape, (rawParams) =>
-    dispatchFlowCall(deps, flowTool, baseCtx, rawParams) as never);
+  const flowRegistration = server.tool(flowTool.name, flowTool.description, flowShape, ((rawParams: Record<string, unknown>, extra: CallExtra) =>
+    dispatchFlowCall(deps, flowTool, baseCtx, rawParams, extra)) as never);
   registeredTools.set(flowTool.name, flowRegistration);
 
   // Re-advertise whenever the session set changes, and take the first pass now.
