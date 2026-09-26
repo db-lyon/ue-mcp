@@ -918,21 +918,13 @@ static void SetObjectPropertiesFromJson(UObject* Object, const TSharedPtr<FJsonO
 	}
 }
 
-static UScriptStruct* ResolveStructType(const FString& StructTypeName)
-{
-	UScriptStruct* Result = FindObject<UScriptStruct>(nullptr, *StructTypeName);
-	if (Result) return Result;
-
-	Result = FindFirstObject<UScriptStruct>(*StructTypeName, EFindFirstObjectOptions::NativeFirst);
-	return Result;
-}
-
 static bool AddEditorNodeToArray(TArray<FStateTreeEditorNode>& Arr, const FString& StructTypeName, const TSharedPtr<FJsonObject>& InstanceProperties, UObject* Outer, FStateTreeEditorNode*& OutNode, FString& OutError)
 {
-	UScriptStruct* NodeStruct = ResolveStructType(StructTypeName);
+	FString ResolveError;
+	UScriptStruct* NodeStruct = MCPResolveScriptStruct(StructTypeName, &ResolveError, true);
 	if (!NodeStruct)
 	{
-		OutError = FString::Printf(TEXT("Struct not found: %s"), *StructTypeName);
+		OutError = ResolveError.IsEmpty() ? FString::Printf(TEXT("Struct not found: %s"), *StructTypeName) : ResolveError;
 		return false;
 	}
 
@@ -2056,10 +2048,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEvaluator(const TSharedPtr<FJsonOb
 
 	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
-	UScriptStruct* NodeStruct = ResolveStructType(StructType);
+	FString ResolveError;
+	UScriptStruct* NodeStruct = MCPResolveScriptStruct(StructType, &ResolveError, true);
 	if (!NodeStruct)
 	{
-		return MCPError(FString::Printf(TEXT("Struct not found: %s"), *StructType));
+		return MCPError(ResolveError.IsEmpty() ? FString::Printf(TEXT("Struct not found: %s"), *StructType) : ResolveError);
 	}
 	if (!IsStructDerivedFrom(NodeStruct, FStateTreeEvaluatorBase::StaticStruct()))
 	{
@@ -2301,10 +2294,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddGlobalTask(const TSharedPtr<FJsonO
 
 	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
-	UScriptStruct* NodeStruct = ResolveStructType(StructType);
+	FString ResolveError;
+	UScriptStruct* NodeStruct = MCPResolveScriptStruct(StructType, &ResolveError, true);
 	if (!NodeStruct)
 	{
-		return MCPError(FString::Printf(TEXT("Struct not found: %s"), *StructType));
+		return MCPError(ResolveError.IsEmpty() ? FString::Printf(TEXT("Struct not found: %s"), *StructType) : ResolveError);
 	}
 	if (!IsStructDerivedFrom(NodeStruct, FStateTreeTaskBase::StaticStruct()))
 	{

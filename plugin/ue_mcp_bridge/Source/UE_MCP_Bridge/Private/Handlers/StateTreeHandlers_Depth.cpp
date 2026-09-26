@@ -122,18 +122,6 @@ namespace
 		return G;
 	}
 
-	/** Resolve a node struct by short name ("FStateTreeDelayTask"), by
-	 *  /Script path, or by the display name list_node_types reports. */
-	UScriptStruct* StateTreeDepthResolveStruct(const FString& StructTypeName)
-	{
-		if (StructTypeName.IsEmpty()) return nullptr;
-		if (UScriptStruct* Direct = FindObject<UScriptStruct>(nullptr, *StructTypeName))
-		{
-			return Direct;
-		}
-		return FindFirstObject<UScriptStruct>(*StructTypeName, EFindFirstObjectOptions::NativeFirst);
-	}
-
 	/** The four node families a StateTree state or tree can hold, keyed by the
 	 *  spelling every action in this category uses. */
 	const UScriptStruct* StateTreeDepthBaseForKind(const FString& Kind)
@@ -333,7 +321,13 @@ namespace
 		FStateTreeEditorNode*& OutNode,
 		FString& OutError)
 	{
-		UScriptStruct* NodeStruct = StateTreeDepthResolveStruct(StructTypeName);
+		FString ResolveError;
+		UScriptStruct* NodeStruct = MCPResolveScriptStruct(StructTypeName, &ResolveError, true);
+		if (!NodeStruct && !ResolveError.IsEmpty())
+		{
+			OutError = ResolveError;
+			return false;
+		}
 		if (!NodeStruct)
 		{
 			OutError = FString::Printf(
