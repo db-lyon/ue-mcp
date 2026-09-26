@@ -30,6 +30,7 @@
 import { bridgeMethodEffect } from "../action-effects.js";
 import type { HandlerSpecs, ParamSpec } from "../handler-spec.js";
 import { RECORDED_HANDLER_SPECS } from "../tools/specs/index.js";
+import type { ToolDef } from "../types.js";
 
 export interface WriteClassification {
   /**
@@ -176,7 +177,11 @@ function recordedWrittenParams(method: string): string[] {
  * Classify a bridge call. Returns the content paths a mutation will touch, or
  * `writes: false` when the call is not a guardable write.
  */
-export function classifyWrite(method: string, params: Record<string, unknown>): WriteClassification {
+export function classifyWrite(
+  method: string,
+  params: Record<string, unknown>,
+  graph?: readonly ToolDef[],
+): WriteClassification {
   const explicit = EXPLICIT[method];
   if (explicit) {
     const contentPaths = dedupe(explicit(params));
@@ -188,7 +193,7 @@ export function classifyWrite(method: string, params: Record<string, unknown>): 
   // candidate for the same reason it gates like a mutation everywhere else.
   // With the parameters, so a wrapped engine tool is judged by which tool it
   // is rather than by the one method all of them share.
-  if (bridgeMethodEffect(method, params).effect === "read") {
+  if (bridgeMethodEffect(method, params, graph).effect === "read") {
     return { writes: false, contentPaths: [] };
   }
 

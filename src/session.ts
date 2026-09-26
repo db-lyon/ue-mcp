@@ -31,6 +31,7 @@ import { warn } from "./log.js";
 import { newLockOwnerId } from "./lock-owner.js";
 import { withoutDialogActuation } from "./dialog-guard.js";
 import { projectDirOf } from "./uproject-path.js";
+import type { ToolDef } from "./types.js";
 
 /** Key used for the session that has no project bound. */
 export const DEFAULT_SESSION_KEY = "";
@@ -76,6 +77,12 @@ export class EditorSession {
    * point of taking it.
    */
   readonly lockOwnerId: string = newLockOwnerId();
+  /**
+   * The graph this editor dispatches, set by the server once its surface is
+   * built. The guard pipeline reads action effects from it. Absent before then
+   * and outside the server, where the pristine declaration answers.
+   */
+  toolGraph?: readonly ToolDef[];
 
   constructor(
     public name: string,

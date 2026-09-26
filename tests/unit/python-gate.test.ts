@@ -26,7 +26,7 @@ import {
 import { editorTool } from "../../src/tools/editor.js";
 import { resetAllWorkarounds } from "../../src/workaround-tracker.js";
 import { PLUGIN_UPGRADE_POINTER } from "../../src/bridge.js";
-import { getLiveToolGraph } from "../../src/tools.js";
+import { ALL_TOOLS } from "../../src/tools.js";
 import type { IBridge } from "../../src/bridge.js";
 import type { ToolContext } from "../../src/types.js";
 
@@ -216,6 +216,7 @@ describe("editor.execute_python end to end", () => {
     bridge,
     project: {} as ToolContext["project"],
     session: { key: "c:/proj/e2e" },
+    getToolGraph: () => ALL_TOOLS,
   } as unknown as ToolContext;
 
   const run = (params: Record<string, unknown>): Promise<Record<string, unknown>> =>
@@ -278,7 +279,7 @@ describe("editor.execute_python end to end", () => {
 
     // A plugin that registers every advertised method except the first
     // bridge-backed candidate's.
-    const graph = getLiveToolGraph();
+    const graph = ALL_TOOLS;
     const methodOf = (qualified: string): string | undefined => {
       const [tool, action] = qualified.replace(")", "").split("(");
       const spec = graph.find((t) => t.name === tool)?.actions[action];

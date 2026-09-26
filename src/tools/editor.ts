@@ -21,7 +21,7 @@ import { specBp, schema as specSchema } from "./specs/editor.generated.js";
  * plugin published no action list, since then nothing is known.
  */
 async function notInRunningPlugin(ctx: ToolContext): Promise<(c: GateCandidate) => boolean> {
-  const graph = await toolGraphOf(ctx);
+  const graph = toolGraphOf(ctx);
   const missing = new Set(checkBridgeParity(graph, ctx.bridge.capabilities).missing);
   if (missing.size === 0) return () => false;
   return (c) => {
@@ -152,7 +152,7 @@ export const editorTool: ToolDef = categoryTool(
         }
 
         // Candidates = meaningful matches (a name/phrase hit), capped at 5.
-        const candidates = searchToolGraph(await toolGraphOf(ctx), taskSummary, 5).filter((h) => h.score >= 4);
+        const candidates = searchToolGraph(toolGraphOf(ctx), taskSummary, 5).filter((h) => h.score >= 4);
         if (candidates.length > 0) {
           // #938 / #960: matching is spelling-insensitive and rulings persist
           // for the session, so the strings this refusal prints are exactly the

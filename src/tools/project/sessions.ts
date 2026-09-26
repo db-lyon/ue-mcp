@@ -56,7 +56,7 @@ export const sessionActions: Record<string, ActionSpec> = {
       // came one failed call at a time. The handshake carries the method
       // list the running binary registered, so the surface is compared
       // against it here instead of being taken on trust.
-      const parity = checkBridgeParity(await toolGraphOf(ctx), ctx.bridge.capabilities);
+      const parity = checkBridgeParity(toolGraphOf(ctx), ctx.bridge.capabilities);
 
       // "disconnected" on its own has never been actionable: it is the same
       // word for "no editor", "editor still loading shaders", and "editor

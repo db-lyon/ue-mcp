@@ -374,6 +374,15 @@ function routingDisabled(): boolean {
   return /^(0|off|false|no)$/i.test((process.env.UE_MCP_FEEDBACK_ROUTING ?? "").trim());
 }
 
+/** The addressed editor's graph for routing, or none when its surface is not built. */
+function builtInGraph(ctx: ToolContext): ToolDef[] | undefined {
+  try {
+    return ctx.getToolGraph?.();
+  } catch {
+    return undefined;
+  }
+}
+
 async function resolveRouting(
   ctx: ToolContext,
   input: { title: string; summary: string; idealTool?: string; repo?: string },
@@ -385,6 +394,7 @@ async function resolveRouting(
     idealTool: input.idealTool,
     explicitRepo: input.repo,
     installed: ctx.getPlugins?.() ?? [],
+    tools: builtInGraph(ctx),
   });
 }
 
@@ -1151,6 +1161,7 @@ export const feedbackTool: ToolDef = categoryTool(
           idealTool,
           explicitRepo: params.repo as string | undefined,
           installed: ctx.getPlugins?.() ?? [],
+          tools: builtInGraph(ctx),
         });
 
         return {

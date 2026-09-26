@@ -3,6 +3,7 @@
  * and `toEditor` parameters, and re-pointing a context at one session.
  */
 import { z } from "zod";
+import { McpError, ErrorCode } from "./errors.js";
 import { EDITOR_TARGET_PARAM, MIGRATE_TARGET_PARAM } from "./routing-params.js";
 import type { EditorSession } from "./session.js";
 import type { ToolContext, ToolDef } from "./types.js";
@@ -121,14 +122,16 @@ export function sessionContext(ctx: ToolContext, session: EditorSession): ToolCo
 }
 
 /**
- * The tool graph a call is answered against: the addressed editor's own, or
- * the process-wide live graph when the context carries no accessor (CLI,
- * scripts, direct unit calls). Every surface-introspection reader goes here.
+ * The tool graph a call is answered against: the addressed editor's own.
+ * Every surface-introspection reader goes here, and a context built without
+ * the accessor is refused rather than answered from some other graph.
  */
-export async function toolGraphOf(ctx: ToolContext): Promise<ToolDef[]> {
+export function toolGraphOf(ctx: ToolContext): ToolDef[] {
   if (ctx.getToolGraph) return ctx.getToolGraph();
-  const { getLiveToolGraph } = await import("./tools.js");
-  return getLiveToolGraph();
+  throw new McpError(
+    ErrorCode.NOT_FOUND,
+    "This call has no tool graph to answer from. It is only served inside a running server.",
+  );
 }
 
 /** Drop the routing parameter from a param bag. */

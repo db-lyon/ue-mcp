@@ -80,16 +80,6 @@ const DEPRIORITIZE = new Set(["execute_python", "run_python_file", "execute_comm
 // Wrapped Epic tools a single tool may place ahead of the other hits.
 const EPIC_HITS_PER_TOOL = 2;
 
-/**
- * Search every registered tool + action for a keyword/intent query.
- * The tool graph is imported lazily to avoid a load-time circular dependency
- * (tools.ts imports the project tool, which imports this).
- */
-export async function searchTools(query: string, limit = 20): Promise<ToolSearchHit[]> {
-  const { getLiveToolGraph } = await import("./tools.js");
-  return searchToolGraph(getLiveToolGraph(), query, limit);
-}
-
 /** Rank the graph supplied by the caller, including that session's plugins. */
 export function searchToolGraph(tools: SearchableTool[], query: string, limit = 20): ToolSearchHit[] {
   const q = (query ?? "").toLowerCase().trim();

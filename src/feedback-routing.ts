@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { PluginInfo } from "./types.js";
+import type { PluginInfo, ToolDef } from "./types.js";
 import {
   CORE_REPO,
   fetchRegistryCatalog,
@@ -11,7 +11,6 @@ import {
   type GitHubRepo,
   type RegistryPlugin,
 } from "./registry-catalog.js";
-import { debug } from "./log.js";
 
 /**
  * Decide which tracker a feedback report belongs in.
@@ -82,6 +81,9 @@ export interface RoutingInput {
   idealTool?: string;
   /** Plugins loaded into the current project (ctx.getPlugins()). */
   installed?: PluginInfo[];
+  /** The addressed editor's tool graph, which decides what counts as built in.
+   *  Omitted, no category or action is recognised as core. */
+  tools?: readonly ToolDef[];
   /** `owner/name` override from the caller. */
   explicitRepo?: string;
   /** Injected catalog. Tests pass this; production leaves it undefined. */
@@ -143,40 +145,32 @@ interface CoreSurface {
   actions: Map<string, string>; // action -> category
 }
 
-let coreSurfaceCache: CoreSurface | null = null;
+let coreSurfaceCache = new WeakMap<readonly ToolDef[], CoreSurface>();
+const NO_TOOLS: readonly ToolDef[] = [];
 
-/**
- * The built-in category/action surface, read from the live tool registry.
- *
- * Imported lazily: tools.ts imports feedback.ts which imports this module, so
- * a static import would close a cycle at module-init time. By the time any
- * routing runs, tools.ts is long since evaluated and this resolves instantly.
- */
-async function coreSurface(): Promise<CoreSurface> {
-  if (coreSurfaceCache) return coreSurfaceCache;
+/** The built-in category/action surface of the graph the caller hands in. */
+function coreSurface(tools: readonly ToolDef[] = NO_TOOLS): CoreSurface {
+  const cached = coreSurfaceCache.get(tools);
+  if (cached) return cached;
   const categories = new Set<string>();
   const actions = new Map<string, string>();
-  try {
-    const { getLiveToolGraph } = await import("./tools.js");
-    for (const tool of getLiveToolGraph()) {
-      categories.add(tool.name.toLowerCase());
-      for (const action of Object.keys(tool.actions)) {
-        const a = action.toLowerCase();
-        // Underscored names only. Bare verbs ("list", "add", "search") appear
-        // in ordinary prose and would anchor everything to core.
-        if (a.includes("_") && a.length >= 6) actions.set(a, tool.name);
-      }
+  for (const tool of tools) {
+    categories.add(tool.name.toLowerCase());
+    for (const action of Object.keys(tool.actions)) {
+      const a = action.toLowerCase();
+      // Underscored names only. Bare verbs ("list", "add", "search") appear
+      // in ordinary prose and would anchor everything to core.
+      if (a.includes("_") && a.length >= 6) actions.set(a, tool.name);
     }
-  } catch (e) {
-    debug("feedback-routing", "could not read the built-in tool surface", e);
   }
-  coreSurfaceCache = { categories, actions };
-  return coreSurfaceCache;
+  const surface = { categories, actions };
+  coreSurfaceCache.set(tools, surface);
+  return surface;
 }
 
-/** Test seam: forget the memoised built-in surface. */
+/** Test seam: forget the memoised built-in surfaces. */
 export function clearCoreSurfaceCache(): void {
-  coreSurfaceCache = null;
+  coreSurfaceCache = new WeakMap();
 }
 
 /* ── helpers ───────────────────────────────────────────────────────── */
@@ -420,7 +414,7 @@ function coreDecision(
 }
 
 export async function routeFeedback(input: RoutingInput): Promise<RoutingDecision> {
-  const core = await coreSurface();
+  const core = coreSurface(input.tools);
   const catalog = input.catalog ?? (await fetchRegistryCatalog({ timeoutMs: input.timeoutMs }));
   const catalogAvailable = catalog.length > 0;
   const installed = input.installed ?? [];

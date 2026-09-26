@@ -178,6 +178,7 @@ export class GuardedBridge extends ForwardingBridge {
         projectPath: this.inner.getTarget().projectPath,
         port: this.inner.getTarget().port,
         portSource: this.inner.getTarget().portSource,
+        toolGraph: this.session?.toolGraph,
       });
     }
   }

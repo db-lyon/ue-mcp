@@ -104,7 +104,7 @@ export function mutationScope(ctx: CallContext): boolean {
  * `unknown` means an argument decides. The guard has the arguments.
  */
 function effectOf(ctx: CallContext): ActionEffect {
-  return bridgeMethodEffect(ctx.method, ctx.params).effect;
+  return bridgeMethodEffect(ctx.method, ctx.params, ctx.session?.toolGraph).effect;
 }
 
 /**
@@ -154,7 +154,7 @@ export function makeCallContext(
     session,
   } as CallContext;
 
-  const write = lazy(ctx, "write", () => classifyWrite(method, params));
+  const write = lazy(ctx, "write", () => classifyWrite(method, params, session?.toolGraph));
   const writeFiles = lazy(ctx, "writeFiles", () => {
     const c = write();
     return c.writes

@@ -7,6 +7,7 @@ import { GuardRegistry, type BridgeGuard, type CallContext } from "../../src/flo
 import { CLIENT_PROTOCOL_VERSION, type BridgeCapabilities, type IBridge } from "../../src/bridge.js";
 import { ProjectContext } from "../../src/project.js";
 import { projectTool } from "../../src/tools/project.js";
+import { ALL_TOOLS } from "../../src/tools.js";
 import type { EditorSession } from "../../src/session.js";
 
 function fakeInner(result: unknown = { ok: true }): IBridge & { calls: Array<{ method: string; params?: Record<string, unknown> }> } {
@@ -154,7 +155,7 @@ describe("project(get_status) through the session's guarded bridge", () => {
     const inner = { ...fakeInner(), capabilities };
     const guarded = new GuardedBridge(inner, new GuardRegistry(), resolveExisting);
 
-    const status = (await projectTool.handler({ project, bridge: guarded } as never, {
+    const status = (await projectTool.handler({ project, bridge: guarded, getToolGraph: () => ALL_TOOLS } as never, {
       action: "get_status",
     })) as Record<string, unknown>;
 

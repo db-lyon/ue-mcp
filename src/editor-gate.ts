@@ -62,6 +62,8 @@ export interface UntargetedCall {
   activeEditor: string;
   /** The parameter name a caller uses to address an editor. */
   targetParam: string;
+  /** The graph whose declarations decide the effect. Omitted, the pristine one. */
+  graph?: readonly ToolDef[];
 }
 
 /**
@@ -75,7 +77,7 @@ export function refuseUntargetedCall(call: UntargetedCall): string | null {
   // The action's own declaration, not a reading of its name. A name is only
   // consulted for a task the tool graph does not carry, and the answer there
   // is a flat `mutate` rather than a second opinion about the name.
-  const { effect: cls } = taskEffect(call.taskName);
+  const { effect: cls } = taskEffect(call.taskName, call.graph);
   if (!requiresExplicitEditor(cls)) return null;
 
   const others = call.editors.filter((n) => n !== call.activeEditor);
@@ -173,6 +175,7 @@ export function refuseUntargetedInRegistry(
   sessions: SessionRegistry,
   taskName: string,
   targeted: boolean,
+  graph?: readonly ToolDef[],
 ): string | null {
   if (sessions.size <= 1 || targeted) return null;
   return refuseUntargetedCall({
@@ -180,6 +183,7 @@ export function refuseUntargetedInRegistry(
     editors: sessions.list().map((s) => s.name),
     activeEditor: sessions.active.name,
     targetParam: EDITOR_TARGET_PARAM,
+    graph,
   });
 }
 

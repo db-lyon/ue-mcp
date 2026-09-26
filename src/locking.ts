@@ -4,6 +4,7 @@ import { McpError, ErrorCode, type McpErrorDetails } from "./errors.js";
 import { debug } from "./log.js";
 import { taskEffect } from "./action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
+import type { ToolDef } from "./types.js";
 
 // Per-asset exclusive locking, orchestrated from the dispatch layer. The lock
 // registry itself lives in the C++ bridge (the one editor every agent shares);
@@ -79,9 +80,13 @@ const NEVER_LOCKED = new Set(["asset.lock", "asset.unlock", "asset.unlock_all", 
  * names no asset runs unlocked exactly as before. That is what keeps this from
  * locking the world: the path, not the verdict, is the narrow part.
  */
-export function classifyAction(taskName: string, params: Record<string, unknown>): ActionClassification {
+export function classifyAction(
+  taskName: string,
+  params: Record<string, unknown>,
+  graph?: readonly ToolDef[],
+): ActionClassification {
   if (NEVER_LOCKED.has(taskName)) return { mutates: false, paths: [] };
-  if (taskEffect(taskName).effect === "read") return { mutates: false, paths: [] };
+  if (taskEffect(taskName, graph).effect === "read") return { mutates: false, paths: [] };
 
   const paths = new Set<string>();
   for (const key of PATH_KEYS) {
@@ -139,10 +144,12 @@ export async function withAssetLocks<T>(
   run: () => Promise<T>,
   /** Who holds the locks. The addressed editor's id; omitted means this process. */
   ownerId: string = SESSION_ID,
+  /** The graph whose declarations decide the effect. Omitted, the pristine one. */
+  graph?: readonly ToolDef[],
 ): Promise<T> {
   if (!cfg.enabled) return run();
 
-  const { mutates, paths } = classifyAction(taskName, params);
+  const { mutates, paths } = classifyAction(taskName, params, graph);
   if (!mutates || paths.length === 0) return run();
 
   const held: string[] = [];

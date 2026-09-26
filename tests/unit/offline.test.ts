@@ -330,6 +330,7 @@ describe("project(list_available_actions) over the real dispatcher", () => {
           throw new Error("this context must never reach the editor");
         },
       },
+      getToolGraph: () => ALL_TOOLS,
     };
   }
 

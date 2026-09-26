@@ -63,7 +63,7 @@ import { withAssetLocks, resolveLockingConfig } from "./locking.js";
 import { collapsingEnvWarnings } from "./session-env.js";
 import * as path from "node:path";
 
-import { ALL_TOOLS, setLiveToolGraph } from "./tools.js";
+import { ALL_TOOLS } from "./tools.js";
 import { unknownActionMessage } from "./action-schema.js";
 import { applyNativeToolsConfig } from "./epic-surface.js";
 import { checkPluginFreshness } from "./plugin-freshness.js";
@@ -303,10 +303,9 @@ async function main() {
     ? unionSurface(loads.map((l) => ({ ...l.surface, tools: l.advertisedTools }))).tools
     : primaryLoad.advertisedTools;
 
-  // The union of every session's dispatchable graph. `search_tools`, the
-  // execute_python gate and the feedback router all ask "what does this server
-  // expose", and with a graph per session that answer no longer lives in the
-  // module-level declaration they used to read.
+  // The union of every session's dispatchable graph. The untargeted-call gate
+  // and asset locking read action effects from it, and explainMissingAction
+  // refuses from it.
   //
   // Recomputed when a session is registered at runtime: built from the startup
   // set alone, it could not refuse for an editor added later, and that editor's
@@ -316,9 +315,9 @@ async function main() {
     dispatchUnion = unionSurface(
       [...perSession.values()].map((l) => ({ ...l.surface, tools: l.registryTools })),
     );
-    setLiveToolGraph(dispatchUnion.tools);
   };
-  setLiveToolGraph(dispatchUnion.tools);
+  // Each editor's guard pipeline reads action effects from its own graph.
+  for (const [session, load] of perSession) session.toolGraph = load.registryTools;
   if (contextStrategy !== "full") {
     console.error(`[ue-mcp] Context strategy: ${contextStrategy}`);
   }
@@ -558,6 +557,7 @@ async function main() {
       await buildRegistryFor(load);
       await buildGuardsFor(load);
       perSession.set(session, load);
+      session.toolGraph = load.registryTools;
       surfaces.push(load.surface);
       // The union is what explainMissingAction refuses from, so it has to know
       // about this editor before the first call is routed to it.
@@ -680,7 +680,7 @@ async function main() {
    * so the single-editor path is the path it always was.
    */
   const gateUntargeted = (taskName: string, targeted: boolean): string | null =>
-    refuseUntargetedInRegistry(sessions, taskName, targeted);
+    refuseUntargetedInRegistry(sessions, taskName, targeted, dispatchUnion.tools);
 
   /** The serving editor, appended to a response only beyond one editor (5.3). */
   const attribution = (session: EditorSession): TextBlock[] => {
@@ -859,6 +859,7 @@ async function main() {
           subject.params,
           () => task.run(),
           session.lockOwnerId,
+          dispatchUnion.tools,
         );
 
         // A handler that makes several bridge calls can swallow a refusal and

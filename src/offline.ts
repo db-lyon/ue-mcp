@@ -31,6 +31,7 @@
 import type { ActionSpec, ToolDef } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { STATUS_STALE_AFTER_MS } from "./dialog-guard.js";
+import { readLogState, readEngineSnapshot } from "./engine-observer.js";
 
 /**
  * Whether an action can run with no editor attached.
@@ -179,7 +180,7 @@ export function classifyAvailability(tool: string, action: string, spec: ActionS
 }
 
 /** Every action in a tool graph, classified. Declaration order is preserved. */
-export function classifyGraph(graph: ToolDef[]): ActionVerdict[] {
+export function classifyGraph(graph: readonly ToolDef[]): ActionVerdict[] {
   const out: ActionVerdict[] = [];
   for (const tool of graph) {
     for (const [action, spec] of Object.entries(tool.actions)) {
@@ -190,7 +191,7 @@ export function classifyGraph(graph: ToolDef[]): ActionVerdict[] {
 }
 
 /** The `tool.action` names that run with no editor, for a graph. */
-export function offlineActionNames(graph: ToolDef[]): string[] {
+export function offlineActionNames(graph: readonly ToolDef[]): string[] {
   return classifyGraph(graph)
     .filter((v) => v.availability === "always")
     .map((v) => `${v.tool}.${v.action}`);
@@ -398,15 +399,16 @@ export function explainEditorDown(error: unknown, ctx: EditorDownContext): unkno
  * The same explanation, with the evidence gathered for you.
  *
  * Reads the editor's own log and the plugin's status snapshot (both plain file
- * reads) and counts the offline surface out of the live tool graph. All of it
- * happens on a failure path that has already given up, so the cost is paid
- * only by a call that was going to fail anyway. The tool graph is imported
- * dynamically because this module sits underneath it: a static import would
- * close the cycle from `tools.ts` back to itself.
+ * reads) and counts the offline surface out of the graph the caller hands in.
+ * All of it happens on a failure path that has already given up, so the cost
+ * is paid only by a call that was going to fail anyway.
  */
 export async function explainEditorDownWithEvidence(
   error: unknown,
-  ctx: Omit<EditorDownContext, "phase" | "blocking" | "modal" | "offlineActionCount">,
+  ctx: Omit<EditorDownContext, "phase" | "blocking" | "modal" | "offlineActionCount"> & {
+    /** The graph the failed call was dispatched from. Omitted, no count is given. */
+    toolGraph?: readonly ToolDef[];
+  },
 ): Promise<unknown> {
   if (!(error instanceof McpError) || error.code !== ErrorCode.NOT_CONNECTED) return error;
 
@@ -414,7 +416,6 @@ export async function explainEditorDownWithEvidence(
   let blocking: boolean | undefined;
   let modal: string | undefined;
   try {
-    const { readLogState, readEngineSnapshot } = await import("./engine-observer.js");
     const logState = readLogState(ctx.projectPath, 25);
     const snapshot = readEngineSnapshot(ctx.projectPath);
     // "unknown" is what the log reader says when there is no log to read, or
@@ -440,11 +441,11 @@ export async function explainEditorDownWithEvidence(
 
   let offlineActionCount: number | undefined;
   try {
-    const { getLiveToolGraph } = await import("./tools.js");
-    offlineActionCount = offlineActionNames(getLiveToolGraph()).length;
+    if (ctx.toolGraph) offlineActionCount = offlineActionNames(ctx.toolGraph).length;
   } catch {
     // Counting the surface is a nicety. Never let it swallow the real error.
   }
 
-  return explainEditorDown(error, { ...ctx, phase, blocking, modal, offlineActionCount });
+  const { toolGraph: _graph, ...context } = ctx;
+  return explainEditorDown(error, { ...context, phase, blocking, modal, offlineActionCount });
 }

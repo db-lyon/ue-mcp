@@ -19,14 +19,11 @@
  * The lexicon in `action-class.ts` survives for exactly the names that have no
  * declaration to read, and every caller of it records the answer as inferred.
  *
- * The index is derived from `getLiveToolGraph()` rather than `ALL_TOOLS`,
- * because the surface a running server dispatches is not the pristine
- * declaration: Epic enrichment injects wrapped engine tools and plugins inject
- * their own actions, and both of those carry an effect too. It is rebuilt when
- * the published graph is replaced, which the server does once at startup and
- * again whenever a session is registered.
+ * Every lookup takes the graph to read. The server passes the graph it
+ * dispatches, which carries plugin-injected actions and their effects too;
+ * omitted, the pristine declaration in `ALL_TOOLS` answers.
  */
-import { getLiveToolGraph } from "./tools.js";
+import { ALL_TOOLS } from "./tools.js";
 import { splitTaskName } from "./action-class.js";
 import { flowCategoryForCheck } from "./flow/flow-surface.js";
 import { EPIC_TOOL_EFFECTS } from "./tools/epic/effects.js";
@@ -103,10 +100,10 @@ interface EffectIndex {
   byBridgeMethod: Map<string, ActionEffect>;
 }
 
-let indexedGraph: ToolDef[] | null = null;
-let index: EffectIndex | null = null;
+/** One index per graph, dropped with the graph. */
+const indexes = new WeakMap<readonly ToolDef[], EffectIndex>();
 
-function build(graph: ToolDef[]): EffectIndex {
+function build(graph: readonly ToolDef[]): EffectIndex {
   const byAction = new Map<string, ActionEffect>();
   const byBridgeMethod = new Map<string, ActionEffect>();
   for (const tool of graph) {
@@ -128,26 +125,25 @@ function build(graph: ToolDef[]): EffectIndex {
   return { byAction, byBridgeMethod };
 }
 
-function current(): EffectIndex {
-  const graph = getLiveToolGraph();
-  if (index === null || indexedGraph !== graph) {
-    indexedGraph = graph;
-    // The flow tool is built per server, from a task registry and a config
-    // source, so it is registered outside `ALL_TOOLS` and is not in the
-    // published graph either: the graph is published during startup and the
-    // flow tool is constructed after it. Its actions still need their
-    // effects read, or `flow(plan)` would be refused as an untargeted change
-    // for being unrecognised. A unit test keeps this stand-in matching the
-    // tool the server actually registers.
+function indexFor(graph: readonly ToolDef[] = ALL_TOOLS): EffectIndex {
+  let index = indexes.get(graph);
+  if (!index) {
+    // The flow tool is built per server, outside every graph, so its actions
+    // are indexed from a stand-in a unit test keeps matching the real tool.
     index = build([...graph, flowCategoryForCheck()]);
+    indexes.set(graph, index);
   }
   return index;
 }
 
 
 /** What `${tool}.${action}` declares, or undefined when the graph has no such action. */
-export function declaredActionEffect(tool: string, action: string): ActionEffect | undefined {
-  return current().byAction.get(`${tool}.${action}`);
+export function declaredActionEffect(
+  tool: string,
+  action: string,
+  graph?: readonly ToolDef[],
+): ActionEffect | undefined {
+  return indexFor(graph).byAction.get(`${tool}.${action}`);
 }
 
 /**
@@ -158,16 +154,16 @@ export function declaredActionEffect(tool: string, action: string): ActionEffect
  * a flow step naming something the graph does not have, a category served by a
  * session this process is not holding, a typo.
  */
-export function actionEffect(tool: string, action: string): ResolvedEffect {
-  const declared = declaredActionEffect(tool, action);
+export function actionEffect(tool: string, action: string, graph?: readonly ToolDef[]): ResolvedEffect {
+  const declared = declaredActionEffect(tool, action, graph);
   if (declared !== undefined) return { effect: declared, source: "declared" };
   return { effect: UNDECLARED_EFFECT, source: "undeclared" };
 }
 
 /** The same, over a `category.action` task name. */
-export function taskEffect(taskName: string): ResolvedEffect {
+export function taskEffect(taskName: string, graph?: readonly ToolDef[]): ResolvedEffect {
   const { tool, action } = splitTaskName(taskName);
-  return actionEffect(tool, action);
+  return actionEffect(tool, action, graph);
 }
 
 
@@ -213,12 +209,13 @@ const ARGUMENT_DECIDES: Readonly<Record<string, (p: Record<string, unknown>) => 
 export function bridgeMethodEffect(
   method: string,
   params?: Record<string, unknown>,
+  graph?: readonly ToolDef[],
 ): ResolvedEffect {
   if (params) {
     const decided = ARGUMENT_DECIDES[method]?.(params);
     if (decided !== undefined) return { effect: decided, source: "declared" };
   }
-  const declared = current().byBridgeMethod.get(method);
+  const declared = indexFor(graph).byBridgeMethod.get(method);
   if (declared !== undefined) return { effect: declared, source: "declared" };
   const raw = RAW_BRIDGE_METHODS[method];
   if (raw !== undefined) return { effect: raw, source: "declared" };

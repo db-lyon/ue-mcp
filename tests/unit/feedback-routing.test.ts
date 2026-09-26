@@ -3,6 +3,7 @@ import { routeFeedback, clearCoreSurfaceCache } from "../../src/feedback-routing
 import { parseGitHubRepo, parseRepoSlug, repoSlug, newIssueUrl } from "../../src/registry-catalog.js";
 import type { RegistryPlugin } from "../../src/registry-catalog.js";
 import type { PluginInfo } from "../../src/types.js";
+import { ALL_TOOLS } from "../../src/tools.js";
 
 /**
  * A trimmed copy of the live plugins.ue-mcp.com catalog. Injected, so these
@@ -75,6 +76,7 @@ describe("feedback routing", () => {
         "Replaying a recorded PIE session drifts from the capture: the pawn ends up several metres from where it was recorded, and the observation profile reports no divergence.",
       idealTool: "pie(action=replay)",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [installedPieStudio()],
     });
 
@@ -90,6 +92,7 @@ describe("feedback routing", () => {
       summary:
         "Injecting a recorded input tape loses the very first frame, so a jump queued on frame 0 never fires during the replayed session.",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [],
     });
 
@@ -104,6 +107,7 @@ describe("feedback routing", () => {
       summary:
         "Starting PIE through editor(play_in_editor) hangs until the asset registry scan finishes, and the call times out before that happens.",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [installedPieStudio()],
     });
 
@@ -122,6 +126,7 @@ describe("feedback routing", () => {
         "Setting a class default marks the blueprint dirty but never saves it, so the change is lost unless a separate save call runs afterwards.",
       idealTool: "blueprint(action=set_class_default)",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [installedPieStudio()],
     });
 
@@ -138,6 +143,7 @@ describe("feedback routing", () => {
       summary:
         "Importing an FBX that carries embedded textures reports success but no texture assets appear on disk, and the material slots stay unassigned.",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [],
     });
 
@@ -151,6 +157,7 @@ describe("feedback routing", () => {
       summary:
         "The import completes and the mesh appears, but every material slot comes back empty so the asset renders with the default grey material.",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [],
     });
 
@@ -165,6 +172,7 @@ describe("feedback routing", () => {
       summary:
         "Clicking record in the toolbar leaves the recorder disarmed, so starting play captures nothing at all and the frame count stays at zero.",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [],
     });
 
@@ -180,6 +188,7 @@ describe("feedback routing", () => {
       summary:
         "The submit reports success and the files land in the depot, but the changelist stays pending locally so the next submit picks up the same files again.",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [],
     });
 
@@ -193,6 +202,7 @@ describe("feedback routing", () => {
       summary:
         "Passing an import (the absolute path) does nothing at all when the level loads, and no warning is written to the log either.",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [],
     });
 
@@ -205,6 +215,7 @@ describe("feedback routing", () => {
       summary:
         "Every captured frame comes out fully black, so the generated contact sheet is unusable for reading what happened during the run.",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [],
     });
 
@@ -218,6 +229,7 @@ describe("feedback routing", () => {
       summary: "Setting a class default marks the blueprint dirty but never saves it to disk.",
       explicitRepo: "db-lyon/ue-mcp-perforce",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
     });
 
     expect(d.target).toBe("plugin");
@@ -231,6 +243,7 @@ describe("feedback routing", () => {
       summary: "Replaying a recorded PIE session drifts badly from the original capture.",
       explicitRepo: "someone-else/private-thing",
       catalog: CATALOG,
+      tools: ALL_TOOLS,
       installed: [installedPieStudio()],
     });
 
