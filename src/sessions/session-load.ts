@@ -19,6 +19,7 @@ import { assertNoLegacyGuardTasks, buildGuards } from "../flow/guards.js";
 import { createLiveGuardSource } from "../flow/guard-config.js";
 import { FlowConfigCache } from "../flow/config-cache.js";
 import type { FlowConfig, PluginEntry } from "../flow/schema.js";
+import type { FlowSource } from "../flow/flow-describe.js";
 import { loadPlugins, type PluginRecord } from "../extensions/loader.js";
 import { readPluginsList } from "../extensions/plugins-list.js";
 
@@ -231,6 +232,35 @@ export class SessionLoads {
     }
   }
 
+  /**
+   * What describing the session's flows needs: its merged config, its task
+   * registry and its config layers. Undefined when it has no load or its
+   * config does not parse.
+   */
+  getFlowSource(forSession: EditorSession = this.primary): FlowSource | undefined {
+    const load = this.perSession.get(forSession);
+    if (!load?.registry) return undefined;
+    try {
+      const config = load.flowConfig.get();
+      const owners = new Map(load.surface.pluginRecords.flatMap((r) => r.flows.map((f) => [f, r.name] as const)));
+      return {
+        config,
+        registry: load.registry,
+        // The plugin layer is split per plugin, so a flow names the one that shipped it.
+        layers: () => load.flowConfig.layerDocs().flatMap((layer) => {
+          if (layer.source !== "plugin") return [layer];
+          const flows = ((layer.doc as { flows?: Record<string, unknown> }).flows) ?? {};
+          return Object.entries(flows).map(([name, def]) => ({
+            source: `plugin:${owners.get(name) ?? "unknown"}`,
+            doc: { flows: { [name]: def } },
+          }));
+        }),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
   /** The session's own plugin records. A session with no load has none. */
   getPlugins(forSession: EditorSession = this.primary): PluginInfo[] {
     const load = this.perSession.get(forSession);
@@ -263,6 +293,7 @@ export class SessionLoads {
       session,
       sessions: this.sessions,
       getFlows: (forSession) => this.getFlows(forSession ?? session),
+      getFlowSource: (forSession) => this.getFlowSource(forSession ?? session),
       getPlugins: (forSession) => this.getPlugins(forSession ?? session),
       getToolGraph: (forSession) => this.getToolGraph(forSession ?? session),
     };

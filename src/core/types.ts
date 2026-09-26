@@ -5,6 +5,7 @@ import type { ProjectContext } from "../config/project.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ParamChoice, ParamSpec } from "../surface/handler-spec.js";
 import type { EpicInputSchema, EpicToolRef } from "../surface/epic-input.js";
+import type { FlowSource } from "../flow/flow-describe.js";
 
 /**
  * Elicit a deterministic, user-mediated form response via the MCP client.
@@ -90,6 +91,8 @@ export interface ToolContext {
    *  Takes the session to read, because flows are declared in each project's
    *  own ue-mcp.yml; omitted means this context's session. */
   getFlows?: (forSession?: EditorSession) => Array<{ name: string; description?: string }>;
+  /** The session's flow config and task registry, for describing a flow without running it. */
+  getFlowSource?: (forSession?: EditorSession) => FlowSource | undefined;
   /** Lazy accessor for the loaded plugin set. Returns one PluginInfo per
    *  entry in the user's `plugins:` array, active or skipped. Used by the
    *  `plugins` introspection category. Session-scoped for the same reason

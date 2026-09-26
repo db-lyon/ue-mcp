@@ -4,6 +4,7 @@ import { availabilityReport } from "../../dispatch/offline.js";
 import { getWorkarounds } from "../../dispatch/workaround-tracker.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
 import { toolGraphOf } from "../../surface/target-params.js";
+import { describeFlow, flowAvailability, flowNameOf, searchFlows } from "../../flow/flow-describe.js";
 
 /** Surface introspection: search, describe and list what this server can serve. */
 export const surfaceActions: Record<string, ActionSpec> = {
@@ -17,10 +18,13 @@ export const surfaceActions: Record<string, ActionSpec> = {
       if (!query.trim()) throw new Error("Missing 'query'");
       const limit = (p.limit as number) ?? 20;
       const results = searchToolGraph(toolGraphOf(_ctx), query, limit);
+      // Flows are not actions, so they are listed beside the results, never in them.
+      const flows = searchFlows(_ctx.getFlows?.() ?? [], query, limit);
       return {
         query,
         resultCount: results.length,
         results,
+        flows: flows.length > 0 ? flows : undefined,
         hint: results.length === 0 ? "No dedicated action matched. Only then consider editor(execute_python)." : undefined,
       };
     },
@@ -66,6 +70,10 @@ export const surfaceActions: Record<string, ActionSpec> = {
 
       const matches = resolveActionRef(name, graph);
       if (matches.length === 0) {
+        // Not an action: a flow of that name answers with its resolved plan.
+        const source = ctx.getFlowSource?.();
+        const flow = source ? await describeFlow(source, flowNameOf(name)) : undefined;
+        if (flow) return flow;
         const suggestions = suggestActions(name, graph);
         throw new Error(
           `Unknown action '${name}'.`
@@ -126,8 +134,21 @@ export const surfaceActions: Record<string, ActionSpec> = {
         names: p.includeNames === true,
       });
       const target = ctx.bridge.getTarget();
+      // Flows run whatever their steps need; reported beside the actions, whole-surface only.
+      const source = category ? undefined : ctx.getFlowSource?.();
+      const flows = source ? await flowAvailability(source, graph, ctx.bridge.isConnected) : undefined;
       return {
         ...report,
+        flows: flows && flows.length > 0
+          ? {
+              total: flows.length,
+              availableNow: flows.filter((f) => f.availableNow).length,
+              blocked: flows.filter((f) => !f.availableNow).length,
+              flows: p.includeNames === true
+                ? flows.filter((f) => state === "all" || (state === "available") === f.availableNow)
+                : undefined,
+            }
+          : undefined,
         editorTarget: { projectPath: target.projectPath, port: target.port, portSource: target.portSource },
         hint: report.blocked > 0
           ? "editor(action='start_editor') launches the editor and blocks until its bridge answers."

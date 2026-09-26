@@ -100,6 +100,7 @@ const PER_SESSION: Record<string, string> = {
   "flow/action-call.ts": "Runs another action, or a handler's own bridge method, on the context's session bridge.",
   "flow/condition.ts": "Reads the project, editor and session of the context it is handed for flow references and conditions.",
   "flow/live-task.ts": "Resolves a live call through the addressed session's registry and task definitions.",
+  "flow/flow-describe.ts": "Describes the flows in the session flow source it is handed: that project's config, registry and layers.",
   "flow/git-snapshot.ts": "Snapshots the repository holding one project, through its bridge.",
   "flow/http-server.ts": "Resolves an editor per request and refuses an untargeted run.",
 
