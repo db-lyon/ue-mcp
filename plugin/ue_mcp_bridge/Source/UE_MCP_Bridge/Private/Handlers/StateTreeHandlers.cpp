@@ -1035,9 +1035,16 @@ bool FStateTreeHandlers::CompileAndSave(UStateTree* StateTree, TSharedPtr<FJsonO
 	OutResult->SetArrayField(TEXT("errors"), Errors);
 	OutResult->SetArrayField(TEXT("warnings"), Warnings);
 
+	// Saves only a tree that compiled; the save outcome lands on OutResult.
 	if (bSuccess)
 	{
-		SaveAssetPackage(StateTree);
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(StateTree, SaveError);
+		MCPNoteSaveOutcome(OutResult, StateTree->GetPathName(), bSaved, SaveError);
+	}
+	else
+	{
+		OutResult->SetBoolField(TEXT("saved"), false);
 	}
 
 	return bSuccess;
@@ -3550,12 +3557,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::CompileStateTree(const TSharedPtr<FJs
 	if (auto SchemaErr = RequireSchema(ST, AssetPath)) return SchemaErr;
 
 	auto Result = MCPSuccess();
-	// CompileAndSave gates SaveAssetPackage on success, so `saved` is a fact this
-	// handler can state. Whether a FAILED compile left the asset's in-memory
-	// compiled data intact is not: the compiler resets it before rebuilding, and
-	// nothing here can observe the outcome, so no claim is made about it.
+	// CompileAndSave saves only on success and records `saved`. A failed compile
+	// may have reset the in-memory compiled data, so no claim is made about it.
 	const bool bCompiled = CompileAndSave(ST, Result);
-	Result->SetBoolField(TEXT("saved"), bCompiled);
 	if (bCompiled)
 	{
 		MCPSetUpdated(Result);
@@ -3639,8 +3643,12 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetSchema(const TSharedPtr<FJsonObjec
 	// root state with no tasks), so the write is saved regardless - otherwise
 	// the repair would be lost on the next reload.
 	const bool bCompiled = CompileAndSave(ST, Result);
-	if (!bCompiled) SaveAssetPackage(ST);
-	Result->SetBoolField(TEXT("saved"), true);
+	if (!bCompiled)
+	{
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(ST, SaveError);
+		MCPNoteSaveOutcome(Result, ST->GetPathName(), bSaved, SaveError);
+	}
 	if (Attach.bSchemaChanged || Attach.bCreatedEditorData) MCPSetUpdated(Result);
 	else Result->SetBoolField(TEXT("updated"), false);
 
