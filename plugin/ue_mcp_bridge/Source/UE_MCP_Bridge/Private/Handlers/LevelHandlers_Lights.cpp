@@ -33,6 +33,37 @@
 #include "Dom/JsonValue.h"
 
 
+namespace
+{
+	/** Read r/g/b in 0-255 units; a missing channel reads as 255. */
+	void MCPLightReadChannels255(const TSharedPtr<FJsonObject>& Obj, double& R, double& G, double& B)
+	{
+		R = 255.0; G = 255.0; B = 255.0;
+		if (!Obj.IsValid()) return;
+		Obj->TryGetNumberField(TEXT("r"), R);
+		Obj->TryGetNumberField(TEXT("g"), G);
+		Obj->TryGetNumberField(TEXT("b"), B);
+	}
+
+	/** A light colour given as {r,g,b} in 0-255 units. */
+	FLinearColor MCPLightColorFrom255(const TSharedPtr<FJsonObject>& Obj)
+	{
+		double R, G, B;
+		MCPLightReadChannels255(Obj, R, G, B);
+		return FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f);
+	}
+
+	/** A light colour written back as {r,g,b} in the 0-255 units it is read in. */
+	TSharedPtr<FJsonObject> MCPLightColorTo255Json(const FLinearColor& Color)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("r"), Color.R * 255.0f);
+		Obj->SetNumberField(TEXT("g"), Color.G * 255.0f);
+		Obj->SetNumberField(TEXT("b"), Color.B * 255.0f);
+		return Obj;
+	}
+}
+
 TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, {
@@ -105,11 +136,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 		{
 			return false;
 		}
-		double R = 255.0, G = 255.0, B = 255.0;
-		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
-		(*ColorObj)->TryGetNumberField(TEXT("g"), G);
-		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
-		OutColor = FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f);
+		OutColor = MCPLightColorFrom255(*ColorObj);
 		return true;
 	};
 
@@ -341,13 +368,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
 	if (TryGetObjectParam(Params, TEXT("color"), ColorObj))
 	{
-		double R = 255.0, G = 255.0, B = 255.0;
-		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
-		(*ColorObj)->TryGetNumberField(TEXT("g"), G);
-		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
+		const FLinearColor NewColor = MCPLightColorFrom255(*ColorObj);
 		PrepareComponentMutation();
-		if (LightComponent) { LightComponent->SetLightColor(FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f)); }
-		else { SkyForProps->SetLightColor(FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f)); }
+		if (LightComponent) { LightComponent->SetLightColor(NewColor); }
+		else { SkyForProps->SetLightColor(NewColor); }
 		bAnyChange = true;
 		bChangedColor = true;
 	}
@@ -464,11 +488,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 
 	FLinearColor CurrentColor = LightComponent ? LightComponent->GetLightColor()
 		: (SkyForProps ? FLinearColor(SkyForProps->LightColor) : FLinearColor::White);
-	TSharedPtr<FJsonObject> ColorResult = MakeShared<FJsonObject>();
-	ColorResult->SetNumberField(TEXT("r"), CurrentColor.R * 255.0f);
-	ColorResult->SetNumberField(TEXT("g"), CurrentColor.G * 255.0f);
-	ColorResult->SetNumberField(TEXT("b"), CurrentColor.B * 255.0f);
-	Result->SetObjectField(TEXT("color"), ColorResult);
+	Result->SetObjectField(TEXT("color"), MCPLightColorTo255Json(CurrentColor));
 
 	if (bAnyChange)
 	{
@@ -480,11 +500,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 		}
 		if (bChangedColor)
 		{
-			TSharedPtr<FJsonObject> PrevColor = MakeShared<FJsonObject>();
-			PrevColor->SetNumberField(TEXT("r"), PreviousColor.R * 255.0f);
-			PrevColor->SetNumberField(TEXT("g"), PreviousColor.G * 255.0f);
-			PrevColor->SetNumberField(TEXT("b"), PreviousColor.B * 255.0f);
-			Payload->SetObjectField(TEXT("color"), PrevColor);
+			Payload->SetObjectField(TEXT("color"), MCPLightColorTo255Json(PreviousColor));
 		}
 		if (bChangedVolumetricScattering)
 		{
@@ -612,20 +628,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFogProperties(const TSharedPtr<FJsonOb
 	// color is a spec alias, renamed to fogInscatteringColor before this runs (#1057).
 	if (TryGetObjectParam(Params, TEXT("fogInscatteringColor"), ColorObj))
 	{
-		double R = 255, G = 255, B = 255;
-		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
-		(*ColorObj)->TryGetNumberField(TEXT("g"), G);
-		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
 		// Back out through the same 0-255 scaling the write applies, so the
 		// inverse replays in the units the action reads.
-		const FLinearColor PreviousInscattering = FC->FogInscatteringLuminance;
-		TSharedPtr<FJsonObject> PreviousColor = MakeShared<FJsonObject>();
-		PreviousColor->SetNumberField(TEXT("r"), PreviousInscattering.R * 255.0);
-		PreviousColor->SetNumberField(TEXT("g"), PreviousInscattering.G * 255.0);
-		PreviousColor->SetNumberField(TEXT("b"), PreviousInscattering.B * 255.0);
-		Rollback->SetObjectField(TEXT("fogInscatteringColor"), PreviousColor);
+		Rollback->SetObjectField(TEXT("fogInscatteringColor"), MCPLightColorTo255Json(FC->FogInscatteringLuminance));
 		bAnyChange = true;
-		FC->FogInscatteringLuminance = FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f);
+		FC->FogInscatteringLuminance = MCPLightColorFrom255(*ColorObj);
 	}
 
 	// #608: volumetric fog controls.
@@ -659,10 +666,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFogProperties(const TSharedPtr<FJsonOb
 	const TSharedPtr<FJsonObject>* AlbedoObj = nullptr;
 	if (TryGetObjectParam(Params, TEXT("volumetricFogAlbedo"), AlbedoObj) && AlbedoObj)
 	{
-		double R = 255, G = 255, B = 255;
-		(*AlbedoObj)->TryGetNumberField(TEXT("r"), R);
-		(*AlbedoObj)->TryGetNumberField(TEXT("g"), G);
-		(*AlbedoObj)->TryGetNumberField(TEXT("b"), B);
+		double R, G, B;
+		MCPLightReadChannels255(*AlbedoObj, R, G, B);
 		// The albedo is stored as an FColor, so its previous value already is
 		// in the 0-255 form this action reads.
 		const FColor PreviousAlbedo = FC->VolumetricFogAlbedo;
