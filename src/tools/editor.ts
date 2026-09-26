@@ -12,8 +12,8 @@ import { progressRenderingNote } from "../client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
 import { searchToolGraph } from "../tool-search.js";
 import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../python-gate.js";
-import { checkBridgeParity } from "../bridge-parity.js";
-import { PLUGIN_UPGRADE_POINTER } from "../bridge.js";
+import { checkBridgeParity } from "../bridge/bridge-parity.js";
+import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
 

@@ -16,7 +16,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
-import type { IBridge } from "../src/bridge.js";
+import type { IBridge } from "../src/bridge/bridge.js";
 
 /** One call this bridge received. */
 export interface RecordedCall {

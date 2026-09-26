@@ -26,7 +26,7 @@
  */
 import { BaseTask } from "@db-lyon/flowkit";
 import type { TaskResult, RollbackRecord, TaskContext } from "@db-lyon/flowkit";
-import type { IBridge } from "./bridge.js";
+import type { IBridge } from "./bridge/bridge.js";
 import type { FlowContext } from "./flow/context.js";
 
 /**

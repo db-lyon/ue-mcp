@@ -22,7 +22,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, resultArray, TEST_PREFIX } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const BP = `${TEST_PREFIX}/BP_DeleteGraph`;
 const FUNCTION_GRAPH = "DoomedFunction";

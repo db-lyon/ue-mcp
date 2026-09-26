@@ -3,7 +3,7 @@
 // on UE 5.8 because the GUID-map registration was gated to exactly 5.4.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge, TEST_PREFIX } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });

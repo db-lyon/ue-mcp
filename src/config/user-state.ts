@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { normalizeProjectRoot } from "../port.js";
+import { normalizeProjectRoot } from "../bridge/port.js";
 import { warn } from "../core/log.js";
 import { userDir } from "../core/user-dir.js";
 import { readEnv } from "../core/env.js";

@@ -5,7 +5,7 @@
 // class default object.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const LABEL = "MCPTest_806_Cube";
 const SPAWN = { x: 1800, y: -2000, z: 0 };

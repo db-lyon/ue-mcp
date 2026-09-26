@@ -20,12 +20,12 @@
  * session and behaves as it always has: nothing here is conditional on the
  * count except targeting itself.
  */
-import { EditorBridge } from "./bridge.js";
+import { EditorBridge } from "./bridge/bridge.js";
 import { ProjectContext } from "./config/project.js";
 import { GuardedBridge } from "./flow/guarded-bridge.js";
 import { GuardRegistry } from "./flow/guard.js";
 import { makeResolveExistingFile } from "./flow/guard.js";
-import { normalizeProjectRoot } from "./port.js";
+import { normalizeProjectRoot } from "./bridge/port.js";
 import { McpError, ErrorCode } from "./core/errors.js";
 import { warn } from "./core/log.js";
 import { newLockOwnerId } from "./lock-owner.js";

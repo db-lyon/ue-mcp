@@ -1,12 +1,12 @@
 import { checkPluginFreshness } from "../../plugin-freshness.js";
-import { checkBridgeParity, deployedPlugin } from "../../bridge-parity.js";
+import { checkBridgeParity, deployedPlugin } from "../../bridge/bridge-parity.js";
 import * as fs from "node:fs";
 import { deploy, deploySummary, attach, attachSummary } from "../../deployer.js";
 import { collapsingEnvWarnings } from "../../config/session-env.js";
 import { startEditor, isBridgeReachable, connectedEditorOf } from "../../editor-control.js";
 import { detectProjectHolders } from "../../project-holders.js";
 import { readDeployedBridgeApiVersion } from "../../plugin/bridge-api.js";
-import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../../bridge.js";
+import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../../bridge/bridge.js";
 import { readLogState, readEngineSnapshot } from "../../engine-observer.js";
 import { switchProject, isTargetDiverged } from "../../project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../config/project.js";

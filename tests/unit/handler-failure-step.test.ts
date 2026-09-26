@@ -35,7 +35,7 @@ import { createFlowTool } from "../../src/flow/flow-tool.js";
 import type { ToolContext, ToolDef } from "../../src/core/types.js";
 import { categoryTool } from "../../src/category-tool.js";
 import { ProjectContext } from "../../src/config/project.js";
-import type { IBridge } from "../../src/bridge.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 import type { FlowContext } from "../../src/flow/context.js";
 
 /** Every call the fake editor was asked to make, plus the canned answers. */

@@ -2,14 +2,14 @@ import WebSocket from "ws";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { McpError, ErrorCode } from "./core/errors.js";
+import { McpError, ErrorCode } from "../core/errors.js";
 import { resolveBridgeTimeout, TIMEOUT_ENV_VAR } from "./bridge-timeouts.js";
-import { debug, warn } from "./core/log.js";
+import { debug, warn } from "../core/log.js";
 import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
 import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
 import { syncRequestedPort } from "./requested-port.js";
-import { packageVersion } from "./core/package-root.js";
-import { readEnv } from "./core/env.js";
+import { packageVersion } from "../core/package-root.js";
+import { readEnv } from "../core/env.js";
 
 /**
  * The wire protocol this client speaks. Must match
@@ -615,7 +615,7 @@ export class EditorBridge implements IBridge {
     // #989: not a flat 30s any more. An explicit per-call budget is honoured,
     // and a method the C++ side registered a longer timeout for is waited out
     // to that limit, so the client stops declaring a failure on a call the
-    // editor is still allowed to be running. See src/bridge-timeouts.ts.
+    // editor is still allowed to be running. See src/bridge/bridge-timeouts.ts.
     const timeout = resolveBridgeTimeout(method, timeoutMs);
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {

@@ -25,9 +25,9 @@ import {
 } from "../../src/python-gate.js";
 import { editorTool } from "../../src/tools/editor.js";
 import { resetAllWorkarounds } from "../../src/workaround-tracker.js";
-import { PLUGIN_UPGRADE_POINTER } from "../../src/bridge.js";
+import { PLUGIN_UPGRADE_POINTER } from "../../src/bridge/bridge.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import type { IBridge } from "../../src/bridge.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 import type { ToolContext } from "../../src/core/types.js";
 
 const CANDIDATES: GateCandidate[] = [

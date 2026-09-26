@@ -34,7 +34,7 @@ import { routeEditorCall } from "../../src/editor-gate.js";
 import type { ToolContext, ToolDef } from "../../src/core/types.js";
 import { cloneToolDef } from "../../src/category-tool.js";
 import { injectEditorTarget, sessionContext } from "../../src/target-params.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 import { LiveServer } from "./server.js";
 import {
   clearParamEcho,

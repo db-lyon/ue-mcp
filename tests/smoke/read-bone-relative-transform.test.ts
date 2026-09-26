@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, resultArray, TEST_PREFIX } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const SOURCE_MESH = "/Engine/EngineMeshes/SkeletalCube";
 const TEST_MESH = `${TEST_PREFIX}/SKM_ReadBoneRelative`;

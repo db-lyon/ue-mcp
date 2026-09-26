@@ -28,7 +28,7 @@
  * it is never owed a ruling. It is listed apart with the upgrade pointer
  * instead (#1167).
  */
-import { PLUGIN_UPGRADE_POINTER } from "./bridge.js";
+import { PLUGIN_UPGRADE_POINTER } from "./bridge/bridge.js";
 import { workaroundScope, type WorkaroundScopeSource } from "./workaround-tracker.js";
 
 /** A ruling has to say something. Twelve characters is the long-standing bar. */

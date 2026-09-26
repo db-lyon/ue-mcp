@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { describe, it, expect, vi } from "vitest";
 import { DialogGatedBridge, GuardedBridge } from "../../src/flow/guarded-bridge.js";
 import { GuardRegistry, type BridgeGuard, type CallContext } from "../../src/flow/guard.js";
-import { CLIENT_PROTOCOL_VERSION, type BridgeCapabilities, type IBridge } from "../../src/bridge.js";
+import { CLIENT_PROTOCOL_VERSION, type BridgeCapabilities, type IBridge } from "../../src/bridge/bridge.js";
 import { ProjectContext } from "../../src/config/project.js";
 import { projectTool } from "../../src/tools/project.js";
 import { ALL_TOOLS } from "../../src/tools.js";

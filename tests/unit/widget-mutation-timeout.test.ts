@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { widgetTool } from "../../src/tools/widget.js";
-import type { IBridge } from "../../src/bridge.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 import type { ToolContext } from "../../src/core/types.js";
 
 /**

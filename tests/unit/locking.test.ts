@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { classifyAction, resolveLockingConfig, withAssetLocks } from "../../src/locking.js";
-import type { IBridge } from "../../src/bridge.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 import { McpError, ErrorCode } from "../../src/core/errors.js";
 import { callSubject } from "../../src/editor-gate.js";
 import { buildMicroGateway } from "../../src/micro-context.js";

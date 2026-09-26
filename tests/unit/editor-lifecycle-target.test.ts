@@ -41,7 +41,7 @@ vi.mock("../../src/engine-observer.js", async (importOriginal) => {
 
 const observer = await import("../../src/engine-observer.js");
 const { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../src/editor-control.js");
-const { bridgeLockfilePath } = await import("../../src/editor-target.js");
+const { bridgeLockfilePath } = await import("../../src/bridge/editor-target.js");
 const { ProjectContext } = await import("../../src/config/project.js");
 
 const findInteractiveEditors = vi.mocked(observer.findInteractiveEditors);

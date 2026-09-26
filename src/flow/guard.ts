@@ -21,7 +21,7 @@ import {
   type GuardContext,
 } from "@db-lyon/flowkit/guard";
 import * as fs from "node:fs";
-import type { IBridge } from "../bridge.js";
+import type { IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
 import type { EditorSession } from "../session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";

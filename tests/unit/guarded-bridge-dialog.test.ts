@@ -15,7 +15,7 @@ import { GuardedBridge } from "../../src/flow/guarded-bridge.js";
 import { GuardRegistry } from "../../src/flow/guard.js";
 import { guardFor, forgetGuard, withoutDialogActuation } from "../../src/dialog-guard.js";
 import type { EditorSession } from "../../src/session.js";
-import type { IBridge } from "../../src/bridge.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 
 const DIALOG = {
   title: "Save Content",

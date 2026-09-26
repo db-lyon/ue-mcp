@@ -10,7 +10,7 @@ import { PluginManifestSchema } from "../../src/plugin/manifest.js";
 import { buildProvidedTool } from "../../src/plugin/provision.js";
 import { categoryTool } from "../../src/category-tool.js";
 import { UeMcpTask } from "../../src/task.js";
-import type { IBridge } from "../../src/bridge.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 
 // The same manifest -> registry-kind action -> native task registration path
 // as PIE Studio, without installing a plugin or contacting an editor.

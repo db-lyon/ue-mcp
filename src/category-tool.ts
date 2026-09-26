@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 import { McpError, ErrorCode } from "./core/errors.js";
-import { MAX_BRIDGE_TIMEOUT_MS } from "./bridge-timeouts.js";
+import { MAX_BRIDGE_TIMEOUT_MS } from "./bridge/bridge-timeouts.js";
 import { unknownActionMessage } from "./action-schema.js";
 import { stripAction } from "./routing-params.js";
 import { stripEditorTarget } from "./target-params.js";

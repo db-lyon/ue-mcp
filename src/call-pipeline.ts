@@ -30,7 +30,7 @@
  */
 import { ENV_VARS, readEnv } from "./core/env.js";
 import { normalizePathParams, attachPathRepairs, type PathRepair } from "./path-params.js";
-import { MAX_BRIDGE_TIMEOUT_MS } from "./bridge-timeouts.js";
+import { MAX_BRIDGE_TIMEOUT_MS } from "./bridge/bridge-timeouts.js";
 import {
   takeFieldSelection,
   projectResult,

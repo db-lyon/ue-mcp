@@ -16,8 +16,8 @@ import type { AddressInfo } from "node:net";
 import { WebSocketServer } from "ws";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { EditorBridge } from "../../src/bridge.js";
-import { resolveLiveBridgeAddress } from "../../src/editor-target.js";
+import { EditorBridge } from "../../src/bridge/bridge.js";
+import { resolveLiveBridgeAddress } from "../../src/bridge/editor-target.js";
 
 async function fakeEditor(name: string): Promise<{ port: number; close: () => Promise<void> }> {
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });

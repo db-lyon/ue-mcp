@@ -21,14 +21,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { EditorBridge, readBridgeErrorRecord } from "../../src/bridge.js";
-import { resolveBridgeTarget, isPidAlive, readBridgeLockfileIn } from "../../src/editor-target.js";
+import { EditorBridge, readBridgeErrorRecord } from "../../src/bridge/bridge.js";
+import { resolveBridgeTarget, isPidAlive, readBridgeLockfileIn } from "../../src/bridge/editor-target.js";
 import { checkPluginFreshness } from "../../src/plugin-freshness.js";
 import { attach } from "../../src/deployer.js";
 import { startEditor } from "../../src/editor-control.js";
 import { switchProject } from "../../src/project-switch.js";
 import { ProjectContext } from "../../src/config/project.js";
-import { requestedPortPath } from "../../src/requested-port.js";
+import { requestedPortPath } from "../../src/bridge/requested-port.js";
 import { LiveServer, resultJson } from "./server.js";
 import { closeLiveBridges, liveTarget, makeTempProject } from "./harness.js";
 

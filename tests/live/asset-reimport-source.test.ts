@@ -21,7 +21,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { callBridge, disconnectBridge, getBridge, TEST_PREFIX } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 /** Authored in the editor, so nothing can reimport it. */
 const AUTHORED_ASSET = `${TEST_PREFIX}/BP_ReimportProbe`;

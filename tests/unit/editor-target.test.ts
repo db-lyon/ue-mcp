@@ -9,7 +9,7 @@ import {
   lockfileIsFromThisLaunch,
   readBridgeLockfileIn,
   resolveBridgeTarget,
-} from "../../src/editor-target.js";
+} from "../../src/bridge/editor-target.js";
 
 const temporaryRoots: string[] = [];
 

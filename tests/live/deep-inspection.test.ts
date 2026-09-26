@@ -22,7 +22,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { callBridge, disconnectBridge, getBridge, resultArray, TEST_PREFIX } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 // The flags are read off a copy inside the test project rather than off the
 // engine material it is duplicated from. set_usage writes, and a write to

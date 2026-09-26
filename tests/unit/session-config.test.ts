@@ -11,7 +11,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { readUeMcpConfig } from "../../src/config/project.js";
-import { EditorBridge } from "../../src/bridge.js";
+import { EditorBridge } from "../../src/bridge/bridge.js";
 import { collapsingEnvWarnings } from "../../src/config/session-env.js";
 import { envWarningsFor } from "../../src/tools/project.js";
 import { getFeedbackMode, setFeedbackMode } from "../../src/config/user-state.js";

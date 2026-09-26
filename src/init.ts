@@ -23,7 +23,7 @@ import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import { getInstalledHooks } from "./config/user-state.js";
 import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs, writeMcpConfig } from "./mcp-client-config.js";
-import { deriveProjectPort } from "./port.js";
+import { deriveProjectPort } from "./bridge/port.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "./config/uproject-path.js";
 import { readEnv } from "./core/env.js";

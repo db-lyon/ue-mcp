@@ -25,7 +25,7 @@
  * caught by whichever notices first.
  */
 import type { EditorSession } from "./session.js";
-import type { IBridge } from "./bridge.js";
+import type { IBridge } from "./bridge/bridge.js";
 import type { ElicitFn, ElicitPrimitiveSchema } from "./core/types.js";
 import type { DialogMode } from "./config/user-state.js";
 import { elicitationNeedsRelay } from "./client-quirks.js";

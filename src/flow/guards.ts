@@ -11,7 +11,7 @@
  * the two is now impossible rather than load-bearing.
  */
 import type { TaskRegistry } from "@db-lyon/flowkit";
-import type { IBridge } from "../bridge.js";
+import type { IBridge } from "../bridge/bridge.js";
 import type { ToolContext } from "../core/types.js";
 import type { FlowContext } from "./context.js";
 import {

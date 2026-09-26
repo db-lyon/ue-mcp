@@ -14,7 +14,7 @@ import { WebSocketServer } from "ws";
 import yaml from "js-yaml";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { EditorBridge } from "../../src/bridge.js";
+import { EditorBridge } from "../../src/bridge/bridge.js";
 import { ProjectContext } from "../../src/config/project.js";
 import { switchProject, isTargetDiverged } from "../../src/project-switch.js";
 
