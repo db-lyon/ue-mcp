@@ -424,16 +424,6 @@ namespace
 		return nullptr;
 	}
 
-	/** The runtime base class a category requires, for validating nodeClass. */
-	UClass* MCPBTARuntimeBaseFor(const FString& Category)
-	{
-		if (Category == TEXT("composite")) return UBTCompositeNode::StaticClass();
-		if (Category == TEXT("task")) return UBTTaskNode::StaticClass();
-		if (Category == TEXT("decorator")) return UBTDecorator::StaticClass();
-		if (Category == TEXT("service")) return UBTService::StaticClass();
-		return nullptr;
-	}
-
 	/** Which category a runtime node class belongs to, or empty. */
 	FString MCPBTACategoryOf(UClass* RuntimeClass)
 	{
