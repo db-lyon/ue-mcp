@@ -264,7 +264,6 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 	if (!Params) return MCPError(TEXT("params must be an object"));
 
 	FString ActorLabel;
-	if (TSharedPtr<FJsonValue> Error = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Error;
 	TSharedPtr<FJsonValue> ActorErr;
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr);
 	if (!Actor) return ActorErr;

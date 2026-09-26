@@ -802,7 +802,6 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ActorLabel;
-	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
 	// The body values are read per component, after the actor resolves (#1057).
 	MCPReadParamsAhead(Params, { TEXT("mass"), TEXT("linearDamping"), TEXT("angularDamping"), TEXT("enableGravity") });
 
