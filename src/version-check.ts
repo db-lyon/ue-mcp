@@ -15,6 +15,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { warn, debug } from "./log.js";
 import { userDir } from "./user-dir.js";
+import { compareVersions, parseVersion } from "./plugin/version.js";
 
 /**
  * Where the answer is cached.
@@ -150,22 +151,10 @@ export function distTagForVersion(version: string): string {
   return first;
 }
 
-function parseVersion(v: string): [number, number, number, string] {
-  const m = /^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/.exec(v.trim());
-  if (!m) return [0, 0, 0, ""];
-  return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] ?? ""];
-}
-
+/** An unparseable version counts as 0.0.0, so it is never offered as an upgrade. */
 export function isNewer(latest: string, current: string): boolean {
-  const [la, lb, lc, lp] = parseVersion(latest);
-  const [ca, cb, cc, cp] = parseVersion(current);
-  if (la !== ca) return la > ca;
-  if (lb !== cb) return lb > cb;
-  if (lc !== cc) return lc > cc;
-  // Same x.y.z: a non-prerelease beats a prerelease, otherwise lex compare.
-  if (lp === "" && cp !== "") return true;
-  if (lp !== "" && cp === "") return false;
-  return lp > cp;
+  const orZero = (v: string): string => (parseVersion(v) ? v : "0.0.0");
+  return compareVersions(orZero(latest), orZero(current)) > 0;
 }
 
 /**

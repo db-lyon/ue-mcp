@@ -51,10 +51,17 @@ describe("version-check", () => {
       expect(isNewer("1.0.0-rc.6", "1.0.0")).toBe(false);
     });
 
-    it("orders prereleases lexicographically", async () => {
+    it("orders numeric prerelease identifiers numerically", async () => {
       const { isNewer } = await import("../../src/version-check.js");
       expect(isNewer("1.0.0-rc.7", "1.0.0-rc.6")).toBe(true);
       expect(isNewer("1.0.0-rc.6", "1.0.0-rc.6")).toBe(false);
+      expect(isNewer("1.3.10-beta.10", "1.3.10-beta.9")).toBe(true);
+      expect(isNewer("1.3.10-beta.9", "1.3.10-beta.10")).toBe(false);
+    });
+
+    it("never offers an unparseable version", async () => {
+      const { isNewer } = await import("../../src/version-check.js");
+      expect(isNewer("garbage", "1.0.0")).toBe(false);
     });
   });
 

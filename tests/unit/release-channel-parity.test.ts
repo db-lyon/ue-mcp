@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { distTag, isPrerelease } from "../../scripts/release-version.mjs";
 import { distTagForVersion, isPrereleaseVersion } from "../../src/version-check.js";
+import { compareVersions as pipelineCompare } from "../../scripts/compose-release-notes.mjs";
+import { compareVersions } from "../../src/plugin/version.js";
 
 /**
  * The channel rule exists twice on purpose: the publish job runs before tsc has
@@ -35,5 +37,17 @@ describe("release channel parity between the pipeline and the shipped CLI", () =
     expect(() => distTag("garbage")).toThrow();
     expect(distTagForVersion("garbage")).toBe("latest");
     expect(isPrereleaseVersion("garbage")).toBe(false);
+  });
+});
+
+describe("version precedence parity between the pipeline and the shipped CLI", () => {
+  const ORDERED = [
+    "1.2.0-1", "1.2.0-alpha", "1.2.0-beta", "1.2.0-beta.2", "1.2.0-beta.9",
+    "1.2.0-beta.10", "1.2.0-rc.1", "1.2.0", "1.2.1-beta", "1.10.0",
+  ];
+  it("sorts the same list the same way", () => {
+    const shuffled = [...ORDERED].reverse();
+    expect([...shuffled].sort(pipelineCompare)).toEqual(ORDERED);
+    expect([...shuffled].sort(compareVersions)).toEqual(ORDERED);
   });
 });

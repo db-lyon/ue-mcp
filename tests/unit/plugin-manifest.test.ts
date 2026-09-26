@@ -188,6 +188,16 @@ describe("version comparison", () => {
     expect(compareVersions("1.0.0", "1.0.0-beta")).toBe(1);
   });
 
+  it("orders prerelease identifiers per semver, numerically where numeric", () => {
+    expect(compareVersions("1.0.0-beta.10", "1.0.0-beta.9")).toBe(1);
+    expect(compareVersions("1.0.0-beta.9", "1.0.0-beta.10")).toBe(-1);
+    expect(compareVersions("1.0.0-beta", "1.0.0-beta.2")).toBe(-1);
+    expect(compareVersions("1.0.0-1", "1.0.0-alpha")).toBe(-1);
+    expect(compareVersions("1.0.0-alpha", "1.0.0-beta")).toBe(-1);
+    expect(compareVersions("1.0.0+build.5", "1.0.0")).toBe(0);
+    expect(satisfiesMinimum("1.3.10-beta.10", "1.3.10-beta.9")).toBe(true);
+  });
+
   it("satisfiesMinimum returns true for equal", () => {
     expect(satisfiesMinimum("1.0.0", "1.0.0")).toBe(true);
     expect(satisfiesMinimum("1.0.1", "1.0.0")).toBe(true);

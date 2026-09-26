@@ -162,7 +162,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "plugin/injection.ts": "Builds an injection plan from a manifest.",
   "plugin/provision.ts": "Builds a provided category from a manifest.",
   "plugin/plugin-groups.ts": "Pure group logic over the config it is handed.",
-  "plugin/version.ts": "Semver comparison for the minServerVersion gate.",
+  "plugin/version.ts": "Semver precedence for the minServerVersion gate and the npm upgrade check.",
   "plugin/plugins-list.ts": "Pure read of the plugins: list from the config file it is handed.",
   "flow/flow-surface.ts": "Shared declaration of the flow tool's actions and their effects.",
 };
