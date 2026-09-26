@@ -44,6 +44,7 @@ private:
 	static TSharedPtr<FJsonValue> GetSkeletonInfo(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListSockets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetPhysicsAssetInfo(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetPhysicsAssetConstraints(const TSharedPtr<FJsonObject>& Params);
 
 	// Read handlers for animation asset types
 	static TSharedPtr<FJsonValue> ReadAnimBlueprint(const TSharedPtr<FJsonObject>& Params);

@@ -24,6 +24,10 @@
 #include "Animation/AnimNotifies/AnimNotify.h"
 #include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+// The constraint templates get_physics_asset_constraints reads: PhysicsAsset.h
+// only forward-declares UPhysicsConstraintTemplate.
+#include "PhysicsEngine/PhysicsConstraintTemplate.h"
+#include "PhysicsEngine/ConstraintInstance.h"
 #include "Engine/SkeletalMeshSocket.h"
 // PhysicsEngine/SkeletalBodySetup.h is unavailable as a public include on
 // UE 5.4. USkeletalBodySetup is still defined transitively via PhysicsAsset.h.
@@ -196,6 +200,11 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("get_physics_asset_info"), &GetPhysicsAssetInfo, {
 		AssetPath(TEXT("SkeletalMesh asset path")),
+	});
+	Registry.RegisterHandler(TEXT("get_physics_asset_constraints"), &GetPhysicsAssetConstraints, {
+		AssetPath(TEXT("PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to read")),
+		MCPParam::Optional(TEXT("boneName"), EType::String, TEXT("Only constraints that touch this bone, as child (bone1) or parent (bone2)")),
+		Limit(TEXT("Cap on the constraints returned (default all); total still counts every match")),
 	});
 	Registry.RegisterHandler(TEXT("read_anim_blueprint"), &ReadAnimBlueprint, {
 		AssetPath(TEXT("AnimBlueprint asset path")),
@@ -1653,6 +1662,174 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetInfo(const TSharedPtr<
 	}
 
 	Result->SetArrayField(TEXT("bodies"), BodiesArray);
+
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// get_physics_asset_constraints
+//
+// Diagnosing a contorted ragdoll needs the angular motion types and limit
+// degrees of every constraint. get_physics_asset_info lists only body bone
+// names and asset(read_properties) shows ConstraintSetup as opaque object
+// paths, so this reads each template's default instance in full.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetConstraints(const TSharedPtr<FJsonObject>& Params)
+{
+	// Every parameter is read before anything can fail (#1057).
+	const FName BoneFilter(*OptionalString(Params, TEXT("boneName")));
+	const int32 Limit = OptionalInt(Params, TEXT("limit"), 0);
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	if (Limit < 0)
+	{
+		return MCPError(TEXT("limit must be 0 (no cap) or a positive integer"));
+	}
+
+	// The PhysicsAsset path is the natural key. A SkeletalMesh path is accepted
+	// too, because that is what get_physics_asset_info takes and what a caller
+	// usually has in hand.
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
+	UPhysicsAsset* PhysicsAsset = Cast<UPhysicsAsset>(LoadedAsset);
+	FString SkeletalMeshPath;
+	if (const USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(LoadedAsset))
+	{
+		PhysicsAsset = SkeletalMesh->GetPhysicsAsset();
+		if (!PhysicsAsset)
+		{
+			return MCPError(TEXT("SkeletalMesh has no PhysicsAsset"));
+		}
+		SkeletalMeshPath = SkeletalMesh->GetPathName();
+	}
+	if (!PhysicsAsset)
+	{
+		return LoadedAsset
+			? MCPAssetWrongTypeError(AssetPath, LoadedAsset, TEXT("PhysicsAsset or SkeletalMesh"))
+			: MCPAssetNotFoundError(AssetPath);
+	}
+
+	auto AngularMotion = [](EAngularConstraintMotion Motion) -> const TCHAR*
+	{
+		switch (Motion)
+		{
+		case EAngularConstraintMotion::ACM_Free: return TEXT("Free");
+		case EAngularConstraintMotion::ACM_Limited: return TEXT("Limited");
+		default: return TEXT("Locked");
+		}
+	};
+	auto LinearMotion = [](ELinearConstraintMotion Motion) -> const TCHAR*
+	{
+		switch (Motion)
+		{
+		case ELinearConstraintMotion::LCM_Free: return TEXT("Free");
+		case ELinearConstraintMotion::LCM_Limited: return TEXT("Limited");
+		default: return TEXT("Locked");
+		}
+	};
+	// The soft-limit block every one of the three limit structs shares.
+	auto LimitObject = [](const FConstraintBaseParams& LimitParams)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetBoolField(TEXT("soft"), LimitParams.bSoftConstraint);
+		Obj->SetNumberField(TEXT("stiffness"), LimitParams.Stiffness);
+		Obj->SetNumberField(TEXT("damping"), LimitParams.Damping);
+		Obj->SetNumberField(TEXT("restitution"), LimitParams.Restitution);
+		Obj->SetNumberField(TEXT("contactDistance"), LimitParams.ContactDistance);
+		return Obj;
+	};
+	// Frame1 is expressed in bone1's (the child body's) space, Frame2 in bone2's.
+	auto FrameObject = [](const FConstraintInstance& Instance, EConstraintFrame::Type Frame, const FName& Bone)
+	{
+		const FTransform RefFrame = Instance.GetRefFrame(Frame);
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("bone"), Bone.ToString());
+		Obj->SetObjectField(TEXT("position"), MCPVec3ToJsonObject(RefFrame.GetLocation()));
+		Obj->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(RefFrame.Rotator()));
+		return Obj;
+	};
+
+	TArray<TSharedPtr<FJsonValue>> ConstraintsArray;
+	int32 Matched = 0;
+	for (int32 Index = 0; Index < PhysicsAsset->ConstraintSetup.Num(); ++Index)
+	{
+		const UPhysicsConstraintTemplate* Constraint = PhysicsAsset->ConstraintSetup[Index];
+		if (!Constraint) continue;
+
+		const FConstraintInstance& Instance = Constraint->DefaultInstance;
+		if (!BoneFilter.IsNone() && Instance.ConstraintBone1 != BoneFilter && Instance.ConstraintBone2 != BoneFilter)
+		{
+			continue;
+		}
+		++Matched;
+		if (Limit > 0 && ConstraintsArray.Num() >= Limit) continue;
+
+		const FConstraintProfileProperties& Profile = Instance.ProfileInstance;
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetNumberField(TEXT("index"), Index);
+		Row->SetStringField(TEXT("constraintName"), Instance.JointName.ToString());
+		Row->SetStringField(TEXT("bone1"), Instance.ConstraintBone1.ToString());
+		Row->SetStringField(TEXT("bone2"), Instance.ConstraintBone2.ToString());
+
+		TSharedPtr<FJsonObject> Linear = LimitObject(Profile.LinearLimit);
+		Linear->SetStringField(TEXT("xMotion"), LinearMotion(Profile.LinearLimit.XMotion));
+		Linear->SetStringField(TEXT("yMotion"), LinearMotion(Profile.LinearLimit.YMotion));
+		Linear->SetStringField(TEXT("zMotion"), LinearMotion(Profile.LinearLimit.ZMotion));
+		Linear->SetNumberField(TEXT("limit"), Profile.LinearLimit.Limit);
+		Row->SetObjectField(TEXT("linear"), Linear);
+
+		TSharedPtr<FJsonObject> Swing = LimitObject(Profile.ConeLimit);
+		Swing->SetStringField(TEXT("swing1Motion"), AngularMotion(Profile.ConeLimit.Swing1Motion));
+		Swing->SetStringField(TEXT("swing2Motion"), AngularMotion(Profile.ConeLimit.Swing2Motion));
+		Swing->SetNumberField(TEXT("swing1LimitDegrees"), Profile.ConeLimit.Swing1LimitDegrees);
+		Swing->SetNumberField(TEXT("swing2LimitDegrees"), Profile.ConeLimit.Swing2LimitDegrees);
+		Row->SetObjectField(TEXT("swing"), Swing);
+
+		TSharedPtr<FJsonObject> Twist = LimitObject(Profile.TwistLimit);
+		Twist->SetStringField(TEXT("twistMotion"), AngularMotion(Profile.TwistLimit.TwistMotion));
+		Twist->SetNumberField(TEXT("twistLimitDegrees"), Profile.TwistLimit.TwistLimitDegrees);
+		Row->SetObjectField(TEXT("twist"), Twist);
+
+		TSharedPtr<FJsonObject> LinearDrive = MakeShared<FJsonObject>();
+		LinearDrive->SetBoolField(TEXT("positionDriveEnabled"), Profile.LinearDrive.IsPositionDriveEnabled());
+		LinearDrive->SetBoolField(TEXT("velocityDriveEnabled"), Profile.LinearDrive.IsVelocityDriveEnabled());
+		Row->SetObjectField(TEXT("linearDrive"), LinearDrive);
+
+		TSharedPtr<FJsonObject> AngularDrive = MakeShared<FJsonObject>();
+		AngularDrive->SetBoolField(TEXT("orientationDriveEnabled"), Profile.AngularDrive.IsOrientationDriveEnabled());
+		AngularDrive->SetBoolField(TEXT("velocityDriveEnabled"), Profile.AngularDrive.IsVelocityDriveEnabled());
+		AngularDrive->SetStringField(TEXT("mode"),
+			Profile.AngularDrive.AngularDriveMode == EAngularDriveMode::SLERP ? TEXT("SLERP") : TEXT("TwistAndSwing"));
+		Row->SetObjectField(TEXT("angularDrive"), AngularDrive);
+
+		Row->SetBoolField(TEXT("parentDominates"), Profile.bParentDominates);
+		Row->SetBoolField(TEXT("disableCollision"), Profile.bDisableCollision);
+		Row->SetBoolField(TEXT("enableProjection"), Profile.bEnableProjection);
+
+		Row->SetObjectField(TEXT("frame1"), FrameObject(Instance, EConstraintFrame::Frame1, Instance.ConstraintBone1));
+		Row->SetObjectField(TEXT("frame2"), FrameObject(Instance, EConstraintFrame::Frame2, Instance.ConstraintBone2));
+
+		ConstraintsArray.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("physicsAssetName"), PhysicsAsset->GetName());
+	Result->SetStringField(TEXT("physicsAssetPath"), PhysicsAsset->GetPathName());
+	if (!SkeletalMeshPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
+	}
+#if WITH_EDITORONLY_DATA
+	// The soft path, not GetPreviewMesh(): reading a constraint table should not
+	// pull a skeletal mesh into memory.
+	Result->SetStringField(TEXT("previewSkeletalMeshPath"), PhysicsAsset->PreviewSkeletalMesh.ToSoftObjectPath().ToString());
+#endif
+	Result->SetNumberField(TEXT("bodyCount"), PhysicsAsset->SkeletalBodySetups.Num());
+	Result->SetNumberField(TEXT("constraintCount"), PhysicsAsset->ConstraintSetup.Num());
+	Result->SetArrayField(TEXT("constraints"), ConstraintsArray);
+	Result->SetNumberField(TEXT("count"), ConstraintsArray.Num());
+	Result->SetNumberField(TEXT("total"), Matched);
+	Result->SetBoolField(TEXT("truncated"), ConstraintsArray.Num() < Matched);
 
 	return MCPResult(Result);
 }

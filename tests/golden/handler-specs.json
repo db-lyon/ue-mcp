@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1070,
+  "handlerCount": 1071,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -16177,6 +16177,32 @@
           "type": "string",
           "required": false,
           "description": "Only report this sense: Sight | Hearing | Damage | Touch | Team | Prediction"
+        }
+      ]
+    },
+    "get_physics_asset_constraints": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to read",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "boneName",
+          "type": "string",
+          "required": false,
+          "description": "Only constraints that touch this bone, as child (bone1) or parent (bone2)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Cap on the constraints returned (default all); total still counts every match"
         }
       ]
     },

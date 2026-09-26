@@ -53,6 +53,23 @@ describe("animation - read specific (dynamic)", () => {
     const r = await callBridge(bridge, "get_physics_asset_info", { assetPath: skelMeshPath });
     expect(r.ok, r.error).toBe(true);
   });
+
+  it("get_physics_asset_constraints", async ({ skip }) => {
+    if (!skelMeshPath) skip();
+    const r = await callBridge(bridge, "get_physics_asset_constraints", { assetPath: skelMeshPath, limit: 5 });
+    expect(r.ok, r.error).toBe(true);
+    const res = r.result as Record<string, unknown>;
+    // A mesh with no physics asset is a clean refusal, not a handler failure.
+    // The bridge returns a refusal as a result, not as a thrown error.
+    if (res.success === false) {
+      expect(String(res.error)).toContain("no PhysicsAsset");
+      return;
+    }
+    expect(typeof res.bodyCount).toBe("number");
+    expect(typeof res.constraintCount).toBe("number");
+    expect(Array.isArray(res.constraints)).toBe(true);
+    expect((res.constraints as unknown[]).length).toBeLessThanOrEqual(5);
+  });
 });
 
 describe("animation - v0.7.15: PoseSearch (motion matching)", () => {
