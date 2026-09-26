@@ -4,6 +4,7 @@ import { loadConfig, deepMerge, type LoadedConfig } from "@db-lyon/flowkit";
 import { FlowConfigSchema, type FlowConfig } from "./schema.js";
 import { readGlobalConfigDoc } from "../config/ue-mcp-config.js";
 import type { ToolDef } from "../core/types.js";
+import { builtinClassPath } from "./task-call.js";
 
 /**
  * Build the defaults object from tool definitions.
@@ -16,14 +17,14 @@ export function buildDefaults(tools: ToolDef[]): Record<string, unknown> {
     for (const [actionName, spec] of Object.entries(tool.actions)) {
       const taskName = `${tool.name}.${actionName}`;
 
-      // class_path always matches the task name so the per-action factory
-      // class (registered in registry.ts with mapParams baked in) is the one
-      // that runs. The previous default of class_path: "ue-mcp.bridge" routed
-      // every bridge action through the generic BridgeTask which silently
-      // dropped mapParams - so YAML callers had to know each handler's exact
-      // C++-side param names instead of the documented TS-side ones.
+      // The base alias, not the task name: the per-action factory class
+      // (mapParams baked in) is registered under both, and an override that
+      // replaces this definition reaches the built-in through the alias
+      // instead of resolving back to itself. A registry-kind action's task is
+      // registered by its plugin under the task name only.
+      const builtin = spec.kind === "handler" || spec.kind === "bridge";
       const taskDef: Record<string, unknown> = {
-        class_path: taskName,
+        class_path: builtin ? builtinClassPath(taskName) : taskName,
         group: tool.name,
       };
       if (spec.description) taskDef.description = spec.description;

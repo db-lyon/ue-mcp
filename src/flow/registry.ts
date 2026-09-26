@@ -8,6 +8,7 @@ import { actionPreparation } from "./run-action.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../surface/context/micro-context.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { paramMapperOf } from "../surface/epic-input.js";
+import { builtinClassPath } from "./task-call.js";
 
 /** A gateway call is an alias for the target task, not a handler that executes
  *  another action and repackages its result. Both MCP and FlowRunner create
@@ -37,6 +38,10 @@ class MicroTaskRegistry extends TaskRegistry {
  * - Bridge actions → factory classes with method + mapParams in closure
  * - Handler actions → factory classes wrapping the existing handler function
  *
+ * Each is registered by its task name and by its base alias
+ * (`ue-mcp.builtin/<category>.<action>`), which the default definitions point
+ * at, so an override can replace the name and still reach the built-in.
+ *
  * Also registers `ue-mcp.bridge` as a class_path for YAML-defined bridge tasks.
  */
 export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
@@ -65,22 +70,20 @@ export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
         // field-by-field used to silently drop new accessors at this
         // boundary - never reintroduce that pattern.
         const originalHandler = spec.handler;
-        registry.register(
-          taskName,
-          handlerTaskClass(taskName, (ctx: FlowContext, params: Record<string, unknown>) => {
-            return originalHandler(ctx, params);
-          }, prep),
-        );
+        const ctor = handlerTaskClass(taskName, (ctx: FlowContext, params: Record<string, unknown>) => {
+          return originalHandler(ctx, params);
+        }, prep);
+        registry.register(taskName, ctor);
+        registry.registerClassPath(builtinClassPath(taskName), ctor);
       } else if (spec.bridge) {
-        registry.register(
-          taskName,
-          // The action's authored budget travels with it. Three actions
-          // (blueprint.flush_component_templates, widget.add_widget,
-          // widget.remove_widget) declare 120s because their method has no
-          // entry in the editor's own timeout table, and dropping it here gave
-          // them the 30s default on every live call.
-          bridgeTaskClass(taskName, spec.bridge, paramMapperOf(spec), spec.timeoutMs, prep),
-        );
+        // The action's authored budget travels with it. Three actions
+        // (blueprint.flush_component_templates, widget.add_widget,
+        // widget.remove_widget) declare 120s because their method has no
+        // entry in the editor's own timeout table, and dropping it here gave
+        // them the 30s default on every live call.
+        const ctor = bridgeTaskClass(taskName, spec.bridge, paramMapperOf(spec), spec.timeoutMs, prep);
+        registry.register(taskName, ctor);
+        registry.registerClassPath(builtinClassPath(taskName), ctor);
       }
     }
   }

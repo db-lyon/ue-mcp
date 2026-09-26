@@ -43,18 +43,18 @@ Tasks are defined in the `tasks:` section of your config:
 ```yaml
 tasks:
   project.build:
-    class_path: ue-mcp.bridge
+    class_path: ue-mcp.builtin/project.build
     group: project
     description: "Build C++ project. Params: configuration?, platform?, clean?"
     options:
-      method: build_project
+      configuration: Development
 ```
 
 The fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `class_path` | Yes | How the task is resolved - a registered name, a built-in class path, or a path to your own `.js`/`.ts` file |
+| `class_path` | No | How the task is resolved - a registered name, a built-in class path such as `ue-mcp.builtin/asset.list`, or a path to your own `.js` file. Omitted, it stays whatever the layer below set |
 | `description` | No | Human-readable description |
 | `group` | No | Category for organization |
 | `options` | No | Default options passed to the task (can be overridden per-step) |
@@ -119,7 +119,6 @@ Step options win:
 ```yaml
 tasks:
   asset.list:
-    class_path: asset.list
     options:
       recursive: true        # default
 
@@ -158,8 +157,10 @@ See the full list by running `flow(action="list")` (the bundled defaults live in
 
 Built-in tasks fall into two categories:
 
-- **Bridge tasks** - forwarded to the C++ plugin over WebSocket. Defined with `class_path: ue-mcp.bridge` and a `method` option.
+- **Bridge tasks** - forwarded to the C++ plugin over WebSocket, with the action's own parameter mapping.
 - **Handler tasks** - executed locally in Node.js (filesystem operations like config parsing, asset directory scanning).
+
+Every built-in is registered under its task name and under a base alias, `ue-mcp.builtin/<category>.<action>`. The default definition of each task points its `class_path` at the alias. `ue-mcp.bridge` stays available for a YAML task that names a raw bridge `method` option directly.
 
 The `shell` task is also built in - it runs a command via `child_process`:
 
@@ -515,18 +516,20 @@ To change how a built-in task behaves, redefine it in your `ue-mcp.yml`. Your de
 ```yaml
 tasks:
   asset.list:
-    class_path: ./tasks/FilteredAssetList.js
+    class_path: tasks/FilteredAssetList
     description: Asset list with custom filtering
+    options:
+      excludePrefix: /Game/Developers/
 ```
 
-The built-in `asset.list` is now replaced by your class. The dynamic loader will import `./tasks/FilteredAssetList.js` from your project root.
+The built-in `asset.list` is now replaced by your class, wherever a flow resolves `asset.list`: a flow step, and another task's `this.call('asset.list')`. The definition's `options` are defaults under the caller's own options. The loader imports `tasks/FilteredAssetList.js` (see [Dynamic Class Loading](#dynamic-class-loading)).
 
 ### Writing a Custom Task
 
 Create a file that exports a class extending `UeMcpTask`:
 
 ```typescript
-// tasks/FilteredAssetList.ts
+// tasks/FilteredAssetList.ts, compiled to tasks/FilteredAssetList.js
 import { UeMcpTask, type TaskResult } from 'ue-mcp/task';
 
 export default class FilteredAssetList extends UeMcpTask {
@@ -535,8 +538,8 @@ export default class FilteredAssetList extends UeMcpTask {
   }
 
   async execute(): Promise<TaskResult> {
-    // Call the original asset.list via the registry
-    const result = await this.call('asset.list', {
+    // The built-in this definition replaced, reached through its base alias
+    const result = await this.call('ue-mcp.builtin/asset.list', {
       directory: (this.options as any).directory ?? '/Game/',
       recursive: true,
     });
@@ -552,24 +555,14 @@ export default class FilteredAssetList extends UeMcpTask {
 }
 ```
 
-Register it in your config:
-
-```yaml
-tasks:
-  asset.list:
-    class_path: ./tasks/FilteredAssetList
-    description: Asset list that filters out developer content
-    options:
-      excludePrefix: /Game/Developers/
-```
-
 Key points:
 
 - **Export as default** - the loader looks for a default export, or a named export matching the filename.
 - **Must extend `UeMcpTask`** - the registry validates this at load time.
 - **`this.options`** - receives the merged options (task defaults + step overrides).
 - **`this.ctx`** - the shared context, typed for you as `FlowContext`: `bridge` (editor WebSocket) and `project` (path resolution). `UeMcpTask` also exposes a `this.bridge` shortcut.
-- **`this.call(name, opts)`** - resolve and execute another task by name. The original built-in task is still in the registry even when you override it via YAML `class_path`.
+- **`this.call(name, opts)`** - resolve and execute another task by name, through the same `tasks:` definitions a flow step uses.
+- **Call the built-in you replaced by its alias.** `this.call('asset.list')` inside the class that replaces `asset.list` resolves back to that class. The call is refused with a `TaskCycleError` naming the alias instead of recursing. The same refusal covers two overrides that call each other, and a task calling its own class, so a recursive walk is written as a loop inside one task.
 - **`this.resolve(name, opts)`** - like `call()` but returns the task instance without running it, in case you need to inspect or configure it first.
 
 ### Extending a Bridge Task
@@ -606,7 +599,7 @@ export default class SafeBuild extends UeMcpTask {
 ```yaml
 tasks:
   safe_build:
-    class_path: ./tasks/SafeBuild
+    class_path: tasks/SafeBuild
     description: Build with connection check
 
 flows:
@@ -727,16 +720,18 @@ This loads `ue-mcp.ci.yml` on top of `ue-mcp.yml`.
 
 ## Hot Reload
 
-The config is **reloaded from disk on every flow call**. Edit `ue-mcp.yml`, save, and run the flow again - no server restart needed. This makes it easy to iterate on flow definitions.
+The config files are checked on every call and reread when one of them changes. Edit `ue-mcp.yml`, save, and run the flow again - no server restart needed. A change is detected from each layer file's modification time, size and existence, so adding or deleting `ue-mcp.local.yml` counts as a change too.
 
 ## Dynamic Class Loading
 
-When you set `class_path` to a file path (e.g., `./tasks/MyTask`), the registry resolves it relative to the current working directory. It tries these candidates in order:
+When you set `class_path` to a path of your own (e.g., `tasks/MyTask` or `tasks.MyTask`), dots become path separators and the registry resolves it relative to the **working directory of the ue-mcp process**, which is not necessarily the project root. It tries these candidates in order:
 
 1. `{cwd}/tasks/MyTask.ts`
 2. `{cwd}/tasks/MyTask.js`
 3. `{cwd}/tasks/MyTask/index.ts`
 4. `{cwd}/tasks/MyTask/index.js`
+
+Write the path without a leading `./` and without an extension. A `.ts` candidate only loads when Node can import TypeScript, so ship compiled `.js`.
 
 The loaded module must export a class that extends `UeMcpTask`, either as the default export or as a named export matching the filename.
 
@@ -788,4 +783,5 @@ In ue-mcp, the context includes:
 | `bridge` | `IBridge` | WebSocket connection to the Unreal Editor |
 | `project` | `ProjectContext` | Path resolution, project info |
 | `registry` | `TaskRegistry` | Task registry for resolving other tasks |
+| `taskDefinitions` | `Record<string, TaskDefinition>` | The merged `tasks:` definitions `call` and `resolve` go through |
 | `logger` | `Logger` | Structured logger |
