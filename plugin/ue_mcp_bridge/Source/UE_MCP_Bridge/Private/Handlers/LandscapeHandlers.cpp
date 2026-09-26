@@ -1318,6 +1318,8 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::AddLandscapeLayerInfo(const TSharedPt
 	// Whether the LayerInfo ASSET is created here matters to the rollback: the
 	// inverse un-registers the layer but leaves the asset on disk.
 	const bool bCreatedLayerInfoAsset = (LayerInfoObj == nullptr);
+	bool bSaved = false;
+	FString SaveError;
 	if (!LayerInfoObj)
 	{
 		UPackage* Package = CreatePackage(*PackageFullPath);
@@ -1342,10 +1344,8 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 		// local and the response hardcoded true, so both are gone rather than
 		// left implying a setting that is not being applied.
 
-		// Notify asset registry and save
 		FAssetRegistryModule::AssetCreated(LayerInfoObj);
-		Package->MarkPackageDirty();
-		UEditorAssetLibrary::SaveAsset(PackageFullPath, false);
+		bSaved = SaveAssetPackageChecked(LayerInfoObj, SaveError);
 	}
 
 	// Register the layer info with the landscape
@@ -1396,6 +1396,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 				 "inverse can address this registration."),
 			*TargetLandscape->GetName()));
 	}
+	if (bCreatedLayerInfoAsset) MCPNoteSaveOutcome(Result, PackageFullPath, bSaved, SaveError);
 
 	return MCPResult(Result);
 }
@@ -1618,8 +1619,8 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	}
 
 	FAssetRegistryModule::AssetCreated(LayerInfo);
-	Package->MarkPackageDirty();
-	SaveAssetPackage(LayerInfo);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(LayerInfo, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -1628,6 +1629,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
 	if (!PhysMaterialPath.IsEmpty()) Result->SetStringField(TEXT("physMaterial"), PhysMaterialPath);
 	MCPSetDeleteAssetRollback(Result, LayerInfo->GetPathName());
+	MCPNoteSaveOutcome(Result, LayerInfo->GetPathName(), bSaved, SaveError);
 
 	return MCPResult(Result);
 }
