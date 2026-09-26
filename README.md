@@ -5,6 +5,9 @@
 [![stars](https://img.shields.io/github/stars/db-lyon/ue-mcp)](https://github.com/db-lyon/ue-mcp/stargazers)
 [![MIT](https://img.shields.io/npm/l/ue-mcp)](LICENSE)
 
+<img width="1357" height="589" alt="{A1802014-857D-4822-BB97-C242CBD3D9DC}" src="https://github.com/user-attachments/assets/8234a9e0-f585-4baf-bb17-0e7cf2ecb19d" />
+
+
 **Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->26<!-- /count --> category tools covering <!-- count:actions -->1966+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
 
 That total is <!-- count:ownActions -->1136+<!-- /count --> actions of ue-mcp's own plus Epic's entire native AI Toolset Registry: on UE 5.8+ its <!-- count:nativeToolActions -->830<!-- /count --> official Unreal tools are called in-process and surfaced as `epic_*` actions in the matching category, Sequencer in `animation`, PCG in `pcg`, static meshes in `asset`.
