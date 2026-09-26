@@ -28,7 +28,7 @@ import { makeResolveExistingFile } from "../flow/guard.js";
 import { normalizeProjectRoot } from "../bridge/port.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { warn } from "../core/log.js";
-import { newLockOwnerId } from "../lock-owner.js";
+import { newLockOwnerId } from "../dispatch/lock-owner.js";
 import { withoutDialogActuation } from "../editor/dialog-guard.js";
 import { projectDirOf } from "../config/uproject-path.js";
 import type { ToolDef } from "../core/types.js";

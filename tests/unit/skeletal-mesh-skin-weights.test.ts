@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { assetTool } from "../../src/tools/asset.js";
-import { classifyAction } from "../../src/locking.js";
+import { classifyAction } from "../../src/dispatch/locking.js";
 import { classifyWrite } from "../../src/flow/write-methods.js";
 
 const handlerSource = readFileSync(

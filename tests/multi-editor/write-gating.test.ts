@@ -16,7 +16,7 @@ import {
   effectiveTaskName,
   refuseUntargetedInRegistry,
   editorAttribution,
-} from "../../src/editor-gate.js";
+} from "../../src/dispatch/editor-gate.js";
 import type { ToolDef } from "../../src/core/types.js";
 import { injectEditorTarget } from "../../src/target-params.js";
 import { assetTool } from "../../src/tools/asset.js";

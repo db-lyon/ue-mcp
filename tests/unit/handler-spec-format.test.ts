@@ -25,7 +25,7 @@ import {
 } from "../../src/handler-spec.js";
 import { actionSchema, parseParams } from "../../src/action-schema.js";
 import { categoryTool } from "../../src/category-tool.js";
-import { prepareCall } from "../../src/call-pipeline.js";
+import { prepareCall } from "../../src/dispatch/call-pipeline.js";
 import { bridgeTaskClass } from "../../src/flow/task-factory.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");

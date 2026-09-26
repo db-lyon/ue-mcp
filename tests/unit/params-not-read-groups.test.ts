@@ -3,7 +3,7 @@
  * caller when the editor read the other name.
  */
 import { describe, expect, it } from "vitest";
-import { attachNotRead } from "../../src/call-pipeline.js";
+import { attachNotRead } from "../../src/dispatch/call-pipeline.js";
 import { WIDGET_PARAM_GROUPS } from "../../src/tools/widget-params.js";
 
 const pipeline = (sent: string[]) => ({ paramGroups: WIDGET_PARAM_GROUPS, sentKeys: sent, params: {} });

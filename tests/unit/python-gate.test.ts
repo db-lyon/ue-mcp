@@ -22,9 +22,9 @@ import {
   resetRulings,
   ruledOutKey,
   type GateCandidate,
-} from "../../src/python-gate.js";
+} from "../../src/dispatch/python-gate.js";
 import { editorTool } from "../../src/tools/editor.js";
-import { resetAllWorkarounds } from "../../src/workaround-tracker.js";
+import { resetAllWorkarounds } from "../../src/dispatch/workaround-tracker.js";
 import { PLUGIN_UPGRADE_POINTER } from "../../src/bridge/bridge.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import type { IBridge } from "../../src/bridge/bridge.js";

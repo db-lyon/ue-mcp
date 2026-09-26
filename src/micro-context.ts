@@ -14,7 +14,7 @@ import { z } from "zod";
 import type { ActionSpec, ToolDef } from "./core/types.js";
 import { categoryTool } from "./category-tool.js";
 import { stripAction } from "./routing-params.js";
-import { takeTimeout } from "./call-pipeline.js";
+import { takeTimeout } from "./dispatch/call-pipeline.js";
 import { McpError, ErrorCode } from "./core/errors.js";
 import { actionSchema } from "./action-schema.js";
 import { takeFieldSelection } from "./field-select.js";

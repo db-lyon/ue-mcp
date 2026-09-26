@@ -16,7 +16,7 @@ import {
   clearWorkarounds,
   workaroundCount,
   resetAllWorkarounds,
-} from "../../src/workaround-tracker.js";
+} from "../../src/dispatch/workaround-tracker.js";
 import { SessionRegistry } from "../../src/sessions/session.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 

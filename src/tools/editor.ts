@@ -8,10 +8,10 @@ import { buildProjectAction } from "./project/install.js";
 import { startProgress } from "../ui/progress.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
-import { progressRenderingNote } from "../client-quirks.js";
-import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
+import { progressRenderingNote } from "../dispatch/client-quirks.js";
+import { pushWorkaround, workaroundCount } from "../dispatch/workaround-tracker.js";
 import { searchToolGraph } from "../tool-search.js";
-import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../python-gate.js";
+import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../dispatch/python-gate.js";
 import { checkBridgeParity } from "../bridge/bridge-parity.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
@@ -148,7 +148,7 @@ export const editorTool: ToolDef = categoryTool(
           // #938 / #960: matching is spelling-insensitive and rulings persist
           // for the session, so the strings this refusal prints are exactly the
           // strings that satisfy it, and a reworded summary cannot reset the
-          // work already done. See src/python-gate.ts.
+          // work already done. See src/dispatch/python-gate.ts.
           // #1167: a candidate whose bridge method the running plugin does not
           // register cannot do the task, so it is owed no ruling.
           const verdict = evaluateGate(candidates, params.ruledOut, ctx, await notInRunningPlugin(ctx));

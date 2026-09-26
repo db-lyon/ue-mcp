@@ -1,7 +1,7 @@
 import type { TaskResult } from "@db-lyon/flowkit";
 import type { ActionSpec, CategoryOptions } from "../core/types.js";
 import { stripAction } from "../routing-params.js";
-import { prepareCall, finishCall, forwardToBridge, type CallPreparation } from "../call-pipeline.js";
+import { prepareCall, finishCall, forwardToBridge, type CallPreparation } from "../dispatch/call-pipeline.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";

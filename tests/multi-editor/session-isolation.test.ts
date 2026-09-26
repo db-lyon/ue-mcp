@@ -11,8 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as path from "node:path";
 import { FakeBridge } from "../fake-bridge.js";
 import { SessionRegistry, type EditorSession } from "../../src/sessions/session.js";
-import { withAssetLocks } from "../../src/locking.js";
-import { SESSION_ID } from "../../src/lock-owner.js";
+import { withAssetLocks } from "../../src/dispatch/locking.js";
+import { SESSION_ID } from "../../src/dispatch/lock-owner.js";
 import { assetTool } from "../../src/tools/asset.js";
 
 import { ProjectFixture, sessionToolContext } from "../helpers/project-fixture.js";

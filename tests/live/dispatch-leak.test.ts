@@ -30,7 +30,7 @@ import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { loadFlowConfig } from "../../src/flow/loader.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import { startFlowHttpServer } from "../../src/flow/http-server.js";
-import { routeEditorCall } from "../../src/editor-gate.js";
+import { routeEditorCall } from "../../src/dispatch/editor-gate.js";
 import type { ToolContext, ToolDef } from "../../src/core/types.js";
 import { cloneToolDef } from "../../src/category-tool.js";
 import { injectEditorTarget, sessionContext } from "../../src/target-params.js";

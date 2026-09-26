@@ -25,9 +25,9 @@ import {
   declaredActionEffect,
   mayChangeState,
 } from "../../src/action-effects.js";
-import { classifyAction } from "../../src/locking.js";
+import { classifyAction } from "../../src/dispatch/locking.js";
 import { classifyWrite } from "../../src/flow/write-methods.js";
-import { refuseUntargetedCall } from "../../src/editor-gate.js";
+import { refuseUntargetedCall } from "../../src/dispatch/editor-gate.js";
 import type { ActionEffect } from "../../src/core/types.js";
 
 const EFFECTS: ActionEffect[] = ["read", "mutate", "unknown"];

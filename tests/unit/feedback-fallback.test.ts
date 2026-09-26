@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ToolContext, ElicitFn, ElicitResult } from "../../src/core/types.js";
 import { isDirectiveResponse } from "../../src/core/directive.js";
-import { clearWorkarounds } from "../../src/workaround-tracker.js";
+import { clearWorkarounds } from "../../src/dispatch/workaround-tracker.js";
 import {
   buildPrefilledIssueUrl,
   writeFallbackReport,

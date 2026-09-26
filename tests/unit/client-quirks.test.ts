@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { elicitationNeedsRelay, progressRenderingNote } from "../../src/client-quirks.js";
+import { elicitationNeedsRelay, progressRenderingNote } from "../../src/dispatch/client-quirks.js";
 
 describe("progressRenderingNote", () => {
   it("explains the collapse on the affected Claude Code versions", () => {

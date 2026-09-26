@@ -22,7 +22,7 @@ import { GuardRegistry } from "./flow/guard.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
-import { resolveLockingConfig } from "./locking.js";
+import { resolveLockingConfig } from "./dispatch/locking.js";
 import { collapsingEnvWarnings } from "./config/session-env.js";
 import { checkPluginFreshness } from "./editor/bridge-freshness.js";
 import { unionSurface } from "./sessions/session-surface.js";
@@ -35,7 +35,7 @@ import {
   dispatchFlowCall,
   type CallExtra,
   type DispatchDeps,
-} from "./server-dispatch.js";
+} from "./dispatch/server-dispatch.js";
 
 /**
  * Register one session per project argument, reporting each by name. A

@@ -4,7 +4,7 @@ import type { createFlowTool } from "./flow-tool.js";
 import type { ToolContext } from "../core/types.js";
 import { sessionContext } from "../target-params.js";
 import { EDITOR_TARGET_PARAM } from "../routing-params.js";
-import { refuseUntargetedCall } from "../editor-gate.js";
+import { refuseUntargetedCall } from "../dispatch/editor-gate.js";
 import { info, warn, error as logError } from "../core/log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
 import { existingGuard } from "../editor/dialog-guard.js";

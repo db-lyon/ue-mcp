@@ -1,7 +1,7 @@
 import { searchToolGraph, type ToolSearchHit } from "../../tool-search.js";
 import { actionSchema, resolveActionRef, suggestActions } from "../../action-schema.js";
-import { availabilityReport } from "../../offline.js";
-import { getWorkarounds } from "../../workaround-tracker.js";
+import { availabilityReport } from "../../dispatch/offline.js";
+import { getWorkarounds } from "../../dispatch/workaround-tracker.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
 import { toolGraphOf } from "../../target-params.js";
 

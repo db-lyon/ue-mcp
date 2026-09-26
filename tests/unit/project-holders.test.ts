@@ -6,7 +6,7 @@ import {
   contestedProject,
   rememberProjectHolders,
 } from "../../src/editor/project-holders.js";
-import { editorAttribution, EDITOR_ATTRIBUTION_PREFIX } from "../../src/editor-gate.js";
+import { editorAttribution, EDITOR_ATTRIBUTION_PREFIX } from "../../src/dispatch/editor-gate.js";
 import type { EditorProcess } from "../../src/editor/engine-observer.js";
 
 const PROJECT = path.resolve("/work/Demo/Demo.uproject");

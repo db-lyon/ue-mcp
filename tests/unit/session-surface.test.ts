@@ -19,7 +19,7 @@ import {
 } from "../../src/sessions/session-surface.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { buildMicroGateway } from "../../src/micro-context.js";
-import { callSubject } from "../../src/editor-gate.js";
+import { callSubject } from "../../src/dispatch/editor-gate.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 
 function graph(): ToolDef[] {

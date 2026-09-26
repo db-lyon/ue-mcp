@@ -10,7 +10,7 @@ import { ALL_TOOLS } from "../../src/tools.js";
 import { bp, categoryTool } from "../../src/category-tool.js";
 import { parseParams, ROUTING_PARAMS } from "../../src/action-schema.js";
 import { mapTracked } from "../../src/param-forwarding.js";
-import { STRICT_PARAMS_ENV } from "../../src/call-pipeline.js";
+import { STRICT_PARAMS_ENV } from "../../src/dispatch/call-pipeline.js";
 import { paramMapperOf } from "../../src/epic-input.js";
 
 

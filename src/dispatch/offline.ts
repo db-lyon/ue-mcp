@@ -28,10 +28,10 @@
  * or renamed without updating it, so the table cannot silently drift away from
  * the graph the server dispatches from.
  */
-import type { ActionSpec, ToolDef } from "./core/types.js";
-import { McpError, ErrorCode } from "./core/errors.js";
-import { STATUS_STALE_AFTER_MS } from "./editor/dialog-guard.js";
-import { readLogState, readEngineSnapshot } from "./editor/engine-observer.js";
+import type { ActionSpec, ToolDef } from "../core/types.js";
+import { McpError, ErrorCode } from "../core/errors.js";
+import { STATUS_STALE_AFTER_MS } from "../editor/dialog-guard.js";
+import { readLogState, readEngineSnapshot } from "../editor/engine-observer.js";
 
 /**
  * Whether an action can run with no editor attached.

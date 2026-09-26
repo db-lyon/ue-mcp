@@ -4,7 +4,7 @@ import { categoryTool } from "../category-tool.js";
 import { directive } from "../core/directive.js";
 import { submitFeedback, type SubmitResult } from "../feedback/github-app.js";
 import { readUserAuth } from "../feedback/github-auth.js";
-import { getWorkarounds, clearWorkarounds, type WorkaroundScopeSource } from "../workaround-tracker.js";
+import { getWorkarounds, clearWorkarounds, type WorkaroundScopeSource } from "../dispatch/workaround-tracker.js";
 import { scrubSecrets } from "../feedback/secret-scrub.js";
 import { privacyScrub } from "../feedback/privacy-scrub.js";
 import { deferSubmission, deleteDeferred } from "../feedback/feedback-deferred.js";

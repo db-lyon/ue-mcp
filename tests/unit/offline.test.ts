@@ -1,7 +1,7 @@
 /**
  * The offline surface, and the guard that keeps it honest (T16).
  *
- * `src/offline.ts` answers "which of these 900-odd actions can run with no
+ * `src/dispatch/offline.ts` answers "which of these 900-odd actions can run with no
  * editor". Most of that answer is mechanical, because an action carrying a
  * bridge method cannot run without one. The rest is a hand-written table, and a
  * hand-written table over a surface this size is exactly the thing that rots.
@@ -30,7 +30,7 @@ import {
   editorDownMessage,
   explainEditorDown,
   offlineActionNames,
-} from "../../src/offline.js";
+} from "../../src/dispatch/offline.js";
 import type { ToolDef } from "../../src/core/types.js";
 
 /** Every `tool.action` in this package whose work starts in a local handler. */
@@ -57,7 +57,7 @@ describe("offline classification stays level with the dispatched graph", () => {
         `${missing.length} action(s) run in the server process and nothing says whether they ` +
           `then call the editor:\n` +
           missing.map((n) => `  ${n}`).join("\n") +
-          `\n\nAdd each to LOCAL_ACTIONS in src/offline.ts (with the reason it needs no editor) ` +
+          `\n\nAdd each to LOCAL_ACTIONS in src/dispatch/offline.ts (with the reason it needs no editor) ` +
           `or to EDITOR_BOUND_LOCAL_ACTIONS (with the bridge work it does). ` +
           `project(list_available_actions) reports this answer to callers, so an unclassified ` +
           `action is reported as unknown and treated as needing an editor.`,
@@ -74,7 +74,7 @@ describe("offline classification stays level with the dispatched graph", () => {
         `${stale.length} classified action(s) are not in the graph any more:\n` +
           stale.map((n) => `  ${n}`).join("\n") +
           `\n\nThey were renamed, deleted, or turned into bridge actions. Remove them from ` +
-          `src/offline.ts.`,
+          `src/dispatch/offline.ts.`,
       );
     }
     expect(stale).toEqual([]);
