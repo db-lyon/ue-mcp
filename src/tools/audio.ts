@@ -1,5 +1,4 @@
 import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
 import { specBp, schema as specSchema } from "./specs/audio.generated.js";
 
 /**
@@ -90,8 +89,5 @@ export const audioTool: ToolDef = categoryTool(
     // #1057: every key the audio handlers declare, generated from their C++
     // registrations.
     ...specSchema,
-    // The shared cursor and limit. Every paged action here is spec'd; these
-    // keep the fuller descriptions and match the generated types.
-    ...PAGINATION_SCHEMA,
   },
 );

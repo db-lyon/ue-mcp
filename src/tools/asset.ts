@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA, paged } from "../pagination.js";
+import { paged } from "../pagination.js";
 import { SESSION_ID } from "../lock-owner.js";
 import { McpError, ErrorCode } from "../errors.js";
 import type { EditorSession } from "../session.js";
@@ -459,11 +459,6 @@ export const assetTool: ToolDef = categoryTool(
       vertexIndex: z.number().int().min(0),
       influences: z.array(z.record(z.unknown())).min(1).max(64),
     })).min(1).max(256).optional().describe("set_skeletal_mesh_skin_weights: selected source vertices and their complete replacement influences, each {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}"),
-    // The shared cursor and limit, declared once for every paged action in this
-    // category: list, search, search_fts and list_textures. Undeclared keys are
-    // stripped, so an action that documents `cursor` without this would return
-    // an unpaged first page and call it a success.
-    ...PAGINATION_SCHEMA,
     // The IMC actions dispatch to gameplay handlers, so their keys come from
     // that spec. `key` is also the StringTable entry key, so it names both.
     ...borrowSchema(gameplaySpecSchema, ["mappingContext", "inputAction", "imcPath", "inputActionPath", "mappingIndex"]),

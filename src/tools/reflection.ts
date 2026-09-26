@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/reflection.generated.js";
 import { specBp, schema as specSchema } from "./specs/reflection.generated.js";
 
@@ -33,9 +32,5 @@ export const reflectionTool: ToolDef = categoryTool(
     // The spec's type is the same, which the handler-specs unit test holds.
     slotName: z.string().min(1).max(128).optional().describe("inspect_save_game: logical save slot name without a path"),
     userIndex: z.number().int().nonnegative().optional().describe("inspect_save_game: platform user index (default 0)"),
-    // Declared for the whole category because the MCP layer strips undeclared
-    // keys: an action that documents `cursor` but whose category does not
-    // declare it receives `undefined` and silently returns page one forever.
-    ...PAGINATION_SCHEMA,
   },
 );

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { categoryTool, type ToolContext, type ToolDef } from "../types.js";
 import { EDITOR_TARGET_PARAM } from "../routing-params.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
 import { handlerFailure } from "../flow/handler-outcome.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/niagara.generated.js";
 import { specBp, schema as specSchema } from "./specs/niagara.generated.js";
@@ -134,9 +133,5 @@ export const niagaraTool: ToolDef = categoryTool(
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
     ops: z.array(z.record(z.unknown())).optional().describe("For batch: [{action, params}]"),
-    // cursor + limit for the paged list actions. Declared once: the MCP layer
-    // strips a key the category never declares, so a paged action whose
-    // category omits these silently returns page one forever.
-    ...PAGINATION_SCHEMA,
   },
 );

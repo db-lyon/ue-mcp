@@ -1,5 +1,4 @@
 import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
 import { specBp, schema as specSchema } from "./specs/landscape.generated.js";
 
 export const landscapeTool: ToolDef = categoryTool(
@@ -98,9 +97,5 @@ export const landscapeTool: ToolDef = categoryTool(
     // #1057: every landscape action is spec'd, so every key comes from the C++
     // registrations through the generated module.
     ...specSchema,
-    // cursor + limit for the paged list actions. Declared once: the MCP layer
-    // strips a key the category never declares, so a paged action whose
-    // category omits these silently returns page one forever.
-    ...PAGINATION_SCHEMA,
   },
 );

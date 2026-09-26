@@ -1,5 +1,4 @@
 import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/level.generated.js";
 import { specBp, schema as specSchema } from "./specs/level.generated.js";
 import { specBp as editorSpecBp, schema as editorSpecSchema } from "./specs/editor.generated.js";
@@ -152,10 +151,5 @@ export const levelTool: ToolDef = categoryTool(
     // the keys only they read come from the editor spec.
     ...specSchema,
     ...borrowSchema(editorSpecSchema, ["templateLevel", "quality"]),
-    // The shared cursor and limit, declared once for every paged action in this
-    // category. Undeclared keys are stripped, so an action that documents
-    // `cursor` without this would return an unpaged first page and call it a
-    // success.
-    ...PAGINATION_SCHEMA,
   },
 );

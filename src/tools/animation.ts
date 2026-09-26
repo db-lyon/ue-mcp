@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/animation.generated.js";
 import { specBp, schema as specSchema } from "./specs/animation.generated.js";
 
@@ -142,7 +141,6 @@ export const animationTool: ToolDef = categoryTool(
     ...specSchema,
     loopCount: z.number().int().min(1).optional().describe("add_montage_segment: how many times the segment repeats (default 1)"),
     insertIndex: z.number().int().min(0).optional().describe("add_montage_segment: position within the slot's segment list (default: append)"),
-    ...PAGINATION_SCHEMA,
     bindingTag: z.string().min(1).optional().describe("Stable Control Rig edit-session natural key used by begin/read/apply/bake."),
     tolerance: z.number().nonnegative().optional().describe("bake_control_rig_edit: key-reduction tolerance."),
   },

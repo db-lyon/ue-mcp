@@ -600,6 +600,19 @@ function routingSchema(actionNames: [string, ...string[]]): Record<string, z.Zod
   };
 }
 
+/**
+ * A page size is at least one row. Applied to every category's `limit` that
+ * states no lower bound of its own; anything that is not an optional number
+ * is left as declared.
+ */
+function boundLimit(limit: z.ZodType | undefined): z.ZodType | undefined {
+  if (!(limit instanceof z.ZodOptional)) return limit;
+  const inner = limit.unwrap();
+  if (!(inner instanceof z.ZodNumber) || inner.minValue !== null) return limit;
+  const bounded = inner.positive().optional();
+  return limit.description === undefined ? bounded : bounded.describe(limit.description);
+}
+
 export function categoryTool(
   name: string,
   summary: string,
@@ -617,13 +630,16 @@ export function categoryTool(
     })
     .join("\n");
 
+  // Spread twice: the first sets the order, the last wins, so a category
+  // cannot replace a parameter the dispatcher consumes.
+  const schema: Record<string, z.ZodType> = { ...routing, ...extraSchema, ...routing };
+  if (schema.limit) schema.limit = boundLimit(schema.limit)!;
+
   const def: ToolDef = {
     name,
     options,
     description: `${summary}\n\nActions:\n${docs}`,
-    // Spread twice: the first sets the order, the last wins, so a category
-    // cannot replace a parameter the dispatcher consumes.
-    schema: { ...routing, ...extraSchema, ...routing },
+    schema,
     actions,
     handler: async (ctx, rawParams) => {
       // `editor` is a routing instruction, never a handler parameter, and only

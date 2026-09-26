@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/blueprint.generated.js";
 import { specBp, schema as specSchema } from "./specs/blueprint.generated.js";
 
@@ -168,8 +167,5 @@ export const blueprintTool: ToolDef = categoryTool(
     maxSamples: z.number().int().nonnegative().optional().describe("audit_dead_code: samples listed per finding kind per Blueprint, default 20, max 500; counts stay complete (#1166)"),
     maxBlueprints: z.number().int().positive().optional().describe("search_call_sites / audit_dead_code: cap on Blueprints loaded, default 2000 (#945/#1166)"),
     offset: z.number().int().nonnegative().optional().describe("Row offset for read_graph, and the older non-resumable form of search_call_sites paging"),
-    // cursor + limit, declared once. Every paged action in this category reads
-    // them, and an undeclared key is stripped before the handler sees it.
-    ...PAGINATION_SCHEMA,
   },
 );
