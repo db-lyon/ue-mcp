@@ -219,25 +219,19 @@ describe("EditorBridge connection handling", () => {
 });
 
 describe("bridge state records", () => {
-  it("carries the identity and version fields the bridge now publishes", async () => {
+  it("reads the port lockfile and refuses a port no socket could bind", async () => {
     const dir = makeProjectDir();
-    const uproject = path.join(dir, "Sample.uproject");
-    const { readBridgeLockfile } = await import("../../src/bridge.js");
+    const { readBridgeLockfileIn } = await import("../../src/editor-target.js");
 
-    writeBridgeRecord(dir, "port.json", {
-      port: 51234,
-      pid: process.pid,
-      instanceId: "9f1c0e2a-0000-4000-8000-000000000001",
-      status: "listening",
-      handlerApiVersion: 1,
-    });
-    const record = readBridgeLockfile(uproject);
+    writeBridgeRecord(dir, "port.json", { port: 51234, pid: process.pid, status: "listening" });
+    const record = readBridgeLockfileIn(dir);
     expect(record?.port).toBe(51234);
-    expect(record?.instanceId).toBe("9f1c0e2a-0000-4000-8000-000000000001");
-    expect(record?.status).toBe("listening");
+    expect(record?.pid).toBe(process.pid);
 
-    writeBridgeRecord(dir, "port.json", { port: 0, pid: process.pid });
-    expect(readBridgeLockfile(uproject)).toBeNull();
+    for (const port of [0, 51234.5, 65536]) {
+      writeBridgeRecord(dir, "port.json", { port, pid: process.pid });
+      expect(readBridgeLockfileIn(dir)).toBeNull();
+    }
   });
 
   it("reports a bridge that failed to bind while its editor is still running", async () => {

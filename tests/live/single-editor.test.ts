@@ -21,8 +21,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { EditorBridge, readBridgeErrorRecord, readBridgeLockfile } from "../../src/bridge.js";
-import { resolveBridgeTarget, isPidAlive } from "../../src/editor-target.js";
+import { EditorBridge, readBridgeErrorRecord } from "../../src/bridge.js";
+import { resolveBridgeTarget, isPidAlive, readBridgeLockfileIn } from "../../src/editor-target.js";
 import { checkPluginFreshness } from "../../src/plugin-freshness.js";
 import { attach } from "../../src/deployer.js";
 import { startEditor } from "../../src/editor-control.js";
@@ -105,7 +105,7 @@ describe("the single-editor shape is the shape it always was", () => {
 
 describe("the editor's own records", () => {
   it("publishes a port lockfile whose process is alive and answering", () => {
-    const lockfile = readBridgeLockfile(target.uproject);
+    const lockfile = readBridgeLockfileIn(target.projectDir);
     expect(lockfile).toBeTruthy();
     expect(lockfile!.port).toBe(target.port);
     expect(isPidAlive(lockfile!.pid!)).toBe(true);

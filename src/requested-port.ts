@@ -24,10 +24,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { debug } from "./log.js";
 import { normalizeProjectRoot } from "./port.js";
+import { bridgeStateDir } from "./editor-target.js";
 
 /** Where the client publishes the pin, for one project root. */
 export function requestedPortPath(projectDir: string): string {
-  return path.join(projectDir, "Saved", "UE_MCP_Bridge", "requested.json");
+  return path.join(bridgeStateDir(projectDir), "requested.json");
 }
 
 export interface RequestedPortRecord {

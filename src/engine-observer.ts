@@ -24,6 +24,7 @@ import * as path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as log from "./log.js";
+import { bridgeStateDir } from "./editor-target.js";
 
 const execFileAsync = promisify(execFile);
 const IS_WINDOWS = process.platform === "win32";
@@ -712,7 +713,7 @@ function instanceStatusFiles(dir: string): string[] {
 
 export function readEngineSnapshot(projectPath: string | null | undefined): EngineSnapshot | null {
   if (!projectPath) return null;
-  const dir = path.join(path.dirname(projectPath), "Saved", "UE_MCP_Bridge");
+  const dir = bridgeStateDir(path.dirname(projectPath));
 
   // Per-process first, shared second. The shared path is still written by
   // current plugin builds and is the only thing an older one writes, so it

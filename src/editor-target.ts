@@ -23,14 +23,19 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+/** The directory the bridge and this server exchange state files in, for one project root. */
+export function bridgeStateDir(projectDir: string): string {
+  return path.join(projectDir, "Saved", "UE_MCP_Bridge");
+}
+
 /** The path the bridge publishes its bound port to, for one project root. */
 export function bridgeLockfilePath(projectDir: string): string {
-  return path.join(projectDir, "Saved", "UE_MCP_Bridge", "port.json");
+  return path.join(bridgeStateDir(projectDir), "port.json");
 }
 
 /** Where every live bridge publishes its own address, one file per process. */
 export function bridgeInstancesDir(projectDir: string): string {
-  return path.join(projectDir, "Saved", "UE_MCP_Bridge", "instances");
+  return path.join(bridgeStateDir(projectDir), "instances");
 }
 
 /**
@@ -130,7 +135,7 @@ export function readBridgeLockfileIn(projectDir: string): BridgeLockfile | null 
   }
 }
 
-export type BridgeTarget =
+export type BridgeAddress =
   | {
       ok: true;
       port: number;
@@ -191,7 +196,7 @@ export function findLiveInstanceRecord(
 export function resolveBridgeTarget(
   projectDir?: string | null,
   isAlive: (pid: number) => boolean = isPidAlive,
-): BridgeTarget {
+): BridgeAddress {
   if (!projectDir) {
     return {
       ok: false,

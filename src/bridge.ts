@@ -6,7 +6,7 @@ import { McpError, ErrorCode } from "./errors.js";
 import { resolveBridgeTimeout, TIMEOUT_ENV_VAR } from "./bridge-timeouts.js";
 import { debug, warn } from "./log.js";
 import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
-import { isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
+import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
 import { syncRequestedPort } from "./requested-port.js";
 import { packageVersion } from "./package-root.js";
 
@@ -98,17 +98,6 @@ export function describeProtocolMismatch(
   );
 }
 
-/** The record the running bridge publishes for this project. */
-export interface BridgeLockfile {
-  port: number;
-  pid?: number;
-  startedAt?: string;
-  /** Identifies the server object that wrote this, across pid recycling. */
-  instanceId?: string;
-  status?: string;
-  apiVersion?: number;
-  handlerApiVersion?: number;
-}
 
 /** What the bridge leaves behind when the editor started but the bridge did not. */
 export interface BridgeErrorRecord {
@@ -129,20 +118,6 @@ function readJsonFile<T>(file: string): T | null {
   }
 }
 
-// #492: per-project port lockfile published by the bridge plugin. When the
-// default port (9877) is taken by another editor, the plugin walks up and
-// publishes the actual bound port here. The client reads this before
-// falling back to the default port so a second editor finds the right one.
-export function readBridgeLockfile(uprojectPath: string | null): BridgeLockfile | null {
-  if (!uprojectPath) return null;
-  const parsed = readJsonFile<BridgeLockfile>(
-    path.join(path.dirname(uprojectPath), "Saved", "UE_MCP_Bridge", "port.json"),
-  );
-  if (!parsed || typeof parsed.port !== "number" || parsed.port <= 0 || parsed.port >= 65536) {
-    return null;
-  }
-  return parsed;
-}
 
 /**
  * #821: read the record the bridge writes when the editor came up but the
@@ -152,7 +127,7 @@ export function readBridgeLockfile(uprojectPath: string | null): BridgeLockfile 
 export function readBridgeErrorRecord(uprojectPath: string | null): BridgeErrorRecord | null {
   if (!uprojectPath) return null;
   const parsed = readJsonFile<BridgeErrorRecord>(
-    path.join(path.dirname(uprojectPath), "Saved", "UE_MCP_Bridge", "bridge-error.json"),
+    path.join(bridgeStateDir(path.dirname(uprojectPath)), "bridge-error.json"),
   );
   if (!parsed || parsed.status !== "bind-failed") return null;
   // A record from an editor that has since exited describes nothing current.
