@@ -11,7 +11,7 @@ import {
   isModalSafeMethod,
   stampBlockedEditor,
   type GuardDeps,
-} from "../../src/dialog-guard.js";
+} from "../../src/editor/dialog-guard.js";
 import type { DialogMode } from "../../src/config/user-state.js";
 
 const DIALOG = {

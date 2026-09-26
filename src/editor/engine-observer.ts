@@ -23,8 +23,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import * as log from "./core/log.js";
-import { bridgeStateDir } from "./bridge/editor-target.js";
+import * as log from "../core/log.js";
+import { bridgeStateDir } from "../bridge/editor-target.js";
 
 const execFileAsync = promisify(execFile);
 const IS_WINDOWS = process.platform === "win32";

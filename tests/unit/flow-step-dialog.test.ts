@@ -3,7 +3,7 @@ import { handlerTaskClass } from "../../src/flow/task-factory.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { buildMicroGateway } from "../../src/micro-context.js";
 import { categoryTool } from "../../src/category-tool.js";
-import { guardFor, forgetGuard, type BlockingDialog } from "../../src/dialog-guard.js";
+import { guardFor, forgetGuard, type BlockingDialog } from "../../src/editor/dialog-guard.js";
 import type { EditorSession } from "../../src/session.js";
 import type { FlowContext } from "../../src/flow/context.js";
 

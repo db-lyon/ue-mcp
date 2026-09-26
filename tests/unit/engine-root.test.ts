@@ -21,8 +21,8 @@ import {
   selectEngine,
   trySelectEngine,
   type EngineLookup,
-} from "../../src/engine-root.js";
-import { readEngineRootFromLog } from "../../src/engine-observer.js";
+} from "../../src/editor/engine-root.js";
+import { readEngineRootFromLog } from "../../src/editor/engine-observer.js";
 
 /** A resolver that knows only about the paths listed, on the platform given. */
 function lookupOver(

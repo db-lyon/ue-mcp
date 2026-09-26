@@ -5,7 +5,7 @@ import {
   extractProjectPath,
   selectEditorsForProject,
   type EditorProcess,
-} from "../../src/engine-observer.js";
+} from "../../src/editor/engine-observer.js";
 
 const GAME_A = path.resolve(path.join("C:", "work", "GameA", "GameA.uproject"));
 const GAME_B = path.resolve(path.join("C:", "work", "GameB", "GameB.uproject"));

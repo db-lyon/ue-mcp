@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { waitForEditorReady } from "../../src/editor-control.js";
+import { waitForEditorReady } from "../../src/editor/editor-control.js";
 
 /**
  * A dialog raised during startup goes through the same rule as one raised any

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextProgressUpdate } from "../../src/editor-control.js";
+import { nextProgressUpdate } from "../../src/editor/editor-control.js";
 
 describe("nextProgressUpdate", () => {
   it("never goes backwards even as the engine's percentage swings", () => {

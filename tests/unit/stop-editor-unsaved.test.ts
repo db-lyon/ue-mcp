@@ -20,11 +20,11 @@ import * as path from "node:path";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
-import type { EditorProcess } from "../../src/engine-observer.js";
+import type { EditorProcess } from "../../src/editor/engine-observer.js";
 import type { ElicitFn, ElicitParams, ElicitResult } from "../../src/core/types.js";
 
-vi.mock("../../src/engine-observer.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/engine-observer.js")>();
+vi.mock("../../src/editor/engine-observer.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/editor/engine-observer.js")>();
   return {
     ...actual,
     listEditorProcesses: vi.fn(async () => []),
@@ -43,9 +43,9 @@ vi.mock("../../src/engine-observer.js", async (importOriginal) => {
   };
 });
 
-const observer = await import("../../src/engine-observer.js");
-const { stopEditor } = await import("../../src/editor-control.js");
-const { resolveDialogMode, clientAdvertisesElicitation } = await import("../../src/dialog-mode.js");
+const observer = await import("../../src/editor/engine-observer.js");
+const { stopEditor } = await import("../../src/editor/editor-control.js");
+const { resolveDialogMode, clientAdvertisesElicitation } = await import("../../src/editor/dialog-mode.js");
 const { bridgeLockfilePath } = await import("../../src/bridge/editor-target.js");
 const { setDialogMode } = await import("../../src/config/user-state.js");
 

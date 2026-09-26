@@ -15,7 +15,7 @@ import {
   type FallbackReport,
 } from "../feedback/feedback-fallback.js";
 import { getFeedbackMode, type FeedbackMode } from "../config/user-state.js";
-import { clientAdvertisesElicitation } from "../dialog-mode.js";
+import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { warn } from "../core/log.js";
 import { routeFeedback, type RoutingDecision } from "../feedback/feedback-routing.js";
 import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubRepo } from "../extensions/registry-catalog.js";

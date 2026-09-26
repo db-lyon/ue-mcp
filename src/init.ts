@@ -6,8 +6,8 @@ import * as path from "node:path";
 import * as readline from "node:readline";
 import { projectConfigPath, readConfigDoc, writeConfigDoc } from "./config/ue-mcp-config.js";
 import { ProjectContext } from "./config/project.js";
-import { deploy } from "./deployer.js";
-import { inspectInstall, installWarning } from "./install-check.js";
+import { deploy } from "./editor/deployer.js";
+import { inspectInstall, installWarning } from "./editor/install-check.js";
 import {
   coreSkillsInstalled,
   installCoreSkills,

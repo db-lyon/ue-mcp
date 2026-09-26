@@ -177,7 +177,7 @@ function canonicalDirectory(directoryPath) {
  *  protects nothing. Semicolons always separate; a colon separates only when
  *  it is not the colon of a drive letter.
  *
- *  Kept identical to protectedEngineRoots in src/engine-root.ts. The two are
+ *  Kept identical to protectedEngineRoots in src/editor/engine-root.ts. The two are
  *  separate because the script and the server have different candidate sets,
  *  not because the rule differs. */
 function splitDenyList(value) {

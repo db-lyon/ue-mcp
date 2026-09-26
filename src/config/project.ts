@@ -4,7 +4,7 @@ import { deepMerge } from "@db-lyon/flowkit";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { info, warn } from "../core/log.js";
 import { UProjectSchema, UeMcpConfigSchema } from "../schemas.js";
-import { resolveEngineRoot, type EngineLookup } from "../engine-root.js";
+import { resolveEngineRoot, type EngineLookup } from "../editor/engine-root.js";
 import {
   configLayerFiles,
   localConfigPath,

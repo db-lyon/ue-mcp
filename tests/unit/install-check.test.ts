@@ -22,7 +22,7 @@ import {
   installWarning,
   readProjectShape,
   type ProbeHooks,
-} from "../../src/install-check.js";
+} from "../../src/editor/install-check.js";
 
 const made: string[] = [];
 

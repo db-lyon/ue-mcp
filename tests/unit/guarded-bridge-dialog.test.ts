@@ -13,7 +13,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { GuardedBridge } from "../../src/flow/guarded-bridge.js";
 import { GuardRegistry } from "../../src/flow/guard.js";
-import { guardFor, forgetGuard, withoutDialogActuation } from "../../src/dialog-guard.js";
+import { guardFor, forgetGuard, withoutDialogActuation } from "../../src/editor/dialog-guard.js";
 import type { EditorSession } from "../../src/session.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
 
@@ -111,7 +111,7 @@ describe("guardCall, the boundary a flow step crosses", () => {
     // it without a guard. Guards used to be created in one startup pass, so a
     // session registered any other way had none and every call it ever made
     // was refused. Now the boundary makes one from the session itself.
-    const { forgetGuard: forget, existingGuard: existing } = await import("../../src/dialog-guard.js");
+    const { forgetGuard: forget, existingGuard: existing } = await import("../../src/editor/dialog-guard.js");
     const inner = {
       isConnected: true,
       call: vi.fn(async () => ({ success: true })),

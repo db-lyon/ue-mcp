@@ -26,10 +26,10 @@ import {
   type GuardDecision,
   isDialogRefusal,
   stampBlockedEditor,
-} from "./dialog-guard.js";
-import { connectedEditorOf } from "./editor-control.js";
-import { clientAdvertisesElicitation } from "./dialog-mode.js";
-import { contestedProject } from "./project-holders.js";
+} from "./editor/dialog-guard.js";
+import { connectedEditorOf } from "./editor/editor-control.js";
+import { clientAdvertisesElicitation } from "./editor/dialog-mode.js";
+import { contestedProject } from "./editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "./action-schema.js";
 import { explainMissingAction } from "./session-surface.js";

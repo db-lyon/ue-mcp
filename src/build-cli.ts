@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as path from "node:path";
-import { buildProject } from "./editor-build.js";
+import { buildProject } from "./editor/editor-build.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject, isUProjectPath } from "./config/uproject-path.js";
 import { RESET, BOLD, GREEN, RED, CYAN } from "./ui/ansi.js";

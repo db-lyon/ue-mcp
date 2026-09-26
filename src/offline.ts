@@ -30,8 +30,8 @@
  */
 import type { ActionSpec, ToolDef } from "./core/types.js";
 import { McpError, ErrorCode } from "./core/errors.js";
-import { STATUS_STALE_AFTER_MS } from "./dialog-guard.js";
-import { readLogState, readEngineSnapshot } from "./engine-observer.js";
+import { STATUS_STALE_AFTER_MS } from "./editor/dialog-guard.js";
+import { readLogState, readEngineSnapshot } from "./editor/engine-observer.js";
 
 /**
  * Whether an action can run with no editor attached.

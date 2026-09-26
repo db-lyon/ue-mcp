@@ -5,7 +5,7 @@
  */
 
 import { editorOwnsProject, listEditorProcesses, sameProjectFile, type EditorProcess } from "./engine-observer.js";
-import { isPidAlive, readBridgeInstanceRecords } from "./bridge/editor-target.js";
+import { isPidAlive, readBridgeInstanceRecords } from "../bridge/editor-target.js";
 
 export interface ProjectHolder {
   pid: number;

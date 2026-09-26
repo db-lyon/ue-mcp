@@ -1,4 +1,4 @@
-import { isDialogRefusal } from "./dialog-guard.js";
+import { isDialogRefusal } from "./editor/dialog-guard.js";
 import type { IBridge } from "./bridge/bridge.js";
 import { McpError, ErrorCode, type McpErrorDetails } from "./core/errors.js";
 import { debug } from "./core/log.js";

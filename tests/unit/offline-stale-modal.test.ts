@@ -11,8 +11,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it, expect } from "vitest";
-import { readEngineSnapshot } from "../../src/engine-observer.js";
-import { STATUS_STALE_AFTER_MS } from "../../src/dialog-guard.js";
+import { readEngineSnapshot } from "../../src/editor/engine-observer.js";
+import { STATUS_STALE_AFTER_MS } from "../../src/editor/dialog-guard.js";
 
 function projectWithStatus(modal: unknown, ageMs: number): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-stale-"));

@@ -7,7 +7,7 @@
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { protectedEngineRoots as scriptRoots } from "../../scripts/build-utils.js";
-import { protectedEngineRoots as serverRoots } from "../../src/engine-root.js";
+import { protectedEngineRoots as serverRoots } from "../../src/editor/engine-root.js";
 
 const ACCEPTED = [
   "",

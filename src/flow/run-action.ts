@@ -6,7 +6,7 @@ import { McpError, ErrorCode } from "../core/errors.js";
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
-import { ensureGuard } from "../dialog-guard.js";
+import { ensureGuard } from "../editor/dialog-guard.js";
 import { paramMapperOf } from "../epic-input.js";
 
 /**

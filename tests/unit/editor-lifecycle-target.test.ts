@@ -9,7 +9,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { EditorProcess } from "../../src/engine-observer.js";
+import type { EditorProcess } from "../../src/editor/engine-observer.js";
 
 // No unit test may launch a real editor. An unknown EngineAssociation still
 // resolves to the machine's default install, so the launch is stubbed here.
@@ -19,8 +19,8 @@ vi.mock("child_process", async (importOriginal) => ({
   spawn: spawnMock,
 }));
 
-vi.mock("../../src/engine-observer.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/engine-observer.js")>();
+vi.mock("../../src/editor/engine-observer.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/editor/engine-observer.js")>();
   return {
     ...actual,
     listEditorProcesses: vi.fn(async () => []),
@@ -39,8 +39,8 @@ vi.mock("../../src/engine-observer.js", async (importOriginal) => {
   };
 });
 
-const observer = await import("../../src/engine-observer.js");
-const { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../src/editor-control.js");
+const observer = await import("../../src/editor/engine-observer.js");
+const { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../src/editor/editor-control.js");
 const { bridgeLockfilePath } = await import("../../src/bridge/editor-target.js");
 const { ProjectContext } = await import("../../src/config/project.js");
 

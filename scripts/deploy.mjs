@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Run the deployer manually to sync plugin/ → tests/ue_mcp/Plugins/
 // without starting the full MCP server.
-import { deploy, deploySummary } from "../dist/deployer.js";
+import { deploy, deploySummary } from "../dist/editor/deployer.js";
 import { ProjectContext } from "../dist/config/project.js";
 
 const proj = new ProjectContext();

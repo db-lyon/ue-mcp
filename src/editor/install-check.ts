@@ -24,11 +24,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { execFileSync } from "node:child_process";
-import { checkPluginFreshness, type PluginFreshness } from "./plugin-freshness.js";
+import { checkPluginFreshness, type PluginFreshness } from "./bridge-freshness.js";
 import { trySelectEngine } from "./engine-root.js";
-import { ProjectContext } from "./config/project.js";
-import { packageRoot } from "./core/package-root.js";
-import { isUProjectPath } from "./config/uproject-path.js";
+import { ProjectContext } from "../config/project.js";
+import { packageRoot } from "../core/package-root.js";
+import { isUProjectPath } from "../config/uproject-path.js";
 
 /**
  * Whether the project declares native modules of its own.

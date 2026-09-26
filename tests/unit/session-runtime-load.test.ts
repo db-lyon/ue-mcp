@@ -20,8 +20,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 
-vi.mock("../../src/deployer.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/deployer.js")>();
+vi.mock("../../src/editor/deployer.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/editor/deployer.js")>();
   return { ...actual, attach: vi.fn(() => ({ action: "skipped" })), attachSummary: vi.fn(() => "stubbed") };
 });
 

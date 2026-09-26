@@ -5,9 +5,9 @@ import {
   detectProjectHolders,
   contestedProject,
   rememberProjectHolders,
-} from "../../src/project-holders.js";
+} from "../../src/editor/project-holders.js";
 import { editorAttribution, EDITOR_ATTRIBUTION_PREFIX } from "../../src/editor-gate.js";
-import type { EditorProcess } from "../../src/engine-observer.js";
+import type { EditorProcess } from "../../src/editor/engine-observer.js";
 
 const PROJECT = path.resolve("/work/Demo/Demo.uproject");
 const OTHER = path.resolve("/work/Other/Other.uproject");

@@ -8,10 +8,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn } from "child_process";
 import * as os from "node:os";
-import { readUeMcpConfig } from "./config/project.js";
+import { readUeMcpConfig } from "../config/project.js";
 import { EngineResolutionError, engineLookupFor, selectEngine } from "./engine-root.js";
-import { invalidatePluginFreshness } from "./plugin-freshness.js";
-import { readEnv } from "./core/env.js";
+import { invalidatePluginFreshness } from "./bridge-freshness.js";
+import { readEnv } from "../core/env.js";
 
 const IS_WINDOWS = process.platform === "win32";
 

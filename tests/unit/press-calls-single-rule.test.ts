@@ -52,7 +52,7 @@ describe("the press-calls rule has exactly one implementation", () => {
   it("is not decided in the editor lifecycle at all", () => {
     // The lifecycle actions have no dialog behaviour, so editor-control has
     // nothing to decide about press calls and must not reach the rule either.
-    const control = fs.readFileSync(path.join(SRC, "editor-control.ts"), "utf-8");
+    const control = fs.readFileSync(path.join(SRC, "editor", "editor-control.ts"), "utf-8");
     expect(control).not.toContain("handsOverPressCalls");
     expect(control).not.toMatch(/pressCalls:/);
   });

@@ -98,7 +98,7 @@ describe("a surface change has to reach the docs", () => {
   });
 
   it("says nothing about a change that touches no surface", () => {
-    expect(say(["src/dialog-guard.ts", "tests/unit/dialog-guard.test.ts"])).toBeNull();
+    expect(say(["src/editor/dialog-guard.ts", "tests/unit/dialog-guard.test.ts"])).toBeNull();
     expect(say(["README.md"])).toBeNull();
   });
 

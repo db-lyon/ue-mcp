@@ -4,7 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { z } from "zod";
 import { SessionRegistry, type EditorSession } from "./session.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "./config/project.js";
-import { attach, attachSummary } from "./deployer.js";
+import { attach, attachSummary } from "./editor/deployer.js";
 import { composeServerInstructions } from "./instructions.js";
 import { resolveContextStrategy, fullSurfaceDescription } from "./lean-context.js";
 import { envelopeInputSchema, envelopeShape, usesArgsEnvelope } from "./call-envelope.js";
@@ -15,7 +15,7 @@ import {
   removeMigrateTarget,
 } from "./target-params.js";
 import type { ToolDef } from "./core/types.js";
-import { DialogGuard, guardFor, sessionGuardDeps } from "./dialog-guard.js";
+import { DialogGuard, guardFor, sessionGuardDeps } from "./editor/dialog-guard.js";
 import { info, warn, error } from "./core/log.js";
 import { startVersionCheck } from "./version-check.js";
 import { GuardRegistry } from "./flow/guard.js";
@@ -24,7 +24,7 @@ import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
 import { resolveLockingConfig } from "./locking.js";
 import { collapsingEnvWarnings } from "./config/session-env.js";
-import { checkPluginFreshness } from "./plugin-freshness.js";
+import { checkPluginFreshness } from "./editor/bridge-freshness.js";
 import { unionSurface } from "./session-surface.js";
 import { packageVersion } from "./core/package-root.js";
 import { findCliCommand, runCliCommand } from "./cli-commands.js";

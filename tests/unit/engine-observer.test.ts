@@ -7,7 +7,7 @@ import {
   readEngineSnapshot,
   withBridgeSnapshot,
   type EngineState,
-} from "../../src/engine-observer.js";
+} from "../../src/editor/engine-observer.js";
 
 const temporaryRoots: string[] = [];
 

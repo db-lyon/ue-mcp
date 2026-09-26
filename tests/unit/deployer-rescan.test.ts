@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { deployPluginTree } from "../../src/deployer.js";
+import { deployPluginTree } from "../../src/editor/deployer.js";
 
 let root: string;
 let source: string;

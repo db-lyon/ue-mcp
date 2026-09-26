@@ -37,9 +37,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
-import { debug, warn } from "./core/log.js";
+import { debug, warn } from "../core/log.js";
 import { readEngineRootFromLog } from "./engine-observer.js";
-import { readEnv } from "./core/env.js";
+import { readEnv } from "../core/env.js";
 
 /** Where a candidate engine came from. Printed verbatim in failures. */
 export type EngineCandidateSource =

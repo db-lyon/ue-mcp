@@ -22,7 +22,7 @@ import {
   type BridgeGuard,
   type CallContext,
 } from "./guard.js";
-import { withoutDialogActuation } from "../dialog-guard.js";
+import { withoutDialogActuation } from "../editor/dialog-guard.js";
 import { DialogGatedBridge } from "./guarded-bridge.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";

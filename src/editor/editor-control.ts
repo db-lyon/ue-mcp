@@ -1,8 +1,8 @@
 import * as path from "node:path";
 import { spawn } from "child_process";
 import * as net from "net";
-import { bridgeReplyAccepted, callBridgeOnce, type BridgeReply } from "./bridge/bridge.js";
-import { readUeMcpConfig, type ProjectContext } from "./config/project.js";
+import { bridgeReplyAccepted, callBridgeOnce, type BridgeReply } from "../bridge/bridge.js";
+import { readUeMcpConfig, type ProjectContext } from "../config/project.js";
 import { EngineResolutionError, engineLookupFor, selectEngine, trySelectEngine } from "./engine-root.js";
 import {
   editorOwnsProject,
@@ -16,11 +16,11 @@ import {
   modalBlocksGameThread,
   type EngineState,
 } from "./engine-observer.js";
-import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "./bridge/editor-target.js";
+import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "../bridge/editor-target.js";
 import { oneLine } from "./dialog-guard.js";
-import type { ProgressDisplay, ProgressFn } from "./core/types.js";
-import { findUProject } from "./config/uproject-path.js";
-import { readEnv } from "./core/env.js";
+import type { ProgressDisplay, ProgressFn } from "../core/types.js";
+import { findUProject } from "../config/uproject-path.js";
+import { readEnv } from "../core/env.js";
 
 const NO_EDITOR_BINARY_MSG =
   "Unreal Editor executable not found. Set UE_EDITOR_PATH to the editor binary (on macOS that is inside UnrealEditor.app/Contents/MacOS/), or install the engine to a default location.";

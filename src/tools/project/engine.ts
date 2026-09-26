@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { selectEngine } from "../../engine-root.js";
+import { selectEngine } from "../../editor/engine-root.js";
 import { parseHeader } from "../../codeintel/cpp-parser.js";
 import { loadEngineIndex, type EngineIndex } from "../../codeintel/engine-index.js";
 import {

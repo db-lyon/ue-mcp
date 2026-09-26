@@ -1,6 +1,6 @@
-import { getDialogMode, getUserStatePath, type DialogMode } from "./config/user-state.js";
-import type { ElicitFn } from "./core/types.js";
-import { readEnv } from "./core/env.js";
+import { getDialogMode, getUserStatePath, type DialogMode } from "../config/user-state.js";
+import type { ElicitFn } from "../core/types.js";
+import { readEnv } from "../core/env.js";
 
 /**
  * The dialog handling mode that applied, and why it applied.
