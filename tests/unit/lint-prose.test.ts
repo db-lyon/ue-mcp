@@ -217,8 +217,7 @@ describe("the lists a rule is built from are complete", () => {
 
 describe("exclusions name a path and a reason", () => {
   it("excludes what it says it excludes", () => {
-    expect(isExcluded("assets/epic-catalog.snapshot.json")).toBe(true);
-    expect(isExcluded("tests/ue_mcp/Content/Python/Foo.cpp")).toBe(true);
+    expect(isExcluded("tests/golden/handler-specs.json")).toBe(true);
     expect(isExcluded("tests/golden/editor-down.json")).toBe(true);
     expect(isExcluded("src/index.ts")).toBe(false);
   });

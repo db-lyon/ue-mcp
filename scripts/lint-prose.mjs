@@ -253,28 +253,6 @@ export const RULES = [
  */
 export const EXCLUDED_PATHS = [
   {
-    path: "assets/epic-catalog.snapshot.json",
-    reason:
-      "Harvested snapshot of Epic's tool catalog. The prose in it is upstream and not ours; "
-      + "src/epic-enrich.ts strips what needs stripping at load, which is what the sanitiser "
-      + "and its test exist for. Editing the snapshot to please a style rule would make it "
-      + "stop matching the engine it came from.",
-  },
-  {
-    path: "tests/ue_mcp/Content/Python/",
-    reason:
-      "Superseded copy of an older bridge source tree carried inside the test project. "
-      + "plugin/ue_mcp_bridge/ is the source of truth and is covered. Rewriting a dead copy "
-      + "would produce 40 files of diff noise and protect nothing.",
-  },
-  {
-    path: "MEMORIES.md",
-    reason:
-      "A verbatim dump of retired agent notes, kept as the record of what each rule said "
-      + "before it became a check. Rewriting quoted history to satisfy the rules it "
-      + "describes would destroy the only evidence of where the rules came from.",
-  },
-  {
     path: "scripts/lint-prose.mjs",
     reason:
       "This file. It names every banned string, because a rule that forbids a word has to "
