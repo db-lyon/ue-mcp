@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
 import { normalizeProjectRoot } from "./port.js";
 import { warn } from "./log.js";
+import { userDir } from "./user-dir.js";
 
 /**
  * User-scoped, machine-only state. Lives at `~/.ue-mcp/state.json`. Stores
@@ -83,7 +83,7 @@ interface UserState {
 function statePath(): string {
   return (
     process.env.UE_MCP_USER_STATE ||
-    path.join(os.homedir(), ".ue-mcp", "state.json")
+    path.join(userDir(), "state.json")
   );
 }
 

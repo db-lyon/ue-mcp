@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
 import { randomBytes } from "node:crypto";
+import { userDir } from "./user-dir.js";
 
 /**
  * Storage for `feedback.mode = "defer"` submissions. The server writes the
@@ -21,7 +21,7 @@ import { randomBytes } from "node:crypto";
 function pendingDir(): string {
   return (
     process.env.UE_MCP_PENDING_DIR ||
-    path.join(os.homedir(), ".ue-mcp", "pending-feedback")
+    path.join(userDir(), "pending-feedback")
   );
 }
 

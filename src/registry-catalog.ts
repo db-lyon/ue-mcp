@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { debug, warn } from "./log.js";
+import { userDir } from "./user-dir.js";
 
 /**
  * Read-only client for the ue-mcp plugin registry (plugins.ue-mcp.com).
@@ -123,7 +123,7 @@ let memoryCache: { at: number; base: string; plugins: RegistryPlugin[] } | null 
 function cachePath(): string {
   return (
     process.env.UE_MCP_REGISTRY_CACHE ||
-    path.join(os.homedir(), ".ue-mcp", "registry-catalog.json")
+    path.join(userDir(), "registry-catalog.json")
   );
 }
 

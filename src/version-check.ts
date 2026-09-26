@@ -12,9 +12,9 @@
  * which returns the notice once and then clears it - one nudge per session.
  */
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { warn, debug } from "./log.js";
+import { userDir } from "./user-dir.js";
 
 /**
  * Where the answer is cached.
@@ -29,7 +29,7 @@ import { warn, debug } from "./log.js";
 function cacheFile(): string {
   const override = process.env.UE_MCP_VERSION_CACHE;
   if (override && override.trim() !== "") return override;
-  return path.join(os.homedir(), ".ue-mcp", "version-check.json");
+  return path.join(userDir(), "version-check.json");
 }
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5000;

@@ -145,6 +145,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "instructions.ts": "The initialize payload is sent once per process and cannot be renegotiated.",
   "global-config.ts": "The user-global config layer, which applies to every project by definition.",
   "log.ts": "Process-wide stderr logging.",
+  "user-dir.ts": "Where per-user state lives. A leaf with no state.",
   "uproject-path.ts": "Pure path handling for a .uproject or the directory holding one.",
   "package-root.ts": "Where this installed package lives and its version; one answer per process.",
   "version-check.ts": "One npm check per process; the upgrade notice is emitted once.",

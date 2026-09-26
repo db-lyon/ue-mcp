@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { userDir } from "./user-dir.js";
 
 // OAuth Client ID for the ue-mcp-feedback GitHub App. This is NOT a secret -
 // device flow client IDs are designed to be public. Override at runtime via
@@ -8,9 +8,12 @@ import { join } from "node:path";
 const DEFAULT_CLIENT_ID = "Iv23li9lpE9A0FqmXlJH";
 const CLIENT_ID = process.env.UE_MCP_OAUTH_CLIENT_ID || DEFAULT_CLIENT_ID;
 
-const AUTH_DIR = process.env.UE_MCP_AUTH_DIR || join(homedir(), ".ue-mcp");
-const AUTH_FILE = join(AUTH_DIR, "auth.json");
-const PENDING_FILE = join(AUTH_DIR, "device-pending.json");
+/** Where the GitHub and registry tokens are kept: UE_MCP_AUTH_DIR, else ~/.ue-mcp. */
+export function authDir(): string {
+  return process.env.UE_MCP_AUTH_DIR || userDir();
+}
+const authFile = () => join(authDir(), "auth.json");
+const pendingFile = () => join(authDir(), "device-pending.json");
 
 export interface UserAuth {
   token: string;
@@ -47,7 +50,7 @@ function assertClientIdConfigured(): void {
 
 export async function readUserAuth(): Promise<UserAuth | null> {
   try {
-    const raw = await fs.readFile(AUTH_FILE, "utf-8");
+    const raw = await fs.readFile(authFile(), "utf-8");
     return JSON.parse(raw) as UserAuth;
   } catch {
     return null;
@@ -55,20 +58,20 @@ export async function readUserAuth(): Promise<UserAuth | null> {
 }
 
 export async function writeUserAuth(auth: UserAuth): Promise<void> {
-  await fs.mkdir(AUTH_DIR, { recursive: true });
-  await fs.writeFile(AUTH_FILE, JSON.stringify(auth, null, 2), { mode: 0o600 });
+  await fs.mkdir(authDir(), { recursive: true });
+  await fs.writeFile(authFile(), JSON.stringify(auth, null, 2), { mode: 0o600 });
 }
 
 export async function clearUserAuth(): Promise<void> {
-  await fs.unlink(AUTH_FILE).catch(() => {});
+  await fs.unlink(authFile()).catch(() => {});
 }
 
 async function readPending(): Promise<PendingDeviceFlow | null> {
   try {
-    const raw = await fs.readFile(PENDING_FILE, "utf-8");
+    const raw = await fs.readFile(pendingFile(), "utf-8");
     const p = JSON.parse(raw) as PendingDeviceFlow;
     if (p.expires_at < Math.floor(Date.now() / 1000)) {
-      await fs.unlink(PENDING_FILE).catch(() => {});
+      await fs.unlink(pendingFile()).catch(() => {});
       return null;
     }
     return p;
@@ -78,12 +81,12 @@ async function readPending(): Promise<PendingDeviceFlow | null> {
 }
 
 async function writePending(p: PendingDeviceFlow): Promise<void> {
-  await fs.mkdir(AUTH_DIR, { recursive: true });
-  await fs.writeFile(PENDING_FILE, JSON.stringify(p, null, 2), { mode: 0o600 });
+  await fs.mkdir(authDir(), { recursive: true });
+  await fs.writeFile(pendingFile(), JSON.stringify(p, null, 2), { mode: 0o600 });
 }
 
 async function clearPending(): Promise<void> {
-  await fs.unlink(PENDING_FILE).catch(() => {});
+  await fs.unlink(pendingFile()).catch(() => {});
 }
 
 export async function startDeviceFlow(): Promise<PendingDeviceFlow> {

@@ -13,9 +13,9 @@
  * can inject a token without logging in.
  */
 import { promises as fs } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import {
+  authDir,
   readUserAuth,
   startDeviceFlow,
   tryExchangeDeviceCode,
@@ -24,8 +24,7 @@ import {
 } from "./auth.js";
 import { registryBase } from "./registry-catalog.js";
 
-const AUTH_DIR = process.env.UE_MCP_AUTH_DIR || join(homedir(), ".ue-mcp");
-const REGISTRY_FILE = join(AUTH_DIR, "registry.json");
+const registryFile = () => join(authDir(), "registry.json");
 
 export interface RegistryAuth {
   /** Registry publish token (uemcp_...). */
@@ -39,7 +38,7 @@ export interface RegistryAuth {
 
 export async function readRegistryAuth(): Promise<RegistryAuth | null> {
   try {
-    const raw = await fs.readFile(REGISTRY_FILE, "utf-8");
+    const raw = await fs.readFile(registryFile(), "utf-8");
     const a = JSON.parse(raw) as RegistryAuth;
     // A cached token for a different registry (e.g. a local dev instance) must
     // not leak into prod publishes.
@@ -51,12 +50,12 @@ export async function readRegistryAuth(): Promise<RegistryAuth | null> {
 }
 
 export async function writeRegistryAuth(a: RegistryAuth): Promise<void> {
-  await fs.mkdir(AUTH_DIR, { recursive: true });
-  await fs.writeFile(REGISTRY_FILE, JSON.stringify(a, null, 2), { mode: 0o600 });
+  await fs.mkdir(authDir(), { recursive: true });
+  await fs.writeFile(registryFile(), JSON.stringify(a, null, 2), { mode: 0o600 });
 }
 
 export async function clearRegistryAuth(): Promise<void> {
-  await fs.unlink(REGISTRY_FILE).catch(() => {});
+  await fs.unlink(registryFile()).catch(() => {});
 }
 
 /**
