@@ -1349,9 +1349,11 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateEnum(const TSharedPtr<FJsonObj
 	}
 
 	Enum->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(Enum->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Enum, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Enum->GetPathName(), bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), Enum->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
@@ -1421,9 +1423,11 @@ TSharedPtr<FJsonValue> FReflectionHandlers::SetEnumEntries(const TSharedPtr<FJso
 	}
 
 	Enum->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(Enum->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Enum, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("entries"), Added);

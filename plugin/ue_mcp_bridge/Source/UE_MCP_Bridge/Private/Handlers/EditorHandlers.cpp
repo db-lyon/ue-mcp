@@ -174,6 +174,35 @@ namespace
 		return true;
 	}
 
+	/** Persist the package editor(set_property) wrote into and record the outcome.
+	 *  A native class default has no file, so it is reported unsaved without failing;
+	 *  a map package keeps the editor's own save path behind the write guard. */
+	void EditorSetPropertyPersist(UObject* Asset, const FString& AssetPath, const TSharedPtr<FJsonObject>& Result)
+	{
+		UPackage* Package = Asset ? Asset->GetOutermost() : nullptr;
+		if (Package && Package->HasAnyPackageFlags(PKG_CompiledIn))
+		{
+			Result->SetBoolField(TEXT("saved"), false);
+			Result->SetStringField(TEXT("saveNote"), TEXT("A native class default has no package file; the change lives in memory for this editor session."));
+			return;
+		}
+		FString SaveError;
+		bool bSaved = false;
+		if (Package && Package->ContainsMap())
+		{
+			bSaved = !MCPPackageWriteBlocked(Asset, SaveError) && UEditorAssetLibrary::SaveLoadedAsset(Asset, /*bOnlyIfIsDirty=*/true);
+			if (!bSaved && SaveError.IsEmpty())
+			{
+				SaveError = TEXT("The editor refused to save the level package. The output log carries the reason.");
+			}
+		}
+		else
+		{
+			bSaved = SaveAssetPackageChecked(Asset, SaveError);
+		}
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	}
+
 	TSharedPtr<FJsonObject> DescribeProperty(FProperty* Prop, const void* ValuePtr, UObject* Owner, bool bIncludeValue)
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -1452,10 +1481,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 		}
 		Asset->MarkPackageDirty();
 		const bool bSaveMesh = bSave;
-		if (bSaveMesh)
-		{
-			UEditorAssetLibrary::SaveLoadedAsset(Asset, /*bOnlyIfIsDirty=*/true);
-		}
 
 		auto MeshResult = MCPSuccess();
 		MeshResult->SetStringField(TEXT("path"), AssetPath);
@@ -1463,7 +1488,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 		MeshResult->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
 		MeshResult->SetStringField(TEXT("type"), Property->GetCPPType());
-		MeshResult->SetBoolField(TEXT("saved"), bSaveMesh);
+		if (bSaveMesh) EditorSetPropertyPersist(Asset, AssetPath, MeshResult);
+		else MeshResult->SetBoolField(TEXT("saved"), false);
 		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
 		MeshResult->SetBoolField(TEXT("changeDetected"), true);
 		MCPSetUpdated(MeshResult);
@@ -1563,18 +1589,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	// #674: opt out of the immediate disk save. Default true preserves the
 	// prior behavior; pass save=false to leave the package dirty in-memory
 	// (batch many writes, then save_dirty / save_asset once).
-	if (bSave)
-	{
-		UEditorAssetLibrary::SaveLoadedAsset(Asset, /*bOnlyIfIsDirty=*/true);
-	}
-
 	auto Result = MCPSuccess();
+	if (bSave) EditorSetPropertyPersist(Asset, AssetPath, Result);
+	else Result->SetBoolField(TEXT("saved"), false);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("resolvedPath"), Asset->GetPathName());
 	Result->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("type"), Property->GetCPPType());
-	Result->SetBoolField(TEXT("saved"), bSave);
 	// previousValue and value are BOTH structured, and set_object_property
 	// reports the same pair in the same form. A caller that reads them off one
 	// action must not have to re-parse them off the other.
