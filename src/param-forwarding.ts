@@ -23,20 +23,6 @@ function trackReads(bag: Record<string, unknown>): { view: Record<string, unknow
   return { view, read };
 }
 
-/** The keys a mapper reads from `bag`, including those read before it throws. */
-export function keysRead(
-  mapParams: (p: Record<string, unknown>) => Record<string, unknown>,
-  bag: Record<string, unknown>,
-): Set<string> {
-  const { view, read } = trackReads(bag);
-  try {
-    const out = mapParams(view);
-    if ((out as unknown) === view) return new Set(Object.keys(bag));
-  } catch {
-    // A refusal still read what it validated.
-  }
-  return read;
-}
 
 export interface ForwardedCall {
   /** What the bridge should receive. Never the tracking view itself. */

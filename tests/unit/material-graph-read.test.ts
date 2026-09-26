@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseParamsClause } from "../../src/action-schema.js";
+import { parseParams } from "../../src/action-schema.js";
 import { materialTool } from "../../src/tools/material.js";
 import { handlerSpecs } from "../../src/tools/specs/material.generated.js";
 
@@ -11,12 +11,12 @@ describe("material graph read surface", () => {
     expect(materialTool.schema.includeInputs.safeParse(undefined).success).toBe(true);
     expect(materialTool.schema.includeInputs.safeParse("true").success).toBe(false);
 
-    const readGraphParams = parseParamsClause(materialTool.actions.read_graph.description ?? "").map((p) => p.name);
+    const readGraphParams = parseParams(materialTool.actions.read_graph.description ?? "").params.map((p) => p.name);
     expect(readGraphParams, "read_graph documents expressionIndex").toContain("expressionIndex");
     expect(materialTool.schema.expressionIndex.safeParse(3).success).toBe(true);
 
     for (const action of ["list_expressions", "read_graph"]) {
-      const params = parseParamsClause(materialTool.actions[action].description ?? "").map((p) => p.name);
+      const params = parseParams(materialTool.actions[action].description ?? "").params.map((p) => p.name);
       expect(params, `${action} documents cursor`).toContain("cursor");
       expect(params, `${action} documents limit`).toContain("limit");
     }

@@ -661,13 +661,6 @@ export function parseParams(description: string, known?: ReadonlySet<string>): D
   return { params, alternatives };
 }
 
-/** The parameters the `Params:` clause names, without the choice structure. */
-export function parseParamsClause(
-  description: string,
-  known?: ReadonlySet<string>,
-): DocumentedParam[] {
-  return parseParams(description, known).params;
-}
 
 /**
  * The parameter keys an action's `mapParams` closure reads.
@@ -988,17 +981,3 @@ export function unknownActionMessage(action: string, category: string, available
     + (close.length ? "" : ` ${PROJECT_ACTIONS_HINT}`);
 }
 
-/**
- * Every action on the surface, with the drift each one carries. Used by the
- * schema-drift unit test and by `project(describe_action)` when it is asked
- * for a whole category rather than one action.
- */
-export function allActionSchemas(tools: ToolDef[]): ActionSchema[] {
-  const out: ActionSchema[] = [];
-  for (const tool of tools) {
-    for (const action of Object.keys(tool.actions)) {
-      out.push(actionSchema(tool, action));
-    }
-  }
-  return out;
-}

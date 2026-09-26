@@ -21,7 +21,7 @@ import {
   PAGINATION_SCHEMA,
   paged,
 } from "../../src/pagination.js";
-import { parseParamsClause } from "../../src/action-schema.js";
+import { parseParams } from "../../src/action-schema.js";
 import { reflectionTool } from "../../src/tools/reflection.js";
 
 describe("pagination parameter declarations", () => {
@@ -55,12 +55,12 @@ describe("pagination parameter declarations", () => {
 describe("paged()", () => {
   it("adds both names to the end of an existing Params clause", () => {
     const out = paged("List gameplay tags. Params: filter?");
-    expect(parseParamsClause(out).map((p) => p.name)).toEqual(["filter", "cursor", "limit"]);
+    expect(parseParams(out).params.map((p) => p.name)).toEqual(["filter", "cursor", "limit"]);
   });
 
   it("adds only the missing name when the action already documents one", () => {
     const out = paged("List classes. Params: parentFilter?, limit?");
-    expect(parseParamsClause(out).map((p) => p.name)).toEqual(["parentFilter", "limit", "cursor"]);
+    expect(parseParams(out).params.map((p) => p.name)).toEqual(["parentFilter", "limit", "cursor"]);
     // `limit` is documented once, not twice.
     expect(out.match(/\blimit\b/g)).toHaveLength(1);
   });
@@ -70,24 +70,24 @@ describe("paged()", () => {
       "Enumerate modules. Params: filter? (case-insensitive substring), loadedOnly? (default false)."
       + " Returns modules[{name, loaded}] + totalLoaded",
     );
-    expect(parseParamsClause(out).map((p) => p.name)).toEqual(["filter", "loadedOnly", "cursor", "limit"]);
+    expect(parseParams(out).params.map((p) => p.name)).toEqual(["filter", "loadedOnly", "cursor", "limit"]);
     expect(out.indexOf("cursor?")).toBeLessThan(out.indexOf("Returns"));
   });
 
   it("inserts before a trailing issue reference, which is prose and not a parameter", () => {
     const out = paged("Enumerate modules. Params: filter?, loadedOnly? (#689)");
-    expect(parseParamsClause(out).map((p) => p.name)).toEqual(["filter", "loadedOnly", "cursor", "limit"]);
+    expect(parseParams(out).params.map((p) => p.name)).toEqual(["filter", "loadedOnly", "cursor", "limit"]);
     expect(out.trimEnd().endsWith("(#689)")).toBe(true);
   });
 
   it("keeps a bracketed comma attached to the parameter it documents", () => {
     const out = paged("Do a thing. Params: mode? (one of a, b, c)");
-    expect(parseParamsClause(out).map((p) => p.name)).toEqual(["mode", "cursor", "limit"]);
+    expect(parseParams(out).params.map((p) => p.name)).toEqual(["mode", "cursor", "limit"]);
   });
 
   it("adds a Params clause when the description has none", () => {
     const out = paged("List everything.");
-    expect(parseParamsClause(out).map((p) => p.name)).toEqual(["cursor", "limit"]);
+    expect(parseParams(out).params.map((p) => p.name)).toEqual(["cursor", "limit"]);
   });
 
   it("stays readable when the action it wraps documented `Params: none`", () => {
@@ -97,7 +97,7 @@ describe("paged()", () => {
     // continue with it, and the paging parameters are advertised either way.
     const out = paged("List every graph. Params: none");
     expect(out).toContain("Params: none, cursor?, limit?");
-    expect(parseParamsClause(out).map((p) => p.name)).toEqual(["cursor", "limit"]);
+    expect(parseParams(out).params.map((p) => p.name)).toEqual(["cursor", "limit"]);
   });
 
   it("is idempotent, so re-wrapping a description cannot document a name twice", () => {
@@ -118,7 +118,7 @@ describe("the reflection category, which is the first adopter", () => {
     for (const action of pagedActions) {
       const spec = reflectionTool.actions[action];
       expect(spec, `${action} is registered`).toBeDefined();
-      const documented = parseParamsClause(spec.description ?? "").map((p) => p.name);
+      const documented = parseParams(spec.description ?? "").params.map((p) => p.name);
       expect(documented, `${action} documents cursor`).toContain("cursor");
       expect(documented, `${action} documents limit`).toContain("limit");
     }
@@ -141,7 +141,7 @@ describe("the reflection category, which is the first adopter", () => {
   });
 
   it("declares every parameter reflect_instance documents", () => {
-    const documented = parseParamsClause(reflectionTool.actions.reflect_instance.description ?? "");
+    const documented = parseParams(reflectionTool.actions.reflect_instance.description ?? "").params;
     expect(documented.length).toBeGreaterThan(0);
     for (const { name } of documented) {
       expect(reflectionTool.schema[name], `reflect_instance's '${name}' is declared`).toBeDefined();
@@ -157,7 +157,7 @@ describe("the reflection category, which is the first adopter", () => {
     expect(reflectionTool.schema.filter).toBeDefined();
     // Spec'd (#1057): no mapParams, so the bag reaches the bridge as sent.
     expect(spec.mapParams).toBeUndefined();
-    expect(parseParamsClause(spec.description ?? "").map((p) => p.name)).toEqual(
+    expect(parseParams(spec.description ?? "").params.map((p) => p.name)).toEqual(
       expect.arrayContaining(["package", "filter"]),
     );
   });

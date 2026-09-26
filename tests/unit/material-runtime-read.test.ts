@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseParamsClause } from "../../src/action-schema.js";
+import { parseParams } from "../../src/action-schema.js";
 import { materialTool } from "../../src/tools/material.js";
 import { handlerSpecs } from "../../src/tools/specs/material.generated.js";
 
@@ -20,7 +20,7 @@ describe("material runtime reads (#1114/#1116)", () => {
     const spec = materialTool.actions.read_mpc;
     expect(spec.kind === "bridge" && spec.bridge).toBe("read_material_parameter_collection");
     expect(spec.effect).toBe("read");
-    const params = parseParamsClause(spec.description ?? "").map((p) => p.name);
+    const params = parseParams(spec.description ?? "").params.map((p) => p.name);
     expect(params).toEqual(expect.arrayContaining(["assetPath", "world"]));
     // Spec'd (#1057): the bag goes as sent, and `path` is an alias the registry resolves.
     expect(spec.mapParams).toBeUndefined();

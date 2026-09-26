@@ -17,17 +17,18 @@
  * name in it, on the same terms as the 24 categories.
  */
 import { describe, expect, it } from "vitest";
-import { allActionSchemas } from "../../src/action-schema.js";
+import { actionSchema } from "../../src/action-schema.js";
 import { declaredActionEffect } from "../../src/action-effects.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import type { FlowConfig } from "../../src/flow/schema.js";
 
 const EMPTY_CONFIG = { flows: {}, tasks: {} } as unknown as FlowConfig;
 const flowTool = createFlowTool({} as never, () => EMPTY_CONFIG);
+const flowSchemas = () => Object.keys(flowTool.actions).map((action) => actionSchema(flowTool, action));
 
 describe("flow action contract", () => {
   it("declares every parameter it documents or reads", () => {
-    const offenders = allActionSchemas([flowTool])
+    const offenders = flowSchemas()
       .filter((a) => a.drift.length > 0)
       .map((a) => `${a.tool}.${a.action}: ${a.drift.join(", ")}`);
 
@@ -48,7 +49,7 @@ describe("flow action contract", () => {
   });
 
   it("advertises every action it dispatches, so the enum and the map agree", () => {
-    const advertised = allActionSchemas([flowTool]).map((a) => a.action).sort();
+    const advertised = flowSchemas().map((a) => a.action).sort();
     expect(advertised).toEqual(Object.keys(flowTool.actions).sort());
   });
 

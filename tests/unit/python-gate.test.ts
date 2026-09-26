@@ -17,7 +17,7 @@ import {
   MIN_REASON_LENGTH,
   evaluateGate,
   gateRefusalMessage,
-  knownRulings,
+
   parseRulings,
   resetRulings,
   ruledOutKey,
@@ -151,8 +151,7 @@ describe("evaluateGate (#960)", () => {
     const a = { session: { key: "c:/proj/alpha" } };
     const b = { session: { key: "c:/proj/beta" } };
     evaluateGate(CANDIDATES, [{ action: "invoke_function", reason: REASON }], a);
-    expect(knownRulings(a).has("invoke_function")).toBe(true);
-    expect(knownRulings(b).has("invoke_function")).toBe(false);
+    expect(evaluateGate(CANDIDATES, undefined, a).unresolved.map((c) => c.action)).toEqual(["set_property"]);
     expect(evaluateGate(CANDIDATES, undefined, b).unresolved).toHaveLength(2);
   });
 });

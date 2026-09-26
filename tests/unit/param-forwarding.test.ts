@@ -9,7 +9,7 @@ import { z } from "zod";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { bp, categoryTool } from "../../src/types.js";
 import { parseParams, ROUTING_PARAMS } from "../../src/action-schema.js";
-import { keysRead, mapTracked } from "../../src/param-forwarding.js";
+import { mapTracked } from "../../src/param-forwarding.js";
 import { STRICT_PARAMS_ENV } from "../../src/call-pipeline.js";
 
 
@@ -151,6 +151,23 @@ function sample(schema: z.ZodTypeAny | undefined): unknown {
     case "ZodUnion": return sample(def.options?.[0]);
     default: return "/Game/Probe/Probe";
   }
+}
+
+/** The keys a mapper reads from `bag`, including those read before it throws. */
+function keysRead(mapParams: (p: Record<string, unknown>) => Record<string, unknown>, bag: Record<string, unknown>): Set<string> {
+  const read = new Set<string>();
+  const note = (key: string | symbol) => { if (typeof key === "string") read.add(key); };
+  const view = new Proxy(bag, {
+    get(target, key, receiver) { note(key); return Reflect.get(target, key, receiver); },
+    has(target, key) { note(key); return Reflect.has(target, key); },
+    getOwnPropertyDescriptor(target, key) { note(key); return Reflect.getOwnPropertyDescriptor(target, key); },
+  });
+  try {
+    if ((mapParams(view) as unknown) === view) return new Set(Object.keys(bag));
+  } catch {
+    // A refusal still read what it validated.
+  }
+  return read;
 }
 
 /** Documented parameters of one action that its mapper never reads, alone or alongside the rest. */

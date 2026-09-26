@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseParamsClause } from "../../src/action-schema.js";
+import { parseParams } from "../../src/action-schema.js";
 import { pcgTool } from "../../src/tools/pcg.js";
 import { handlerSpecs } from "../../src/tools/specs/pcg.generated.js";
 
@@ -9,7 +9,7 @@ describe("pcg unwrap_instance_nodes surface (#1087)", () => {
     expect(spec.kind).toBe("bridge");
     expect(spec.kind === "bridge" && spec.bridge).toBe("unwrap_pcg_instance_nodes");
     expect(spec.effect).toBe("mutate");
-    const params = parseParamsClause(spec.description ?? "").map((p) => p.name);
+    const params = parseParams(spec.description ?? "").params.map((p) => p.name);
     expect(params).toEqual(expect.arrayContaining(["assetPath", "nodeName"]));
   });
 

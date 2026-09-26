@@ -154,10 +154,6 @@ export function recordRulings(
   return new Map(store);
 }
 
-/** What this session has already ruled out. Read-only view. */
-export function knownRulings(ctx?: WorkaroundScopeSource): Map<string, string> {
-  return new Map(storeFor(workaroundScope(ctx)));
-}
 
 /** Drop every partition. Test-only. */
 export function resetRulings(): void {
