@@ -3,6 +3,17 @@
 #include "CoreMinimal.h"
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
+#include "HandlerUtils.h"
+
+/** Save Asset's package and record saved/saveError on Result. A save that did
+ *  not reach disk fails the result (#931). Returns whether it saved. */
+inline bool MCPAnimSaveOutcome(const TSharedPtr<FJsonObject>& Result, UObject* Asset, const FString& AssetPath)
+{
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Asset, SaveError);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	return bSaved;
+}
 
 class FAnimationHandlers
 {

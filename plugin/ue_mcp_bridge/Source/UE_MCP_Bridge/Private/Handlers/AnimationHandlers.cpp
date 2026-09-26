@@ -1878,9 +1878,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 	auto Created = MCPCreateAssetIdempotent<UAnimBlueprint>(Name, PackagePath, OnConflict, TEXT("AnimBlueprint"), Factory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
-
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Created.Asset, Created.Asset->GetPathName());
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Created.Asset->GetName());
@@ -1917,9 +1916,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 	auto Created = MCPCreateAssetIdempotent<UAnimMontage>(Name, PackagePath, OnConflict, TEXT("AnimMontage"), Factory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
-
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Created.Asset, Created.Asset->GetPathName());
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Created.Asset->GetName());
@@ -1973,11 +1971,12 @@ namespace
 			return false;
 		}
 
-		if (!SaveAssetPackage(Montage))
+		FString SaveError;
+		if (!SaveAssetPackageChecked(Montage, SaveError))
 		{
 			OutError = FString::Printf(
-				TEXT("Failed to save authored montage package '%s'"),
-				*Montage->GetOutermost()->GetName());
+				TEXT("Failed to save authored montage package '%s': %s"),
+				*Montage->GetOutermost()->GetName(), *SaveError);
 			return false;
 		}
 		return true;
@@ -2462,10 +2461,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	AnimAsset->PostEditChange();
 	AnimAsset->MarkPackageDirty();
 
-	// Save the asset
-	UEditorAssetLibrary::SaveAsset(AssetPath);
-
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, AnimAsset, AssetPath);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("notifyName"), NotifyName);
@@ -2618,9 +2615,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveAnimNotify(const TSharedPtr<FJs
 	AnimAsset->SortNotifies();
 	AnimAsset->PostEditChange();
 	AnimAsset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, AnimAsset, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("notifyName"), NotifyName);
@@ -2718,9 +2715,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 	BlendParam1.Min = VerticalMin;
 	BlendParam1.Max = VerticalMax;
 
-	UEditorAssetLibrary::SaveAsset(BlendSpace->GetPathName());
-
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, BlendSpace, BlendSpace->GetPathName());
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), BlendSpace->GetPathName());
 	Result->SetStringField(TEXT("name"), BlendSpace->GetName());
@@ -2766,9 +2762,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace1D(const TSharedPtr<F
 	BlendParam0.Max = AxisMax;
 	BlendParam0.GridNum = GridNum;
 
-	UEditorAssetLibrary::SaveAsset(BS->GetPathName());
-
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, BS, BS->GetPathName());
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), BS->GetPathName());
 	Result->SetStringField(TEXT("name"), BS->GetName());
@@ -2990,9 +2985,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PopulateBlendspace(const TSharedPtr<F
 
 	BS->PostEditChange();
 	BS->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(BS, /*bOnlyIfIsDirty*/ true);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, BS, BS->GetPathName());
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), BS->GetPathName());
 	Result->SetStringField(TEXT("class"), BS->GetClass()->GetName());
@@ -3060,9 +3055,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddBlendSample(const TSharedPtr<FJson
 	BlendSpace->ResampleData();
 	BlendSpace->ValidateSampleData();
 	BlendSpace->PostEditChange();
-	SaveAssetPackage(BlendSpace);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, BlendSpace, BlendSpace->GetPathName());
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), BlendSpace->GetPathName());
 	Result->SetStringField(TEXT("animation"), Anim->GetPathName());
@@ -3163,10 +3158,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	BlendSpace->ResampleData();
 	BlendSpace->ValidateSampleData();
 	BlendSpace->PostEditChange();
-	SaveAssetPackage(BlendSpace);
 
 	const FBlendSample& Updated = BlendSpace->GetBlendSample(SampleIndex);
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, BlendSpace, BlendSpace->GetPathName());
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), BlendSpace->GetPathName());
 	Result->SetNumberField(TEXT("sampleIndex"), SampleIndex);
@@ -3369,9 +3364,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 
 	Montage->PostEditChange();
 	Montage->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Montage, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), !bChanged && !bCreatedSegment);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -3529,10 +3524,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 
 	Montage->PostEditChange();
 	Montage->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	// Return current state
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Montage, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	TArray<TSharedPtr<FJsonValue>> ModifiedArray;
@@ -3594,9 +3589,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSlot(const TSharedPtr<FJson
 	Montage->SlotAnimTracks[TrackIndex].SlotName = NewSlotFName;
 
 	Montage->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Montage, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("slotName"), SlotName);
@@ -3830,9 +3825,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJ
 	Montage->CompositeSections.Add(NewSection);
 
 	Montage->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Montage, AssetPath);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("sectionName"), SectionName);
@@ -4016,9 +4011,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSegment(const TSharedPtr<FJ
 	SlotTrack.AnimTrack.AnimSegments.Insert(NewSegment, InsertIndex);
 
 	const float MontageLength = MCPMontageSegments::Relayout(Montage);
-	SaveAssetPackage(Montage);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Montage, AssetPath);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("animSequencePath"), AnimSequencePath);
@@ -4093,9 +4088,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveMontageSegment(const TSharedPtr
 	Segments.RemoveAt(SegmentIndex);
 
 	const float MontageLength = MCPMontageSegments::Relayout(Montage);
-	SaveAssetPackage(Montage);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Montage, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("slotName"), SlotTrack->SlotName.ToString());
@@ -4357,9 +4352,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetRootMotionSettings(const TSharedPt
 	}
 
 	Seq->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(Seq);
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Seq, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"),
 		bPrevEnableRootMotion == Seq->bEnableRootMotion
@@ -4405,9 +4400,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddVirtualBone(const TSharedPtr<FJson
 		return MCPError(TEXT("Failed to add virtual bone (source/target invalid or duplicate)"));
 	}
 	Skeleton->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(Skeleton);
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Skeleton, SkeletonPath);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
 	Result->SetStringField(TEXT("virtualBoneName"), NewBoneName.ToString());
@@ -4458,9 +4453,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveVirtualBone(const TSharedPtr<FJ
 	TArray<FName> ToRemove = { BoneFName };
 	Skeleton->RemoveVirtualBones(ToRemove);
 	Skeleton->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(Skeleton);
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, Skeleton, SkeletonPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
 	Result->SetStringField(TEXT("removed"), BoneName);
@@ -4500,9 +4495,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetAnimBlueprintSkeleton(const TShare
 	AnimBP->TargetSkeleton = Skeleton;
 	AnimBP->MarkPackageDirty();
 	FKismetEditorUtilities::CompileBlueprint(AnimBP);
-	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPAnimSaveOutcome(Result, AnimBP, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), PrevSkeleton == Skeleton);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
