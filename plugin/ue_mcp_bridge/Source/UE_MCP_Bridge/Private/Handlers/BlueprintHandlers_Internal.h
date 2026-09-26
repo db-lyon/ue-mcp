@@ -20,6 +20,8 @@
 #include "Serialization/JsonWriter.h"
 #include "UObject/Class.h"
 #include "UObject/Interface.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
 #include "HandlerUtils.h"
 
 class UBlueprint;
@@ -338,3 +340,20 @@ TSharedPtr<FJsonValue> BlueprintNotFoundError(const FString& AssetPath);
 // umap path gets back the level script Blueprint's object path, so the alias it
 // used is visible rather than implied.
 void AnnotateResolvedBlueprint(const TSharedPtr<FJsonObject>& Result, UBlueprint* Blueprint);
+
+/** The SCS node a component name addresses: the node whose variable name
+ *  matches, else the node whose component template is named that. One rule
+ *  for add, remove and reparent, so a name that finds a node in one finds it in all. */
+inline USCS_Node* MCPFindSCSNode(USimpleConstructionScript* SCS, const FString& Name)
+{
+	if (!SCS || Name.IsEmpty()) return nullptr;
+	for (USCS_Node* Node : SCS->GetAllNodes())
+	{
+		if (Node && Node->GetVariableName().ToString() == Name) return Node;
+	}
+	for (USCS_Node* Node : SCS->GetAllNodes())
+	{
+		if (Node && Node->ComponentTemplate && Node->ComponentTemplate->GetName() == Name) return Node;
+	}
+	return nullptr;
+}

@@ -2102,24 +2102,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	}
 
 	// Idempotency: existing SCS component with same name short-circuits.
-	if (USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript)
+	if (MCPFindSCSNode(Blueprint->SimpleConstructionScript, ComponentName))
 	{
-		for (USCS_Node* Node : SCS->GetAllNodes())
-		{
-			if (Node && Node->GetVariableName().ToString() == ComponentName)
+			if (OnConflict == TEXT("error"))
 			{
-				if (OnConflict == TEXT("error"))
-				{
-					return MCPError(FString::Printf(TEXT("Component '%s' already exists"), *ComponentName));
-				}
-				auto Existing = MCPSuccess();
-				MCPSetExisted(Existing);
-				Existing->SetStringField(TEXT("path"), AssetPath);
-				Existing->SetStringField(TEXT("componentName"), ComponentName);
-				Existing->SetStringField(TEXT("componentClass"), ComponentClass);
-				return MCPResult(Existing);
+				return MCPError(FString::Printf(TEXT("Component '%s' already exists"), *ComponentName));
 			}
-		}
+			auto Existing = MCPSuccess();
+			MCPSetExisted(Existing);
+			Existing->SetStringField(TEXT("path"), AssetPath);
+			Existing->SetStringField(TEXT("componentName"), ComponentName);
+			Existing->SetStringField(TEXT("componentClass"), ComponentClass);
+			return MCPResult(Existing);
 	}
 
 	// Find component class: accept full paths, short names ("StaticMeshComponent"),
@@ -3067,18 +3061,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?)"));
 	}
 
-	// Find the SCS node by variable name or component template name
-	USCS_Node* TargetNode = nullptr;
-	for (USCS_Node* Node : SCS->GetAllNodes())
-	{
-		if (!Node || !Node->ComponentTemplate) continue;
-		if (Node->GetVariableName().ToString() == ComponentName ||
-			Node->ComponentTemplate->GetName() == ComponentName)
-		{
-			TargetNode = Node;
-			break;
-		}
-	}
+	// A node with no template has nothing to remove or restore.
+	USCS_Node* TargetNode = MCPFindSCSNode(SCS, ComponentName);
+	if (TargetNode && !TargetNode->ComponentTemplate) TargetNode = nullptr;
 
 	// Idempotent: nothing to remove is a no-op.
 	if (!TargetNode)
@@ -3559,13 +3544,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentComponent(const TSharedPtr<FJ
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
 	if (!SCS) return MCPError(TEXT("Blueprint has no SCS"));
 
-	USCS_Node* Child = nullptr; USCS_Node* Parent = nullptr;
-	for (USCS_Node* N : SCS->GetAllNodes())
-	{
-		if (!N) continue;
-		if (N->GetVariableName().ToString() == ComponentName) Child = N;
-		if (N->GetVariableName().ToString() == NewParent) Parent = N;
-	}
+	USCS_Node* Child = MCPFindSCSNode(SCS, ComponentName);
+	USCS_Node* Parent = MCPFindSCSNode(SCS, NewParent);
 	if (!Child) return MCPError(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
 	if (!Parent) return MCPError(FString::Printf(TEXT("Parent not found: %s"), *NewParent));
 
