@@ -35,17 +35,17 @@ vi.mock("../../src/registry-catalog.js", async (importOriginal) => {
 });
 
 const mockSubmitFeedback = vi.fn();
-vi.mock("../../src/github-app.js", () => ({
+vi.mock("../../src/feedback/github-app.js", () => ({
   submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
 }));
 
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/auth.js", () => ({
+vi.mock("../../src/feedback/github-auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 
 const { feedbackTool } = await import("../../src/tools/feedback.js");
-const { clearCoreSurfaceCache } = await import("../../src/feedback-routing.js");
+const { clearCoreSurfaceCache } = await import("../../src/feedback/feedback-routing.js");
 
 const PIE_REPO = { owner: "db-lyon", repo: "pie-studio" };
 const CORE = { owner: "db-lyon", repo: "ue-mcp" };

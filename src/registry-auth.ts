@@ -3,7 +3,7 @@
  *
  * Publishing to the plugin registry needs a per-author token. Rather than make
  * authors visit the site, mint a token, and paste it into an env var, this runs
- * the GitHub device flow already used for feedback authorship (src/auth.ts) and
+ * the GitHub device flow already used for feedback authorship (src/feedback/github-auth.ts) and
  * trades the resulting GitHub identity for a registry token via
  * POST /api/cli/exchange.
  *
@@ -20,7 +20,7 @@ import {
   startDeviceFlow,
   pollDeviceFlow,
   type UserAuth,
-} from "./auth.js";
+} from "./feedback/github-auth.js";
 import { registryBase } from "./registry-catalog.js";
 import { readEnv } from "./core/env.js";
 

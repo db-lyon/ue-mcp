@@ -8,14 +8,14 @@ import { clearWorkarounds, pushWorkaround } from "../../src/workaround-tracker.j
 
 // Stub the GitHub submission so no network call happens.
 const mockSubmitFeedback = vi.fn();
-vi.mock("../../src/github-app.js", () => ({
+vi.mock("../../src/feedback/github-app.js", () => ({
   submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
 }));
 
 // Stub the OAuth cache lookup so the test environment never depends on the
 // developer's actual ~/.ue-mcp/auth.json state.
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/auth.js", () => ({
+vi.mock("../../src/feedback/github-auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 

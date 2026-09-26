@@ -7,7 +7,7 @@ import {
   listDeferred,
   type DeferredFeedback,
 } from "./feedback-deferred.js";
-import { repoSlug, type GitHubRepo } from "./registry-catalog.js";
+import { repoSlug, type GitHubRepo } from "../registry-catalog.js";
 
 /**
  * What feedback(submit) does when the elicitation gate cannot reach a human

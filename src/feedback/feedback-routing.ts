@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { PluginInfo, ToolDef } from "./core/types.js";
+import type { PluginInfo, ToolDef } from "../core/types.js";
 import {
   CORE_REPO,
   fetchRegistryCatalog,
@@ -10,7 +10,7 @@ import {
   sameRepo,
   type GitHubRepo,
   type RegistryPlugin,
-} from "./registry-catalog.js";
+} from "../registry-catalog.js";
 
 /**
  * Decide which tracker a feedback report belongs in.

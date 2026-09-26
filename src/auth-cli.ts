@@ -9,7 +9,7 @@
  * re-running the full setup wizard.
  */
 
-import { pollDeviceFlow, readUserAuth, startDeviceFlow } from "./auth.js";
+import { pollDeviceFlow, readUserAuth, startDeviceFlow } from "./feedback/github-auth.js";
 import {
   BOLD,
   CYAN,

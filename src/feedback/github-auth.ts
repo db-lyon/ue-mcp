@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
-import { userDir } from "./core/user-dir.js";
-import { readEnv } from "./core/env.js";
+import { userDir } from "../core/user-dir.js";
+import { readEnv } from "../core/env.js";
 
 // OAuth Client ID for the ue-mcp-feedback GitHub App. This is NOT a secret -
 // device flow client IDs are designed to be public. Override at runtime via

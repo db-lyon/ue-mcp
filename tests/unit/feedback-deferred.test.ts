@@ -19,7 +19,7 @@ afterEach(() => {
 
 // feedback-deferred reads UE_MCP_PENDING_DIR lazily per call, so we can use
 // the normal module import - no cache-busting needed.
-import * as deferred from "../../src/feedback-deferred.js";
+import * as deferred from "../../src/feedback/feedback-deferred.js";
 async function freshImport(): Promise<typeof deferred> {
   return deferred;
 }

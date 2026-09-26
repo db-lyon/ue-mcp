@@ -2,7 +2,7 @@
 /**
  * `npx ue-mcp feedback <list|show|approve|discard|review>` - review and act on
  * submissions that ue-mcp deferred to disk while running in
- * `feedback.mode = "defer"`. Pairs with src/feedback-deferred.ts.
+ * `feedback.mode = "defer"`. Pairs with src/feedback/feedback-deferred.ts.
  *
  * Argv layout after index.ts splices "feedback" out:
  *   argv[2] = subcommand (list, show, approve, discard, review)
@@ -17,10 +17,10 @@ import {
   listDeferred as listAllDeferred,
   loadDeferred,
   type DeferredFeedback,
-} from "./feedback-deferred.js";
-import { deleteFallbackReport } from "./feedback-fallback.js";
+} from "./feedback/feedback-deferred.js";
+import { deleteFallbackReport } from "./feedback/feedback-fallback.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { submitFeedback } from "./github-app.js";
+import { submitFeedback } from "./feedback/github-app.js";
 import {
   CORE_REPO,
   newIssueUrl,

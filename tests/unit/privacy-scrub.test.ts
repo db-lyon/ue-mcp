@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { privacyScrub } from "../../src/privacy-scrub.js";
+import { privacyScrub } from "../../src/feedback/privacy-scrub.js";
 
 const ctx = {
   projectRoot: "C:/Users/david/Projects/UE/Vale",

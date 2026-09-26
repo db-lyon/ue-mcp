@@ -10,17 +10,17 @@ import {
   writeFallbackReport,
   findByConfirmToken,
   MaxIssueUrlChars,
-} from "../../src/feedback-fallback.js";
+} from "../../src/feedback/feedback-fallback.js";
 import { CORE_REPO } from "../../src/registry-catalog.js";
-import { listDeferred } from "../../src/feedback-deferred.js";
+import { listDeferred } from "../../src/feedback/feedback-deferred.js";
 
 const mockSubmitFeedback = vi.fn();
-vi.mock("../../src/github-app.js", () => ({
+vi.mock("../../src/feedback/github-app.js", () => ({
   submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
 }));
 
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/auth.js", () => ({
+vi.mock("../../src/feedback/github-auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 

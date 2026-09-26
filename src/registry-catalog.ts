@@ -59,7 +59,7 @@ export function registryBase(): string {
  * by the same deployment today, which is an operational detail, not a contract.
  *
  * `UE_MCP_FEEDBACK` overrides the origin; `UE_MCP_FEEDBACK_ENDPOINT` (read in
- * src/github-app.ts) overrides the full URL when the path differs too.
+ * src/feedback/github-app.ts) overrides the full URL when the path differs too.
  */
 export function feedbackBase(): string {
   return (readEnv("feedback") ?? "https://feedback.ue-mcp.com").replace(/\/+$/, "");

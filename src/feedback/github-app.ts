@@ -1,5 +1,5 @@
-import { readEnv } from "./core/env.js";
-import { resolveUserAuth, clearUserAuth, type PendingDeviceFlow } from "./auth.js";
+import { readEnv } from "../core/env.js";
+import { resolveUserAuth, clearUserAuth, type PendingDeviceFlow } from "./github-auth.js";
 import {
   CORE_REPO,
   feedbackBase,
@@ -7,7 +7,7 @@ import {
   repoSlug,
   sameRepo,
   type GitHubRepo,
-} from "./registry-catalog.js";
+} from "../registry-catalog.js";
 
 /**
  * Hosted signing endpoints for the anonymous bot path, in the order they are
@@ -49,7 +49,7 @@ const SIGNING_TIMEOUT_MS = 20_000;
 
 /**
  * A report can be filed against a plugin's own tracker instead of core - see
- * src/feedback-routing.ts. Everything below takes the target repo as a
+ * src/feedback/feedback-routing.ts. Everything below takes the target repo as a
  * parameter and defaults to core, so existing callers are unaffected.
  */
 function issuesEndpoint(repo: GitHubRepo): string {

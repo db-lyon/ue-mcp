@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { pollDeviceFlow, readUserAuth, type PendingDeviceFlow } from "../../src/auth.js";
+import { pollDeviceFlow, readUserAuth, type PendingDeviceFlow } from "../../src/feedback/github-auth.js";
 
 let dir: string;
 const pending = (expiresInS: number): PendingDeviceFlow => ({
