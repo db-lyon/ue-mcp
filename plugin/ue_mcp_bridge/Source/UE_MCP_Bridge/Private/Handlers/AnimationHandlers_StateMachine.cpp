@@ -46,6 +46,7 @@
 #include "PoseSearch/PoseSearchDatabase.h"
 #include "PoseSearch/PoseSearchSchema.h"
 #include "HandlerPoseSearchSchema.h"
+#include "HandlerAnimStateGraph.h"
 #include "PoseSearch/PoseSearchDerivedData.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Animation/AnimComposite.h"
@@ -302,81 +303,6 @@ static bool AddPoseSearchAnimationAsset(UPoseSearchDatabase* Database, UObject* 
 #endif
 }
 
-// ─── State Machine Helpers ────────────────────────────────────────
-
-static UAnimBlueprint* LoadAnimBP(const FString& Path)
-{
-	return LoadAssetByPath<UAnimBlueprint>(Path);
-}
-
-
-static UEdGraph* FindGraphByName(UBlueprint* BP, const FString& Name)
-{
-	TArray<UEdGraph*> All;
-	BP->GetAllGraphs(All);
-	for (UEdGraph* G : All)
-	{
-		if (G && G->GetName() == Name) return G;
-	}
-	return nullptr;
-}
-
-// Find the SM container node (UAnimGraphNode_StateMachine) by its machine name
-
-
-// Find the SM container node (UAnimGraphNode_StateMachine) by its machine name
-static UAnimGraphNode_StateMachine* FindStateMachineNode(UBlueprint* BP, const FString& MachineName)
-{
-	TArray<UEdGraph*> All;
-	BP->GetAllGraphs(All);
-	for (UEdGraph* G : All)
-	{
-		for (UEdGraphNode* Node : G->Nodes)
-		{
-			if (UAnimGraphNode_StateMachine* SM = Cast<UAnimGraphNode_StateMachine>(Node))
-			{
-				if (UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SM->EditorStateMachineGraph))
-				{
-					if (SMGraph->GetName() == MachineName || SM->GetNodeTitle(ENodeTitleType::FullTitle).ToString().Contains(MachineName))
-					{
-						return SM;
-					}
-				}
-			}
-		}
-	}
-	return nullptr;
-}
-
-// Find a state node by name within a state machine graph
-
-
-// Find a state node by name within a state machine graph
-static UAnimStateNode* FindStateNode(UAnimationStateMachineGraph* SMGraph, const FString& StateName)
-{
-	for (UEdGraphNode* Node : SMGraph->Nodes)
-	{
-		if (UAnimStateNode* State = Cast<UAnimStateNode>(Node))
-		{
-			if (State->GetStateName() == StateName)
-			{
-				return State;
-			}
-		}
-	}
-	return nullptr;
-}
-
-
-static void CompileAndSave(UBlueprint* BP)
-{
-	FKismetEditorUtilities::CompileBlueprint(BP);
-	SaveAssetPackage(BP);
-}
-
-// ─── State Machine Handlers ──────────────────────────────────────
-
-
 // ─── State Machine Handlers ──────────────────────────────────────
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateStateMachine(const TSharedPtr<FJsonObject>& Params)
@@ -387,20 +313,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateStateMachine(const TSharedPtr<F
 	FString Name = OptionalString(Params, TEXT("name"), TEXT("NewStateMachine"));
 	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
 
-	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UEdGraph* TargetGraph = FindGraphByName(AnimBP, GraphName);
+	UEdGraph* TargetGraph = MCPAnimStateGraph::FindGraphByName(AnimBP, GraphName);
 	if (!TargetGraph)
 	{
 		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
 	// Idempotency: check for existing state machine by name
-	if (FindStateMachineNode(AnimBP, Name))
+	if (MCPAnimStateGraph::FindStateMachineNode(AnimBP, Name))
 	{
 		auto Existed = MCPSuccess();
 		MCPSetExisted(Existed);
@@ -425,9 +351,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateStateMachine(const TSharedPtr<F
 		SMNode->EditorStateMachineGraph->Rename(*Name);
 	}
 
-	CompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), Name);
@@ -459,13 +384,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 	// Read before anything can fail (#1057).
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
 		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
@@ -478,7 +403,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 	}
 
 	// Idempotency: existing state with this name short-circuits
-	if (FindStateNode(SMGraph, StateName))
+	if (MCPAnimStateGraph::FindStateNode(SMGraph, StateName))
 	{
 		if (OnConflict == TEXT("error"))
 		{
@@ -557,9 +482,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 	NewState->NodePosX = 300 + ((StateCount - 1) % 4) * 300;
 	NewState->NodePosY = ((StateCount - 1) / 4) * 200;
 
-	CompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
@@ -612,21 +536,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonO
 			: (Logic == ETransitionLogicType::TLT_Custom ? TEXT("Custom") : TEXT("Standard"));
 	};
 
-	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
 		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
 	}
 
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
-	UAnimStateNode* From = FindStateNode(SMGraph, FromState);
-	UAnimStateNode* To = FindStateNode(SMGraph, ToState);
+	UAnimStateNode* From = MCPAnimStateGraph::FindStateNode(SMGraph, FromState);
+	UAnimStateNode* To = MCPAnimStateGraph::FindStateNode(SMGraph, ToState);
 	if (!From)
 	{
 		return MCPError(FString::Printf(TEXT("State '%s' not found"), *FromState));
@@ -720,9 +644,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonO
 		}
 	}
 
-	CompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
@@ -773,20 +696,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetStateAnimation(const TSharedPtr<FJ
 		return MCPError(TEXT("Missing required params: stateMachineName, stateName, animAssetPath"));
 	}
 
-	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
 		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
 	}
 
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
-	UAnimStateNode* State = FindStateNode(SMGraph, StateName);
+	UAnimStateNode* State = MCPAnimStateGraph::FindStateNode(SMGraph, StateName);
 	if (!State)
 	{
 		return MCPError(FString::Printf(TEXT("State '%s' not found"), *StateName));
@@ -875,9 +798,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetStateAnimation(const TSharedPtr<FJ
 		return MCPError(FString::Printf(TEXT("Unsupported animation asset type: %s"), *AnimAsset->GetClass()->GetName()));
 	}
 
-	CompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), bUnchanged);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -933,13 +855,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionBlend(const TSharedPtr<F
 		return MCPError(TEXT("Missing required params: stateMachineName, fromState, toState"));
 	}
 
-	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
 		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
@@ -998,9 +920,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionBlend(const TSharedPtr<F
 		(bWroteDuration && !FMath::IsNearlyEqual(PrevCrossfade, TransNode->CrossfadeDuration))
 		|| (bWroteLogic && (PrevLogicType != TransNode->LogicType || PrevBlendMode != TransNode->BlendMode));
 
-	CompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("unchanged"), !bChanged);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -1103,13 +1024,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionCondition(const TSharedP
 		return MCPError(TEXT("Provide transitionGuid, or both fromState and toState, to identify the transition."));
 	}
 
-	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
 		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
@@ -1278,9 +1199,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionCondition(const TSharedP
 	SourcePin->MakeLinkTo(ResultPin);
 	TransGraph->NotifyGraphChanged();
 
-	CompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
@@ -1323,13 +1243,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadStateMachine(const TSharedPtr<FJs
 	FString SMName;
 	if (auto Err = RequireString(Params, TEXT("stateMachineName"), SMName)) return Err;
 
-	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
 		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
@@ -1417,13 +1337,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimGraph(const TSharedPtr<FJsonO
 
 	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
 
-	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UEdGraph* TargetGraph = FindGraphByName(AnimBP, GraphName);
+	UEdGraph* TargetGraph = MCPAnimStateGraph::FindGraphByName(AnimBP, GraphName);
 	if (!TargetGraph)
 	{
 		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
@@ -3213,9 +3133,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::InspectAnimNodes(const TSharedPtr<FJs
 	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
 	const FString ClassFilter = OptionalString(Params, TEXT("nodeClass"));
 
-	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
-	UEdGraph* TargetGraph = FindGraphByName(AnimBP, GraphName);
+	UEdGraph* TargetGraph = MCPAnimStateGraph::FindGraphByName(AnimBP, GraphName);
 	if (!TargetGraph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 
 	// Recursively export a struct's editable sub-properties as name/type/value.

@@ -78,101 +78,6 @@
 #include "EditorAssetLibrary.h"
 #include "UObject/UnrealType.h"
 
-// ── File-local helpers ───────────────────────────────────────────────────────
-//
-// These duplicate the SHAPE of the statics in AnimationHandlers_StateMachine.cpp
-// but not their names. The module is a unity build, so two file-local functions
-// with the same signature in two .cpp files that land in the same blob are a
-// redefinition (C2084). The prefix is what keeps them apart; the alternative,
-// promoting them into Public/HandlerUtils.h, would put anim-graph editor types
-// into a header every handler includes.
-
-static UAnimBlueprint* MCPAnimDepthLoadAnimBP(const FString& Path)
-{
-	return LoadAssetByPath<UAnimBlueprint>(Path);
-}
-
-/** The state machine container node whose graph is named MachineName. */
-static UAnimGraphNode_StateMachine* MCPAnimDepthFindStateMachine(UBlueprint* BP, const FString& MachineName)
-{
-	TArray<UEdGraph*> All;
-	BP->GetAllGraphs(All);
-	for (UEdGraph* G : All)
-	{
-		if (!G) continue;
-		for (UEdGraphNode* Node : G->Nodes)
-		{
-			UAnimGraphNode_StateMachine* SM = Cast<UAnimGraphNode_StateMachine>(Node);
-			if (!SM) continue;
-			if (UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SM->EditorStateMachineGraph))
-			{
-				if (SMGraph->GetName() == MachineName
-					|| SM->GetNodeTitle(ENodeTitleType::FullTitle).ToString().Contains(MachineName))
-				{
-					return SM;
-				}
-			}
-		}
-	}
-	return nullptr;
-}
-
-/** Every state machine name in the blueprint, so a miss can name the hits. */
-static TArray<FString> MCPAnimDepthListStateMachines(UBlueprint* BP)
-{
-	TArray<FString> Names;
-	TArray<UEdGraph*> All;
-	BP->GetAllGraphs(All);
-	for (UEdGraph* G : All)
-	{
-		if (!G) continue;
-		for (UEdGraphNode* Node : G->Nodes)
-		{
-			if (UAnimGraphNode_StateMachine* SM = Cast<UAnimGraphNode_StateMachine>(Node))
-			{
-				if (SM->EditorStateMachineGraph)
-				{
-					Names.AddUnique(SM->EditorStateMachineGraph->GetName());
-				}
-			}
-		}
-	}
-	return Names;
-}
-
-static UAnimStateNode* MCPAnimDepthFindState(UAnimationStateMachineGraph* SMGraph, const FString& StateName)
-{
-	if (!SMGraph) return nullptr;
-	for (UEdGraphNode* Node : SMGraph->Nodes)
-	{
-		if (UAnimStateNode* State = Cast<UAnimStateNode>(Node))
-		{
-			if (State->GetStateName() == StateName) return State;
-		}
-	}
-	return nullptr;
-}
-
-static TArray<FString> MCPAnimDepthListStates(UAnimationStateMachineGraph* SMGraph)
-{
-	TArray<FString> Names;
-	if (!SMGraph) return Names;
-	for (UEdGraphNode* Node : SMGraph->Nodes)
-	{
-		if (UAnimStateNode* State = Cast<UAnimStateNode>(Node))
-		{
-			Names.AddUnique(State->GetStateName());
-		}
-	}
-	return Names;
-}
-
-static void MCPAnimDepthCompileAndSave(UBlueprint* BP)
-{
-	FKismetEditorUtilities::CompileBlueprint(BP);
-	SaveAssetPackage(BP);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // set_state_machine_entry
 //
@@ -195,16 +100,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetStateMachineEntry(const TSharedPtr
 	// fail (#1057).
 	const FString StateName = OptionalString(Params, TEXT("stateName"));
 
-	UAnimBlueprint* AnimBP = MCPAnimDepthLoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = MCPAnimDepthFindStateMachine(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
-		const TArray<FString> Known = MCPAnimDepthListStateMachines(AnimBP);
+		const TArray<FString> Known = MCPAnimStateGraph::ListStateMachines(AnimBP);
 		return MCPError(FString::Printf(
 			TEXT("State machine '%s' not found in %s. State machines in this AnimBlueprint: %s"),
 			*SMName, *AssetPath,
@@ -255,10 +160,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetStateMachineEntry(const TSharedPtr
 	UAnimStateNode* Target = nullptr;
 	if (!StateName.IsEmpty())
 	{
-		Target = MCPAnimDepthFindState(SMGraph, StateName);
+		Target = MCPAnimStateGraph::FindStateNode(SMGraph, StateName);
 		if (!Target)
 		{
-			const TArray<FString> Known = MCPAnimDepthListStates(SMGraph);
+			const TArray<FString> Known = MCPAnimStateGraph::ListStates(SMGraph);
 			return MCPError(FString::Printf(
 				TEXT("State '%s' not found in state machine '%s'. States: %s"),
 				*StateName, *SMName,
@@ -297,9 +202,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetStateMachineEntry(const TSharedPtr
 		EntryPin->MakeLinkTo(Target->GetInputPin());
 	}
 
-	MCPAnimDepthCompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
@@ -324,16 +228,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveState(const TSharedPtr<FJsonObj
 	FString StateName;
 	if (auto Err = RequireString(Params, TEXT("stateName"), StateName)) return Err;
 
-	UAnimBlueprint* AnimBP = MCPAnimDepthLoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = MCPAnimDepthFindStateMachine(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
-		const TArray<FString> Known = MCPAnimDepthListStateMachines(AnimBP);
+		const TArray<FString> Known = MCPAnimStateGraph::ListStateMachines(AnimBP);
 		return MCPError(FString::Printf(
 			TEXT("State machine '%s' not found in %s. State machines in this AnimBlueprint: %s"),
 			*SMName, *AssetPath,
@@ -346,7 +250,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveState(const TSharedPtr<FJsonObj
 		return MCPError(FString::Printf(TEXT("State machine '%s' has no editor graph."), *SMName));
 	}
 
-	UAnimStateNode* State = MCPAnimDepthFindState(SMGraph, StateName);
+	UAnimStateNode* State = MCPAnimStateGraph::FindStateNode(SMGraph, StateName);
 	if (!State)
 	{
 		// Idempotent: removing what is already gone is a success that says so.
@@ -367,9 +271,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveState(const TSharedPtr<FJsonObj
 	const int32 SharedRuleGraphsKept = Teardown.SharedRuleGraphsKept;
 	const bool bWasEntryState = Teardown.bWasEntryState;
 
-	MCPAnimDepthCompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("alreadyDeleted"), false);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -420,16 +323,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveTransition(const TSharedPtr<FJs
 		return MCPError(TEXT("Address the transition either by 'transitionGuid' (from add_transition or read_state_machine) or by both 'fromState' and 'toState'."));
 	}
 
-	UAnimBlueprint* AnimBP = MCPAnimDepthLoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = MCPAnimDepthFindStateMachine(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
-		const TArray<FString> Known = MCPAnimDepthListStateMachines(AnimBP);
+		const TArray<FString> Known = MCPAnimStateGraph::ListStateMachines(AnimBP);
 		return MCPError(FString::Printf(
 			TEXT("State machine '%s' not found in %s. State machines in this AnimBlueprint: %s"),
 			*SMName, *AssetPath,
@@ -493,9 +396,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveTransition(const TSharedPtr<FJs
 		if (bShared) SharedRuleGraphsKept++;
 	}
 
-	MCPAnimDepthCompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("alreadyDeleted"), false);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -528,13 +430,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveStateMachine(const TSharedPtr<F
 	FString SMName;
 	if (auto Err = RequireString(Params, TEXT("stateMachineName"), SMName)) return Err;
 
-	UAnimBlueprint* AnimBP = MCPAnimDepthLoadAnimBP(AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP)
 	{
 		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
-	UAnimGraphNode_StateMachine* SMNode = MCPAnimDepthFindStateMachine(AnimBP, SMName);
+	UAnimGraphNode_StateMachine* SMNode = MCPAnimStateGraph::FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
 		auto Noop = MCPSuccess();
@@ -594,9 +496,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveStateMachine(const TSharedPtr<F
 		FBlueprintEditorUtils::RemoveGraph(AnimBP, SMGraph, EGraphRemoveFlags::MarkTransient);
 	}
 
-	MCPAnimDepthCompileAndSave(AnimBP);
-
 	auto Result = MCPSuccess();
+	MCPAnimStateGraph::CompileAndSave(AnimBP, Result, AssetPath);
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("alreadyDeleted"), false);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);

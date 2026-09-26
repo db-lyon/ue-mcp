@@ -18,6 +18,10 @@
 #include "AnimStateNodeBase.h"
 #include "AnimStateTransitionNode.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "AnimGraphNode_StateMachine.h"
+#include "AnimStateNode.h"
+#include "HandlerUtils.h"
 
 namespace MCPAnimStateGraph
 {
@@ -126,5 +130,113 @@ namespace MCPAnimStateGraph
 		RemoveStateLikeNode(BP, OwningGraph, State, bStateGraphShared);
 		if (bStateGraphShared) Out.SharedRuleGraphsKept++;
 		return Out;
+	}
+
+	/** The graph named Name anywhere in BP (AnimGraph, a state's inner graph). */
+	inline UEdGraph* FindGraphByName(UBlueprint* BP, const FString& Name)
+	{
+		if (!BP) return nullptr;
+		TArray<UEdGraph*> All;
+		BP->GetAllGraphs(All);
+		for (UEdGraph* G : All)
+		{
+			if (G && G->GetName() == Name) return G;
+		}
+		return nullptr;
+	}
+
+	/** The state machine container node whose graph is named MachineName, or
+	 *  whose title contains it. */
+	inline UAnimGraphNode_StateMachine* FindStateMachineNode(UBlueprint* BP, const FString& MachineName)
+	{
+		if (!BP) return nullptr;
+		TArray<UEdGraph*> All;
+		BP->GetAllGraphs(All);
+		for (UEdGraph* G : All)
+		{
+			if (!G) continue;
+			for (UEdGraphNode* Node : G->Nodes)
+			{
+				UAnimGraphNode_StateMachine* SM = Cast<UAnimGraphNode_StateMachine>(Node);
+				if (!SM) continue;
+				if (UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SM->EditorStateMachineGraph))
+				{
+					if (SMGraph->GetName() == MachineName
+						|| SM->GetNodeTitle(ENodeTitleType::FullTitle).ToString().Contains(MachineName))
+					{
+						return SM;
+					}
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	/** Every state machine name in BP, so a miss can name the hits. */
+	inline TArray<FString> ListStateMachines(UBlueprint* BP)
+	{
+		TArray<FString> Names;
+		if (!BP) return Names;
+		TArray<UEdGraph*> All;
+		BP->GetAllGraphs(All);
+		for (UEdGraph* G : All)
+		{
+			if (!G) continue;
+			for (UEdGraphNode* Node : G->Nodes)
+			{
+				UAnimGraphNode_StateMachine* SM = Cast<UAnimGraphNode_StateMachine>(Node);
+				if (SM && SM->EditorStateMachineGraph)
+				{
+					Names.AddUnique(SM->EditorStateMachineGraph->GetName());
+				}
+			}
+		}
+		return Names;
+	}
+
+	/** The state named StateName in SMGraph. */
+	inline UAnimStateNode* FindStateNode(UAnimationStateMachineGraph* SMGraph, const FString& StateName)
+	{
+		if (!SMGraph) return nullptr;
+		for (UEdGraphNode* Node : SMGraph->Nodes)
+		{
+			UAnimStateNode* State = Cast<UAnimStateNode>(Node);
+			if (State && State->GetStateName() == StateName) return State;
+		}
+		return nullptr;
+	}
+
+	/** Every state name in SMGraph. */
+	inline TArray<FString> ListStates(UAnimationStateMachineGraph* SMGraph)
+	{
+		TArray<FString> Names;
+		if (!SMGraph) return Names;
+		for (UEdGraphNode* Node : SMGraph->Nodes)
+		{
+			if (UAnimStateNode* State = Cast<UAnimStateNode>(Node))
+			{
+				Names.AddUnique(State->GetStateName());
+			}
+		}
+		return Names;
+	}
+
+	/** Compile BP and save its package, recording saved/saveError on Result.
+	 *  A save that did not reach disk fails the result. Returns whether it saved. */
+	inline bool CompileAndSave(UBlueprint* BP, const TSharedPtr<FJsonObject>& Result, const FString& AssetPath)
+	{
+		FString SaveError;
+		bool bSaved = false;
+		if (BP)
+		{
+			FKismetEditorUtilities::CompileBlueprint(BP);
+			bSaved = SaveAssetPackageChecked(BP, SaveError);
+		}
+		else
+		{
+			SaveError = TEXT("No blueprint to save.");
+		}
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+		return bSaved;
 	}
 }

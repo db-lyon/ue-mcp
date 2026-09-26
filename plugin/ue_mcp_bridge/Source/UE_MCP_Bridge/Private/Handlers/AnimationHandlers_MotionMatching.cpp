@@ -14,6 +14,7 @@
 #include "HandlerAssetCreate.h"
 #include "PoseSearch/PoseSearchSchema.h"
 #include "HandlerPoseSearchSchema.h"
+#include "HandlerAnimStateGraph.h"
 #include "PoseSearch/PoseSearchFeatureChannel.h"
 #if UE_MCP_HAS_5_5_API
 #include "PoseSearch/PoseSearchFeatureChannel_Pose.h"
@@ -1132,16 +1133,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 // handlers close both gaps: add_sequence_evaluator drops the node, and
 // bind_anim_node_function binds a UFUNCTION to a node's update slot.
 
-// Resolve an AnimGraph (AnimGraph itself or a named state's inner graph) on an
-// AnimBP by name.
-static UEdGraph* FindAnimGraphByName(UAnimBlueprint* AnimBP, const FString& GraphName)
-{
-	TArray<UEdGraph*> All;
-	AnimBP->GetAllGraphs(All);
-	for (UEdGraph* G : All) { if (G && G->GetName() == GraphName) return G; }
-	return nullptr;
-}
-
 // The output pose node of a graph. In the top-level AnimGraph this is a
 // UAnimGraphNode_Root; inside a state's inner graph it is a
 // UAnimGraphNode_StateResult (both derive from UAnimGraphNode_Base and expose a
@@ -1180,7 +1171,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddSequenceEvaluator(const TSharedPtr
 	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 
-	UEdGraph* Graph = FindAnimGraphByName(AnimBP, GraphName);
+	UEdGraph* Graph = MCPAnimStateGraph::FindGraphByName(AnimBP, GraphName);
 	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 
 	UAnimSequenceBase* Sequence = nullptr;
@@ -1270,7 +1261,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BindAnimNodeFunction(const TSharedPtr
 
 	if (FunctionNameError) return FunctionNameError;
 
-	UEdGraph* Graph = FindAnimGraphByName(AnimBP, GraphName);
+	UEdGraph* Graph = MCPAnimStateGraph::FindGraphByName(AnimBP, GraphName);
 	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 
 	// Locate the target node by GUID (from add_sequence_evaluator / add_*_node).
