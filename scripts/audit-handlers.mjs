@@ -63,18 +63,17 @@ function tsBridgeMethods() {
         if (!methods.has(method)) methods.set(method, []);
         methods.get(method).push({ file: rel });
       }
-      // `JSON.stringify({ id, method: "x", params })` written straight onto the
-      // socket. The handshake does this rather than going through bridge.call,
-      // because it runs before the call machinery is available - so a scanner
-      // that reads only bridge.call reports get_bridge_capabilities as an
-      // unreachable C++ handler when it is the first thing every connection
-      // asks for.
+      // Frames written straight onto a socket, outside bridge.call: the
+      // capabilities handshake through `encodeRequest(id, "x")`, and a one-shot
+      // `callBridgeOnce(host, port, "x", ...)`. Both run where the call
+      // machinery is not available, and get_bridge_capabilities is the first
+      // thing every connection asks for.
       //
-      // Anchored on the JSON.stringify envelope rather than on `method:` alone.
-      // A bare `method:` also appears in prose, including inside the C++ files
-      // plugin-cli.ts scaffolds for a new plugin, and reading a doc comment as
-      // a call is how an audit invents a missing handler.
-      for (const m of src.matchAll(/JSON\.stringify\(\s*\{[^}]*\bmethod:\s*"([a-z_][a-z0-9_]*)"/g)) {
+      // Anchored on those calls rather than on `method:` alone. A bare
+      // `method:` also appears in prose, including inside the C++ files
+      // plugin-scaffold.ts writes for a new plugin, and reading a doc comment
+      // as a call is how an audit invents a missing handler.
+      for (const m of src.matchAll(/\b(?:encodeRequest\(\s*[\w$]+|callBridgeOnce\(\s*[\w$]+\s*,\s*[\w$]+)\s*,\s*"([a-z_][a-z0-9_]*)"/g)) {
         const method = m[1];
         if (!methods.has(method)) methods.set(method, []);
         methods.get(method).push({ file: rel });
