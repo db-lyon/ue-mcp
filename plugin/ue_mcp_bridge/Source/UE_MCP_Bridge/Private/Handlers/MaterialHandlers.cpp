@@ -2006,45 +2006,28 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 		}
 	}
 
-	// Constant3Vector: bare value assignment (the previous SetMaterialBaseColor
-	// pattern needed a wrapper helper; expose direct authoring here).
-	// #444: also accept {R,G,B,A} or {x,y,z,w} dict shapes.
-	auto ReadColorAny = [](const TSharedPtr<FJsonObject>& Obj, FLinearColor& Out) -> bool
-	{
-		double R = 0, G = 0, B = 0, A = 1; bool bAny = false;
-		auto Pick = [&](const TCHAR* L, const TCHAR* U, const TCHAR* Alt, double& Slot)
-		{
-			double V; if (Obj->TryGetNumberField(L, V) || Obj->TryGetNumberField(U, V) || Obj->TryGetNumberField(Alt, V)) { Slot = V; bAny = true; }
-		};
-		Pick(TEXT("r"), TEXT("R"), TEXT("x"), R);
-		Pick(TEXT("g"), TEXT("G"), TEXT("y"), G);
-		Pick(TEXT("b"), TEXT("B"), TEXT("z"), B);
-		Pick(TEXT("a"), TEXT("A"), TEXT("w"), A);
-		Out = FLinearColor((float)R, (float)G, (float)B, (float)A);
-		return bAny;
-	};
+	// Constant3Vector/Constant4Vector take value, else defaultValue, in any colour
+	// shape TryParseMaterialColorField reads (#444, #952).
 	if (UMaterialExpressionConstant3Vector* Const3 = Cast<UMaterialExpressionConstant3Vector>(NewExpression))
 	{
-		const TSharedPtr<FJsonObject>* ConstColor = nullptr;
 		FLinearColor Col = Const3->Constant;
-		if (TryGetObjectParam(Params, TEXT("value"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
+		if (TryParseMaterialColorField(Params, TEXT("value"), Col))
 		{
 			Const3->Constant = Col;
 		}
-		else if (TryGetObjectParam(Params, TEXT("defaultValue"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
+		else if (TryParseMaterialColorField(Params, TEXT("defaultValue"), Col))
 		{
 			Const3->Constant = Col;
 		}
 	}
 	if (UMaterialExpressionConstant4Vector* Const4 = Cast<UMaterialExpressionConstant4Vector>(NewExpression))
 	{
-		const TSharedPtr<FJsonObject>* ConstColor = nullptr;
 		FLinearColor Col = Const4->Constant;
-		if (TryGetObjectParam(Params, TEXT("value"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
+		if (TryParseMaterialColorField(Params, TEXT("value"), Col))
 		{
 			Const4->Constant = Col;
 		}
-		else if (TryGetObjectParam(Params, TEXT("defaultValue"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
+		else if (TryParseMaterialColorField(Params, TEXT("defaultValue"), Col))
 		{
 			Const4->Constant = Col;
 		}
