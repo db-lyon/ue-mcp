@@ -206,7 +206,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 					UClass* TargetClass = LoadObject<UClass>(nullptr, *TargetClassName);
 					if (!TargetClass)
 					{
-						TargetClass = FindClassByShortName(TargetClassName);
+						TargetClass = MCPResolveClass(TargetClassName);
 					}
 					if (TargetClass)
 					{
@@ -333,7 +333,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 				if (!EventClassName.IsEmpty())
 				{
 					// Engine event override -- bind via EventReference
-					UClass* EventClass = FindClassByShortName(EventClassName);
+					UClass* EventClass = MCPResolveClass(EventClassName);
 					if (!EventClass) EventClass = Blueprint->ParentClass;
 
 					if (EventClass)
@@ -380,7 +380,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 					{
 						Owner = LoadClass<UObject>(nullptr, *(OwnerClass + TEXT("_C")));
 					}
-					if (!Owner) Owner = FindClassByShortName(OwnerClass);
+					if (!Owner) Owner = MCPResolveClass(OwnerClass);
 					if (Owner)
 					{
 						GetNode->VariableReference.SetExternalMember(FName(*VarName), Owner);
@@ -441,7 +441,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 				}
 				if (!CastTargetClass)
 				{
-					CastTargetClass = FindClassByShortName(TargetType);
+					CastTargetClass = MCPResolveClass(TargetType);
 				}
 				if (CastTargetClass)
 				{
@@ -489,7 +489,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 				if (!OwnerClass.IsEmpty())
 				{
 					UClass* Owner = LoadObject<UClass>(nullptr, *OwnerClass);
-					if (!Owner) Owner = FindClassByShortName(OwnerClass);
+					if (!Owner) Owner = MCPResolveClass(OwnerClass);
 					if (Owner)
 					{
 						// Check if the property is a multicast delegate on the owner class
@@ -564,7 +564,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 					UClass* Owner = LoadObject<UClass>(nullptr, *OwnerClass);
 					if (!Owner && !OwnerClass.EndsWith(TEXT("_C")))
 						Owner = LoadObject<UClass>(nullptr, *(OwnerClass + TEXT("_C")));
-					if (!Owner) Owner = FindClassByShortName(OwnerClass);
+					if (!Owner) Owner = MCPResolveClass(OwnerClass);
 					if (Owner)
 					{
 						FProperty* Prop = Owner->FindPropertyByName(FName(*DelegateName));
@@ -666,7 +666,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		{
 			UClass* Resolved = LoadClass<UObject>(nullptr, *SubsystemClass);
 			if (!Resolved) Resolved = LoadObject<UClass>(nullptr, *SubsystemClass);
-			if (!Resolved) Resolved = FindClassByShortName(SubsystemClass);
+			if (!Resolved) Resolved = MCPResolveClass(SubsystemClass);
 			if (Resolved)
 			{
 				if (FClassProperty* Prop = CastField<FClassProperty>(NewNode->GetClass()->FindPropertyByName(TEXT("CustomClass"))))

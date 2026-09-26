@@ -1234,7 +1234,7 @@ FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
 		}
 		if (!Resolved)
 		{
-			Resolved = FindClassByShortName(Trimmed);
+			Resolved = MCPResolveClass(Trimmed);
 		}
 		if (!Resolved) return false;
 
@@ -1727,7 +1727,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 	UClass* ParentClass = nullptr;
 
 	// 1. Try silent short-name search first (handles "Actor", "AActor", "UAnimInstance" etc.)
-	ParentClass = FindClassByShortName(ParentClassName);
+	ParentClass = MCPResolveClass(ParentClassName);
 
 	// 2. Try as full class path (e.g. "/Script/Engine.Actor" or "/Script/MyModule.MyClass")
 	if (!ParentClass)
@@ -2133,7 +2133,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	}
 	if (!CompClass)
 	{
-		CompClass = FindClassByShortName(ComponentClass);
+		CompClass = MCPResolveClass(ComponentClass);
 	}
 	if (!CompClass)
 	{
@@ -2462,7 +2462,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodeTypes(const TSharedPtr<FJso
 		{
 			FilterClass = LoadObject<UClass>(nullptr, *ClassFilter);
 		}
-		if (!FilterClass) FilterClass = FindClassByShortName(ClassFilter);
+		if (!FilterClass) FilterClass = MCPResolveClass(ClassFilter);
 		if (!FilterClass)
 		{
 			return MCPError(FString::Printf(TEXT("Class not found: %s"), *ClassFilter));
@@ -3654,7 +3654,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentBlueprint(const TSharedPtr<FJ
 	}
 	if (!NewParent)
 	{
-		NewParent = FindClassByShortName(ParentClassName);
+		NewParent = MCPResolveClass(ParentClassName);
 	}
 	if (!NewParent)
 	{

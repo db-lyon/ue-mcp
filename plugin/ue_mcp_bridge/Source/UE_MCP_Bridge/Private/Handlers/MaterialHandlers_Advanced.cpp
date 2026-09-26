@@ -363,7 +363,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	auto SpawnExpression = [&](const FString& ClassName) -> UMaterialExpression*
 	{
 		UClass* Cls = FindObject<UClass>(nullptr, *FString::Printf(TEXT("/Script/Engine.%s"), *ClassName));
-		if (!Cls) Cls = FindClassByShortName(ClassName);
+		if (!Cls) Cls = MCPResolveClassOfType(ClassName, UMaterialExpression::StaticClass());
 		if (!Cls || !Cls->IsChildOf(UMaterialExpression::StaticClass())) return nullptr;
 		UMaterialExpression* Expr = NewObject<UMaterialExpression>(Material, Cls);
 		Material->GetExpressionCollection().AddExpression(Expr);

@@ -945,7 +945,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 			// A short class name is resolved here; the importer needs a path.
 			if (CastField<FClassProperty>(Prop) && !bNoneValue && !Value.Contains(TEXT("/")))
 			{
-				if (UClass* ClassVal = FindClassByShortName(Value))
+				if (UClass* ClassVal = MCPResolveClass(Value))
 				{
 					StoredValue = ClassVal->GetPathName();
 				}
@@ -1287,7 +1287,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetCdoProperty(const TSharedPtr<FJson
 	UClass* Class = LoadObject<UClass>(nullptr, *ClassName);
 	if (!Class)
 	{
-		Class = FindClassByShortName(ClassName);
+		Class = MCPResolveClass(ClassName);
 	}
 	if (!Class)
 	{
@@ -1408,7 +1408,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::GetCdoProperties(const TSharedPtr<FJs
 	UClass* Class = LoadObject<UClass>(nullptr, *ClassName);
 	if (!Class)
 	{
-		Class = FindClassByShortName(ClassName);
+		Class = MCPResolveClass(ClassName);
 	}
 	if (!Class)
 	{

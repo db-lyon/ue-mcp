@@ -136,8 +136,7 @@ namespace
 				OutError = TEXT("target=subsystem requires 'subsystemClass'");
 				return nullptr;
 			}
-			UClass* Cls = FindFirstObject<UClass>(*SubsystemName, EFindFirstObjectOptions::None);
-			if (!Cls) Cls = LoadObject<UClass>(nullptr, *SubsystemName);
+			UClass* Cls = MCPResolveClass(SubsystemName);
 			if (!Cls)
 			{
 				OutError = FString::Printf(TEXT("Subsystem class not found: %s"), *SubsystemName);
@@ -1264,32 +1263,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 
 namespace
 {
-	/** Resolve a class from a short name, a /Script path, or a Blueprint asset
-	 *  path. A Blueprint path names the asset, not the class it generates, so
-	 *  "/Game/UI/WBP_Hud" is retried as "/Game/UI/WBP_Hud.WBP_Hud_C". */
-	UClass* ResolveClassSpec(const FString& Spec)
-	{
-		if (Spec.IsEmpty()) return nullptr;
-		if (Spec.Contains(TEXT("/")))
-		{
-			if (UClass* Direct = LoadObject<UClass>(nullptr, *Spec)) return Direct;
-			if (!Spec.EndsWith(TEXT("_C")))
-			{
-				FString Path = Spec;
-				if (!Path.Contains(TEXT(".")))
-				{
-					FString Leaf;
-					Path.Split(TEXT("/"), nullptr, &Leaf, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-					Path = Path + TEXT(".") + Leaf;
-				}
-				if (UClass* Generated = LoadObject<UClass>(nullptr, *(Path + TEXT("_C")))) return Generated;
-			}
-			return nullptr;
-		}
-		if (UClass* ByName = FindFirstObject<UClass>(*Spec, EFindFirstObjectOptions::None)) return ByName;
-		return FindClassByShortName(Spec);
-	}
-
 	/** World kind as a short string, so a caller can tell an editor-world hit
 	 *  from a PIE-world one without parsing the UEDPIE prefix out of the path. */
 	FString DescribeWorldType(const UWorld* World)
@@ -1379,13 +1352,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::FindLiveObjects(const TSharedPtr<FJsonOb
 	UClass* FilterClass = nullptr;
 	if (!ClassSpec.IsEmpty())
 	{
-		FilterClass = ResolveClassSpec(ClassSpec);
-		if (!FilterClass)
-		{
-			return MCPError(FString::Printf(
-				TEXT("Class not found: %s. Use a short name (StaticMeshActor), a /Script path (/Script/Engine.StaticMeshActor), a generated class name (WBP_Hud_C) or a Blueprint asset path. A Blueprint class only exists once its asset is loaded."),
-				*ClassSpec));
-		}
+		FilterClass = MCPResolveClass(ClassSpec);
+		if (!FilterClass) return MCPClassNotFoundError(ClassSpec);
 	}
 
 	// world defaults to every world. A scope is a filter here, and defaulting it
