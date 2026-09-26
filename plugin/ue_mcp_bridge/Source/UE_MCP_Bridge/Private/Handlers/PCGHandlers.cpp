@@ -347,13 +347,15 @@ TSharedPtr<FJsonValue> FPCGHandlers::CreatePCGGraph(const TSharedPtr<FJsonObject
 	auto Created = MCPCreateAssetIdempotent<UPCGGraph>(Name, PackagePath, OnConflict, TEXT("PCGGraph"), nullptr);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveLoadedAsset(Created.Asset, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -499,11 +501,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 		return MCPError(FString::Printf(TEXT("PCG settings class not found or invalid: %s"), *NodeType));
 	}
 
-	// #157: wrap mutation in a scoped transaction, outer settings to the graph
-	// (so they serialize with the package), and force SaveLoadedAsset on the
-	// exact Graph instance. The prior AddNode + SaveAsset(path) combination
-	// could silently drop mutations when save-by-path resolved to a different
-	// loaded instance than the one we mutated.
+	// #157: mutate inside a transaction, outer the settings to the graph so they
+	// serialize with the package, and save the exact Graph instance mutated.
 	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "AddPCGNode", "Add PCG Node"));
 	Graph->Modify();
 
@@ -540,7 +539,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
 
-	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Graph, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -555,6 +555,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
 	Payload->SetStringField(TEXT("nodeName"), NewNodeName);
 	MCPSetRollback(Result, TEXT("remove_pcg_node"), Payload);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 
 	return MCPResult(Result);
 }
@@ -755,7 +756,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
 
-	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Graph, SaveError);
 
 	auto Result = MCPSuccess();
 	// The edge did not exist a moment ago - the pre-check above returned early
@@ -776,6 +778,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	RollbackPayload->SetStringField(TEXT("sourcePin"), ResolvedSourcePinLabel.ToString());
 	RollbackPayload->SetStringField(TEXT("targetPin"), ResolvedTargetPinLabel.ToString());
 	MCPSetRollback(Result, TEXT("disconnect_pcg_nodes"), RollbackPayload);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 
 	return MCPResult(Result);
 }
@@ -894,7 +897,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 	TargetNode->PostEditChange();
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
-	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Graph, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -921,6 +925,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 			TEXT("%d edges were cut because the pin labels were left open, and the rollback restores only the first one (%s -> %s). Replay the rest from removedEdgeList with connect_pcg_nodes."),
 			RemovedCount, *FirstRemovedSourcePin, *FirstRemovedTargetPin));
 	}
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -1005,7 +1010,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
 
-	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Graph, SaveError);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -1038,6 +1044,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 		Result->SetStringField(TEXT("rollbackNote"),
 			TEXT("The removed node carried no settings object, so there is no class for add_pcg_node to recreate it from. Restore the graph from an export_pcg_graph snapshot with import_pcg_graph replace=true."));
 	}
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -1164,7 +1171,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
 
-	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Graph, SaveError);
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -1208,6 +1216,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 		Result->SetStringField(TEXT("rollbackNote"),
 			TEXT("None of the written properties could be read back before the write, so no inverse call is offered rather than one that would write something else. Snapshot with export_pcg_graph and restore with import_pcg_graph replace=true if this has to be undone."));
 	}
+	// Recorded last: a save failure has to override the success computed above.
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -1748,8 +1758,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 
 	SpawnerSettings->Modify();
 
-	// Persist the asset
-	SaveAssetPackage(Graph);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Graph, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1796,6 +1806,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 		}
 		Result->SetStringField(TEXT("rollbackNote"), Note.TrimEnd());
 	}
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -2332,7 +2343,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
-	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Graph, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2372,6 +2384,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 		Result->SetStringField(TEXT("rollbackNote"),
 			TEXT("The graph could not be exported before the import, so there is no snapshot to restore from and no other call undoes a bulk import."));
 	}
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	return MCPResult(Result);
 }
 
@@ -2600,11 +2613,12 @@ TSharedPtr<FJsonValue> FPCGHandlers::UnwrapInstanceNodes(const TSharedPtr<FJsonO
 	}
 
 	bool bSaved = false;
+	FString SaveError;
 	if (Unwrapped.Num() > 0)
 	{
 		Graph->PostEditChange();
 		if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
-		bSaved = UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
+		bSaved = SaveAssetPackageChecked(Graph, SaveError);
 	}
 
 	auto Result = MCPSuccess();
@@ -2614,8 +2628,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::UnwrapInstanceNodes(const TSharedPtr<FJsonO
 	Result->SetNumberField(TEXT("unwrappedCount"), Unwrapped.Num());
 	Result->SetNumberField(TEXT("alreadyOwnedCount"), AlreadyOwned);
 	Result->SetBoolField(TEXT("unchanged"), Unwrapped.Num() == 0);
-	Result->SetBoolField(TEXT("saved"), bSaved);
 	if (Warnings.Num() > 0) Result->SetArrayField(TEXT("warnings"), Warnings);
 	MCPSetNoRollback(Result, TEXT("Unwrapping discards the UPCGSettingsInstance wrappers, and no bridge action builds instance nodes to restore them. Editor undo reverts it."));
+	if (Unwrapped.Num() > 0) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	else Result->SetBoolField(TEXT("saved"), false);
 	return MCPResult(Result);
 }
