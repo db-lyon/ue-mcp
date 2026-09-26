@@ -1,99 +1,11 @@
 using UnrealBuildTool;
 
-// New source files (UBT caches the module file list and will not pick one up
-// until this file changes): GameplayHandlers_EQS.cpp,
-// GameplayHandlers_BTRuntime.cpp, GameplayHandlers_Perception.cpp,
-// EditorHandlers_ViewportControl.cpp, NiagaraHandlers_Advanced.cpp,
-// AudioHandlers_MetaSoundRead.cpp, AssetHandlers_UV.cpp,
-// AnimationHandlers_Skeleton.cpp.
-//
-// And the backlog wave: NiagaraHandlers_Compile.cpp,
-// GameplayHandlers_Mass.cpp, AssetHandlers_GeometryScript.cpp,
-// AssetHandlers_Hygiene.cpp, AnimationHandlers_Depth.cpp,
-// AudioHandlers_Depth.cpp, BlueprintHandlers_Depth.cpp,
-// BlueprintHandlers_UserTypes.cpp, StateTreeHandlers_Depth.cpp,
-// FoliageHandlers_Depth.cpp, EditorHandlers_Profiling.cpp,
-// MaterialHandlers_RVT.cpp, GasHandlers_Abilities.cpp,
-// GasHandlers_Snapshot.cpp, ReflectionHandlers_Schema.cpp,
-// ProjectHandlers_Plugins.cpp, WidgetHandlers_Animation.cpp,
-// WidgetHandlers_CommonUI.cpp.
+// UBT caches this module's file list and rescans only when this file changes.
+// scripts/deploy.mjs touches it when it deploys a new source file; bump the
+// counter to force a rescan by hand. Rescan counter: 1
 
 public class UE_MCP_Bridge : ModuleRules
 {
-	// Touched when Private/EngineStatus.cpp was added, and again for
-	// Private/Handlers/WidgetHandlers_Extraction.cpp plus the first file under
-	// Private/Tests: UBT caches the module's file list and will not pick up a
-	// new .cpp until this file changes.
-	// Private/Handlers/AssetHandlers_BulkUpsert.cpp: UBT caches the module's
-	// file list and will not pick up a new .cpp until this file changes.
-	// Private/Handlers/LevelHandlers_Inspection.cpp and its focused test: same reason.
-	// Private/BridgeStateFiles.cpp, Private/BridgeParamEcho.cpp and
-	// Private/Tests/BridgeProtocolTests.cpp: same reason.
-	// Private/Tests/SequencerHandlerTests.cpp: same reason.
-	// Private/Tests/MaterialGraphReadTests.cpp: rescan the expression graph regression.
-	// Private/Handlers/LevelHandlers_InstanceProjection.cpp and
-	// Private/Tests/LevelInstanceProjectionTests.cpp: same reason.
-	// Private/Tests/PackageSaveExtensionTests.cpp: same reason.
-	// Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp,
-	// Private/Handlers/AnimationHandlers_Validation.cpp,
-	// Private/Handlers/AnimationHandlers_IKRigAuthoring.cpp and
-	// Private/Handlers/AnimationHandlers_IKRetargeterAuthoring.cpp plus
-	// Private/Tests/AnimationControlRigTimelineTests.cpp: same reason.
-	// Private/Tests/DataTableRowWriteTests.cpp: same reason.
-	// Private/Handlers/EditorHandlers_RuntimeVisibility.cpp and
-	// Private/Tests/RuntimeVisibilityTests.cpp: same reason.
-	// Private/Handlers/MaterialHandlers_Build.cpp and
-	// Private/Tests/MaterialBuildTests.cpp: same reason.
-	// Private/Handlers/AssetHandlers_Geometry.cpp,
-	// Private/Handlers/AnimationHandlers_Pose.cpp,
-	// Private/Tests/MeshGeometryTests.cpp and
-	// Private/Tests/AnimationPoseTests.cpp: same reason.
-	// Private/Tests/WidgetBlueprintResolveTests.cpp and
-	// Private/Tests/GasLiveAttributeTests.cpp: same reason.
-	// Private/Tests/BlueprintHandlerSurfaceTests.cpp: same reason.
-	// Private/Handlers/BlueprintHandlers_Search.cpp: same reason.
-	// Private/Handlers/LevelHandlers_Query.cpp,
-	// Private/Handlers/LevelHandlers_BatchWrite.cpp,
-	// Private/Handlers/LevelHandlers_Convert.cpp,
-	// Private/Handlers/LevelHandlers_Refresh.cpp,
-	// Private/Handlers/LevelHandlers_Transient.cpp,
-	// Private/Handlers/AssetHandlers_BulkRead.cpp,
-	// Private/Handlers/FoliageHandlers_Batch.cpp,
-	// Private/Tests/LevelQueryComponentsTests.cpp,
-	// Private/Tests/LevelBatchWriteTests.cpp,
-	// Private/Tests/LevelRefreshTests.cpp,
-	// Private/Tests/LevelConvertBrushesTests.cpp,
-	// Private/Tests/LevelTransientActorTests.cpp,
-	// Private/Tests/AssetBulkReadTests.cpp and
-	// Private/Tests/FoliageBatchTests.cpp: same reason.
-	// Private/Tests/EditorFunctionCallTests.cpp (#885/#969): same reason.
-	// Private/Tests/SequencerScrubTests.cpp (#881): same reason.
-	// Private/Tests/AssetPathResolutionTests.cpp and
-	// Private/Tests/AssetPropertyPersistTests.cpp: same reason.
-	// Private/Handlers/AssetHandlers_Subobject.cpp,
-	// Private/Handlers/AssetHandlers_Redirectors.cpp and
-	// Private/Tests/AssetSubobjectTests.cpp: same reason.
-	// Private/Tests/AssetDeleteGuardTests.cpp (#976): same reason.
-	// Private/Tests/PackageWriteGuardTests.cpp (#932): same reason.
-	// Private/Handlers/BlueprintHandlers_Collision.cpp and
-	// Private/Tests/CollisionQueryTests.cpp (#925): same reason.
-	// Private/Handlers/AssetHandlers_MeshBoolean.cpp and
-	// Private/Tests/MeshBooleanTests.cpp (#916): same reason.
-	// Private/Tests/LevelTraceWorldScopeTests.cpp (#933): same reason.
-	// Private/Tests/LandscapeSampleTests.cpp (#939): same reason.
-	// Private/Handlers/LevelHandlers_PostProcess.cpp and
-	// Private/Tests/LevelPostProcessOverrideTests.cpp (#950): same reason.
-	// Private/Handlers/LevelHandlers_Save.cpp and
-	// Private/Tests/LevelSaveReportTests.cpp (#964): same reason.
-	// Private/Tests/LevelComponentTreeInstanceCountTests.cpp (#986): same reason.
-	// Private/Handlers/LevelHandlers_WorldPartitionSettings.cpp and
-	// Private/Tests/LevelWorldPartitionSettingsTests.cpp (#985): same reason.
-	// Private/Handlers/EditorHandlers_OpenEditors.cpp and
-	// Private/Tests/OpenAssetEditorTests.cpp (#1112): same reason.
-	// Private/Tests/LevelPlaceVolumeTests.cpp (#1119): same reason.
-	// Private/Tests/BlueprintTransactionalNodeTests.cpp (#1086): same reason.
-	// Private/Handlers/MaterialHandlers_Designer.cpp (#1131): same reason.
-	// Private/Handlers/LevelHandlers_Water.cpp (#1156): same reason.
 	public UE_MCP_Bridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -274,19 +186,3 @@ public class UE_MCP_Bridge : ModuleRules
 		}
 	}
 }
-
-// Rescan trigger: level-script handler automation coverage added.
-// Rescan trigger: round 2 added handler translation units.
-// Rescan trigger: Private/Tests/GameThreadGateTests.cpp (#968).
-// Rescan trigger: Private/Tests/AutomationRunnerTests.cpp (#993).
-// Rescan trigger: Mass and skeletal-mesh handler translation units.
-// Rescan trigger: FInstancedStruct scalar, wrapper-array and nested path tests added.
-// Round 3: Private/Handlers/GameplayHandlers_BehaviorTree.cpp and
-// Private/Tests/BehaviorTreeNodeTests.cpp.
-// Round 4: Private/Handlers/GameplayHandlers_BTAuthoring.cpp and
-// Private/Tests/BehaviorTreeAuthoringTests.cpp.
-// Live post-process AnimBP handler automation coverage added.
-// Private/Tests/AnimationSkeletonCreateTests.cpp.
-// Rescan trigger: Private/Tests/NativeStructFPrefixTests.cpp (#1088).
-// Rescan trigger: Private/Tests/ReflectionSurfaceTests.cpp (#1106).
-// Rescan trigger: Private/Handlers/SequencerHandlers_Render.cpp (#1098).
