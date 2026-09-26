@@ -22,6 +22,7 @@ import {
   type DialogMode,
 } from "./user-state.js";
 import { BOLD, CYAN, DIM, RESET, fail, info, ok, warn } from "./ui/ansi.js";
+import { projectDirOf } from "./uproject-path.js";
 
 function printHelp(): void {
   console.log("");
@@ -47,10 +48,7 @@ function isMode(value: string): value is DialogMode {
 
 /** The project root a --editor value resolved to, for per-project preferences. */
 function projectRootOf(projectPath?: string): string | null {
-  if (!projectPath) return null;
-  return projectPath.toLowerCase().endsWith(".uproject")
-    ? path.dirname(path.resolve(projectPath))
-    : path.resolve(projectPath);
+  return projectPath ? projectDirOf(projectPath) : null;
 }
 
 /**

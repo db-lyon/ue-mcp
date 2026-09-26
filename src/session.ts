@@ -20,7 +20,6 @@
  * session and behaves as it always has: nothing here is conditional on the
  * count except targeting itself.
  */
-import * as path from "node:path";
 import { EditorBridge } from "./bridge.js";
 import { ProjectContext } from "./project.js";
 import { GuardedBridge } from "./flow/guarded-bridge.js";
@@ -31,6 +30,7 @@ import { McpError, ErrorCode } from "./errors.js";
 import { warn } from "./log.js";
 import { newLockOwnerId } from "./lock-owner.js";
 import { withoutDialogActuation } from "./dialog-guard.js";
+import { projectDirOf } from "./uproject-path.js";
 
 /** Key used for the session that has no project bound. */
 export const DEFAULT_SESSION_KEY = "";
@@ -57,9 +57,7 @@ export interface EditorSessionInfo {
  * session addressed by directory must find the session registered by file.
  */
 export function sessionKeyFor(projectPathOrDir: string): string {
-  const resolved = path.resolve(projectPathOrDir);
-  const dir = resolved.toLowerCase().endsWith(".uproject") ? path.dirname(resolved) : resolved;
-  return normalizeProjectRoot(dir);
+  return normalizeProjectRoot(projectDirOf(projectPathOrDir));
 }
 
 export class EditorSession {

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { ProjectContext } from "./project.js";
 import { deploy } from "./deployer.js";
 import { coreSkillsInstalled, conflictMessages, installCoreSkills, syncPluginSkills } from "./skills.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { findUProject } from "./uproject-path.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -29,15 +29,7 @@ async function deployCmd() {
     fail(e instanceof EditorFlagError ? e.message : String(e));
     process.exit(1);
   }
-  let uprojectPath = target.projectPath || target.rest[0] || "";
-
-  if (!uprojectPath) {
-    const cwd = process.cwd();
-    const found = fs.readdirSync(cwd).filter((f) => f.endsWith(".uproject"));
-    if (found.length > 0) {
-      uprojectPath = path.join(cwd, found[0]);
-    }
-  }
+  const uprojectPath = target.projectPath || target.rest[0] || findUProject(process.cwd());
 
   if (!uprojectPath) {
     fail("No .uproject found. Run from your project directory or pass the path.");

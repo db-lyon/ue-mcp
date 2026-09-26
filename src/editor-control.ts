@@ -24,6 +24,7 @@ import { startProgress } from "./ui/progress.js";
 import { getDialogMode, getUserStatePath, type DialogMode } from "./user-state.js";
 import { oneLine } from "./dialog-guard.js";
 import type { ElicitFn, ProgressFn } from "./types.js";
+import { findUProject } from "./uproject-path.js";
 
 // Process control is cross-platform: the editor binary path and the running-
 // process probe differ per OS, and stopping goes through the bridge (#790).
@@ -668,21 +669,6 @@ const EDITOR_SELF_QUIT_PY = [
 ].join("\n");
 
 /**
- * The .uproject inside a project directory. The stop/restart paths are handed a
- * directory, but the process probe matches editors by the project file they
- * have open, so resolve one from the other.
- */
-function uprojectInDir(projectDir?: string): string | null {
-  if (!projectDir) return null;
-  try {
-    const match = fs.readdirSync(projectDir).find((f) => f.toLowerCase().endsWith(".uproject"));
-    return match ? path.join(projectDir, match) : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * What one bridge call on a throwaway socket came back with.
  *
  * A reply alone is not acceptance, and the three ways a call can fail need
@@ -1313,7 +1299,7 @@ export async function stopEditor(
     confirmPollMs?: number;
   } = {},
 ): Promise<StopEditorResult> {
-  const projectPath = uprojectInDir(projectDir);
+  const projectPath = projectDir ? findUProject(projectDir) : null;
   const confirmPollMs = opts.confirmPollMs ?? 1000;
   // Resolved once, up front, so every dialog this stop can run into is handled
   // by the same mode and reports the same reason for it.
@@ -1660,7 +1646,7 @@ export async function buildProject(
     };
   }
 
-  const projectName = path.basename(resolvedPath, ".uproject");
+  const projectName = path.basename(resolvedPath, path.extname(resolvedPath));
   const target = `${projectName}Editor`;
   const platform = opts.platform?.trim() || getPlatformString();
   const configuration = opts.configuration?.trim() || "Development";

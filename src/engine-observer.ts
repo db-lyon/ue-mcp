@@ -357,7 +357,7 @@ export interface LogState {
 
 function projectLogPath(projectPath: string): string {
   const dir = path.dirname(projectPath);
-  const name = path.basename(projectPath, ".uproject");
+  const name = path.basename(projectPath, path.extname(projectPath));
   return path.join(dir, "Saved", "Logs", `${name}.log`);
 }
 

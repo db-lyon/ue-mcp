@@ -10,6 +10,7 @@ import { editorOwnsProject, listEditorProcesses } from "./engine-observer.js";
 import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
 import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "./version-check.js";
 import { packageModulePath, packageRoot, packageVersion } from "./package-root.js";
+import { findUProject, isUProjectPath } from "./uproject-path.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -45,11 +46,10 @@ function isGlobalInstall(): boolean {
 }
 
 /** The .uproject an argument names (file or directory), else the one in cwd. */
-function findUProject(arg: string | undefined): string | null {
-  if (arg?.endsWith(".uproject")) return path.resolve(arg);
-  const dir = arg && fs.existsSync(arg) && fs.statSync(arg).isDirectory() ? arg : process.cwd();
-  const found = fs.readdirSync(dir).filter((f) => f.endsWith(".uproject"));
-  return found.length > 0 ? path.resolve(dir, found[0]) : null;
+function targetUProject(arg: string | undefined): string | null {
+  if (arg && isUProjectPath(arg)) return path.resolve(arg);
+  const isDir = !!arg && fs.existsSync(arg) && fs.statSync(arg).isDirectory();
+  return findUProject(isDir ? arg : process.cwd());
 }
 
 async function editorRunningFor(uproject: string): Promise<boolean> {
@@ -84,7 +84,7 @@ async function update() {
   // The package and the editor plugin are one product, so a bare update carries
   // both. Stopping at npm left editors on an old plugin that answered
   // "Unknown method" for actions the new server advertised.
-  const uproject = findUProject(target.projectPath ?? args.find((a) => !a.startsWith("-")));
+  const uproject = targetUProject(target.projectPath ?? args.find((a) => !a.startsWith("-")));
   const projectArg = uproject ?? undefined;
   const shouldDeploy = !!uproject && !args.includes("--no-deploy");
   // --build and --deploy are the old opt-ins, now the default; still accepted.

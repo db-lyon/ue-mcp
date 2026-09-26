@@ -15,6 +15,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isUProjectPath, projectDirOf } from "./uproject-path.js";
 
 export const EDITOR_FLAG = "--editor";
 
@@ -87,9 +88,9 @@ export function namesForProjects(projectPaths: string[]): string[] {
 
 function projectBaseName(projectPath: string): string {
   const resolved = path.resolve(projectPath);
-  if (resolved.toLowerCase().endsWith(".uproject")) return path.basename(resolved, path.extname(resolved));
+  if (isUProjectPath(resolved)) return path.basename(resolved, path.extname(resolved));
   const found = listUprojects(resolved)[0];
-  return found ? path.basename(found, ".uproject") : path.basename(resolved);
+  return found ? path.basename(found, path.extname(found)) : path.basename(resolved);
 }
 
 function listUprojects(dir: string): string[] {
@@ -97,7 +98,7 @@ function listUprojects(dir: string): string[] {
     if (!fs.statSync(dir).isDirectory()) return [];
     return fs
       .readdirSync(dir)
-      .filter((f) => f.toLowerCase().endsWith(".uproject"))
+      .filter(isUProjectPath)
       .map((f) => path.join(dir, f));
   } catch {
     return [];
@@ -241,7 +242,7 @@ export function resolveEditorFlag(editor: string, cwd: string = process.cwd()): 
 
   const asPath = path.resolve(cwd, needle);
   if (fs.existsSync(asPath)) {
-    if (asPath.toLowerCase().endsWith(".uproject")) return asPath;
+    if (isUProjectPath(asPath)) return asPath;
     const found = listUprojects(asPath);
     if (found.length === 1) return found[0];
     if (found.length > 1) {
@@ -266,9 +267,8 @@ export function resolveEditorFlag(editor: string, cwd: string = process.cwd()): 
 }
 
 function sameProject(a: string, b: string): boolean {
-  const dirOf = (p: string) =>
-    (p.toLowerCase().endsWith(".uproject") ? path.dirname(p) : p).replace(/[\\/]+$/, "").toLowerCase();
-  return dirOf(path.resolve(a)) === dirOf(path.resolve(b));
+  const dirOf = (p: string) => projectDirOf(p).replace(/[\\/]+$/, "").toLowerCase();
+  return dirOf(a) === dirOf(b);
 }
 
 /**

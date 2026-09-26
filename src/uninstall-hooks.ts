@@ -13,6 +13,7 @@ import * as path from "node:path";
 import { uninstallAllRegisteredHooks } from "./hook-installer.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { projectDirOf } from "./uproject-path.js";
 
 function resolveProjectDir(): string | null {
   // index.ts splices the "uninstall-hooks" arg out before this module loads,
@@ -31,7 +32,7 @@ function resolveProjectDir(): string | null {
       fail(`Path does not exist: ${arg}`);
       return null;
     }
-    return path.resolve(arg);
+    return projectDirOf(arg);
   }
   // Walk up from cwd looking for a ue-mcp.yml (the project root signal).
   let dir = process.cwd();

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { buildProject } from "./editor-control.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { findUProject, isUProjectPath } from "./uproject-path.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -10,7 +10,7 @@ const GREEN = "\x1b[32m";
 const RED = "\x1b[31m";
 const CYAN = "\x1b[36m";
 
-function findUProject(): string | null {
+function targetUProject(): string | null {
   // --editor names one of the editors this server drives; it wins over the
   // positional, which in turn wins over cwd.
   let arg: string | undefined;
@@ -21,17 +21,10 @@ function findUProject(): string | null {
     console.log(`  ${RED}${e instanceof EditorFlagError ? e.message : String(e)}${RESET}`);
     process.exit(1);
   }
-  if (arg && arg.endsWith(".uproject")) return path.resolve(arg);
-  if (arg && fs.existsSync(arg) && fs.statSync(arg).isDirectory()) {
-    const found = fs.readdirSync(arg).filter((f) => f.endsWith(".uproject"));
-    if (found.length > 0) return path.resolve(arg, found[0]);
-  }
-
-  const cwd = process.cwd();
-  const found = fs.readdirSync(cwd).filter((f) => f.endsWith(".uproject"));
-  if (found.length > 0) return path.join(cwd, found[0]);
-
-  return null;
+  // A named .uproject is taken as given, so a missing one is reported rather
+  // than silently replaced by whatever project cwd holds.
+  if (arg && isUProjectPath(arg)) return path.resolve(arg);
+  return (arg && findUProject(arg)) || findUProject(process.cwd());
 }
 
 async function main() {
@@ -39,13 +32,13 @@ async function main() {
   console.log(`  ${BOLD}${CYAN}UE-MCP Build${RESET}`);
   console.log("");
 
-  const uprojectPath = findUProject();
+  const uprojectPath = targetUProject();
   if (!uprojectPath) {
     console.log(`  ${RED}No .uproject found. Run from your project directory or pass the path.${RESET}`);
     process.exit(1);
   }
 
-  const projectName = path.basename(uprojectPath, ".uproject");
+  const projectName = path.basename(uprojectPath, path.extname(uprojectPath));
   console.log(`  Project: ${GREEN}${projectName}${RESET}`);
   console.log(`  Path:    ${uprojectPath}`);
   console.log("");

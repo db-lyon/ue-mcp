@@ -25,6 +25,7 @@ import { getInstalledHooks } from "./user-state.js";
 import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs, writeMcpConfig } from "./mcp-client-config.js";
 import { deriveProjectPort } from "./port.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { findUProject } from "./uproject-path.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -233,12 +234,10 @@ async function init() {
   let uprojectPath = initTarget.projectPath || initTarget.rest[0] || "";
 
   if (!uprojectPath) {
-    // Auto-detect .uproject in current directory
-    const cwd = process.cwd();
-    const found = fs.readdirSync(cwd).filter((f) => f.endsWith(".uproject"));
-    if (found.length > 0) {
-      uprojectPath = path.join(cwd, found[0]);
-      info(`Found ${found[0]} in current directory`);
+    const found = findUProject(process.cwd());
+    if (found) {
+      uprojectPath = found;
+      info(`Found ${path.basename(found)} in current directory`);
     } else {
       uprojectPath = await askPath();
     }

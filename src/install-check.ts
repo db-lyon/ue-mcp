@@ -28,6 +28,7 @@ import { checkPluginFreshness, type PluginFreshness } from "./plugin-freshness.j
 import { trySelectEngine } from "./engine-root.js";
 import { ProjectContext } from "./project.js";
 import { packageRoot } from "./package-root.js";
+import { isUProjectPath } from "./uproject-path.js";
 
 /**
  * Whether the project declares native modules of its own.
@@ -333,12 +334,12 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
   if (!fs.existsSync(resolved)) {
     throw new Error(`Project file not found: ${resolved}. Pass the path to a .uproject.`);
   }
-  if (!resolved.toLowerCase().endsWith(".uproject")) {
+  if (!isUProjectPath(resolved)) {
     throw new Error(`Not a .uproject file: ${resolved}. Pass the project descriptor, not its directory.`);
   }
 
   const shape = readProjectShape(resolved);
-  const projectName = path.basename(resolved, ".uproject");
+  const projectName = path.basename(resolved, path.extname(resolved));
 
   const context = new ProjectContext();
   context.setProject(resolved);

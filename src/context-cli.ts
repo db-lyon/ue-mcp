@@ -4,6 +4,7 @@ import * as path from "node:path";
 import yaml from "js-yaml";
 import { dumpYaml } from "./yaml-dump.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { findUProject } from "./uproject-path.js";
 
 /**
  * `ue-mcp context [full|lean|micro|status] [project]` - read or set the context
@@ -70,18 +71,8 @@ function parseArgs(): { action: string; projectArg?: string; help: boolean } {
 }
 
 function findProjectDir(projectArg?: string): string | null {
-  const candidates = [projectArg, process.cwd()].filter(Boolean) as string[];
-  for (const c of candidates) {
-    try {
-      if (c.endsWith(".uproject") && fs.existsSync(c)) return path.dirname(path.resolve(c));
-      if (fs.existsSync(c) && fs.statSync(c).isDirectory()) {
-        if (fs.readdirSync(c).some((f) => f.endsWith(".uproject"))) return path.resolve(c);
-      }
-    } catch {
-      // ignore and try the next candidate
-    }
-  }
-  return null;
+  const uproject = (projectArg && findUProject(projectArg)) || findUProject(process.cwd());
+  return uproject ? path.dirname(uproject) : null;
 }
 
 function loadYaml(configPath: string): Record<string, unknown> {

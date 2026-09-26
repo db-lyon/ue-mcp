@@ -47,6 +47,7 @@ import {
   ok,
   warn,
 } from "./ui/ansi.js";
+import { isUProjectPath, projectDirOf } from "./uproject-path.js";
 
 function printHelp(): void {
   console.log("");
@@ -139,17 +140,14 @@ function setEditorFilter(projectPath?: string): void {
     editorFilter = null;
     return;
   }
-  editorFilter = projectPath.toLowerCase().endsWith(".uproject")
+  editorFilter = isUProjectPath(projectPath)
     ? path.basename(projectPath, path.extname(projectPath))
     : path.basename(projectPath.replace(/[\/]+$/, ""));
 }
 
 /** The project root a --editor value resolved to, for per-project preferences. */
 function projectRootOf(projectPath?: string): string | null {
-  if (!projectPath) return null;
-  return projectPath.toLowerCase().endsWith(".uproject")
-    ? path.dirname(path.resolve(projectPath))
-    : path.resolve(projectPath);
+  return projectPath ? projectDirOf(projectPath) : null;
 }
 
 /** The deferred entries in scope: all of them, or one editor's. */

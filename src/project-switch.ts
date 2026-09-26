@@ -22,7 +22,8 @@
  */
 import * as path from "node:path";
 import type { BridgeTarget, IBridge } from "./bridge.js";
-import { ProjectContext, readUeMcpConfig, resolveUProjectPath } from "./project.js";
+import { ProjectContext, readUeMcpConfig } from "./project.js";
+import { resolveUProjectPath } from "./uproject-path.js";
 import { debug, info } from "./log.js";
 
 export interface ProjectSwitchResult {

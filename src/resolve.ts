@@ -10,6 +10,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { projectDirOf } from "./uproject-path.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -53,9 +54,7 @@ async function resolve() {
     return;
   }
   if (target.projectPath) {
-    const dir = target.projectPath.toLowerCase().endsWith(".uproject")
-      ? path.dirname(target.projectPath)
-      : target.projectPath;
+    const dir = projectDirOf(target.projectPath);
     try {
       process.chdir(dir);
       ok(`Working in ${dir}`);

@@ -18,6 +18,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isUProjectPath, projectDirOf } from "./uproject-path.js";
 
 /** The fields of a hook payload this cares about. Everything else passes through. */
 export interface HookPayload {
@@ -93,9 +94,8 @@ async function defaultResolveEditor(name: string): Promise<string> {
 
 /** The project directory for a .uproject path, a directory, or null. */
 function directoryOf(target: string): string | null {
-  const resolved = path.resolve(target);
-  if (resolved.toLowerCase().endsWith(".uproject")) return path.dirname(resolved);
-  return isDirectory(resolved) ? resolved : null;
+  const dir = projectDirOf(target);
+  return isUProjectPath(target) || isDirectory(dir) ? dir : null;
 }
 
 function isDirectory(target: string): boolean {

@@ -60,6 +60,7 @@ import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-fl
 import { packageVersion } from "./package-root.js";
 import { ProjectContext } from "./project.js";
 import { registryBase } from "./registry-catalog.js";
+import { findUProject, projectDirOf } from "./uproject-path.js";
 
 // --editor names one of the editors this server drives; every project lookup
 // below starts from it instead of cwd. Taken before the subcommand is shifted
@@ -94,7 +95,7 @@ function projectStartDir(): string {
   if (parsedEditor.editor === undefined) return process.cwd();
   try {
     const projectPath = resolveEditorFlag(parsedEditor.editor);
-    return projectPath.toLowerCase().endsWith(".uproject") ? path.dirname(projectPath) : projectPath;
+    return projectDirOf(projectPath);
   } catch (e) {
     fail(e instanceof EditorFlagError ? e.message : String(e));
   }
@@ -107,7 +108,7 @@ function findProjectDir(startDir: string): ProjectInfo {
     if (fs.existsSync(path.join(dir, "ue-mcp.yml"))) {
       return { projectDir: dir, configPath: path.join(dir, "ue-mcp.yml") };
     }
-    if (fs.existsSync(path.join(dir, "package.json")) && fs.readdirSync(dir).some((f) => f.endsWith(".uproject"))) {
+    if (fs.existsSync(path.join(dir, "package.json")) && findUProject(dir)) {
       return { projectDir: dir, configPath: path.join(dir, "ue-mcp.yml") };
     }
     if (dir === root) break;

@@ -15,6 +15,7 @@ import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { isNewer } from "./version-check.js";
 import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
 import { packageVersion } from "./package-root.js";
+import { findUProject, isUProjectPath, projectDirOf } from "./uproject-path.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -177,12 +178,6 @@ function tokenizeArgs(rest: string): string[] {
   return out.map((t) => t.trim()).filter((t) => t !== "");
 }
 
-/** The directory that owns a project arg (a .uproject file or its containing dir). */
-function projectDirOf(projectArg: string | null): string | null {
-  if (!projectArg) return null;
-  const resolved = path.resolve(projectArg);
-  return resolved.toLowerCase().endsWith(".uproject") ? path.dirname(resolved) : resolved;
-}
 
 /** Best-effort scan of running node processes for a ue-mcp server. */
 function findRunningServers(): Array<{ pid: number; version: string | null; script: string; project: string | null; projects: string[] }> {
@@ -220,21 +215,10 @@ function findRunningServers(): Array<{ pid: number; version: string | null; scri
   return out;
 }
 
+/** A named .uproject that exists, else the nearest one at or up to three levels above cwd. */
 function findUproject(projectArg: string | undefined, cwd: string): string | null {
-  if (projectArg && projectArg.endsWith(".uproject") && fs.existsSync(projectArg)) {
-    return path.resolve(projectArg);
-  }
-  let dir = path.resolve(cwd);
-  for (let i = 0; i < 4; i++) {
-    try {
-      const found = fs.readdirSync(dir).find((f) => f.endsWith(".uproject"));
-      if (found) return path.join(dir, found);
-    } catch { /* ignore */ }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
+  const named = projectArg && isUProjectPath(projectArg) ? findUProject(projectArg) : null;
+  return named ?? findUProject(cwd, { walkUp: 3 });
 }
 
 function bridgePluginVersion(projectArg: string | undefined, cwd: string): { version: string | null; project: string } | null {
@@ -287,7 +271,7 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
   const global = npmGlobal();
   const shadow = findLocalShadow(cwd);
   const uproject = findUproject(projectArg, cwd);
-  const targetProjectDir = projectDirOf(uproject);
+  const targetProjectDir = uproject ? projectDirOf(uproject) : null;
   const servers = findRunningServers().map((s) => {
     // A server serves the target when ANY of its projects is the target: a
     // multi-editor server driving the project doctor was asked about is
@@ -296,8 +280,7 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
     const servesTarget = !!(
       targetProjectDir &&
       candidates.some((p) => {
-        const dir = projectDirOf(p);
-        return dir !== null && dir.toLowerCase() === targetProjectDir.toLowerCase();
+        return p !== null && projectDirOf(p).toLowerCase() === targetProjectDir.toLowerCase();
       })
     );
     return { ...s, servesTarget };
