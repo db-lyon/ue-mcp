@@ -7,20 +7,16 @@ import { z } from "zod";
  * implementation in `plugin/ue_mcp_bridge/.../Public/HandlerPagination.h`,
  * which owns the cursor format and the rules for what happens when the
  * collection changes between pages. This module is the half that lives on this
- * side of the bridge: it declares `cursor` and `limit` identically for every
- * category that pages, and keeps each action's documentation in step with that
- * declaration.
+ * side of the bridge: the shared `cursor` declaration, and `paged()`, which
+ * keeps each paged action's documentation in step with it.
  *
- * ── Why the declaration is not optional ──
+ * ── The rule ──
  *
- * A category's zod shape is ONE FLAT BAG shared by every action in it, and the
- * MCP layer strips keys the shape does not declare. A parameter an action
- * documents, or forwards in its own `mapParams`, but which the category never
- * declares does not fail: it arrives at the handler as `undefined` and the call
- * returns an ordinary success for a page that was never paged. So a category
- * whose handlers accept `cursor` and `limit` MUST spread `PAGINATION_SCHEMA`
- * into its shape. `tests/unit/action-schema.test.ts` fails on the drift, which
- * is the backstop rather than the plan.
+ * A category whose handlers page declares `cursor` (CURSOR_PARAM) in its shape,
+ * because the MCP layer strips an undeclared key and the call then succeeds on
+ * a page that was never paged. `limit` is the category's own; `categoryTool`
+ * bounds any optional numeric `limit` to at least one row.
+ * `tests/unit/action-schema.test.ts` fails on documentation drift.
  *
  * ── The cursor is opaque ──
  *
