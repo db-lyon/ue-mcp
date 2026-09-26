@@ -420,12 +420,7 @@ export async function dispatchFlowCall(
       typeof target === "string" && target.trim() !== "",
       deps.loads.dispatchUnion.tools,
     );
-    if (untargeted) {
-      return {
-        content: withUpgradeNotice([{ type: "text" as const, text: `Error: ${untargeted}` }]),
-        isError: true,
-      };
-    }
+    if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
 
     // Steps are refused individually at the guarded bridge. This covers a run
     // STARTED while a modal is up, and flow(list)/flow(plan), which never
@@ -441,6 +436,7 @@ export async function dispatchFlowCall(
     return { content: withUpgradeNotice([{ type: "text" as const, text }, ...attribution(sessions, session)]) };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { content: withUpgradeNotice([{ type: "text" as const, text: `Error: ${msg}` }]), isError: true };
+    const code = e instanceof McpError ? e.code : "UNKNOWN";
+    return errorResult(code, msg, machineErrorBlock(e));
   }
 }
