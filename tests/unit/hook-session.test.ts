@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { hookProjectDir, feedbackDisabledForDir } from "../../src/hook-session.js";
+import { hookProjectDir, feedbackDisabledForDir } from "../../src/integrations/claude-code/hook-session.js";
 
 let root: string;
 

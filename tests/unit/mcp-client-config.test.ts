@@ -9,7 +9,7 @@ import {
   writeMcpConfig,
   writeCodexMcpConfig,
   writeJsonMcpConfig,
-} from "../../src/mcp-client-config.js";
+} from "../../src/integrations/claude-code/mcp-client-config.js";
 import { findBareNpxConfigs } from "../../src/doctor.js";
 
 let tmpRoot: string;

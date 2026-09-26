@@ -9,7 +9,7 @@
  * agent needs a nudge (e.g. after execute_python workarounds).
  */
 
-import { hookProjectDir, feedbackDisabledForDir, type HookPayload } from "./hook-session.js";
+import { hookProjectDir, feedbackDisabledForDir, type HookPayload } from "./integrations/claude-code/hook-session.js";
 
 interface HookInput extends HookPayload {
   tool_output?: string;

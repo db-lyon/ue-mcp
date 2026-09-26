@@ -6,7 +6,7 @@ import {
   installClaudeHooks,
   uninstallClaudeHooks,
   uninstallAllRegisteredHooks,
-} from "../../src/hook-installer.js";
+} from "../../src/integrations/claude-code/hook-installer.js";
 import { getInstalledHooks } from "../../src/config/user-state.js";
 
 let tmpRoot: string;

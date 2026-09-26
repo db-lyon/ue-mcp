@@ -8,7 +8,7 @@ import * as path from "node:path";
 import { collectDoctor, formatDoctor } from "./doctor.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { editorOwnsProject, listEditorProcesses } from "./engine-observer.js";
-import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
+import { UE_MCP_LAUNCH } from "./integrations/claude-code/mcp-client-config.js";
 import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "./version-check.js";
 import { packageModulePath, packageRoot, packageVersion } from "./core/package-root.js";
 import { findUProject, isUProjectPath } from "./config/uproject-path.js";

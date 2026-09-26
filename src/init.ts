@@ -19,10 +19,10 @@ import {
 import { warn as logWarn } from "./core/log.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
-import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
+import { installClaudeHooks, uninstallClaudeHooks } from "./integrations/claude-code/hook-installer.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import { getInstalledHooks } from "./config/user-state.js";
-import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs, writeMcpConfig } from "./mcp-client-config.js";
+import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs, writeMcpConfig } from "./integrations/claude-code/mcp-client-config.js";
 import { deriveProjectPort } from "./bridge/port.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "./config/uproject-path.js";
