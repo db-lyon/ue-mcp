@@ -6,7 +6,7 @@ import {
   isGroupEnabled,
   runtimeConfigFor,
   partitionFlowsByGroup,
-} from "../../src/plugin/plugin-groups.js";
+} from "../../src/extensions/plugin-groups.js";
 
 describe("pluginSlug", () => {
   it("strips the conventional ue-mcp- prefix", () => {

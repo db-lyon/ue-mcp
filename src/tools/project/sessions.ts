@@ -5,7 +5,7 @@ import { deploy, deploySummary, attach, attachSummary } from "../../deployer.js"
 import { collapsingEnvWarnings } from "../../config/session-env.js";
 import { startEditor, isBridgeReachable, connectedEditorOf } from "../../editor-control.js";
 import { detectProjectHolders } from "../../project-holders.js";
-import { readDeployedBridgeApiVersion } from "../../plugin/bridge-api.js";
+import { readDeployedBridgeApiVersion } from "../../extensions/bridge-api.js";
 import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../../bridge/bridge.js";
 import { readLogState, readEngineSnapshot } from "../../engine-observer.js";
 import { switchProject, isTargetDiverged } from "../../project-switch.js";

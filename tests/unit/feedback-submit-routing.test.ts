@@ -5,7 +5,7 @@ import * as path from "node:path";
 import type { ToolContext, ElicitFn, ElicitResult, PluginInfo } from "../../src/core/types.js";
 import { isDirectiveResponse } from "../../src/core/directive.js";
 import { clearWorkarounds } from "../../src/workaround-tracker.js";
-import type { RegistryPlugin } from "../../src/registry-catalog.js";
+import type { RegistryPlugin } from "../../src/extensions/registry-catalog.js";
 
 /**
  * feedback(submit) with plugin routing live: the same approval gate, but the
@@ -29,8 +29,8 @@ const CATALOG: RegistryPlugin[] = [
   },
 ];
 
-vi.mock("../../src/registry-catalog.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/registry-catalog.js")>();
+vi.mock("../../src/extensions/registry-catalog.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/extensions/registry-catalog.js")>();
   return { ...actual, fetchRegistryCatalog: async () => CATALOG };
 });
 

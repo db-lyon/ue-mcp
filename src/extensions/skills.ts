@@ -14,11 +14,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
-import { nearestActions } from "./action-schema.js";
-import { readPluginsList } from "./plugin/plugins-list.js";
-import { findInstalledPackage } from "./plugin/resolver.js";
-import { pluginSlug } from "./plugin/plugin-groups.js";
-import { packageRoot } from "./core/package-root.js";
+import { nearestActions } from "../action-schema.js";
+import { readPluginsList } from "./plugins-list.js";
+import { findInstalledPackage } from "./resolver.js";
+import { pluginSlug } from "./plugin-groups.js";
+import { packageRoot } from "../core/package-root.js";
 
 /** The owner name recorded for the skills that ship with ue-mcp itself. */
 export const CORE_OWNER = "ue-mcp";

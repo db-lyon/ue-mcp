@@ -19,8 +19,8 @@ import { assertNoLegacyGuardTasks, buildGuards } from "./flow/guards.js";
 import { createLiveGuardSource } from "./flow/guard-config.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import type { FlowConfig, PluginEntry } from "./flow/schema.js";
-import { loadPlugins, type PluginRecord } from "./plugin/loader.js";
-import { readPluginsList } from "./plugin/plugins-list.js";
+import { loadPlugins, type PluginRecord } from "./extensions/loader.js";
+import { readPluginsList } from "./extensions/plugins-list.js";
 
 /**
  * Everything one editor session needs to serve a call: its own tool graph,

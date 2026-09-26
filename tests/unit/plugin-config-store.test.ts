@@ -8,7 +8,7 @@ import {
   readLayerGroups,
   readEffectiveGroups,
   writeLayerGroups,
-} from "../../src/plugin/plugin-config-store.js";
+} from "../../src/extensions/plugin-config-store.js";
 
 let projectDir: string;
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { distTag, isPrerelease } from "../../scripts/release-version.mjs";
 import { distTagForVersion, isPrereleaseVersion } from "../../src/version-check.js";
 import { compareVersions as pipelineCompare } from "../../scripts/compose-release-notes.mjs";
-import { compareVersions } from "../../src/plugin/version.js";
+import { compareVersions } from "../../src/extensions/version.js";
 
 /**
  * The channel rule exists twice on purpose: the publish job runs before tsc has

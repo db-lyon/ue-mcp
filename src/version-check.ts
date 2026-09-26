@@ -15,7 +15,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { warn, debug } from "./core/log.js";
 import { userDir } from "./core/user-dir.js";
-import { compareVersions, parseVersion } from "./plugin/version.js";
+import { compareVersions, parseVersion } from "./extensions/version.js";
 import { readEnv } from "./core/env.js";
 
 /**

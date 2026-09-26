@@ -11,7 +11,7 @@ import {
   findByConfirmToken,
   MaxIssueUrlChars,
 } from "../../src/feedback/feedback-fallback.js";
-import { CORE_REPO } from "../../src/registry-catalog.js";
+import { CORE_REPO } from "../../src/extensions/registry-catalog.js";
 import { listDeferred } from "../../src/feedback/feedback-deferred.js";
 
 const mockSubmitFeedback = vi.fn();

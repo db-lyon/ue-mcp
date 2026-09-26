@@ -7,7 +7,7 @@ import {
   repoSlug,
   sameRepo,
   type GitHubRepo,
-} from "../registry-catalog.js";
+} from "../extensions/registry-catalog.js";
 
 /**
  * Hosted signing endpoints for the anonymous bot path, in the order they are

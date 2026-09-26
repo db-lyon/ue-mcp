@@ -17,7 +17,7 @@
 import type { ToolDef, ActionSpec } from "./core/types.js";
 import { actionEnum, cloneToolDef, cloneToolGraph } from "./category-tool.js";
 import type { EditorSession } from "./session.js";
-import type { PluginRecord } from "./plugin/loader.js";
+import type { PluginRecord } from "./extensions/loader.js";
 
 /** One editor's fully-built surface. */
 export interface SessionSurface {

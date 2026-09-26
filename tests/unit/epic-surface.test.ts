@@ -6,7 +6,7 @@ import type { ToolDef } from "../../src/core/types.js";
 import { actionEnumValues, bp, categoryTool, cloneToolGraph } from "../../src/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { unionSurface, type SessionSurface } from "../../src/session-surface.js";
-import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/plugin/injection.js";
+import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/extensions/injection.js";
 
 function mixedTool(): ToolDef {
   return categoryTool(

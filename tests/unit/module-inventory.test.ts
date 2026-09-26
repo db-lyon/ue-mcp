@@ -81,7 +81,7 @@ const PER_SESSION: Record<string, string> = {
   "plugin-cli.ts": "Installs and inspects plugins for one project, chosen with --editor.",
   "feedback-cli.ts": "Scopes the deferred queue and the feedback mode with --editor.",
   "dialog-cli.ts": "Scopes the dialog handling mode with --editor, one editor at a time.",
-  "skills.ts": "Installs, removes and checks agent skills inside one project directory, recording which package owns each.",
+  "extensions/skills.ts": "Installs, removes and checks agent skills inside one project directory, recording which package owns each.",
 
   "flow/context.ts": "Carries the session a flow step runs in.",
   "flow/flow-tool.ts": "Resolves the registry and config of the addressed editor.",
@@ -98,11 +98,11 @@ const PER_SESSION: Record<string, string> = {
   "flow/git-snapshot.ts": "Snapshots the repository holding one project, through its bridge.",
   "flow/http-server.ts": "Resolves an editor per request and refuses an untargeted run.",
 
-  "plugin/loader.ts": "Loads each project's plugins into that session's graph.",
-  "plugin/resolver.ts": "Resolves packages from one project's node_modules.",
-  "plugin/native-deploy.ts": "Deploys a native module into one project.",
-  "plugin/plugin-config-store.ts": "Reads and writes one project's config layers.",
-  "plugin/bridge-api.ts": "Reads the bridge ABI version deployed in one project.",
+  "extensions/loader.ts": "Loads each project's plugins into that session's graph.",
+  "extensions/resolver.ts": "Resolves packages from one project's node_modules.",
+  "extensions/native-deploy.ts": "Deploys a native module into one project.",
+  "extensions/plugin-config-store.ts": "Reads and writes one project's config layers.",
+  "extensions/bridge-api.ts": "Reads the bridge ABI version deployed in one project.",
 };
 
 /** No editor concept, or one deliberate answer for the whole process. */
@@ -133,8 +133,8 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "feedback/github-auth.ts": "GitHub identity for feedback authorship: per user, not per project.",
   "auth-cli.ts": "Runs that per-user device flow.",
   "login-cli.ts": "Registry login, per user.",
-  "registry-auth.ts": "The plugin registry token, per user.",
-  "registry-catalog.ts": "The plugin registry itself, which no project owns.",
+  "extensions/registry-auth.ts": "The plugin registry token, per user.",
+  "extensions/registry-catalog.ts": "The plugin registry itself, which no project owns.",
   "feedback/github-app.ts": "Posts to the ue-mcp tracker, never to the user's project.",
   "feedback/secret-scrub.ts": "Pure redaction with no context to scope.",
   "client-quirks.ts": "About the connected MCP client, not about any editor.",
@@ -148,7 +148,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "core/env.ts": "Names and reads the process environment; one answer for the whole process.",
   "cli-main.ts": "The command entry contract and the helpers that run one; no editor involved.",
   "cli-commands.ts": "The table of commands and the dispatcher over it; each command picks its own editor.",
-  "plugin-scaffold.ts": "Writes a new plugin's files into the directory it is handed; no editor involved.",
+  "extensions/plugin-scaffold.ts": "Writes a new plugin's files into the directory it is handed; no editor involved.",
   "task.ts": "The public task-authoring surface, which is types.",
   "tools.ts": "The pristine tool declaration; per-session graphs are clones of it, built in session-surface.",
   "tool-search.ts": "Searches the graph it is handed.",
@@ -169,12 +169,12 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "flow/handler-outcome.ts": "Pure reading of a handler's own verdict off the body it answered with.",
   "flow/write-methods.ts": "Pure classification of a bridge call against the recorded handler specs.",
 
-  "plugin/manifest.ts": "Parses and validates a plugin manifest file.",
-  "plugin/injection.ts": "Builds an injection plan from a manifest.",
-  "plugin/provision.ts": "Builds a provided category from a manifest.",
-  "plugin/plugin-groups.ts": "Pure group logic over the config it is handed.",
-  "plugin/version.ts": "Semver precedence for the minServerVersion gate and the npm upgrade check.",
-  "plugin/plugins-list.ts": "Pure read of the plugins: list from the config file it is handed.",
+  "extensions/manifest.ts": "Parses and validates a plugin manifest file.",
+  "extensions/injection.ts": "Builds an injection plan from a manifest.",
+  "extensions/provision.ts": "Builds a provided category from a manifest.",
+  "extensions/plugin-groups.ts": "Pure group logic over the config it is handed.",
+  "extensions/version.ts": "Semver precedence for the minServerVersion gate and the npm upgrade check.",
+  "extensions/plugins-list.ts": "Pure read of the plugins: list from the config file it is handed.",
   "flow/flow-surface.ts": "Shared declaration of the flow tool's actions and their effects.",
 };
 

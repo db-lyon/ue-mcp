@@ -20,9 +20,9 @@ import {
   startDeviceFlow,
   pollDeviceFlow,
   type UserAuth,
-} from "./feedback/github-auth.js";
+} from "../feedback/github-auth.js";
 import { registryBase } from "./registry-catalog.js";
-import { readEnv } from "./core/env.js";
+import { readEnv } from "../core/env.js";
 
 const registryFile = () => join(authDir(), "registry.json");
 

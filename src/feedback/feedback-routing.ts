@@ -10,7 +10,7 @@ import {
   sameRepo,
   type GitHubRepo,
   type RegistryPlugin,
-} from "../registry-catalog.js";
+} from "../extensions/registry-catalog.js";
 
 /**
  * Decide which tracker a feedback report belongs in.

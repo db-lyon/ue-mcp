@@ -15,7 +15,7 @@ import {
   removeCoreSkills,
   conflictMessages,
   syncPluginSkills,
-} from "./skills.js";
+} from "./extensions/skills.js";
 import { warn as logWarn } from "./core/log.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";

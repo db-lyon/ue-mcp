@@ -29,7 +29,7 @@ import {
   setFrontmatterName,
   skillNamespace,
   syncPluginSkills,
-} from "../../src/skills.js";
+} from "../../src/extensions/skills.js";
 
 let tmp: string;
 let projectDir: string;

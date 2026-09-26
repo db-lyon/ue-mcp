@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import type { ToolDef } from "../../src/core/types.js";
 import { actionEnumValues, categoryTool, bp } from "../../src/category-tool.js";
-import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/plugin/injection.js";
-import { looksLikeBaseTask, nativeHandlerSurface } from "../../src/plugin/loader.js";
-import { PluginManifestSchema } from "../../src/plugin/manifest.js";
+import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/extensions/injection.js";
+import { looksLikeBaseTask, nativeHandlerSurface } from "../../src/extensions/loader.js";
+import { PluginManifestSchema } from "../../src/extensions/manifest.js";
 
 function fakePcg(): ToolDef {
   return categoryTool(

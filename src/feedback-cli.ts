@@ -27,7 +27,7 @@ import {
   parseRepoSlug,
   repoSlug,
   type GitHubRepo,
-} from "./registry-catalog.js";
+} from "./extensions/registry-catalog.js";
 import {
   getFeedbackMode,
   setFeedbackMode,

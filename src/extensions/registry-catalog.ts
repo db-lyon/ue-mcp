@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { debug, warn } from "./core/log.js";
-import { userDir } from "./core/user-dir.js";
-import { readEnv } from "./core/env.js";
+import { debug, warn } from "../core/log.js";
+import { userDir } from "../core/user-dir.js";
+import { readEnv } from "../core/env.js";
 
 /**
  * Read-only client for the ue-mcp plugin registry (plugins.ue-mcp.com).

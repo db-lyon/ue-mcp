@@ -3,8 +3,8 @@ import { z } from "zod";
 import type { IBridge } from "../../src/bridge/bridge.js";
 import type { ToolContext, ToolDef } from "../../src/core/types.js";
 import { bp, categoryTool } from "../../src/category-tool.js";
-import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/plugin/injection.js";
-import { buildProvidedTool } from "../../src/plugin/provision.js";
+import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/extensions/injection.js";
+import { buildProvidedTool } from "../../src/extensions/provision.js";
 import { ErrorCode } from "../../src/core/errors.js";
 
 function bridgeAnswering(answer: unknown): IBridge & { calls: Array<{ method: string; params?: Record<string, unknown> }> } {

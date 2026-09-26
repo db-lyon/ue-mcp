@@ -4,8 +4,8 @@ import {
   prefixedActionName,
   compileSchemaFields,
   parseManifest,
-} from "../../src/plugin/manifest.js";
-import { satisfiesMinimum, compareVersions } from "../../src/plugin/version.js";
+} from "../../src/extensions/manifest.js";
+import { satisfiesMinimum, compareVersions } from "../../src/extensions/version.js";
 
 describe("PluginManifestSchema", () => {
   it("accepts a minimal manifest", () => {

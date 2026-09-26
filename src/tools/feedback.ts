@@ -18,7 +18,7 @@ import { getFeedbackMode, type FeedbackMode } from "../config/user-state.js";
 import { clientAdvertisesElicitation } from "../dialog-mode.js";
 import { warn } from "../core/log.js";
 import { routeFeedback, type RoutingDecision } from "../feedback/feedback-routing.js";
-import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubRepo } from "../registry-catalog.js";
+import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubRepo } from "../extensions/registry-catalog.js";
 import { readEnv } from "../core/env.js";
 
 /**

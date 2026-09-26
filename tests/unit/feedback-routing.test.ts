@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { routeFeedback, clearCoreSurfaceCache } from "../../src/feedback/feedback-routing.js";
-import { parseGitHubRepo, parseRepoSlug, repoSlug, newIssueUrl } from "../../src/registry-catalog.js";
-import type { RegistryPlugin } from "../../src/registry-catalog.js";
+import { parseGitHubRepo, parseRepoSlug, repoSlug, newIssueUrl } from "../../src/extensions/registry-catalog.js";
+import type { RegistryPlugin } from "../../src/extensions/registry-catalog.js";
 import type { PluginInfo } from "../../src/core/types.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 

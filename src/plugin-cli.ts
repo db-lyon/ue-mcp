@@ -23,27 +23,27 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadManifest } from "./plugin/manifest.js";
-import { satisfiesMinimum } from "./plugin/version.js";
-import { findInstalledPackage } from "./plugin/resolver.js";
-import { pluginSlug, deriveGroups, isGroupEnabled } from "./plugin/plugin-groups.js";
+import { loadManifest } from "./extensions/manifest.js";
+import { satisfiesMinimum } from "./extensions/version.js";
+import { findInstalledPackage } from "./extensions/resolver.js";
+import { pluginSlug, deriveGroups, isGroupEnabled } from "./extensions/plugin-groups.js";
 import {
   targetFile,
   readEffectiveGroups,
   writeLayerGroups,
   type ConfigTarget,
-} from "./plugin/plugin-config-store.js";
+} from "./extensions/plugin-config-store.js";
 import { checkboxSelect, singleSelect } from "./ui/select.js";
-import { readDeployedBridgeApiVersion } from "./plugin/bridge-api.js";
+import { readDeployedBridgeApiVersion } from "./extensions/bridge-api.js";
 import {
   deployNativeModule,
   readNativeModulesState,
   undeployNativeModule,
   writeNativeModulesState,
-} from "./plugin/native-deploy.js";
+} from "./extensions/native-deploy.js";
 import { ALL_TOOLS } from "./tools.js";
-import { readPluginsList, type PluginEntry } from "./plugin/plugins-list.js";
-import { prefixedActionName } from "./plugin/manifest.js";
+import { readPluginsList, type PluginEntry } from "./extensions/plugins-list.js";
+import { prefixedActionName } from "./extensions/manifest.js";
 import { flowCategoryForCheck } from "./flow/flow-surface.js";
 import { buildMicroGateway } from "./micro-context.js";
 import {
@@ -54,13 +54,13 @@ import {
   listSkills,
   removeSkillSet,
   syncPluginSkills,
-} from "./skills.js";
-import { resolvePublishToken } from "./registry-auth.js";
+} from "./extensions/skills.js";
+import { resolvePublishToken } from "./extensions/registry-auth.js";
 import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
 import { packageVersion } from "./core/package-root.js";
-import { deriveDefaultPrefix, deriveUePluginName, writeScaffold } from "./plugin-scaffold.js";
+import { deriveDefaultPrefix, deriveUePluginName, writeScaffold } from "./extensions/plugin-scaffold.js";
 import { ProjectContext } from "./config/project.js";
-import { registryBase } from "./registry-catalog.js";
+import { registryBase } from "./extensions/registry-catalog.js";
 import { findUProject, projectDirOf } from "./config/uproject-path.js";
 
 const RESTART_NOTE =
