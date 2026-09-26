@@ -8,8 +8,6 @@
  * supposed to be called.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { FakeBridge } from "../fake-bridge.js";
 import { SessionRegistry, type EditorSession } from "../../src/session.js";
@@ -19,33 +17,19 @@ import {
   refuseUntargetedInRegistry,
   editorAttribution,
 } from "../../src/editor-gate.js";
-import type { ToolContext, ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/types.js";
 import { injectEditorTarget } from "../../src/target-params.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { editorTool } from "../../src/tools/editor.js";
 import { cloneToolDef } from "../../src/category-tool.js";
+import { ProjectFixture, sessionToolContext } from "../helpers/project-fixture.js";
 
-let root: string;
+let fixture: ProjectFixture;
 let alphaBridge: FakeBridge;
 let betaBridge: FakeBridge;
 let sessions: SessionRegistry;
 let alpha: EditorSession;
 let beta: EditorSession;
-
-function makeProject(name: string): string {
-  const dir = path.join(root, name);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, `${name}.uproject`),
-    JSON.stringify({ FileVersion: 3, EngineAssociation: "5.6" }),
-    "utf-8",
-  );
-  return path.join(dir, `${name}.uproject`);
-}
-
-function ctxFor(session: EditorSession): ToolContext {
-  return { bridge: session.guarded, project: session.project, session, sessions };
-}
 
 /** A targetable copy of a real category tool, as the server advertises it. */
 function targetable(tool: ToolDef): ToolDef {
@@ -68,7 +52,7 @@ async function dispatch(tool: ToolDef, params: Record<string, unknown>): Promise
     routed.targeted,
   );
   if (refusal) return { refused: refusal };
-  await tool.handler(ctxFor(routed.session), routed.params);
+  await tool.handler(sessionToolContext(sessions, routed.session), routed.params);
   return {
     ran: true,
     editor: routed.session.name,
@@ -80,9 +64,9 @@ async function dispatch(tool: ToolDef, params: Record<string, unknown>): Promise
 }
 
 beforeEach(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-gating-"));
-  const alphaProject = makeProject("Alpha");
-  const betaProject = makeProject("Beta");
+  fixture = new ProjectFixture("ue-mcp-gating-");
+  const alphaProject = fixture.makeProject("Alpha");
+  const betaProject = fixture.makeProject("Beta");
   alphaBridge = await FakeBridge.start({ projectDir: path.dirname(alphaProject) });
   betaBridge = await FakeBridge.start({ projectDir: path.dirname(betaProject) });
 
@@ -98,7 +82,7 @@ afterEach(async () => {
   beta.bridge.disconnect();
   await alphaBridge.stop();
   await betaBridge.stop();
-  fs.rmSync(root, { recursive: true, force: true });
+  fixture.cleanup();
 });
 
 describe("untargeted calls beyond one editor", () => {

@@ -13,24 +13,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { attach } from "../../src/deployer.js";
 import { ProjectContext } from "../../src/project.js";
+import { ProjectFixture } from "../helpers/project-fixture.js";
 
-let root: string;
-
-function makeProject(name: string): string {
-  const dir = path.join(root, name);
-  fs.mkdirSync(dir, { recursive: true });
-  const uproject = path.join(dir, `${name}.uproject`);
-  fs.writeFileSync(
-    uproject,
-    JSON.stringify({ FileVersion: 3, EngineAssociation: "5.6" }, null, 2),
-    "utf-8",
-  );
-  return uproject;
-}
+let fixture: ProjectFixture;
 
 /** Put a plugin descriptor where attach looks for the installed bridge. */
 function installBridge(uproject: string, version: string): void {
@@ -50,16 +38,16 @@ function contextFor(uproject: string): ProjectContext {
 }
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-attach-"));
+  fixture = new ProjectFixture("ue-mcp-attach-");
 });
 
 afterEach(() => {
-  fs.rmSync(root, { recursive: true, force: true });
+  fixture.cleanup();
 });
 
 describe("attach", () => {
   it("writes nothing into a project that has no bridge installed", () => {
-    const uproject = makeProject("NoBridge");
+    const uproject = fixture.makeProject("NoBridge");
     const before = fs.readFileSync(uproject, "utf-8");
 
     const result = attach(contextFor(uproject));
@@ -75,7 +63,7 @@ describe("attach", () => {
   });
 
   it("enables the plugins once the bridge is really there", () => {
-    const uproject = makeProject("WithBridge");
+    const uproject = fixture.makeProject("WithBridge");
     installBridge(uproject, "9.9.9");
 
     const result = attach(contextFor(uproject));
@@ -93,7 +81,7 @@ describe("attach", () => {
   });
 
   it("leaves an already-configured project byte-identical", () => {
-    const uproject = makeProject("Configured");
+    const uproject = fixture.makeProject("Configured");
     installBridge(uproject, "9.9.9");
     attach(contextFor(uproject));
     const before = fs.readFileSync(uproject, "utf-8");

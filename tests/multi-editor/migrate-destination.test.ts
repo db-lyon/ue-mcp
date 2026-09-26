@@ -6,13 +6,11 @@
  * side alone.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { FakeBridge } from "../fake-bridge.js";
 import { SessionRegistry, type EditorSession } from "../../src/session.js";
 import { assetTool } from "../../src/tools/asset.js";
-import type { ToolContext } from "../../src/types.js";
+
 import { cloneToolDef } from "../../src/category-tool.js";
 import {
   injectEditorTarget,
@@ -21,37 +19,25 @@ import {
   removeMigrateTarget,
 } from "../../src/target-params.js";
 import { MIGRATE_TARGET_PARAM } from "../../src/routing-params.js";
+import { ProjectFixture, sessionToolContext } from "../helpers/project-fixture.js";
 
 let root: string;
+let fixture: ProjectFixture;
 let alphaBridge: FakeBridge;
 let betaBridge: FakeBridge;
 let sessions: SessionRegistry;
 let alpha: EditorSession;
 let beta: EditorSession;
 
-function makeProject(name: string): string {
-  const dir = path.join(root, name);
-  fs.mkdirSync(path.join(dir, "Content"), { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, `${name}.uproject`),
-    JSON.stringify({ FileVersion: 3, EngineAssociation: "5.6" }),
-    "utf-8",
-  );
-  return path.join(dir, `${name}.uproject`);
-}
-
-function ctxFor(session: EditorSession): ToolContext {
-  return { bridge: session.guarded, project: session.project, session, sessions };
-}
-
 function run(params: Record<string, unknown>, from: EditorSession = alpha): Promise<unknown> {
-  return assetTool.handler(ctxFor(from), { action: "migrate", ...params });
+  return assetTool.handler(sessionToolContext(sessions, from), { action: "migrate", ...params });
 }
 
 beforeEach(async () => {
-  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-migrate-")));
-  const alphaProject = makeProject("Alpha");
-  const betaProject = makeProject("Beta");
+  fixture = new ProjectFixture("ue-mcp-migrate-", { realpath: true });
+  root = fixture.root;
+  const alphaProject = fixture.makeProject("Alpha", { content: true });
+  const betaProject = fixture.makeProject("Beta", { content: true });
   alphaBridge = await FakeBridge.start({ projectDir: path.dirname(alphaProject) });
   betaBridge = await FakeBridge.start({ projectDir: path.dirname(betaProject) });
 
@@ -67,7 +53,7 @@ afterEach(async () => {
   beta.bridge.disconnect();
   await alphaBridge.stop();
   await betaBridge.stop();
-  fs.rmSync(root, { recursive: true, force: true });
+  fixture.cleanup();
 });
 
 describe("asset(migrate) toEditor", () => {
