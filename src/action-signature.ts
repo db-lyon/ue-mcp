@@ -244,24 +244,27 @@ export interface SignatureOptions {
   maxLength?: number;
 }
 
-const cache = new WeakMap<ActionSpec, string>();
+const cache = new WeakMap<ActionSpec, Map<string, string>>();
 
 /**
  * The signature of one action: `name(param, param?, ...)`.
  *
- * Cached per action object, since describe and search render the same actions
- * over and over. A plugin or enrichment that replaces an action replaces the
+ * Cached per action object and the name it is registered under, since describe
+ * and search render the same actions over and over and one spec may be
+ * registered twice. A plugin or enrichment that replaces an action replaces the
  * object, so the cache cannot serve a stale signature.
  */
 export function actionSignature(tool: ToolDef, action: string, options: SignatureOptions = {}): string {
   const spec = tool.actions[action];
   if (!spec) return `${action}()`;
-  let full = cache.get(spec);
+  const slot = `${tool.name}.${action}`;
+  let full = cache.get(spec)?.get(slot);
   let items: SigItem[] | undefined;
   if (full === undefined) {
     items = signatureItems(tool, action, spec);
     full = `${action}(${items.map(renderItem).join(", ")})`;
-    cache.set(spec, full);
+    if (!cache.has(spec)) cache.set(spec, new Map());
+    cache.get(spec)!.set(slot, full);
   }
   const max = options.maxLength;
   if (max === undefined || full.length <= max) return full;
