@@ -81,7 +81,8 @@ async function main() {
   // Same wait the start_editor tool performs: hold here with a progress bar
   // until the editor is actually usable, rather than printing "launched!" over
   // a splash screen that has forty seconds of module loading left.
-  const { waitForEditorReady } = await import('../dist/editor/editor-control.js');
+  const { tsImport } = await import('tsx/esm/api');
+  const { waitForEditorReady } = await tsImport('../src/editor/editor-control.ts', import.meta.url);
   // The launch timestamp makes the wait ignore a port lockfile an earlier
   // session left behind, so readiness is judged on this editor's bridge.
   const result = await waitForEditorReady(projectFile, path.dirname(projectFile), 300, { launchedAtMs });
