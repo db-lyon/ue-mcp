@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { isDirectiveResponse, type ToolContext, type ElicitFn, type ElicitResult } from "../../src/types.js";
+import { type ToolContext, type ElicitFn, type ElicitResult } from "../../src/types.js";
+import { isDirectiveResponse } from "../../src/directive.js";
 import { clearWorkarounds } from "../../src/workaround-tracker.js";
 import {
   buildPrefilledIssueUrl,

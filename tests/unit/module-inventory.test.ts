@@ -135,6 +135,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "config-parser.ts": "Pure ini utility over whatever directory it is handed.",
   "cpp-parser.ts": "Pure header inspection over whatever file it is handed.",
   "errors.ts": "Shared error codes and the McpError shape.",
+  "directive.ts": "The directive envelope a handler wraps its result in. A leaf with no imports and no state.",
   "schemas.ts": "Shared schema declarations.",
   "types.ts": "Shared declarations. The session-aware helpers here take the session and hold nothing.",
   "task.ts": "The public task-authoring surface, which is types.",

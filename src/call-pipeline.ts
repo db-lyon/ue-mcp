@@ -37,6 +37,7 @@ import {
   type FieldSelection,
 } from "./field-select.js";
 import { mapTracked } from "./param-forwarding.js";
+import { isDirectiveResponse } from "./directive.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { choiceViolation, type ParamChoice, type ParamSpec } from "./handler-spec.js";
 
@@ -258,7 +259,7 @@ export function attachUnforwarded<T>(result: T, unforwarded: string[] | undefine
   if (result === null || typeof result !== "object" || Array.isArray(result)) return result;
   const record = result as Record<string, unknown>;
   if ("paramsNotForwarded" in record) return result;
-  if (record.__directive === true && "result" in record) {
+  if (isDirectiveResponse(record)) {
     return { ...record, result: attachUnforwarded(record.result, unforwarded) } as T;
   }
   return {
@@ -294,7 +295,7 @@ export function attachNotRead<T>(result: T, answered: unknown, pipeline?: Pick<C
   if (names.length === 0) return result;
   if (result === null || typeof result !== "object" || Array.isArray(result)) return result;
   const record = result as Record<string, unknown>;
-  if (record.__directive === true && "result" in record) {
+  if (isDirectiveResponse(record)) {
     return { ...record, result: attachNotRead(record.result, answered, pipeline) } as T;
   }
   return {

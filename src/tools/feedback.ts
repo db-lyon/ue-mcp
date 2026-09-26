@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { categoryTool, directive, type ToolDef, type ToolContext } from "../types.js";
+import { categoryTool, type ToolDef, type ToolContext } from "../types.js";
+import { directive } from "../directive.js";
 import { submitFeedback } from "../github-app.js";
 import { readUserAuth } from "../auth.js";
 import { getWorkarounds, clearWorkarounds, type WorkaroundScopeSource } from "../workaround-tracker.js";

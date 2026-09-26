@@ -1,3 +1,5 @@
+import { isDirectiveResponse } from "./directive.js";
+
 /**
  * Backslash repair on path parameters, with the repair reported back.
  *
@@ -114,10 +116,8 @@ export function attachPathRepairs<T>(result: T, repairs: PathRepair[]): T {
   if ("pathsRepaired" in record) return result;
 
   // A directive response is an envelope: the caller reads `.result`, so the
-  // repair belongs on the payload rather than beside the instruction. Checked
-  // structurally because types.ts imports this module, and importing the
-  // guard back from there would close a cycle.
-  if (record.__directive === true && "result" in record) {
+  // repair belongs on the payload rather than beside the instruction.
+  if (isDirectiveResponse(record)) {
     return { ...record, result: attachPathRepairs(record.result, repairs) } as T;
   }
 

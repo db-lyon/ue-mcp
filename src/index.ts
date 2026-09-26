@@ -17,8 +17,8 @@ import {
   editorAttribution,
   type RoutedCall,
 } from "./editor-gate.js";
+import { isDirectiveResponse } from "./directive.js";
 import {
-  isDirectiveResponse,
   injectEditorTarget,
   removeEditorTarget,
   injectMigrateTarget,
@@ -1007,9 +1007,9 @@ async function main() {
         // so clients that strip prose still see the intent, (3) the actual
         // tool result. Block 2 is tagged with MACHINE_DIRECTIVE and a stable
         // JSON envelope.
-        if (result.data?.__directive) {
+        if (isDirectiveResponse(result.data)) {
           const blocks: Array<{ type: "text"; text: string }> = [
-            { type: "text" as const, text: result.data.directive as string },
+            { type: "text" as const, text: result.data.directive },
           ];
           if (result.data.machine) {
             blocks.push({

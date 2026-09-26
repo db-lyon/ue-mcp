@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { categoryTool, bp, directive, type ToolDef, type ToolContext } from "../types.js";
+import { categoryTool, bp, type ToolDef, type ToolContext } from "../types.js";
+import { directive } from "../directive.js";
 import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, connectedEditorOf, clientAdvertisesElicitation, resolveDialogMode } from "../editor-control.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../engine-observer.js";
 import { progressRenderingNote } from "../client-quirks.js";
