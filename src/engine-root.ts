@@ -36,7 +36,8 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { findEngineInstall } from "./deployer.js";
+import { execSync } from "node:child_process";
+import { debug, warn } from "./log.js";
 import { readEngineRootFromLog } from "./engine-observer.js";
 
 /** Where a candidate engine came from. Printed verbatim in failures. */
@@ -111,6 +112,16 @@ const DEFAULT_HOOKS: EngineLookupHooks = {
   associationInstall: (association) => findEngineInstall(association),
   lastEngineRoot: (projectPath) => readEngineRootFromLog(projectPath),
 };
+
+/** Where the Epic launcher installs engines on Windows. */
+const WINDOWS_INSTALL_BASES = [
+  "C:/Program Files/Epic Games",
+  "D:/Program Files/Epic Games",
+  "E:/Program Files/Epic Games",
+  "C:/Epic Games",
+  "D:/Epic Games",
+  "E:/Epic Games",
+];
 
 /** Engine versions probed in the default install locations, newest first. */
 const DEFAULT_VERSIONS = ["5.8", "5.7", "5.6", "5.5", "5.4", "5.3"];
@@ -324,14 +335,7 @@ function defaultInstallRoots(
   const impl = pathImpl(platform);
   const bases =
     platform === "win32"
-      ? [
-          "C:/Program Files/Epic Games",
-          "D:/Program Files/Epic Games",
-          "E:/Program Files/Epic Games",
-          "C:/Epic Games",
-          "D:/Epic Games",
-          "E:/Epic Games",
-        ]
+      ? WINDOWS_INSTALL_BASES
       : platform === "darwin"
         ? ["/Users/Shared/Epic Games"]
         : ["/opt/UnrealEngine"];
@@ -569,4 +573,78 @@ export function trySelectEngine(lookup: EngineLookup = {}, need: EngineNeed = "b
  */
 export function resolveEngineRoot(lookup: EngineLookup = {}): string | null {
   return trySelectEngine(lookup, "engineRoot")?.engineRoot ?? null;
+}
+
+/**
+ * The engine a launcher association names: a source build's registry GUID,
+ * or a launcher version found in LauncherInstalled.dat or the default bases.
+ */
+function findEngineInstall(
+  engineAssociation: string | null,
+): string | null {
+  if (!engineAssociation) return null;
+  const normalizedAssociation = engineAssociation.replace(/^\{|\}$/g, "");
+
+  const guidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (guidRegex.test(normalizedAssociation)) {
+    return findEngineByGuid(normalizedAssociation);
+  }
+
+  return findLauncherEngine(normalizedAssociation);
+}
+
+function findEngineByGuid(guid: string): string | null {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+    debug("engine-root", `refusing registry lookup for non-GUID engine association '${guid}'`);
+    return null;
+  }
+  try {
+    const output = execSync(
+      `reg query "HKCU\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds" /v "${guid}"`,
+      { stdio: "pipe", encoding: "utf-8" },
+    );
+    const match = output.match(/REG_SZ\s+(.+)/);
+    if (match) {
+      const p = match[1].trim();
+      if (fs.existsSync(p)) return p;
+    }
+  } catch (e) {
+    debug("engine-root", `no registry entry for GUID ${guid}`, e);
+  }
+  return null;
+}
+
+function findLauncherEngine(association: string): string | null {
+  const launcherDat = path.join(
+    process.env.PROGRAMDATA || "C:\\ProgramData",
+    "Epic",
+    "UnrealEngineLauncher",
+    "LauncherInstalled.dat",
+  );
+
+  if (fs.existsSync(launcherDat)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(launcherDat, "utf-8"));
+      for (const entry of data.InstallationList ?? []) {
+        if (
+          entry.AppName?.toLowerCase() ===
+          `ue_${association}`.toLowerCase()
+        ) {
+          if (fs.existsSync(entry.InstallLocation)) {
+            return entry.InstallLocation;
+          }
+        }
+      }
+    } catch (e) {
+      warn("engine-root", `LauncherInstalled.dat at ${launcherDat} could not be parsed - falling back to drive-letter scan`, e);
+    }
+  }
+
+  for (const root of WINDOWS_INSTALL_BASES) {
+    const candidate = path.join(root, `UE_${association}`);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  return null;
 }

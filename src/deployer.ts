@@ -1,8 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execSync } from "node:child_process";
 import type { ProjectContext } from "./project.js";
-import { debug, warn } from "./log.js";
+import { warn } from "./log.js";
 import { UPluginSchema } from "./schemas.js";
 import { packageRoot } from "./package-root.js";
 
@@ -387,83 +386,4 @@ function ensureCppPluginEnabled(uprojectPath: string): boolean {
   });
   fs.writeFileSync(uprojectPath, JSON.stringify(root, null, "\t"));
   return true;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Engine discovery (used by editor-control)                         */
-/* ------------------------------------------------------------------ */
-
-export function findEngineInstall(
-  engineAssociation: string | null,
-): string | null {
-  if (!engineAssociation) return null;
-  const normalizedAssociation = engineAssociation.replace(/^\{|\}$/g, "");
-
-  const guidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (guidRegex.test(normalizedAssociation)) {
-    return findEngineByGuid(normalizedAssociation);
-  }
-
-  return findLauncherEngine(normalizedAssociation);
-}
-
-function findEngineByGuid(guid: string): string | null {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-    debug("deployer", `refusing registry lookup for non-GUID engine association '${guid}'`);
-    return null;
-  }
-  try {
-    const output = execSync(
-      `reg query "HKCU\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds" /v "${guid}"`,
-      { stdio: "pipe", encoding: "utf-8" },
-    );
-    const match = output.match(/REG_SZ\s+(.+)/);
-    if (match) {
-      const p = match[1].trim();
-      if (fs.existsSync(p)) return p;
-    }
-  } catch (e) {
-    debug("deployer", `no registry entry for GUID ${guid}`, e);
-  }
-  return null;
-}
-
-function findLauncherEngine(association: string): string | null {
-  const launcherDat = path.join(
-    process.env.PROGRAMDATA || "C:\\ProgramData",
-    "Epic",
-    "UnrealEngineLauncher",
-    "LauncherInstalled.dat",
-  );
-
-  if (fs.existsSync(launcherDat)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(launcherDat, "utf-8"));
-      for (const entry of data.InstallationList ?? []) {
-        if (
-          entry.AppName?.toLowerCase() ===
-          `ue_${association}`.toLowerCase()
-        ) {
-          if (fs.existsSync(entry.InstallLocation)) {
-            return entry.InstallLocation;
-          }
-        }
-      }
-    } catch (e) {
-      warn("deployer", `LauncherInstalled.dat at ${launcherDat} could not be parsed - falling back to drive-letter scan`, e);
-    }
-  }
-
-  for (const root of [
-    "C:\\Program Files\\Epic Games",
-    "D:\\Program Files\\Epic Games",
-    "C:\\Epic Games",
-    "D:\\Epic Games",
-  ]) {
-    const candidate = path.join(root, `UE_${association}`);
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
-  return null;
 }
