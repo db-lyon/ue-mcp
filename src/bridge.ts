@@ -57,7 +57,7 @@ export const PLUGIN_UPGRADE_POINTER =
  * An "Unknown method" for a method this server dispatched means the running
  * plugin lacks a handler the package advertises. Say so, with the fix (#1167).
  */
-export function describeUnregisteredMethod(method: string): string {
+function describeUnregisteredMethod(method: string): string {
   return `'${method}' is advertised by this ue-mcp package but not registered by the running plugin. ${PLUGIN_UPGRADE_POINTER}`;
 }
 

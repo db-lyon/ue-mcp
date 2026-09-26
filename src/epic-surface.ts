@@ -24,7 +24,7 @@
 import { actionEnum, type ToolDef } from "./types.js";
 
 /** Prefix every generated engine-tool action carries. */
-export const EPIC_ACTION_PREFIX = "epic_";
+const EPIC_ACTION_PREFIX = "epic_";
 
 /** The `epic` category's own actions, which are ue-mcp's and never removed. */
 const GATEWAY_ACTIONS = new Set(["status", "list_toolsets", "describe_toolset", "call_tool"]);

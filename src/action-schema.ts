@@ -962,7 +962,7 @@ export function nearestActions(ref: string, available: string[], limit = 5): str
 }
 
 /** How a project adds an action of its own, for a miss that is not a typo (#1105). */
-export const PROJECT_ACTIONS_HINT =
+const PROJECT_ACTIONS_HINT =
   "To add a project-side action, register it from a native-module plugin with UEMCP::RegisterExternalHandler"
   + " and list it in a handlers: manifest (docs/plugins-native-modules.md). Edits to the vendored bridge plugin"
   + " are overwritten on the next deploy.";

@@ -404,7 +404,7 @@ export function buildEngineIndex(
 
 /** Where indexes live: beside the user state, so every project on one engine
  *  shares one index rather than each paying the cold-scan cost. */
-export function indexCacheDir(): string {
+function indexCacheDir(): string {
   return path.join(path.dirname(getUserStatePath()), "engine-index");
 }
 
@@ -437,7 +437,7 @@ export function readCachedIndex(
 
 /** Persist an index. Best-effort: a cache that cannot be written is a slow
  *  next call, not a failed one. */
-export function writeCachedIndex(index: EngineIndex): string | null {
+function writeCachedIndex(index: EngineIndex): string | null {
   const file = indexCacheFile(index.engineRoot, index.trees);
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });

@@ -136,7 +136,7 @@ function storeFor(scope: string): Map<string, string> {
  * a different candidate set, and without this every earlier justification would
  * have to be typed again.
  */
-export function recordRulings(
+function recordRulings(
   ctx: WorkaroundScopeSource | undefined,
   rulings: Map<string, string>,
 ): Map<string, string> {

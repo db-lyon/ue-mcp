@@ -413,7 +413,7 @@ export function removeEditorTarget(tool: ToolDef): boolean {
 
 
 /** Does any of this tool's actions move content into a second editor? */
-export function hasDestinationEditorAction(tool: ToolDef): boolean {
+function hasDestinationEditorAction(tool: ToolDef): boolean {
   return Object.values(tool.actions).some((spec) => spec.destinationEditor === true);
 }
 
@@ -447,7 +447,7 @@ export function removeMigrateTarget(tool: ToolDef): boolean {
   return true;
 }
 
-export function migrateTargetSchema(sessionNames: string[]): z.ZodType {
+function migrateTargetSchema(sessionNames: string[]): z.ZodType {
   return z
     .string()
     .optional()

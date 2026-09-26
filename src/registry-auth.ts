@@ -48,7 +48,7 @@ export async function readRegistryAuth(): Promise<RegistryAuth | null> {
   }
 }
 
-export async function writeRegistryAuth(a: RegistryAuth): Promise<void> {
+async function writeRegistryAuth(a: RegistryAuth): Promise<void> {
   await fs.mkdir(authDir(), { recursive: true });
   await fs.writeFile(registryFile(), JSON.stringify(a, null, 2), { mode: 0o600 });
 }
