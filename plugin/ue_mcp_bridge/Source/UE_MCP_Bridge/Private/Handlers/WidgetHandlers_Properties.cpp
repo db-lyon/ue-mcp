@@ -430,7 +430,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetBinding(const TSharedPtr<FJso
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
 	// No action puts a designer binding back on THIS blueprint. One action does
@@ -1080,10 +1082,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 		{
 			return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 		}
-		UEditorAssetLibrary::SaveAsset(AssetPath);
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 		auto Result = MCPSuccess();
 		MCPSetUpdated(Result);
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		Result->SetStringField(TEXT("widgetName"), WidgetName);
 		Result->SetStringField(TEXT("propertyName"), PropertyName);
 		Result->SetStringField(TEXT("propertyValue"), PropertyValue);
@@ -1329,10 +1333,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetStyle(const TSharedPtr<FJsonObj
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
-	SaveAssetPackage(WidgetBP);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("widgetName"), WidgetName);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
@@ -1454,9 +1460,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
-	SaveAssetPackage(WidgetBP);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("applied"), Applied);
 	Result->SetNumberField(TEXT("failed"), Failed);
@@ -1518,10 +1526,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReorderChild(const TSharedPtr<FJsonObjec
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
-	SaveAssetPackage(WidgetBP);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("widgetName"), WidgetName);
 	Result->SetStringField(TEXT("parent"), Parent->GetName());

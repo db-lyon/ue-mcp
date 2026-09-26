@@ -192,8 +192,10 @@ static TSharedPtr<FJsonValue> WAnim_CommitBlueprint(
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BP, SaveError);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	return nullptr;
 }
 

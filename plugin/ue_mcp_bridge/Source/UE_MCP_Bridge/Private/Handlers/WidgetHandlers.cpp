@@ -761,10 +761,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<F
 	// leaving the first compile to report the missing one.
 	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::Sync(Created.Asset);
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("parentClass"), ParentClass->GetPathName());
@@ -858,10 +860,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 		GuidSync = MCPWidgetGuidMap::Sync(CreatedWidgetBP);
 	}
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
 	MCPSetWidgetGuidOutcome(Result, GuidSync, Created.Asset->GetPathName());
@@ -886,10 +890,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 	auto Created = MCPCreateAssetIdempotent<UObject>(AssetName, PackagePath, OnConflict, TEXT("EditorUtilityBlueprint"), EUBClass, nullptr);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
 	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
@@ -1269,10 +1275,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 		PersistedName = AddedWidget->GetName();
 	}
 
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("widgetName"), PersistedName);
 	// Both names, always: the requested one is what a caller retries with, the
 	// persisted one is what the asset actually holds (#799).
@@ -1352,13 +1360,15 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 		// this is the call an agent makes after the compiler complains about
 		// that name, so clear the dead metadata here too (#799).
 		const MCPWidgetGuidMap::FSyncReport PruneOnly = MCPWidgetGuidMap::Sync(WidgetBP);
+		bool bPruneSaved = true;
+		FString PruneSaveError;
 		if (PruneOnly.Pruned > 0 || PruneOnly.Added > 0)
 		{
-			WidgetBP->MarkPackageDirty();
-			UEditorAssetLibrary::SaveAsset(AssetPath);
+			bPruneSaved = SaveAssetPackageChecked(WidgetBP, PruneSaveError);
 		}
 
 		auto AlreadyResult = MCPSuccess();
+		MCPNoteSaveOutcome(AlreadyResult, AssetPath, bPruneSaved, PruneSaveError);
 		AlreadyResult->SetBoolField(TEXT("alreadyDeleted"), true);
 		AlreadyResult->SetStringField(TEXT("widgetName"), WidgetName);
 		AlreadyResult->SetStringField(TEXT("assetPath"), AssetPath);
@@ -1424,9 +1434,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	GuidSync.Evicted = Evicted;
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetBoolField(TEXT("deleted"), true);
 	Result->SetStringField(TEXT("widgetName"), WidgetName);
 	Result->SetStringField(TEXT("widgetClass"), RemovedClass);
@@ -1588,10 +1600,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("widgetName"), WidgetName);
 	Result->SetStringField(TEXT("oldParent"), OldParentName);
 	Result->SetStringField(TEXT("newParent"), NewParentName);
@@ -1686,10 +1700,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRoot(const TSharedPtr<FJsonObject>& P
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
 	GuidSync.Evicted = Evicted;
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("rootWidget"), WidgetName);
 	Result->SetStringField(TEXT("previousRoot"), PreviousRootName);
 	Result->SetNumberField(TEXT("evictedWidgets"), Evicted);
@@ -1819,7 +1835,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 	{
 		return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
 	}
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(WidgetBP, SaveError);
 
 	if (WrappedChild.IsValid())
 	{
@@ -1832,6 +1849,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("wrapperName"), WrapperName);
 	Result->SetStringField(TEXT("wrapperClass"), WrapperCls->GetName());
 	Result->SetStringField(TEXT("wrappedChild"), WrappedChildName);

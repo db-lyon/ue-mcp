@@ -540,13 +540,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ExtractWidgetSubtree(const TSharedPtr<FJ
 		return MCPError(TEXT("Destination WidgetBlueprint failed to compile; a newly created destination was removed"));
 	}
 
-	if (!UEditorAssetLibrary::SaveAsset(Destination->GetPathName(), false))
+	FString SaveError;
+	if (!SaveAssetPackageChecked(Destination, SaveError))
 	{
 		if (bCreatedDestination)
 		{
 			UEditorAssetLibrary::DeleteAsset(DestinationAssetPath);
 		}
-		return MCPError(TEXT("Destination WidgetBlueprint compiled but could not be saved"));
+		return MCPError(FString::Printf(TEXT("Destination WidgetBlueprint compiled but could not be saved: %s"), *SaveError));
 	}
 
 	if (bCreatedDestination)
