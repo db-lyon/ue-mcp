@@ -1567,7 +1567,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateCustomizableObject(const TSharedPtr
 		return GraphsJson.Num();
 	};
 
-	if (UObject* Existing = LoadObject<UObject>(nullptr, *ObjectPath))
+	if (UObject* Existing = MCPLoadAssetObject(ObjectPath))
 	{
 		if (!Existing->IsA(ObjectClass))
 		{

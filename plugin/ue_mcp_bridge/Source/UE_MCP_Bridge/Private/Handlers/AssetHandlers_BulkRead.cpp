@@ -290,7 +290,7 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 
 	for (const FString& AssetPath : CandidatePaths)
 	{
-		UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+		UObject* Asset = MCPLoadAssetObject(AssetPath);
 		if (!Asset)
 		{
 			if (UnloadableAssets.Num() < 50)

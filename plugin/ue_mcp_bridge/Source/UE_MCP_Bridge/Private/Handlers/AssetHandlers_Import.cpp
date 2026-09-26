@@ -155,18 +155,19 @@ namespace
 		SaveAssetPackage(Table);
 	}
 
-	TSharedPtr<FJsonValue> LoadCurveTable(const TSharedPtr<FJsonObject>& Params, UCurveTable*& OutTable, FString& OutAssetPath)
+	/** Resolve Params.assetPath the way asset(read) resolves any asset and
+	 *  require it to be a T. `path` is an alias the registry resolves to
+	 *  assetPath before dispatch (#1057). */
+	template <typename T>
+	TSharedPtr<FJsonValue> MCPImportLoadTypedAsset(
+		const TSharedPtr<FJsonObject>& Params, const TCHAR* TypeLabel, FString& OutAssetPath, T*& OutAsset)
 	{
-		// `path` is an alias the registry resolves to assetPath before dispatch (#1057).
 		if (auto Err = RequireString(Params, TEXT("assetPath"), OutAssetPath)) return Err;
 		TSharedPtr<FJsonValue> LoadError;
 		UObject* Asset = MCPRequireAssetObject(OutAssetPath, LoadError);
 		if (!Asset) return LoadError;
-		OutTable = Cast<UCurveTable>(Asset);
-		if (!OutTable)
-		{
-			return MCPAssetWrongTypeError(OutAssetPath, Asset, TEXT("CurveTable"));
-		}
+		OutAsset = Cast<T>(Asset);
+		if (!OutAsset) return MCPAssetWrongTypeError(OutAssetPath, Asset, TypeLabel);
 		return nullptr;
 	}
 
@@ -1454,7 +1455,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadCurveTable(const TSharedPtr<FJsonObje
 
 	FString AssetPath;
 	UCurveTable* Table = nullptr;
-	if (auto Err = LoadCurveTable(Params, Table, AssetPath)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("CurveTable"), AssetPath, Table)) return Err;
 
 	const ECurveTableMode Mode = Table->GetCurveTableMode();
 
@@ -1502,7 +1503,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportCurveTable(const TSharedPtr<FJsonOb
 
 	FString AssetPath;
 	UCurveTable* Table = nullptr;
-	if (auto Err = LoadCurveTable(Params, Table, AssetPath)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("CurveTable"), AssetPath, Table)) return Err;
 
 	FString Data;
 	if (bHasJsonData)
@@ -1608,7 +1609,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableRow(const TSharedPtr<FJsonOb
 
 	FString AssetPath;
 	UCurveTable* Table = nullptr;
-	if (auto Err = LoadCurveTable(Params, Table, AssetPath)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("CurveTable"), AssetPath, Table)) return Err;
 	if (MissingRowName) return MissingRowName;
 	// The spec types curveType as a string, so an unknown value is refused here
 	// rather than silently keeping the inferred curve type.
@@ -1700,7 +1701,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveCurveTableRow(const TSharedPtr<FJso
 	const TSharedPtr<FJsonValue> MissingRowName = RequireString(Params, TEXT("rowName"), RowName);
 	FString AssetPath;
 	UCurveTable* Table = nullptr;
-	if (auto Err = LoadCurveTable(Params, Table, AssetPath)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("CurveTable"), AssetPath, Table)) return Err;
 	if (MissingRowName) return MissingRowName;
 
 	const FName RowKey(*RowName);
@@ -1763,7 +1764,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameCurveTableRow(const TSharedPtr<FJso
 	const TSharedPtr<FJsonValue> MissingNewName = RequireString(Params, TEXT("newName"), NewName);
 	FString AssetPath;
 	UCurveTable* Table = nullptr;
-	if (auto Err = LoadCurveTable(Params, Table, AssetPath)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("CurveTable"), AssetPath, Table)) return Err;
 	if (MissingOldName) return MissingOldName;
 	if (MissingNewName) return MissingNewName;
 
@@ -1820,7 +1821,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetCurveTableKeys(const TSharedPtr<FJsonO
 	const TSharedPtr<FJsonValue> MissingRowName = RequireString(Params, TEXT("rowName"), RowName);
 	FString AssetPath;
 	UCurveTable* Table = nullptr;
-	if (auto Err = LoadCurveTable(Params, Table, AssetPath)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("CurveTable"), AssetPath, Table)) return Err;
 	if (MissingRowName) return MissingRowName;
 
 	FRealCurve* Curve = GetCurveTableRow(Table, RowName);
@@ -1849,7 +1850,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetCurveTableKeys(const TSharedPtr<FJsonO
 
 	FString AssetPath;
 	UCurveTable* Table = nullptr;
-	if (auto Err = LoadCurveTable(Params, Table, AssetPath)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("CurveTable"), AssetPath, Table)) return Err;
 	if (MissingRowName) return MissingRowName;
 
 	FRealCurve* Curve = GetCurveTableRow(Table, RowName);
@@ -1981,7 +1982,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableKey(const TSharedPtr<FJsonOb
 
 	FString AssetPath;
 	UCurveTable* Table = nullptr;
-	if (auto Err = LoadCurveTable(Params, Table, AssetPath)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("CurveTable"), AssetPath, Table)) return Err;
 	if (MissingRowName) return MissingRowName;
 
 	FRealCurve* Curve = GetCurveTableRow(Table, RowName);
@@ -2117,33 +2118,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObj
 
 namespace
 {
-	// #930: resolve the DataTable parameter the way asset(read) resolves any
-	// asset, so the type-specific actions succeed on every path form the
-	// generic reader already opens. Returns a ready-to-return error, or an
-	// unset pointer on success with OutAssetPath and OutTable filled in.
-	//
-	// The "not a DataTable" message names the class that was found, because
-	// the old wording was also what a caller saw when the path resolved to
-	// nothing at all.
-	TSharedPtr<FJsonValue> LoadDataTableParam(
-		const TSharedPtr<FJsonObject>& Params,
-		FString& OutAssetPath,
-		UDataTable*& OutTable)
-	{
-		// `path` is an alias the registry resolves to assetPath before dispatch (#1057).
-		if (auto Err = RequireString(Params, TEXT("assetPath"), OutAssetPath)) return Err;
-
-		TSharedPtr<FJsonValue> LoadError;
-		UObject* Asset = MCPRequireAssetObject(OutAssetPath, LoadError);
-		if (!Asset) return LoadError;
-		OutTable = Cast<UDataTable>(Asset);
-		if (!OutTable)
-		{
-			return MCPAssetWrongTypeError(OutAssetPath, Asset, TEXT("DataTable"));
-		}
-		return nullptr;
-	}
-
 	/** The inverse of a whole-table DataTable import, from the snapshot taken
 	 *  before it ran. Shared by the success and the failure path, because
 	 *  CreateTableFromJSONString empties the table before it reports errors. */
@@ -2193,7 +2167,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
-	if (auto Err = LoadDataTableParam(Params, AssetPath, DataTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
 
 	// Get the row struct for property iteration
 	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
@@ -2316,7 +2290,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
-	if (auto Err = LoadDataTableParam(Params, AssetPath, DataTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
 
 	// Get JSON string from either inline jsonString or from a file path
 	if (!bHasJsonString)
@@ -2397,7 +2371,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableRow(const TSharedPtr<FJsonObj
 
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
-	if (auto Err = LoadDataTableParam(Params, AssetPath, DataTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
 	if (MissingRowName) return MissingRowName;
 
 	if (!RowObj || !RowObj->IsValid())
@@ -2620,7 +2594,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRow(const TSharedPtr<FJson
 	const TSharedPtr<FJsonValue> MissingRowName = RequireString(Params, TEXT("rowName"), RowName);
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
-	if (auto Err = LoadDataTableParam(Params, AssetPath, DataTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
 	if (MissingRowName) return MissingRowName;
 
 	const FName RowKey(*RowName);
@@ -2687,7 +2661,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetDataTableRow(const TSharedPtr<FJsonObj
 	const TSharedPtr<FJsonValue> MissingRowName = RequireString(Params, TEXT("rowName"), RowName);
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
-	if (auto Err = LoadDataTableParam(Params, AssetPath, DataTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
 	if (MissingRowName) return MissingRowName;
 
 	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
@@ -2735,7 +2709,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableCell(const TSharedPtr<FJsonOb
 	// requires the row to exist for a cell edit (no accidental row creation).
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
-	if (auto Err = LoadDataTableParam(Params, AssetPath, DataTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
 	if (MissingRowName) return MissingRowName;
 	if (!DataTable->GetRowMap().Contains(FName(*RowName)))
 	{
@@ -2762,7 +2736,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameDataTableRow(const TSharedPtr<FJson
 	const TSharedPtr<FJsonValue> MissingNewName = RequireString(Params, TEXT("newName"), NewName);
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
-	if (auto Err = LoadDataTableParam(Params, AssetPath, DataTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
 	if (MissingOldName) return MissingOldName;
 	if (MissingNewName) return MissingNewName;
 
@@ -2832,7 +2806,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillDataTableFromJson(const TSharedPtr<FJ
 
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
-	if (auto Err = LoadDataTableParam(Params, AssetPath, DataTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
 
 	TSharedPtr<FJsonObject> ParsedRows;
 	if (!bHasRows)
@@ -2893,23 +2867,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillDataTableFromJson(const TSharedPtr<FJ
 
 namespace
 {
-	TSharedPtr<FJsonValue> LoadStringTableAsset(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, UStringTable*& OutStringTable)
-	{
-		// `path` is an alias the registry resolves to assetPath before dispatch (#1057).
-		if (auto Err = RequireString(Params, TEXT("assetPath"), OutAssetPath)) return Err;
-
-		TSharedPtr<FJsonValue> LoadError;
-		UObject* Asset = MCPRequireAssetObject(OutAssetPath, LoadError);
-		if (!Asset) return LoadError;
-
-		OutStringTable = Cast<UStringTable>(Asset);
-		if (!OutStringTable)
-		{
-			return MCPAssetWrongTypeError(OutAssetPath, Asset, TEXT("StringTable"));
-		}
-		return nullptr;
-	}
-
 	int32 AppendStringTableEntries(
 		const UStringTable* StringTable,
 		const FString& KeyFilter,
@@ -3031,7 +2988,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadStringTable(const TSharedPtr<FJsonObj
 	const FString KeyFilter = OptionalString(Params, TEXT("keyFilter"));
 	FString AssetPath;
 	UStringTable* StringTable = nullptr;
-	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("StringTable"), AssetPath, StringTable)) return Err;
 
 	TArray<TSharedPtr<FJsonValue>> Entries;
 	TArray<TSharedPtr<FJsonValue>> Keys;
@@ -3057,7 +3014,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListStringTableKeys(const TSharedPtr<FJso
 	const FString KeyFilter = OptionalString(Params, TEXT("keyFilter"));
 	FString AssetPath;
 	UStringTable* StringTable = nullptr;
-	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("StringTable"), AssetPath, StringTable)) return Err;
 
 	TArray<TSharedPtr<FJsonValue>> Entries;
 	TArray<TSharedPtr<FJsonValue>> Keys;
@@ -3083,7 +3040,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetStringTableEntry(const TSharedPtr<FJso
 	const TSharedPtr<FJsonValue> MissingKey = RequireString(Params, TEXT("key"), Key);
 	FString AssetPath;
 	UStringTable* StringTable = nullptr;
-	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("StringTable"), AssetPath, StringTable)) return Err;
 	if (MissingKey) return MissingKey;
 
 	FString SourceString;
@@ -3119,7 +3076,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetStringTableEntry(const TSharedPtr<FJso
 
 	FString AssetPath;
 	UStringTable* StringTable = nullptr;
-	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("StringTable"), AssetPath, StringTable)) return Err;
 	if (MissingKey) return MissingKey;
 
 	if (!bHasSourceString)
@@ -3170,7 +3127,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveStringTableEntry(const TSharedPtr<F
 	const TSharedPtr<FJsonValue> MissingKey = RequireString(Params, TEXT("key"), Key);
 	FString AssetPath;
 	UStringTable* StringTable = nullptr;
-	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("StringTable"), AssetPath, StringTable)) return Err;
 	if (MissingKey) return MissingKey;
 
 	const FTextKey EntryKey(Key);
@@ -3210,7 +3167,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTable(const TSharedPtr<FJsonO
 	TryGetStringParam(Params, TEXT("filePath"), FilePath);
 	FString AssetPath;
 	UStringTable* StringTable = nullptr;
-	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("StringTable"), AssetPath, StringTable)) return Err;
 
 	if (FilePath.IsEmpty())
 	{
@@ -3364,7 +3321,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 
 	FString AssetPath;
 	UStringTable* StringTable = nullptr;
-	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("StringTable"), AssetPath, StringTable)) return Err;
 
 	if (MCPIsProtectedAssetPath(AssetPath))
 	{

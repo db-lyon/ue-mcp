@@ -50,34 +50,6 @@ struct FPreparedUpsertItem
 	TArray<FPreparedProperty> Properties;
 };
 
-UClass* ResolveDataAssetClass(const FString& ClassName)
-{
-	UClass* DataClass = nullptr;
-	if (ClassName.StartsWith(TEXT("/")))
-	{
-		DataClass = LoadClass<UObject>(nullptr, *ClassName);
-		if (!DataClass)
-		{
-			DataClass = LoadObject<UClass>(nullptr, *ClassName);
-		}
-	}
-
-	if (!DataClass)
-	{
-		FString Trimmed = ClassName;
-		Trimmed.RemoveFromEnd(TEXT("_C"));
-		for (TObjectIterator<UClass> It; It; ++It)
-		{
-			if (It->GetName() == Trimmed || It->GetName() == ClassName)
-			{
-				DataClass = *It;
-				break;
-			}
-		}
-	}
-	return DataClass;
-}
-
 bool ParseAssetIdentity(
 	const TSharedPtr<FJsonObject>& Item,
 	const int32 ItemIndex,
@@ -489,7 +461,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkUpsertDataAssets(const TSharedPtr<FJs
 		}
 		SeenAssetPaths.Add(Prepared.AssetPath);
 
-		Prepared.DataClass = ResolveDataAssetClass(Prepared.ClassName);
+		Prepared.DataClass = MCPResolveClass(Prepared.ClassName);
 		if (!Prepared.DataClass)
 		{
 			return MCPError(FString::Printf(
