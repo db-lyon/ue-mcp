@@ -71,7 +71,7 @@
 // is 5.5 and newer. 5.4 exposes the clip list as the AnimationAssets array of
 // FInstancedStruct with GetAnimationAssetBase, which is what the #else arms
 // below are written against.
-#define UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
+#define UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API UE_MCP_HAS_5_5_API
 
 #if UE_MCP_HAS_5_8_API
 static TSharedPtr<FJsonObject> AnimationTransformToJson(const FTransform& Value)
@@ -1841,7 +1841,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 			if (Controller)
 			{
 #if UE_MCP_HAS_5_5_API
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
+#if UE_MCP_HAS_5_7_API
 				// #753/#766: the factory creates a retargeter with an EMPTY ops
 				// stack. On 5.7+ the chain mappings live ON the ops, so both
 				// AssignIKRigToAllOps and AutoMapChains below have nothing to
@@ -1859,7 +1859,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 				{
 					if (UIKRigDefinition* SrcRig = Cast<UIKRigDefinition>(MCPLoadAssetObject(SourceRigPath)))
 					{
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
+#if UE_MCP_HAS_5_7_API
 						Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Source, SrcRig);
 #else
 						Controller->SetIKRig(ERetargetSourceOrTarget::Source, SrcRig);
@@ -1870,7 +1870,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 				{
 					if (UIKRigDefinition* TgtRig = Cast<UIKRigDefinition>(MCPLoadAssetObject(TargetRigPath)))
 					{
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
+#if UE_MCP_HAS_5_7_API
 						Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Target, TgtRig);
 #else
 						Controller->SetIKRig(ERetargetSourceOrTarget::Target, TgtRig);
@@ -2890,7 +2890,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 		TEXT("retargeterPath"), TEXT("sourceMesh"), TEXT("targetMesh"), TEXT("animPaths"), TEXT("outputPath"),
 		TEXT("prefix"), TEXT("suffix"), TEXT("overwrite"), TEXT("requireCompleteMapping"),
 	});
-#if !(ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
+#if !UE_MCP_HAS_5_8_API
 	return MCPUnsupportedEngineError(TEXT("batch_retarget_animations"), TEXT("5.8"));
 #else
 	FString RetargeterPath;

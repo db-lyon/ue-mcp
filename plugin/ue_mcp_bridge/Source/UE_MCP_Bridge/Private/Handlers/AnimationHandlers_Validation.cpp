@@ -630,7 +630,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 #if WITH_EDITOR
 	RootMotionContext.bIgnoreRootLock = true;
 #endif
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+#if UE_MCP_HAS_5_6_API
 	const FTransform CycleRootMotion = Sequence->ExtractRootMotionFromRange(0.0, DurationSeconds, RootMotionContext);
 #else
 	const FTransform CycleRootMotion = Sequence->ExtractRootMotionFromRange(0.0, DurationSeconds);

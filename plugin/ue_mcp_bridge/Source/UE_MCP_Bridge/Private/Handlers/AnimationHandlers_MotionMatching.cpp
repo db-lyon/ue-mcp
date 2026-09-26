@@ -576,7 +576,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMirrorDataTable(const TSharedPt
 	// UE 5.8+. On 5.7 the expressions are stored on the table above but the
 	// mirror rows are not auto-synced from them here; the asset editor's Sync
 	// button (or manual row entry) fills them in.
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 	Table->UpdateFromFindReplaceExpressions(UMirrorDataTable::FFindReplaceOptions::Sync());
 #endif
 
