@@ -40,7 +40,7 @@ const refuseVariable = (method: string) =>
 describe("blueprint(author)", () => {
   it("reports a child that answered success:false as a failed step", async () => {
     const { ctx, calls } = context(refuseVariable);
-    const out = await blueprintTool.actions.author.handler!(ctx, { ...request }) as Record<string, unknown>;
+    const out = await blueprintTool.handler(ctx, { action: "author", ...request }) as Record<string, unknown>;
     expect(calls.map((c) => c.method)).toEqual([
       "create_blueprint", "add_component", "add_variable", "create_function", "compile_blueprint",
     ]);
@@ -54,7 +54,7 @@ describe("blueprint(author)", () => {
 
   it("sends each step the action's own parameter names", async () => {
     const { ctx, calls } = context(() => ({ success: true }));
-    await blueprintTool.actions.author.handler!(ctx, { ...request });
+    await blueprintTool.handler(ctx, { action: "author", ...request });
     expect(calls[0].params).toEqual({ assetPath: "/Game/BP_Door", parentClass: "Actor" });
     expect(calls[1].params).toEqual({ assetPath: "/Game/BP_Door", componentClass: "StaticMeshComponent", componentName: "StaticMeshComponent" });
     expect(calls[2].params).toEqual({ assetPath: "/Game/BP_Door", name: "Open", varType: "bool" });
@@ -77,7 +77,7 @@ describe("blueprint(author)", () => {
       if (method === "add_component") throw new Error("socket closed");
       return { success: true };
     });
-    const out = await blueprintTool.actions.author.handler!(ctx, { assetPath: "/Game/BP_Door", components: [{ componentClass: "X" }], compile: false }) as Record<string, unknown>;
+    const out = await blueprintTool.handler(ctx, { action: "author", assetPath: "/Game/BP_Door", components: [{ componentClass: "X" }], compile: false }) as Record<string, unknown>;
     expect(out.steps).toEqual([{ step: "add_component", target: "X", ok: false, error: "socket closed" }]);
     expect(out.created).toBe(false);
   });
