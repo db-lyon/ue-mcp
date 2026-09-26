@@ -350,7 +350,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 		Requests.Add(MoveTemp(Request));
 	}
 
-	UWorld* OriginalWorld = GEditor->GetEditorWorldContext().World();
+	UWorld* OriginalWorld = GetEditorWorld();
 	if (!OriginalWorld)
 	{
 		return MCPError(TEXT("The editor world is not available"));
@@ -473,7 +473,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 			return false;
 		}
 
-		UWorld* CurrentWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+		UWorld* CurrentWorld = GetEditorWorld();
 		if (CurrentWorld && CurrentWorld->GetOutermost()->GetName() == OriginalLevelPath)
 		{
 			return true;
@@ -498,7 +498,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 			return BuildResult(false, LoadError, false, bRestored, {});
 		}
 
-		UWorld* World = GEditor->GetEditorWorldContext().World();
+		UWorld* World = GetEditorWorld();
 		FString InspectError;
 		if (!InspectLoadedLevel(World, Request, InspectError))
 		{
@@ -580,7 +580,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 			return BuildResult(false, LoadError, true, false, {});
 		}
 
-		UWorld* World = GEditor->GetEditorWorldContext().World();
+		UWorld* World = GetEditorWorld();
 		FString InspectError;
 		if (!InspectLoadedLevel(World, Request, InspectError))
 		{

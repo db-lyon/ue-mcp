@@ -601,7 +601,7 @@ namespace
 		FScopedSpatialNudgeTestWorld()
 		{
 			if (!GEditor) return;
-			OriginalWorld = GEditor->GetEditorWorldContext().World();
+			OriginalWorld = GetEditorWorld();
 			const FString PackageName = FString(TEXT("/Temp/UEMCP_SpatialNudgeTest_")) +
 				FGuid::NewGuid().ToString(EGuidFormats::Digits);
 			TestPackage = CreatePackage(*PackageName);

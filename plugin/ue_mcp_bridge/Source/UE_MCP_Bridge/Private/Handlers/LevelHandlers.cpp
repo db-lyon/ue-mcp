@@ -1373,7 +1373,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 	}
 	else
 	{
-		World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+		World = GetEditorWorld();
 		if (!World) return MCPError(TEXT("No editor world available"));
 	}
 
@@ -2415,7 +2415,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 	// and load_level takes it. Only an untitled or temporary world genuinely
 	// has no path that reopens it, and that is what DoesPackageExist answers.
 	FString PreviousLevelPath;
-	if (UWorld* PreviousWorld = GEditor->GetEditorWorldContext().World())
+	if (UWorld* PreviousWorld = GetEditorWorld())
 	{
 		if (UPackage* PreviousPackage = PreviousWorld->GetOutermost())
 		{
@@ -2446,7 +2446,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 		Noop->SetBoolField(TEXT("alreadyOpen"), true);
 		Noop->SetBoolField(TEXT("unchanged"), true);
 		Noop->SetBoolField(TEXT("endedPlaySession"), false);
-		if (UWorld* OpenWorld = GEditor->GetEditorWorldContext().World())
+		if (UWorld* OpenWorld = GetEditorWorld())
 		{
 			Noop->SetStringField(TEXT("worldName"), OpenWorld->GetName());
 			Noop->SetStringField(TEXT("worldPath"), OpenWorld->GetPathName());
@@ -2488,7 +2488,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 
 	// Get info about the newly loaded world
 	auto Result = MCPSuccess();
-	UWorld* World = GEditor->GetEditorWorldContext().World();
+	UWorld* World = GetEditorWorld();
 	if (World)
 	{
 		Result->SetStringField(TEXT("worldName"), World->GetName());
@@ -2590,7 +2590,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ClearLevelScript(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("GEditor not available"));
 	}
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
+	UWorld* World = GetEditorWorld();
 	if (!World || !World->PersistentLevel)
 	{
 		return MCPError(TEXT("No persistent editor level is loaded"));
