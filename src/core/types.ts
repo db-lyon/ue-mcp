@@ -124,6 +124,21 @@ export interface ToolContext {
    * rather than leaving the user staring at a call that looks frozen.
    */
   client?: { name: string; version?: string };
+  /**
+   * Opens the asset-lock scope for a run in this context's editor. Present
+   * only while per-asset locking is enabled (`ue-mcp.locking`).
+   */
+  openAssetLocks?: (ctx: ToolContext) => AssetLockScopeLike;
+  /** The locks held by the run this call belongs to: one live call, or a whole flow run. */
+  assetLocks?: AssetLockScopeLike;
+}
+
+/** The asset locks one run holds. See dispatch/locking.ts. */
+export interface AssetLockScopeLike {
+  /** Take the locks an action needs before it runs; throws when an asset is busy. */
+  acquireFor(taskName: string, params: Record<string, unknown>): Promise<void>;
+  /** Release everything the run holds. */
+  releaseAll(): Promise<void>;
 }
 
 export interface ProgressUpdate {

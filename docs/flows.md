@@ -371,6 +371,10 @@ git_snapshot:
 
 The shadow repo is completely separate from any project-level git - your real history isn't touched. Snapshot failure doesn't fail the flow; handler-level rollbacks still apply. Restore outcomes surface in `result.snapshotRestore`.
 
+## Asset Locks
+
+With per-asset locking enabled (`ue-mcp.locking.enabled` in `ue-mcp.yml`), each step locks the assets it writes as it starts, exactly as the same action called directly does. The locks belong to the run: nothing is released until the flow ends, rollback and hooks included, so another agent cannot write an asset between the step that created it and the step that configures it. A step whose asset another session holds fails with `ASSET_LOCKED`, and the run releases what it holds whether it succeeded or failed. A long flow holds its assets for its whole length.
+
 ## Live Observation (SSE)
 
 Every flow run emits per-step lifecycle events that observers can subscribe to over a loopback HTTP Server-Sent Events stream. Use this for editor plugins that want a live "what's running" panel, dashboards, CI log streaming, or `curl --no-buffer` debugging.

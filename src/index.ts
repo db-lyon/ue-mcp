@@ -21,7 +21,7 @@ import { startVersionCheck } from "./core/version-check.js";
 import { GuardRegistry } from "./flow/guard.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
-import { resolveLockingConfig } from "./dispatch/locking.js";
+import { lockScopeOpener, resolveLockingConfig } from "./dispatch/locking.js";
 import { collapsingEnvWarnings } from "./config/session-env.js";
 import { checkPluginFreshness } from "./editor/bridge-freshness.js";
 import { unionSurface } from "./sessions/session-surface.js";
@@ -150,6 +150,9 @@ async function main() {
   if (lockingCfg.enabled) {
     info("locking", `Per-asset locking enabled (TTL ${lockingCfg.ttlSeconds}s)`);
   }
+  // Every route that runs actions (MCP calls, flow calls, the HTTP surface)
+  // opens its run's lock scope through this.
+  baseCtx.openAssetLocks = lockScopeOpener(lockingCfg, () => loads.dispatchUnion.tools);
 
   // One task registry and guard pipeline per session, built from its own graph.
   await loads.finishStartup();

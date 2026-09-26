@@ -30,7 +30,7 @@ import {
 import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
-import { withAssetLocks, type LockingConfig } from "./locking.js";
+import { lockScopeOpener, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "../surface/action-schema.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
@@ -251,7 +251,11 @@ export async function dispatchCategoryCall(
     elicit: deps.elicit(),
     onProgress: makeProgressReporter(extra),
     client: deps.client(),
+    openAssetLocks: lockScopeOpener(deps.lockingCfg, () => loads.dispatchUnion.tools),
   };
+  // One lock scope per call: every action it runs, the action's own children
+  // included, locks into it, and it is released when the call returns.
+  flowCtx.assetLocks = flowCtx.openAssetLocks?.(flowCtx);
 
   // The addressed session's own registry, built on demand rather than falling
   // back to the first project's (D1). A call for an action this session does
@@ -295,17 +299,10 @@ export async function dispatchCategoryCall(
       taskName,
       taskParams,
     );
-    // Locks are taken in the editor the call runs in, through the GUARDED
-    // bridge, so a lock request made while a modal is up is refused as a dialog.
-    const result = await withAssetLocks(
-      session.guarded,
-      deps.lockingCfg,
-      effectiveTask,
-      subject.params,
-      () => task.run(),
-      session.lockOwnerId,
-      loads.dispatchUnion.tools,
-    );
+    // Locks are taken inside the run, in the editor the call runs in, through
+    // the GUARDED bridge, so a lock request made while a modal is up is refused
+    // as a dialog.
+    const result = await task.run();
 
     // A task that failed for its own reasons reports that, not a dialog. A
     // failure DURING a modal is usually caused by it, and the runner returns
@@ -318,7 +315,11 @@ export async function dispatchCategoryCall(
       && (postRunDecision = await guard.check(effectiveTask, "action")).allow === false;
     if (!result.success && !isDialogRefusal(result.data) && !failedUnderDialog) {
       const msg = result.error?.message ?? `Task ${taskName} failed`;
-      return errorResult("TASK_FAILED", msg, [...machineErrorBlock(result.error), ...served]);
+      // A busy asset keeps its own retryable code.
+      const code = result.error instanceof McpError && result.error.code === ErrorCode.ASSET_LOCKED
+        ? ErrorCode.ASSET_LOCKED
+        : "TASK_FAILED";
+      return errorResult(code, msg, [...machineErrorBlock(result.error), ...served]);
     }
 
     // An allow-listed read still SAYS a dialog is up: get_status must never
@@ -395,8 +396,8 @@ export async function dispatchCategoryCall(
       ]),
     };
   } catch (e) {
-    // A refusal can arrive as a throw (taking an asset lock is a bridge call),
-    // and is shaped through the guard so the payload matches the result route.
+    // A refusal can arrive as a throw, and is shaped through the guard so the
+    // payload matches the result route.
     const thrownRefusal = e instanceof McpError && isDialogRefusal(e.details)
       ? (e.details as unknown as Record<string, unknown>)
       : null;
@@ -408,6 +409,8 @@ export async function dispatchCategoryCall(
     const msg = e instanceof Error ? e.message : String(e);
     const code = e instanceof McpError ? e.code : "UNKNOWN";
     return errorResult(code, msg, [...machineErrorBlock(e), ...served]);
+  } finally {
+    await flowCtx.assetLocks?.releaseAll();
   }
 }
 
@@ -453,7 +456,11 @@ export async function dispatchFlowCall(
       "action",
     );
     if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
-    const result = await flowTool.handler(sessionContext(baseCtx, session), params);
+    const flowCtx: ToolContext = {
+      ...sessionContext(baseCtx, session),
+      openAssetLocks: lockScopeOpener(deps.lockingCfg, () => deps.loads.dispatchUnion.tools),
+    };
+    const result = await flowTool.handler(flowCtx, params);
     const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
     return { content: withUpgradeNotice([{ type: "text" as const, text }, ...attribution(sessions, session)]) };
   } catch (e) {

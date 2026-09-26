@@ -184,8 +184,18 @@ async function runFlow(
   // emit carries this id so SSE subscribers can filter to a specific
   // run; the response includes it so callers can correlate.
   const runId = nextRunId();
-  const runner = makeRunner(registry, config, ctx, runId, flowName);
-  const result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure });
+  // The lock scope is the whole run: each step locks what it writes as it
+  // starts, and nothing is released until the run (rollback included) ends,
+  // so no other agent writes between two steps of it.
+  const locks = ctx.assetLocks ? undefined : ctx.openAssetLocks?.(ctx);
+  const runCtx: ToolContext = locks ? { ...ctx, assetLocks: locks } : ctx;
+  const runner = makeRunner(registry, config, runCtx, runId, flowName);
+  let result: FlowRunResult;
+  try {
+    result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure });
+  } finally {
+    await locks?.releaseAll();
+  }
 
   const formatted = formatFlowResult(result);
   return { ...formatted, runId };
