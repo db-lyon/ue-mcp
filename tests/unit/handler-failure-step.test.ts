@@ -70,7 +70,7 @@ function probeTool(handlerAnswer: () => Promise<unknown>): ToolDef {
       wipe: { kind: "bridge", effect: "read", description: "A destructive bridge action.", bridge: "wipe_the_thing" },
       touch: { kind: "bridge", effect: "read", description: "A benign bridge action.", bridge: "touch_the_thing" },
       list: { kind: "bridge", effect: "read", description: "A read that answers without a success key.", bridge: "list_the_things" },
-      refuse: { description: "A direct handler that refuses by returning.", handler: handlerAnswer },
+      refuse: { kind: "handler", effect: "read", description: "A direct handler that refuses by returning.", handler: handlerAnswer },
     },
     undefined,
     { note: z.string().optional() } as Record<string, z.ZodType>,

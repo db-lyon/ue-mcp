@@ -38,6 +38,8 @@ const probeTool = categoryTool(
   "Test-only category that reports what the context handed it.",
   {
     context: {
+      kind: "handler",
+      effect: "read",
       description: "Report the context accessors this call was given.",
       handler: async (ctx) => ({
         flows: ctx.getFlows?.().map((f) => f.name) ?? null,

@@ -47,7 +47,7 @@ describe("cloneToolGraph", () => {
     const original = graph();
     const copy = cloneToolGraph(original);
 
-    copy[0].actions.injected = { description: "only on the copy" };
+    copy[0].actions.injected = bp("read", "only on the copy", "alpha_injected");
     copy[0].description += " (copy)";
     copy[0].schema.extra = z.string().optional();
 
@@ -123,7 +123,7 @@ describe("unionSurface", () => {
   it("advertises the union and records which editor provides each action", () => {
     const a = graph();
     const b = graph();
-    b[0].actions.beta_only = { description: "only in B" };
+    b[0].actions.beta_only = bp("read", "only in B", "alpha_beta_only");
 
     const union = unionSurface([surfaceOf("Alpha", a), surfaceOf("Beta", b)]);
     const alphaCategory = union.tools.find((t) => t.name === "alpha")!;
@@ -136,7 +136,7 @@ describe("unionSurface", () => {
   it("does not fold the union back into either session's own graph", () => {
     const a = graph();
     const b = graph();
-    b[0].actions.beta_only = { description: "only in B" };
+    b[0].actions.beta_only = bp("read", "only in B", "alpha_beta_only");
 
     unionSurface([surfaceOf("Alpha", a), surfaceOf("Beta", b)]);
 
@@ -146,7 +146,7 @@ describe("unionSurface", () => {
   it("rebuilds the action enum so a merged action is accepted", () => {
     const a = graph();
     const b = graph();
-    b[0].actions.beta_only = { description: "only in B" };
+    b[0].actions.beta_only = bp("read", "only in B", "alpha_beta_only");
 
     const union = unionSurface([surfaceOf("Alpha", a), surfaceOf("Beta", b)]);
     const enumSchema = union.tools.find((t) => t.name === "alpha")!.schema.action;
@@ -167,7 +167,7 @@ describe("explainMissingAction", () => {
   it("names the editors that provide an action the addressed one lacks", () => {
     const a = graph();
     const b = graph();
-    b[0].actions.beta_only = { description: "only in B" };
+    b[0].actions.beta_only = bp("read", "only in B", "alpha_beta_only");
     const union = unionSurface([surfaceOf("Alpha", a), surfaceOf("Beta", b)]);
 
     const msg = explainMissingAction(union, "alpha.beta_only", "Alpha", false);

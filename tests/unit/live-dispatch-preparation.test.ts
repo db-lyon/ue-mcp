@@ -253,6 +253,8 @@ describe("timeoutMs on the live dispatch route", () => {
     let seenParams: Record<string, unknown> | undefined;
     const tool = categoryTool("demo", "Demo", {
       local: {
+        kind: "handler",
+        effect: "read",
         description: "A direct handler",
         handler: async (ctx, p) => { seenCtx = ctx; seenParams = p; return { ok: true }; },
       },

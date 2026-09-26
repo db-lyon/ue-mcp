@@ -373,6 +373,8 @@ describe("forwardedParams", () => {
     // `arr.length` and `Array.isArray` are not parameters, and reporting them
     // would put permanent false entries in the drift guard above.
     const names = forwardedParams({
+      kind: "bridge",
+      effect: "read",
       bridge: "x",
       mapParams: (p) => ({ n: Array.isArray(p.items) ? (p.items as unknown[]).length : 0 }),
     });
