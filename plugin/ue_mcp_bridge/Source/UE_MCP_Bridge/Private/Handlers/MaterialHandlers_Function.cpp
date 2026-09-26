@@ -23,19 +23,6 @@
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "UObject/UObjectIterator.h"
 
-namespace
-{
-	UMaterialFunction* LoadMaterialFunction(const FString& Path)
-	{
-		UMaterialFunction* MF = LoadObject<UMaterialFunction>(nullptr, *Path);
-		if (!MF)
-		{
-			MF = Cast<UMaterialFunction>(UEditorAssetLibrary::LoadAsset(Path));
-		}
-		return MF;
-	}
-}
-
 // material(action="create_function", name, packagePath?, description?, onConflict?)
 TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFunction(const TSharedPtr<FJsonObject>& Params)
 {
@@ -89,8 +76,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialFunctionExpression(const TS
 	FString FallbackName;
 	const bool bHasFallbackName = TryGetStringParam(Params, TEXT("name"), FallbackName);
 
-	UMaterialFunction* MF = LoadMaterialFunction(FunctionPath);
-	if (!MF) return MCPError(FString::Printf(TEXT("MaterialFunction not found: %s"), *FunctionPath));
+	REQUIRE_ASSET(UMaterialFunction, MF, FunctionPath);
 
 	UClass* ExprClass = ResolveExpressionClass(ExpressionType);
 	if (!ExprClass) return MCPError(FString::Printf(TEXT("Unknown expression type: '%s'"), *ExpressionType));
@@ -181,8 +167,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialFunctionExpressions(con
 	const FString SourceOutput = OptionalString(Params, TEXT("sourceOutput"));
 	const FString TargetInput = OptionalString(Params, TEXT("targetInput"));
 
-	UMaterialFunction* MF = LoadMaterialFunction(FunctionPath);
-	if (!MF) return MCPError(FString::Printf(TEXT("MaterialFunction not found: %s"), *FunctionPath));
+	REQUIRE_ASSET(UMaterialFunction, MF, FunctionPath);
 
 	auto ResolveExpr = [&](const FExpressionRef& Ref) -> UMaterialExpression*
 	{
@@ -373,8 +358,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialFunctionExpressions(const 
 	FString FunctionPath;
 	if (auto Err = RequireString(Params, TEXT("functionPath"), FunctionPath)) return Err;
 
-	UMaterialFunction* MF = LoadMaterialFunction(FunctionPath);
-	if (!MF) return MCPError(FString::Printf(TEXT("MaterialFunction not found: %s"), *FunctionPath));
+	REQUIRE_ASSET(UMaterialFunction, MF, FunctionPath);
 
 	TArray<TSharedPtr<FJsonValue>> Arr;
 	int32 Index = 0;
