@@ -155,14 +155,8 @@ namespace
 			const FVector Min = Desc.Bounds.Min;
 			const FVector Max = Desc.Bounds.Max;
 			TSharedPtr<FJsonObject> BoundsObj = MakeShared<FJsonObject>();
-			TSharedPtr<FJsonObject> MinObj = MakeShared<FJsonObject>();
-			MinObj->SetNumberField(TEXT("x"), Min.X);
-			MinObj->SetNumberField(TEXT("y"), Min.Y);
-			MinObj->SetNumberField(TEXT("z"), Min.Z);
-			TSharedPtr<FJsonObject> MaxObj = MakeShared<FJsonObject>();
-			MaxObj->SetNumberField(TEXT("x"), Max.X);
-			MaxObj->SetNumberField(TEXT("y"), Max.Y);
-			MaxObj->SetNumberField(TEXT("z"), Max.Z);
+			TSharedPtr<FJsonObject> MinObj = MCPVec3ToJsonObject(Min);
+			TSharedPtr<FJsonObject> MaxObj = MCPVec3ToJsonObject(Max);
 			BoundsObj->SetObjectField(TEXT("min"), MinObj);
 			BoundsObj->SetObjectField(TEXT("max"), MaxObj);
 			Obj->SetObjectField(TEXT("bounds"), BoundsObj);

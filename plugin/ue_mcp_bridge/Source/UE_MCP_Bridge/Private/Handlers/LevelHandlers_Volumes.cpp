@@ -76,10 +76,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListVolumes(const TSharedPtr<FJsonObject>
 		VolumeObj->SetStringField(TEXT("path"), Volume->GetPathName());
 
 		FVector Location = Volume->GetActorLocation();
-		TSharedPtr<FJsonObject> LocObj = MakeShared<FJsonObject>();
-		LocObj->SetNumberField(TEXT("x"), Location.X);
-		LocObj->SetNumberField(TEXT("y"), Location.Y);
-		LocObj->SetNumberField(TEXT("z"), Location.Z);
+		TSharedPtr<FJsonObject> LocObj = MCPVec3ToJsonObject(Location);
 		VolumeObj->SetObjectField(TEXT("location"), LocObj);
 
 		// The actor path is the anchor: two volumes can share a label, and a

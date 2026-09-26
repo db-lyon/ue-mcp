@@ -120,24 +120,6 @@ namespace
 
 	// ── JSON shaping ────────────────────────────────────────────────────────
 
-	TSharedPtr<FJsonObject> MCPQueryVec(const FVector& V)
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetNumberField(TEXT("x"), V.X);
-		Obj->SetNumberField(TEXT("y"), V.Y);
-		Obj->SetNumberField(TEXT("z"), V.Z);
-		return Obj;
-	}
-
-	TSharedPtr<FJsonObject> MCPQueryRot(const FRotator& R)
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetNumberField(TEXT("pitch"), R.Pitch);
-		Obj->SetNumberField(TEXT("yaw"), R.Yaw);
-		Obj->SetNumberField(TEXT("roll"), R.Roll);
-		return Obj;
-	}
-
 	// ── Projection ──────────────────────────────────────────────────────────
 
 	struct FMCPQueryFields
@@ -598,9 +580,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 				if (Fields.bTransform)
 				{
 					TSharedPtr<FJsonObject> TransformObject = MakeShared<FJsonObject>();
-					TransformObject->SetObjectField(TEXT("location"), MCPQueryVec(WorldLocation));
-					TransformObject->SetObjectField(TEXT("rotation"), MCPQueryRot(ComponentTransform.Rotator()));
-					TransformObject->SetObjectField(TEXT("scale"), MCPQueryVec(WorldScale));
+					TransformObject->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(WorldLocation));
+					TransformObject->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(ComponentTransform.Rotator()));
+					TransformObject->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(WorldScale));
 					TransformObject->SetNumberField(TEXT("minAbsScale"),
 						FMath::Min3(FMath::Abs(WorldScale.X), FMath::Abs(WorldScale.Y), FMath::Abs(WorldScale.Z)));
 					Row->SetObjectField(TEXT("transform"), TransformObject);
@@ -621,8 +603,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 				if (Fields.bBounds)
 				{
 					TSharedPtr<FJsonObject> BoundsObject = MakeShared<FJsonObject>();
-					BoundsObject->SetObjectField(TEXT("origin"), MCPQueryVec(ComponentBounds.Origin));
-					BoundsObject->SetObjectField(TEXT("boxExtent"), MCPQueryVec(Extent));
+					BoundsObject->SetObjectField(TEXT("origin"), MCPVec3ToJsonObject(ComponentBounds.Origin));
+					BoundsObject->SetObjectField(TEXT("boxExtent"), MCPVec3ToJsonObject(Extent));
 					BoundsObject->SetNumberField(TEXT("sphereRadius"), ComponentBounds.SphereRadius);
 					BoundsObject->SetBoolField(TEXT("zero"), bBoundsZero);
 					BoundsObject->SetBoolField(TEXT("invalid"), bBoundsInvalid);
@@ -638,8 +620,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 				// reads expose.
 				const FBoxSphereBounds LocalBounds = SceneComponent->GetLocalBounds();
 				TSharedPtr<FJsonObject> LocalObject = MakeShared<FJsonObject>();
-				LocalObject->SetObjectField(TEXT("origin"), MCPQueryVec(LocalBounds.Origin));
-				LocalObject->SetObjectField(TEXT("boxExtent"), MCPQueryVec(LocalBounds.BoxExtent));
+				LocalObject->SetObjectField(TEXT("origin"), MCPVec3ToJsonObject(LocalBounds.Origin));
+				LocalObject->SetObjectField(TEXT("boxExtent"), MCPVec3ToJsonObject(LocalBounds.BoxExtent));
 				LocalObject->SetNumberField(TEXT("sphereRadius"), LocalBounds.SphereRadius);
 				if (const UBoxComponent* BoxComponent = Cast<UBoxComponent>(Component))
 				{
@@ -647,7 +629,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 					// authored value the details panel shows and is not
 					// derivable from the scaled bounds.
 					LocalObject->SetObjectField(TEXT("boxExtent_unscaled"),
-						MCPQueryVec(BoxComponent->GetUnscaledBoxExtent()));
+						MCPVec3ToJsonObject(BoxComponent->GetUnscaledBoxExtent()));
 				}
 				Row->SetObjectField(TEXT("localBounds"), LocalObject);
 			}
@@ -1142,7 +1124,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 				continue;
 			}
 			TSharedPtr<FJsonObject> DuplicateObject = MakeShared<FJsonObject>();
-			DuplicateObject->SetObjectField(TEXT("location"), MCPQueryVec(FVector(
+			DuplicateObject->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(FVector(
 				Pair.Key.X * DuplicateQuantum,
 				Pair.Key.Y * DuplicateQuantum,
 				Pair.Key.Z * DuplicateQuantum)));

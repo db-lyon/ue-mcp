@@ -9,22 +9,12 @@
 
 namespace
 {
-	TSharedPtr<FJsonObject> QuatToJson(const FQuat& Quat)
-	{
-		auto Json = MakeShared<FJsonObject>();
-		Json->SetNumberField(TEXT("x"), Quat.X);
-		Json->SetNumberField(TEXT("y"), Quat.Y);
-		Json->SetNumberField(TEXT("z"), Quat.Z);
-		Json->SetNumberField(TEXT("w"), Quat.W);
-		return Json;
-	}
-
 	TSharedPtr<FJsonObject> TransformToJson(const FTransform& Transform)
 	{
 		auto Json = MakeShared<FJsonObject>();
 		Json->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Transform.GetLocation()));
 		Json->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Transform.Rotator()));
-		Json->SetObjectField(TEXT("quaternion"), QuatToJson(Transform.GetRotation()));
+		Json->SetObjectField(TEXT("quaternion"), MCPQuatToJsonObject(Transform.GetRotation()));
 		Json->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Transform.GetScale3D()));
 		return Json;
 	}
@@ -428,7 +418,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 			TEXT("Requested setter inputs only; attachment, absolute flags, scale and runtime systems can affect the applied result. Verify after applying."));
 		Result->SetObjectField(TEXT("requestedWorldLocation"), MCPVec3ToJsonObject(RequestedWorld.GetLocation()));
 		Result->SetObjectField(TEXT("requestedWorldRotation"), MCPRotatorToJsonObject(RequestedWorld.Rotator()));
-		Result->SetObjectField(TEXT("requestedWorldQuaternion"), QuatToJson(RequestedWorld.GetRotation()));
+		Result->SetObjectField(TEXT("requestedWorldQuaternion"), MCPQuatToJsonObject(RequestedWorld.GetRotation()));
 		Result->SetObjectField(TEXT("requestedRelativeScale"), MCPVec3ToJsonObject(RequestedRelativeScale));
 		return MCPResult(Result);
 	}

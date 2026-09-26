@@ -321,10 +321,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SnapActorToFloor(const TSharedPtr<FJsonOb
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
-	TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
-	Loc->SetNumberField(TEXT("x"), PrevLoc.X);
-	Loc->SetNumberField(TEXT("y"), PrevLoc.Y);
-	Loc->SetNumberField(TEXT("z"), PrevLoc.Z);
+	TSharedPtr<FJsonObject> Loc = MCPVec3ToJsonObject(PrevLoc);
 	Payload->SetObjectField(TEXT("location"), Loc);
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 	return MCPResult(Result);

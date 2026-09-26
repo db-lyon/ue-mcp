@@ -1015,17 +1015,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		ActorObj->SetBoolField(TEXT("editorHidden"), bEditorHidden);
 
 		FVector Location = Actor->GetActorLocation();
-		TSharedPtr<FJsonObject> LocationObj = MakeShared<FJsonObject>();
-		LocationObj->SetNumberField(TEXT("x"), Location.X);
-		LocationObj->SetNumberField(TEXT("y"), Location.Y);
-		LocationObj->SetNumberField(TEXT("z"), Location.Z);
+		TSharedPtr<FJsonObject> LocationObj = MCPVec3ToJsonObject(Location);
 		ActorObj->SetObjectField(TEXT("location"), LocationObj);
 
 		FRotator Rotation = Actor->GetActorRotation();
-		TSharedPtr<FJsonObject> RotationObj = MakeShared<FJsonObject>();
-		RotationObj->SetNumberField(TEXT("pitch"), Rotation.Pitch);
-		RotationObj->SetNumberField(TEXT("yaw"), Rotation.Yaw);
-		RotationObj->SetNumberField(TEXT("roll"), Rotation.Roll);
+		TSharedPtr<FJsonObject> RotationObj = MCPRotatorToJsonObject(Rotation);
 		ActorObj->SetObjectField(TEXT("rotation"), RotationObj);
 
 		// Include child components
@@ -1400,24 +1394,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("folderPath"), Actor->GetFolderPath().ToString());
 
 	FVector Location = Actor->GetActorLocation();
-	TSharedPtr<FJsonObject> LocationObj = MakeShared<FJsonObject>();
-	LocationObj->SetNumberField(TEXT("x"), Location.X);
-	LocationObj->SetNumberField(TEXT("y"), Location.Y);
-	LocationObj->SetNumberField(TEXT("z"), Location.Z);
+	TSharedPtr<FJsonObject> LocationObj = MCPVec3ToJsonObject(Location);
 	Result->SetObjectField(TEXT("location"), LocationObj);
 
 	FRotator Rot = Actor->GetActorRotation();
-	TSharedPtr<FJsonObject> RotObj = MakeShared<FJsonObject>();
-	RotObj->SetNumberField(TEXT("pitch"), Rot.Pitch);
-	RotObj->SetNumberField(TEXT("yaw"), Rot.Yaw);
-	RotObj->SetNumberField(TEXT("roll"), Rot.Roll);
+	TSharedPtr<FJsonObject> RotObj = MCPRotatorToJsonObject(Rot);
 	Result->SetObjectField(TEXT("rotation"), RotObj);
 
 	FVector Scale = Actor->GetActorScale3D();
-	TSharedPtr<FJsonObject> ScaleObj = MakeShared<FJsonObject>();
-	ScaleObj->SetNumberField(TEXT("x"), Scale.X);
-	ScaleObj->SetNumberField(TEXT("y"), Scale.Y);
-	ScaleObj->SetNumberField(TEXT("z"), Scale.Z);
+	TSharedPtr<FJsonObject> ScaleObj = MCPVec3ToJsonObject(Scale);
 	Result->SetObjectField(TEXT("scale"), ScaleObj);
 
 	if (AActor* Parent = Actor->GetAttachParentActor())
@@ -1579,28 +1564,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 			const FVector RelLoc = SC->GetRelativeLocation();
 			const FRotator RelRot = SC->GetRelativeRotation();
 			const FVector RelScale = SC->GetRelativeScale3D();
-			auto MakeVec = [](const FVector& V) {
-				auto O = MakeShared<FJsonObject>();
-				O->SetNumberField(TEXT("x"), V.X);
-				O->SetNumberField(TEXT("y"), V.Y);
-				O->SetNumberField(TEXT("z"), V.Z);
-				return O;
-			};
-			auto MakeRot = [](const FRotator& R) {
-				auto O = MakeShared<FJsonObject>();
-				O->SetNumberField(TEXT("pitch"), R.Pitch);
-				O->SetNumberField(TEXT("yaw"), R.Yaw);
-				O->SetNumberField(TEXT("roll"), R.Roll);
-				return O;
-			};
-			C->SetObjectField(TEXT("relativeLocation"), MakeVec(RelLoc));
-			C->SetObjectField(TEXT("relativeRotation"), MakeRot(RelRot));
-			C->SetObjectField(TEXT("relativeScale"), MakeVec(RelScale));
+			C->SetObjectField(TEXT("relativeLocation"), MCPVec3ToJsonObject(RelLoc));
+			C->SetObjectField(TEXT("relativeRotation"), MCPRotatorToJsonObject(RelRot));
+			C->SetObjectField(TEXT("relativeScale"), MCPVec3ToJsonObject(RelScale));
 
 			// World transform
-			C->SetObjectField(TEXT("worldLocation"), MakeVec(SC->GetComponentLocation()));
-			C->SetObjectField(TEXT("worldRotation"), MakeRot(SC->GetComponentRotation()));
-			C->SetObjectField(TEXT("worldScale"), MakeVec(SC->GetComponentScale()));
+			C->SetObjectField(TEXT("worldLocation"), MCPVec3ToJsonObject(SC->GetComponentLocation()));
+			C->SetObjectField(TEXT("worldRotation"), MCPRotatorToJsonObject(SC->GetComponentRotation()));
+			C->SetObjectField(TEXT("worldScale"), MCPVec3ToJsonObject(SC->GetComponentScale()));
 
 			if (UPrimitiveComponent* PC = Cast<UPrimitiveComponent>(SC))
 			{
@@ -1621,8 +1592,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 
 				// Bounds
 				const FBoxSphereBounds Bounds = PC->Bounds;
-				C->SetObjectField(TEXT("boundsOrigin"), MakeVec(Bounds.Origin));
-				C->SetObjectField(TEXT("boundsBoxExtent"), MakeVec(Bounds.BoxExtent));
+				C->SetObjectField(TEXT("boundsOrigin"), MCPVec3ToJsonObject(Bounds.Origin));
+				C->SetObjectField(TEXT("boundsBoxExtent"), MCPVec3ToJsonObject(Bounds.BoxExtent));
 				C->SetNumberField(TEXT("boundsSphereRadius"), Bounds.SphereRadius);
 
 				// Material slots + meshes (mesh-component subclasses)
@@ -1778,29 +1749,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetRelativeTransform(const TSharedPtr<FJs
 	const FTransform Reference = ReferenceActor->GetActorTransform();
 	const FTransform Relative = Target.GetRelativeTransform(Reference);
 
-	auto MakeVec = [](const FVector& V) {
-		auto O = MakeShared<FJsonObject>();
-		O->SetNumberField(TEXT("x"), V.X);
-		O->SetNumberField(TEXT("y"), V.Y);
-		O->SetNumberField(TEXT("z"), V.Z);
-		return O;
-	};
-	auto MakeRot = [](const FRotator& R) {
-		auto O = MakeShared<FJsonObject>();
-		O->SetNumberField(TEXT("pitch"), R.Pitch);
-		O->SetNumberField(TEXT("yaw"), R.Yaw);
-		O->SetNumberField(TEXT("roll"), R.Roll);
-		return O;
-	};
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("targetLabel"), TargetLabel);
 	Result->SetStringField(TEXT("targetPath"), TargetActor->GetPathName());
 	Result->SetStringField(TEXT("referenceLabel"), ReferenceLabel);
 	Result->SetStringField(TEXT("referencePath"), ReferenceActor->GetPathName());
-	Result->SetObjectField(TEXT("location"), MakeVec(Relative.GetLocation()));
-	Result->SetObjectField(TEXT("rotation"), MakeRot(Relative.GetRotation().Rotator()));
-	Result->SetObjectField(TEXT("scale"), MakeVec(Relative.GetScale3D()));
+	Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Relative.GetLocation()));
+	Result->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Relative.GetRotation().Rotator()));
+	Result->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Relative.GetScale3D()));
 	return MCPResult(Result);
 }
 
@@ -1902,10 +1859,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetSelectedActors(const TSharedPtr<FJsonO
 		ActorObj->SetStringField(TEXT("path"), Actor->GetPathName());
 
 		FVector Location = Actor->GetActorLocation();
-		TSharedPtr<FJsonObject> LocationObj = MakeShared<FJsonObject>();
-		LocationObj->SetNumberField(TEXT("x"), Location.X);
-		LocationObj->SetNumberField(TEXT("y"), Location.Y);
-		LocationObj->SetNumberField(TEXT("z"), Location.Z);
+		TSharedPtr<FJsonObject> LocationObj = MCPVec3ToJsonObject(Location);
 		ActorObj->SetObjectField(TEXT("location"), LocationObj);
 
 		ActorsArray.Add(MakeShared<FJsonValueObject>(ActorObj));
@@ -3084,23 +3038,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentDetails(const TSharedPtr<FJso
 			const FVector RelScale = Scene->GetRelativeScale3D();
 			const FTransform World = Scene->GetComponentTransform();
 
-			auto VecObj = [](const FVector& V)
-			{
-				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-				O->SetNumberField(TEXT("x"), V.X); O->SetNumberField(TEXT("y"), V.Y); O->SetNumberField(TEXT("z"), V.Z);
-				return O;
-			};
-			auto RotObj = [](const FRotator& R)
-			{
-				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-				O->SetNumberField(TEXT("pitch"), R.Pitch); O->SetNumberField(TEXT("yaw"), R.Yaw); O->SetNumberField(TEXT("roll"), R.Roll);
-				return O;
-			};
-			Obj->SetObjectField(TEXT("relativeLocation"), VecObj(RelLoc));
-			Obj->SetObjectField(TEXT("relativeRotation"), RotObj(RelRot));
-			Obj->SetObjectField(TEXT("relativeScale3D"), VecObj(RelScale));
-			Obj->SetObjectField(TEXT("worldLocation"), VecObj(World.GetLocation()));
-			Obj->SetObjectField(TEXT("worldRotation"), RotObj(World.Rotator()));
+			Obj->SetObjectField(TEXT("relativeLocation"), MCPVec3ToJsonObject(RelLoc));
+			Obj->SetObjectField(TEXT("relativeRotation"), MCPRotatorToJsonObject(RelRot));
+			Obj->SetObjectField(TEXT("relativeScale3D"), MCPVec3ToJsonObject(RelScale));
+			Obj->SetObjectField(TEXT("worldLocation"), MCPVec3ToJsonObject(World.GetLocation()));
+			Obj->SetObjectField(TEXT("worldRotation"), MCPRotatorToJsonObject(World.Rotator()));
 			USceneComponent* Parent = Scene->GetAttachParent();
 			Obj->SetStringField(TEXT("attachParent"), Parent ? Parent->GetName() : TEXT(""));
 		}
@@ -3586,10 +3528,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetRVTSummary(const TSharedPtr<FJsonObjec
 		Entry->SetArrayField(TEXT("components"), CompArr);
 
 		const FVector Loc = A->GetActorLocation();
-		TSharedPtr<FJsonObject> LocObj = MakeShared<FJsonObject>();
-		LocObj->SetNumberField(TEXT("x"), Loc.X);
-		LocObj->SetNumberField(TEXT("y"), Loc.Y);
-		LocObj->SetNumberField(TEXT("z"), Loc.Z);
+		TSharedPtr<FJsonObject> LocObj = MCPVec3ToJsonObject(Loc);
 		Entry->SetObjectField(TEXT("location"), LocObj);
 
 		VolumesArr.Add(MakeShared<FJsonValueObject>(Entry));
@@ -3761,15 +3700,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorBounds(const TSharedPtr<FJsonObje
 		Actor->GetActorBounds(bOnlyColliding, Origin, Extent);
 	}
 
-	TSharedPtr<FJsonObject> OriginObj = MakeShared<FJsonObject>();
-	OriginObj->SetNumberField(TEXT("x"), Origin.X);
-	OriginObj->SetNumberField(TEXT("y"), Origin.Y);
-	OriginObj->SetNumberField(TEXT("z"), Origin.Z);
+	TSharedPtr<FJsonObject> OriginObj = MCPVec3ToJsonObject(Origin);
 
-	TSharedPtr<FJsonObject> ExtentObj = MakeShared<FJsonObject>();
-	ExtentObj->SetNumberField(TEXT("x"), Extent.X);
-	ExtentObj->SetNumberField(TEXT("y"), Extent.Y);
-	ExtentObj->SetNumberField(TEXT("z"), Extent.Z);
+	TSharedPtr<FJsonObject> ExtentObj = MCPVec3ToJsonObject(Extent);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
@@ -4215,18 +4148,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReadActorMotion(const TSharedPtr<FJsonObj
 		return MCPError(TEXT("Pass at least one of 'actorLabel', 'actorLabels', 'actorPath' or 'actorPaths'"));
 	}
 
-	auto VecToJson = [](const FVector& V) -> TSharedPtr<FJsonObject>
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetNumberField(TEXT("x"), V.X); Obj->SetNumberField(TEXT("y"), V.Y); Obj->SetNumberField(TEXT("z"), V.Z);
-		return Obj;
-	};
-	auto RotToJson = [](const FRotator& R) -> TSharedPtr<FJsonObject>
-	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetNumberField(TEXT("pitch"), R.Pitch); Obj->SetNumberField(TEXT("yaw"), R.Yaw); Obj->SetNumberField(TEXT("roll"), R.Roll);
-		return Obj;
-	};
 
 	TArray<TSharedPtr<FJsonValue>> Samples;
 	TArray<TSharedPtr<FJsonValue>> Missing;
@@ -4262,10 +4183,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReadActorMotion(const TSharedPtr<FJsonObj
 		S->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
 		S->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 		S->SetStringField(TEXT("class"), Actor->GetClass()->GetName());
-		S->SetObjectField(TEXT("location"), VecToJson(Actor->GetActorLocation()));
-		S->SetObjectField(TEXT("rotation"), RotToJson(Actor->GetActorRotation()));
-		S->SetObjectField(TEXT("scale"), VecToJson(Actor->GetActorScale3D()));
-		S->SetObjectField(TEXT("velocity"), VecToJson(Actor->GetVelocity()));
+		S->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Actor->GetActorLocation()));
+		S->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Actor->GetActorRotation()));
+		S->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Actor->GetActorScale3D()));
+		S->SetObjectField(TEXT("velocity"), MCPVec3ToJsonObject(Actor->GetVelocity()));
 
 		// Physics: drill into the root primitive for angular velocity + grounded.
 		if (UPrimitiveComponent* Prim = Actor->FindComponentByClass<UPrimitiveComponent>())
@@ -4273,7 +4194,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReadActorMotion(const TSharedPtr<FJsonObj
 			if (Prim->IsSimulatingPhysics())
 			{
 				S->SetBoolField(TEXT("simulatingPhysics"), true);
-				S->SetObjectField(TEXT("angularVelocity"), VecToJson(Prim->GetPhysicsAngularVelocityInDegrees()));
+				S->SetObjectField(TEXT("angularVelocity"), MCPVec3ToJsonObject(Prim->GetPhysicsAngularVelocityInDegrees()));
 				S->SetNumberField(TEXT("mass"), Prim->GetMass());
 			}
 			else
@@ -6198,10 +6119,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListStreamingSublevels(const TSharedPtr<F
 		O->SetBoolField(TEXT("loaded"), SL->IsLevelLoaded());
 		O->SetBoolField(TEXT("visible"), SL->GetShouldBeVisibleFlag());
 		const FTransform T = SL->LevelTransform;
-		TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
-		Loc->SetNumberField(TEXT("x"), T.GetLocation().X);
-		Loc->SetNumberField(TEXT("y"), T.GetLocation().Y);
-		Loc->SetNumberField(TEXT("z"), T.GetLocation().Z);
+		TSharedPtr<FJsonObject> Loc = MCPVec3ToJsonObject(T.GetLocation());
 		O->SetObjectField(TEXT("location"), Loc);
 		Out.Add(MakeShared<FJsonValueObject>(O));
 	}
@@ -6565,10 +6483,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchTranslate(const TSharedPtr<FJsonObje
 	// exactly the actors that moved.
 	if (bOffsetMoves)
 	{
-		TSharedPtr<FJsonObject> InverseOffset = MakeShared<FJsonObject>();
-		InverseOffset->SetNumberField(TEXT("x"), -Offset.X);
-		InverseOffset->SetNumberField(TEXT("y"), -Offset.Y);
-		InverseOffset->SetNumberField(TEXT("z"), -Offset.Z);
+		TSharedPtr<FJsonObject> InverseOffset = MCPVec3ToJsonObject(-Offset);
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetArrayField(TEXT("actorPaths"), TargetPaths);
 		Payload->SetObjectField(TEXT("offset"), InverseOffset);

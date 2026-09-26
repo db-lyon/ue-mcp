@@ -505,10 +505,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 		}
 		if (bChangedRotation)
 		{
-			TSharedPtr<FJsonObject> PrevRotation = MakeShared<FJsonObject>();
-			PrevRotation->SetNumberField(TEXT("pitch"), PreviousRotation.Pitch);
-			PrevRotation->SetNumberField(TEXT("yaw"), PreviousRotation.Yaw);
-			PrevRotation->SetNumberField(TEXT("roll"), PreviousRotation.Roll);
+			TSharedPtr<FJsonObject> PrevRotation = MCPRotatorToJsonObject(PreviousRotation);
 			Payload->SetObjectField(TEXT("rotation"), PrevRotation);
 		}
 		if (bChangedMobility)
