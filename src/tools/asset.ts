@@ -172,21 +172,36 @@ async function rescanDestination(
     : { attempted: true, editor: destination.name, scanned, failed };
 }
 
+/** search: every content root rather than /Game/ alone. */
+const SEARCH_ALL = z.boolean().optional().describe("Search all content roots (plugins, engine content) not just /Game/");
+
 export const assetTool: ToolDef = categoryTool(
   "asset",
   "Asset management: list, search, read, CRUD, import meshes/textures, datatables, stringtables.",
   {
     list: specBp("read", "List assets via the AssetRegistry (sees /Game and every mounted plugin root). Cursor-paginated, so a large folder is walked deterministically instead of dropping the bridge on one oversized response (#790): every page carries totalMatched, hasMore and a nextCursor to pass back. The row offset this used to page with is refused, because a row number cannot report that the folder changed underneath it. maxResults is a deprecated spelling of limit.", "list_assets"),
     search: {
-      kind: "handler",
+      kind: "flow",
       effect: "read",
       description: paged("Search by name/class/path. maxResults is a deprecated spelling of limit and sizes the page when limit is omitted. With extra content roots configured and no directory, this searches each root and pages ONE ROOT AT A TIME, so a cursor has to be passed back together with the directory it came from. Params: query, directory?, maxResults?, searchAll?"),
-      handler: async (ctx, p) => {
-        const { action: _, maxResults, ...rest } = p;
+      inputs: {
+        ...borrowSchema(specSchema, ["query", "directory", "maxResults", "limit", "cursor"]),
+        searchAll: SEARCH_ALL,
+      },
+      // Opaque: how many roots are searched depends on what each one returns.
+      expand: () => null,
+      compose: async (run, p, ctx) => {
+        const { maxResults, ...rest } = p;
         // One page size, whichever spelling the caller used. The bridge reads
         // `limit` only, so `maxResults` is resolved here rather than in C++.
         const limit = (p.limit as number | undefined) ?? (maxResults as number | undefined);
         const call = { ...rest, ...(limit !== undefined ? { limit } : {}) };
+        // `search_assets` is this action's own primitive; no other action wraps it.
+        const search = async (params: Record<string, unknown>): Promise<Record<string, unknown>> => {
+          const r = await run("ue-mcp.bridge", { ...params, method: "search_assets" });
+          if (r.data === undefined) throw r.error ?? new Error("search_assets failed");
+          return r.data;
+        };
         const roots = ctx.project.config.contentRoots;
         // If no directory specified and contentRoots configured, search each root and merge
         if (!p.directory && roots && roots.length > 0) {
@@ -202,8 +217,7 @@ export const assetTool: ToolDef = categoryTool(
           const allResults: Array<Record<string, unknown>> = [];
           const perRoot: Array<Record<string, unknown>> = [];
           for (const root of roots) {
-            // `search_assets` is this handler's own primitive; no other action wraps it.
-            const res = await callOwnBridgeMethod(ctx, "search_assets", { ...call, directory: root }) as Record<string, unknown>;
+            const res = await search({ ...call, directory: root });
             if (res.results && Array.isArray(res.results)) {
               allResults.push(...(res.results as Array<Record<string, unknown>>));
             }
@@ -232,8 +246,9 @@ export const assetTool: ToolDef = categoryTool(
             success: true,
           };
         }
-        return callOwnBridgeMethod(ctx, "search_assets", call);
+        return search(call);
       },
+      result: (answer) => answer,
     },
     read:           specBp("read", "Read asset via reflection.", "read_asset"),
     read_properties: specBp("read", "Read asset properties with values. Blueprint paths resolve to the generated-class CDO (#568). propertyName accepts dotted/indexed paths into nested structs, array elements, and instanced subobjects (e.g. `Config.Traits[1].Params.Field`); landing on an array of subobjects also lists each element's index+class (#527). expandDepth inlines the properties of subobjects OWNED by this asset, so a data asset's nested payload comes back in ONE call instead of a reference you have to chase (#755); references to OTHER assets are marked expandable rather than followed, unless expandExternal=true. Capped by maxExpandedObjects with expansionTruncated reported.", "read_asset_properties"),
@@ -474,7 +489,7 @@ export const assetTool: ToolDef = categoryTool(
     ...borrowSchema(gameplaySpecSchema, ["mappingContext", "inputAction", "imcPath", "inputActionPath", "mappingIndex"]),
     key: z.string().optional().describe("Key name for add_input_mapping or StringTable entry key (e.g. 'Mouse2D', 'LeftMouseButton') (#525)"),
     // Hand-written actions only: search, migrate and the locks.
-    searchAll: z.boolean().optional().describe("Search all content roots (plugins, engine content) not just /Game/"),
+    searchAll: SEARCH_ALL,
     exportName: z.string().optional(),
     allowDirty: z.boolean().optional().describe("migrate: migrate the on-disk version of an asset with unsaved edits (#760)"),
     destinationContentDir: z.string().optional().describe("migrate: the TARGET project's Content folder (#760)"),
