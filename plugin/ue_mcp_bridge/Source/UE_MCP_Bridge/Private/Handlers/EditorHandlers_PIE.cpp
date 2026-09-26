@@ -1049,7 +1049,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 	if (Paths.Num() == 0) return MCPError(TEXT("'paths' must contain at least one non-empty string"));
 
 	UWorld* World = ResolveWorldScope(WorldHint, PIEInstance);
-	if (!World) World = (UWorld*)GEditor->GetEditorWorldContext().World();
+	if (!World) World = GetEditorWorld();
 	if (!World) return MCPError(TEXT("No world available"));
 
 	TArray<TSharedPtr<FJsonValue>> Rows;

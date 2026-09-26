@@ -3182,7 +3182,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetWorldState(const TSharedPtr<FJsonObje
 		return MCPError(TEXT("Editor not available"));
 	}
 
-	UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
+	UWorld* EditorWorld = GetEditorWorld();
 	if (!EditorWorld)
 	{
 		// Fail closed. An empty answer here would read as "nothing is open and
