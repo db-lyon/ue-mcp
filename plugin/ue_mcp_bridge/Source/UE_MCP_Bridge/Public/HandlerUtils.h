@@ -1331,6 +1331,42 @@ inline TSharedPtr<FJsonValue> RequireStringAlt(
 	return MCPError(FString::Printf(TEXT("Missing required parameter '%s' (or '%s')"), Key1, Key2));
 }
 
+/** Extract a required number. Returns error JSON when absent or not a number, nullptr on success. */
+template <typename TNumber>
+inline TSharedPtr<FJsonValue> RequireNumber(
+	const TSharedPtr<FJsonObject>& Params,
+	const TCHAR* Key,
+	TNumber& OutValue)
+{
+	MCPNoteParamRead(Params, Key);
+	if (Params.IsValid() && Params->TryGetNumberField(Key, OutValue)) return nullptr;
+	return MCPError(FString::Printf(TEXT("Missing required parameter '%s'"), Key));
+}
+
+/** Extract a required array. Returns error JSON when absent or not an array, nullptr on success. */
+inline TSharedPtr<FJsonValue> RequireArray(
+	const TSharedPtr<FJsonObject>& Params,
+	const TCHAR* Key,
+	const TArray<TSharedPtr<FJsonValue>>*& OutValue)
+{
+	MCPNoteParamRead(Params, Key);
+	OutValue = nullptr;
+	if (Params.IsValid() && Params->TryGetArrayField(Key, OutValue) && OutValue) return nullptr;
+	return MCPError(FString::Printf(TEXT("Missing required parameter '%s'"), Key));
+}
+
+/** Extract a required object. Returns error JSON when absent or not an object, nullptr on success. */
+inline TSharedPtr<FJsonValue> RequireObject(
+	const TSharedPtr<FJsonObject>& Params,
+	const TCHAR* Key,
+	const TSharedPtr<FJsonObject>*& OutValue)
+{
+	MCPNoteParamRead(Params, Key);
+	OutValue = nullptr;
+	if (Params.IsValid() && Params->TryGetObjectField(Key, OutValue) && OutValue && OutValue->IsValid()) return nullptr;
+	return MCPError(FString::Printf(TEXT("Missing required parameter '%s'"), Key));
+}
+
 /** Extract an optional string, returning DefaultValue if absent. */
 inline FString OptionalString(
 	const TSharedPtr<FJsonObject>& Params,
@@ -1765,6 +1801,37 @@ inline bool ReadRotatorFields(const TSharedPtr<FJsonObject>& Obj, FRotator& Out)
 	return Any;
 }
 
+/** Read x/y/z into Out only when all three are present numbers. Returns false,
+ *  leaving Out untouched, when any axis is missing. */
+inline bool ReadVec3FieldsStrict(const TSharedPtr<FJsonObject>& Obj, FVector& Out)
+{
+	if (!Obj.IsValid()) return false;
+	double X, Y, Z;
+	if (!Obj->TryGetNumberField(TEXT("x"), X)
+		|| !Obj->TryGetNumberField(TEXT("y"), Y)
+		|| !Obj->TryGetNumberField(TEXT("z"), Z))
+	{
+		return false;
+	}
+	Out = FVector(X, Y, Z);
+	return true;
+}
+
+/** Read pitch/yaw/roll into Out only when all three are present numbers. */
+inline bool ReadRotatorFieldsStrict(const TSharedPtr<FJsonObject>& Obj, FRotator& Out)
+{
+	if (!Obj.IsValid()) return false;
+	double Pitch, Yaw, Roll;
+	if (!Obj->TryGetNumberField(TEXT("pitch"), Pitch)
+		|| !Obj->TryGetNumberField(TEXT("yaw"), Yaw)
+		|| !Obj->TryGetNumberField(TEXT("roll"), Roll))
+	{
+		return false;
+	}
+	Out = FRotator(Pitch, Yaw, Roll);
+	return true;
+}
+
 inline bool ReadLinearColorFields(const TSharedPtr<FJsonObject>& Obj, FLinearColor& Out)
 {
 	if (!Obj.IsValid()) return false;
@@ -1876,6 +1943,27 @@ inline TSharedPtr<FJsonObject> MCPLinearColorToJsonObject(const FLinearColor& C)
 	Obj->SetNumberField(TEXT("g"), C.G);
 	Obj->SetNumberField(TEXT("b"), C.B);
 	Obj->SetNumberField(TEXT("a"), C.A);
+	return Obj;
+}
+
+/** FQuat to { x, y, z, w }. */
+inline TSharedPtr<FJsonObject> MCPQuatToJsonObject(const FQuat& Q)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetNumberField(TEXT("x"), Q.X);
+	Obj->SetNumberField(TEXT("y"), Q.Y);
+	Obj->SetNumberField(TEXT("z"), Q.Z);
+	Obj->SetNumberField(TEXT("w"), Q.W);
+	return Obj;
+}
+
+/** FTransform to { location, rotation, scale }, the shape OptionalTransform reads. */
+inline TSharedPtr<FJsonObject> MCPTransformToJsonObject(const FTransform& T)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(T.GetLocation()));
+	Obj->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(T.Rotator()));
+	Obj->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(T.GetScale3D()));
 	return Obj;
 }
 
