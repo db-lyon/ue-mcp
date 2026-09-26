@@ -45,48 +45,6 @@ namespace
 			default:                                    return TEXT("Unknown");
 		}
 	}
-
-	/** Resolve a parent class path to a UClass*.
-	 *  Accepts: "/Script/Engine.Actor", "Actor" (short native name), or
-	 *  a BP path "/Game/.../BP_Foo.BP_Foo_C". Returns nullptr if unresolved. */
-	const UClass* ResolveParentClass(const FString& InClass)
-	{
-		if (InClass.IsEmpty()) return UObject::StaticClass();
-
-		// Direct path form
-		if (UClass* Cls = LoadClass<UObject>(nullptr, *InClass))
-		{
-			return Cls;
-		}
-		if (UClass* Cls = LoadObject<UClass>(nullptr, *InClass))
-		{
-			return Cls;
-		}
-
-		// Try common native short-names first
-		if (UClass* Cls = FindFirstObjectSafe<UClass>(*InClass))
-		{
-			return Cls;
-		}
-
-		// Try "/Script/<Module>.<Name>" for common modules if a short name
-		// was provided.
-		static const TCHAR* CommonModules[] = { TEXT("Engine"), TEXT("CoreUObject"), TEXT("UMG"), TEXT("GameplayAbilities") };
-		for (const TCHAR* Mod : CommonModules)
-		{
-			FString Candidate = FString::Printf(TEXT("/Script/%s.%s"), Mod, *InClass);
-			if (UClass* Cls = LoadClass<UObject>(nullptr, *Candidate))
-			{
-				return Cls;
-			}
-			if (UClass* Cls = LoadObject<UClass>(nullptr, *Candidate))
-			{
-				return Cls;
-			}
-		}
-
-		return nullptr;
-	}
 }
 
 void FProjectHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
@@ -173,13 +131,9 @@ TSharedPtr<FJsonValue> FProjectHandlers::CreateCppClass(const TSharedPtr<FJsonOb
 			TEXT("classDomain must be public, private or classes (got '%s')"), *ClassDomain));
 	}
 
-	const UClass* ParentClass = ResolveParentClass(ParentClassStr);
-	if (!ParentClass)
-	{
-		return MCPError(FString::Printf(
-			TEXT("Could not resolve parentClass '%s' - pass a /Script/<Module>.<Class> path or a loaded native class name"),
-			*ParentClassStr));
-	}
+	// No parentClass means UObject; anything else goes through the shared resolver.
+	const UClass* ParentClass = ParentClassStr.IsEmpty() ? UObject::StaticClass() : MCPResolveClass(ParentClassStr);
+	if (!ParentClass) return MCPClassNotFoundError(ParentClassStr, TEXT("parentClass"));
 
 	// Discover project modules and pick one.
 	FGameProjectGenerationModule& GPM = FGameProjectGenerationModule::Get();

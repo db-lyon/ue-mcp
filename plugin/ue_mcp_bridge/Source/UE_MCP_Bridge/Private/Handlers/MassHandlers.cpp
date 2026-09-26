@@ -20,27 +20,6 @@ namespace
 	static const TCHAR* ConfigClassPath = TEXT("/Script/MassSpawner.MassEntityConfigAsset");
 	static const TCHAR* TraitBaseClassPath = TEXT("/Script/MassSpawner.MassEntityTraitBase");
 
-	UClass* ResolveClass(const FString& ClassPath)
-	{
-		if (ClassPath.IsEmpty()) return nullptr;
-		UClass* Result = LoadClass<UObject>(nullptr, *ClassPath);
-		if (!Result) Result = LoadObject<UClass>(nullptr, *ClassPath);
-		if (!Result)
-		{
-			FString ShortName = ClassPath;
-			ShortName.RemoveFromEnd(TEXT("_C"));
-			for (TObjectIterator<UClass> It; It; ++It)
-			{
-				if (It->GetName() == ShortName || It->GetName() == FPackageName::GetShortName(ClassPath))
-				{
-					Result = *It;
-					break;
-				}
-			}
-		}
-		return Result;
-	}
-
 	bool SplitAssetPath(const TSharedPtr<FJsonObject>& Params, FString& OutName, FString& OutPackagePath)
 	{
 		FString AssetPath;
@@ -221,8 +200,8 @@ TSharedPtr<FJsonValue> FMassHandlers::ReadEntityConfig(const TSharedPtr<FJsonObj
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
-	UClass* ConfigClass = ResolveClass(ConfigClassPath);
-	UClass* TraitBaseClass = ResolveClass(TraitBaseClassPath);
+	UClass* ConfigClass = MCPResolveClass(ConfigClassPath);
+	UClass* TraitBaseClass = MCPResolveClass(TraitBaseClassPath);
 	if (!ConfigClass || !TraitBaseClass)
 	{
 		return MCPError(TEXT("MassSpawner is unavailable; enable MassGameplay/MassSpawner before using read_mass_entity_config"));
@@ -292,8 +271,8 @@ TSharedPtr<FJsonValue> FMassHandlers::EnsureEntityConfig(const TSharedPtr<FJsonO
 		return MCPError(FString::Printf(TEXT("Invalid package path: %s"), *PackagePath));
 	}
 
-	UClass* ConfigClass = ResolveClass(ConfigClassPath);
-	UClass* TraitBaseClass = ResolveClass(TraitBaseClassPath);
+	UClass* ConfigClass = MCPResolveClass(ConfigClassPath);
+	UClass* TraitBaseClass = MCPResolveClass(TraitBaseClassPath);
 	if (!ConfigClass || !TraitBaseClass)
 	{
 		return MCPError(TEXT("MassSpawner is unavailable; enable MassGameplay/MassSpawner before using ensure_mass_entity_config"));
@@ -331,7 +310,7 @@ TSharedPtr<FJsonValue> FMassHandlers::EnsureEntityConfig(const TSharedPtr<FJsonO
 		{
 			return MCPError(FString::Printf(TEXT("traits[%d] requires class or traitClass"), Index));
 		}
-		UClass* TraitClass = ResolveClass(ClassPath);
+		UClass* TraitClass = MCPResolveClassOfType(ClassPath, TraitBaseClass);
 		if (!TraitClass || !TraitClass->IsChildOf(TraitBaseClass) || TraitClass->HasAnyClassFlags(CLASS_Abstract))
 		{
 			return MCPError(FString::Printf(TEXT("traits[%d] is not a concrete UMassEntityTraitBase: %s"), Index, *ClassPath));
