@@ -726,9 +726,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
@@ -1121,9 +1123,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 
 		// Compile and save
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		SaveAssetPackage(Blueprint);
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 		auto Result = MCPSuccess();
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		if (bAlreadyLinked)
 		{
 			MCPSetUpdated(Result);
@@ -1448,9 +1452,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	}
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeId"), NodeId);
@@ -1681,13 +1687,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RefreshNode(const TSharedPtr<FJsonObj
 	const bool bChanged = Before != After || BrokenOrphanLinks.Num() > 0;
 	const TArray<TSharedPtr<FJsonValue>> RemainingOrphans = OrphanedPins(Node);
 
+	bool bSaveRan = false, bSaved = false;
+	FString SaveError;
 	if (bChanged)
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		SaveAssetPackage(Blueprint);
+		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+		bSaveRan = true;
 	}
 
 	auto Result = MCPSuccess();
+	if (bSaveRan) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	if (bChanged)
 	{
 		MCPSetUpdated(Result);
@@ -1833,9 +1843,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DisconnectPins(const TSharedPtr<FJson
 	}
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetBoolField(TEXT("alreadyDisconnected"), false);
 	Result->SetNumberField(TEXT("brokenLinkCount"), BrokenLinks.Num());
 	Result->SetArrayField(TEXT("brokenLinks"), BrokenLinks);
@@ -2025,9 +2037,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
@@ -2561,9 +2575,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
@@ -2608,7 +2624,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprints(const TSharedPtr<FJ
 	bool bSave = OptionalBool(Params, TEXT("save"), true);
 
 	TArray<TSharedPtr<FJsonValue>> Results;
-	int32 Compiled = 0, Failed = 0, NotFound = 0, AlreadyUpToDate = 0;
+	int32 Compiled = 0, Failed = 0, NotFound = 0, AlreadyUpToDate = 0, SaveFailed = 0;
 	// Blueprints whose compiled status actually moved: one that came in stale,
 	// or one that came out in error. A batch where every entry was already up
 	// to date and compiled clean ends where it started.
@@ -2654,7 +2670,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprints(const TSharedPtr<FJ
 		}
 		else
 		{
-			if (bSave) SaveAssetPackage(Blueprint);
+			if (bSave)
+			{
+				FString SaveError;
+				const bool bItemSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+				Item->SetBoolField(TEXT("saved"), bItemSaved);
+				if (!bItemSaved)
+				{
+					Item->SetStringField(TEXT("saveError"), SaveError);
+					SaveFailed++;
+				}
+			}
 			Item->SetStringField(TEXT("status"), TEXT("compiled"));
 			Item->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings);
 			Compiled++;
@@ -2670,6 +2696,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprints(const TSharedPtr<FJ
 	Result->SetNumberField(TEXT("alreadyUpToDate"), AlreadyUpToDate);
 	Result->SetNumberField(TEXT("statusChanged"), StatusChanged);
 	Result->SetArrayField(TEXT("results"), Results);
+	if (SaveFailed > 0)
+	{
+		// A compile that stays in memory is lost on restart, so the batch fails (#931).
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetNumberField(TEXT("saveFailed"), SaveFailed);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d Blueprint(s) compiled but were not written to disk; each such entry carries saveError."), SaveFailed));
+	}
 
 	// The work and the outcome are separate answers. CompileBlueprint rebuilds
 	// and reinstances on every call regardless of status, so a batch where
@@ -2773,13 +2807,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CleanupGraph(const TSharedPtr<FJsonOb
 		}
 	}
 
+	bool bSaveRan = false, bSaved = false;
+	FString SaveError;
 	if (Removed > 0)
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		SaveAssetPackage(Blueprint);
+		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+		bSaveRan = true;
 	}
 
 	auto Result = MCPSuccess();
+	if (bSaveRan) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetNumberField(TEXT("removed"), Removed);
 	Result->SetArrayField(TEXT("removedNodes"), RemovedIds);
@@ -2893,13 +2931,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 		Detail.Add(MakeShared<FJsonValueObject>(EntryResult));
 	}
 
+	bool bSaveRan = false, bSaved = false;
+	FString SaveError;
 	if (Connected > 0)
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		SaveAssetPackage(Blueprint);
+		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+		bSaveRan = true;
 	}
 
 	auto Result = MCPSuccess();
+	if (bSaveRan) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetNumberField(TEXT("total"), ConnectionsArray->Num());

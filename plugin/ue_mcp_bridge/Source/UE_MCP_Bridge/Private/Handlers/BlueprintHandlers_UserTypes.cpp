@@ -638,9 +638,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReorderEnumValues(const TSharedPtr<FJ
 		++Moves;
 	}
 
-	UEditorAssetLibrary::SaveLoadedAsset(Enum);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Enum, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetNumberField(TEXT("moves"), Moves);
@@ -776,9 +778,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetEnumMetadata(const TSharedPtr<FJso
 		Enum->SetMetaData(TEXT("ToolTip"), *Entry.Tooltip, Entry.Index);
 	}
 
-	UEditorAssetLibrary::SaveLoadedAsset(Enum);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Enum, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("bitflags"), FEnumEditorUtils::IsEnumeratorBitflagsType(Enum));
@@ -924,9 +928,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetStructFieldDefault(const TSharedPt
 			*DefaultValue, *FieldDisplayName, *FieldTypeSpec(*Before, bRoundTrips)));
 	}
 
-	UEditorAssetLibrary::SaveLoadedAsset(Struct);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Struct, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("fieldGuid"), Guid.ToString());
@@ -1078,15 +1084,20 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReorderStructFields(const TSharedPtr<
 			UndoPayload->SetStringField(TEXT("assetPath"), AssetPath);
 			UndoPayload->SetArrayField(TEXT("order"), PreviousOrder);
 			MCPSetRollback(Partial, TEXT("reorder_struct_fields"), UndoPayload);
-			UEditorAssetLibrary::SaveLoadedAsset(Struct);
+			// The moves made so far are kept, so say whether they reached disk.
+			FString PartialSaveError;
+			const bool bPartialSaved = SaveAssetPackageChecked(Struct, PartialSaveError);
+			MCPNoteSaveOutcome(Partial, AssetPath, bPartialSaved, PartialSaveError);
 			return MCPResult(Partial);
 		}
 		++Moves;
 	}
 
-	UEditorAssetLibrary::SaveLoadedAsset(Struct);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Struct, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("complete"), true);
@@ -1323,9 +1334,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditStructMetadata(const TSharedPtr<F
 #endif
 	}
 
-	UEditorAssetLibrary::SaveLoadedAsset(Struct);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Struct, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("tooltip"), FStructureEditorUtils::GetTooltip(Struct));

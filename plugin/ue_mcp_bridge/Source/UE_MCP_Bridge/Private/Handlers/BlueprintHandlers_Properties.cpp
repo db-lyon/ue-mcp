@@ -262,9 +262,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
@@ -624,9 +626,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 	CDO->PostEditChange();
 
 	// Save
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
@@ -816,9 +820,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -1012,9 +1018,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 		}
 	}
 
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
@@ -1144,6 +1152,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	// A no-op does not dirty the package and does not save it. Reporting
 	// unchanged:true beside an unconditional MarkPackageDirty and SaveAsset was
 	// the claim and the contradiction in the same result.
+	bool bSaved = true;
+	FString SaveError;
 	if (!bNoChange)
 	{
 		CDO->PrimaryActorTick.bCanEverTick = bCanEverTick;
@@ -1151,11 +1161,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 		CDO->PrimaryActorTick.TickInterval = NewTickInterval;
 
 		Blueprint->MarkPackageDirty();
-		UEditorAssetLibrary::SaveAsset(AssetPath);
+		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 	}
 
 	auto Result = MCPSuccess();
 	if (bNoChange) MCPSetExisted(Result); else MCPSetUpdated(Result);
+	if (!bNoChange) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("bCanEverTick"), bCanEverTick);
 	Result->SetBoolField(TEXT("bStartWithTickEnabled"), bStartWithTickEnabled);
@@ -1530,9 +1541,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentOverrideMaterials(const T
 	Template->PostEditChange();
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -1752,9 +1765,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	// Recompile so K2Node_Timeline regenerates its output pins for the new track.
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("timelineName"), TimelineName);
@@ -1834,9 +1849,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetCapsuleSize(const TSharedPtr<FJson
 	Capsule->Modify();
 	Capsule->SetCapsuleSize(NewRadius, NewHalfHeight, /*bUpdateOverlaps*/ true);
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("componentName"), ComponentName);

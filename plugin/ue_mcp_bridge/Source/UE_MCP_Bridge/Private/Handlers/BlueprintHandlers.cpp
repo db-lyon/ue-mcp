@@ -2051,9 +2051,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 	if (bSuccess)
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		SaveAssetPackage(Blueprint);
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 		auto Result = MCPSuccess();
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("variableName"), VarName);
@@ -2223,9 +2225,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
 		// Save asset
-		SaveAssetPackage(Blueprint);
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 		auto Result = MCPSuccess();
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentClass"), ComponentClass);
@@ -3177,9 +3181,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 	{
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		SaveAssetPackage(Blueprint);
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 		auto Result = MCPSuccess();
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentName"), ComponentName);
 		Result->SetBoolField(TEXT("deleted"), true);
@@ -3286,9 +3292,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
 	Result->SetBoolField(TEXT("deleted"), true);
@@ -3793,9 +3801,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushInheritableComponentHandler(cons
 	const int32 After = CountRecords();
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("hadInheritableComponentHandler"), true);

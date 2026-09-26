@@ -146,9 +146,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 	// Save asset
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, BlueprintPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetStringField(TEXT("interfacePath"), InterfacePathStr);
@@ -219,9 +221,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 	FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, /*bIsUserCreated=*/true, /*SignatureFromObject=*/nullptr);
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -660,9 +664,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, BlueprintPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetStringField(TEXT("name"), DispatcherName);
@@ -715,9 +721,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 	FBlueprintEditorUtils::RenameGraph(FoundGraph, NewName);
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("oldName"), OldName);
@@ -775,9 +783,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, FoundGraph);
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
 	Result->SetBoolField(TEXT("deleted"), true);
@@ -987,9 +997,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::OverrideFunction(const TSharedPtr<FJs
 
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		SaveAssetPackage(Blueprint);
+		FString SaveError;
+		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 		auto Result = MCPSuccess();
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -1086,9 +1098,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::OverrideFunction(const TSharedPtr<FJs
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);

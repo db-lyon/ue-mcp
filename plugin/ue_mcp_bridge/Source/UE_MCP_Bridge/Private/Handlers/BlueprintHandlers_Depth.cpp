@@ -372,11 +372,11 @@ static UStruct* FindLocalVariableScope(UBlueprint* Blueprint, const FString& Fun
 
 /** Compile and persist after a structural edit, the way every other authoring
  *  handler in this category finishes. */
-static void RecompileAfterStructuralEdit(UBlueprint* Blueprint)
+static bool RecompileAfterStructuralEdit(UBlueprint* Blueprint, FString& OutSaveError)
 {
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	SaveAssetPackage(Blueprint);
+	return SaveAssetPackageChecked(Blueprint, OutSaveError);
 }
 
 } // namespace MCPBlueprintDepth
@@ -577,9 +577,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveBlueprintInterface(const TShare
 
 	FBlueprintEditorUtils::RemoveInterface(
 		Blueprint, FTopLevelAssetPath(InterfaceClass->GetPathName()), bPreserveFunctions);
-	RecompileAfterStructuralEdit(Blueprint);
+	FString SaveError;
+	const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), AssetPath);
 	Result->SetStringField(TEXT("interfacePath"), InterfaceClass->GetPathName());
@@ -765,9 +767,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetFunctionProperties(const TSharedPt
 	if (bHasDeprecated)   Meta->bIsDeprecated = bDeprecated;
 	if (bHasDeprMsg)      Meta->DeprecationMessage = DeprecationMessage;
 
-	RecompileAfterStructuralEdit(Blueprint);
+	FString SaveError;
+	const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -1034,7 +1038,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 			}
 		}
 		Result->SetArrayField(TEXT("parameters"), Now);
-		RecompileAfterStructuralEdit(Blueprint);
+		FString SaveError;
+		const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		return MCPResult(Result);
 	};
 
@@ -1500,12 +1506,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameBlueprintVariable(const TShared
 	// the RepNotify function name and the SCS entry when the variable is a
 	// component. Recreating the variable would leave all of them dangling.
 	FBlueprintEditorUtils::RenameMemberVariable(Blueprint, OldVar, NewVar);
-	RecompileAfterStructuralEdit(Blueprint);
+	FString SaveError;
+	const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 	const int32 ReferencesAfter = CountVariableReferences(Blueprint, NewVar);
 	const int32 StillOld = CountVariableReferences(Blueprint, OldVar);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("oldName"), OldName);
@@ -1745,9 +1753,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetBlueprintVariableMetadata(const TS
 		}
 	}
 
-	RecompileAfterStructuralEdit(Blueprint);
+	FString SaveError;
+	const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("name"), VarName);
@@ -1865,9 +1875,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditLocalVariable(const TSharedPtr<FJ
 		const FString PrevDefault = Entry->LocalVariables[At].DefaultValue;
 
 		FBlueprintEditorUtils::RemoveLocalVariable(Blueprint, Scope, VarFName);
-		RecompileAfterStructuralEdit(Blueprint);
+		FString SaveError;
+		const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 		auto Result = MCPSuccess();
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetUpdated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -1918,9 +1930,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditLocalVariable(const TSharedPtr<FJ
 		// RenameLocalVariable rewrites the get/set nodes inside the function,
 		// which a remove-then-add pair would destroy.
 		FBlueprintEditorUtils::RenameLocalVariable(Blueprint, Scope, VarFName, NewVar);
-		RecompileAfterStructuralEdit(Blueprint);
+		FString SaveError;
+		const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 		auto Result = MCPSuccess();
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetUpdated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -1961,9 +1975,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditLocalVariable(const TSharedPtr<FJ
 		if (auto Err = RequireScope()) return Err;
 
 		FBlueprintEditorUtils::ChangeLocalVariableType(Blueprint, Scope, VarFName, PinType);
-		RecompileAfterStructuralEdit(Blueprint);
+		FString SaveError;
+		const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 		auto Result = MCPSuccess();
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetUpdated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -2008,9 +2024,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditLocalVariable(const TSharedPtr<FJ
 		// in the first place. There is no engine helper and none is needed.
 		Entry->Modify();
 		Entry->LocalVariables[At].DefaultValue = DefaultValue;
-		RecompileAfterStructuralEdit(Blueprint);
+		FString SaveError;
+		const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 		auto Result = MCPSuccess();
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetUpdated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -2168,9 +2186,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveEventDispatcher(const TSharedPt
 	{
 		FBlueprintEditorUtils::RemoveGraph(Blueprint, Signature);
 	}
-	RecompileAfterStructuralEdit(Blueprint);
+	FString SaveError;
+	const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), Name);
@@ -2327,9 +2347,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddCustomEvent(const TSharedPtr<FJson
 	Event->ReconstructNode();
 
 	Graph->NotifyGraphChanged();
-	RecompileAfterStructuralEdit(Blueprint);
+	FString SaveError;
+	const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
@@ -2485,9 +2507,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateMacro(const TSharedPtr<FJsonObj
 	if (InputOwner) InputOwner->ReconstructNode();
 	if (OutputOwner) OutputOwner->ReconstructNode();
 
-	RecompileAfterStructuralEdit(Blueprint);
+	FString SaveError;
+	const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("macroName"), MacroName);
@@ -2655,9 +2679,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteGraph(const TSharedPtr<FJsonObj
 		: FString();
 
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, Target);
-	RecompileAfterStructuralEdit(Blueprint);
+	FString SaveError;
+	const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), DeletedName);
@@ -2735,9 +2761,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteMacro(const TSharedPtr<FJsonObj
 	}
 
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, Graph);
-	RecompileAfterStructuralEdit(Blueprint);
+	FString SaveError;
+	const bool bSaved = RecompileAfterStructuralEdit(Blueprint, SaveError);
 
 	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("macroName"), MacroName);
