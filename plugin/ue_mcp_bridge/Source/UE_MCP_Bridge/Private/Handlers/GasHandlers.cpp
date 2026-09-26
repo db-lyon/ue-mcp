@@ -380,15 +380,10 @@ TSharedPtr<FJsonValue> FGasHandlers::GetGasInfo(const TSharedPtr<FJsonObject>& P
 	FString BlueprintPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	if (!Blueprint || !Blueprint->GeneratedClass)
+	REQUIRE_ASSET(UBlueprint, Blueprint, BlueprintPath);
+	if (!Blueprint->GeneratedClass)
 	{
-		// Return success with empty info rather than crashing
-		auto Result = MCPSuccess();
-		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-		Result->SetBoolField(TEXT("hasGasComponents"), false);
-		Result->SetStringField(TEXT("info"), TEXT("Blueprint not found or has no generated class"));
-		return MCPResult(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint has no generated class: %s"), *BlueprintPath));
 	}
 
 	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
