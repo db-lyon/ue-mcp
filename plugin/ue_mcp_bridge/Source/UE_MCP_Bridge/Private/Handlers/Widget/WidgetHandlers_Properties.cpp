@@ -440,69 +440,46 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetBinding(const TSharedPtr<FJso
 	return MCPResult(Result);
 }
 
-TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJsonObject>& Params)
+namespace
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
-
-	FString WidgetName;
-	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
-
-	FString PropertyName;
-	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
-
-	FString PropertyValue;
-	// `propertyValue` is a spec alias, resolved by the registry (#1057).
-	if (auto Err = RequireString(Params, TEXT("value"), PropertyValue)) return Err;
-
-	TSharedPtr<FJsonValue> ResolveError;
-	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
-	if (!WidgetBP) return ResolveError;
-
-	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
-
-	// Find the widget
-	UWidget* FoundWidget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
-
-	if (!FoundWidget)
+	/** What a reflection write read back before it wrote, and where it read it,
+	 *  which decides the rollback set_widget_property can offer. */
+	struct FMCPWidgetPropertyCapture
 	{
-		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
-	}
+		// The previous value, in the SAME text form this action accepts, and only
+		// when the write goes through one of the three reflection routes below,
+		// whose input format is UE export text either way. The typed convenience
+		// branches take bespoke formats ("R,G,B,A", a bare font size, a plain
+		// string for Text) that export text does not round-trip through, so a
+		// captured value replayed at one of those would write something else. That
+		// is reported as having no rollback rather than given a wrong one.
+		FString PreviousPropertyValue;
+		bool bCapturedPreviousValue = false;
+		// True only when the capture came off a SINGLE-SEGMENT property on the
+		// widget itself, which is the one shape widget(set_style) can also address.
+		// That matters because an empty previous value cannot travel through this
+		// action at all: FStrProperty::ExportText_Internal appends nothing for an
+		// empty string when PPF_Delimited is not set, and this action's
+		// propertyValue is read with RequireStringAlt, which rejects an empty
+		// string as a missing parameter. set_style takes its value as JSON and
+		// accepts an empty one, so it is the rollback for that case.
+		bool bCapturedOnFlatWidgetProperty = false;
+		// The single path segment the capture came off, which is what the set_style
+		// rollback has to be handed. It is NOT always the incoming propertyName:
+		// ParseIntoArray drops empty segments, so "Foo." parses to one part and
+		// still counts as flat, while the raw string would be looked up verbatim by
+		// FindPropertyByName and would not be found.
+		FString FlatWidgetPropertyName;
+		// True when the flat capture came off an FStrProperty. That is the one
+		// property kind whose empty-string round trip through set_style is
+		// established rather than assumed (see the rollback note below).
+		bool bFlatCaptureWasStringProperty = false;
+	};
 
-	bool bPropertySet = false;
-
-	// The previous value, in the SAME text form this action accepts, and only
-	// when the write goes through one of the three reflection routes below,
-	// whose input format is UE export text either way. The typed convenience
-	// branches take bespoke formats ("R,G,B,A", a bare font size, a plain
-	// string for Text) that export text does not round-trip through, so a
-	// captured value replayed at one of those would write something else. That
-	// is reported as having no rollback rather than given a wrong one.
-	FString PreviousPropertyValue;
-	bool bCapturedPreviousValue = false;
-	// True only when the capture came off a SINGLE-SEGMENT property on the
-	// widget itself, which is the one shape widget(set_style) can also address.
-	// That matters because an empty previous value cannot travel through this
-	// action at all: FStrProperty::ExportText_Internal appends nothing for an
-	// empty string when PPF_Delimited is not set, and this action's
-	// propertyValue is read with RequireStringAlt, which rejects an empty
-	// string as a missing parameter. set_style takes its value as JSON and
-	// accepts an empty one, so it is the rollback for that case.
-	bool bCapturedOnFlatWidgetProperty = false;
-	// The single path segment the capture came off, which is what the set_style
-	// rollback has to be handed. It is NOT always the incoming propertyName:
-	// ParseIntoArray drops empty segments, so "Foo." parses to one part and
-	// still counts as flat, while the raw string would be looked up verbatim by
-	// FindPropertyByName and would not be found.
-	FString FlatWidgetPropertyName;
-	// True when the flat capture came off an FStrProperty. That is the one
-	// property kind whose empty-string round trip through set_style is
-	// established rather than assumed (see the rollback note below).
-	bool bFlatCaptureWasStringProperty = false;
-
-	// Handle well-known properties by type
-	if (UTextBlock* TextBlock = Cast<UTextBlock>(FoundWidget))
+	/** TextBlock: text and fontSize. */
+	bool MCPWidgetSetTextBlockProperty(UTextBlock* TextBlock, const FString& PropertyName, const FString& PropertyValue)
 	{
+		bool bPropertySet = false;
 		if (PropertyName == TEXT("text") || PropertyName == TEXT("Text"))
 		{
 			TextBlock->SetText(FText::FromString(PropertyValue));
@@ -515,9 +492,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 			TextBlock->SetFont(FontInfo);
 			bPropertySet = true;
 		}
+		return bPropertySet;
 	}
-	else if (UImage* Image = Cast<UImage>(FoundWidget))
+
+	/** Image: colorAndOpacity or tint, and the brush fields. */
+	bool MCPWidgetSetImageProperty(UImage* Image, const FString& PropertyName, const FString& PropertyValue)
 	{
+		bool bPropertySet = false;
 		if (PropertyName == TEXT("colorAndOpacity") || PropertyName == TEXT("tint"))
 		{
 			// Expect "R,G,B,A" format
@@ -627,9 +608,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 				}
 			}
 		}
+		return bPropertySet;
 	}
-	else if (UProgressBar* ProgressBar = Cast<UProgressBar>(FoundWidget))
+
+	/** ProgressBar: percent and fillColor. */
+	bool MCPWidgetSetProgressBarProperty(UProgressBar* ProgressBar, const FString& PropertyName, const FString& PropertyValue)
 	{
+		bool bPropertySet = false;
 		if (PropertyName == TEXT("percent") || PropertyName == TEXT("Percent"))
 		{
 			ProgressBar->SetPercent(FCString::Atof(*PropertyValue));
@@ -649,55 +634,317 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 				bPropertySet = true;
 			}
 		}
+		return bPropertySet;
 	}
-	else if (UCheckBox* CheckBox = Cast<UCheckBox>(FoundWidget))
+
+	/** CheckBox: isChecked. */
+	bool MCPWidgetSetCheckBoxProperty(UCheckBox* CheckBox, const FString& PropertyName, const FString& PropertyValue)
 	{
+		bool bPropertySet = false;
 		if (PropertyName == TEXT("isChecked") || PropertyName == TEXT("IsChecked"))
 		{
 			bool bChecked = PropertyValue.ToBool();
 			CheckBox->SetIsChecked(bChecked);
 			bPropertySet = true;
 		}
+		return bPropertySet;
 	}
-	else if (USlider* Slider = Cast<USlider>(FoundWidget))
+
+	/** Slider: value. */
+	bool MCPWidgetSetSliderProperty(USlider* Slider, const FString& PropertyName, const FString& PropertyValue)
 	{
+		bool bPropertySet = false;
 		if (PropertyName == TEXT("value") || PropertyName == TEXT("Value"))
 		{
 			Slider->SetValue(FCString::Atof(*PropertyValue));
 			bPropertySet = true;
 		}
+		return bPropertySet;
 	}
-	else if (UEditableTextBox* EditableText = Cast<UEditableTextBox>(FoundWidget))
+
+	/** EditableTextBox: text. */
+	bool MCPWidgetSetEditableTextBoxProperty(UEditableTextBox* EditableText, const FString& PropertyName, const FString& PropertyValue)
 	{
+		bool bPropertySet = false;
 		if (PropertyName == TEXT("text") || PropertyName == TEXT("Text"))
 		{
 			EditableText->SetText(FText::FromString(PropertyValue));
 			bPropertySet = true;
 		}
-	}
-	// (#135) SizeBox overrides: UMG 5.1+ requires the Set*Override accessors so the
-	// paired bOverride_ flag is toggled on - ImportText on the raw property doesn't do this.
-	if (!bPropertySet)
-	{
-		if (USizeBox* SizeBox = Cast<USizeBox>(FoundWidget))
-		{
-			const float V = FCString::Atof(*PropertyValue);
-			const FString& N = PropertyName;
-			if (N == TEXT("WidthOverride") || N == TEXT("widthOverride"))       { SizeBox->SetWidthOverride(V);       bPropertySet = true; }
-			else if (N == TEXT("HeightOverride") || N == TEXT("heightOverride")) { SizeBox->SetHeightOverride(V);      bPropertySet = true; }
-			else if (N == TEXT("MinDesiredWidth") || N == TEXT("minDesiredWidth"))   { SizeBox->SetMinDesiredWidth(V);   bPropertySet = true; }
-			else if (N == TEXT("MinDesiredHeight") || N == TEXT("minDesiredHeight")) { SizeBox->SetMinDesiredHeight(V);  bPropertySet = true; }
-			else if (N == TEXT("MaxDesiredWidth") || N == TEXT("maxDesiredWidth"))   { SizeBox->SetMaxDesiredWidth(V);   bPropertySet = true; }
-			else if (N == TEXT("MaxDesiredHeight") || N == TEXT("maxDesiredHeight")) { SizeBox->SetMaxDesiredHeight(V);  bPropertySet = true; }
-			else if (N == TEXT("clearWidthOverride"))  { SizeBox->ClearWidthOverride();  bPropertySet = true; }
-			else if (N == TEXT("clearHeightOverride")) { SizeBox->ClearHeightOverride(); bPropertySet = true; }
-		}
+		return bPropertySet;
 	}
 
-	// ── Slot properties (slot.anchors, slot.alignment, slot.position, slot.autoSize, slot.*) ──
-	// Case-insensitive: "Slot.padding" and "slot.padding" both route here (#364).
-	if (!bPropertySet && PropertyName.StartsWith(TEXT("slot."), ESearchCase::IgnoreCase))
+	/** SizeBox overrides, through the Set*Override accessors (#135). */
+	bool MCPWidgetSetSizeBoxProperty(USizeBox* SizeBox, const FString& PropertyName, const FString& PropertyValue)
 	{
+		bool bPropertySet = false;
+		const float V = FCString::Atof(*PropertyValue);
+		const FString& N = PropertyName;
+		if (N == TEXT("WidthOverride") || N == TEXT("widthOverride"))       { SizeBox->SetWidthOverride(V);       bPropertySet = true; }
+		else if (N == TEXT("HeightOverride") || N == TEXT("heightOverride")) { SizeBox->SetHeightOverride(V);      bPropertySet = true; }
+		else if (N == TEXT("MinDesiredWidth") || N == TEXT("minDesiredWidth"))   { SizeBox->SetMinDesiredWidth(V);   bPropertySet = true; }
+		else if (N == TEXT("MinDesiredHeight") || N == TEXT("minDesiredHeight")) { SizeBox->SetMinDesiredHeight(V);  bPropertySet = true; }
+		else if (N == TEXT("MaxDesiredWidth") || N == TEXT("maxDesiredWidth"))   { SizeBox->SetMaxDesiredWidth(V);   bPropertySet = true; }
+		else if (N == TEXT("MaxDesiredHeight") || N == TEXT("maxDesiredHeight")) { SizeBox->SetMaxDesiredHeight(V);  bPropertySet = true; }
+		else if (N == TEXT("clearWidthOverride"))  { SizeBox->ClearWidthOverride();  bPropertySet = true; }
+		else if (N == TEXT("clearHeightOverride")) { SizeBox->ClearHeightOverride(); bPropertySet = true; }
+		return bPropertySet;
+	}
+
+	/** The typed convenience properties, one widget class at a time. False when
+	 *  the widget's class has no typed route for this property. */
+	bool MCPWidgetApplyTypedProperty(UWidget* FoundWidget, const FString& PropertyName, const FString& PropertyValue)
+	{
+		bool bPropertySet = false;
+		if (UTextBlock* TextBlock = Cast<UTextBlock>(FoundWidget))
+		{
+			bPropertySet = MCPWidgetSetTextBlockProperty(TextBlock, PropertyName, PropertyValue);
+		}
+		else if (UImage* Image = Cast<UImage>(FoundWidget))
+		{
+			bPropertySet = MCPWidgetSetImageProperty(Image, PropertyName, PropertyValue);
+		}
+		else if (UProgressBar* ProgressBar = Cast<UProgressBar>(FoundWidget))
+		{
+			bPropertySet = MCPWidgetSetProgressBarProperty(ProgressBar, PropertyName, PropertyValue);
+		}
+		else if (UCheckBox* CheckBox = Cast<UCheckBox>(FoundWidget))
+		{
+			bPropertySet = MCPWidgetSetCheckBoxProperty(CheckBox, PropertyName, PropertyValue);
+		}
+		else if (USlider* Slider = Cast<USlider>(FoundWidget))
+		{
+			bPropertySet = MCPWidgetSetSliderProperty(Slider, PropertyName, PropertyValue);
+		}
+		else if (UEditableTextBox* EditableText = Cast<UEditableTextBox>(FoundWidget))
+		{
+			bPropertySet = MCPWidgetSetEditableTextBoxProperty(EditableText, PropertyName, PropertyValue);
+		}
+		// (#135) SizeBox overrides: UMG 5.1+ requires the Set*Override accessors so the
+		// paired bOverride_ flag is toggled on - ImportText on the raw property doesn't do this.
+		if (!bPropertySet)
+		{
+			if (USizeBox* SizeBox = Cast<USizeBox>(FoundWidget))
+			{
+				bPropertySet = MCPWidgetSetSizeBoxProperty(SizeBox, PropertyName, PropertyValue);
+			}
+		}
+		return bPropertySet;
+	}
+
+	/** CanvasPanelSlot: anchors, alignment, position, size, autoSize and zOrder. */
+	bool MCPWidgetSetCanvasSlotProperty(UCanvasPanelSlot* CanvasSlot, const FString& SlotPropName, const FString& PropertyValue)
+	{
+		bool bPropertySet = false;
+		if (SlotPropName == TEXT("anchors") || SlotPropName == TEXT("Anchors"))
+		{
+			// Format: "minX,minY,maxX,maxY"  e.g. "0.5,0.5,0.5,0.5" for center
+			TArray<FString> Parts;
+			PropertyValue.ParseIntoArray(Parts, TEXT(","));
+			if (Parts.Num() >= 2)
+			{
+				FAnchors Anchors;
+				Anchors.Minimum = FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]));
+				Anchors.Maximum = Parts.Num() >= 4
+					? FVector2D(FCString::Atof(*Parts[2]), FCString::Atof(*Parts[3]))
+					: Anchors.Minimum;
+				CanvasSlot->SetAnchors(Anchors);
+				bPropertySet = true;
+			}
+		}
+		else if (SlotPropName == TEXT("alignment") || SlotPropName == TEXT("Alignment"))
+		{
+			// Format: "x,y"  e.g. "0.5,0.5"
+			TArray<FString> Parts;
+			PropertyValue.ParseIntoArray(Parts, TEXT(","));
+			if (Parts.Num() >= 2)
+			{
+				CanvasSlot->SetAlignment(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
+				bPropertySet = true;
+			}
+		}
+		else if (SlotPropName == TEXT("position") || SlotPropName == TEXT("Position"))
+		{
+			// Format: "x,y"
+			TArray<FString> Parts;
+			PropertyValue.ParseIntoArray(Parts, TEXT(","));
+			if (Parts.Num() >= 2)
+			{
+				CanvasSlot->SetPosition(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
+				bPropertySet = true;
+			}
+		}
+		else if (SlotPropName == TEXT("size") || SlotPropName == TEXT("Size"))
+		{
+			// Format: "x,y"
+			TArray<FString> Parts;
+			PropertyValue.ParseIntoArray(Parts, TEXT(","));
+			if (Parts.Num() >= 2)
+			{
+				CanvasSlot->SetSize(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
+				bPropertySet = true;
+			}
+		}
+		else if (SlotPropName == TEXT("autoSize") || SlotPropName == TEXT("AutoSize"))
+		{
+			CanvasSlot->SetAutoSize(PropertyValue.ToBool());
+			bPropertySet = true;
+		}
+		else if (SlotPropName == TEXT("zOrder") || SlotPropName == TEXT("ZOrder"))
+		{
+			CanvasSlot->SetZOrder(FCString::Atoi(*PropertyValue));
+			bPropertySet = true;
+		}
+		return bPropertySet;
+	}
+
+	/** HorizontalBoxSlot, VerticalBoxSlot and OverlaySlot: padding, alignment and size. */
+	bool MCPWidgetSetBoxSlotProperty(UPanelSlot* BoxSlot, const FString& SlotPropName, const FString& PropertyValue)
+	{
+		if (SlotPropName == TEXT("padding") || SlotPropName == TEXT("Padding"))
+		{
+			// "L,T,R,B" or uniform "N"
+			TArray<FString> Parts;
+			PropertyValue.ParseIntoArray(Parts, TEXT(","));
+			FMargin Margin;
+			if (Parts.Num() == 1)
+			{
+				float V = FCString::Atof(*Parts[0]);
+				Margin = FMargin(V);
+			}
+			else if (Parts.Num() >= 4)
+			{
+				Margin = FMargin(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]),
+								  FCString::Atof(*Parts[2]), FCString::Atof(*Parts[3]));
+			}
+			else return false;
+
+			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
+				HSlot->SetPadding(Margin);
+			else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
+				VSlot->SetPadding(Margin);
+			else if (UOverlaySlot* OSlot = Cast<UOverlaySlot>(BoxSlot))
+				OSlot->SetPadding(Margin);
+			else return false;
+			return true;
+		}
+		if (SlotPropName == TEXT("hAlign") || SlotPropName == TEXT("HorizontalAlignment") || SlotPropName == TEXT("horizontalAlignment"))
+		{
+			EHorizontalAlignment Align = EHorizontalAlignment::HAlign_Fill;
+			FString Val = PropertyValue.ToLower();
+			if (Val == TEXT("left"))        Align = EHorizontalAlignment::HAlign_Left;
+			else if (Val == TEXT("center"))  Align = EHorizontalAlignment::HAlign_Center;
+			else if (Val == TEXT("right"))   Align = EHorizontalAlignment::HAlign_Right;
+			else if (Val == TEXT("fill"))    Align = EHorizontalAlignment::HAlign_Fill;
+
+			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
+				HSlot->SetHorizontalAlignment(Align);
+			else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
+				VSlot->SetHorizontalAlignment(Align);
+			else if (UOverlaySlot* OSlot = Cast<UOverlaySlot>(BoxSlot))
+				OSlot->SetHorizontalAlignment(Align);
+			else return false;
+			return true;
+		}
+		if (SlotPropName == TEXT("vAlign") || SlotPropName == TEXT("VerticalAlignment") || SlotPropName == TEXT("verticalAlignment"))
+		{
+			EVerticalAlignment Align = EVerticalAlignment::VAlign_Fill;
+			FString Val = PropertyValue.ToLower();
+			if (Val == TEXT("top"))          Align = EVerticalAlignment::VAlign_Top;
+			else if (Val == TEXT("center"))  Align = EVerticalAlignment::VAlign_Center;
+			else if (Val == TEXT("bottom"))  Align = EVerticalAlignment::VAlign_Bottom;
+			else if (Val == TEXT("fill"))    Align = EVerticalAlignment::VAlign_Fill;
+
+			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
+				HSlot->SetVerticalAlignment(Align);
+			else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
+				VSlot->SetVerticalAlignment(Align);
+			else if (UOverlaySlot* OSlot = Cast<UOverlaySlot>(BoxSlot))
+				OSlot->SetVerticalAlignment(Align);
+			else return false;
+			return true;
+		}
+		if (SlotPropName == TEXT("sizeRule") || SlotPropName == TEXT("SizeRule"))
+		{
+			FString Val = PropertyValue.ToLower();
+			ESlateSizeRule::Type Rule = (Val == TEXT("fill")) ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
+			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
+			{
+				FSlateChildSize Size = HSlot->GetSize();
+				Size.SizeRule = Rule;
+				HSlot->SetSize(Size);
+			}
+			else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
+			{
+				FSlateChildSize Size = VSlot->GetSize();
+				Size.SizeRule = Rule;
+				VSlot->SetSize(Size);
+			}
+			else return false;
+			return true;
+		}
+		if (SlotPropName == TEXT("sizeValue") || SlotPropName == TEXT("SizeValue") || SlotPropName == TEXT("fillWeight"))
+		{
+			float Value = FCString::Atof(*PropertyValue);
+			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
+			{
+				FSlateChildSize Size = HSlot->GetSize();
+				Size.Value = Value;
+				HSlot->SetSize(Size);
+			}
+			else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
+			{
+				FSlateChildSize Size = VSlot->GetSize();
+				Size.Value = Value;
+				VSlot->SetSize(Size);
+			}
+			else return false;
+			return true;
+		}
+		// #200: combined size accessor for box slots. Accepts either a
+		// "value,rule" string ("1,fill" / "1.5,automatic") or an
+		// "automatic"/"fill" word for "value=1, rule=...".
+		if (SlotPropName == TEXT("size") || SlotPropName == TEXT("Size"))
+		{
+			FString RuleText = PropertyValue.ToLower();
+			float Value = 1.0f;
+			if (PropertyValue.Contains(TEXT(",")))
+			{
+				TArray<FString> Parts;
+				PropertyValue.ParseIntoArray(Parts, TEXT(","));
+				if (Parts.Num() >= 2)
+				{
+					Value = FCString::Atof(*Parts[0]);
+					RuleText = Parts[1].ToLower().TrimStartAndEnd();
+				}
+			}
+			ESlateSizeRule::Type Rule = (RuleText.Contains(TEXT("fill"))) ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
+			FSlateChildSize NewSize;
+			NewSize.SizeRule = Rule;
+			NewSize.Value = Value;
+			if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
+			{
+				HSlot->SetSize(NewSize);
+			}
+			else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
+			{
+				VSlot->SetSize(NewSize);
+			}
+			else return false;
+			return true;
+		}
+		return false;
+	}
+
+	/** slot.* properties: struct text and nested paths through reflection, the
+	 *  typed canvas and box slot routes, then any other slot UPROPERTY. Returns the
+	 *  refusal for a value the slot property will not take, or nullptr. */
+	TSharedPtr<FJsonValue> MCPWidgetApplySlotProperty(
+		UWidgetBlueprint* WidgetBP, UWidget* FoundWidget, const FString& PropertyName, const FString& PropertyValue,
+		FMCPWidgetPropertyCapture& Capture, bool& bPropertySet)
+	{
+		FString& PreviousPropertyValue = Capture.PreviousPropertyValue;
+		bool& bCapturedPreviousValue = Capture.bCapturedPreviousValue;
 		UPanelSlot* Slot = FoundWidget->Slot;
 		if (Slot)
 		{
@@ -772,208 +1019,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 			UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
 			if (!bPropertySet && CanvasSlot)
 			{
-				if (SlotPropName == TEXT("anchors") || SlotPropName == TEXT("Anchors"))
-				{
-					// Format: "minX,minY,maxX,maxY"  e.g. "0.5,0.5,0.5,0.5" for center
-					TArray<FString> Parts;
-					PropertyValue.ParseIntoArray(Parts, TEXT(","));
-					if (Parts.Num() >= 2)
-					{
-						FAnchors Anchors;
-						Anchors.Minimum = FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]));
-						Anchors.Maximum = Parts.Num() >= 4
-							? FVector2D(FCString::Atof(*Parts[2]), FCString::Atof(*Parts[3]))
-							: Anchors.Minimum;
-						CanvasSlot->SetAnchors(Anchors);
-						bPropertySet = true;
-					}
-				}
-				else if (SlotPropName == TEXT("alignment") || SlotPropName == TEXT("Alignment"))
-				{
-					// Format: "x,y"  e.g. "0.5,0.5"
-					TArray<FString> Parts;
-					PropertyValue.ParseIntoArray(Parts, TEXT(","));
-					if (Parts.Num() >= 2)
-					{
-						CanvasSlot->SetAlignment(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
-						bPropertySet = true;
-					}
-				}
-				else if (SlotPropName == TEXT("position") || SlotPropName == TEXT("Position"))
-				{
-					// Format: "x,y"
-					TArray<FString> Parts;
-					PropertyValue.ParseIntoArray(Parts, TEXT(","));
-					if (Parts.Num() >= 2)
-					{
-						CanvasSlot->SetPosition(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
-						bPropertySet = true;
-					}
-				}
-				else if (SlotPropName == TEXT("size") || SlotPropName == TEXT("Size"))
-				{
-					// Format: "x,y"
-					TArray<FString> Parts;
-					PropertyValue.ParseIntoArray(Parts, TEXT(","));
-					if (Parts.Num() >= 2)
-					{
-						CanvasSlot->SetSize(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
-						bPropertySet = true;
-					}
-				}
-				else if (SlotPropName == TEXT("autoSize") || SlotPropName == TEXT("AutoSize"))
-				{
-					CanvasSlot->SetAutoSize(PropertyValue.ToBool());
-					bPropertySet = true;
-				}
-				else if (SlotPropName == TEXT("zOrder") || SlotPropName == TEXT("ZOrder"))
-				{
-					CanvasSlot->SetZOrder(FCString::Atoi(*PropertyValue));
-					bPropertySet = true;
-				}
+				bPropertySet = MCPWidgetSetCanvasSlotProperty(CanvasSlot, SlotPropName, PropertyValue);
 			}
 
 			// ── HorizontalBoxSlot / VerticalBoxSlot ──
-			auto TryBoxSlotProps = [&](UPanelSlot* BoxSlot) -> bool
-			{
-				if (SlotPropName == TEXT("padding") || SlotPropName == TEXT("Padding"))
-				{
-					// "L,T,R,B" or uniform "N"
-					TArray<FString> Parts;
-					PropertyValue.ParseIntoArray(Parts, TEXT(","));
-					FMargin Margin;
-					if (Parts.Num() == 1)
-					{
-						float V = FCString::Atof(*Parts[0]);
-						Margin = FMargin(V);
-					}
-					else if (Parts.Num() >= 4)
-					{
-						Margin = FMargin(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]),
-										  FCString::Atof(*Parts[2]), FCString::Atof(*Parts[3]));
-					}
-					else return false;
-
-					if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
-						HSlot->SetPadding(Margin);
-					else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
-						VSlot->SetPadding(Margin);
-					else if (UOverlaySlot* OSlot = Cast<UOverlaySlot>(BoxSlot))
-						OSlot->SetPadding(Margin);
-					else return false;
-					return true;
-				}
-				if (SlotPropName == TEXT("hAlign") || SlotPropName == TEXT("HorizontalAlignment") || SlotPropName == TEXT("horizontalAlignment"))
-				{
-					EHorizontalAlignment Align = EHorizontalAlignment::HAlign_Fill;
-					FString Val = PropertyValue.ToLower();
-					if (Val == TEXT("left"))        Align = EHorizontalAlignment::HAlign_Left;
-					else if (Val == TEXT("center"))  Align = EHorizontalAlignment::HAlign_Center;
-					else if (Val == TEXT("right"))   Align = EHorizontalAlignment::HAlign_Right;
-					else if (Val == TEXT("fill"))    Align = EHorizontalAlignment::HAlign_Fill;
-
-					if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
-						HSlot->SetHorizontalAlignment(Align);
-					else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
-						VSlot->SetHorizontalAlignment(Align);
-					else if (UOverlaySlot* OSlot = Cast<UOverlaySlot>(BoxSlot))
-						OSlot->SetHorizontalAlignment(Align);
-					else return false;
-					return true;
-				}
-				if (SlotPropName == TEXT("vAlign") || SlotPropName == TEXT("VerticalAlignment") || SlotPropName == TEXT("verticalAlignment"))
-				{
-					EVerticalAlignment Align = EVerticalAlignment::VAlign_Fill;
-					FString Val = PropertyValue.ToLower();
-					if (Val == TEXT("top"))          Align = EVerticalAlignment::VAlign_Top;
-					else if (Val == TEXT("center"))  Align = EVerticalAlignment::VAlign_Center;
-					else if (Val == TEXT("bottom"))  Align = EVerticalAlignment::VAlign_Bottom;
-					else if (Val == TEXT("fill"))    Align = EVerticalAlignment::VAlign_Fill;
-
-					if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
-						HSlot->SetVerticalAlignment(Align);
-					else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
-						VSlot->SetVerticalAlignment(Align);
-					else if (UOverlaySlot* OSlot = Cast<UOverlaySlot>(BoxSlot))
-						OSlot->SetVerticalAlignment(Align);
-					else return false;
-					return true;
-				}
-				if (SlotPropName == TEXT("sizeRule") || SlotPropName == TEXT("SizeRule"))
-				{
-					FString Val = PropertyValue.ToLower();
-					ESlateSizeRule::Type Rule = (Val == TEXT("fill")) ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
-					if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
-					{
-						FSlateChildSize Size = HSlot->GetSize();
-						Size.SizeRule = Rule;
-						HSlot->SetSize(Size);
-					}
-					else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
-					{
-						FSlateChildSize Size = VSlot->GetSize();
-						Size.SizeRule = Rule;
-						VSlot->SetSize(Size);
-					}
-					else return false;
-					return true;
-				}
-				if (SlotPropName == TEXT("sizeValue") || SlotPropName == TEXT("SizeValue") || SlotPropName == TEXT("fillWeight"))
-				{
-					float Value = FCString::Atof(*PropertyValue);
-					if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
-					{
-						FSlateChildSize Size = HSlot->GetSize();
-						Size.Value = Value;
-						HSlot->SetSize(Size);
-					}
-					else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
-					{
-						FSlateChildSize Size = VSlot->GetSize();
-						Size.Value = Value;
-						VSlot->SetSize(Size);
-					}
-					else return false;
-					return true;
-				}
-				// #200: combined size accessor for box slots. Accepts either a
-				// "value,rule" string ("1,fill" / "1.5,automatic") or an
-				// "automatic"/"fill" word for "value=1, rule=...".
-				if (SlotPropName == TEXT("size") || SlotPropName == TEXT("Size"))
-				{
-					FString RuleText = PropertyValue.ToLower();
-					float Value = 1.0f;
-					if (PropertyValue.Contains(TEXT(",")))
-					{
-						TArray<FString> Parts;
-						PropertyValue.ParseIntoArray(Parts, TEXT(","));
-						if (Parts.Num() >= 2)
-						{
-							Value = FCString::Atof(*Parts[0]);
-							RuleText = Parts[1].ToLower().TrimStartAndEnd();
-						}
-					}
-					ESlateSizeRule::Type Rule = (RuleText.Contains(TEXT("fill"))) ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
-					FSlateChildSize NewSize;
-					NewSize.SizeRule = Rule;
-					NewSize.Value = Value;
-					if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
-					{
-						HSlot->SetSize(NewSize);
-					}
-					else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
-					{
-						VSlot->SetSize(NewSize);
-					}
-					else return false;
-					return true;
-				}
-				return false;
-			};
-
 			if (!bPropertySet && (Cast<UHorizontalBoxSlot>(Slot) || Cast<UVerticalBoxSlot>(Slot) || Cast<UOverlaySlot>(Slot)))
 			{
-				bPropertySet = TryBoxSlotProps(Slot);
+				bPropertySet = MCPWidgetSetBoxSlotProperty(Slot, SlotPropName, PropertyValue);
 			}
 
 			// Generic slot reflection fallback
@@ -994,15 +1046,20 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 				}
 			}
 		}
+		return nullptr;
 	}
 
-	// Fallback: try to set via UObject reflection. Supports dotted paths
-	// (#364) so "Brush.ImageSize" / "ColorAndOpacity.SpecifiedColor.R" /
-	// "Padding.Left" all drill into FStructProperty fields cleanly. The
-	// previous flat lookup quietly failed because FProperty names never
-	// contain dots, so the parent struct was never written.
-	if (!bPropertySet)
+	/** Any other property, through reflection, with dotted paths into structs.
+	 *  Returns the refusal for a value the property will not take, or nullptr. */
+	TSharedPtr<FJsonValue> MCPWidgetApplyReflectedProperty(
+		UWidget* FoundWidget, const FString& PropertyName, const FString& PropertyValue,
+		FMCPWidgetPropertyCapture& Capture, bool& bPropertySet)
 	{
+		FString& PreviousPropertyValue = Capture.PreviousPropertyValue;
+		bool& bCapturedPreviousValue = Capture.bCapturedPreviousValue;
+		bool& bCapturedOnFlatWidgetProperty = Capture.bCapturedOnFlatWidgetProperty;
+		FString& FlatWidgetPropertyName = Capture.FlatWidgetPropertyName;
+		bool& bFlatCaptureWasStringProperty = Capture.bFlatCaptureWasStringProperty;
 		TArray<FString> PathParts;
 		PropertyName.ParseIntoArray(PathParts, TEXT("."));
 
@@ -1052,10 +1109,20 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 					*PropertyValue, *FinalProp->GetName(), *FinalProp->GetCPPType()));
 			}
 		}
+		return nullptr;
 	}
 
-	if (bPropertySet)
+	/** Compile and save a widget Blueprint whose property was written, and the
+	 *  result with the rollback the capture allows. */
+	TSharedPtr<FJsonValue> MCPWidgetFinishSetProperty(
+		UWidgetBlueprint* WidgetBP, const FString& AssetPath, const FString& WidgetName,
+		const FString& PropertyName, const FString& PropertyValue, const FMCPWidgetPropertyCapture& Capture)
 	{
+		const FString& PreviousPropertyValue = Capture.PreviousPropertyValue;
+		const bool bCapturedPreviousValue = Capture.bCapturedPreviousValue;
+		const bool bCapturedOnFlatWidgetProperty = Capture.bCapturedOnFlatWidgetProperty;
+		const FString& FlatWidgetPropertyName = Capture.FlatWidgetPropertyName;
+		const bool bFlatCaptureWasStringProperty = Capture.bFlatCaptureWasStringProperty;
 		// Mark package dirty and save
 		WidgetBP->MarkPackageDirty();
 		// #728: see ClearWidgetBinding. A property write compiles the blueprint,
@@ -1145,10 +1212,68 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 
 		return MCPResult(Result);
 	}
-	else
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	FString WidgetName;
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
+
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+
+	FString PropertyValue;
+	// `propertyValue` is a spec alias, resolved by the registry (#1057).
+	if (auto Err = RequireString(Params, TEXT("value"), PropertyValue)) return Err;
+
+	TSharedPtr<FJsonValue> ResolveError;
+	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
+	if (!WidgetBP) return ResolveError;
+
+	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
+
+	// Find the widget
+	UWidget* FoundWidget = MCPWidget::FindWidgetByName(WidgetBP->WidgetTree, WidgetName);
+
+	if (!FoundWidget)
+	{
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
+	}
+
+	FMCPWidgetPropertyCapture Capture;
+	bool bPropertySet = MCPWidgetApplyTypedProperty(FoundWidget, PropertyName, PropertyValue);
+
+	// ── Slot properties (slot.anchors, slot.alignment, slot.position, slot.autoSize, slot.*) ──
+	// Case-insensitive: "Slot.padding" and "slot.padding" both route here (#364).
+	if (!bPropertySet && PropertyName.StartsWith(TEXT("slot."), ESearchCase::IgnoreCase))
+	{
+		if (auto Refusal = MCPWidgetApplySlotProperty(WidgetBP, FoundWidget, PropertyName, PropertyValue, Capture, bPropertySet))
+		{
+			return Refusal;
+		}
+	}
+
+	// Fallback: try to set via UObject reflection. Supports dotted paths
+	// (#364) so "Brush.ImageSize" / "ColorAndOpacity.SpecifiedColor.R" /
+	// "Padding.Left" all drill into FStructProperty fields cleanly. The
+	// previous flat lookup quietly failed because FProperty names never
+	// contain dots, so the parent struct was never written.
+	if (!bPropertySet)
+	{
+		if (auto Refusal = MCPWidgetApplyReflectedProperty(FoundWidget, PropertyName, PropertyValue, Capture, bPropertySet))
+		{
+			return Refusal;
+		}
+	}
+
+	if (!bPropertySet)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to set property '%s' on widget '%s'. Property not found or value format invalid."), *PropertyName, *WidgetName));
 	}
+	return MCPWidgetFinishSetProperty(WidgetBP, AssetPath, WidgetName, PropertyName, PropertyValue, Capture);
 }
 
 
