@@ -1,5 +1,7 @@
 import { ALL_TOOLS } from "./tools.js";
 import { SIGNATURE_LEGEND } from "./action-signature.js";
+import { unionKnowledge, type SessionSurface } from "./session-surface.js";
+import type { ContextStrategy } from "./lean-context.js";
 
 /**
  * Counts and the category list, derived rather than transcribed (#817, plan
@@ -244,4 +246,72 @@ export function multiEditorInstructions(sessionNames: string[], activeName: stri
     "Name the editor explicitly on anything that writes, and on every lifecycle call",
     "(start_editor / stop_editor / restart_editor / build_project), so the work lands where you intend.",
   ].join("\n");
+}
+
+function buildKnowledgeBlock(knowledgeByCategory: Record<string, string[]>): string {
+  const lines: string[] = [];
+  for (const [category, blobs] of Object.entries(knowledgeByCategory)) {
+    if (blobs.length === 0) continue;
+    lines.push(`── ${category} ──`);
+    for (const blob of blobs) lines.push(blob.trim());
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
+
+/**
+ * One line per plugin that is missing from the surface or narrower than its
+ * manifest declares. Empty string when every configured plugin loaded whole,
+ * which is the usual case and leaves the initialize payload untouched.
+ */
+function buildPluginWarningBlock(surfaces: SessionSurface[]): string {
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  for (const surface of surfaces) {
+    for (const rec of surface.pluginRecords) {
+      if (rec.status === "active" && rec.degraded.length === 0) continue;
+      if (seen.has(rec.name)) continue;
+      seen.add(rec.name);
+      if (rec.status !== "active") {
+        lines.push(
+          `${rec.name}@${rec.version} did NOT load, so none of its actions exist: ${rec.statusReason ?? "unknown reason"}`,
+        );
+      } else {
+        lines.push(`${rec.name}@${rec.version} loaded with ${rec.degraded.length} part(s) dropped:`);
+        for (const d of rec.degraded) lines.push(`  - ${d}`);
+      }
+    }
+  }
+  if (lines.length === 0) return "";
+  lines.push("Run plugins(action=\"describe\", name=\"<plugin>\") for the full record.");
+  return lines.join("\n");
+}
+
+/**
+ * The instructions sent at initialize: the strategy's base text, then plugin
+ * knowledge and load warnings across every session (they cannot be
+ * renegotiated later), then targeting only when there is more than one editor.
+ */
+export function composeServerInstructions(
+  strategy: ContextStrategy,
+  surfaces: SessionSurface[],
+  sessionNames: string[],
+  activeName: string,
+): string {
+  const knowledgeBlock = buildKnowledgeBlock(unionKnowledge(surfaces));
+  const baseInstructions = strategy === "micro"
+    ? SERVER_INSTRUCTIONS_MICRO
+    : strategy === "lean"
+      ? SERVER_INSTRUCTIONS_LEAN
+      : SERVER_INSTRUCTIONS;
+  const withKnowledge = knowledgeBlock
+    ? `${baseInstructions}\n\n═══ PLUGIN KNOWLEDGE ═══\n${knowledgeBlock}`
+    : baseInstructions;
+  const loadWarnings = buildPluginWarningBlock(surfaces);
+  const withWarnings = loadWarnings
+    ? `${withKnowledge}\n\n═══ PLUGIN LOAD WARNINGS ═══\n${loadWarnings}`
+    : withKnowledge;
+  return sessionNames.length > 1
+    ? `${withWarnings}\n\n${multiEditorInstructions(sessionNames, activeName)}`
+    : withWarnings;
 }
