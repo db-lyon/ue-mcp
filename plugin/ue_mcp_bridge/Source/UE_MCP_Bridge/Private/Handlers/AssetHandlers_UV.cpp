@@ -38,6 +38,7 @@
 #include "AssetHandlers.h"
 
 #include "HandlerFunctionCall.h"
+#include "HandlerGeometryScript.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
@@ -88,95 +89,16 @@ constexpr int32 MCPUvMaxChannels = MAX_STATIC_TEXCOORDS;
 
 // ─── The Geometry Script surface this file drives ────────────────────────────
 
-const TCHAR* const MCPUvGSDynamicMeshClass    = TEXT("/Script/GeometryFramework.DynamicMesh");
-const TCHAR* const MCPUvGSDebugClass          = TEXT("/Script/GeometryScriptingCore.GeometryScriptDebug");
-const TCHAR* const MCPUvGSAssetFunctions      = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_StaticMeshFunctions");
 const TCHAR* const MCPUvGSUVFunctions         = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_MeshUVFunctions");
-const TCHAR* const MCPUvGSLODTypeEnum         = TEXT("/Script/GeometryScriptingCore.EGeometryScriptLODType");
 const TCHAR* const MCPUvGSFlattenMethodEnum   = TEXT("/Script/GeometryScriptingCore.EGeometryScriptUVFlattenMethod");
 const TCHAR* const MCPUvGSIslandSourceEnum    = TEXT("/Script/GeometryScriptingCore.EGeometryScriptUVIslandSource");
 const TCHAR* const MCPUvGSLightmapOptionEnum  = TEXT("/Script/GeometryScriptingCore.EGeometryScriptGenerateLightmapUVOptions");
 
-/** Ask the module system for the Geometry Script modules once. False when the
- *  plugin is absent or disabled for this project. */
-bool MCPUvEnsureGeometryScripting()
-{
-	static const TCHAR* const Modules[] = {
-		TEXT("GeometryFramework"),
-		TEXT("GeometryScriptingCore"),
-		TEXT("GeometryScriptingEditor")
-	};
-	for (const TCHAR* Name : Modules)
-	{
-		const FName ModuleName(Name);
-		if (!FModuleManager::Get().IsModuleLoaded(ModuleName))
-		{
-			// LoadModule, not LoadModuleChecked: a project that simply does not
-			// have the plugin must get an answer, not a crashed editor.
-			FModuleManager::Get().LoadModule(ModuleName);
-		}
-	}
-	return FindObject<UClass>(nullptr, MCPUvGSDynamicMeshClass) != nullptr
-		&& FindObject<UClass>(nullptr, MCPUvGSAssetFunctions) != nullptr
-		&& FindObject<UClass>(nullptr, MCPUvGSUVFunctions) != nullptr;
-}
-
 TSharedPtr<FJsonValue> MCPUvGeometryScriptUnavailable(const FString& Detail)
 {
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), FString::Printf(
-		TEXT("GeometryScripting plugin not available: %s Enable the 'Geometry Script' plugin ")
-			TEXT("(Edit > Plugins > Geometry Script) and restart the editor, then retry. ")
-			TEXT("asset(set_uv_channel_count), asset(transform_uvs), asset(read_uv_channels), ")
-			TEXT("asset(check_uvs) and asset(export_uv_layout) do not need it and still work."),
-		*Detail));
-	Obj->SetStringField(TEXT("reason"), TEXT("geometry_scripting_unavailable"));
-	Obj->SetStringField(TEXT("requiredPlugin"), TEXT("GeometryScripting"));
-	return MakeShared<FJsonValueObject>(Obj);
-}
-
-/** A value from a UEnum this module does not link, by enumerator name.
- *  INDEX_NONE when the enum or the enumerator is absent, so an engine that
- *  renames an enumerator reports that rather than silently picking ordinal 0. */
-int64 MCPUvEnumValue(const TCHAR* EnumPath, const FString& EnumeratorName)
-{
-	UEnum* Enum = FindObject<UEnum>(nullptr, EnumPath);
-	if (!Enum) return INDEX_NONE;
-	return Enum->GetValueByNameString(EnumeratorName);
-}
-
-/** Read and clear the messages a UGeometryScriptDebug collected, so the reason
- *  an unwrap failed reaches the caller instead of only the output log. */
-TArray<FString> MCPUvDrainDebug(UObject* Debug)
-{
-	TArray<FString> Out;
-	if (!Debug) return Out;
-
-	FArrayProperty* ArrayProp = CastField<FArrayProperty>(
-		Debug->GetClass()->FindPropertyByName(FName(TEXT("Messages"))));
-	if (!ArrayProp) return Out;
-	FStructProperty* ElementProp = CastField<FStructProperty>(ArrayProp->Inner);
-	if (!ElementProp || !ElementProp->Struct) return Out;
-	FTextProperty* MessageProp = CastField<FTextProperty>(
-		ElementProp->Struct->FindPropertyByName(FName(TEXT("Message"))));
-	if (!MessageProp) return Out;
-
-	FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Debug));
-	for (int32 Index = 0; Index < Helper.Num(); ++Index)
-	{
-		const FString Text = MessageProp->GetPropertyValue(
-			MessageProp->ContainerPtrToValuePtr<void>(Helper.GetRawPtr(Index))).ToString();
-		if (!Text.IsEmpty()) Out.Add(Text);
-	}
-	Helper.EmptyValues();
-	return Out;
-}
-
-void MCPUvAttachMessages(const TSharedPtr<FJsonObject>& Out, const TArray<FString>& Messages)
-{
-	if (Messages.Num() == 0) return;
-	Out->SetArrayField(TEXT("geometryScriptMessages"), MCPStringListToJson(Messages));
+	return MCPGeometryScript::UnavailableError(Detail,
+		TEXT("asset(set_uv_channel_count), asset(transform_uvs), asset(read_uv_channels), ")
+		TEXT("asset(check_uvs) and asset(export_uv_layout) do not need it and still work."));
 }
 
 // ─── The mesh a UV action is aimed at ────────────────────────────────────────
@@ -1761,12 +1683,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 			BackupToChannel, MCPUvMaxChannels - 1, Channel));
 	}
 
-	if (!MCPUvEnsureGeometryScripting())
+	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions, MCPUvGSUVFunctions }))
 	{
 		return MCPUvGeometryScriptUnavailable(TEXT("its runtime classes are not registered in this editor."));
 	}
 
-	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, MCPUvGSDynamicMeshClass);
+	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, MCPGeometryScript::DynamicMeshClass);
 	if (!DynamicMeshClass)
 	{
 		return MCPUvGeometryScriptUnavailable(TEXT("UDynamicMesh is not registered."));
@@ -1782,11 +1704,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 	FString BindError;
 	{
 		FMCPReflectedCall Probe;
-		if (!Probe.Bind(MCPUvGSAssetFunctions, CopyInName, BindError))
+		if (!Probe.Bind(MCPGeometryScript::StaticMeshFunctions, CopyInName, BindError))
 		{
 			return MCPUvGeometryScriptUnavailable(BindError);
 		}
-		if (!Probe.Bind(MCPUvGSAssetFunctions, CopyOutName, BindError))
+		if (!Probe.Bind(MCPGeometryScript::StaticMeshFunctions, CopyOutName, BindError))
 		{
 			return MCPUvGeometryScriptUnavailable(BindError);
 		}
@@ -1842,18 +1764,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 	const FGCRootScope KeepDynamic(Dynamic);
 
 	UObject* Debug = nullptr;
-	if (UClass* DebugClass = FindObject<UClass>(nullptr, MCPUvGSDebugClass))
+	if (UClass* DebugClass = FindObject<UClass>(nullptr, MCPGeometryScript::DebugClass))
 	{
 		Debug = NewObject<UObject>(GetTransientPackage(), DebugClass);
 	}
 	const FGCRootScope KeepDebug(Debug);
 
 	TArray<FString> Messages;
-	const int64 LODTypeValue = MCPUvEnumValue(MCPUvGSLODTypeEnum, TEXT("SourceModel"));
+	const int64 LODTypeValue = MCPGeometryScript::EnumValue(MCPGeometryScript::LODTypeEnum, TEXT("SourceModel"));
 
 	{
 		FMCPReflectedCall CopyIn;
-		if (!CopyIn.Bind(MCPUvGSAssetFunctions, CopyInName, BindError))
+		if (!CopyIn.Bind(MCPGeometryScript::StaticMeshFunctions, CopyInName, BindError))
 		{
 			return MCPUvGeometryScriptUnavailable(BindError);
 		}
@@ -1867,7 +1789,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 		if (Target.StaticMesh) CopyIn.SetBool(TEXT("bUseSectionMaterials"), true);
 		CopyIn.SetObject(TEXT("Debug"), Debug);
 		CopyIn.Invoke();
-		Messages.Append(MCPUvDrainDebug(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 		if (CopyIn.GetEnumName(TEXT("Outcome")) != TEXT("Success"))
 		{
@@ -1878,7 +1800,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 					TEXT("is untouched."),
 				Target.LodIndex, *Target.AssetPath));
 			Obj->SetStringField(TEXT("reason"), TEXT("source_read_failed"));
-			MCPUvAttachMessages(Obj, Messages);
+			MCPGeometryScript::AttachMessages(Obj, Messages);
 			return MakeShared<FJsonValueObject>(Obj);
 		}
 	}
@@ -1892,7 +1814,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 			SetCount.SetNumber(TEXT("NumUVSets"), FMath::Max(PreviousCount, Channel + 1));
 			SetCount.SetObject(TEXT("Debug"), Debug);
 			SetCount.Invoke();
-			Messages.Append(MCPUvDrainDebug(Debug));
+			Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 		}
 	}
 
@@ -1906,7 +1828,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 			*Method, Target.LodIndex, Channel, *Target.AssetPath, *Detail));
 		Obj->SetStringField(TEXT("reason"), TEXT("unwrap_failed"));
 		Obj->SetStringField(TEXT("method"), Method);
-		MCPUvAttachMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	};
 
@@ -1943,13 +1865,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 			const FString Enumerator =
 				Method == TEXT("expmap") ? TEXT("ExpMap") :
 				Method == TEXT("conformal") ? TEXT("Conformal") : TEXT("SpectralConformal");
-			const int64 MethodValue = MCPUvEnumValue(MCPUvGSFlattenMethodEnum, Enumerator);
+			const int64 MethodValue = MCPGeometryScript::EnumValue(MCPUvGSFlattenMethodEnum, Enumerator);
 			if (MethodValue == INDEX_NONE)
 			{
 				return MCPUvGeometryScriptUnavailable(FString::Printf(
 					TEXT("EGeometryScriptUVFlattenMethod has no '%s' in this engine build."), *Enumerator));
 			}
-			const int64 IslandValue = MCPUvEnumValue(MCPUvGSIslandSourceEnum,
+			const int64 IslandValue = MCPGeometryScript::EnumValue(MCPUvGSIslandSourceEnum,
 				IslandSource.Equals(TEXT("PolyGroups"), ESearchCase::IgnoreCase) ? TEXT("PolyGroups") : TEXT("UVIslands"));
 			Unwrap.SetObject(TEXT("TargetMesh"), Dynamic);
 			Unwrap.SetNumber(TEXT("UVSetIndex"), Channel);
@@ -1977,7 +1899,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 		}
 		Unwrap.SetObject(TEXT("Debug"), Debug);
 		Unwrap.Invoke();
-		Messages.Append(MCPUvDrainDebug(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 	}
 
 	// ── Pack ────────────────────────────────────────────────────────────────
@@ -1993,7 +1915,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 			Repack.SetStructBool(TEXT("RepackOptions"), TEXT("bOptimizeIslandRotation"), true);
 			Repack.SetObject(TEXT("Debug"), Debug);
 			Repack.Invoke();
-			Messages.Append(MCPUvDrainDebug(Debug));
+			Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 			bPacked = true;
 		}
 		else
@@ -2012,7 +1934,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 	// ── Write back ──────────────────────────────────────────────────────────
 	{
 		FMCPReflectedCall CopyOut;
-		if (!CopyOut.Bind(MCPUvGSAssetFunctions, CopyOutName, BindError))
+		if (!CopyOut.Bind(MCPGeometryScript::StaticMeshFunctions, CopyOutName, BindError))
 		{
 			return MCPUvGeometryScriptUnavailable(BindError);
 		}
@@ -2031,7 +1953,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 			&& Target.StaticMesh->GetSourceModel(Target.LodIndex).BuildSettings.DstLightmapIndex == Channel;
 		if (bCollidesWithLightmap)
 		{
-			const int64 NoLightmap = MCPUvEnumValue(MCPUvGSLightmapOptionEnum, TEXT("DoNotGenerateLightmapUVs"));
+			const int64 NoLightmap = MCPGeometryScript::EnumValue(MCPUvGSLightmapOptionEnum, TEXT("DoNotGenerateLightmapUVs"));
 			CopyOut.SetStructEnum(TEXT("Options"), TEXT("GenerateLightmapUVs"), NoLightmap);
 			Messages.Add(FString::Printf(
 				TEXT("Lightmap UV generation writes to channel %d, the channel this unwrap targets, so it was ")
@@ -2043,7 +1965,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 		if (Target.StaticMesh) CopyOut.SetBool(TEXT("bUseSectionMaterials"), true);
 		CopyOut.SetObject(TEXT("Debug"), Debug);
 		CopyOut.Invoke();
-		Messages.Append(MCPUvDrainDebug(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 		if (CopyOut.GetEnumName(TEXT("Outcome")) != TEXT("Success"))
 		{
@@ -2090,7 +2012,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnwrapUvs(const TSharedPtr<FJsonObject>& 
 	{
 		Result->SetObjectField(TEXT("channelAfter"), MCPUvChannelToJson(Stats, MCPUvLightmapChannel(After)));
 	}
-	MCPUvAttachMessages(Result, Messages);
+	MCPGeometryScript::AttachMessages(Result, Messages);
 
 	// ── Rollback ─────────────────────────────────────────────────────────────
 	if (bBackedUp)

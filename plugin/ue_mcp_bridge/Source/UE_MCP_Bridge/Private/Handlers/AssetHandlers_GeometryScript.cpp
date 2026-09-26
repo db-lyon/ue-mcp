@@ -53,6 +53,7 @@
 #include "AssetHandlers.h"
 
 #include "HandlerFunctionCall.h"
+#include "HandlerGeometryScript.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
@@ -87,19 +88,12 @@ constexpr int32 MCPGeoMaxFracturePlanes = 64;
 
 // ─── The Geometry Script surface this file drives ────────────────────────────
 
-const TCHAR* const MCPGeoDynamicMeshClass    = TEXT("/Script/GeometryFramework.DynamicMesh");
-const TCHAR* const MCPGeoDebugClass          = TEXT("/Script/GeometryScriptingCore.GeometryScriptDebug");
-const TCHAR* const MCPGeoAssetFunctions      = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_StaticMeshFunctions");
-const TCHAR* const MCPGeoQueryFunctions      = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_MeshQueryFunctions");
 const TCHAR* const MCPGeoSimplifyFunctions   = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_MeshSimplifyFunctions");
 const TCHAR* const MCPGeoRemeshFunctions     = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_RemeshingFunctions");
-const TCHAR* const MCPGeoBooleanFunctions    = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_MeshBooleanFunctions");
 const TCHAR* const MCPGeoRepairFunctions     = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_MeshRepairFunctions");
 const TCHAR* const MCPGeoCollisionFunctions  = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_CollisionFunctions");
 const TCHAR* const MCPGeoDecompFunctions     = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_MeshDecompositionFunctions");
-const TCHAR* const MCPGeoCreateAssetFunctions= TEXT("/Script/GeometryScriptingEditor.GeometryScriptLibrary_CreateNewAssetFunctions");
 
-const TCHAR* const MCPGeoLODTypeEnum         = TEXT("/Script/GeometryScriptingCore.EGeometryScriptLODType");
 const TCHAR* const MCPGeoSimplifyMethodEnum  = TEXT("/Script/GeometryScriptingCore.EGeometryScriptRemoveMeshSimplificationType");
 const TCHAR* const MCPGeoRemeshTargetEnum    = TEXT("/Script/GeometryScriptingCore.EGeometryScriptUniformRemeshTargetType");
 const TCHAR* const MCPGeoRemeshSmoothingEnum = TEXT("/Script/GeometryScriptingCore.EGeometryScriptRemeshSmoothingType");
@@ -107,94 +101,6 @@ const TCHAR* const MCPGeoRemeshConstraintEnum= TEXT("/Script/GeometryScriptingCo
 const TCHAR* const MCPGeoFillHolesEnum       = TEXT("/Script/GeometryScriptingCore.EGeometryScriptFillHolesMethod");
 const TCHAR* const MCPGeoCollisionMethodEnum = TEXT("/Script/GeometryScriptingCore.EGeometryScriptCollisionGenerationMethod");
 const TCHAR* const MCPGeoSweptHullAxisEnum   = TEXT("/Script/GeometryScriptingCore.EGeometryScriptSweptHullAxis");
-
-/** Ask the module system for the Geometry Script modules once. False when the
- *  plugin is absent or disabled for this project. */
-bool MCPGeoEnsureGeometryScripting()
-{
-	static const TCHAR* const Modules[] = {
-		TEXT("GeometryFramework"),
-		TEXT("GeometryScriptingCore"),
-		TEXT("GeometryScriptingEditor")
-	};
-	for (const TCHAR* Name : Modules)
-	{
-		const FName ModuleName(Name);
-		if (!FModuleManager::Get().IsModuleLoaded(ModuleName))
-		{
-			// LoadModule, not LoadModuleChecked: a project that simply does not
-			// have the plugin must get an answer, not a crashed editor.
-			FModuleManager::Get().LoadModule(ModuleName);
-		}
-	}
-	return FindObject<UClass>(nullptr, MCPGeoDynamicMeshClass) != nullptr
-		&& FindObject<UClass>(nullptr, MCPGeoAssetFunctions) != nullptr;
-}
-
-/** The typed refusal for a project without the plugin. `StillWorks` names the
- *  actions in this area that do not need it, so the answer is a route forward
- *  rather than a dead end. */
-TSharedPtr<FJsonValue> MCPGeoUnavailable(const FString& Detail, const FString& StillWorks = FString())
-{
-	FString Message = FString::Printf(
-		TEXT("GeometryScripting plugin not available: %s Enable the 'Geometry Script' plugin ")
-			TEXT("(Edit > Plugins > Geometry Script) and restart the editor, then retry."),
-		*Detail);
-	if (!StillWorks.IsEmpty())
-	{
-		Message += TEXT(" ") + StillWorks;
-	}
-
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), Message);
-	Obj->SetStringField(TEXT("reason"), TEXT("geometry_scripting_unavailable"));
-	Obj->SetStringField(TEXT("requiredPlugin"), TEXT("GeometryScripting"));
-	return MakeShared<FJsonValueObject>(Obj);
-}
-
-/** A value from a UEnum this module does not link, by enumerator name.
- *  INDEX_NONE when the enum or the enumerator is absent, so an engine that
- *  renames an enumerator reports that rather than silently picking ordinal 0. */
-int64 MCPGeoEnumValue(const TCHAR* EnumPath, const FString& EnumeratorName)
-{
-	UEnum* Enum = FindObject<UEnum>(nullptr, EnumPath);
-	if (!Enum) return INDEX_NONE;
-	return Enum->GetValueByNameString(EnumeratorName);
-}
-
-/** Read and clear the messages a UGeometryScriptDebug collected, so the reason
- *  an operation failed reaches the caller instead of only the output log. */
-TArray<FString> MCPGeoDrainDebug(UObject* Debug)
-{
-	TArray<FString> Out;
-	if (!Debug) return Out;
-
-	FArrayProperty* ArrayProp = CastField<FArrayProperty>(
-		Debug->GetClass()->FindPropertyByName(FName(TEXT("Messages"))));
-	if (!ArrayProp) return Out;
-	FStructProperty* ElementProp = CastField<FStructProperty>(ArrayProp->Inner);
-	if (!ElementProp || !ElementProp->Struct) return Out;
-	FTextProperty* MessageProp = CastField<FTextProperty>(
-		ElementProp->Struct->FindPropertyByName(FName(TEXT("Message"))));
-	if (!MessageProp) return Out;
-
-	FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Debug));
-	for (int32 Index = 0; Index < Helper.Num(); ++Index)
-	{
-		const FString Text = MessageProp->GetPropertyValue(
-			MessageProp->ContainerPtrToValuePtr<void>(Helper.GetRawPtr(Index))).ToString();
-		if (!Text.IsEmpty()) Out.Add(Text);
-	}
-	Helper.EmptyValues();
-	return Out;
-}
-
-void MCPGeoAttachMessages(const TSharedPtr<FJsonObject>& Out, const TArray<FString>& Messages)
-{
-	if (Messages.Num() == 0) return;
-	Out->SetArrayField(TEXT("geometryScriptMessages"), MCPStringListToJson(Messages));
-}
 
 // ─── Mesh statistics ─────────────────────────────────────────────────────────
 
@@ -226,23 +132,14 @@ FMCPGeoMeshStats MCPGeoReadStats(UObject* Mesh)
 	FMCPGeoMeshStats Stats;
 	if (!Mesh) return Stats;
 
+	Stats.Triangles = MCPGeometryScript::QueryMeshInt(Mesh, TEXT("GetNumTriangleIDs"));
+	Stats.Vertices = MCPGeometryScript::QueryMeshInt(Mesh, TEXT("GetNumVertexIDs"));
+	Stats.Islands = MCPGeometryScript::QueryMeshInt(Mesh, TEXT("GetNumConnectedComponents"));
+	Stats.OpenBorderEdges = MCPGeometryScript::QueryMeshInt(Mesh, TEXT("GetNumOpenBorderEdges"));
+
 	FString Error;
-	auto ReadInt = [&](const TCHAR* FunctionName) -> int32
-	{
-		FMCPReflectedCall Call;
-		if (!Call.Bind(MCPGeoQueryFunctions, FunctionName, Error)) return 0;
-		Call.SetObject(TEXT("TargetMesh"), Mesh);
-		Call.Invoke();
-		return Call.GetInt(TEXT("ReturnValue"));
-	};
-
-	Stats.Triangles = ReadInt(TEXT("GetNumTriangleIDs"));
-	Stats.Vertices = ReadInt(TEXT("GetNumVertexIDs"));
-	Stats.Islands = ReadInt(TEXT("GetNumConnectedComponents"));
-	Stats.OpenBorderEdges = ReadInt(TEXT("GetNumOpenBorderEdges"));
-
 	FMCPReflectedCall Closed;
-	if (Closed.Bind(MCPGeoQueryFunctions, TEXT("GetIsClosedMesh"), Error))
+	if (Closed.Bind(MCPGeometryScript::QueryFunctions, TEXT("GetIsClosedMesh"), Error))
 	{
 		Closed.SetObject(TEXT("TargetMesh"), Mesh);
 		Closed.Invoke();
@@ -257,26 +154,10 @@ bool MCPGeoReadBounds(UObject* Mesh, FBox& OutBox)
 	if (!Mesh) return false;
 	FString Error;
 	FMCPReflectedCall Call;
-	if (!Call.Bind(MCPGeoQueryFunctions, TEXT("GetMeshBoundingBox"), Error)) return false;
+	if (!Call.Bind(MCPGeometryScript::QueryFunctions, TEXT("GetMeshBoundingBox"), Error)) return false;
 	Call.SetObject(TEXT("TargetMesh"), Mesh);
 	Call.Invoke();
 	return Call.GetBox(TEXT("ReturnValue"), OutBox) && OutBox.IsValid;
-}
-
-/** The written asset's own numbers, so the caller can verify rather than trust. */
-void MCPGeoWriteAssetStats(const TSharedPtr<FJsonObject>& Out, const TCHAR* Field, UStaticMesh* Mesh)
-{
-	if (!Mesh) return;
-	TSharedPtr<FJsonObject> Stats = MakeShared<FJsonObject>();
-	Stats->SetStringField(TEXT("assetPath"), Mesh->GetPathName());
-	Stats->SetNumberField(TEXT("triangles"), Mesh->GetNumTriangles(0));
-	Stats->SetNumberField(TEXT("vertices"), Mesh->GetNumVertices(0));
-	Stats->SetNumberField(TEXT("lodCount"), Mesh->GetNumLODs());
-	Stats->SetNumberField(TEXT("materialSlots"), Mesh->GetStaticMaterials().Num());
-	const FBoxSphereBounds Bounds = Mesh->GetBounds();
-	Stats->SetObjectField(TEXT("boundsOrigin"), MCPVec3ToJsonObject(Bounds.Origin));
-	Stats->SetObjectField(TEXT("boundsExtent"), MCPVec3ToJsonObject(Bounds.BoxExtent));
-	Out->SetObjectField(Field, Stats);
 }
 
 // ─── Simple collision ────────────────────────────────────────────────────────
@@ -314,46 +195,7 @@ int32 MCPGeoCollisionShapeCount(const UBodySetup* Setup)
 	return Setup ? Setup->AggGeom.GetElementCount() : 0;
 }
 
-/** Copy the simple collision shapes and trace flag from one StaticMesh to
- *  another. A generated result with no collision at all is a silent trap for
- *  anything that walks on it. */
-bool MCPGeoCopySimpleCollision(UStaticMesh* From, UStaticMesh* To)
-{
-	if (!From || !To || From == To) return false;
-	UBodySetup* SourceSetup = From->GetBodySetup();
-	if (!SourceSetup) return false;
-
-	if (!To->GetBodySetup())
-	{
-		To->CreateBodySetup();
-	}
-	UBodySetup* TargetSetup = To->GetBodySetup();
-	if (!TargetSetup) return false;
-
-	TargetSetup->Modify();
-	TargetSetup->AggGeom = SourceSetup->AggGeom;
-	TargetSetup->CollisionTraceFlag = SourceSetup->CollisionTraceFlag;
-	// Invalidate and leave the cook to the engine's own lazy path. Forcing
-	// CreatePhysicsMeshes here would cook on the game thread for no benefit the
-	// caller can observe from the result.
-	TargetSetup->InvalidatePhysicsData();
-	return true;
-}
-
 // ─── Shared parameter parsing ────────────────────────────────────────────────
-
-/** The LOD selector word, defaulting to the highest-quality source available.
- *  Empty return means the word was not recognised. */
-FString MCPGeoResolveLODType(const FString& Requested)
-{
-	if (Requested.IsEmpty()) return TEXT("MaxAvailable");
-	const FString Lower = Requested.ToLower();
-	if (Lower == TEXT("maxavailable")) return TEXT("MaxAvailable");
-	if (Lower == TEXT("hiressourcemodel")) return TEXT("HiResSourceModel");
-	if (Lower == TEXT("sourcemodel")) return TEXT("SourceModel");
-	if (Lower == TEXT("renderdata")) return TEXT("RenderData");
-	return FString();
-}
 
 /**
  * Everything the five mesh-rewriting actions share: which asset, which LOD,
@@ -421,7 +263,7 @@ TSharedPtr<FJsonValue> MCPGeoParseRequest(
 	}
 
 	const FString RequestedLODType = OptionalString(Params, TEXT("lodType"));
-	Out.LODTypeName = MCPGeoResolveLODType(RequestedLODType);
+	Out.LODTypeName = MCPGeometryScript::ResolveLODType(RequestedLODType);
 	if (Out.LODTypeName.IsEmpty())
 	{
 		return MCPError(FString::Printf(
@@ -509,7 +351,7 @@ bool MCPGeoCopyMeshIn(
 {
 	FMCPReflectedCall Call;
 	FString Error;
-	if (!Call.Bind(MCPGeoAssetFunctions, TEXT("CopyMeshFromStaticMeshV2"), Error))
+	if (!Call.Bind(MCPGeometryScript::StaticMeshFunctions, TEXT("CopyMeshFromStaticMeshV2"), Error))
 	{
 		OutFailure = Error;
 		return false;
@@ -522,7 +364,7 @@ bool MCPGeoCopyMeshIn(
 	Call.SetObject(TEXT("Debug"), Debug);
 	Call.Invoke();
 
-	Messages.Append(MCPGeoDrainDebug(Debug));
+	Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 	if (Call.GetEnumName(TEXT("Outcome")) != TEXT("Success"))
 	{
 		OutFailure = FString::Printf(
@@ -555,7 +397,7 @@ UStaticMesh* MCPGeoWriteMeshOut(
 	if (ExistingTarget)
 	{
 		FMCPReflectedCall CopyOut;
-		if (!CopyOut.Bind(MCPGeoAssetFunctions, TEXT("CopyMeshToStaticMesh"), BindError))
+		if (!CopyOut.Bind(MCPGeometryScript::StaticMeshFunctions, TEXT("CopyMeshToStaticMesh"), BindError))
 		{
 			OutFailure = BindError;
 			OutReason = TEXT("geometry_scripting_unavailable");
@@ -570,7 +412,7 @@ UStaticMesh* MCPGeoWriteMeshOut(
 		CopyOut.SetBool(TEXT("bUseSectionMaterials"), true);
 		CopyOut.SetObject(TEXT("Debug"), Debug);
 		CopyOut.Invoke();
-		Messages.Append(MCPGeoDrainDebug(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 		if (CopyOut.GetEnumName(TEXT("Outcome")) != TEXT("Success"))
 		{
@@ -582,7 +424,7 @@ UStaticMesh* MCPGeoWriteMeshOut(
 	}
 
 	FMCPReflectedCall Create;
-	if (!Create.Bind(MCPGeoCreateAssetFunctions, TEXT("CreateNewStaticMeshAssetFromMesh"), BindError))
+	if (!Create.Bind(MCPGeometryScript::CreateAssetFunctions, TEXT("CreateNewStaticMeshAssetFromMesh"), BindError))
 	{
 		OutFailure = FString::Printf(
 			TEXT("%s Creating a new StaticMesh asset needs the editor half of the plugin ")
@@ -602,7 +444,7 @@ UStaticMesh* MCPGeoWriteMeshOut(
 			&& Request.SourceMesh && MCPGetNaniteSettings(Request.SourceMesh).bEnabled));
 	Create.SetObject(TEXT("Debug"), Debug);
 	Create.Invoke();
-	Messages.Append(MCPGeoDrainDebug(Debug));
+	Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 	UStaticMesh* Written = Cast<UStaticMesh>(Create.ReturnObject());
 	if (Create.GetEnumName(TEXT("Outcome")) != TEXT("Success") || !Written)
@@ -644,7 +486,7 @@ void MCPGeoFinishWrite(
 	bool bCollisionCopied = false;
 	if (Request.bCopyCollision && Written != Request.SourceMesh)
 	{
-		bCollisionCopied = MCPGeoCopySimpleCollision(Request.SourceMesh, Written);
+		bCollisionCopied = MCPGeometryScript::CopySimpleCollision(Request.SourceMesh, Written);
 	}
 
 	bool bNaniteChanged = false;
@@ -674,7 +516,7 @@ void MCPGeoFinishWrite(
 	Result->SetBoolField(TEXT("collisionCopiedFromSource"), bCollisionCopied);
 	Result->SetStringField(TEXT("nanite"), Request.NaniteMode);
 	Result->SetBoolField(TEXT("naniteChanged"), bNaniteChanged);
-	MCPGeoWriteAssetStats(Result, TEXT("output"), Written);
+	MCPGeometryScript::WriteAssetStats(Result, TEXT("output"), Written);
 
 	if (Request.bSave)
 	{
@@ -793,26 +635,26 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 {
 	FMCPGeoRequest Request = RequestIn;
 
-	if (!MCPGeoEnsureGeometryScripting())
+	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions }))
 	{
-		return MCPGeoUnavailable(TEXT("its runtime classes are not registered in this editor."));
+		return MCPGeometryScript::UnavailableError(TEXT("its runtime classes are not registered in this editor."));
 	}
-	Request.LODTypeValue = MCPGeoEnumValue(MCPGeoLODTypeEnum, Request.LODTypeName);
+	Request.LODTypeValue = MCPGeometryScript::EnumValue(MCPGeometryScript::LODTypeEnum, Request.LODTypeName);
 
-	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, MCPGeoDynamicMeshClass);
+	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, MCPGeometryScript::DynamicMeshClass);
 	if (!DynamicMeshClass)
 	{
-		return MCPGeoUnavailable(TEXT("UDynamicMesh is not registered."));
+		return MCPGeometryScript::UnavailableError(TEXT("UDynamicMesh is not registered."));
 	}
 	UObject* Dynamic = NewObject<UObject>(GetTransientPackage(), DynamicMeshClass);
 	if (!Dynamic)
 	{
-		return MCPGeoUnavailable(TEXT("a UDynamicMesh could not be constructed."));
+		return MCPGeometryScript::UnavailableError(TEXT("a UDynamicMesh could not be constructed."));
 	}
 	const FGCRootScope KeepDynamic(Dynamic);
 
 	UObject* Debug = nullptr;
-	if (UClass* DebugClass = FindObject<UClass>(nullptr, MCPGeoDebugClass))
+	if (UClass* DebugClass = FindObject<UClass>(nullptr, MCPGeometryScript::DebugClass))
 	{
 		Debug = NewObject<UObject>(GetTransientPackage(), DebugClass);
 	}
@@ -828,7 +670,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Source mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("source_read_failed"));
 		MCPGeoDescribeRequest(Obj, Request);
-		MCPGeoAttachMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
@@ -844,7 +686,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 		MCPGeoDescribeRequest(Obj, Request);
 		Obj->SetObjectField(TEXT("before"), Before.ToJson());
 		Describe(Obj);
-		MCPGeoAttachMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
@@ -863,7 +705,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 		Obj->SetObjectField(TEXT("before"), Before.ToJson());
 		Obj->SetObjectField(TEXT("after"), After.ToJson());
 		Describe(Obj);
-		MCPGeoAttachMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
@@ -884,7 +726,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 			TEXT("%s produced the mesh that is already there, so '%s' was left untouched."),
 			OperationName, *Request.AssetPath));
 		Describe(Result);
-		MCPGeoAttachMessages(Result, Messages);
+		MCPGeometryScript::AttachMessages(Result, Messages);
 		return MCPResult(Result);
 	}
 
@@ -899,7 +741,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 		Preview->SetBoolField(TEXT("written"), false);
 		Preview->SetStringField(TEXT("wouldWrite"), Request.OutputPath);
 		Describe(Preview);
-		MCPGeoAttachMessages(Preview, Messages);
+		MCPGeometryScript::AttachMessages(Preview, Messages);
 		return MCPResult(Preview);
 	}
 
@@ -929,7 +771,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 			TEXT("%s produced %d triangles but %s"), OperationName, After.Triangles, *WriteFailure));
 		Result->SetStringField(TEXT("reason"), WriteReason);
 		Result->SetBoolField(TEXT("written"), false);
-		MCPGeoAttachMessages(Result, Messages);
+		MCPGeometryScript::AttachMessages(Result, Messages);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
@@ -938,7 +780,7 @@ TSharedPtr<FJsonValue> MCPGeoRunMeshOperation(
 	// stated in its body rather than buried here: which call undoes a
 	// simplify is a claim only the action that made the edit can make.
 	Finish(Result, bCreated, Request.OutputPath);
-	MCPGeoAttachMessages(Result, Messages);
+	MCPGeometryScript::AttachMessages(Result, Messages);
 	return MCPResult(Result);
 }
 
@@ -992,9 +834,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::SimplifyMesh(const TSharedPtr<FJsonObject
 	// GeometryScriptingCore makes every FindObject<UEnum> miss, and a valid
 	// method name would be rejected as unknown rather than reported as a missing
 	// plugin.
-	if (!MCPGeoEnsureGeometryScripting())
+	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions }))
 	{
-		return MCPGeoUnavailable(TEXT("its runtime classes are not registered in this editor."));
+		return MCPGeometryScript::UnavailableError(TEXT("its runtime classes are not registered in this editor."));
 	}
 
 	const FString Mode = OptionalString(Params, TEXT("simplifyMode"), TEXT("triangleCount")).ToLower();
@@ -1061,7 +903,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SimplifyMesh(const TSharedPtr<FJsonObject
 
 	const FString Method = OptionalString(Params, TEXT("method"), TEXT("AttributeAware"));
 	const TCHAR* const KnownMethods = TEXT("StandardQEM, VolumePreserving, AttributeAware, AttributeAwareV2");
-	const int64 MethodValue = MCPGeoEnumValue(MCPGeoSimplifyMethodEnum, Method);
+	const int64 MethodValue = MCPGeometryScript::EnumValue(MCPGeoSimplifyMethodEnum, Method);
 	if (MethodValue == INDEX_NONE)
 	{
 		return MCPError(FString::Printf(
@@ -1140,7 +982,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SimplifyMesh(const TSharedPtr<FJsonObject
 
 		Call.SetObject(TEXT("Debug"), Debug);
 		Call.Invoke();
-		Messages.Append(MCPGeoDrainDebug(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 		return true;
 	};
 
@@ -1215,9 +1057,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemeshMesh(const TSharedPtr<FJsonObject>&
 	if (auto Err = MCPGeoParseRequest(Params, TEXT("Remeshed"), Request)) return Err;
 
 	// Load before resolving enumerators, for the reason given in apply_mesh_simplify.
-	if (!MCPGeoEnsureGeometryScripting())
+	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions }))
 	{
-		return MCPGeoUnavailable(TEXT("its runtime classes are not registered in this editor."));
+		return MCPGeometryScript::UnavailableError(TEXT("its runtime classes are not registered in this editor."));
 	}
 
 	const FString Mode = OptionalString(Params, TEXT("remeshMode"), TEXT("uniform")).ToLower();
@@ -1230,7 +1072,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemeshMesh(const TSharedPtr<FJsonObject>&
 	}
 
 	const FString TargetType = OptionalString(Params, TEXT("targetType"), TEXT("TriangleCount"));
-	const int64 TargetTypeValue = MCPGeoEnumValue(MCPGeoRemeshTargetEnum, TargetType);
+	const int64 TargetTypeValue = MCPGeometryScript::EnumValue(MCPGeoRemeshTargetEnum, TargetType);
 	if (TargetTypeValue == INDEX_NONE)
 	{
 		return MCPError(FString::Printf(
@@ -1253,7 +1095,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemeshMesh(const TSharedPtr<FJsonObject>&
 	}
 
 	const FString Smoothing = OptionalString(Params, TEXT("smoothingType"), TEXT("Mixed"));
-	const int64 SmoothingValue = MCPGeoEnumValue(MCPGeoRemeshSmoothingEnum, Smoothing);
+	const int64 SmoothingValue = MCPGeometryScript::EnumValue(MCPGeoRemeshSmoothingEnum, Smoothing);
 	if (SmoothingValue == INDEX_NONE)
 	{
 		return MCPError(FString::Printf(
@@ -1263,7 +1105,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemeshMesh(const TSharedPtr<FJsonObject>&
 	}
 
 	const FString BoundaryConstraint = OptionalString(Params, TEXT("boundaryConstraint"), TEXT("Free"));
-	const int64 BoundaryValue = MCPGeoEnumValue(MCPGeoRemeshConstraintEnum, BoundaryConstraint);
+	const int64 BoundaryValue = MCPGeometryScript::EnumValue(MCPGeoRemeshConstraintEnum, BoundaryConstraint);
 	if (BoundaryValue == INDEX_NONE)
 	{
 		return MCPError(FString::Printf(
@@ -1310,7 +1152,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemeshMesh(const TSharedPtr<FJsonObject>&
 
 		Call.SetObject(TEXT("Debug"), Debug);
 		Call.Invoke();
-		Messages.Append(MCPGeoDrainDebug(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 		return true;
 	};
 
@@ -1378,9 +1220,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::MirrorMesh(const TSharedPtr<FJsonObject>&
 	FMCPGeoRequest Request;
 	if (auto Err = MCPGeoParseRequest(Params, TEXT("Mirrored"), Request)) return Err;
 
-	if (!MCPGeoEnsureGeometryScripting())
+	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions }))
 	{
-		return MCPGeoUnavailable(TEXT("its runtime classes are not registered in this editor."));
+		return MCPGeometryScript::UnavailableError(TEXT("its runtime classes are not registered in this editor."));
 	}
 
 	// The plane is named either by an axis word (the common case) or by an
@@ -1411,7 +1253,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::MirrorMesh(const TSharedPtr<FJsonObject>&
 	{
 		FString BindError;
 		FMCPReflectedCall Call;
-		if (!Call.Bind(MCPGeoBooleanFunctions, TEXT("ApplyMeshMirror"), BindError))
+		if (!Call.Bind(MCPGeometryScript::BooleanFunctions, TEXT("ApplyMeshMirror"), BindError))
 		{
 			OutFailure = BindError;
 			return false;
@@ -1423,7 +1265,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::MirrorMesh(const TSharedPtr<FJsonObject>&
 		Call.SetStructBool(TEXT("Options"), TEXT("bWeldAlongPlane"), bWeldAlongPlane);
 		Call.SetObject(TEXT("Debug"), Debug);
 		Call.Invoke();
-		Messages.Append(MCPGeoDrainDebug(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 		return true;
 	};
 
@@ -1497,13 +1339,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillMeshHoles(const TSharedPtr<FJsonObjec
 	if (auto Err = MCPGeoParseRequest(Params, TEXT("Filled"), Request)) return Err;
 
 	// Load before resolving enumerators, for the reason given in apply_mesh_simplify.
-	if (!MCPGeoEnsureGeometryScripting())
+	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions }))
 	{
-		return MCPGeoUnavailable(TEXT("its runtime classes are not registered in this editor."));
+		return MCPGeometryScript::UnavailableError(TEXT("its runtime classes are not registered in this editor."));
 	}
 
 	const FString Method = OptionalString(Params, TEXT("fillMethod"), TEXT("Automatic"));
-	const int64 MethodValue = MCPGeoEnumValue(MCPGeoFillHolesEnum, Method);
+	const int64 MethodValue = MCPGeometryScript::EnumValue(MCPGeoFillHolesEnum, Method);
 	if (MethodValue == INDEX_NONE)
 	{
 		return MCPError(FString::Printf(
@@ -1536,7 +1378,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillMeshHoles(const TSharedPtr<FJsonObjec
 			Repair.SetObject(TEXT("TargetMesh"), Mesh);
 			Repair.SetObject(TEXT("Debug"), Debug);
 			Repair.Invoke();
-			Messages.Append(MCPGeoDrainDebug(Debug));
+			Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 		}
 
 		if (bWeldFirst)
@@ -1553,7 +1395,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillMeshHoles(const TSharedPtr<FJsonObjec
 			Weld.SetStructNumber(TEXT("WeldOptions"), TEXT("Tolerance"), WeldTolerance);
 			Weld.SetObject(TEXT("Debug"), Debug);
 			Weld.Invoke();
-			Messages.Append(MCPGeoDrainDebug(Debug));
+			Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 			const FMCPGeoMeshStats AfterWeld = MCPGeoReadStats(Mesh);
 			WeldedOpenEdges = FMath::Max(0, BeforeWeld.OpenBorderEdges - AfterWeld.OpenBorderEdges);
@@ -1570,7 +1412,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillMeshHoles(const TSharedPtr<FJsonObjec
 		Fill.SetStructBool(TEXT("FillOptions"), TEXT("bDeleteIsolatedTriangles"), bDeleteIsolatedTriangles);
 		Fill.SetObject(TEXT("Debug"), Debug);
 		Fill.Invoke();
-		Messages.Append(MCPGeoDrainDebug(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 		FilledHoles = Fill.GetInt(TEXT("NumFilledHoles"));
 		FailedHoleFills = Fill.GetInt(TEXT("NumFailedHoleFills"));
@@ -1747,15 +1589,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 		TEXT("AlignedBoxes, OrientedBoxes, MinimalSpheres, Capsules, ConvexHulls, SweptHulls, ")
 		TEXT("MinVolumeShapes, LevelSets");
 
-	if (!MCPGeoEnsureGeometryScripting())
+	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions }))
 	{
-		return MCPGeoUnavailable(
+		return MCPGeometryScript::UnavailableError(
 			TEXT("its runtime classes are not registered in this editor."),
 			TEXT("asset(generate_mesh_collision, op='clear') and asset(get_mesh_collision) do not need it and ")
 				TEXT("still work."));
 	}
 
-	const int64 MethodValue = MCPGeoEnumValue(MCPGeoCollisionMethodEnum, Method);
+	const int64 MethodValue = MCPGeometryScript::EnumValue(MCPGeoCollisionMethodEnum, Method);
 	if (MethodValue == INDEX_NONE)
 	{
 		return MCPError(FString::Printf(
@@ -1763,7 +1605,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	}
 
 	const FString SweptHullAxis = OptionalString(Params, TEXT("sweptHullAxis"), TEXT("Z"));
-	const int64 SweptHullAxisValue = MCPGeoEnumValue(MCPGeoSweptHullAxisEnum, SweptHullAxis);
+	const int64 SweptHullAxisValue = MCPGeometryScript::EnumValue(MCPGeoSweptHullAxisEnum, SweptHullAxis);
 	if (SweptHullAxisValue == INDEX_NONE)
 	{
 		return MCPError(FString::Printf(
@@ -1785,7 +1627,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	const bool bMarkAsCustomized = OptionalBool(Params, TEXT("markAsCustomized"), true);
 
 	FString RequestedLODType = OptionalString(Params, TEXT("lodType"));
-	const FString LODTypeName = MCPGeoResolveLODType(RequestedLODType);
+	const FString LODTypeName = MCPGeometryScript::ResolveLODType(RequestedLODType);
 	if (LODTypeName.IsEmpty())
 	{
 		return MCPError(FString::Printf(
@@ -1798,16 +1640,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	ReadRequest.SourceMesh = Mesh;
 	ReadRequest.LODTypeName = LODTypeName;
 	ReadRequest.LODIndex = FMath::Max(0, OptionalInt(Params, TEXT("lodIndex"), 0));
-	ReadRequest.LODTypeValue = MCPGeoEnumValue(MCPGeoLODTypeEnum, LODTypeName);
+	ReadRequest.LODTypeValue = MCPGeometryScript::EnumValue(MCPGeometryScript::LODTypeEnum, LODTypeName);
 
-	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, MCPGeoDynamicMeshClass);
-	if (!DynamicMeshClass) return MCPGeoUnavailable(TEXT("UDynamicMesh is not registered."));
+	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, MCPGeometryScript::DynamicMeshClass);
+	if (!DynamicMeshClass) return MCPGeometryScript::UnavailableError(TEXT("UDynamicMesh is not registered."));
 	UObject* Dynamic = NewObject<UObject>(GetTransientPackage(), DynamicMeshClass);
-	if (!Dynamic) return MCPGeoUnavailable(TEXT("a UDynamicMesh could not be constructed."));
+	if (!Dynamic) return MCPGeometryScript::UnavailableError(TEXT("a UDynamicMesh could not be constructed."));
 	const FGCRootScope KeepDynamic(Dynamic);
 
 	UObject* Debug = nullptr;
-	if (UClass* DebugClass = FindObject<UClass>(nullptr, MCPGeoDebugClass))
+	if (UClass* DebugClass = FindObject<UClass>(nullptr, MCPGeometryScript::DebugClass))
 	{
 		Debug = NewObject<UObject>(GetTransientPackage(), DebugClass);
 	}
@@ -1821,7 +1663,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 		Obj->SetBoolField(TEXT("success"), false);
 		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("source_read_failed"));
-		MCPGeoAttachMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
@@ -1853,7 +1695,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 				TEXT("%d triangles. The shape count is only known once the solver has run, so it is not ")
 				TEXT("predicted here."),
 			PreviousShapeCount, *AssetPath, *Method, SourceStats.Triangles));
-		MCPGeoAttachMessages(Result, Messages);
+		MCPGeometryScript::AttachMessages(Result, Messages);
 		return MCPResult(Result);
 	}
 
@@ -1861,7 +1703,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	FMCPReflectedCall Generate;
 	if (!Generate.Bind(MCPGeoCollisionFunctions, TEXT("SetStaticMeshCollisionFromMesh"), BindError))
 	{
-		return MCPGeoUnavailable(BindError);
+		return MCPGeometryScript::UnavailableError(BindError);
 	}
 	Generate.SetObject(TEXT("FromDynamicMesh"), Dynamic);
 	Generate.SetObject(TEXT("ToStaticMeshAsset"), Mesh);
@@ -1882,7 +1724,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	Generate.SetStructBool(TEXT("StaticMeshCollisionOptions"), TEXT("bMarkAsCustomized"), bMarkAsCustomized);
 	Generate.SetObject(TEXT("Debug"), Debug);
 	Generate.Invoke();
-	Messages.Append(MCPGeoDrainDebug(Debug));
+	Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 	UBodySetup* NewSetup = Mesh->GetBodySetup();
 	const int32 ShapeCount = MCPGeoCollisionShapeCount(NewSetup);
@@ -1902,7 +1744,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 				TEXT("asset(apply_mesh_hole_fill) first, or try method='ConvexHulls' which tolerates an open surface."),
 			*Method, *AssetPath));
 		Result->SetStringField(TEXT("reason"), TEXT("no_shapes_generated"));
-		MCPGeoAttachMessages(Result, Messages);
+		MCPGeometryScript::AttachMessages(Result, Messages);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
@@ -1954,7 +1796,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 		Result->SetBoolField(TEXT("saved"), false);
 	}
 
-	MCPGeoAttachMessages(Result, Messages);
+	MCPGeometryScript::AttachMessages(Result, Messages);
 	return MCPResult(Result);
 }
 
@@ -2103,7 +1945,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 	}
 
 	FString RequestedLODType = OptionalString(Params, TEXT("lodType"));
-	Request.LODTypeName = MCPGeoResolveLODType(RequestedLODType);
+	Request.LODTypeName = MCPGeometryScript::ResolveLODType(RequestedLODType);
 	if (Request.LODTypeName.IsEmpty())
 	{
 		return MCPError(FString::Printf(
@@ -2121,20 +1963,20 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 			: MCPAssetNotFoundError(AssetPath, TEXT("Source mesh"));
 	}
 
-	if (!MCPGeoEnsureGeometryScripting())
+	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions }))
 	{
-		return MCPGeoUnavailable(TEXT("its runtime classes are not registered in this editor."));
+		return MCPGeometryScript::UnavailableError(TEXT("its runtime classes are not registered in this editor."));
 	}
-	Request.LODTypeValue = MCPGeoEnumValue(MCPGeoLODTypeEnum, Request.LODTypeName);
+	Request.LODTypeValue = MCPGeometryScript::EnumValue(MCPGeometryScript::LODTypeEnum, Request.LODTypeName);
 
-	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, MCPGeoDynamicMeshClass);
-	if (!DynamicMeshClass) return MCPGeoUnavailable(TEXT("UDynamicMesh is not registered."));
+	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, MCPGeometryScript::DynamicMeshClass);
+	if (!DynamicMeshClass) return MCPGeometryScript::UnavailableError(TEXT("UDynamicMesh is not registered."));
 	UObject* Dynamic = NewObject<UObject>(GetTransientPackage(), DynamicMeshClass);
-	if (!Dynamic) return MCPGeoUnavailable(TEXT("a UDynamicMesh could not be constructed."));
+	if (!Dynamic) return MCPGeometryScript::UnavailableError(TEXT("a UDynamicMesh could not be constructed."));
 	const FGCRootScope KeepDynamic(Dynamic);
 
 	UObject* Debug = nullptr;
-	if (UClass* DebugClass = FindObject<UClass>(nullptr, MCPGeoDebugClass))
+	if (UClass* DebugClass = FindObject<UClass>(nullptr, MCPGeometryScript::DebugClass))
 	{
 		Debug = NewObject<UObject>(GetTransientPackage(), DebugClass);
 	}
@@ -2148,7 +1990,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 		Obj->SetBoolField(TEXT("success"), false);
 		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Source mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("source_read_failed"));
-		MCPGeoAttachMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
@@ -2162,7 +2004,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 		Obj->SetStringField(TEXT("error"), FString::Printf(
 			TEXT("'%s' has no valid bounding box, so no cut planes could be placed inside it."), *AssetPath));
 		Obj->SetStringField(TEXT("reason"), TEXT("no_bounds"));
-		MCPGeoAttachMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
@@ -2300,7 +2142,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 			TEXT("plannedPieceCount is what the plane layout implies. The cut itself decides the real count: a ")
 				TEXT("plane that misses the geometry, or a concave shape that a single plane separates into ")
 				TEXT("three parts, both change it. Run without dryRun to get the true count."));
-		MCPGeoAttachMessages(Preview, Messages);
+		MCPGeometryScript::AttachMessages(Preview, Messages);
 		return MCPResult(Preview);
 	}
 
@@ -2309,9 +2151,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 	for (const FMCPGeoPlane& Plane : Planes)
 	{
 		FMCPReflectedCall Slice;
-		if (!Slice.Bind(MCPGeoBooleanFunctions, TEXT("ApplyMeshPlaneSlice"), BindError))
+		if (!Slice.Bind(MCPGeometryScript::BooleanFunctions, TEXT("ApplyMeshPlaneSlice"), BindError))
 		{
-			return MCPGeoUnavailable(BindError);
+			return MCPGeometryScript::UnavailableError(BindError);
 		}
 		Slice.SetObject(TEXT("TargetMesh"), Dynamic);
 		Slice.SetTransform(TEXT("CutFrame"), MCPGeoPlaneFrame(Plane.Point, Plane.Normal));
@@ -2320,20 +2162,20 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 		Slice.SetStructNumber(TEXT("Options"), TEXT("GapWidth"), GapWidth);
 		Slice.SetObject(TEXT("Debug"), Debug);
 		Slice.Invoke();
-		Messages.Append(MCPGeoDrainDebug(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 	}
 
 	// ── Split into pieces ───────────────────────────────────────────────────
 	FMCPReflectedCall Split;
 	if (!Split.Bind(MCPGeoDecompFunctions, TEXT("SplitMeshByComponents"), BindError))
 	{
-		return MCPGeoUnavailable(BindError);
+		return MCPGeometryScript::UnavailableError(BindError);
 	}
 	Split.SetObject(TEXT("TargetMesh"), Dynamic);
 	Split.SetObject(TEXT("MeshPool"), nullptr);
 	Split.SetObject(TEXT("Debug"), Debug);
 	Split.Invoke();
-	Messages.Append(MCPGeoDrainDebug(Debug));
+	Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 	TArray<UObject*> PieceMeshes;
 	Split.GetObjectArray(TEXT("ComponentMeshes"), PieceMeshes);
@@ -2360,7 +2202,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 				TEXT("gapWidth, or check cutPlanes against the source bounds."),
 			*AssetPath, PieceMeshes.Num()));
 		Result->SetStringField(TEXT("reason"), TEXT("no_separation"));
-		MCPGeoAttachMessages(Result, Messages);
+		MCPGeometryScript::AttachMessages(Result, Messages);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
@@ -2373,7 +2215,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 				TEXT("or raise minPieceTriangles to discard the fragments."),
 			*AssetPath, PieceMeshes.Num(), MCPGeoMaxFracturePieces));
 		Result->SetStringField(TEXT("reason"), TEXT("too_many_pieces"));
-		MCPGeoAttachMessages(Result, Messages);
+		MCPGeometryScript::AttachMessages(Result, Messages);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
@@ -2464,6 +2306,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::FractureMesh(const TSharedPtr<FJsonObject
 		MCPSetRollback(Result, TEXT("delete_asset_batch"), RollbackPayload);
 	}
 
-	MCPGeoAttachMessages(Result, Messages);
+	MCPGeometryScript::AttachMessages(Result, Messages);
 	return MCPResult(Result);
 }

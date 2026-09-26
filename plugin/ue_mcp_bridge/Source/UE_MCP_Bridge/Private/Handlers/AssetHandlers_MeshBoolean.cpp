@@ -25,6 +25,7 @@
 #include "AssetHandlers_MeshBoolean.h"
 
 #include "HandlerFunctionCall.h"
+#include "HandlerGeometryScript.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
@@ -41,124 +42,15 @@ namespace
 {
 // ── The Geometry Script surface this handler drives ──────────────────────────
 
-const TCHAR* const GSDynamicMeshClass       = TEXT("/Script/GeometryFramework.DynamicMesh");
-const TCHAR* const GSDebugClass             = TEXT("/Script/GeometryScriptingCore.GeometryScriptDebug");
-const TCHAR* const GSStaticMeshFunctions    = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_StaticMeshFunctions");
-const TCHAR* const GSBooleanFunctions       = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_MeshBooleanFunctions");
-const TCHAR* const GSQueryFunctions         = TEXT("/Script/GeometryScriptingCore.GeometryScriptLibrary_MeshQueryFunctions");
-const TCHAR* const GSCreateAssetFunctions   = TEXT("/Script/GeometryScriptingEditor.GeometryScriptLibrary_CreateNewAssetFunctions");
 const TCHAR* const GSBooleanOperationEnum   = TEXT("/Script/GeometryScriptingCore.EGeometryScriptBooleanOperation");
-const TCHAR* const GSLODTypeEnum            = TEXT("/Script/GeometryScriptingCore.EGeometryScriptLODType");
-
-/** Ask the module system for the Geometry Script modules once. Returns false
- *  when the plugin is not present or not enabled for this project. */
-bool EnsureGeometryScriptingLoaded()
-{
-	static const TCHAR* const Modules[] = {
-		TEXT("GeometryFramework"),
-		TEXT("GeometryScriptingCore"),
-		TEXT("GeometryScriptingEditor")
-	};
-	for (const TCHAR* Name : Modules)
-	{
-		const FName ModuleName(Name);
-		if (!FModuleManager::Get().IsModuleLoaded(ModuleName))
-		{
-			// LoadModule is the non-fatal form. LoadModuleChecked would take
-			// the editor down for a project that simply does not have the
-			// plugin, which is the exact opposite of what this needs to do.
-			FModuleManager::Get().LoadModule(ModuleName);
-		}
-	}
-	return FindObject<UClass>(nullptr, GSDynamicMeshClass) != nullptr
-		&& FindObject<UClass>(nullptr, GSStaticMeshFunctions) != nullptr
-		&& FindObject<UClass>(nullptr, GSBooleanFunctions) != nullptr;
-}
-
-TSharedPtr<FJsonValue> GeometryScriptingUnavailableError(const FString& Detail)
-{
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), FString::Printf(
-		TEXT("GeometryScripting plugin not available: %s Enable the 'Geometry Script' plugin ")
-			TEXT("(Edit > Plugins > Geometry Script) and restart the editor, then retry."),
-		*Detail));
-	Obj->SetStringField(TEXT("reason"), TEXT("geometry_scripting_unavailable"));
-	Obj->SetStringField(TEXT("requiredPlugin"), TEXT("GeometryScripting"));
-	return MakeShared<FJsonValueObject>(Obj);
-}
-
-/** A value from a UEnum this module does not link, by enumerator name.
- *  Returns INDEX_NONE when the enum or the name is not there. */
-int64 GeometryScriptEnumValue(const TCHAR* EnumPath, const FString& EnumeratorName)
-{
-	UEnum* Enum = FindObject<UEnum>(nullptr, EnumPath);
-	if (!Enum) return INDEX_NONE;
-	const int64 Value = Enum->GetValueByNameString(EnumeratorName);
-	return Value;
-}
-
-/** Read and clear the messages a UGeometryScriptDebug collected, so the reason
- *  a boolean failed reaches the caller instead of only the output log. */
-TArray<FString> DrainDebugMessages(UObject* Debug)
-{
-	TArray<FString> Out;
-	if (!Debug) return Out;
-
-	FArrayProperty* ArrayProp = CastField<FArrayProperty>(
-		Debug->GetClass()->FindPropertyByName(FName(TEXT("Messages"))));
-	if (!ArrayProp) return Out;
-
-	FStructProperty* ElementProp = CastField<FStructProperty>(ArrayProp->Inner);
-	if (!ElementProp || !ElementProp->Struct) return Out;
-	FTextProperty* MessageProp = CastField<FTextProperty>(
-		ElementProp->Struct->FindPropertyByName(FName(TEXT("Message"))));
-	if (!MessageProp) return Out;
-
-	FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Debug));
-	for (int32 Index = 0; Index < Helper.Num(); ++Index)
-	{
-		void* Element = Helper.GetRawPtr(Index);
-		const FString Text = MessageProp->GetPropertyValue(
-			MessageProp->ContainerPtrToValuePtr<void>(Element)).ToString();
-		if (!Text.IsEmpty()) Out.Add(Text);
-	}
-	Helper.EmptyValues();
-	return Out;
-}
-
-void AttachDebugMessages(const TSharedPtr<FJsonObject>& Out, const TArray<FString>& Messages)
-{
-	if (Messages.Num() == 0) return;
-	TArray<TSharedPtr<FJsonValue>> Json;
-	for (const FString& Message : Messages) Json.Add(MakeShared<FJsonValueString>(Message));
-	Out->SetArrayField(TEXT("geometryScriptMessages"), Json);
-}
 
 /** Count triangles and vertices on a DynamicMesh through Geometry Script's own
  *  query library, which is the only thing that can see inside it from here. */
 bool ReadDynamicMeshCounts(UObject* Mesh, int32& OutTriangles, int32& OutVertices)
 {
-	OutTriangles = 0;
-	OutVertices = 0;
-	if (!Mesh) return false;
-
-	FString Error;
-	FMCPReflectedCall Triangles;
-	if (Triangles.Bind(GSQueryFunctions, TEXT("GetNumTriangleIDs"), Error))
-	{
-		Triangles.SetObject(TEXT("TargetMesh"), Mesh);
-		Triangles.Invoke();
-		OutTriangles = Triangles.GetInt(TEXT("ReturnValue"));
-	}
-	FMCPReflectedCall Vertices;
-	if (Vertices.Bind(GSQueryFunctions, TEXT("GetNumVertexIDs"), Error))
-	{
-		Vertices.SetObject(TEXT("TargetMesh"), Mesh);
-		Vertices.Invoke();
-		OutVertices = Vertices.GetInt(TEXT("ReturnValue"));
-	}
-	return true;
+	OutTriangles = MCPGeometryScript::QueryMeshInt(Mesh, TEXT("GetNumTriangleIDs"));
+	OutVertices = MCPGeometryScript::QueryMeshInt(Mesh, TEXT("GetNumVertexIDs"));
+	return Mesh != nullptr;
 }
 
 /** Map the caller's operation word to the Geometry Script enumerator.
@@ -176,19 +68,6 @@ FString ResolveBooleanOperation(const FString& Requested)
 	return FString();
 }
 
-/** The LOD selector word, defaulting to the highest-quality source available.
- *  Empty return means the word was not recognised. */
-FString ResolveLODType(const FString& Requested)
-{
-	if (Requested.IsEmpty()) return TEXT("MaxAvailable");
-	const FString Lower = Requested.ToLower();
-	if (Lower == TEXT("maxavailable")) return TEXT("MaxAvailable");
-	if (Lower == TEXT("hiressourcemodel")) return TEXT("HiResSourceModel");
-	if (Lower == TEXT("sourcemodel")) return TEXT("SourceModel");
-	if (Lower == TEXT("renderdata")) return TEXT("RenderData");
-	return FString();
-}
-
 /** The default output path for a boolean whose caller did not name one:
  *  "/Game/Meshes/SM_Wall" plus "_Subtract". A separate asset is the default on
  *  purpose, because the destructive form of this operation cannot be undone
@@ -200,47 +79,6 @@ FString DeriveOutputPath(const FString& TargetPath, const FString& OperationName
 	return Forms.PackagePath + TEXT("_") + OperationName;
 }
 
-/** Copy the simple collision shapes and trace flag from one StaticMesh to
- *  another. A boolean result with no collision at all is a silent trap for
- *  anything that walks on it, and rebuilding collision from the new geometry is
- *  a different operation with different tradeoffs. */
-bool CopySimpleCollision(UStaticMesh* From, UStaticMesh* To)
-{
-	if (!From || !To) return false;
-	UBodySetup* SourceSetup = From->GetBodySetup();
-	if (!SourceSetup) return false;
-
-	if (!To->GetBodySetup())
-	{
-		To->CreateBodySetup();
-	}
-	UBodySetup* TargetSetup = To->GetBodySetup();
-	if (!TargetSetup) return false;
-
-	TargetSetup->Modify();
-	TargetSetup->AggGeom = SourceSetup->AggGeom;
-	TargetSetup->CollisionTraceFlag = SourceSetup->CollisionTraceFlag;
-	// Invalidate and leave the cook to the engine's own lazy path. Forcing
-	// CreatePhysicsMeshes here would cook on the game thread for no benefit the
-	// caller can observe from the result.
-	TargetSetup->InvalidatePhysicsData();
-	return true;
-}
-
-void WriteMeshStats(const TSharedPtr<FJsonObject>& Out, const TCHAR* Prefix, UStaticMesh* Mesh)
-{
-	if (!Mesh) return;
-	TSharedPtr<FJsonObject> Stats = MakeShared<FJsonObject>();
-	Stats->SetStringField(TEXT("assetPath"), Mesh->GetPathName());
-	Stats->SetNumberField(TEXT("triangles"), Mesh->GetNumTriangles(0));
-	Stats->SetNumberField(TEXT("vertices"), Mesh->GetNumVertices(0));
-	Stats->SetNumberField(TEXT("lodCount"), Mesh->GetNumLODs());
-	Stats->SetNumberField(TEXT("materialSlots"), Mesh->GetStaticMaterials().Num());
-	const FBoxSphereBounds Bounds = Mesh->GetBounds();
-	Stats->SetObjectField(TEXT("boundsOrigin"), MCPVec3ToJsonObject(Bounds.Origin));
-	Stats->SetObjectField(TEXT("boundsExtent"), MCPVec3ToJsonObject(Bounds.BoxExtent));
-	Out->SetObjectField(Prefix, Stats);
-}
 }
 
 void FAssetMeshBooleanHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
@@ -336,7 +174,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	}
 
 	const FString RequestedLODType = OptionalString(Params, TEXT("lodType"));
-	const FString LODTypeName = ResolveLODType(RequestedLODType);
+	const FString LODTypeName = MCPGeometryScript::ResolveLODType(RequestedLODType);
 	if (LODTypeName.IsEmpty())
 	{
 		return MCPError(FString::Printf(
@@ -376,9 +214,9 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	// ── Guardrails ──────────────────────────────────────────────────────────
 	if (MCPIsProtectedAssetPath(OutputPath)) return MCPProtectedPathError(OutputPath);
 
-	if (!EnsureGeometryScriptingLoaded())
+	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions, MCPGeometryScript::BooleanFunctions }))
 	{
-		return GeometryScriptingUnavailableError(
+		return MCPGeometryScript::UnavailableError(
 			TEXT("its runtime classes are not registered in this editor."));
 	}
 
@@ -414,44 +252,44 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	}
 
 	// ── Bind everything before anything is built ────────────────────────────
-	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, GSDynamicMeshClass);
+	UClass* DynamicMeshClass = FindObject<UClass>(nullptr, MCPGeometryScript::DynamicMeshClass);
 	if (!DynamicMeshClass)
 	{
-		return GeometryScriptingUnavailableError(TEXT("UDynamicMesh is not registered."));
+		return MCPGeometryScript::UnavailableError(TEXT("UDynamicMesh is not registered."));
 	}
 
 	FString BindError;
 	FMCPReflectedCall CopyIn;
-	if (!CopyIn.Bind(GSStaticMeshFunctions, TEXT("CopyMeshFromStaticMeshV2"), BindError))
+	if (!CopyIn.Bind(MCPGeometryScript::StaticMeshFunctions, TEXT("CopyMeshFromStaticMeshV2"), BindError))
 	{
-		return GeometryScriptingUnavailableError(BindError);
+		return MCPGeometryScript::UnavailableError(BindError);
 	}
 	FMCPReflectedCall Boolean;
-	if (!Boolean.Bind(GSBooleanFunctions, TEXT("ApplyMeshBoolean"), BindError))
+	if (!Boolean.Bind(MCPGeometryScript::BooleanFunctions, TEXT("ApplyMeshBoolean"), BindError))
 	{
-		return GeometryScriptingUnavailableError(BindError);
+		return MCPGeometryScript::UnavailableError(BindError);
 	}
 
-	const int64 OperationValue = GeometryScriptEnumValue(GSBooleanOperationEnum, OperationName);
+	const int64 OperationValue = MCPGeometryScript::EnumValue(GSBooleanOperationEnum, OperationName);
 	if (OperationValue == INDEX_NONE)
 	{
-		return GeometryScriptingUnavailableError(FString::Printf(
+		return MCPGeometryScript::UnavailableError(FString::Printf(
 			TEXT("EGeometryScriptBooleanOperation has no '%s' in this engine build."), *OperationName));
 	}
-	const int64 LODTypeValue = GeometryScriptEnumValue(GSLODTypeEnum, LODTypeName);
+	const int64 LODTypeValue = MCPGeometryScript::EnumValue(MCPGeometryScript::LODTypeEnum, LODTypeName);
 
 	// ── Build the two dynamic meshes ────────────────────────────────────────
 	UObject* TargetDynamic = NewObject<UObject>(GetTransientPackage(), DynamicMeshClass);
 	UObject* ToolDynamic = NewObject<UObject>(GetTransientPackage(), DynamicMeshClass);
 	if (!TargetDynamic || !ToolDynamic)
 	{
-		return GeometryScriptingUnavailableError(TEXT("a UDynamicMesh could not be constructed."));
+		return MCPGeometryScript::UnavailableError(TEXT("a UDynamicMesh could not be constructed."));
 	}
 	const FGCRootScope KeepTargetDynamic(TargetDynamic);
 	const FGCRootScope KeepToolDynamic(ToolDynamic);
 
 	UObject* Debug = nullptr;
-	if (UClass* DebugClass = FindObject<UClass>(nullptr, GSDebugClass))
+	if (UClass* DebugClass = FindObject<UClass>(nullptr, MCPGeometryScript::DebugClass))
 	{
 		Debug = NewObject<UObject>(GetTransientPackage(), DebugClass);
 	}
@@ -463,7 +301,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	{
 		FMCPReflectedCall Call;
 		FString Error;
-		if (!Call.Bind(GSStaticMeshFunctions, TEXT("CopyMeshFromStaticMeshV2"), Error))
+		if (!Call.Bind(MCPGeometryScript::StaticMeshFunctions, TEXT("CopyMeshFromStaticMeshV2"), Error))
 		{
 			OutFailure = Error;
 			return false;
@@ -476,7 +314,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 		Call.SetObject(TEXT("Debug"), Debug);
 		Call.Invoke();
 
-		Messages.Append(DrainDebugMessages(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 		if (Call.GetEnumName(TEXT("Outcome")) != TEXT("Success"))
 		{
 			OutFailure = FString::Printf(
@@ -493,7 +331,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 		Obj->SetBoolField(TEXT("success"), false);
 		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Target mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("target_read_failed"));
-		AttachDebugMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 	if (!CopyMeshIn(ToolMesh, ToolDynamic, ToolPath, Failure))
@@ -502,7 +340,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 		Obj->SetBoolField(TEXT("success"), false);
 		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("Tool mesh could not be read: %s"), *Failure));
 		Obj->SetStringField(TEXT("reason"), TEXT("tool_read_failed"));
-		AttachDebugMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
@@ -523,7 +361,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	Boolean.SetStructBool(TEXT("Options"), TEXT("bAllowEmptyResult"), bAllowEmptyResult);
 	Boolean.SetObject(TEXT("Debug"), Debug);
 	Boolean.Invoke();
-	Messages.Append(DrainDebugMessages(Debug));
+	Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 	int32 ResultTriangles = 0, ResultVertices = 0;
 	ReadDynamicMeshCounts(TargetDynamic, ResultTriangles, ResultVertices);
@@ -541,7 +379,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 		Obj->SetStringField(TEXT("reason"), TEXT("empty_result"));
 		Obj->SetStringField(TEXT("operation"), OperationName);
 		Obj->SetNumberField(TEXT("resultTriangles"), 0);
-		AttachDebugMessages(Obj, Messages);
+		MCPGeometryScript::AttachMessages(Obj, Messages);
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
@@ -561,7 +399,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 		Out->SetNumberField(TEXT("resultTriangles"), ResultTriangles);
 		Out->SetNumberField(TEXT("resultVertices"), ResultVertices);
 		Out->SetBoolField(TEXT("resultIsEmpty"), ResultTriangles == 0);
-		AttachDebugMessages(Out, Messages);
+		MCPGeometryScript::AttachMessages(Out, Messages);
 	};
 
 	if (bDryRun)
@@ -581,9 +419,9 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	if (ExistingOutput)
 	{
 		FMCPReflectedCall CopyOut;
-		if (!CopyOut.Bind(GSStaticMeshFunctions, TEXT("CopyMeshToStaticMesh"), BindError))
+		if (!CopyOut.Bind(MCPGeometryScript::StaticMeshFunctions, TEXT("CopyMeshToStaticMesh"), BindError))
 		{
-			return GeometryScriptingUnavailableError(BindError);
+			return MCPGeometryScript::UnavailableError(BindError);
 		}
 		CopyOut.SetObject(TEXT("FromDynamicMesh"), TargetDynamic);
 		CopyOut.SetObject(TEXT("ToStaticMeshAsset"), ExistingOutput);
@@ -594,7 +432,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 		CopyOut.SetBool(TEXT("bUseSectionMaterials"), true);
 		CopyOut.SetObject(TEXT("Debug"), Debug);
 		CopyOut.Invoke();
-		Messages.Append(DrainDebugMessages(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 		if (CopyOut.GetEnumName(TEXT("Outcome")) != TEXT("Success"))
 		{
@@ -612,9 +450,9 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	else
 	{
 		FMCPReflectedCall Create;
-		if (!Create.Bind(GSCreateAssetFunctions, TEXT("CreateNewStaticMeshAssetFromMesh"), BindError))
+		if (!Create.Bind(MCPGeometryScript::CreateAssetFunctions, TEXT("CreateNewStaticMeshAssetFromMesh"), BindError))
 		{
-			return GeometryScriptingUnavailableError(FString::Printf(
+			return MCPGeometryScript::UnavailableError(FString::Printf(
 				TEXT("%s Creating a new StaticMesh asset needs the editor half of the plugin ")
 					TEXT("(GeometryScriptingEditor)."),
 				*BindError));
@@ -629,7 +467,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 			|| (NaniteMode == TEXT("inherit") && MCPGetNaniteSettings(TargetMesh).bEnabled));
 		Create.SetObject(TEXT("Debug"), Debug);
 		Create.Invoke();
-		Messages.Append(DrainDebugMessages(Debug));
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
 
 		Written = Cast<UStaticMesh>(Create.ReturnObject());
 		if (Create.GetEnumName(TEXT("Outcome")) != TEXT("Success") || !Written)
@@ -661,7 +499,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	bool bCollisionCopied = false;
 	if (bCopyCollision && Written != TargetMesh)
 	{
-		bCollisionCopied = CopySimpleCollision(TargetMesh, Written);
+		bCollisionCopied = MCPGeometryScript::CopySimpleCollision(TargetMesh, Written);
 	}
 
 	bool bNaniteChanged = false;
@@ -702,7 +540,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 	Result->SetBoolField(TEXT("collisionCopiedFromTarget"), bCollisionCopied);
 	Result->SetStringField(TEXT("nanite"), NaniteMode);
 	Result->SetBoolField(TEXT("naniteChanged"), bNaniteChanged);
-	WriteMeshStats(Result, TEXT("output"), Written);
+	MCPGeometryScript::WriteAssetStats(Result, TEXT("output"), Written);
 
 	if (bSave)
 	{
