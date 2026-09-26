@@ -11,7 +11,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/BlueprintHandlers.h"
+#include "Handlers/Blueprint/BlueprintHandlers.h"
 #include "Misc/AutomationTest.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"

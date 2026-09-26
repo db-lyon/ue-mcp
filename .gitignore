@@ -3,17 +3,6 @@ node_modules/
 
 ## TypeScript build output
 dist/
-dist/*.js.map
-dist/**/*.js.map
-
-## .NET (legacy)
-bin/
-obj/
-*.user
-*.suo
-*.vs/
-.vs/
-*.DotSettings.user
 
 ## IDE
 .idea/
@@ -26,11 +15,8 @@ obj/
 ## MCP config (contains absolute local paths)
 .mcp.json
 
-## Local planning artifacts (release-note drafts, ship-list scratch)
+## Local planning and announcement drafts (never shipped)
 plans/
-comms/
-
-## Announcement / comms drafts (Discord posts, demo recipes - never shipped)
 comms/
 
 ## Test-project Claude Code artifacts (ephemeral - installed by `ue-mcp init` / skills dry-runs)
@@ -42,17 +28,14 @@ tests/ue_mcp/Plugins/UE_MCP_Bridge/
 ## PIE_Studio lives in its own repo; never commit a test install here
 tests/ue_mcp/Plugins/PIE_Studio/
 
-## Kantext
-.kantext/
-kantext-mcp-*
-
 ## Claude / Cursor local settings
 .claude/settings.local.json
-
 
 ## Junk
 TODO.md
 ISSUES.md
+ISSUE-AUDIT.md
+CODE-SMELLS.md
 RELEASE_NOTES*.md
 CODE_OF_CONDUCT.md
 *.stackdump
@@ -69,10 +52,6 @@ desktop.ini
 ## Build output
 publish/
 artifacts/
-
-## NuGet
-*.nupkg
-packages/
 
 ## Python
 __pycache__/
@@ -100,7 +79,6 @@ venv/
 
 # Saved files (runtime data, logs, cache)
 **/Saved/
-**/Saved/**/*
 
 # Build files (Visual Studio solution/project files - these are generated)
 **/Build/
@@ -110,6 +88,7 @@ venv/
 **/*.vcxproj.user
 
 # Visual Studio files
+**/*.DotSettings.user
 **/.vs/
 **/*.suo
 **/*.user
@@ -167,8 +146,6 @@ venv/
 tests/**/Content/MCP*/
 tests/**/Content/MCPTest/**/*.uasset
 tests/**/Content/MCPTest/**/*.umap
-tests/**/Content/*SmokeTest*.uasset
-tests/**/Content/*SmokeTest*.umap
 tests/**/Content/*Test*.uasset
 tests/**/Content/*Test*.umap
 
@@ -185,8 +162,6 @@ tests/**/Content/Demo/**/*.umap
 # - Content/**/*.uasset, *.umap (content assets) - EXCEPT test-generated ones above
 # - Plugins/**/*.uplugin (plugin files)
 # - Any other project source files
-ISSUE-AUDIT.md
-CODE-SMELLS.md
 
 ## Harness lockfiles
 .claude/*.lock

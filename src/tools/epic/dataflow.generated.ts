@@ -10,8 +10,8 @@
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import { bp, type ActionSpec } from "../../types.js";
-import { epicToolCall } from "../../epic-input.js";
+import type { ActionSpec } from "../../core/types.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_comment_box = {"properties":{"graph":{"type":"object","properties":{"refPath":{}}},"nodes":{"type":"array"},"comment":{"type":"string"},"color":{"type":"object"}},"required":["graph","nodes"]} as const;
 const S_epic_add_node = {"properties":{"graph":{"type":"object","properties":{"refPath":{}}},"typeName":{"type":"string"},"nodeName":{"type":"string"},"jsonParams":{"type":"string"},"x":{"type":"integer"},"y":{"type":"integer"}},"required":["graph","typeName","nodeName","jsonParams"]} as const;
@@ -38,138 +38,116 @@ const S_epic_update_node = {"properties":{"node":{"type":"object","properties":{
 
 /** 22 wrapped engine tools routed to the `dataflow` category. */
 export const actions: Record<string, ActionSpec> = {
-  epic_add_comment_box: { epicSchema: S_epic_add_comment_box, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Adds a comment box around the given nodes. Params: graph, nodes, comment?, color?",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.AddCommentBox", S_epic_add_comment_box, p),
-  ) },
-  epic_add_node: { epicSchema: S_epic_add_node, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Adds a node of the given type to the Dataflow graph. Params: graph, typeName, nodeName, jsonParams, x?, y?",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.AddNode", S_epic_add_node, p),
-  ) },
-  epic_add_variable: { epicSchema: S_epic_add_variable, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Adds a new variable to the Dataflow graph. Supported type strings: Primitives : \"Bool\", \"Int32\", \"Int64\", \"Float\", \"Double\", \"Name\", \"String\" Structs : UScriptStruct name with or without the \"F\" prefix e.g. \"Vector\", \"FVector\", \"Transform\", \"FTransform\", \"Rotator\", \"LinearColor\" Objects : \"Object:<ClassName>\" where ClassName is with or without the \"U\"/\"A\" prefix e.g. \"Object:StaticMesh\", \"Object:USkeletalMesh\" Params: graph, name, type",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.AddVariable", S_epic_add_variable, p),
-  ) },
-  epic_assign_dataflow_template: { epicSchema: S_epic_assign_dataflow_template, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Assigns a Dataflow template to an existing Dataflow-compatible asset by duplicating the template graph and embedding it. Replaces any existing embedded graph. Params: asset, templateId",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.AssignDataflowTemplate", S_epic_assign_dataflow_template, p),
-  ) },
-  epic_connect_node_pins: { epicSchema: S_epic_connect_node_pins, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Connects an output pin of one node to an input pin of another. Params: fromNode, fromPin, toNode, toPin",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.ConnectNodePins", S_epic_connect_node_pins, p),
-  ) },
-  epic_create_dataflow_compatible_asset: { epicSchema: S_epic_create_dataflow_compatible_asset, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Creates a new Dataflow-compatible asset (e.g. ChaosClothAsset, GeometryCollection, FleshAsset, GroomAsset) with an empty embedded Dataflow graph. Params: className, name, path?",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.CreateDataflowCompatibleAsset", S_epic_create_dataflow_compatible_asset, p),
-  ) },
-  epic_create_dataflow_compatible_asset_from_template: { epicSchema: S_epic_create_dataflow_compatible_asset_from_template, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Creates a new Dataflow-compatible asset and initialises its embedded Dataflow graph from a registered template in one step. Params: className, name, path, templateId",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.CreateDataflowCompatibleAssetFromTemplate", S_epic_create_dataflow_compatible_asset_from_template, p),
-  ) },
-  epic_create_graph: { epicSchema: S_epic_create_graph, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Creates a new saved Dataflow graph asset. Params: name, path",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.CreateGraph", S_epic_create_graph, p),
-  ) },
-  epic_disconnect_node_pins: { epicSchema: S_epic_disconnect_node_pins, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Removes the connection between two node pins. Params: fromNode, fromPin, toNode, toPin",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.DisconnectNodePins", S_epic_disconnect_node_pins, p),
-  ) },
-  epic_get_graph_structure: { epicSchema: S_epic_get_graph_structure, ...bp(
-    "read",
-    "[Epic DataflowAgent.DataflowAgentToolset] Returns the complete structure of a Dataflow graph including all nodes and connections. Params: graph",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.GetGraphStructure", S_epic_get_graph_structure, p),
-  ) },
-  epic_get_node_info: { epicSchema: S_epic_get_node_info, ...bp(
-    "read",
-    "[Epic DataflowAgent.DataflowAgentToolset] Returns information about a node as a JSON object (name, type, position, pins). Params: node",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.GetNodeInfo", S_epic_get_node_info, p),
-  ) },
-  epic_get_node_type_schema: { epicSchema: S_epic_get_node_type_schema, ...bp(
-    "read",
-    "[Epic DataflowAgent.DataflowAgentToolset] Returns the schema for a Dataflow node type including its input/output pins and editable UPROPERTY parameters. Params: typeName",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.GetNodeTypeSchema", S_epic_get_node_type_schema, p),
-  ) },
-  epic_list_dataflow_compatible_asset_types: { epicSchema: S_epic_list_dataflow_compatible_asset_types, ...bp(
-    "read",
-    "[Epic DataflowAgent.DataflowAgentToolset] Returns a JSON list of every UClass that can host an embedded Dataflow graph (i.e. implements IDataflowInstanceInterface). Each entry has \"className\", \"displayName\", and \"modulePath\" fields. Use the \"className\" value as input to CreateDataflowCompatibleAsset or ListDataflowTemplatesForAssetClass. Params: none",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.ListDataflowCompatibleAssetTypes", S_epic_list_dataflow_compatible_asset_types, p),
-  ) },
-  epic_list_dataflow_templates_for_asset_class: { epicSchema: S_epic_list_dataflow_templates_for_asset_class, ...bp(
-    "read",
-    "[Epic DataflowAgent.DataflowAgentToolset] Returns a JSON list of Dataflow templates registered for the given asset class. Templates registered for parent classes are included (class hierarchy walk). Params: className, bIncludeBlank?",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.ListDataflowTemplatesForAssetClass", S_epic_list_dataflow_templates_for_asset_class, p),
-  ) },
-  epic_list_node_types: { epicSchema: S_epic_list_node_types, ...bp(
-    "read",
-    "[Epic DataflowAgent.DataflowAgentToolset] Returns a JSON list of all registered Dataflow node types. Params: bCommonOnly?",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.ListNodeTypes", S_epic_list_node_types, p),
-  ) },
-  epic_list_variables: { epicSchema: S_epic_list_variables, ...bp(
-    "read",
-    "[Epic DataflowAgent.DataflowAgentToolset] Returns all variables defined on the Dataflow graph as a JSON array. Each entry contains \"name\", \"type\", and \"value\" fields. Params: graph",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.ListVariables", S_epic_list_variables, p),
-  ) },
-  epic_remove_comment_box: { epicSchema: S_epic_remove_comment_box, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Removes a comment box node from the graph. Params: graph, commentId",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.RemoveCommentBox", S_epic_remove_comment_box, p),
-  ) },
-  epic_remove_node: { epicSchema: S_epic_remove_node, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Removes a node and all its connections from the Dataflow graph. Params: graph, node",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.RemoveNode", S_epic_remove_node, p),
-  ) },
-  epic_remove_variable: { epicSchema: S_epic_remove_variable, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Removes a variable from the Dataflow graph. Params: graph, name",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.RemoveVariable", S_epic_remove_variable, p),
-  ) },
-  epic_reposition_node: { epicSchema: S_epic_reposition_node, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Moves a node to a new position in the graph editor. Params: node, x, y",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.RepositionNode", S_epic_reposition_node, p),
-  ) },
-  epic_set_variable: { epicSchema: S_epic_set_variable, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Sets the value of an existing variable using its serialized string representation. The format depends on the variable's type (e.g., \"3.14\" for float, \"true\" for bool, \"42\" for int, \"MyName\" for FName). Params: graph, name, value",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.SetVariable", S_epic_set_variable, p),
-  ) },
-  epic_update_node: { epicSchema: S_epic_update_node, ...bp(
-    "mutate",
-    "[Epic DataflowAgent.DataflowAgentToolset] Updates an existing node's editable properties via JSON. Params: node, jsonParams",
-    "epic_call_tool",
-    (p) => epicToolCall("DataflowAgent.DataflowAgentToolset", "DataflowAgent.DataflowAgentToolset.UpdateNode", S_epic_update_node, p),
-  ) },
+  epic_add_comment_box: {
+    epicSchema: S_epic_add_comment_box,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.AddCommentBox" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Adds a comment box around the given nodes. Params: graph, nodes, comment?, color?", "epic_call_tool"),
+  },
+  epic_add_node: {
+    epicSchema: S_epic_add_node,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.AddNode" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Adds a node of the given type to the Dataflow graph. Params: graph, typeName, nodeName, jsonParams, x?, y?", "epic_call_tool"),
+  },
+  epic_add_variable: {
+    epicSchema: S_epic_add_variable,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.AddVariable" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Adds a new variable to the Dataflow graph. Supported type strings: Primitives : \"Bool\", \"Int32\", \"Int64\", \"Float\", \"Double\", \"Name\", \"String\" Structs : UScriptStruct name with or without the \"F\" prefix e.g. \"Vector\", \"FVector\", \"Transform\", \"FTransform\", \"Rotator\", \"LinearColor\" Objects : \"Object:<ClassName>\" where ClassName is with or without the \"U\"/\"A\" prefix e.g. \"Object:StaticMesh\", \"Object:USkeletalMesh\" Params: graph, name, type", "epic_call_tool"),
+  },
+  epic_assign_dataflow_template: {
+    epicSchema: S_epic_assign_dataflow_template,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.AssignDataflowTemplate" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Assigns a Dataflow template to an existing Dataflow-compatible asset by duplicating the template graph and embedding it. Replaces any existing embedded graph. Params: asset, templateId", "epic_call_tool"),
+  },
+  epic_connect_node_pins: {
+    epicSchema: S_epic_connect_node_pins,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.ConnectNodePins" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Connects an output pin of one node to an input pin of another. Params: fromNode, fromPin, toNode, toPin", "epic_call_tool"),
+  },
+  epic_create_dataflow_compatible_asset: {
+    epicSchema: S_epic_create_dataflow_compatible_asset,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.CreateDataflowCompatibleAsset" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Creates a new Dataflow-compatible asset (e.g. ChaosClothAsset, GeometryCollection, FleshAsset, GroomAsset) with an empty embedded Dataflow graph. Params: className, name, path?", "epic_call_tool"),
+  },
+  epic_create_dataflow_compatible_asset_from_template: {
+    epicSchema: S_epic_create_dataflow_compatible_asset_from_template,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.CreateDataflowCompatibleAssetFromTemplate" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Creates a new Dataflow-compatible asset and initialises its embedded Dataflow graph from a registered template in one step. Params: className, name, path, templateId", "epic_call_tool"),
+  },
+  epic_create_graph: {
+    epicSchema: S_epic_create_graph,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.CreateGraph" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Creates a new saved Dataflow graph asset. Params: name, path", "epic_call_tool"),
+  },
+  epic_disconnect_node_pins: {
+    epicSchema: S_epic_disconnect_node_pins,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.DisconnectNodePins" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Removes the connection between two node pins. Params: fromNode, fromPin, toNode, toPin", "epic_call_tool"),
+  },
+  epic_get_graph_structure: {
+    epicSchema: S_epic_get_graph_structure,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.GetGraphStructure" },
+    ...bp("read", "[Epic DataflowAgent.DataflowAgentToolset] Returns the complete structure of a Dataflow graph including all nodes and connections. Params: graph", "epic_call_tool"),
+  },
+  epic_get_node_info: {
+    epicSchema: S_epic_get_node_info,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.GetNodeInfo" },
+    ...bp("read", "[Epic DataflowAgent.DataflowAgentToolset] Returns information about a node as a JSON object (name, type, position, pins). Params: node", "epic_call_tool"),
+  },
+  epic_get_node_type_schema: {
+    epicSchema: S_epic_get_node_type_schema,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.GetNodeTypeSchema" },
+    ...bp("read", "[Epic DataflowAgent.DataflowAgentToolset] Returns the schema for a Dataflow node type including its input/output pins and editable UPROPERTY parameters. Params: typeName", "epic_call_tool"),
+  },
+  epic_list_dataflow_compatible_asset_types: {
+    epicSchema: S_epic_list_dataflow_compatible_asset_types,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.ListDataflowCompatibleAssetTypes" },
+    ...bp("read", "[Epic DataflowAgent.DataflowAgentToolset] Returns a JSON list of every UClass that can host an embedded Dataflow graph (i.e. implements IDataflowInstanceInterface). Each entry has \"className\", \"displayName\", and \"modulePath\" fields. Use the \"className\" value as input to CreateDataflowCompatibleAsset or ListDataflowTemplatesForAssetClass. Params: none", "epic_call_tool"),
+  },
+  epic_list_dataflow_templates_for_asset_class: {
+    epicSchema: S_epic_list_dataflow_templates_for_asset_class,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.ListDataflowTemplatesForAssetClass" },
+    ...bp("read", "[Epic DataflowAgent.DataflowAgentToolset] Returns a JSON list of Dataflow templates registered for the given asset class. Templates registered for parent classes are included (class hierarchy walk). Params: className, bIncludeBlank?", "epic_call_tool"),
+  },
+  epic_list_node_types: {
+    epicSchema: S_epic_list_node_types,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.ListNodeTypes" },
+    ...bp("read", "[Epic DataflowAgent.DataflowAgentToolset] Returns a JSON list of all registered Dataflow node types. Params: bCommonOnly?", "epic_call_tool"),
+  },
+  epic_list_variables: {
+    epicSchema: S_epic_list_variables,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.ListVariables" },
+    ...bp("read", "[Epic DataflowAgent.DataflowAgentToolset] Returns all variables defined on the Dataflow graph as a JSON array. Each entry contains \"name\", \"type\", and \"value\" fields. Params: graph", "epic_call_tool"),
+  },
+  epic_remove_comment_box: {
+    epicSchema: S_epic_remove_comment_box,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.RemoveCommentBox" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Removes a comment box node from the graph. Params: graph, commentId", "epic_call_tool"),
+  },
+  epic_remove_node: {
+    epicSchema: S_epic_remove_node,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.RemoveNode" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Removes a node and all its connections from the Dataflow graph. Params: graph, node", "epic_call_tool"),
+  },
+  epic_remove_variable: {
+    epicSchema: S_epic_remove_variable,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.RemoveVariable" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Removes a variable from the Dataflow graph. Params: graph, name", "epic_call_tool"),
+  },
+  epic_reposition_node: {
+    epicSchema: S_epic_reposition_node,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.RepositionNode" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Moves a node to a new position in the graph editor. Params: node, x, y", "epic_call_tool"),
+  },
+  epic_set_variable: {
+    epicSchema: S_epic_set_variable,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.SetVariable" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Sets the value of an existing variable using its serialized string representation. The format depends on the variable's type (e.g., \"3.14\" for float, \"true\" for bool, \"42\" for int, \"MyName\" for FName). Params: graph, name, value", "epic_call_tool"),
+  },
+  epic_update_node: {
+    epicSchema: S_epic_update_node,
+    epicTool: { toolset: "DataflowAgent.DataflowAgentToolset", name: "DataflowAgent.DataflowAgentToolset.UpdateNode" },
+    ...bp("mutate", "[Epic DataflowAgent.DataflowAgentToolset] Updates an existing node's editable properties via JSON. Params: node, jsonParams", "epic_call_tool"),
+  },
 };
 
 /** The parameters those actions accept, declared so the MCP layer stops stripping them. */

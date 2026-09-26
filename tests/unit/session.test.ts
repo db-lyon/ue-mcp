@@ -8,41 +8,31 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-import { SessionRegistry, sessionKeyFor } from "../../src/session.js";
-import { deriveProjectPort, DEFAULT_BRIDGE_PORT } from "../../src/port.js";
-import {
-  categoryTool,
-  injectEditorTarget,
-  removeEditorTarget,
-  stripEditorTarget,
-} from "../../src/types.js";
+import { SessionRegistry, sessionKeyFor } from "../../src/sessions/session.js";
+import { deriveProjectPort, DEFAULT_BRIDGE_PORT } from "../../src/bridge/port.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
+import { injectEditorTarget, removeEditorTarget, stripEditorTarget } from "../../src/surface/target-params.js";
 import { z } from "zod";
+import { ProjectFixture } from "../helpers/project-fixture.js";
 
 let root: string;
-
-function makeProject(name: string): string {
-  const dir = path.join(root, name);
-  fs.mkdirSync(dir, { recursive: true });
-  const uproject = path.join(dir, `${name}.uproject`);
-  fs.writeFileSync(uproject, JSON.stringify({ FileVersion: 3, EngineAssociation: "5.6" }), "utf-8");
-  return uproject;
-}
+let fixture: ProjectFixture;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-sessions-"));
+  fixture = new ProjectFixture("ue-mcp-sessions-");
+  root = fixture.root;
   delete process.env.UE_MCP_PORT;
 });
 
 afterEach(() => {
-  fs.rmSync(root, { recursive: true, force: true });
+  fixture.cleanup();
   delete process.env.UE_MCP_PORT;
 });
 
 describe("SessionRegistry", () => {
   it("keys one session per resolved project root, whatever spelling it arrives in", () => {
-    const uproject = makeProject("Alpha");
+    const uproject = fixture.makeProject("Alpha");
     const registry = new SessionRegistry();
 
     const a = registry.register({ projectPath: uproject });
@@ -64,7 +54,7 @@ describe("SessionRegistry", () => {
     // extension is part of that: an upper-cased ".UPROJECT" used to be read as
     // a directory name and failed as "project directory not found".
     if (process.platform !== "win32" && process.platform !== "darwin") return;
-    const uproject = makeProject("Alpha");
+    const uproject = fixture.makeProject("Alpha");
     const registry = new SessionRegistry();
 
     const a = registry.register({ projectPath: uproject });
@@ -79,8 +69,8 @@ describe("SessionRegistry", () => {
     // The other half of folding case: a key that collapsed too far would hand
     // one editor's session to another project's calls, which is worse than the
     // duplicate it was avoiding.
-    const alpha = makeProject("Alpha");
-    const alphaTwo = makeProject("Alpha2");
+    const alpha = fixture.makeProject("Alpha");
+    const alphaTwo = fixture.makeProject("Alpha2");
     // A project living inside another project's directory: same prefix, and
     // its own root all the same.
     const nestedDir = path.join(path.dirname(alpha), "Inner");
@@ -99,8 +89,8 @@ describe("SessionRegistry", () => {
   });
 
   it("gives every session its own bridge port and its own lockfile", () => {
-    const alpha = makeProject("Alpha");
-    const beta = makeProject("Beta");
+    const alpha = fixture.makeProject("Alpha");
+    const beta = fixture.makeProject("Beta");
     const registry = new SessionRegistry();
 
     const a = registry.register({ projectPath: alpha });
@@ -126,8 +116,8 @@ describe("SessionRegistry", () => {
   });
 
   it("resolves a target by session name, project name, or project path", () => {
-    const alpha = makeProject("Alpha");
-    const beta = makeProject("Beta");
+    const alpha = fixture.makeProject("Alpha");
+    const beta = fixture.makeProject("Beta");
     const registry = new SessionRegistry();
     const a = registry.register({ projectPath: alpha, name: "left" });
     const b = registry.register({ projectPath: beta });
@@ -141,8 +131,8 @@ describe("SessionRegistry", () => {
 
   it("refuses an unknown target instead of falling back to some other editor", () => {
     const registry = new SessionRegistry();
-    registry.register({ projectPath: makeProject("Alpha") });
-    registry.register({ projectPath: makeProject("Beta") });
+    registry.register({ projectPath: fixture.makeProject("Alpha") });
+    registry.register({ projectPath: fixture.makeProject("Beta") });
 
     expect(() => registry.resolve("Gamma")).toThrowError(/No editor session named 'Gamma'/);
     expect(() => registry.resolve("Gamma")).toThrowError(/Alpha, Beta/);
@@ -150,7 +140,7 @@ describe("SessionRegistry", () => {
 
   it("de-duplicates session names so two same-named projects stay addressable", () => {
     const registry = new SessionRegistry();
-    const one = registry.register({ projectPath: makeProject("Game") });
+    const one = registry.register({ projectPath: fixture.makeProject("Game") });
     fs.mkdirSync(path.join(root, "worktree"), { recursive: true });
     const twoDir = path.join(root, "worktree", "Game");
     fs.mkdirSync(twoDir, { recursive: true });
@@ -164,8 +154,8 @@ describe("SessionRegistry", () => {
 
   it("moves the default target without touching the session set", () => {
     const registry = new SessionRegistry();
-    const a = registry.register({ projectPath: makeProject("Alpha") });
-    const b = registry.register({ projectPath: makeProject("Beta") });
+    const a = registry.register({ projectPath: fixture.makeProject("Alpha") });
+    const b = registry.register({ projectPath: fixture.makeProject("Beta") });
 
     expect(registry.active).toBe(a);
     expect(registry.use("Beta")).toBe(b);
@@ -176,8 +166,8 @@ describe("SessionRegistry", () => {
 
   it("drops a session, keeps the rest, and refuses to drop the last one", () => {
     const registry = new SessionRegistry();
-    const a = registry.register({ projectPath: makeProject("Alpha") });
-    const b = registry.register({ projectPath: makeProject("Beta") });
+    const a = registry.register({ projectPath: fixture.makeProject("Alpha") });
+    const b = registry.register({ projectPath: fixture.makeProject("Beta") });
 
     const dropped = registry.drop("Alpha");
     expect(dropped.name).toBe("Alpha");
@@ -193,16 +183,16 @@ describe("SessionRegistry", () => {
     const counts: number[] = [];
     registry.onCountChanged = (n) => counts.push(n);
 
-    registry.register({ projectPath: makeProject("Alpha") });
-    registry.register({ projectPath: makeProject("Beta") });
+    registry.register({ projectPath: fixture.makeProject("Alpha") });
+    registry.register({ projectPath: fixture.makeProject("Beta") });
     registry.drop("Alpha");
 
     expect(counts).toEqual([1, 2, 1]);
   });
 
   it("re-files a session when its project moves, without growing the set", () => {
-    const alpha = makeProject("Alpha");
-    const beta = makeProject("Beta");
+    const alpha = fixture.makeProject("Alpha");
+    const beta = fixture.makeProject("Beta");
     const registry = new SessionRegistry();
     const session = registry.register({ projectPath: alpha });
 
@@ -227,11 +217,11 @@ describe("SessionRegistry", () => {
    * honouring tools/list_changed was never told.
    */
   it("reports a change when a rename moves the addressable name", () => {
-    const alpha = makeProject("Alpha");
-    const beta = makeProject("Beta");
+    const alpha = fixture.makeProject("Alpha");
+    const beta = fixture.makeProject("Beta");
     const registry = new SessionRegistry();
     const session = registry.register({ projectPath: alpha });
-    registry.register({ projectPath: makeProject("Gamma") });
+    registry.register({ projectPath: fixture.makeProject("Gamma") });
 
     const changes: number[] = [];
     registry.onCountChanged = (n) => changes.push(n);
@@ -244,7 +234,7 @@ describe("SessionRegistry", () => {
   });
 
   it("says nothing when a re-file leaves the name alone", () => {
-    const alpha = makeProject("Alpha");
+    const alpha = fixture.makeProject("Alpha");
     const registry = new SessionRegistry();
     const session = registry.register({ projectPath: alpha, name: "Alpha" });
 
@@ -263,8 +253,8 @@ describe("SessionRegistry", () => {
    */
   it("recomputes the shared-port record from the ports actually in use", () => {
     const registry = new SessionRegistry();
-    const a = registry.register({ projectPath: makeProject("Alpha") });
-    const b = registry.register({ projectPath: makeProject("Beta") });
+    const a = registry.register({ projectPath: fixture.makeProject("Alpha") });
+    const b = registry.register({ projectPath: fixture.makeProject("Beta") });
 
     // Two derived ports: nothing shared at registration.
     expect(a.portSharedWith).toEqual([]);
@@ -284,8 +274,8 @@ describe("SessionRegistry", () => {
   });
 
   it("refuses to re-file a session onto a project another session already holds", () => {
-    const alpha = makeProject("Alpha");
-    const beta = makeProject("Beta");
+    const alpha = fixture.makeProject("Alpha");
+    const beta = fixture.makeProject("Beta");
     const registry = new SessionRegistry();
     const a = registry.register({ projectPath: alpha });
     const b = registry.register({ projectPath: beta });
@@ -298,8 +288,8 @@ describe("SessionRegistry", () => {
   it("records sessions that collapse onto one port, because they cannot be told apart", () => {
     process.env.UE_MCP_PORT = "9999";
     const registry = new SessionRegistry();
-    const a = registry.register({ projectPath: makeProject("Alpha") });
-    const b = registry.register({ projectPath: makeProject("Beta") });
+    const a = registry.register({ projectPath: fixture.makeProject("Alpha") });
+    const b = registry.register({ projectPath: fixture.makeProject("Beta") });
 
     expect(a.bridge.port).toBe(9999);
     expect(b.bridge.port).toBe(9999);
@@ -321,7 +311,7 @@ describe("SessionRegistry", () => {
 
 describe("per-call editor targeting", () => {
   const build = () =>
-    categoryTool("demoCategory", "summary", { ping: { kind: "bridge", effect: "read", description: "d", bridge: "ping" } }, undefined, {
+    categoryTool("demoCategory", "summary", { ping: { kind: "bridge", effect: "read", description: "d", bridge: "ping" } }, {
       assetPath: z.string().optional(),
     });
 
@@ -340,7 +330,7 @@ describe("per-call editor targeting", () => {
   });
 
   it("refuses to shadow a tool that declares its own editor parameter", () => {
-    const tool = categoryTool("plugged", "summary", { ping: { kind: "bridge", effect: "read", bridge: "ping" } }, undefined, {
+    const tool = categoryTool("plugged", "summary", { ping: { kind: "bridge", effect: "read", bridge: "ping" } }, {
       editor: z.string().optional(),
     });
     const outcome = injectEditorTarget(tool, ["Alpha", "Beta"]);

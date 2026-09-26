@@ -1,0 +1,66 @@
+import { z } from "zod";
+import type { ToolDef, ActionSpec } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
+import {
+  compileSchemaFields,
+  type ManifestProvidedCategory,
+} from "./manifest.js";
+import { inferActionEffect } from "../surface/action-class.js";
+
+/**
+ * Per-category provision plan derived from one plugin's `provides:` block.
+ * Unlike injection, a provided category is owned end-to-end by the plugin:
+ * action names are NOT prefixed, the entire top-level MCP tool is the
+ * plugin's namespace.
+ */
+export interface ProvisionPlan {
+  /** Provided category name (e.g. `terrain_sculpt`). */
+  category: string;
+  /** Plugin name for diagnostics. */
+  pluginName: string;
+  /** Category description. */
+  description?: string;
+  /** Bare action name -> manifest spec. */
+  spec: ManifestProvidedCategory;
+}
+
+/**
+ * Build a top-level ToolDef from one plugin-provided category. Dispatch is
+ * via the task registry under `${category}.${action}`, matching how built-in
+ * categories route inside index.ts; the tool's own handler refuses a direct
+ * call with NO_HANDLER, as for any registry action.
+ */
+export function buildProvidedTool(plan: ProvisionPlan): ToolDef {
+  const actions: Record<string, ActionSpec> = {};
+  const extraSchema: Record<string, z.ZodType> = {};
+  const docLines: string[] = [];
+
+  for (const [actionName, actionSpec] of Object.entries(plan.spec.actions)) {
+    actions[actionName] = {
+      kind: "registry",
+      // The plugin author's answer when the manifest gives one, the name
+      // lexicon's otherwise, marked as the guess it is.
+      effect: actionSpec.effect ?? inferActionEffect(plan.category, actionName),
+      effectSource: actionSpec.effect ? "declared" : "inferred",
+      description:
+        actionSpec.description ?? `Plugin action from ${plan.pluginName}`,
+    };
+    docLines.push(
+      actionSpec.description
+        ? `- ${actionName}: ${actionSpec.description}`
+        : `- ${actionName}`,
+    );
+    const compiled = compileSchemaFields(actionSpec.schema);
+    for (const [k, v] of Object.entries(compiled)) {
+      if (!(k in extraSchema)) extraSchema[k] = v;
+    }
+  }
+
+  const summary =
+    plan.description ?? `Plugin-provided category from ${plan.pluginName}`;
+  // Built like any category, so it takes the routing parameters (timeoutMs,
+  // select, omit) and a rebuilder. Its doc lines keep the manifest's wording.
+  const tool = categoryTool(plan.category, summary, actions, extraSchema);
+  tool.description = `${summary}\n\nActions:\n${docLines.join("\n")}`;
+  return tool;
+}

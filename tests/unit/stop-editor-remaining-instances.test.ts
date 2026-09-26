@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { findRemainingInstances } from "../../src/editor-control.js";
+import { findRemainingInstances } from "../../src/editor/editor-control.js";
 
 const made: string[] = [];
 

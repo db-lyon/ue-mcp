@@ -21,18 +21,20 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as http from "node:http";
-import { SessionRegistry, type EditorSession } from "../../src/session.js";
+import { SessionRegistry, type EditorSession } from "../../src/sessions/session.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { niagaraTool } from "../../src/tools/niagara.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { loadFlowConfig } from "../../src/flow/loader.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import { startFlowHttpServer } from "../../src/flow/http-server.js";
-import { routeEditorCall } from "../../src/editor-gate.js";
-import { cloneToolDef, injectEditorTarget, sessionContext, type ToolContext, type ToolDef } from "../../src/types.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import { routeEditorCall } from "../../src/dispatch/editor-gate.js";
+import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import { cloneToolDef } from "../../src/surface/category-tool.js";
+import { injectEditorTarget, sessionContext } from "../../src/surface/target-params.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 import { LiveServer } from "./server.js";
 import {
   clearParamEcho,

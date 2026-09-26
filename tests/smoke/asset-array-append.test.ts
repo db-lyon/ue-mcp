@@ -6,7 +6,7 @@ import {
   getBridge,
   TEST_PREFIX,
 } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 let bridge: EditorBridge;
 let hasSmartObjects = false;

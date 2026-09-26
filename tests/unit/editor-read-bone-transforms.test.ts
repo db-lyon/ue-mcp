@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 describe("editor.read_bone_transforms", () => {
   it("accepts and forwards relativeTo to the native handler", async () => {

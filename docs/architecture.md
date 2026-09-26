@@ -18,25 +18,28 @@ The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), r
 
 ### Key Modules
 
-| Module | Purpose |
+| Module (under `src/`) | Purpose |
 |--------|---------|
 | `index.ts` | Tool registration, MCP server lifecycle |
 | `tools.ts` | The `ALL_TOOLS` registry consumed by `index.ts` and tests |
-| `bridge.ts` | `EditorBridge` (implements `IBridge`) - WebSocket client, JSON-RPC messaging, auto-reconnect |
-| `project.ts` | `ProjectContext` - path resolution, INI parsing, C++ header parsing |
-| `types.ts` | `ToolDef`, `ActionSpec`, `categoryTool()` factory |
-| `schemas.ts` | Shared Zod schemas - `Vec3`, `Rotator`, `Color`, `Quat` |
-| `errors.ts` | `McpError` class with `ErrorCode` enum for structured error handling |
-| `deployer.ts` | First-run deployment: copy plugin, mutate `.uproject` |
-| `editor-control.ts` | Start/stop/restart the Unreal Editor process |
-| `instructions.ts` | AI-facing server instructions (embedded documentation), one variant per context strategy |
-| `lean-context.ts` | The context strategies: the micro `tools` gateway, the lean `catalog` tool, paged `describe` and signature `search` |
-| `action-signature.ts` | One-line action signatures and the legend that explains them |
-| `call-envelope.ts` | The `action` + `args` call shape and the server-side validation behind it |
-| `auth.ts` | GitHub OAuth device flow + `~/.ue-mcp/auth.json` token cache (default authorship path for feedback issues) |
-| `github-app.ts` | GitHub App auth used as the bot fallback when OAuth isn't authorized |
+| `bridge/bridge.ts` | `EditorBridge` (implements `IBridge`) - WebSocket client, JSON-RPC messaging, auto-reconnect |
+| `config/project.ts` | `ProjectContext` - path resolution, INI parsing, C++ header parsing |
+| `core/types.ts` | `ToolDef`, `ActionSpec` and the other shared type declarations |
+| `surface/category-tool.ts` | `categoryTool()` factory, `bp()` action builder, routing parameter schemas |
+| `surface/target-params.ts` | Per-call `editor` / `toEditor` parameter injection |
+| `surface/schemas.ts` | Zod schemas for `.uproject`, `.uplugin` and `ue-mcp.yml` |
+| `core/errors.ts` | `McpError` class with `ErrorCode` enum for structured error handling |
+| `editor/deployer.ts` | First-run deployment: copy plugin, mutate `.uproject` |
+| `editor/editor-control.ts` | Start/stop/restart the Unreal Editor process; `editor/editor-build.ts` compiles the project C++ |
+| `surface/context/instructions.ts` | AI-facing server instructions (embedded documentation), one variant per context strategy |
+| `surface/context/lean-context.ts` | Choosing a context strategy, the lean `catalog` tool, paged `describe` and signature `search` |
+| `surface/context/micro-context.ts` | The micro `tools` gateway and how a call through it resolves to its target |
+| `surface/action-signature.ts` | One-line action signatures and the legend that explains them |
+| `surface/context/call-envelope.ts` | The `action` + `args` call shape and the server-side validation behind it |
+| `feedback/github-auth.ts` | GitHub OAuth device flow + `~/.ue-mcp/auth.json` token cache (default authorship path for feedback issues) |
+| `feedback/github-app.ts` | GitHub App auth used as the bot fallback when OAuth isn't authorized |
 | `flow/` | Flow engine (registry, loader, task factory, HTTP server) - see [Flows](flows.md) |
-| `init.ts` / `update.ts` / `resolve.ts` / `hook-handler.ts` | CLI subcommands (`npx ue-mcp init`, `update`, `resolve`, `hook`) |
+| `cli/` | CLI subcommands (`npx ue-mcp init`, `update`, `resolve`, `hook`) |
 
 ### Tool Registration Pattern
 
@@ -155,7 +158,7 @@ Beyond a list of named, typed parameters:
 - **A required choice.** `MCPSpec::ExactlyOne({ { TEXT("settings") }, { TEXT("propertyName"), TEXT("propertyValue") } })` says a call supplies one branch and never two; `MCPSpec::AtLeastOne(...)` says one or more. Each branch is a set of names that go together, and every name in a choice is a declared, optional parameter, since the group is what is required. The clause reads as the hand-written ones did (`settings OR propertyName + propertyValue`, `at least one of actorLabels/labelPrefix/tag`), `describe_action` reports each choice as a choice group, and a call that satisfies none, two sides of an exactly-one choice, or half a branch is refused with the choice spelled out. The contract test calls such a handler once per branch.
 - **A value shape.** `EMCPParamType::Color` is `{r, g, b, a?}`. `.Or(EMCPParamType::Color)` makes a union (a number or a colour), `.Nullable()` makes null a value of its own (clear the reference), `.Literal(false)` accepts one value only, and `.WithFields({ MCPParam::RequiredField(...), ... })` declares the fields of an object, or of each element of an array of objects.
 - **A tagged union.** `.Tagged(TEXT("op"), { MCPParam::Variant(TEXT("set"), TEXT("..."), { fields }), ... })` on an object, or on an array of objects, says the field `op` holds a tag and each tag has its own fields. It generates a zod `discriminatedUnion` of strict objects, so a field that belongs to another variant is refused rather than stripped. The signature writes it `o<op>` (`[o<op>]` for an array), and `describe_action` lists the variants with their `discriminator`. A rule between fields (a range whose end follows its start, a blend that must leave a frame) is not part of the spec; the handler enforces it and says what failed.
-- **Value forms.** `.OneOfForms({ EMCPValueForm::ArgMap, EMCPValueForm::StringList, EMCPValueForm::ArgEntryList, EMCPValueForm::String })` on an `Any` parameter or field lists the named shapes it takes: a name-to-value map, a list of strings, a `[{name, value}]` entry list, a string. Each form has one fixed, fully typed schema, so the value is advertised without the untyped member #811 removed, and a value that fits none is refused with a message naming every form. The handler reads the value through the normalizer for its kind in `HandlerUtils.h`: `MCPReadFunctionArgs` reduces a map, an entry list or a JSON string of either to the name-to-value map a UFUNCTION is called with, and `MCPReadPythonArgs` reduces a list, a JSON array string or one string to positional arguments. Each refuses the forms its kind cannot use, with the same message wherever it is called.
+- **Value forms.** `.OneOfForms({ EMCPValueForm::ArgMap, EMCPValueForm::StringList, EMCPValueForm::ArgEntryList, EMCPValueForm::String })` on an `Any` parameter or field lists the named shapes it takes: a name-to-value map, a list of strings, a `[{name, value}]` entry list, a string. Each form has one fixed, fully typed schema, so the value is advertised without the untyped member #811 removed, and a value that fits none is refused with a message naming every form. The handler reads the value through the normalizer for its kind in `HandlerFunctionCall.h`: `MCPReadFunctionArgs` reduces a map, an entry list or a JSON string of either to the name-to-value map a UFUNCTION is called with, and `MCPReadPythonArgs` reduces a list, a JSON array string or one string to positional arguments. Each refuses the forms its kind cannot use, with the same message wherever it is called.
 - **A contract exemption.** `MCPSpec::ContractExempt(TEXT("why"))` marks a handler whose contract values would reach a create, spawn, save or run before anything failed. Its spec is recorded and generates the surface like any other; the contract test does not call it, and the source check above holds it to its spec instead: the names its body reads through the `HandlerUtils.h` helpers, and through any function it hands `Params` to, must be the declared names, and a read whose key is not a literal fails the check rather than passing it.
 
 A choice or an exemption goes in the last argument, after the parameter list: `RegisterHandler(name, fn, { ... }, MCPSpec::ExactlyOne(...).ContractExempt(...))`, or `RegisterHandlerWithTimeout(name, fn, seconds, { ... }, rules)`. Each addition is written into the recording only when it is used (`choices`, `contractExempt`, and on a parameter `nullable`, `orTypes`, `literal`, `fields`, `forms`, `oneOf`), so a spec that uses none of them records exactly what it did before they existed.
@@ -182,11 +185,22 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 | `FMCPBridgeServer` | WebSocket server (raw platform sockets, Windows + Linux/Mac) |
 | `FMCPHandlerRegistry` | Maps method names to C++ handler functions |
 | `FMCPGameThreadExecutor` | Queues tasks to the game thread (required for UE API access) |
-| `HandlerUtils.h` + `HandlerAssetCreate.h` | Shared utilities - `MCPError`/`MCPSuccess`/`MCPResult`, `RequireString`/`OptionalVec3`/`OptionalRotator`/etc., `FindActorByLabel`/`FindActorByLabelOrName`, `MCPCheckAssetExists`/`MCPCheckActorLabelExists`, `LoadAssetByPath<T>`, `LoadBlueprintCDO<T>`, `MCPCreateAssetIdempotent<T>`, `SaveAssetPackage`. |
+| `HandlerUtils.h` | Umbrella over the shared helper headers, and the one include external plugins rely on. |
+| `HandlerResult.h` | `MCPError`/`MCPSuccess`/`MCPResult`, `MCPErrorWithCode`, `MCPSetCreated`/`Existed`/`Updated`, `MCPSetRollback`/`MCPSetNoRollback`. |
+| `HandlerParams.h` | `RequireString`/`OptionalString`/`OptionalVec3`/`OptionalRotator`/etc., and the #1057 parameter read tracking. |
+| `HandlerAssetResolve.h` | `MCPLoadAssetObject`, `MCPAssetNotFoundError`, `LoadAssetByPath<T>`, `REQUIRE_ASSET`, `LoadBlueprintCDO<T>`, `MCPCheckAssetExists`, the protected-mount rule. |
+| `HandlerActorResolve.h` | `MCPResolveActor` and its selector, ambiguity refusals, `MCPCheckActorLabelExists`. |
+| `HandlerClassResolve.h` | `MCPResolveClass`/`MCPResolveClassOfType`, `MCPResolveScriptStruct`. |
+| `HandlerWorld.h` | `GetEditorWorld`, the PIE world lookups, `ResolveWorldFromParams`, `REQUIRE_EDITOR_WORLD`. |
+| `HandlerPackageSave.h` | `SaveAssetPackage`/`SaveAssetPackageChecked`, `MCPPackageWriteBlocked`, `MCPNoteSaveOutcome`. |
+| `HandlerJsonConvert.h` | Vector, rotator, colour, quaternion, transform and string-list JSON builders. |
+| `HandlerObjectUtils.h` | Property export, file dumps, `FGCRootScope`, subobject walks, component and collision lookup. |
+| `HandlerEngineVersion.h` | The `UE_MCP_HAS_5_x_API` gates and engine API shims. |
+| `HandlerAssetCreate.h` | `MCPCreateAssetIdempotent<T>`. |
 
 ### Handler Categories
 
-34 C++ handler groups are registered in `BridgeServer.cpp`. Together they expose <!-- count:actions -->1966+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
+34 C++ handler groups are registered in `HandlerCatalog.cpp`. Together they expose <!-- count:actions -->1966+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
 
 | Handler group | Coverage |
 |---------|----------|

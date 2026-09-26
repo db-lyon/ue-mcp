@@ -17,36 +17,26 @@
  * awaits, so an editor is never addressable before its own surface exists.
  * These cover the registry half of the contract and the tool half.
  */
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ProjectFixture } from "../helpers/project-fixture.js";
 
-vi.mock("../../src/deployer.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/deployer.js")>();
+vi.mock("../../src/editor/deployer.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/editor/deployer.js")>();
   return { ...actual, attach: vi.fn(() => ({ action: "skipped" })), attachSummary: vi.fn(() => "stubbed") };
 });
 
-const { SessionRegistry } = await import("../../src/session.js");
+const { SessionRegistry } = await import("../../src/sessions/session.js");
 const { projectTool } = await import("../../src/tools/project.js");
 
-let root: string;
-
-function makeProject(name: string): string {
-  const dir = path.join(root, name);
-  fs.mkdirSync(path.join(dir, "Content"), { recursive: true });
-  const uproject = path.join(dir, `${name}.uproject`);
-  fs.writeFileSync(uproject, JSON.stringify({ FileVersion: 3, EngineAssociation: "5.6" }), "utf-8");
-  return uproject;
-}
+let fixture: ProjectFixture;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-runtime-load-"));
+  fixture = new ProjectFixture("ue-mcp-runtime-load-");
   delete process.env.UE_MCP_PORT;
 });
 
 afterEach(() => {
-  fs.rmSync(root, { recursive: true, force: true });
+  fixture.cleanup();
   delete process.env.UE_MCP_PORT;
 });
 
@@ -58,14 +48,14 @@ describe("SessionRegistry.prepare", () => {
       built.push(session.name);
     };
 
-    const session = registry.register({ projectPath: makeProject("Beta") });
+    const session = registry.register({ projectPath: fixture.makeProject("Beta", { content: true }) });
     await registry.prepare(session);
     expect(built).toEqual(["Beta"]);
   });
 
   it("is a no-op for an embedder that installed no builder", async () => {
     const registry = new SessionRegistry();
-    const session = registry.register({ projectPath: makeProject("Beta") });
+    const session = registry.register({ projectPath: fixture.makeProject("Beta", { content: true }) });
     await expect(registry.prepare(session)).resolves.toBeUndefined();
   });
 
@@ -74,7 +64,7 @@ describe("SessionRegistry.prepare", () => {
     registry.prepareSession = async () => {
       throw new Error("plugin load blew up");
     };
-    const session = registry.register({ projectPath: makeProject("Beta") });
+    const session = registry.register({ projectPath: fixture.makeProject("Beta", { content: true }) });
     await expect(registry.prepare(session)).rejects.toThrow(/plugin load blew up/);
   });
 });
@@ -94,7 +84,7 @@ describe("project(add_editor)", () => {
 
   it("builds the new editor's surface before it hands back a usable handle", async () => {
     const registry = new SessionRegistry();
-    registry.register({ projectPath: makeProject("Alpha") });
+    registry.register({ projectPath: fixture.makeProject("Alpha", { content: true }) });
 
     const order: string[] = [];
     let prepared: string | null = null;
@@ -107,7 +97,7 @@ describe("project(add_editor)", () => {
 
     const result = (await projectTool.handler(contextFor(registry) as never, {
       action: "add_editor",
-      projectPath: makeProject("Beta"),
+      projectPath: fixture.makeProject("Beta", { content: true }),
     })) as Record<string, unknown>;
     order.push("returned");
 
@@ -119,7 +109,7 @@ describe("project(add_editor)", () => {
 
   it("refuses the editor rather than letting it borrow another project's surface", async () => {
     const registry = new SessionRegistry();
-    registry.register({ projectPath: makeProject("Alpha") });
+    registry.register({ projectPath: fixture.makeProject("Alpha", { content: true }) });
     registry.prepareSession = async () => {
       throw new Error("its ue-mcp.yml names a plugin that will not load");
     };
@@ -127,7 +117,7 @@ describe("project(add_editor)", () => {
     await expect(
       projectTool.handler(contextFor(registry) as never, {
         action: "add_editor",
-        projectPath: makeProject("Beta"),
+        projectPath: fixture.makeProject("Beta", { content: true }),
       }),
     ).rejects.toThrow(/could not build its tool surface/);
   });

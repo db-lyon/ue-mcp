@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/animation.generated.js";
 import { specBp, schema as specSchema } from "./specs/animation.generated.js";
 
@@ -135,44 +135,14 @@ export const animationTool: ToolDef = categoryTool(
     set_live_post_process_anim_blueprint: specBp("mutate", "Set or clear a transient post-process AnimBP override on one live SkeletalMeshComponent in the editor world or PIE. Pass the AnimBlueprintGeneratedClass object path (for example /Game/Animations/ABP_Name.ABP_Name_C), not the AnimBlueprint asset path; pass clear=true to remove the component override and fall back to the skeletal mesh asset setting. Incompatible skeletons and the component's main AnimBP class are refused before mutation. Reads back the override, effective class, and live post-process instance. Repeating the active override is a no-op. This never edits or saves a mesh, Blueprint, or component template.", "set_live_post_process_anim_blueprint"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
-    // registration. A key listed again below is shared with hand-written
-    // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
+    // registration. The keys below add a bound the registration cannot state.
     ...specSchema,
-    assetPath: z.string().optional(),
-    path: z.string().optional().describe("Alias for assetPath, accepted by sample_pose, measure_natural_speed and every action whose Params clause lists it"),
-    mode: z.string().optional().describe("set_bone_retargeting: Animation|Skeleton|AnimationScaled|AnimationRelative|OrientAndScale. author_blend_profile: TimeFactor|WeightFactor|BlendMask"),
-    skeletonPath: z.string().optional().describe("USkeleton asset path; the target of set_bone_retargeting, author_blend_profile, edit_curve_metadata and register_compatible_skeleton"),
-    name: z.string().optional(),
-    packagePath: z.string().optional(),
-    axisHorizontal: z.string().optional(),
-    axisVertical: z.string().optional(),
-    horizontalMin: z.number().optional(),
-    horizontalMax: z.number().optional(),
-    verticalMin: z.number().optional(),
-    verticalMax: z.number().optional(),
-    samples: z.array(z.record(z.unknown())).optional().describe("populate_blendspace: [{animationPath, x, y?}] (#459)"),
     loopCount: z.number().int().min(1).optional().describe("add_montage_segment: how many times the segment repeats (default 1)"),
     insertIndex: z.number().int().min(0).optional().describe("add_montage_segment: position within the slot's segment list (default: append)"),
-    frameRate: z.number().optional().describe("Frames per second for create_sequence or bake_control_rig_edit."),
-    boneName: z.string().optional(),
-    boneNames: z.array(z.string()).optional(),
-    ...PAGINATION_SCHEMA,
-    curveName: z.string().optional().describe("Curve name for add_curve"),
-    skeletalMeshPath: z.string().optional().describe("SkeletalMesh asset path. Used by IK Rig creation, curve/morph comparison, Control Rig edit setup, and animation analysis."),
-    rigPath: z.string().optional().describe("IK Rig path for set_ik_rig_mesh / set_ik_retargeter_rig (#701/#703)"),
-    retargeterPath: z.string().optional().describe("IK Retargeter path (#701/#703)"),
-    onConflict: z.string().optional().describe("Conflict policy. Existing asset actions use skip|error|overwrite; Control Rig begin/bake and create_skeleton use skip|error and never overwrite."),
-    frames: z.array(z.number()).optional().describe("Frames to read/sample. Used by read_bone_track, read_control_rig_edit, and analyze_animation."),
     bindingTag: z.string().min(1).optional().describe("Stable Control Rig edit-session natural key used by begin/read/apply/bake."),
     tolerance: z.number().nonnegative().optional().describe("bake_control_rig_edit: key-reduction tolerance."),
-    schemaPath: z.string().optional().describe("Path to a UPoseSearchSchema asset"),
-    sequencePath: z.string().optional().describe("Animation path for PoseSearch graph actions, or LevelSequence path for the UE 5.8 Control Rig edit workflow."),
-    weight: z.number().optional().describe("Channel weight for pose/trajectory channels"),
-    interpolation: z.string().optional().describe("bake_root_motion_from_bone: 'linear' (default) or 'per_frame'"),
-    space: z.string().optional().describe("Transform space. Control Rig edit actions: 'local'|'component'|'global', where 'global' is an alias for 'component'. get_bone_transforms: 'local'|'component'. get_bone_transform: 'world'|'component'|'local'."),
   },
 );

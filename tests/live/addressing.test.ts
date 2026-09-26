@@ -20,8 +20,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { EditorBridge } from "../../src/bridge.js";
-import { SessionRegistry } from "../../src/session.js";
+import { EditorBridge } from "../../src/bridge/bridge.js";
+import { SessionRegistry } from "../../src/sessions/session.js";
 import { LiveServer, resultJson, servingEditor } from "./server.js";
 import { closeLiveBridges, liveTarget, makeTempProject } from "./harness.js";
 

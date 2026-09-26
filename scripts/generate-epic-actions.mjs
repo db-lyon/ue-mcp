@@ -16,7 +16,8 @@
  * no entry in the effects file stops this script rather than being guessed at.
  *
  * What comes out is an ordinary category action record: `bp("read", "...",
- * "epic_call_tool", mapParams)` plus the zod parameters those actions accept.
+ * "epic_call_tool")` carrying the wrapped tool as `epicTool` and its input
+ * schema as `epicSchema`, plus the zod parameters those actions accept.
  * Nothing about the result is special-cased downstream. It goes through the
  * same union, the same task factory, the same guards, locks, path repair,
  * `describe_action` and parameter audits as an action written by hand, because
@@ -33,7 +34,7 @@ import { fileURLToPath } from "node:url";
 // The dispatcher's own parameter names, imported from the module that
 // declares them. Run under tsx, so this reads the real export rather than
 // parsing the file.
-import { ROUTING_PARAMS } from "../src/action-schema.js";
+import { ROUTING_PARAMS } from "../src/surface/action-schema.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
@@ -308,8 +309,8 @@ function emitCategory(category, bucket) {
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import { bp, type ActionSpec } from "../../types.js";
-import { epicToolCall } from "../../epic-input.js";
+import type { ActionSpec } from "../../core/types.js";
+import { bp } from "../../surface/category-tool.js";
 
 `;
 
@@ -341,12 +342,11 @@ import { epicToolCall } from "../../epic-input.js";
     .map((a) => {
       const schemaConst = `const ${constName(a.key)} = ${JSON.stringify(minifySchema(a.input))} as const;`;
       return { schemaConst, entry:
-`  ${safeKey(a.key)}: { epicSchema: ${constName(a.key)}, ...bp(
-    ${q(a.effect)},
-    ${q(a.description)},
-    "epic_call_tool",
-    (p) => epicToolCall(${q(a.toolset)}, ${q(a.tool)}, ${constName(a.key)}, p),
-  ) },` };
+`  ${safeKey(a.key)}: {
+    epicSchema: ${constName(a.key)},
+    epicTool: { toolset: ${q(a.toolset)}, name: ${q(a.tool)} },
+    ...bp(${q(a.effect)}, ${q(a.description)}, "epic_call_tool"),
+  },` };
     });
 
   return header

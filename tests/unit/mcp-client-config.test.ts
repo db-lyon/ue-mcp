@@ -9,7 +9,8 @@ import {
   writeMcpConfig,
   writeCodexMcpConfig,
   writeJsonMcpConfig,
-} from "../../src/mcp-client-config.js";
+} from "../../src/integrations/claude-code/mcp-client-config.js";
+import { findBareNpxConfigs } from "../../src/cli/doctor.js";
 
 let tmpRoot: string;
 let originalHome: string | undefined;
@@ -64,8 +65,14 @@ describe("JSON MCP client config", () => {
     };
     expect(config.mcpServers["ue-mcp"]).toEqual({
       command: "npx",
-      args: ["ue-mcp", "C:/Projects/MyGame/MyGame.uproject"],
+      args: ["-y", "ue-mcp@latest", "C:/Projects/MyGame/MyGame.uproject"],
     });
+  });
+
+  it("writes an entry doctor does not flag as a bare npx launch", () => {
+    const projectDir = path.join(tmpRoot, "project");
+    writeJsonMcpConfig(path.join(projectDir, ".mcp.json"), path.join(projectDir, "MyGame.uproject"));
+    expect(findBareNpxConfigs(projectDir)).toEqual([]);
   });
 });
 
@@ -85,7 +92,7 @@ describe("Codex MCP client config", () => {
     expect(result).toContain("[profiles.default]");
     expect(result).toContain("[mcp_servers.ue-mcp]");
     expect(result).toContain('command = "npx"');
-    expect(result).toContain('args = ["ue-mcp", "C:/Projects/MyGame/MyGame.uproject"]');
+    expect(result).toContain('args = ["-y", "ue-mcp@latest", "C:/Projects/MyGame/MyGame.uproject"]');
     expect(result).toContain('cwd = "C:/Projects/MyGame"');
     expect(result).toContain("enabled = true");
   });
@@ -115,7 +122,7 @@ describe("Codex MCP client config", () => {
     expect(result).toContain('sandbox_mode = "workspace-write"');
     expect(result).not.toContain('command = "old"');
     expect(result).not.toContain('UE_MCP_BRIDGE_PORT = "9999"');
-    expect(result).toContain('args = ["ue-mcp", "/home/alex/Game/Game.uproject"]');
+    expect(result).toContain('args = ["-y", "ue-mcp@latest", "/home/alex/Game/Game.uproject"]');
     expect(result).toContain('cwd = "/home/alex/Game"');
   });
 
@@ -126,7 +133,7 @@ describe("Codex MCP client config", () => {
 
     const result = fs.readFileSync(configPath, "utf-8");
     expect(result).toContain("[mcp_servers.ue-mcp]");
-    expect(result).toContain('args = ["ue-mcp", "M:/Game/Game.uproject"]');
+    expect(result).toContain('args = ["-y", "ue-mcp@latest", "M:/Game/Game.uproject"]');
     expect(result).toContain('cwd = "M:/Game"');
   });
 
@@ -143,7 +150,7 @@ describe("Codex MCP client config", () => {
     const result = fs.readFileSync(path.join(tmpRoot, ".codex", "config.toml"), "utf-8");
     expect(result).toContain("[mcp_servers.ue-mcp]");
     expect(result).toContain('command = "npx"');
-    expect(result).toContain('args = ["ue-mcp", "M:/PerforceWorkspace/Territory/Territory.uproject"]');
+    expect(result).toContain('args = ["-y", "ue-mcp@latest", "M:/PerforceWorkspace/Territory/Territory.uproject"]');
     expect(result).toContain('cwd = "M:/PerforceWorkspace/Territory"');
     expect(result).toContain("enabled = true");
   });

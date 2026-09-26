@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync } from "node:fs";
 import { getBridge, disconnectBridge, callBridge } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 let bridge: EditorBridge;
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { findLocalShadow, findBareNpxConfigs, parseServerInvocation, formatDoctor, type DoctorReport } from "../../src/doctor.js";
+import { findLocalShadow, findBareNpxConfigs, parseServerInvocation, formatDoctor, type DoctorReport } from "../../src/cli/doctor.js";
 
 const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
 

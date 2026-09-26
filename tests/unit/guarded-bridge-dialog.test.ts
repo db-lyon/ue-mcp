@@ -13,9 +13,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { GuardedBridge } from "../../src/flow/guarded-bridge.js";
 import { GuardRegistry } from "../../src/flow/guard.js";
-import { DialogGuard, guardFor, forgetGuard, withoutDialogActuation } from "../../src/dialog-guard.js";
-import type { EditorSession } from "../../src/session.js";
-import type { IBridge } from "../../src/bridge.js";
+import { guardFor, forgetGuard, withoutDialogActuation } from "../../src/editor/dialog-guard.js";
+import type { EditorSession } from "../../src/sessions/session.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 
 const DIALOG = {
   title: "Save Content",
@@ -41,7 +41,7 @@ function harness(mode: "auto" | "defer" | "interactive" = "auto") {
   });
   guard.note(DIALOG);
 
-  const bridge = new GuardedBridge(inner, new GuardRegistry(), async () => null, session);
+  const bridge = new GuardedBridge(inner, new GuardRegistry(), () => null, session);
   return { session, inner, guard, bridge };
 }
 
@@ -97,7 +97,7 @@ describe("guardCall, the boundary a flow step crosses", () => {
       probe: async () => ({ dialogs: [] }),
       press: async () => ({ success: true }),
     });
-    const bridge = new GuardedBridge(inner, new GuardRegistry(), async () => null, session);
+    const bridge = new GuardedBridge(inner, new GuardRegistry(), () => null, session);
     try {
       await bridge.call("spawn_actor", {});
       expect(inner.call).toHaveBeenCalledTimes(1);
@@ -111,7 +111,7 @@ describe("guardCall, the boundary a flow step crosses", () => {
     // it without a guard. Guards used to be created in one startup pass, so a
     // session registered any other way had none and every call it ever made
     // was refused. Now the boundary makes one from the session itself.
-    const { forgetGuard: forget, existingGuard: existing } = await import("../../src/dialog-guard.js");
+    const { forgetGuard: forget, existingGuard: existing } = await import("../../src/editor/dialog-guard.js");
     const inner = {
       isConnected: true,
       call: vi.fn(async () => ({ success: true })),
@@ -127,7 +127,7 @@ describe("guardCall, the boundary a flow step crosses", () => {
     } as unknown as EditorSession;
     try {
       expect(existing(session), "started with a guard, so this proves nothing").toBeUndefined();
-      const bridge = new GuardedBridge(inner, new GuardRegistry(), async () => null, session);
+      const bridge = new GuardedBridge(inner, new GuardRegistry(), () => null, session);
       const result = await bridge.call("spawn_actor", {});
       // Nothing is blocking, so the call runs; what matters is that it was
       // decided by a guard rather than refused for the lack of one.
@@ -215,7 +215,7 @@ describe("the actuation block lives on the session's own bridge", () => {
     // `ctx.session.bridge` is the raw one and reachable from any handler or
     // task. Wrapping one caller left the escape a single line away, so the
     // block is applied where the session builds its bridge instead.
-    const { SessionRegistry } = await import("../../src/session.js");
+    const { SessionRegistry } = await import("../../src/sessions/session.js");
     const { GuardRegistry } = await import("../../src/flow/guard.js");
     const registry = new SessionRegistry(new GuardRegistry());
     const session = registry.register({});

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { safeParallelActions, ranOutOfMemory, describeMemoryFailure } from "../../src/editor-control.js";
+import { safeParallelActions, ranOutOfMemory, describeMemoryFailure } from "../../src/editor/editor-build.js";
 
 const GB = 1024 ** 3;
 

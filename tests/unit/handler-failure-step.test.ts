@@ -32,9 +32,10 @@ import { z } from "zod";
 import { FlowConfigSchema, type FlowConfig } from "../../src/flow/schema.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
-import { categoryTool, type ToolContext, type ToolDef } from "../../src/types.js";
-import { ProjectContext } from "../../src/project.js";
-import type { IBridge } from "../../src/bridge.js";
+import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
+import { ProjectContext } from "../../src/config/project.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 import type { FlowContext } from "../../src/flow/context.js";
 
 /** Every call the fake editor was asked to make, plus the canned answers. */
@@ -70,9 +71,8 @@ function probeTool(handlerAnswer: () => Promise<unknown>): ToolDef {
       wipe: { kind: "bridge", effect: "read", description: "A destructive bridge action.", bridge: "wipe_the_thing" },
       touch: { kind: "bridge", effect: "read", description: "A benign bridge action.", bridge: "touch_the_thing" },
       list: { kind: "bridge", effect: "read", description: "A read that answers without a success key.", bridge: "list_the_things" },
-      refuse: { description: "A direct handler that refuses by returning.", handler: handlerAnswer },
+      refuse: { kind: "handler", effect: "read", description: "A direct handler that refuses by returning.", handler: handlerAnswer },
     },
-    undefined,
     { note: z.string().optional() } as Record<string, z.ZodType>,
   );
 }

@@ -1,14 +1,19 @@
 import { z } from "zod";
-import { categoryTool, bp, directive, type ToolDef, type ToolContext } from "../types.js";
-import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, connectedEditorOf, clientAdvertisesElicitation, resolveDialogMode } from "../editor-control.js";
-import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../engine-observer.js";
-import { progressRenderingNote } from "../client-quirks.js";
-import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
-import { searchTools } from "../tool-search.js";
-import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../python-gate.js";
-import { checkBridgeParity } from "../bridge-parity.js";
-import { PLUGIN_UPGRADE_POINTER } from "../bridge.js";
-import { DialogGuard } from "../dialog-guard.js";
+import type { ToolDef, ToolContext } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
+import { toolGraphOf } from "../surface/target-params.js";
+import { directive } from "../core/directive.js";
+import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
+import { buildProjectAction } from "./project/install.js";
+import { startProgress } from "../cli/ui/progress.js";
+import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
+import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
+import { progressRenderingNote } from "../dispatch/client-quirks.js";
+import { pushWorkaround, workaroundCount } from "../dispatch/workaround-tracker.js";
+import { searchToolGraph } from "../surface/context/tool-search.js";
+import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../dispatch/python-gate.js";
+import { checkBridgeParity } from "../bridge/bridge-parity.js";
+import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
 
@@ -18,7 +23,7 @@ import { specBp, schema as specSchema } from "./specs/editor.generated.js";
  * plugin published no action list, since then nothing is known.
  */
 async function notInRunningPlugin(ctx: ToolContext): Promise<(c: GateCandidate) => boolean> {
-  const graph = ctx.getToolGraph?.() ?? (await import("../tools.js")).getLiveToolGraph();
+  const graph = toolGraphOf(ctx);
   const missing = new Set(checkBridgeParity(graph, ctx.bridge.capabilities).missing);
   if (missing.size === 0) return () => false;
   return (c) => {
@@ -48,6 +53,7 @@ export const editorTool: ToolDef = categoryTool(
         const result = await startEditor(ctx.project, timeout, ctx.onProgress, {
           dialogPolicy,
           paramEcho,
+          openDisplay: startProgress,
         });
 
         // The call blocks for as long as the editor takes, so when its progress
@@ -112,22 +118,10 @@ export const editorTool: ToolDef = categoryTool(
       effect: "mutate",
       description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action. Params: none",
       handler: async (ctx: ToolContext) => {
-        return restartEditor(ctx.project, ctx.bridge);
+        return restartEditor(ctx.project, ctx.bridge, startProgress);
       },
     },
-    build_project: {
-      kind: "handler",
-      effect: "mutate",
-      description: "Build the project's C++ code using Unreal Build Tool. Editor should be stopped first. Params: none",
-      handler: async (ctx: ToolContext) => {
-        ctx.project.ensureLoaded();
-        const lines: string[] = [];
-        const result = await buildProject(ctx.project.projectPath!, {
-          onOutput: (text) => lines.push(text),
-        });
-        return { ...result, output: lines.join("") };
-      },
-    },
+    build_project: buildProjectAction,
     execute_command: specBp("unknown", "Run console command.", "execute_command"),
     execute_python: {
       kind: "handler",
@@ -149,12 +143,12 @@ export const editorTool: ToolDef = categoryTool(
         }
 
         // Candidates = meaningful matches (a name/phrase hit), capped at 5.
-        const candidates = (await searchTools(taskSummary, 5)).filter((h) => h.score >= 4);
+        const candidates = searchToolGraph(toolGraphOf(ctx), taskSummary, 5).filter((h) => h.score >= 4);
         if (candidates.length > 0) {
           // #938 / #960: matching is spelling-insensitive and rulings persist
           // for the session, so the strings this refusal prints are exactly the
           // strings that satisfy it, and a reworded summary cannot reset the
-          // work already done. See src/python-gate.ts.
+          // work already done. See src/dispatch/python-gate.ts.
           // #1167: a candidate whose bridge method the running plugin does not
           // register cannot do the task, so it is owed no ruling.
           const verdict = evaluateGate(candidates, params.ruledOut, ctx, await notInRunningPlugin(ctx));
@@ -467,7 +461,6 @@ export const editorTool: ToolDef = categoryTool(
     },
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
@@ -481,6 +474,9 @@ export const editorTool: ToolDef = categoryTool(
     taskSummary: z.string().optional().describe("execute_python: plain-words intent, searched against the tool registry to gate the call (#704)"),
     ruledOut: z.array(z.object({ action: z.string(), reason: z.string() })).optional().describe("execute_python: reason each searched candidate action does not fit; every candidate must be ruled out before Python runs. 'action' accepts the bare action name, tool(action) or tool.action; 'reason' must be at least 12 characters. Send back the array the previous refusal printed under 'sendThisBack' (#704, #938, #960)"),
     timeout: z.number().optional().describe("start_editor: seconds to wait for the bridge (default 120) (#758)"),
+    // build_project is project(build); `platform` is already declared by the specs above.
+    configuration: z.string().optional().describe("build_project: build configuration, Development (default), DebugGame, Shipping or Test"),
+    clean: z.boolean().optional().describe("build_project: rebuild from scratch (UnrealBuildTool -Clean)"),
     probeWindows: z.boolean().optional().describe("get_engine_state: also enumerate native windows to catch pre-Slate dialogs (default true, costs ~2s)"),
     dialogPolicy: z.string().optional().describe("start_editor: semicolon-separated pattern=response pairs armed before the bridge is listening, so a prompt raised during startup is answered from the first frame (e.g. \"Restore=no\"). Same effect as set_dialog_policy and the same warning: an armed pattern presses the button, so the user never sees that prompt. Responses are the ones set_dialog_policy takes (#968)"),
     paramEcho: z.boolean().optional().describe("start_editor: arm the bridge parameter echo for the launched editor. It is read at startup, so it cannot be turned on over the socket afterwards. The live tests' leak assertions skip without it"),

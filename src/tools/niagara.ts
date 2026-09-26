@@ -1,6 +1,8 @@
 import { z } from "zod";
-import { categoryTool, EDITOR_TARGET_PARAM, type ToolContext, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
+import type { ToolContext, ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
+import { EDITOR_TARGET_PARAM } from "../surface/routing-params.js";
+import { handlerFailure } from "../flow/handler-outcome.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/niagara.generated.js";
 import { specBp, schema as specSchema } from "./specs/niagara.generated.js";
 
@@ -107,6 +109,13 @@ export const niagaraTool: ToolDef = categoryTool(
             // The batch's own budget covers every op that names none of its own.
             if (subParams.timeoutMs === undefined && ctx.callTimeoutMs !== undefined) subParams.timeoutMs = ctx.callTimeoutMs;
             const result = await dispatchTool.handler(ctx, subParams);
+            // A handler that failed resolves with success:false rather than
+            // throwing, so the verdict is read off the body.
+            const failure = handlerFailure(result);
+            if (failure !== null) {
+              results.push({ action, result, error: failure });
+              return { results, stoppedAt: i };
+            }
             results.push({ action, result });
           } catch (e) {
             results.push({ action, error: (e as Error).message });
@@ -118,7 +127,6 @@ export const niagaraTool: ToolDef = categoryTool(
     },
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
@@ -126,9 +134,5 @@ export const niagaraTool: ToolDef = categoryTool(
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
     ops: z.array(z.record(z.unknown())).optional().describe("For batch: [{action, params}]"),
-    // cursor + limit for the paged list actions. Declared once: the MCP layer
-    // strips a key the category never declares, so a paged action whose
-    // category omits these silently returns page one forever.
-    ...PAGINATION_SCHEMA,
   },
 );

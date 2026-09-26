@@ -43,9 +43,9 @@ export const TEST_PORT_LOCKFILE = path.join(
 /** Pre-derived-port bridges bound this. Kept as the last candidate. */
 export const LEGACY_BRIDGE_PORT = 9877;
 
-// Ephemeral range used by the derived-port scheme. Must match src/port.ts and
+// Ephemeral range used by the derived-port scheme. Must match src/bridge/port.ts and
 // FMCPBridgeServer::DeriveProjectPort; tests/unit/bridge-target.test.ts pins
-// this implementation against src/port.ts so the two cannot drift apart.
+// this implementation against src/bridge/port.ts so the two cannot drift apart.
 const EPHEMERAL_BASE = 49152;
 const EPHEMERAL_SPAN = 65535 - EPHEMERAL_BASE + 1;
 
@@ -328,6 +328,8 @@ export function assertLiveTestProjectDir(reportedDir, allowed = liveTestProjectD
  * Run the guard over any RPC caller. `call` takes (method, params) and resolves
  * to the raw handler result (or anything containing it); the identity marker is
  * matched out of the stringified value.
+ *
+ * @param {(method: string, params: Record<string, unknown>) => Promise<unknown>} call
  */
 export async function verifyTestProjectTarget(call) {
   let result;
@@ -379,5 +381,81 @@ export function askOnce(url, method, params, timeoutMs) {
       if (message.error) return done(reject, new Error(message.error.message ?? "bridge error"));
       done(resolve, message.result);
     });
+  });
+}
+
+/**
+ * Open a socket to the test project's bridge, trying each candidate port, and
+ * confirm the editor behind it has tests/ue_mcp open before returning.
+ *
+ * `call` resolves with the result and rejects on a bridge error or a timeout.
+ * Set `verify: false` only for a caller that runs its own identity check.
+ */
+export async function connectTestBridge(options = {}) {
+  const {
+    host = "127.0.0.1",
+    explicitPort = null,
+    projectDir = null,
+    connectTimeoutMs = 3000,
+    verify = true,
+    log = () => {},
+  } = options;
+  assertLoopbackHost(host);
+  const { candidates, lockfile } = bridgePortCandidates({ explicitPort, projectDir });
+
+  let lastError = null;
+  for (const c of candidates) {
+    const url = `ws://${host}:${c.port}`;
+    let ws;
+    try {
+      ws = await openSocket(url, connectTimeoutMs);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      continue;
+    }
+    log(`connected to ${url} (${c.source})`);
+    let nextId = 1;
+    const call = (method, params = {}, timeoutMs = 60_000) =>
+      new Promise((resolve, reject) => {
+        const id = nextId++;
+        const timer = setTimeout(() => {
+          ws.off("message", onMessage);
+          reject(new Error(`${method} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+        const onMessage = (raw) => {
+          let msg;
+          try { msg = JSON.parse(raw.toString()); } catch { return; }
+          if (msg.id !== id) return;
+          clearTimeout(timer);
+          ws.off("message", onMessage);
+          if (msg.error) reject(new Error(msg.error.message ?? String(msg.error)));
+          else resolve(msg.result);
+        };
+        ws.on("message", onMessage);
+        ws.send(JSON.stringify({ id, method, params }));
+      });
+    const bridge = { ws, url, source: c.source, call, close: () => ws.close(), projectDir: null };
+    if (verify) {
+      try {
+        bridge.projectDir = await verifyTestProjectTarget(call);
+      } catch (err) {
+        ws.close();
+        throw err;
+      }
+    }
+    return bridge;
+  }
+  throw new Error(describeMissingBridge({ host, candidates, lockfile, lastError }));
+}
+
+function openSocket(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    const timer = setTimeout(() => {
+      ws.terminate();
+      reject(new Error(`Connection to ${url} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    ws.on("open", () => { clearTimeout(timer); resolve(ws); });
+    ws.on("error", (err) => { clearTimeout(timer); reject(err); });
   });
 }

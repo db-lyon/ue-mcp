@@ -17,14 +17,14 @@ concurrency:
 permissions:
   contents: read
 
-# The em dash gate is not here, and no longer has a workflow of its own. It is
-# a two-second check that was costing a hosted-runner slot on every branch push,
-# and when runners are unavailable that turns a release into a fifteen-minute
-# wait on a queue. It runs in .husky/pre-commit and .husky/commit-msg instead,
-# which rejects the character before the commit exists.
+# Prose rules run here over the tracked tree and again in .husky/pre-commit and
+# .husky/commit-msg, which reject a bad character before the commit exists.
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write   # surface/counts, posted on pushes to main only
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,18 +49,13 @@ jobs:
           rm -f package-lock.json
           npm install --include=optional
 
-      - name: Prose rules
-        # Also in .husky/pre-commit and .husky/pre-push, and repeated here on
-        # purpose: hooks can be skipped with --no-verify and are not installed
-        # in every clone. dist/ is checked separately in the publish job, once
-        # there is a dist/ to check.
-        run: node scripts/lint-prose.mjs
-
-      - name: Tracked config carries no personal settings
-        run: node scripts/check-tracked-config.mjs
-
-      - name: Flow rules
-        run: node scripts/check-flows.mjs
+      - name: Repo audits
+        # npm run audit: docs and param drift, TS/C++ handler parity, prose
+        # rules, tracked config, flows, unity-build collisions and direct param
+        # reads. Prose is also in the husky hooks, and repeated here on purpose:
+        # hooks can be skipped with --no-verify and are not installed in every
+        # clone. dist/ is checked separately in the publish job.
+        run: npm run audit
 
       - name: Release gates
         # Patch-only bumps, stamped counts that match the surface, and a docs
@@ -71,6 +66,12 @@ jobs:
 
       - name: Type-check
         run: npx tsc --noEmit
+
+      - name: Type-check tests and scripts
+        # tsconfig.json covers src/ only and vitest strips types without
+        # checking them, so a test could build a fixture src/ no longer accepts
+        # and still pass. Kept out of the pre-commit hook because it is slow.
+        run: npm run typecheck:tests
 
       - name: Unit tests
         run: npm run test:unit
@@ -103,6 +104,20 @@ jobs:
       - name: Audit (high+ only, production deps)
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: false
+
+      - name: Post surface/counts commit status
+        # Derived from the source of truth (TS schema + C++ RegisterHandler)
+        # so the status stays accurate without hand-edited counts.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DESC=$(npx tsx scripts/surface-counts.mts)
+          gh api -X POST "repos/$REPO/statuses/$SHA"             -f state=success             -f context=surface/counts             -f description="$DESC"             -f target_url="https://github.com/$REPO/blob/$SHA/scripts/surface-counts.mts"
+          echo "Posted surface/counts: $DESC"
 
   publish:
     needs: build
@@ -319,11 +334,17 @@ jobs:
         if: steps.version.outputs.should_publish == 'true'
         env:
           DIST_TAG: ${{ steps.channel.outputs.dist_tag }}
-        run: npm publish --access public --provenance --tag "$DIST_TAG"
+        #
+        # --ignore-scripts: the steps above already built and generated dist/
+        # and checked it. prepublishOnly would delete and rebuild it, so what
+        # shipped would not be what was checked.
+        run: npm publish --access public --provenance --tag "$DIST_TAG" --ignore-scripts
 
       - name: Package tarball
         if: steps.version.outputs.should_publish == 'true'
-        run: tar czf ue-mcp.tar.gz dist/ plugin/ package.json package-lock.json README.md LICENSE
+        # No package-lock.json: the install step replaces the committed one with
+        # a Linux-generated lockfile, so it would not be the one in the repo.
+        run: tar czf ue-mcp.tar.gz dist/ plugin/ package.json README.md LICENSE
 
       - name: Promote draft release
         # The draft was authored before the bump push and validated by the
@@ -370,52 +391,6 @@ jobs:
             -f description="$HEADLINE" \
             -f target_url="https://github.com/$REPO/releases/tag/v$VERSION"
           echo "Posted landing/headline: $HEADLINE"
-
-  surface_counts:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      statuses: write   # post the surface/counts commit status
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-
-      - name: Install
-        # Mirror the build job: lockfile is from Windows, drop it for Linux install.
-        run: |
-          rm -f package-lock.json
-          npm install --include=optional
-
-      - name: Compute surface counts
-        id: counts
-        # Derive the count from the source of truth (TS schema + C++
-        # RegisterHandler) so the status stays accurate across every release
-        # without anyone hand-editing package.json or .uplugin copy.
-        run: |
-          set -euo pipefail
-          DESC=$(npx tsx scripts/surface-counts.mts)
-          echo "desc=$DESC" >> "$GITHUB_OUTPUT"
-          echo "Computed: $DESC"
-
-      - name: Post surface/counts commit status
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-          DESC: ${{ steps.counts.outputs.desc }}
-        run: |
-          set -euo pipefail
-          gh api -X POST "repos/$REPO/statuses/$SHA" \
-            -f state=success \
-            -f context=surface/counts \
-            -f description="$DESC" \
-            -f target_url="https://github.com/$REPO/blob/$SHA/scripts/surface-counts.mts"
-          echo "Posted surface/counts: $DESC"
 
   # The MkDocs -> gh-pages deploy used to live here. The published docs are
   # built by the landing site from docs/**, synced by push-docs.yml, so this

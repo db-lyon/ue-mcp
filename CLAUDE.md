@@ -5,9 +5,9 @@ Operating guide for Claude Code (and any AI agent) working in this repo. Shared 
 ## Repo at a glance
 
 - **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->26<!-- /count --> category tools with <!-- count:actions -->1966+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
-- **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/*.cpp`, registers actions with `FMCPHandlerRegistry`.
+- **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/<Category>/*.cpp`, registers actions with `FMCPHandlerRegistry`.
 - **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
-- **Docs** (`docs/`) - MkDocs site. `docs/release-notes-X.Y.Z.md` is the canonical release body.
+- **Docs** (`docs/`) - MkDocs site. Release bodies are drafted outside the repo (see Release process).
 
 Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plugins/UE_MCP_Bridge/` - never hand-copy.
 
@@ -41,7 +41,7 @@ The merge style follows the commit count, and writing five commits only to squas
 - Test builds pass `-NoEngineChanges`, so Unreal aborts with the offending file list if the build would overwrite anything already in the engine tree. Set `UE_MCP_ALLOW_TEST_ENGINE_CHANGES=true` only to bootstrap engine outputs in an engine you are willing to have written to.
 - Optional: `UE_MCP_TEST_ENGINE_ROOT` pins the engine to build and run with, and `UE_MCP_PROTECTED_ENGINE_ROOTS` is a deny list of roots the scripts refuse to touch at all. The deny list outranks every other setting, including the opt-in above.
 - `npm run up:build` stops the editor, builds, and relaunches. Use when iterating live.
-- The deployer (`scripts/deploy.mjs`, also called implicitly by `npm run up`) syncs `plugin/` → `tests/ue_mcp/Plugins/UE_MCP_Bridge/`. Run it after plugin source edits before building.
+- The deployer (`scripts/deploy.mjs`) syncs `plugin/` → `tests/ue_mcp/Plugins/UE_MCP_Bridge/`. Neither `npm run up` nor `npm run build` runs it, so run it after plugin source edits and before building.
 
 ### Smoke tests - REQUIRED
 
@@ -84,8 +84,9 @@ The merge style follows the commit count, and writing five commits only to squas
 If new handlers return `"Unknown method"` at runtime even though source + build reported success:
 
 1. Delete `tests/ue_mcp/Plugins/UE_MCP_Bridge/` entirely.
-2. Delete any `*.patch_*.{dll,pdb,lib,exp}` files under `tests/ue_mcp/Binaries/Win64/`. Live Coding will otherwise load stale patches on top of a fresh DLL.
-3. Redeploy (`node scripts/deploy.mjs`), then `npm run build`.
+2. Redeploy (`node scripts/deploy.mjs`), then `npm run build`.
+
+`npm run build` already deletes stale Live Coding `*.patch_*` binaries and warns about orphaned sources in the deployed tree (`scripts/pre-build-hygiene.mjs`).
 
 UBT's incremental build + Live Coding can mask registration failures from earlier compile errors. A clean rebuild surfaces the real error.
 
@@ -132,7 +133,7 @@ Release notes structure (below the frontmatter): **`## Features` / `## Fixes` / 
 - **Cumulative, not archaeological.** A stable release never mentions its own betas or what an earlier release got wrong.
 - **Credit contributors** from `gh api repos/OWNER/REPO/compare/vPREV...vNEW --jq '.commits[].author.login'`, not from memory.
 
-`.github/RELEASE_TEMPLATE.md` is the skeleton, `.github/PULL_REQUEST_TEMPLATE.md` collects the notes line per PR. (The `docs/release-notes-*.md` files in the repo predate this flow and are kept as references only.)
+`.github/RELEASE_TEMPLATE.md` is the skeleton, `.github/PULL_REQUEST_TEMPLATE.md` collects the notes line per PR.
 
 ### Prereleases
 
@@ -141,7 +142,7 @@ A version with a prerelease suffix (`1.2.0-beta`, `1.2.0-beta.2`, `1.3.0-rc.1`) 
 - **npm dist-tag** comes from the first prerelease identifier, so `1.2.0-beta` and `1.2.0-beta.2` publish under `beta` and `1.3.0-rc.1` under `rc`. `npx ue-mcp` keeps resolving to the newest plain `X.Y.Z`; testers opt in with `ue-mcp@beta`.
 - **The GitHub release** is marked as a prerelease, so it does not take the "Latest" badge or answer `/releases/latest`.
 - **The publish gate** asks whether that exact version is already on the registry, so a prerelease does not wedge every later push.
-- The rules live in `scripts/release-version.mjs` (unit tested in `tests/unit/release-version.test.ts`), mirrored for the shipped CLI in `src/version-check.ts`. Change one and the parity test will tell you to change the other.
+- The rules live in `scripts/release-version.mjs` (unit tested in `tests/unit/release-version.test.ts`), mirrored for the shipped CLI in `src/core/version-check.ts`. Change one and the parity test will tell you to change the other.
 
 The tag name still has to match the version exactly: `gh release create v1.2.0-beta --draft --notes-file ...`.
 
@@ -160,18 +161,18 @@ Prerelease notes stay incremental: the `1.2.0-beta.3` page says what changed sin
 
 ### Handler conventions
 
-Each category has a paired `Private/Handlers/<Category>Handlers.{h,cpp}`. Handler methods are static, take `const TSharedPtr<FJsonObject>& Params`, and return `TSharedPtr<FJsonValue>`. They self-register in `RegisterHandlers(FMCPHandlerRegistry&)`.
+Each category has a folder `Private/Handlers/<Category>/` holding a paired `<Category>Handlers.{h,cpp}`, its split files, and the helper headers only it uses. Handler methods are static, take `const TSharedPtr<FJsonObject>& Params`, and return `TSharedPtr<FJsonValue>`. They self-register in `RegisterHandlers(FMCPHandlerRegistry&)`.
 
-- Use the helpers in `Private/HandlerUtils.h`: `MCPError`, `MCPSuccess`, `MCPResult`, `MCPSetCreated`/`Existed`/`Updated`, `MCPSetRollback`, `RequireString`, `OptionalString`/`Int`/`Number`/`Bool`, `REQUIRE_EDITOR_WORLD`.
+- Use the helpers `Public/HandlerUtils.h` gathers from the `Public/Handler*.h` headers: `MCPError`, `MCPSuccess`, `MCPResult`, `MCPSetCreated`/`Existed`/`Updated`, `MCPSetRollback`, `RequireString`, `OptionalString`/`Int`/`Number`/`Bool`, `REQUIRE_EDITOR_WORLD`.
 - For JSON-driven property assignment (TArray, TSet, nested structs, UObject path refs, dotted paths), use `Private/HandlerJsonProperty.h::MCPJsonProperty::SetJsonOnProperty`. Introduced for `set_pcg_node_settings` (#149), now also used by `blueprint(set_component_property)` and `level(set_water_body_property)`.
 - **Param names must exactly match between the TS schema and the C++ handler.** Drift is how silent failures start. Audit new actions in both places.
 - Modules that may not be loaded (Water, WaterSpline, etc.) should be reached via `LoadClass<>()` at runtime rather than a `Build.cs` dependency. Fail with a clear "plugin X not available" error instead of a link-time break.
-- **Never copy a file-local helper into a second handler file.** The module is compiled as a unity build, so two `.cpp` files sharing a blob merge their anonymous namespaces and the second definition is a redefinition (`error C2084`). Unity grouping shifts with file count, file order, and the `git status` derived adaptive-unity working set, so a duplicate builds clean locally and breaks on the next machine. Shared helper goes in a header: `Public/HandlerUtils.h`. `npm run audit:unity` reports duplicates and is gated by a unit test in CI. Copies drift as well as collide - the protected-mount guardrail had four copies and two of them enforced weaker rules.
+- **Never copy a file-local helper into a second handler file.** The module is compiled as a unity build, so two `.cpp` files sharing a blob merge their anonymous namespaces and the second definition is a redefinition (`error C2084`). Unity grouping shifts with file count, file order, and the `git status` derived adaptive-unity working set, so a duplicate builds clean locally and breaks on the next machine. Shared helper goes in a header: one of the `Public/Handler*.h` pieces `HandlerUtils.h` includes. `npm run audit:unity` reports duplicates and is gated by a unit test in CI. Copies drift as well as collide - the protected-mount guardrail had four copies and two of them enforced weaker rules.
 
 ### Writing style - public artifacts
 
 - **No em dashes (`—`).** Use hyphens (` - `), colons, parentheses, or split into sentences. Applies to commit messages, release notes, docs, PR bodies, code comments. <!-- em-dash-allowed: the rule has to show the character it bans -->
-  Git hooks enforce this locally, not CI. `.husky/pre-commit` scans the staged files and `.husky/commit-msg` scans the message, so a bad character is rejected before the commit exists rather than after a runner picks the job up. Run `npm run lint:prose` for the whole tracked tree, and `npm run lint:prose -- --explain` for every rule and the exemption policy.
+  Enforced in CI and locally. `.husky/pre-commit` scans the staged files and `.husky/commit-msg` scans the message, so a bad character is rejected before the commit exists rather than after a runner picks the job up. Run `npm run lint:prose` for the whole tracked tree, and `npm run lint:prose -- --explain` for every rule and the exemption policy.
 - **Never name competitor or comparison projects in public artifacts.** Commit messages, release notes, PR bodies, GitHub release bodies, code comments, docs - any of these. Even when the work is literally closing a gap against another project, describe the work on its own terms ("adds module input authoring"), not as "catching up to X" or "matching Y". Gap-analysis context belongs in private discussion, never in public git history.
 
 ### MCP design principle
@@ -181,7 +182,7 @@ The bridge must be self-sufficient. Every system (Niagara, materials, PCG, bluep
 ## Useful commands
 
 ```bash
-npm run up              # Start MCP server + launch editor
+npm run up              # Launch the editor on tests/ue_mcp
 npm run up:build        # Stop editor, build plugin, relaunch
 npm run build           # Build the UE C++ plugin only
 npx tsc --noEmit        # Type-check TS
@@ -190,7 +191,8 @@ npm run test:live       # Live tests against a running editor (tests/ue_mcp only
 npm run test:automation # The plugin's C++ UE.MCP.* suite, through the bridge
 npm run golden:record   # Re-record tests/golden/editor-down.json (review the diff)
 npm run release:notes   # Compose cumulative stable notes from a version's prereleases
-npm test                # Vitest unit tests
+npm test                # Unit + multi-editor suites (no editor needed)
+npm run test:suites     # Vitest smoke suites (tests/ue_mcp only)
 node scripts/deploy.mjs # Sync plugin/ → tests/ue_mcp/Plugins/
 ```
 

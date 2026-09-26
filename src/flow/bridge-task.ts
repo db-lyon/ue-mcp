@@ -2,14 +2,14 @@ import type { TaskResult } from "@db-lyon/flowkit";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
 import { UeMcpTask } from "../task.js";
-import { stripEditorTarget } from "../types.js";
+import { stripEditorTarget } from "../surface/target-params.js";
 
 /**
  * Generic task for bridge-delegation actions.
  *
  * Used two ways:
  *
- * 1. **YAML-defined tasks** (`class_path: flow.bridge`):
+ * 1. **YAML-defined tasks** (`class_path: ue-mcp.bridge`):
  *    The `method` option specifies the bridge method to call.
  *    Remaining options are passed as bridge params.
  *

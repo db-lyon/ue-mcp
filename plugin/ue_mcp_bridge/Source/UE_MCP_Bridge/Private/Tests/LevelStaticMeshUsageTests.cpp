@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/LevelHandlers.h"
+#include "Handlers/Level/LevelHandlers.h"
 #include "HandlerUtils.h"
 #include "Misc/AutomationTest.h"
 

@@ -10,8 +10,8 @@
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import { bp, type ActionSpec } from "../../types.js";
-import { epicToolCall } from "../../epic-input.js";
+import type { ActionSpec } from "../../core/types.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_key = {"properties":{"curve_table":{"type":"object","properties":{"refPath":{}}},"row_name":{"type":"string"},"key":{"type":"object"}},"required":["curve_table","row_name","key"]} as const;
 const S_epic_add_row = {"properties":{"curve_table":{"type":"object","properties":{"refPath":{}}},"row_name":{"type":"string"},"default_value":{"type":"number"}},"required":["curve_table","row_name"]} as const;
@@ -92,462 +92,386 @@ const S_epic_write_file = {"properties":{"file_path":{"type":"string"},"content"
 
 /** 76 wrapped engine tools routed to the `asset` category. */
 export const actions: Record<string, ActionSpec> = {
-  epic_add_key: { epicSchema: S_epic_add_key, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Adds a key to a row. Params: curve_table, row_name, key",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.curve_table.CurveTableTools", "editor_toolset.toolsets.curve_table.CurveTableTools.add_key", S_epic_add_key, p),
-  ) },
-  epic_add_row: { epicSchema: S_epic_add_row, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Adds a new row to the curve table with an optional default value. Params: curve_table, row_name, default_value?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.curve_table.CurveTableTools", "editor_toolset.toolsets.curve_table.CurveTableTools.add_row", S_epic_add_row, p),
-  ) },
-  epic_add_rows: { epicSchema: S_epic_add_rows, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Adds new rows with default values to the data table. Params: data_table, row_names",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.add_rows", S_epic_add_rows, p),
-  ) },
-  epic_can_edit_asset: { epicSchema: S_epic_can_edit_asset, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Checks whether an asset can be edited. Params: asset_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.can_edit_asset", S_epic_can_edit_asset, p),
-  ) },
-  epic_create: { epicSchema: S_epic_create, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Creates a new CurveTable asset. Params: folder_path, asset_name",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.curve_table.CurveTableTools", "editor_toolset.toolsets.curve_table.CurveTableTools.create", S_epic_create, p),
-  ) },
-  epic_create__data_asset_tools: { epicSchema: S_epic_create__data_asset_tools, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.data_asset.DataAssetTools] Creates a new DataAsset asset in the project. Params: folder_path, asset_name, asset_type",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_asset.DataAssetTools", "editor_toolset.toolsets.data_asset.DataAssetTools.create", S_epic_create__data_asset_tools, p),
-  ) },
-  epic_create__data_table_tools: { epicSchema: S_epic_create__data_table_tools, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Creates a new DataTable asset with the specified column schema. Params: folder_path, asset_name, schema",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.create", S_epic_create__data_table_tools, p),
-  ) },
-  epic_create__string_table_tools: { epicSchema: S_epic_create__string_table_tools, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.string_table.StringTableTools] Creates a new StringTable asset. Params: folder_path, asset_name",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.string_table.StringTableTools", "editor_toolset.toolsets.string_table.StringTableTools.create", S_epic_create__string_table_tools, p),
-  ) },
-  epic_create_folder: { epicSchema: S_epic_create_folder, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Creates a folder at the specified path. Params: path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.create_folder", S_epic_create_folder, p),
-  ) },
-  epic_delete: { epicSchema: S_epic_delete, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Deletes an asset or folder. Params: path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.delete", S_epic_delete, p),
-  ) },
-  epic_duplicate: { epicSchema: S_epic_duplicate, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Makes a copy of a folder or asset. Params: path, new_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.duplicate", S_epic_duplicate, p),
-  ) },
-  epic_exists: { epicSchema: S_epic_exists, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Determines if a folder or asset exists. Params: path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.exists", S_epic_exists, p),
-  ) },
-  epic_find_assets: { epicSchema: S_epic_find_assets, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Searches the project for assets that match specific criteria. Params: folder_path, name, asset_type?, recursive?, tags?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.find_assets", S_epic_find_assets, p),
-  ) },
-  epic_find_similar: { epicSchema: S_epic_find_similar, ...bp(
-    "read",
-    "[Epic SemanticSearchToolset.SemanticSearchToolset] Find assets whose embeddings are semantically similar to the given asset's embedding. Vector-only (no BM25). The source asset must already be indexed by the SemanticSearch plugin. Params: assetPath, classFilter, pathRegexes, k?",
-    "epic_call_tool",
-    (p) => epicToolCall("SemanticSearchToolset.SemanticSearchToolset", "SemanticSearchToolset.SemanticSearchToolset.FindSimilar", S_epic_find_similar, p),
-  ) },
-  epic_generate_convex_collisions: { epicSchema: S_epic_generate_convex_collisions, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Generates convex hull collision shapes for a static mesh. Convex hulls provide accurate collision for physics simulation. More hulls improve accuracy but increase runtime cost. Replaces any existing collision. Params: mesh, hull_count?, max_hull_verts?, hull_precision?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.generate_convex_collisions", S_epic_generate_convex_collisions, p),
-  ) },
-  epic_generate_lods: { epicSchema: S_epic_generate_lods, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Auto-generates LODs for a static mesh using triangle reduction. Each entry in triangle_percents creates one additional LOD. The value is the fraction of triangles to keep relative to LOD 0, from just above 0.0 (nearly empty) to 1.0 (full detail). For example, [0.5, 0.25] creates LOD1 with 50% of the original triangles and LOD2 with 25%. Params: mesh, triangle_percents",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.generate_lods", S_epic_generate_lods, p),
-  ) },
-  epic_get_asset_class: { epicSchema: S_epic_get_asset_class, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Gets the class of an asset. Params: asset_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.get_asset_class", S_epic_get_asset_class, p),
-  ) },
-  epic_get_asset_tags: { epicSchema: S_epic_get_asset_tags, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Gets the asset registry tags for an asset. Params: asset_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.get_asset_tags", S_epic_get_asset_tags, p),
-  ) },
-  epic_get_bounds: { epicSchema: S_epic_get_bounds, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the local-space bounding box of a static mesh. Params: mesh",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_bounds", S_epic_get_bounds, p),
-  ) },
-  epic_get_dependencies: { epicSchema: S_epic_get_dependencies, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Lists assets that the specified asset depends on. Params: asset_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.get_dependencies", S_epic_get_dependencies, p),
-  ) },
-  epic_get_entry: { epicSchema: S_epic_get_entry, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.string_table.StringTableTools] Returns the source string for a specific key. Params: string_table, key",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.string_table.StringTableTools", "editor_toolset.toolsets.string_table.StringTableTools.get_entry", S_epic_get_entry, p),
-  ) },
-  epic_get_items: { epicSchema: S_epic_get_items, ...bp(
-    "read",
-    "[Epic DataRegistryToolset.DataRegistryTools] Returns cached item data. Items must be loaded in the registry cache to be returned. Params: registryName, itemNames",
-    "epic_call_tool",
-    (p) => epicToolCall("DataRegistryToolset.DataRegistryTools", "DataRegistryToolset.DataRegistryTools.GetItems", S_epic_get_items, p),
-  ) },
-  epic_get_keys: { epicSchema: S_epic_get_keys, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Returns all keys for a row. Params: curve_table, row_name",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.curve_table.CurveTableTools", "editor_toolset.toolsets.curve_table.CurveTableTools.get_keys", S_epic_get_keys, p),
-  ) },
-  epic_get_lod_count: { epicSchema: S_epic_get_lod_count, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the number of LODs in a static mesh asset. Params: mesh",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_lod_count", S_epic_get_lod_count, p),
-  ) },
-  epic_get_lod_thresholds: { epicSchema: S_epic_get_lod_thresholds, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the screen-size thresholds at which each LOD becomes active. Screen size is a ratio of the mesh's screen height to the viewport height. A value of 1.0 means the mesh fills the full viewport height; values above 1.0 are valid and mean the mesh must appear larger than the viewport before the next LOD activates. Each LOD activates when the mesh appears smaller than its threshold. Params: mesh",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_lod_thresholds", S_epic_get_lod_thresholds, p),
-  ) },
-  epic_get_material: { epicSchema: S_epic_get_material, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the material assigned to a named slot on a static mesh. Params: mesh, slot_name",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_material", S_epic_get_material, p),
-  ) },
-  epic_get_material_slots: { epicSchema: S_epic_get_material_slots, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the names of all material slots in a static mesh. Material slot names are used when assigning materials to specific parts of the mesh. Use these names with get_material and set_material. Params: mesh",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_material_slots", S_epic_get_material_slots, p),
-  ) },
-  epic_get_metadata_tags: { epicSchema: S_epic_get_metadata_tags, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Gets the metadata tags for an asset. Params: asset_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.get_metadata_tags", S_epic_get_metadata_tags, p),
-  ) },
-  epic_get_namespace: { epicSchema: S_epic_get_namespace, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.string_table.StringTableTools] Returns the namespace of a StringTable asset. Params: string_table",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.string_table.StringTableTools", "editor_toolset.toolsets.string_table.StringTableTools.get_namespace", S_epic_get_namespace, p),
-  ) },
-  epic_get_plugin_content_paths: { epicSchema: S_epic_get_plugin_content_paths, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Returns the root content paths for plugins that have content. Params: include_engine?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.get_plugin_content_paths", S_epic_get_plugin_content_paths, p),
-  ) },
-  epic_get_referencers: { epicSchema: S_epic_get_referencers, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Lists assets that reference the specified asset. Params: asset_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.get_referencers", S_epic_get_referencers, p),
-  ) },
-  epic_get_registry_info: { epicSchema: S_epic_get_registry_info, ...bp(
-    "read",
-    "[Epic DataRegistryToolset.DataRegistryTools] Returns detailed information about a specific registry. Params: registryName",
-    "epic_call_tool",
-    (p) => epicToolCall("DataRegistryToolset.DataRegistryTools", "DataRegistryToolset.DataRegistryTools.GetRegistryInfo", S_epic_get_registry_info, p),
-  ) },
-  epic_get_rows: { epicSchema: S_epic_get_rows, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Returns the column values for one or more rows as a JSON string. Params: data_table, row_names",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.get_rows", S_epic_get_rows, p),
-  ) },
-  epic_get_schema: { epicSchema: S_epic_get_schema, ...bp(
-    "read",
-    "[Epic DataRegistryToolset.DataRegistryTools] Returns the item struct schema as JSON. Params: registryName",
-    "epic_call_tool",
-    (p) => epicToolCall("DataRegistryToolset.DataRegistryTools", "DataRegistryToolset.DataRegistryTools.GetSchema", S_epic_get_schema, p),
-  ) },
-  epic_get_schema__data_table_tools: { epicSchema: S_epic_get_schema__data_table_tools, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Returns the column schema of the data table as a JSON string. Params: data_table",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.get_schema", S_epic_get_schema__data_table_tools, p),
-  ) },
-  epic_get_size: { epicSchema: S_epic_get_size, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.texture.TextureTools] Returns the dimensions of a Texture2D in pixels. Params: texture",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.texture.TextureTools", "editor_toolset.toolsets.texture.TextureTools.get_size", S_epic_get_size, p),
-  ) },
-  epic_get_table_id: { epicSchema: S_epic_get_table_id, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.string_table.StringTableTools] Returns the table ID for a StringTable asset. The table ID is derived from the asset's package path and is used to reference the string table in text properties and localisation. Params: string_table",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.string_table.StringTableTools", "editor_toolset.toolsets.string_table.StringTableTools.get_table_id", S_epic_get_table_id, p),
-  ) },
-  epic_get_triangle_count: { epicSchema: S_epic_get_triangle_count, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the number of triangles in a specific LOD of a static mesh. Params: mesh, lod_index?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_triangle_count", S_epic_get_triangle_count, p),
-  ) },
-  epic_get_vertex_count: { epicSchema: S_epic_get_vertex_count, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the number of vertices in a specific LOD of a static mesh. Params: mesh, lod_index?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_vertex_count", S_epic_get_vertex_count, p),
-  ) },
-  epic_import_file: { epicSchema: S_epic_import_file, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Imports a file from disk as a CurveTable asset. The file's first column is the row name; subsequent columns are sample times and values. interp_mode controls how the imported keys are interpolated between samples. Params: folder_path, asset_name, source_file, interp_mode",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.curve_table.CurveTableTools", "editor_toolset.toolsets.curve_table.CurveTableTools.import_file", S_epic_import_file, p),
-  ) },
-  epic_import_file__data_table_tools: { epicSchema: S_epic_import_file__data_table_tools, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Imports a file from disk as a DataTable asset. The file's columns must match the property names in schema. Use search_row_structs to discover usable schema structs. Params: folder_path, asset_name, source_file, schema",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.import_file", S_epic_import_file__data_table_tools, p),
-  ) },
-  epic_import_file__static_mesh_tools: { epicSchema: S_epic_import_file__static_mesh_tools, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Imports a mesh file from disk as a StaticMesh asset. Params: folder_path, asset_name, source_file, import_materials?, import_textures?, combine_meshes?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.import_file", S_epic_import_file__static_mesh_tools, p),
-  ) },
-  epic_import_file__string_table_tools: { epicSchema: S_epic_import_file__string_table_tools, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.string_table.StringTableTools] Imports a file from disk as a StringTable asset. The file must have a header row with at least 'Key' and 'SourceString' columns. Additional meta-data columns are imported but the namespace is not - the StringTable's namespace is derived from its asset path. Params: folder_path, asset_name, source_file",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.string_table.StringTableTools", "editor_toolset.toolsets.string_table.StringTableTools.import_file", S_epic_import_file__string_table_tools, p),
-  ) },
-  epic_import_file__texture_tools: { epicSchema: S_epic_import_file__texture_tools, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.texture.TextureTools] Imports an image file from disk as a Texture2D asset. Params: folder_path, asset_name, source_file",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.texture.TextureTools", "editor_toolset.toolsets.texture.TextureTools.import_file", S_epic_import_file__texture_tools, p),
-  ) },
-  epic_is_checked_out: { epicSchema: S_epic_is_checked_out, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Checks whether an asset is checked out by the current user. Params: asset_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.is_checked_out", S_epic_is_checked_out, p),
-  ) },
-  epic_is_dirty: { epicSchema: S_epic_is_dirty, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Checks whether an asset has unsaved changes. Params: asset_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.is_dirty", S_epic_is_dirty, p),
-  ) },
-  epic_is_nanite_enabled: { epicSchema: S_epic_is_nanite_enabled, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns whether Nanite is enabled for a static mesh. Nanite is Unreal's virtualized geometry system that renders highly detailed meshes efficiently. It is most beneficial for meshes with many triangles. Params: mesh",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.is_nanite_enabled", S_epic_is_nanite_enabled, p),
-  ) },
-  epic_list_data_sources: { epicSchema: S_epic_list_data_sources, ...bp(
-    "read",
-    "[Epic DataRegistryToolset.DataRegistryTools] Returns the editor-defined sources configured on a Data Registry. These are the sources as authored on the registry asset, before any runtime expansion of meta sources. Params: registryName",
-    "epic_call_tool",
-    (p) => epicToolCall("DataRegistryToolset.DataRegistryTools", "DataRegistryToolset.DataRegistryTools.ListDataSources", S_epic_list_data_sources, p),
-  ) },
-  epic_list_folders: { epicSchema: S_epic_list_folders, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Lists the folders contained within a folder. Params: root_path, recursive?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.list_folders", S_epic_list_folders, p),
-  ) },
-  epic_list_items: { epicSchema: S_epic_list_items, ...bp(
-    "read",
-    "[Epic DataRegistryToolset.DataRegistryTools] Returns all item names in a Data Registry. Params: registryName",
-    "epic_call_tool",
-    (p) => epicToolCall("DataRegistryToolset.DataRegistryTools", "DataRegistryToolset.DataRegistryTools.ListItems", S_epic_list_items, p),
-  ) },
-  epic_list_keys: { epicSchema: S_epic_list_keys, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.string_table.StringTableTools] Lists all keys in the string table. Params: string_table",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.string_table.StringTableTools", "editor_toolset.toolsets.string_table.StringTableTools.list_keys", S_epic_list_keys, p),
-  ) },
-  epic_list_registries: { epicSchema: S_epic_list_registries, ...bp(
-    "read",
-    "[Epic DataRegistryToolset.DataRegistryTools] Returns the names of all registered Data Registries. Params: structFilter?",
-    "epic_call_tool",
-    (p) => epicToolCall("DataRegistryToolset.DataRegistryTools", "DataRegistryToolset.DataRegistryTools.ListRegistries", S_epic_list_registries, p),
-  ) },
-  epic_list_rows: { epicSchema: S_epic_list_rows, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Lists the names of all rows in the curve table. Params: curve_table",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.curve_table.CurveTableTools", "editor_toolset.toolsets.curve_table.CurveTableTools.list_rows", S_epic_list_rows, p),
-  ) },
-  epic_list_rows__data_table_tools: { epicSchema: S_epic_list_rows__data_table_tools, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Lists the names of all rows in the data table. Params: data_table",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.list_rows", S_epic_list_rows__data_table_tools, p),
-  ) },
-  epic_list_runtime_sources: { epicSchema: S_epic_list_runtime_sources, ...bp(
-    "read",
-    "[Epic DataRegistryToolset.DataRegistryTools] Returns the runtime sources for a Data Registry. This is the expanded list including transient child sources generated from meta sources. Will equal ListDataSources when the registry has no meta sources. Params: registryName",
-    "epic_call_tool",
-    (p) => epicToolCall("DataRegistryToolset.DataRegistryTools", "DataRegistryToolset.DataRegistryTools.ListRuntimeSources", S_epic_list_runtime_sources, p),
-  ) },
-  epic_load_asset: { epicSchema: S_epic_load_asset, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Loads an asset from the project. Params: asset_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.load_asset", S_epic_load_asset, p),
-  ) },
-  epic_move: { epicSchema: S_epic_move, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Moves or renames an asset or folder. Params: path, new_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.move", S_epic_move, p),
-  ) },
-  epic_read_file: { epicSchema: S_epic_read_file, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Reads a text file from disk and returns its contents. Only files under /Game/, an enabled plugin's Content/ directory, or the project Saved/ directory may be read. Only plain text formats are supported. Params: file_path",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.read_file", S_epic_read_file, p),
-  ) },
-  epic_remove_collisions: { epicSchema: S_epic_remove_collisions, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Removes all collision shapes from a static mesh. Params: mesh",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.remove_collisions", S_epic_remove_collisions, p),
-  ) },
-  epic_remove_entry: { epicSchema: S_epic_remove_entry, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.string_table.StringTableTools] Removes an entry from the string table. Params: string_table, key",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.string_table.StringTableTools", "editor_toolset.toolsets.string_table.StringTableTools.remove_entry", S_epic_remove_entry, p),
-  ) },
-  epic_remove_lods: { epicSchema: S_epic_remove_lods, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Removes all auto-generated LODs from a static mesh, keeping only LOD 0. Params: mesh",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.remove_lods", S_epic_remove_lods, p),
-  ) },
-  epic_remove_row: { epicSchema: S_epic_remove_row, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Removes a row from the curve table. Params: curve_table, row_name",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.curve_table.CurveTableTools", "editor_toolset.toolsets.curve_table.CurveTableTools.remove_row", S_epic_remove_row, p),
-  ) },
-  epic_remove_rows: { epicSchema: S_epic_remove_rows, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Removes rows from the data table. Params: data_table, row_names",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.remove_rows", S_epic_remove_rows, p),
-  ) },
-  epic_rename_row: { epicSchema: S_epic_rename_row, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Renames a row in the curve table. Params: curve_table, row_name, new_row_name",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.curve_table.CurveTableTools", "editor_toolset.toolsets.curve_table.CurveTableTools.rename_row", S_epic_rename_row, p),
-  ) },
-  epic_rename_rows: { epicSchema: S_epic_rename_rows, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Renames one or more rows in the data table. Params: data_table, renames",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.rename_rows", S_epic_rename_rows, p),
-  ) },
-  epic_save_assets: { epicSchema: S_epic_save_assets, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Saves assets to disk. Params: asset_paths",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.save_assets", S_epic_save_assets, p),
-  ) },
-  epic_search: { epicSchema: S_epic_search, ...bp(
-    "read",
-    "[Epic SemanticSearchToolset.SemanticSearchToolset] Run a semantic search over the Content Browser assets indexed by the SemanticSearch plugin. Params: query, classFilter, pathRegexes, k?",
-    "epic_call_tool",
-    (p) => epicToolCall("SemanticSearchToolset.SemanticSearchToolset", "SemanticSearchToolset.SemanticSearchToolset.Search", S_epic_search, p),
-  ) },
-  epic_search_row_structs: { epicSchema: S_epic_search_row_structs, ...bp(
-    "read",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Finds structs that can be used as a DataTable schema. Params: struct_name?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.search_row_structs", S_epic_search_row_structs, p),
-  ) },
-  epic_set_entry: { epicSchema: S_epic_set_entry, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.string_table.StringTableTools] Adds or updates an entry in the string table. If the key already exists its value is replaced; otherwise a new entry is created. Params: string_table, key, value",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.string_table.StringTableTools", "editor_toolset.toolsets.string_table.StringTableTools.set_entry", S_epic_set_entry, p),
-  ) },
-  epic_set_keys: { epicSchema: S_epic_set_keys, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Replaces all keys in a row with the provided list. Params: curve_table, row_name, keys",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.curve_table.CurveTableTools", "editor_toolset.toolsets.curve_table.CurveTableTools.set_keys", S_epic_set_keys, p),
-  ) },
-  epic_set_lod_thresholds: { epicSchema: S_epic_set_lod_thresholds, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Sets the screen-size thresholds at which each LOD becomes active. Screen size is a ratio of the mesh's screen height to the viewport height. A value of 1.0 means the mesh fills the full viewport height; values above 1.0 are valid and mean the mesh must appear larger than the viewport before the next LOD activates. Thresholds must be in strictly descending order (LOD 0 has the largest threshold), and there must be exactly one threshold per LOD. Params: mesh, thresholds",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.set_lod_thresholds", S_epic_set_lod_thresholds, p),
-  ) },
-  epic_set_material: { epicSchema: S_epic_set_material, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Assigns a material to a named slot on a static mesh asset. This affects all instances of the mesh that do not override the slot material. Use set_component_material_override to change materials on a single instance. Params: mesh, slot_name, material",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.set_material", S_epic_set_material, p),
-  ) },
-  epic_set_nanite_enabled: { epicSchema: S_epic_set_nanite_enabled, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Enables or disables Nanite for a static mesh. Changing this setting triggers a mesh rebuild. Nanite is most beneficial for high-polygon meshes. Low-polygon meshes may not benefit from Nanite. Params: mesh, enabled",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.static_mesh.StaticMeshTools", "editor_toolset.toolsets.static_mesh.StaticMeshTools.set_nanite_enabled", S_epic_set_nanite_enabled, p),
-  ) },
-  epic_set_rows: { epicSchema: S_epic_set_rows, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.data_table.DataTableTools] Sets column values for one or more rows. Params: data_table, values",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.data_table.DataTableTools", "editor_toolset.toolsets.data_table.DataTableTools.set_rows", S_epic_set_rows, p),
-  ) },
-  epic_update_metadata_tags: { epicSchema: S_epic_update_metadata_tags, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Sets or removes metadata tags on an asset. Params: asset_path, set_tags?, remove_tags?",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.update_metadata_tags", S_epic_update_metadata_tags, p),
-  ) },
-  epic_write_file: { epicSchema: S_epic_write_file, ...bp(
-    "mutate",
-    "[Epic editor_toolset.toolsets.asset.AssetTools] Writes text content to a file on disk. Only files under /Game/, an enabled plugin's Content/ directory, or the project Saved/ directory may be written. Only plain text formats are supported. Overwrites the file if it already exists. Params: file_path, content",
-    "epic_call_tool",
-    (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.write_file", S_epic_write_file, p),
-  ) },
+  epic_add_key: {
+    epicSchema: S_epic_add_key,
+    epicTool: { toolset: "editor_toolset.toolsets.curve_table.CurveTableTools", name: "editor_toolset.toolsets.curve_table.CurveTableTools.add_key" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Adds a key to a row. Params: curve_table, row_name, key", "epic_call_tool"),
+  },
+  epic_add_row: {
+    epicSchema: S_epic_add_row,
+    epicTool: { toolset: "editor_toolset.toolsets.curve_table.CurveTableTools", name: "editor_toolset.toolsets.curve_table.CurveTableTools.add_row" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Adds a new row to the curve table with an optional default value. Params: curve_table, row_name, default_value?", "epic_call_tool"),
+  },
+  epic_add_rows: {
+    epicSchema: S_epic_add_rows,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.add_rows" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Adds new rows with default values to the data table. Params: data_table, row_names", "epic_call_tool"),
+  },
+  epic_can_edit_asset: {
+    epicSchema: S_epic_can_edit_asset,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.can_edit_asset" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Checks whether an asset can be edited. Params: asset_path", "epic_call_tool"),
+  },
+  epic_create: {
+    epicSchema: S_epic_create,
+    epicTool: { toolset: "editor_toolset.toolsets.curve_table.CurveTableTools", name: "editor_toolset.toolsets.curve_table.CurveTableTools.create" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Creates a new CurveTable asset. Params: folder_path, asset_name", "epic_call_tool"),
+  },
+  epic_create__data_asset_tools: {
+    epicSchema: S_epic_create__data_asset_tools,
+    epicTool: { toolset: "editor_toolset.toolsets.data_asset.DataAssetTools", name: "editor_toolset.toolsets.data_asset.DataAssetTools.create" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.data_asset.DataAssetTools] Creates a new DataAsset asset in the project. Params: folder_path, asset_name, asset_type", "epic_call_tool"),
+  },
+  epic_create__data_table_tools: {
+    epicSchema: S_epic_create__data_table_tools,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.create" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Creates a new DataTable asset with the specified column schema. Params: folder_path, asset_name, schema", "epic_call_tool"),
+  },
+  epic_create__string_table_tools: {
+    epicSchema: S_epic_create__string_table_tools,
+    epicTool: { toolset: "editor_toolset.toolsets.string_table.StringTableTools", name: "editor_toolset.toolsets.string_table.StringTableTools.create" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.string_table.StringTableTools] Creates a new StringTable asset. Params: folder_path, asset_name", "epic_call_tool"),
+  },
+  epic_create_folder: {
+    epicSchema: S_epic_create_folder,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.create_folder" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.asset.AssetTools] Creates a folder at the specified path. Params: path", "epic_call_tool"),
+  },
+  epic_delete: {
+    epicSchema: S_epic_delete,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.delete" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.asset.AssetTools] Deletes an asset or folder. Params: path", "epic_call_tool"),
+  },
+  epic_duplicate: {
+    epicSchema: S_epic_duplicate,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.duplicate" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.asset.AssetTools] Makes a copy of a folder or asset. Params: path, new_path", "epic_call_tool"),
+  },
+  epic_exists: {
+    epicSchema: S_epic_exists,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.exists" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Determines if a folder or asset exists. Params: path", "epic_call_tool"),
+  },
+  epic_find_assets: {
+    epicSchema: S_epic_find_assets,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.find_assets" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Searches the project for assets that match specific criteria. Params: folder_path, name, asset_type?, recursive?, tags?", "epic_call_tool"),
+  },
+  epic_find_similar: {
+    epicSchema: S_epic_find_similar,
+    epicTool: { toolset: "SemanticSearchToolset.SemanticSearchToolset", name: "SemanticSearchToolset.SemanticSearchToolset.FindSimilar" },
+    ...bp("read", "[Epic SemanticSearchToolset.SemanticSearchToolset] Find assets whose embeddings are semantically similar to the given asset's embedding. Vector-only (no BM25). The source asset must already be indexed by the SemanticSearch plugin. Params: assetPath, classFilter, pathRegexes, k?", "epic_call_tool"),
+  },
+  epic_generate_convex_collisions: {
+    epicSchema: S_epic_generate_convex_collisions,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.generate_convex_collisions" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Generates convex hull collision shapes for a static mesh. Convex hulls provide accurate collision for physics simulation. More hulls improve accuracy but increase runtime cost. Replaces any existing collision. Params: mesh, hull_count?, max_hull_verts?, hull_precision?", "epic_call_tool"),
+  },
+  epic_generate_lods: {
+    epicSchema: S_epic_generate_lods,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.generate_lods" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Auto-generates LODs for a static mesh using triangle reduction. Each entry in triangle_percents creates one additional LOD. The value is the fraction of triangles to keep relative to LOD 0, from just above 0.0 (nearly empty) to 1.0 (full detail). For example, [0.5, 0.25] creates LOD1 with 50% of the original triangles and LOD2 with 25%. Params: mesh, triangle_percents", "epic_call_tool"),
+  },
+  epic_get_asset_class: {
+    epicSchema: S_epic_get_asset_class,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.get_asset_class" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Gets the class of an asset. Params: asset_path", "epic_call_tool"),
+  },
+  epic_get_asset_tags: {
+    epicSchema: S_epic_get_asset_tags,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.get_asset_tags" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Gets the asset registry tags for an asset. Params: asset_path", "epic_call_tool"),
+  },
+  epic_get_bounds: {
+    epicSchema: S_epic_get_bounds,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_bounds" },
+    ...bp("read", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the local-space bounding box of a static mesh. Params: mesh", "epic_call_tool"),
+  },
+  epic_get_dependencies: {
+    epicSchema: S_epic_get_dependencies,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.get_dependencies" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Lists assets that the specified asset depends on. Params: asset_path", "epic_call_tool"),
+  },
+  epic_get_entry: {
+    epicSchema: S_epic_get_entry,
+    epicTool: { toolset: "editor_toolset.toolsets.string_table.StringTableTools", name: "editor_toolset.toolsets.string_table.StringTableTools.get_entry" },
+    ...bp("read", "[Epic editor_toolset.toolsets.string_table.StringTableTools] Returns the source string for a specific key. Params: string_table, key", "epic_call_tool"),
+  },
+  epic_get_items: {
+    epicSchema: S_epic_get_items,
+    epicTool: { toolset: "DataRegistryToolset.DataRegistryTools", name: "DataRegistryToolset.DataRegistryTools.GetItems" },
+    ...bp("read", "[Epic DataRegistryToolset.DataRegistryTools] Returns cached item data. Items must be loaded in the registry cache to be returned. Params: registryName, itemNames", "epic_call_tool"),
+  },
+  epic_get_keys: {
+    epicSchema: S_epic_get_keys,
+    epicTool: { toolset: "editor_toolset.toolsets.curve_table.CurveTableTools", name: "editor_toolset.toolsets.curve_table.CurveTableTools.get_keys" },
+    ...bp("read", "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Returns all keys for a row. Params: curve_table, row_name", "epic_call_tool"),
+  },
+  epic_get_lod_count: {
+    epicSchema: S_epic_get_lod_count,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_lod_count" },
+    ...bp("read", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the number of LODs in a static mesh asset. Params: mesh", "epic_call_tool"),
+  },
+  epic_get_lod_thresholds: {
+    epicSchema: S_epic_get_lod_thresholds,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_lod_thresholds" },
+    ...bp("read", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the screen-size thresholds at which each LOD becomes active. Screen size is a ratio of the mesh's screen height to the viewport height. A value of 1.0 means the mesh fills the full viewport height; values above 1.0 are valid and mean the mesh must appear larger than the viewport before the next LOD activates. Each LOD activates when the mesh appears smaller than its threshold. Params: mesh", "epic_call_tool"),
+  },
+  epic_get_material: {
+    epicSchema: S_epic_get_material,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_material" },
+    ...bp("read", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the material assigned to a named slot on a static mesh. Params: mesh, slot_name", "epic_call_tool"),
+  },
+  epic_get_material_slots: {
+    epicSchema: S_epic_get_material_slots,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_material_slots" },
+    ...bp("read", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the names of all material slots in a static mesh. Material slot names are used when assigning materials to specific parts of the mesh. Use these names with get_material and set_material. Params: mesh", "epic_call_tool"),
+  },
+  epic_get_metadata_tags: {
+    epicSchema: S_epic_get_metadata_tags,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.get_metadata_tags" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Gets the metadata tags for an asset. Params: asset_path", "epic_call_tool"),
+  },
+  epic_get_namespace: {
+    epicSchema: S_epic_get_namespace,
+    epicTool: { toolset: "editor_toolset.toolsets.string_table.StringTableTools", name: "editor_toolset.toolsets.string_table.StringTableTools.get_namespace" },
+    ...bp("read", "[Epic editor_toolset.toolsets.string_table.StringTableTools] Returns the namespace of a StringTable asset. Params: string_table", "epic_call_tool"),
+  },
+  epic_get_plugin_content_paths: {
+    epicSchema: S_epic_get_plugin_content_paths,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.get_plugin_content_paths" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Returns the root content paths for plugins that have content. Params: include_engine?", "epic_call_tool"),
+  },
+  epic_get_referencers: {
+    epicSchema: S_epic_get_referencers,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.get_referencers" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Lists assets that reference the specified asset. Params: asset_path", "epic_call_tool"),
+  },
+  epic_get_registry_info: {
+    epicSchema: S_epic_get_registry_info,
+    epicTool: { toolset: "DataRegistryToolset.DataRegistryTools", name: "DataRegistryToolset.DataRegistryTools.GetRegistryInfo" },
+    ...bp("read", "[Epic DataRegistryToolset.DataRegistryTools] Returns detailed information about a specific registry. Params: registryName", "epic_call_tool"),
+  },
+  epic_get_rows: {
+    epicSchema: S_epic_get_rows,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.get_rows" },
+    ...bp("read", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Returns the column values for one or more rows as a JSON string. Params: data_table, row_names", "epic_call_tool"),
+  },
+  epic_get_schema: {
+    epicSchema: S_epic_get_schema,
+    epicTool: { toolset: "DataRegistryToolset.DataRegistryTools", name: "DataRegistryToolset.DataRegistryTools.GetSchema" },
+    ...bp("read", "[Epic DataRegistryToolset.DataRegistryTools] Returns the item struct schema as JSON. Params: registryName", "epic_call_tool"),
+  },
+  epic_get_schema__data_table_tools: {
+    epicSchema: S_epic_get_schema__data_table_tools,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.get_schema" },
+    ...bp("read", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Returns the column schema of the data table as a JSON string. Params: data_table", "epic_call_tool"),
+  },
+  epic_get_size: {
+    epicSchema: S_epic_get_size,
+    epicTool: { toolset: "editor_toolset.toolsets.texture.TextureTools", name: "editor_toolset.toolsets.texture.TextureTools.get_size" },
+    ...bp("read", "[Epic editor_toolset.toolsets.texture.TextureTools] Returns the dimensions of a Texture2D in pixels. Params: texture", "epic_call_tool"),
+  },
+  epic_get_table_id: {
+    epicSchema: S_epic_get_table_id,
+    epicTool: { toolset: "editor_toolset.toolsets.string_table.StringTableTools", name: "editor_toolset.toolsets.string_table.StringTableTools.get_table_id" },
+    ...bp("read", "[Epic editor_toolset.toolsets.string_table.StringTableTools] Returns the table ID for a StringTable asset. The table ID is derived from the asset's package path and is used to reference the string table in text properties and localisation. Params: string_table", "epic_call_tool"),
+  },
+  epic_get_triangle_count: {
+    epicSchema: S_epic_get_triangle_count,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_triangle_count" },
+    ...bp("read", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the number of triangles in a specific LOD of a static mesh. Params: mesh, lod_index?", "epic_call_tool"),
+  },
+  epic_get_vertex_count: {
+    epicSchema: S_epic_get_vertex_count,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.get_vertex_count" },
+    ...bp("read", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns the number of vertices in a specific LOD of a static mesh. Params: mesh, lod_index?", "epic_call_tool"),
+  },
+  epic_import_file: {
+    epicSchema: S_epic_import_file,
+    epicTool: { toolset: "editor_toolset.toolsets.curve_table.CurveTableTools", name: "editor_toolset.toolsets.curve_table.CurveTableTools.import_file" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Imports a file from disk as a CurveTable asset. The file's first column is the row name; subsequent columns are sample times and values. interp_mode controls how the imported keys are interpolated between samples. Params: folder_path, asset_name, source_file, interp_mode", "epic_call_tool"),
+  },
+  epic_import_file__data_table_tools: {
+    epicSchema: S_epic_import_file__data_table_tools,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.import_file" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Imports a file from disk as a DataTable asset. The file's columns must match the property names in schema. Use search_row_structs to discover usable schema structs. Params: folder_path, asset_name, source_file, schema", "epic_call_tool"),
+  },
+  epic_import_file__static_mesh_tools: {
+    epicSchema: S_epic_import_file__static_mesh_tools,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.import_file" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Imports a mesh file from disk as a StaticMesh asset. Params: folder_path, asset_name, source_file, import_materials?, import_textures?, combine_meshes?", "epic_call_tool"),
+  },
+  epic_import_file__string_table_tools: {
+    epicSchema: S_epic_import_file__string_table_tools,
+    epicTool: { toolset: "editor_toolset.toolsets.string_table.StringTableTools", name: "editor_toolset.toolsets.string_table.StringTableTools.import_file" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.string_table.StringTableTools] Imports a file from disk as a StringTable asset. The file must have a header row with at least 'Key' and 'SourceString' columns. Additional meta-data columns are imported but the namespace is not - the StringTable's namespace is derived from its asset path. Params: folder_path, asset_name, source_file", "epic_call_tool"),
+  },
+  epic_import_file__texture_tools: {
+    epicSchema: S_epic_import_file__texture_tools,
+    epicTool: { toolset: "editor_toolset.toolsets.texture.TextureTools", name: "editor_toolset.toolsets.texture.TextureTools.import_file" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.texture.TextureTools] Imports an image file from disk as a Texture2D asset. Params: folder_path, asset_name, source_file", "epic_call_tool"),
+  },
+  epic_is_checked_out: {
+    epicSchema: S_epic_is_checked_out,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.is_checked_out" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Checks whether an asset is checked out by the current user. Params: asset_path", "epic_call_tool"),
+  },
+  epic_is_dirty: {
+    epicSchema: S_epic_is_dirty,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.is_dirty" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Checks whether an asset has unsaved changes. Params: asset_path", "epic_call_tool"),
+  },
+  epic_is_nanite_enabled: {
+    epicSchema: S_epic_is_nanite_enabled,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.is_nanite_enabled" },
+    ...bp("read", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Returns whether Nanite is enabled for a static mesh. Nanite is Unreal's virtualized geometry system that renders highly detailed meshes efficiently. It is most beneficial for meshes with many triangles. Params: mesh", "epic_call_tool"),
+  },
+  epic_list_data_sources: {
+    epicSchema: S_epic_list_data_sources,
+    epicTool: { toolset: "DataRegistryToolset.DataRegistryTools", name: "DataRegistryToolset.DataRegistryTools.ListDataSources" },
+    ...bp("read", "[Epic DataRegistryToolset.DataRegistryTools] Returns the editor-defined sources configured on a Data Registry. These are the sources as authored on the registry asset, before any runtime expansion of meta sources. Params: registryName", "epic_call_tool"),
+  },
+  epic_list_folders: {
+    epicSchema: S_epic_list_folders,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.list_folders" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Lists the folders contained within a folder. Params: root_path, recursive?", "epic_call_tool"),
+  },
+  epic_list_items: {
+    epicSchema: S_epic_list_items,
+    epicTool: { toolset: "DataRegistryToolset.DataRegistryTools", name: "DataRegistryToolset.DataRegistryTools.ListItems" },
+    ...bp("read", "[Epic DataRegistryToolset.DataRegistryTools] Returns all item names in a Data Registry. Params: registryName", "epic_call_tool"),
+  },
+  epic_list_keys: {
+    epicSchema: S_epic_list_keys,
+    epicTool: { toolset: "editor_toolset.toolsets.string_table.StringTableTools", name: "editor_toolset.toolsets.string_table.StringTableTools.list_keys" },
+    ...bp("read", "[Epic editor_toolset.toolsets.string_table.StringTableTools] Lists all keys in the string table. Params: string_table", "epic_call_tool"),
+  },
+  epic_list_registries: {
+    epicSchema: S_epic_list_registries,
+    epicTool: { toolset: "DataRegistryToolset.DataRegistryTools", name: "DataRegistryToolset.DataRegistryTools.ListRegistries" },
+    ...bp("read", "[Epic DataRegistryToolset.DataRegistryTools] Returns the names of all registered Data Registries. Params: structFilter?", "epic_call_tool"),
+  },
+  epic_list_rows: {
+    epicSchema: S_epic_list_rows,
+    epicTool: { toolset: "editor_toolset.toolsets.curve_table.CurveTableTools", name: "editor_toolset.toolsets.curve_table.CurveTableTools.list_rows" },
+    ...bp("read", "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Lists the names of all rows in the curve table. Params: curve_table", "epic_call_tool"),
+  },
+  epic_list_rows__data_table_tools: {
+    epicSchema: S_epic_list_rows__data_table_tools,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.list_rows" },
+    ...bp("read", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Lists the names of all rows in the data table. Params: data_table", "epic_call_tool"),
+  },
+  epic_list_runtime_sources: {
+    epicSchema: S_epic_list_runtime_sources,
+    epicTool: { toolset: "DataRegistryToolset.DataRegistryTools", name: "DataRegistryToolset.DataRegistryTools.ListRuntimeSources" },
+    ...bp("read", "[Epic DataRegistryToolset.DataRegistryTools] Returns the runtime sources for a Data Registry. This is the expanded list including transient child sources generated from meta sources. Will equal ListDataSources when the registry has no meta sources. Params: registryName", "epic_call_tool"),
+  },
+  epic_load_asset: {
+    epicSchema: S_epic_load_asset,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.load_asset" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.asset.AssetTools] Loads an asset from the project. Params: asset_path", "epic_call_tool"),
+  },
+  epic_move: {
+    epicSchema: S_epic_move,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.move" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.asset.AssetTools] Moves or renames an asset or folder. Params: path, new_path", "epic_call_tool"),
+  },
+  epic_read_file: {
+    epicSchema: S_epic_read_file,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.read_file" },
+    ...bp("read", "[Epic editor_toolset.toolsets.asset.AssetTools] Reads a text file from disk and returns its contents. Only files under /Game/, an enabled plugin's Content/ directory, or the project Saved/ directory may be read. Only plain text formats are supported. Params: file_path", "epic_call_tool"),
+  },
+  epic_remove_collisions: {
+    epicSchema: S_epic_remove_collisions,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.remove_collisions" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Removes all collision shapes from a static mesh. Params: mesh", "epic_call_tool"),
+  },
+  epic_remove_entry: {
+    epicSchema: S_epic_remove_entry,
+    epicTool: { toolset: "editor_toolset.toolsets.string_table.StringTableTools", name: "editor_toolset.toolsets.string_table.StringTableTools.remove_entry" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.string_table.StringTableTools] Removes an entry from the string table. Params: string_table, key", "epic_call_tool"),
+  },
+  epic_remove_lods: {
+    epicSchema: S_epic_remove_lods,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.remove_lods" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Removes all auto-generated LODs from a static mesh, keeping only LOD 0. Params: mesh", "epic_call_tool"),
+  },
+  epic_remove_row: {
+    epicSchema: S_epic_remove_row,
+    epicTool: { toolset: "editor_toolset.toolsets.curve_table.CurveTableTools", name: "editor_toolset.toolsets.curve_table.CurveTableTools.remove_row" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Removes a row from the curve table. Params: curve_table, row_name", "epic_call_tool"),
+  },
+  epic_remove_rows: {
+    epicSchema: S_epic_remove_rows,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.remove_rows" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Removes rows from the data table. Params: data_table, row_names", "epic_call_tool"),
+  },
+  epic_rename_row: {
+    epicSchema: S_epic_rename_row,
+    epicTool: { toolset: "editor_toolset.toolsets.curve_table.CurveTableTools", name: "editor_toolset.toolsets.curve_table.CurveTableTools.rename_row" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Renames a row in the curve table. Params: curve_table, row_name, new_row_name", "epic_call_tool"),
+  },
+  epic_rename_rows: {
+    epicSchema: S_epic_rename_rows,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.rename_rows" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Renames one or more rows in the data table. Params: data_table, renames", "epic_call_tool"),
+  },
+  epic_save_assets: {
+    epicSchema: S_epic_save_assets,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.save_assets" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.asset.AssetTools] Saves assets to disk. Params: asset_paths", "epic_call_tool"),
+  },
+  epic_search: {
+    epicSchema: S_epic_search,
+    epicTool: { toolset: "SemanticSearchToolset.SemanticSearchToolset", name: "SemanticSearchToolset.SemanticSearchToolset.Search" },
+    ...bp("read", "[Epic SemanticSearchToolset.SemanticSearchToolset] Run a semantic search over the Content Browser assets indexed by the SemanticSearch plugin. Params: query, classFilter, pathRegexes, k?", "epic_call_tool"),
+  },
+  epic_search_row_structs: {
+    epicSchema: S_epic_search_row_structs,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.search_row_structs" },
+    ...bp("read", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Finds structs that can be used as a DataTable schema. Params: struct_name?", "epic_call_tool"),
+  },
+  epic_set_entry: {
+    epicSchema: S_epic_set_entry,
+    epicTool: { toolset: "editor_toolset.toolsets.string_table.StringTableTools", name: "editor_toolset.toolsets.string_table.StringTableTools.set_entry" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.string_table.StringTableTools] Adds or updates an entry in the string table. If the key already exists its value is replaced; otherwise a new entry is created. Params: string_table, key, value", "epic_call_tool"),
+  },
+  epic_set_keys: {
+    epicSchema: S_epic_set_keys,
+    epicTool: { toolset: "editor_toolset.toolsets.curve_table.CurveTableTools", name: "editor_toolset.toolsets.curve_table.CurveTableTools.set_keys" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.curve_table.CurveTableTools] Replaces all keys in a row with the provided list. Params: curve_table, row_name, keys", "epic_call_tool"),
+  },
+  epic_set_lod_thresholds: {
+    epicSchema: S_epic_set_lod_thresholds,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.set_lod_thresholds" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Sets the screen-size thresholds at which each LOD becomes active. Screen size is a ratio of the mesh's screen height to the viewport height. A value of 1.0 means the mesh fills the full viewport height; values above 1.0 are valid and mean the mesh must appear larger than the viewport before the next LOD activates. Thresholds must be in strictly descending order (LOD 0 has the largest threshold), and there must be exactly one threshold per LOD. Params: mesh, thresholds", "epic_call_tool"),
+  },
+  epic_set_material: {
+    epicSchema: S_epic_set_material,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.set_material" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Assigns a material to a named slot on a static mesh asset. This affects all instances of the mesh that do not override the slot material. Use set_component_material_override to change materials on a single instance. Params: mesh, slot_name, material", "epic_call_tool"),
+  },
+  epic_set_nanite_enabled: {
+    epicSchema: S_epic_set_nanite_enabled,
+    epicTool: { toolset: "editor_toolset.toolsets.static_mesh.StaticMeshTools", name: "editor_toolset.toolsets.static_mesh.StaticMeshTools.set_nanite_enabled" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.static_mesh.StaticMeshTools] Enables or disables Nanite for a static mesh. Changing this setting triggers a mesh rebuild. Nanite is most beneficial for high-polygon meshes. Low-polygon meshes may not benefit from Nanite. Params: mesh, enabled", "epic_call_tool"),
+  },
+  epic_set_rows: {
+    epicSchema: S_epic_set_rows,
+    epicTool: { toolset: "editor_toolset.toolsets.data_table.DataTableTools", name: "editor_toolset.toolsets.data_table.DataTableTools.set_rows" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.data_table.DataTableTools] Sets column values for one or more rows. Params: data_table, values", "epic_call_tool"),
+  },
+  epic_update_metadata_tags: {
+    epicSchema: S_epic_update_metadata_tags,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.update_metadata_tags" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.asset.AssetTools] Sets or removes metadata tags on an asset. Params: asset_path, set_tags?, remove_tags?", "epic_call_tool"),
+  },
+  epic_write_file: {
+    epicSchema: S_epic_write_file,
+    epicTool: { toolset: "editor_toolset.toolsets.asset.AssetTools", name: "editor_toolset.toolsets.asset.AssetTools.write_file" },
+    ...bp("mutate", "[Epic editor_toolset.toolsets.asset.AssetTools] Writes text content to a file on disk. Only files under /Game/, an enabled plugin's Content/ directory, or the project Saved/ directory may be written. Only plain text formats are supported. Overwrites the file if it already exists. Params: file_path, content", "epic_call_tool"),
+  },
 };
 
 /** The parameters those actions accept, declared so the MCP layer stops stripping them. */

@@ -15,18 +15,6 @@ FMCPHandlerRegistry::~FMCPHandlerRegistry()
 	Clear();
 }
 
-bool FMCPHandlerRegistry::ReportsUnreadParams(const FString& Category)
-{
-	// A category joins once scripts/audit-direct-param-reads.mjs lists no
-	// direct reads in its handlers, since those are invisible to the tracking.
-	static const TCHAR* const Reporting[] = { TEXT("animation"), TEXT("asset"), TEXT("audio"), TEXT("blueprint"), TEXT("chooser"), TEXT("demo"), TEXT("dialog"), TEXT("diff"), TEXT("editor"), TEXT("epic"), TEXT("fab"), TEXT("foliage"), TEXT("gameplay"), TEXT("gas"), TEXT("landscape"), TEXT("level"), TEXT("lock"), TEXT("mass"), TEXT("material"), TEXT("networking"), TEXT("niagara"), TEXT("pcg"), TEXT("physics"), TEXT("project"), TEXT("reflection"), TEXT("sequencer"), TEXT("skeletalmesh"), TEXT("spline"), TEXT("statetree"), TEXT("widget") };
-	for (const TCHAR* Name : Reporting)
-	{
-		if (Category == Name) return true;
-	}
-	return false;
-}
-
 void FMCPHandlerRegistry::TagCategory(const FString& MethodName)
 {
 	if (RegistrationCategory.IsEmpty())
@@ -561,21 +549,7 @@ float FMCPHandlerRegistry::GetHandlerTimeout(const FString& MethodName) const
 		return *V;
 	}
 	// External (plugin-contributed) handlers may register their own timeout.
-	UEMCP::FExternalHandlerFn Unused;
-	float ExternalTimeout = 0.0f;
-	if (UEMCP::LookupExternalHandler(MethodName, Unused, ExternalTimeout) && ExternalTimeout > 0.0f)
-	{
-		return ExternalTimeout;
-	}
-	return 0.0f;
-}
-
-void FMCPHandlerRegistry::RegisterPythonHandler(const FString& MethodName, const FString& PythonScriptPath)
-{
-	FPythonHandlerInfo Info;
-	Info.ScriptPath = PythonScriptPath;
-	Info.HandlerName = MethodName;
-	PythonHandlers.Add(MethodName, Info);
+	return UEMCP::GetExternalHandlerTimeout(MethodName);
 }
 
 TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
@@ -588,7 +562,7 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 		const TSharedPtr<FJsonObject> Effective = Spec ? ResolveParamAliases(*Spec, Params) : Params;
 
 		const FString* Category = HandlerCategories.Find(MethodName);
-		if (!Category || !ReportsUnreadParams(*Category) || !Effective.IsValid())
+		if (!Category || !Effective.IsValid())
 		{
 			return (*Handler)(Effective);
 		}
@@ -597,12 +571,6 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 		TSharedPtr<FJsonValue> Result = (*Handler)(Effective);
 		MCPAttachParamsNotRead(Result, ReadScope.Unread());
 		return Result;
-	}
-
-	// Try Python handler
-	if (PythonHandlers.Contains(MethodName))
-	{
-		return ExecutePythonHandler(MethodName, Params);
 	}
 
 	// Plugin-contributed external handler (registered via UEMCP::RegisterExternalHandler).
@@ -621,23 +589,17 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 
 bool FMCPHandlerRegistry::HasHandler(const FString& MethodName) const
 {
-	if (CppHandlers.Contains(MethodName) || PythonHandlers.Contains(MethodName))
+	if (CppHandlers.Contains(MethodName))
 	{
 		return true;
 	}
-	UEMCP::FExternalHandlerFn Unused;
-	float UnusedTimeout = 0.0f;
-	return UEMCP::LookupExternalHandler(MethodName, Unused, UnusedTimeout);
+	return UEMCP::HasExternalHandler(MethodName);
 }
 
 TArray<FString> FMCPHandlerRegistry::GetHandlerNames() const
 {
 	TArray<FString> Names;
 	CppHandlers.GetKeys(Names);
-
-	TArray<FString> PythonNames;
-	PythonHandlers.GetKeys(PythonNames);
-	Names.Append(PythonNames);
 
 	Names.Append(UEMCP::GetExternalHandlerNames());
 
@@ -647,23 +609,7 @@ TArray<FString> FMCPHandlerRegistry::GetHandlerNames() const
 void FMCPHandlerRegistry::Clear()
 {
 	CppHandlers.Empty();
-	PythonHandlers.Empty();
 	HandlerTimeouts.Empty();
 	HandlerCategories.Empty();
 	HandlerSpecs.Empty();
-}
-
-TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecutePythonHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& /*Params*/)
-{
-	// Python handler dispatch is not implemented. Prior behaviour returned an
-	// empty JSON object, which callers could not distinguish from a real
-	// empty-success result. Return a typed error instead so callers see the
-	// gap clearly; use `execute_python` for ad-hoc Python until the dispatch
-	// pipeline lands.
-	TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
-	Err->SetBoolField(TEXT("success"), false);
-	Err->SetStringField(TEXT("error"), FString::Printf(
-		TEXT("Python handler '%s' is registered but Python dispatch is not implemented. Use the 'execute_python' action instead."),
-		*MethodName));
-	return MakeShared<FJsonValueObject>(Err);
 }

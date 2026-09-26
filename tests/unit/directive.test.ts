@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { directive, isDirectiveResponse } from "../../src/types.js";
+import { directive, isDirectiveResponse } from "../../src/core/directive.js";
 
 describe("directive()", () => {
   it("emits the legacy prose shape by default", () => {

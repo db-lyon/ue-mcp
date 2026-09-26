@@ -47,14 +47,10 @@
  * Run: node scripts/audit-handler-conventions.mjs [--json]
  * Gated by tests/unit/handler-conventions.test.ts.
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { HANDLERS_DIR, REGISTRATION_RE, listHandlerFiles } from "./lib/cpp-registrations.mjs";
 
-const here = dirname(fileURLToPath(import.meta.url));
-export const HANDLERS_DIR = join(
-  here, "..", "plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Private", "Handlers",
-);
+export { HANDLERS_DIR };
 
 /** Markers that say a handler reports whether it actually changed anything. */
 const IDEMPOTENCY_MARKERS = [
@@ -85,7 +81,7 @@ const ROLLBACK_MARKERS = [
  * exactly like an omission. A caller reading the result can tell them apart,
  * which is the whole point of emitting the field.
  *
- * `MCPSetNoRollback(Result, Reason)` in Public/HandlerUtils.h is the helper
+ * `MCPSetNoRollback(Result, Reason)` in Public/HandlerResult.h is the helper
  * spelling, and it sets the field and its note together. This list carried the
  * name before the helper was written, which made it a marker that could never
  * match: the audit advertised two accepted spellings and only ever recognised
@@ -113,7 +109,7 @@ const NO_ROLLBACK_MARKERS = [
  * scores it as debt, which makes the ledger wrong in the direction that costs
  * somebody a day writing markers for handlers that already answered.
  *
- * `MCPSetIdempotencyUnobservable(Result, Reason)` in Public/HandlerUtils.h is
+ * `MCPSetIdempotencyUnobservable(Result, Reason)` in Public/HandlerResult.h is
  * the helper spelling, and it sets the flag and its note together so the pair
  * cannot come apart. Both spellings are recognised because both exist.
  */
@@ -201,11 +197,10 @@ function memberDefinitions(text) {
  *  that both define `ListNodeTypes` stay apart. An explicitly qualified
  *  `&FFoo::Bar` names its own class and is taken at its word. */
 export function readRegistrations() {
-  const re = /Registry\.RegisterHandler(?:WithTimeout)?\(\s*TEXT\("([^"]+)"\)\s*,\s*&(?:(F\w+)::)?(\w+)/g;
+  const re = new RegExp(REGISTRATION_RE);
   const out = new Map();
-  for (const entry of readdirSync(HANDLERS_DIR)) {
-    if (!entry.endsWith(".cpp")) continue;
-    const body = readFileSync(join(HANDLERS_DIR, entry), "utf8");
+  for (const { name: entry, path } of listHandlerFiles()) {
+    const body = readFileSync(path, "utf8");
     const defs = memberDefinitions(body);
     for (const m of body.matchAll(re)) {
       let className = m[2] ?? null;
@@ -262,9 +257,8 @@ export function findHandlerBody(className, methodName, sources) {
 /** Every handler source, read once. */
 export function readSources() {
   const out = new Map();
-  for (const entry of readdirSync(HANDLERS_DIR)) {
-    if (!entry.endsWith(".cpp")) continue;
-    out.set(entry, readFileSync(join(HANDLERS_DIR, entry), "utf8"));
+  for (const { name, path } of listHandlerFiles()) {
+    out.set(name, readFileSync(path, "utf8"));
   }
   return out;
 }

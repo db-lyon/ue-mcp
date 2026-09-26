@@ -412,14 +412,12 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
   },
   {
     id: "default-config-categories",
-    text: "dist/ue-mcp.default.yml covers 24 categories instead of 19.",
+    text: "dist/ue-mcp.default.yml covers every shipped category instead of 19.",
     coverage: [
       {
-        kind: "pending",
-        planItem: "1.3",
-        reason:
-          "scripts/generate-default-config.ts still carries its own hand-rolled list of 19 category tools " +
-          "instead of reading the live tool graph",
+        kind: "engine-free",
+        file: "tests/unit/default-config.test.ts",
+        title: "declares a task for every action of every category the server ships",
       },
     ],
   },

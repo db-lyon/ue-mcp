@@ -1,5 +1,5 @@
 import type { TaskContext } from "@db-lyon/flowkit";
-import type { ToolContext } from "../types.js";
+import type { ToolContext } from "../core/types.js";
 
 /**
  * FlowContext is the runtime context passed to flowkit tasks. It is a

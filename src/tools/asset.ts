@@ -1,13 +1,15 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA, paged } from "../pagination.js";
-import { SESSION_ID } from "../lock-owner.js";
-import { McpError, ErrorCode } from "../errors.js";
-import type { EditorSession } from "../session.js";
-import type { ToolContext } from "../types.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
+import { paged } from "../surface/pagination.js";
+import { SESSION_ID } from "../dispatch/lock-owner.js";
+import { McpError, ErrorCode } from "../core/errors.js";
+import type { EditorSession } from "../sessions/session.js";
+import type { ToolContext } from "../core/types.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/asset.generated.js";
 import { specBp, schema as specSchema } from "./specs/asset.generated.js";
-import { specBp as gameplaySpecBp } from "./specs/gameplay.generated.js";
+import { specBp as gameplaySpecBp, schema as gameplaySpecSchema } from "./specs/gameplay.generated.js";
+import { borrowSchema } from "../surface/handler-spec.js";
 
 /**
  * Who a lock belongs to: the addressed editor, or this process when there is
@@ -422,7 +424,6 @@ export const assetTool: ToolDef = categoryTool(
     diff:                 specBp("read", "Semantic structural diff between two assets, dispatching on the asset's class. Blueprints: parent class, variables, functions, components, per-graph node and connection deltas. Skeleton and SkeletalMesh: raw bone additions and removals, reparenting (bone, fromParent, toParent), raw-index changes (bone, fromIndex, toIndex), and declared virtual-bone additions and removals, with hierarchyCompatible and editorCompatible reported SEPARATELY. That separation is the point: it answers whether two skeletons are bone-compatible enough to register as Compatible Skeletons or whether a retarget is required, because appending bones (virtual ones especially) leaves the shared hierarchy intact while reparenting an existing bone does not (#879). Deliberately OUT of scope and reported as such: reference-pose transforms (referencePoseCompared=false), export names (exportNamesCompared=false), sockets and retarget sources; structureScope spells the boundary out in the result. Both paths must be the same class. Other asset types report that diffing is not supported yet rather than failing opaquely.", "diff_asset"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
@@ -459,19 +460,12 @@ export const assetTool: ToolDef = categoryTool(
       vertexIndex: z.number().int().min(0),
       influences: z.array(z.record(z.unknown())).min(1).max(64),
     })).min(1).max(256).optional().describe("set_skeletal_mesh_skin_weights: selected source vertices and their complete replacement influences, each {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}"),
-    // The shared cursor and limit, declared once for every paged action in this
-    // category: list, search, search_fts and list_textures. Undeclared keys are
-    // stripped, so an action that documents `cursor` without this would return
-    // an unpaged first page and call it a success.
-    ...PAGINATION_SCHEMA,
-    // Hand-written actions only: search, migrate, the IMC aliases and the locks.
-    searchAll: z.boolean().optional().describe("Search all content roots (plugins, engine content) not just /Game/"),
-    mappingContext: z.string().optional().describe("InputMappingContext asset path for add_input_mapping (#525)"),
-    inputAction: z.string().optional().describe("InputAction asset path for add_input_mapping (#525)"),
-    imcPath: z.string().optional(),
-    inputActionPath: z.string().optional(),
+    // The IMC actions dispatch to gameplay handlers, so their keys come from
+    // that spec. `key` is also the StringTable entry key, so it names both.
+    ...borrowSchema(gameplaySpecSchema, ["mappingContext", "inputAction", "imcPath", "inputActionPath", "mappingIndex"]),
     key: z.string().optional().describe("Key name for add_input_mapping or StringTable entry key (e.g. 'Mouse2D', 'LeftMouseButton') (#525)"),
-    mappingIndex: z.number().optional().describe("Index of an IMC mapping for remove_input_mapping (#525)"),
+    // Hand-written actions only: search, migrate and the locks.
+    searchAll: z.boolean().optional().describe("Search all content roots (plugins, engine content) not just /Game/"),
     exportName: z.string().optional(),
     allowDirty: z.boolean().optional().describe("migrate: migrate the on-disk version of an asset with unsaved edits (#760)"),
     destinationContentDir: z.string().optional().describe("migrate: the TARGET project's Content folder (#760)"),

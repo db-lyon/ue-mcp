@@ -18,8 +18,8 @@ import { buildGuards } from "../../src/flow/guards.js";
 import { GuardsSchema } from "../../src/flow/guard-schema.js";
 import { makeCallContext, type CallContext } from "../../src/flow/guard.js";
 import { UeMcpGuard, type GuardedCall } from "../../src/guard-task.js";
-import type { IBridge } from "../../src/bridge.js";
-import type { ToolContext } from "../../src/types.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 const target = { projectPath: null, port: 0, portSource: "default" as const, verified: true };
 const fakeBridge = (): IBridge => ({

@@ -1,4 +1,5 @@
-import { categoryTool, type ToolDef } from "../types.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/foliage.generated.js";
 
 export const foliageTool: ToolDef = categoryTool(
@@ -31,7 +32,6 @@ export const foliageTool: ToolDef = categoryTool(
     },
     clear_procedural: specBp("mutate", "Remove every instance a procedural foliage component spawned, matched on the component's own procedural GUID so hand-painted instances of the same type are left alone. Pass one of actorLabel, actorPath or spawnerPath. Reports alreadyRemoved when the component had produced nothing. The inverse re-runs the simulation, which reproduces the cleared content only while the spawner's seed, tile settings and type list are unchanged.", "clear_procedural_foliage"),
   },
-  undefined,
   {
     // #1057: every foliage action is spec'd, so every key comes from the C++
     // registrations through the generated module.

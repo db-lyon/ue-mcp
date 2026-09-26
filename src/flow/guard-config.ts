@@ -1,7 +1,8 @@
+import { readEnv } from "../core/env.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { globalConfigPath } from "../global-config.js";
-import type { ToolDef } from "../types.js";
+import { globalConfigPath } from "../config/ue-mcp-config.js";
+import type { ToolDef } from "../core/types.js";
 import type { GuardDeclarations } from "./guard-schema.js";
 import type { GuardSource } from "./guards.js";
 import { loadFlowConfig, type PluginContribution } from "./loader.js";
@@ -28,7 +29,7 @@ function configLayers(configDir: string): ConfigLayer[] {
   const project = configLayer(path.join(configDir, "ue-mcp.yml"));
   const layers = [configLayer(globalConfigPath()), project];
   if (project.stamp !== null) {
-    if (process.env.UE_MCP_ENV) layers.push(configLayer(path.join(configDir, `ue-mcp.${process.env.UE_MCP_ENV}.yml`)));
+    if (readEnv("env")) layers.push(configLayer(path.join(configDir, `ue-mcp.${readEnv("env")}.yml`)));
     layers.push(configLayer(path.join(configDir, "ue-mcp.local.yml")));
   }
   return layers;

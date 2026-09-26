@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { handlerParamReads, paramReadsInBody, readAllSources } from "../../scripts/lib/handler-param-reads.mjs";
 import { readRegistrations } from "../../scripts/audit-handler-conventions.mjs";
-import type { HandlerSpecs } from "../../src/handler-spec.js";
+import type { HandlerSpecs } from "../../src/surface/handler-spec.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {

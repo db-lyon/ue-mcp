@@ -3,7 +3,7 @@
 // shape could leave a null Triggers entry that trips AssetCheck on save.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge, resultArray, TEST_PREFIX } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });

@@ -31,7 +31,7 @@ The maintained surface of this repo:
 Examples of in-scope findings:
 
 - Bypass of the `feedback(submit)` consent gate (anything that lets an agent post to the public tracker without explicit user approval in `interactive` mode)
-- Bypass of the credential or privacy scrub (`src/secret-scrub.ts`, `src/privacy-scrub.ts`)
+- Bypass of the credential or privacy scrub (`src/feedback/secret-scrub.ts`, `src/feedback/privacy-scrub.ts`)
 - Leakage of identifiers the privacy scrub is documented to redact
 - Path traversal, arbitrary write, or local privilege escalation through the deferred feedback queue, the hook installer, or the plugin loader
 - Remote interaction with the WebSocket bridge (it's loopback-only by design; anything that reaches it from off-host is in scope)

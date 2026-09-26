@@ -18,6 +18,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import { listRegistrations } from "./lib/cpp-registrations.mjs";
 import {
   assertLoopbackHost,
   bridgePortCandidates,
@@ -59,40 +60,7 @@ const DIM = "\x1b[2m";
 // 1. Discover handler names from C++ sources
 // ---------------------------------------------------------------------------
 function discoverHandlers() {
-  const handlersDir = path.resolve(
-    __dirname,
-    "..",
-    "plugin",
-    "ue_mcp_bridge",
-    "Source",
-    "UE_MCP_Bridge",
-    "Private",
-    "Handlers"
-  );
-
-  if (!fs.existsSync(handlersDir)) {
-    console.error(`${RED}Handler directory not found: ${handlersDir}${RESET}`);
-    process.exit(1);
-  }
-
-  const cppFiles = fs
-    .readdirSync(handlersDir)
-    .filter((f) => f.endsWith(".cpp"))
-    .sort();
-
-  // Matches Registry.RegisterHandler(...) and Registry.RegisterHandlerWithTimeout(...)
-  const pattern = /Registry\.RegisterHandler(?:WithTimeout)?\(TEXT\("([^"]+)"\)/g;
-  const handlers = []; // { method, file }
-
-  for (const file of cppFiles) {
-    const contents = fs.readFileSync(path.join(handlersDir, file), "utf-8");
-    let match;
-    while ((match = pattern.exec(contents)) !== null) {
-      handlers.push({ method: match[1], file });
-    }
-  }
-
-  return handlers;
+  return listRegistrations().map(({ method, file }) => ({ method, file }));
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +117,6 @@ const PARAM_OVERRIDES = {
   save_all:                    { dryRun: true },
   build_lighting:              { dryRun: true },
   build_all:                   { dryRun: true },
-  build_project:               { dryRun: true },
   read_editor_log:             { tailLines: 1 },
   get_crash_reports:           { maxReports: 1 },
   // Discover-only: a no-match filter so smoke doesn't actually run a test suite.
@@ -271,7 +238,7 @@ async function teardown(ws, idGen) {
   // Create a fresh blank MCP_Home; this also switches the editor to it,
   // unloading SCRATCH.
   await rpcRaw(ws, "create_new_level", { levelPath: HOME_LEVEL }, idGen());
-  await rpcRaw(ws, "save_current_level", {}, idGen());
+  await rpcRaw(ws, "save_level", {}, idGen());
   // SCRATCH now unloaded; safe to delete.
   await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());
 }

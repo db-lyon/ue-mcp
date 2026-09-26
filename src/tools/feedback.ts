@@ -1,22 +1,25 @@
 import { z } from "zod";
-import { categoryTool, directive, type ToolDef, type ToolContext } from "../types.js";
-import { submitFeedback } from "../github-app.js";
-import { readUserAuth } from "../auth.js";
-import { getWorkarounds, clearWorkarounds, type WorkaroundScopeSource } from "../workaround-tracker.js";
-import { scrubSecrets } from "../secret-scrub.js";
-import { privacyScrub } from "../privacy-scrub.js";
-import { deferSubmission, deleteDeferred } from "../feedback-deferred.js";
+import type { ToolDef, ToolContext } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
+import { directive } from "../core/directive.js";
+import { submitFeedback, type SubmitResult } from "../feedback/github-app.js";
+import { readUserAuth } from "../feedback/github-auth.js";
+import { getWorkarounds, clearWorkarounds, type WorkaroundScopeSource } from "../dispatch/workaround-tracker.js";
+import { scrubSecrets } from "../feedback/secret-scrub.js";
+import { privacyScrub } from "../feedback/privacy-scrub.js";
+import { deferSubmission, deleteDeferred } from "../feedback/feedback-deferred.js";
 import {
   writeFallbackReport,
   findByConfirmToken,
   deleteFallbackReport,
   type FallbackReport,
-} from "../feedback-fallback.js";
-import { getFeedbackMode, type FeedbackMode } from "../user-state.js";
-import { clientAdvertisesElicitation } from "../editor-control.js";
-import { warn } from "../log.js";
-import { routeFeedback, type RoutingDecision } from "../feedback-routing.js";
-import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubRepo } from "../registry-catalog.js";
+} from "../feedback/feedback-fallback.js";
+import { getFeedbackMode, type FeedbackMode } from "../config/user-state.js";
+import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
+import { warn } from "../core/log.js";
+import { routeFeedback, type RoutingDecision } from "../feedback/feedback-routing.js";
+import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubRepo } from "../extensions/registry-catalog.js";
+import { readEnv } from "../core/env.js";
 
 /**
  * Resolve the active feedback mode. Precedence (highest wins):
@@ -38,7 +41,7 @@ import { CORE_REPO, newIssueUrl, parseRepoSlug, repoSlug, sameRepo, type GitHubR
  * change this; it's set by the human running the server.
  */
 function resolveFeedbackMode(ctx: ToolContext): FeedbackMode {
-  const env = (process.env.UE_MCP_FEEDBACK_MODE ?? "").trim().toLowerCase();
+  const env = (readEnv("feedbackMode") ?? "").trim().toLowerCase();
   if (env === "auto-approve" || env === "defer" || env === "interactive") return env;
   const pref = getFeedbackMode(ctx.project?.projectDir ?? null);
   if (pref) return pref;
@@ -369,7 +372,16 @@ function buildApprovalMessage(
  * air-gapped runs or anyone who wants the old single-tracker behaviour.
  */
 function routingDisabled(): boolean {
-  return /^(0|off|false|no)$/i.test((process.env.UE_MCP_FEEDBACK_ROUTING ?? "").trim());
+  return /^(0|off|false|no)$/i.test((readEnv("feedbackRouting") ?? "").trim());
+}
+
+/** The addressed editor's graph for routing, or none when its surface is not built. */
+function builtInGraph(ctx: ToolContext): ToolDef[] | undefined {
+  try {
+    return ctx.getToolGraph?.();
+  } catch {
+    return undefined;
+  }
 }
 
 async function resolveRouting(
@@ -383,6 +395,7 @@ async function resolveRouting(
     idealTool: input.idealTool,
     explicitRepo: input.repo,
     installed: ctx.getPlugins?.() ?? [],
+    tools: builtInGraph(ctx),
   });
 }
 
@@ -478,6 +491,160 @@ function elicitationFallbackDirective(
   );
 }
 
+/** Where a post landed or was aimed, and what to hand back either way. */
+interface SubmitTarget {
+  repo: GitHubRepo;
+  title: string;
+  body: string;
+  labels: string[];
+  /** What authorized the post; it only changes the success line. */
+  via: "approval" | "auto-approve" | "confirm-token";
+  /** A saved report the post came from. Deleted on success, kept on failure. */
+  pendingId?: string;
+  /** Extra fields for the success result. */
+  extra?: Record<string, unknown>;
+}
+
+const VIA_SUFFIX: Record<SubmitTarget["via"], string> = {
+  approval: "",
+  "auto-approve": " (auto-approved)",
+  "confirm-token": " (confirmed by token)",
+};
+
+/**
+ * The one rendering of a submitFeedback outcome. Every failure keeps the bytes
+ * reachable through a prefilled link, and a saved report stays saved so its
+ * token still works once whatever refused the post clears.
+ */
+function renderSubmitResult(ctx: ToolContext, result: SubmitResult, target: SubmitTarget) {
+  const slug = repoSlug(target.repo);
+  if (result.kind === "submitted") {
+    if (target.pendingId) {
+      deleteDeferred(target.pendingId);
+      deleteFallbackReport(target.pendingId);
+    }
+    // The body has shipped, so drop the session log: a follow-up must not
+    // re-bundle the same execute_python calls into a second issue.
+    clearWorkarounds(ctx);
+    const who = result.authoredAs === "user" ? `@${result.authoredBy}` : "bot";
+    return {
+      message: `Feedback submitted to ${slug} as ${who}${VIA_SUFFIX[target.via]}.`,
+      issue_url: result.url,
+      issue_number: result.number,
+      authored_by: result.authoredBy,
+      authored_as: result.authoredAs,
+      labels: target.labels,
+      target_repo: slug,
+      ...(target.pendingId ? { pending_id: target.pendingId } : {}),
+      ...target.extra,
+    };
+  }
+
+  const manualUrl = newIssueUrl(target.repo, target.title, target.body);
+  const kept = target.pendingId
+    ? [``, `The report is still saved as ${target.pendingId}, and its token still works.`]
+    : [];
+  const pending = target.pendingId ? { pending_id: target.pendingId } : {};
+
+  if (result.kind === "auth_required") {
+    // A token cached when the call started, rejected by GitHub at post time
+    // (revoked or expired mid-session). Surface the device flow to re-authorize.
+    return directive(
+      [
+        `[FEEDBACK NOT POSTED - CACHED GITHUB TOKEN REJECTED]`,
+        `GitHub rejected the cached OAuth token (revoked or expired). Re-authorize:`,
+        ``,
+        `  1. Open: ${result.verification_uri}`,
+        `  2. Enter code: ${result.user_code}`,
+        `  3. Authorize the ue-mcp-feedback app`,
+        ``,
+        `Code expires in ~${Math.round(result.expires_in / 60)} min.`,
+        `Or re-run feedback(submit) with author="bot" to post anonymously instead.`,
+        ...kept,
+      ].join("\n"),
+      {
+        submitted: false,
+        code: "auth_required",
+        authRequired: true,
+        verification_uri: result.verification_uri,
+        user_code: result.user_code,
+        expires_in: result.expires_in,
+        ...pending,
+      },
+      {
+        kind: "feedback.auth_required",
+        requiredActions: ["surface_oauth_url_to_user"],
+        context: { verification_uri: result.verification_uri, user_code: result.user_code },
+      },
+    );
+  }
+
+  if (result.kind === "bot_unavailable") {
+    // Anonymous reports are signed by a hosted service so this package carries
+    // no credentials. The bytes are still good, so offer the two doors that do
+    // not need that service.
+    return directive(
+      [
+        `[FEEDBACK NOT POSTED - ANONYMOUS SUBMISSION UNAVAILABLE]`,
+        `${result.message}`,
+        ``,
+        `Anonymous reports are signed by a hosted service so this package`,
+        `carries no credentials. That service did not take the report.`,
+        ``,
+        `Nothing was posted. Two options for the user:`,
+        `  1. Open it manually (body prefilled): ${manualUrl}`,
+        `  2. Run \`npx ue-mcp auth\`, then re-run feedback(submit) with author="user".`,
+        ...kept,
+        ``,
+        `Surface both to the user; do not pick for them.`,
+      ].join("\n"),
+      {
+        submitted: false,
+        code: `bot_${result.code}`,
+        target_repo: slug,
+        manual_url: manualUrl,
+        ...(result.retryAfter ? { retry_after: result.retryAfter } : {}),
+        ...pending,
+      },
+      {
+        kind: "feedback.blocked",
+        requiredActions: ["surface_manual_issue_url_to_user", "offer_user_authored_submission"],
+        context: { code: `bot_${result.code}` },
+      },
+    );
+  }
+
+  // repo_unavailable. Re-aiming an approved body at another tracker without
+  // asking would post it somewhere the user did not agree to.
+  return directive(
+    [
+      `[FEEDBACK NOT POSTED - TRACKER REFUSED THE ISSUE]`,
+      `${result.repo} returned HTTP ${result.status}. Issues may be disabled there,`,
+      `or your account cannot open them on that repo.`,
+      ``,
+      `Nothing was posted anywhere. Two options for the user:`,
+      `  1. Open it manually (body prefilled): ${manualUrl}`,
+      `  2. Re-run feedback(submit) with repo="${repoSlug(CORE_REPO)}" to file it on ue-mcp core.`,
+      ...kept,
+      ``,
+      `Surface both to the user; do not pick for them.`,
+    ].join("\n"),
+    {
+      submitted: false,
+      code: "repo_unavailable",
+      target_repo: result.repo,
+      status: result.status,
+      manual_url: manualUrl,
+      ...pending,
+    },
+    {
+      kind: "feedback.blocked",
+      requiredActions: ["surface_manual_issue_url_to_user", "offer_core_tracker_fallback"],
+      context: { code: "repo_unavailable", target_repo: result.repo, status: result.status },
+    },
+  );
+}
+
 /**
  * Second half of the confirmation-token path (#991).
  *
@@ -512,9 +679,9 @@ async function submitWithConfirmToken(ctx: ToolContext, token: string) {
 
   const repo = parseRepoSlug(entry.repo ?? null) ?? CORE_REPO;
   const useBot = entry.author === "bot";
-  const manualUrl = newIssueUrl(repo, entry.title, entry.body);
 
   if (!useBot && !(await readUserAuth())) {
+    const manualUrl = newIssueUrl(repo, entry.title, entry.body);
     return directive(
       [
         `[FEEDBACK NOT SUBMITTED - GITHUB AUTH REQUIRED]`,
@@ -540,51 +707,422 @@ async function submitWithConfirmToken(ctx: ToolContext, token: string) {
   }
 
   const result = await submitFeedback(entry.title, entry.body, entry.labels, { useBot, repo });
+  return renderSubmitResult(ctx, result, {
+    repo,
+    title: entry.title,
+    body: entry.body,
+    labels: entry.labels,
+    via: "confirm-token",
+    pendingId: entry.id,
+    extra: { confirmed_via: "confirm_token" },
+  });
+}
 
-  if (result.kind !== "submitted") {
-    // Keep the saved report and the token alive: the post failed for reasons
-    // that may clear (tracker closed, signing service down, token revoked),
-    // and discarding the user's approval on a transient failure is how a
-    // report gets lost twice.
+/** A report that passed validation, routed, assembled and scrubbed. */
+interface PreparedSubmission {
+  payload: AssembledPayload;
+  routing: RoutingDecision | null;
+  targetRepo: GitHubRepo;
+  useBot: boolean;
+  authorPromptLine: string;
+  /** Save the report to disk for the three doors (#991). */
+  saveFallback: (reason: string) => FallbackReport;
+}
+
+/**
+ * Defer mode: the user opted out of the elicitation gate with
+ * `npx ue-mcp feedback mode defer` (or the env override). The scrubbed
+ * payload waits in ~/.ue-mcp/pending-feedback/ for `feedback list/approve`.
+ */
+function submitDefer(ctx: ToolContext, s: PreparedSubmission) {
+  const entry = deferSubmission(
+    {
+      title: s.payload.title,
+      body: s.payload.body,
+      labels: labelsForRepo(s.payload.labels, s.targetRepo),
+      repo: repoSlug(s.targetRepo),
+      routing: routingLine(s.routing, s.targetRepo),
+    },
+    ctx.project?.projectName ?? null,
+    s.useBot ? "bot" : "user",
+  );
+  clearWorkarounds(ctx);
+  return {
+    message: `Feedback deferred locally for later review (id ${entry.id}), aimed at ${repoSlug(s.targetRepo)}.`,
+    deferred: true,
+    id: entry.id,
+    createdAt: entry.createdAt,
+    mode: "defer",
+    target_repo: repoSlug(s.targetRepo),
+    routing: routingLine(s.routing, s.targetRepo),
+    review_with: "npx ue-mcp feedback list",
+  };
+}
+
+/**
+ * Auto-approve mode: post the scrubbed body with no prompt. Opt-in via
+ * config or env only; the agent has no surface to set it.
+ */
+async function submitAutoApprove(ctx: ToolContext, s: PreparedSubmission) {
+  const post = (repo: GitHubRepo) =>
+    submitFeedback(s.payload.title, s.payload.body, labelsForRepo(s.payload.labels, repo), { useBot: s.useBot, repo });
+  let postedTo = s.targetRepo;
+  let result = await post(postedTo);
+  if (result.kind === "repo_unavailable" && !sameRepo(postedTo, CORE_REPO)) {
+    // Nobody is at the keyboard in this mode. Losing the report because a
+    // plugin tracker is closed is worse than filing it on core, where the
+    // routing section still names the real owner.
+    warn("feedback", `${result.repo} refused the issue (HTTP ${result.status}); falling back to ue-mcp core`);
+    postedTo = CORE_REPO;
+    result = await post(postedTo);
+  }
+  return renderSubmitResult(ctx, result, {
+    repo: postedTo,
+    title: s.payload.title,
+    body: s.payload.body,
+    labels: labelsForRepo(s.payload.labels, postedTo),
+    via: "auto-approve",
+    extra: {
+      routing: routingLine(s.routing, postedTo),
+      ...(sameRepo(postedTo, s.targetRepo) ? {} : { fell_back_to_core: true }),
+      mode: "auto-approve",
+    },
+  });
+}
+
+/**
+ * Interactive mode (default): block on an elicitation form that shows the
+ * user the exact payload, and post only what they accepted.
+ */
+async function submitInteractive(ctx: ToolContext, s: PreparedSubmission) {
+  const { payload, routing } = s;
+  let targetRepo = s.targetRepo;
+  // #772: a client that never renders the form still answers, and it answers
+  // instantly. Time the round trip so an auto-decline can be reported as "no
+  // form was shown" instead of being blamed on the user.
+  const elicitStartedAt = Date.now();
+
+  // A second tracker only appears in the form when there actually is one to
+  // choose. With no plugin candidate the schema is a single optional field.
+  const altCandidate = routing?.target === "plugin"
+    ? routing.suggestions.find((c) => c.repo) ?? null
+    : (routing?.suggestions ?? []).find((c) => c.repo) ?? null;
+  const altRepo: GitHubRepo | null =
+    routing?.target === "plugin" ? CORE_REPO : (altCandidate?.repo ?? null);
+  const altLabel =
+    routing?.target === "plugin"
+      ? `${repoSlug(CORE_REPO)} (ue-mcp core)`
+      : altCandidate
+        ? `${repoSlug(altCandidate.repo!)} (${altCandidate.name})`
+        : "";
+
+  let elicitResult;
+  try {
+    // The caller checked the capability, so the gate exists here.
+    elicitResult = await ctx.elicit!({
+      message: buildApprovalMessage(payload, s.authorPromptLine, targetRepo, routing),
+      // The form's own Accept and Decline carry the decision. The one field
+      // is optional revisions:
+      //
+      //   Decline / cancel         -> discard
+      //   Accept, empty revisions  -> post the body as shown
+      //   Accept, revisions filled -> notes go back to the agent; nothing
+      //                               posts until a fresh approval
+      requestedSchema: {
+        type: "object",
+        properties: {
+          revisions: {
+            type: "string",
+            title: "Submit with revisions (optional)",
+            description:
+              "Leave EMPTY and click Accept to submit the body as shown. Fill in to ask the agent to rewrite the body per these notes - nothing posts until you re-approve the revised body. Click Decline to discard.",
+          },
+          // Tracker override. The body is identical either way: the routing
+          // section states what was matched, not where it landed.
+          ...(altRepo
+            ? {
+                destination: {
+                  type: "string" as const,
+                  title: "Tracker",
+                  description: `Where the issue is filed. Defaults to ${repoSlug(targetRepo)}.`,
+                  enum: [repoSlug(targetRepo), repoSlug(altRepo)],
+                  enumNames: [
+                    `${repoSlug(targetRepo)}${routing?.target === "plugin" ? ` (${routing.candidate?.name})` : " (ue-mcp core)"}`,
+                    altLabel,
+                  ],
+                  default: repoSlug(targetRepo),
+                },
+              }
+            : {}),
+        },
+      },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // The client took the request and threw. No human saw anything, so the
+    // report goes to disk and comes back as a link (#991).
+    const report = s.saveFallback(`client rejected the elicitation request: ${msg}`);
+    return elicitationFallbackDirective(
+      `[FEEDBACK NOT SUBMITTED - APPROVAL PROMPT FAILED]`,
+      [
+        `The MCP client rejected the elicitation request: ${msg}`,
+        `Nobody saw a form, so this is NOT the user refusing.`,
+      ],
+      report,
+      targetRepo,
+      "elicitation_failed",
+      { message: msg },
+    );
+  }
+
+  const revisions =
+    typeof elicitResult.content?.revisions === "string"
+      ? elicitResult.content.revisions.trim()
+      : "";
+
+  // Honour a tracker flip, but only to one of the two repos the form offered.
+  const chosen =
+    typeof elicitResult.content?.destination === "string"
+      ? elicitResult.content.destination.trim()
+      : "";
+  if (chosen && altRepo && chosen === repoSlug(altRepo)) {
+    targetRepo = altRepo;
+  }
+
+  if (elicitResult.action !== "accept") {
+    // #772: no human reads a form and clicks Decline in under a second. A
+    // response that fast means the client resolved the request itself.
+    const elapsedMs = Date.now() - elicitStartedAt;
+    // Overridable so both branches are testable without sleeping, and so an
+    // operator on a slow-but-real client can tune it. 0 disables it.
+    const configured = Number(readEnv("elicitMinHumanMs"));
+    const noHumanCouldRespondMs = Number.isFinite(configured) && configured >= 0 ? configured : 1000;
+    if (noHumanCouldRespondMs > 0 && elapsedMs < noHumanCouldRespondMs) {
+      // #991: without a saved report this answer led nowhere on a client that
+      // cannot render the form, and the report was lost.
+      const report = s.saveFallback(
+        `client auto-answered "${elicitResult.action}" in ${elapsedMs}ms without rendering a form`,
+      );
+      return elicitationFallbackDirective(
+        `[FEEDBACK NOT SUBMITTED - NO APPROVAL FORM WAS SHOWN]`,
+        [
+          `The MCP client answered "${elicitResult.action}" in ${elapsedMs}ms, which is too fast for a human to have seen a form.`,
+          `Treat this as the client not supporting or not rendering elicitation, NOT as the user refusing.`,
+        ],
+        report,
+        targetRepo,
+        "form_not_presented",
+        { action: elicitResult.action, elapsedMs },
+      );
+    }
+
+    const reasonCode =
+      elicitResult.action === "decline"
+        ? "user_declined_form"
+        : elicitResult.action === "cancel"
+          ? "user_cancelled"
+          : "user_did_not_approve";
     return directive(
       [
-        `[FEEDBACK CONFIRMED BUT NOT POSTED]`,
-        `The token was valid and the post was attempted, but GitHub did not take it`,
-        `(${result.kind}).`,
+        `[FEEDBACK NOT SUBMITTED - USER DECLINED]`,
+        `Reason: ${reasonCode} (action="${elicitResult.action}")`,
         ``,
-        `The report is still saved as ${entry.id} and the token still works.`,
-        `Open it manually instead (body prefilled): ${manualUrl}`,
+        `The user reviewed the prompt and clicked Decline. Do not retry.`,
+        `Resume the user's task.`,
       ].join("\n"),
+      { submitted: false, code: reasonCode, action: elicitResult.action },
       {
-        submitted: false,
-        code: result.kind,
-        pending_id: entry.id,
-        manual_url: manualUrl,
-        target_repo: repoSlug(repo),
-      },
-      {
-        kind: "feedback.blocked",
-        requiredActions: ["surface_manual_issue_url_to_user"],
-        context: { code: result.kind, pending_id: entry.id },
+        kind: "feedback.declined",
+        requiredActions: ["do_not_retry_feedback_submit", "resume_user_task"],
+        context: { code: reasonCode, action: elicitResult.action },
       },
     );
   }
 
-  deleteDeferred(entry.id);
-  deleteFallbackReport(entry.id);
-  clearWorkarounds(ctx);
+  if (revisions) {
+    // Approved in principle, but the body is to be rewritten first. The
+    // agent revises and calls again, which shows a fresh approval prompt.
+    return directive(
+      [
+        `[FEEDBACK NEEDS REVISION BEFORE SUBMIT]`,
+        ``,
+        `The user approved in principle but filled in the revisions field.`,
+        `Nothing has been posted. Revision notes from the user:`,
+        ``,
+        revisions,
+        ``,
+        `Revise the title/summary/pythonWorkaround/idealTool to address`,
+        `these notes and call feedback(submit) again. The user will see`,
+        `a fresh approval prompt for the revised body.`,
+      ].join("\n"),
+      {
+        submitted: false,
+        code: "revisions_requested",
+        revisions,
+      },
+      {
+        kind: "feedback.revisions_requested",
+        requiredActions: [
+          "revise_submission_per_user_notes",
+          "call_feedback_submit_again_with_revised_payload",
+        ],
+        context: { revisions },
+      },
+    );
+  }
 
-  return {
-    message: `Feedback submitted to ${repoSlug(repo)} as ${result.authoredAs === "user" ? `@${result.authoredBy}` : "bot"} (confirmed by token).`,
-    issue_url: result.url,
-    issue_number: result.number,
-    authored_by: result.authoredBy,
-    authored_as: result.authoredAs,
-    labels: entry.labels,
-    target_repo: repoSlug(repo),
-    confirmed_via: "confirm_token",
-    pending_id: entry.id,
+  // The bytes the user saw are the bytes posted, under the authorship the
+  // prompt promised.
+  const labels = labelsForRepo(payload.labels, targetRepo);
+  const result = await submitFeedback(payload.title, payload.body, labels, { useBot: s.useBot, repo: targetRepo });
+  return renderSubmitResult(ctx, result, {
+    repo: targetRepo,
+    title: payload.title,
+    body: payload.body,
+    labels,
+    via: "approval",
+    extra: { routing: routingLine(routing, targetRepo) },
+  });
+}
+
+/** feedback(submit): validate, route and assemble, then hand off by mode. */
+async function submit(ctx: ToolContext, params: Record<string, unknown>) {
+  // #991: a token the user read out of a saved report posts the STORED bytes,
+  // not whatever is in params now, so the body cannot drift after approval.
+  const confirmToken = (params.confirmToken as string | undefined) ?? "";
+  if (confirmToken.trim()) {
+    return submitWithConfirmToken(ctx, confirmToken.trim());
+  }
+
+  const title = (params.title as string | undefined) ?? "";
+  const summary = (params.summary as string | undefined) ?? "";
+  const pythonWorkaround = params.pythonWorkaround as string | undefined;
+  const idealTool = params.idealTool as string | undefined;
+  // Enum, default "user" per the schema. Missing == "user".
+  const author: AuthorIntent = params.author === "bot" ? "bot" : "user";
+
+  const rejection = validateSubmission(title, summary, pythonWorkaround, idealTool, getWorkarounds(ctx).length);
+  if (rejection) {
+    clearWorkarounds(ctx);
+    return directive(
+      [
+        `[FEEDBACK REJECTED - DO NOT RETRY]`,
+        `Reason (${rejection.code}): ${rejection.message}`,
+        ``,
+        `This was rejected only for being placeholder/spam-shaped, not for lacking`,
+        `a python workaround (none is required). Do NOT call feedback(submit) again`,
+        `with a modified title, a placeholder, or a meta-apology issue. If you have a`,
+        `genuine, specific gap to report, file it once with a real title and summary;`,
+        `otherwise move on with the user's actual task.`,
+      ].join("\n"),
+      { submitted: false, code: rejection.code, message: rejection.message },
+      {
+        kind: "feedback.rejected",
+        requiredActions: ["do_not_retry_feedback_submit", "resume_user_task"],
+        context: { code: rejection.code },
+      },
+    );
+  }
+
+  // Auto-approve and defer opt out of the elicitation gate, so only
+  // interactive mode needs the client to support it.
+  const mode = resolveFeedbackMode(ctx);
+
+  // Never fatal: a registry that is down or unreachable resolves to core.
+  let routing: RoutingDecision | null = null;
+  try {
+    routing = await resolveRouting(ctx, { title, summary, idealTool, repo: params.repo as string | undefined });
+  } catch (e) {
+    warn("feedback", "routing lookup failed; filing against ue-mcp core", e);
+  }
+  const targetRepo: GitHubRepo = routing?.repo ?? CORE_REPO;
+
+  const payload = assemblePayload(
+    title,
+    summary,
+    pythonWorkaround,
+    idealTool,
+    {
+      projectRoot: ctx.project?.projectDir ?? undefined,
+      projectName: ctx.project?.projectName ?? undefined,
+      ...otherSessionIdentifiers(ctx),
+    },
+    routing,
+    ctx,
+  );
+
+  const saveFallback = (reason: string): FallbackReport =>
+    writeFallbackReport({
+      title: payload.title,
+      body: payload.body,
+      labels: labelsForRepo(payload.labels, targetRepo),
+      repo: targetRepo,
+      routing: routingLine(routing, targetRepo),
+      project: ctx.project?.projectName ?? null,
+      author,
+      reason,
+    });
+
+  // Asked as a capability, not as "is there a function": the server builds
+  // the gate before any client connects, so ctx.elicit is always defined.
+  if (mode === "interactive" && !clientAdvertisesElicitation(ctx.elicit)) {
+    const report = saveFallback("client did not advertise the elicitation capability");
+    return elicitationFallbackDirective(
+      `[FEEDBACK NOT SUBMITTED - NO APPROVAL CHANNEL]`,
+      [
+        `This MCP client did not advertise the \`elicitation\` capability, so the`,
+        `server cannot show the user the approval form for posting to a public`,
+        `tracker. That is a client limitation, NOT the user refusing.`,
+      ],
+      report,
+      targetRepo,
+      "elicitation_unsupported",
+      { message: "MCP client did not advertise the elicitation capability" },
+    );
+  }
+
+  // author="user" needs a cached token; never silently substitute the bot.
+  let authorPromptLine = "ue-mcp-feedback bot (anonymous)";
+  if (author === "user") {
+    const cached = await readUserAuth();
+    if (!cached) {
+      return directive(
+        [
+          `[FEEDBACK BLOCKED - GITHUB AUTH REQUIRED]`,
+          `author="user" requires a cached GitHub OAuth token, and none is cached on this machine.`,
+          ``,
+          `Either:`,
+          `  - Run \`npx ue-mcp auth\` to authorize as your GitHub user, then re-call`,
+          `  - Re-call feedback(submit) with author="bot" to post anonymously instead`,
+          ``,
+          `Nothing was posted.`,
+        ].join("\n"),
+        {
+          submitted: false,
+          code: "auth_required",
+          message: "GitHub OAuth token required for author=\"user\".",
+        },
+        {
+          kind: "feedback.blocked",
+          requiredActions: ["run_npx_ue_mcp_auth_or_call_with_author_bot"],
+          context: { code: "auth_required" },
+        },
+      );
+    }
+    authorPromptLine = `your GitHub user @${cached.login}`;
+  }
+
+  const prepared: PreparedSubmission = {
+    payload,
+    routing,
+    targetRepo,
+    useBot: author === "bot",
+    authorPromptLine,
+    saveFallback,
   };
+  if (mode === "defer") return submitDefer(ctx, prepared);
+  if (mode === "auto-approve") return submitAutoApprove(ctx, prepared);
+  return submitInteractive(ctx, prepared);
 }
 
 export const feedbackTool: ToolDef = categoryTool(
@@ -596,627 +1134,7 @@ export const feedbackTool: ToolDef = categoryTool(
       effect: "mutate",
       description:
         "Submit feedback about a tool gap (missing action, wrong behavior, crash, or a case you had to work around). Provide a specific title and a summary; pythonWorkaround and idealTool are optional enrichment, not prerequisites. Checks the plugin registry first and files against the owning plugin's repo when one matches, then blocks on an MCP elicitation prompt that asks the USER (not the agent) to approve or decline the exact payload - and to override the tracker - before anything is posted to GitHub. If the client cannot show that form (it never advertised elicitation, it throws, or it auto-answers in milliseconds without rendering anything), nothing is lost: the report is written to disk and the result carries a prefilled GitHub issue URL for the user to click. Params: title, summary, pythonWorkaround?, idealTool?, author?, repo?, confirmToken?",
-      handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
-        // ── Confirmation-token path (#991) ───────────────────────
-        // The elicitation gate could not reach a human on an earlier call,
-        // so the payload was written to disk with a token in the report
-        // file. The user read that token out and the agent is handing it
-        // back. Post the STORED bytes, not whatever is in params now: the
-        // token authorizes what the user actually read, and re-assembling
-        // from params would let the body drift between approval and post.
-        const confirmToken = (params.confirmToken as string | undefined) ?? "";
-        if (confirmToken.trim()) {
-          return submitWithConfirmToken(ctx, confirmToken.trim());
-        }
-
-        const title = (params.title as string | undefined) ?? "";
-        const summary = (params.summary as string | undefined) ?? "";
-        const pythonWorkaround = params.pythonWorkaround as string | undefined;
-        const idealTool = params.idealTool as string | undefined;
-        // Enum, default "user" per the schema. Missing == "user".
-        const author: AuthorIntent = params.author === "bot" ? "bot" : "user";
-
-        const sessionWorkarounds = getWorkarounds(ctx);
-        const rejection = validateSubmission(
-          title,
-          summary,
-          pythonWorkaround,
-          idealTool,
-          sessionWorkarounds.length,
-        );
-        if (rejection) {
-          clearWorkarounds(ctx);
-          return directive(
-            [
-              `[FEEDBACK REJECTED - DO NOT RETRY]`,
-              `Reason (${rejection.code}): ${rejection.message}`,
-              ``,
-              `This was rejected only for being placeholder/spam-shaped, not for lacking`,
-              `a python workaround (none is required). Do NOT call feedback(submit) again`,
-              `with a modified title, a placeholder, or a meta-apology issue. If you have a`,
-              `genuine, specific gap to report, file it once with a real title and summary;`,
-              `otherwise move on with the user's actual task.`,
-            ].join("\n"),
-            { submitted: false, code: rejection.code, message: rejection.message },
-            {
-              kind: "feedback.rejected",
-              requiredActions: ["do_not_retry_feedback_submit", "resume_user_task"],
-              context: { code: rejection.code },
-            },
-          );
-        }
-
-        // Resolve mode BEFORE checking for elicit. In interactive mode the
-        // missing elicit capability is a hard block. In auto-approve or
-        // defer modes the user has explicitly opted out of the elicitation
-        // gate, so elicit support is irrelevant.
-        const mode = resolveFeedbackMode(ctx);
-
-        // ── Routing ────────────────────────────────────────────────
-        // Work out whether a published plugin owns the surface being
-        // reported before assembling anything. Never fatal: a registry
-        // that is down, slow, or unreachable resolves to core, which is
-        // the behaviour that existed before routing did.
-        let routing: RoutingDecision | null = null;
-        try {
-          routing = await resolveRouting(ctx, { title, summary, idealTool, repo: params.repo as string | undefined });
-        } catch (e) {
-          warn("feedback", "routing lookup failed; filing against ue-mcp core", e);
-        }
-        let targetRepo: GitHubRepo = routing?.repo ?? CORE_REPO;
-
-        const payload = assemblePayload(
-          title,
-          summary,
-          pythonWorkaround,
-          idealTool,
-          {
-            projectRoot: ctx.project?.projectDir ?? undefined,
-            projectName: ctx.project?.projectName ?? undefined,
-            ...otherSessionIdentifiers(ctx),
-          },
-          routing,
-          ctx,
-        );
-
-        // Everything below needs a channel to the human. Bundle the "save the
-        // report and hand back a link" fallback once so all three
-        // unreachable-gate cases produce the same three doors (#991).
-        const saveFallback = (reason: string): FallbackReport =>
-          writeFallbackReport({
-            title: payload.title,
-            body: payload.body,
-            labels: labelsForRepo(payload.labels, targetRepo),
-            repo: targetRepo,
-            routing: routingLine(routing, targetRepo),
-            project: ctx.project?.projectName ?? null,
-            author,
-            reason,
-          });
-
-        // The client never advertised elicitation, so there is no form to
-        // show. Previously a dead end; now it degrades to the fallback, which
-        // needs nothing from the client at all.
-        //
-        // Asked as a capability, not as "is there a function". The server
-        // builds the gate at startup, before any client has connected, so
-        // ctx.elicit is defined for every client and testing it for undefined
-        // made this branch unreachable: a client that advertised nothing got
-        // the elicitation path and its error, rather than the fallback that
-        // needs nothing from it.
-        if (mode === "interactive" && !clientAdvertisesElicitation(ctx.elicit)) {
-          const report = saveFallback("client did not advertise the elicitation capability");
-          return elicitationFallbackDirective(
-            `[FEEDBACK NOT SUBMITTED - NO APPROVAL CHANNEL]`,
-            [
-              `This MCP client did not advertise the \`elicitation\` capability, so the`,
-              `server cannot show the user the approval form for posting to a public`,
-              `tracker. That is a client limitation, NOT the user refusing.`,
-            ],
-            report,
-            targetRepo,
-            "elicitation_unsupported",
-            { message: "MCP client did not advertise the elicitation capability" },
-          );
-        }
-
-        // Two independent checks: (1) capture intent above, (2) validate
-        // auth here. Auth validation only matters when intent is "user".
-        // If validation fails, return a normal error directive - there is
-        // no third "plan" state to model.
-        let authorPromptLine: string;
-        let useBotForSubmit: boolean;
-        if (author === "bot") {
-          authorPromptLine = "ue-mcp-feedback bot (anonymous)";
-          useBotForSubmit = true;
-        } else {
-          const cached = await readUserAuth();
-          if (!cached) {
-            return directive(
-              [
-                `[FEEDBACK BLOCKED - GITHUB AUTH REQUIRED]`,
-                `author="user" requires a cached GitHub OAuth token, and none is cached on this machine.`,
-                ``,
-                `Either:`,
-                `  - Run \`npx ue-mcp auth\` to authorize as your GitHub user, then re-call`,
-                `  - Re-call feedback(submit) with author="bot" to post anonymously instead`,
-                ``,
-                `Nothing was posted.`,
-              ].join("\n"),
-              {
-                submitted: false,
-                code: "auth_required",
-                message: "GitHub OAuth token required for author=\"user\".",
-              },
-              {
-                kind: "feedback.blocked",
-                requiredActions: ["run_npx_ue_mcp_auth_or_call_with_author_bot"],
-                context: { code: "auth_required" },
-              },
-            );
-          }
-          authorPromptLine = `your GitHub user @${cached.login}`;
-          useBotForSubmit = false;
-        }
-
-        // ── Defer mode ─────────────────────────────────────────────
-        // User has explicitly opted out of the elicitation gate via
-        // `npx ue-mcp feedback mode defer` (or the env override).
-        // Write the scrubbed payload to ~/.ue-mcp/pending-feedback/ for
-        // later review via `npx ue-mcp feedback list/approve/discard`.
-        if (mode === "defer") {
-          const entry = deferSubmission(
-            {
-              title: payload.title,
-              body: payload.body,
-              labels: labelsForRepo(payload.labels, targetRepo),
-              repo: repoSlug(targetRepo),
-              routing: routingLine(routing, targetRepo),
-            },
-            ctx.project?.projectName ?? null,
-            useBotForSubmit ? "bot" : "user",
-          );
-          clearWorkarounds(ctx);
-          return {
-            message: `Feedback deferred locally for later review (id ${entry.id}), aimed at ${repoSlug(targetRepo)}.`,
-            deferred: true,
-            id: entry.id,
-            createdAt: entry.createdAt,
-            mode: "defer",
-            target_repo: repoSlug(targetRepo),
-            routing: routingLine(routing, targetRepo),
-            review_with: "npx ue-mcp feedback list",
-          };
-        }
-
-        // ── Auto-approve mode ──────────────────────────────────────
-        // Skip the elicitation prompt entirely and post the scrubbed
-        // body. Opt-in via config/env only; the agent has no surface
-        // to set this.
-        if (mode === "auto-approve") {
-          let postedTo = targetRepo;
-          let result = await submitFeedback(
-            payload.title,
-            payload.body,
-            labelsForRepo(payload.labels, targetRepo),
-            { useBot: useBotForSubmit, repo: targetRepo },
-          );
-          if (result.kind === "repo_unavailable") {
-            // Nobody is at the keyboard in this mode. Losing the report
-            // because a plugin tracker is closed is worse than filing it on
-            // core, where the routing section still names the real owner.
-            warn("feedback", `${result.repo} refused the issue (HTTP ${result.status}); falling back to ue-mcp core`);
-            postedTo = CORE_REPO;
-            result = await submitFeedback(
-              payload.title,
-              payload.body,
-              labelsForRepo(payload.labels, CORE_REPO),
-              { useBot: useBotForSubmit, repo: CORE_REPO },
-            );
-          }
-          if (result.kind === "repo_unavailable") {
-            return {
-              message: `Feedback not posted: ${result.repo} refused the issue (HTTP ${result.status}).`,
-              submitted: false,
-              target_repo: result.repo,
-              manual_url: newIssueUrl(targetRepo, payload.title, payload.body),
-            };
-          }
-          if (result.kind === "bot_unavailable") {
-            // Anonymous submission goes through the hosted signing service, and
-            // it is not answering. The body is already assembled and scrubbed,
-            // so hand back the prefilled URL rather than dropping the report.
-            return {
-              message: `Feedback not posted: anonymous submission is unavailable. ${result.message}`,
-              submitted: false,
-              code: `bot_${result.code}`,
-              target_repo: repoSlug(postedTo),
-              manual_url: newIssueUrl(targetRepo, payload.title, payload.body),
-              hint: `Run \`npx ue-mcp auth\` and re-run with author="user" to post without the anonymous path.`,
-            };
-          }
-          if (result.kind === "auth_required") {
-            return directive(
-              [
-                `[FEEDBACK BLOCKED - CACHED GITHUB TOKEN REJECTED]`,
-                ``,
-                `Auto-approve mode tried to post as your user but GitHub`,
-                `rejected the cached token (revoked or expired). Re-authorize`,
-                `with \`npx ue-mcp auth\` or switch to author="bot".`,
-              ].join("\n"),
-              {
-                submitted: false,
-                authRequired: true,
-                verification_uri: result.verification_uri,
-                user_code: result.user_code,
-                expires_in: result.expires_in,
-              },
-              {
-                kind: "feedback.auth_required",
-                requiredActions: ["surface_oauth_url_to_user"],
-                context: {
-                  verification_uri: result.verification_uri,
-                  user_code: result.user_code,
-                },
-              },
-            );
-          }
-          clearWorkarounds(ctx);
-          return {
-            message: `Feedback auto-approved and submitted to ${repoSlug(postedTo)} as ${result.authoredAs === "user" ? `@${result.authoredBy}` : "bot"} (auto-approve mode).`,
-            issue_url: result.url,
-            issue_number: result.number,
-            authored_by: result.authoredBy,
-            authored_as: result.authoredAs,
-            labels: labelsForRepo(payload.labels, postedTo),
-            target_repo: repoSlug(postedTo),
-            routing: routingLine(routing, postedTo),
-            ...(sameRepo(postedTo, targetRepo) ? {} : { fell_back_to_core: true }),
-            mode: "auto-approve",
-          };
-        }
-
-        // ── Interactive mode (default): elicitation gate ───────────
-        // NOTE: ctx.elicit is guaranteed defined here. The capability check
-        // above returns for interactive mode when the client advertised no
-        // elicitation, and a missing gate is one of the states that check
-        // reports as "cannot be asked", so nothing reaches here without one.
-        let elicitResult;
-        // #772: a client that never renders the form still answers, and it
-        // answers instantly. Time the round trip so an auto-decline can be
-        // reported as "no form was shown" instead of being blamed on the user,
-        // who in the reported case never saw anything at all.
-        const elicitStartedAt = Date.now();
-
-        // A second tracker only appears in the form when there actually is
-        // one to choose. With no plugin candidate the schema is exactly what
-        // it always was: a single optional revisions field.
-        const altCandidate = routing?.target === "plugin"
-          ? routing.suggestions.find((s) => s.repo) ?? null
-          : (routing?.suggestions ?? []).find((s) => s.repo) ?? null;
-        const altRepo: GitHubRepo | null =
-          routing?.target === "plugin" ? CORE_REPO : (altCandidate?.repo ?? null);
-        const altLabel =
-          routing?.target === "plugin"
-            ? `${repoSlug(CORE_REPO)} (ue-mcp core)`
-            : altCandidate
-              ? `${repoSlug(altCandidate.repo!)} (${altCandidate.name})`
-              : "";
-
-        try {
-          elicitResult = await ctx.elicit!({
-            message: buildApprovalMessage(payload, authorPromptLine, targetRepo, routing),
-            // Radio semantics on `decision` (two-value enum, mutually
-            // exclusive by schema). Filling the `revisions` text field is
-            // its own choice and takes precedence over `decision` - no
-            // extra checkbox to tick. Three outcomes the user can express:
-            //
-            //   decision = submit, revisions empty   → post the body as shown
-            //   decision = reject, revisions empty   → discard
-            //   revisions non-empty (any decision)   → return notes to the
-            //                                          agent for a body
-            //                                          rewrite; nothing posts
-            //                                          until re-approval
-            //
-            // Form-level Decline/cancel always declines, regardless of
-            // field values.
-            // The form-level Accept / Decline buttons are Claude Code's
-            // built-in form actions - they carry the submit/discard
-            // decision. We only need ONE field in the schema, for the
-            // optional revisions text. The three outcomes:
-            //
-            //   form Decline / cancel    → discard
-            //   form Accept, empty text  → submit the body as shown
-            //   form Accept, text filled → return notes to the agent;
-            //                              nothing posts until re-approval
-            requestedSchema: {
-              type: "object",
-              properties: {
-                revisions: {
-                  type: "string",
-                  title: "Submit with revisions (optional)",
-                  description:
-                    "Leave EMPTY and click Accept to submit the body as shown. Fill in to ask the agent to rewrite the body per these notes - nothing posts until you re-approve the revised body. Click Decline to discard.",
-                },
-                // Tracker override. The body is identical either way - the
-                // routing section states what was matched, not where it
-                // landed - so flipping this cannot change the bytes you
-                // just read.
-                ...(altRepo
-                  ? {
-                      destination: {
-                        type: "string" as const,
-                        title: "Tracker",
-                        description: `Where the issue is filed. Defaults to ${repoSlug(targetRepo)}.`,
-                        enum: [repoSlug(targetRepo), repoSlug(altRepo)],
-                        enumNames: [
-                          `${repoSlug(targetRepo)}${routing?.target === "plugin" ? ` (${routing.candidate?.name})` : " (ue-mcp core)"}`,
-                          altLabel,
-                        ],
-                        default: repoSlug(targetRepo),
-                      },
-                    }
-                  : {}),
-              },
-            },
-          });
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          // The client took the elicitation request and threw. Same practical
-          // outcome as never supporting it: no human saw anything, so the
-          // report goes to disk and comes back as a link (#991).
-          const report = saveFallback(`client rejected the elicitation request: ${msg}`);
-          return elicitationFallbackDirective(
-            `[FEEDBACK NOT SUBMITTED - APPROVAL PROMPT FAILED]`,
-            [
-              `The MCP client rejected the elicitation request: ${msg}`,
-              `Nobody saw a form, so this is NOT the user refusing.`,
-            ],
-            report,
-            targetRepo,
-            "elicitation_failed",
-            { message: msg },
-          );
-        }
-
-        const revisions =
-          typeof elicitResult.content?.revisions === "string"
-            ? elicitResult.content.revisions.trim()
-            : "";
-
-        // Honour a tracker flip, but only to one of the two repos the form
-        // actually offered. Anything else is ignored and the default stands.
-        const chosen =
-          typeof elicitResult.content?.destination === "string"
-            ? elicitResult.content.destination.trim()
-            : "";
-        if (chosen && altRepo && chosen === repoSlug(altRepo)) {
-          targetRepo = altRepo;
-        }
-
-        // form-level Accept = submit. form-level Decline/cancel = discard.
-        // Revisions text presence routes to the rewrite path on Accept.
-        if (elicitResult.action !== "accept") {
-          // #772: no human reads a form and clicks Decline in under a second.
-          // A response that fast means the client resolved the elicitation
-          // itself without presenting anything, so saying "the user reviewed
-          // the prompt and clicked Decline" is a false statement about someone
-          // who was never asked - and it told the agent not to retry, leaving
-          // no way to submit at all.
-          const elapsedMs = Date.now() - elicitStartedAt;
-          // Overridable so both branches are testable without sleeping, and so
-          // an operator on a slow-but-real client can tune it. 0 disables the
-          // heuristic entirely.
-          const configured = Number(process.env.UE_MCP_ELICIT_MIN_HUMAN_MS);
-          const NoHumanCouldRespondMs = Number.isFinite(configured) && configured >= 0 ? configured : 1000;
-          if (NoHumanCouldRespondMs > 0 && elapsedMs < NoHumanCouldRespondMs) {
-            // #991: the detection above was right and still lost the report.
-            // Eight detailed reports died here in one week because the only
-            // thing on the other side of it was "ask the user in plain text",
-            // which leads nowhere on a client that cannot render the form.
-            const report = saveFallback(
-              `client auto-answered "${elicitResult.action}" in ${elapsedMs}ms without rendering a form`,
-            );
-            return elicitationFallbackDirective(
-              `[FEEDBACK NOT SUBMITTED - NO APPROVAL FORM WAS SHOWN]`,
-              [
-                `The MCP client answered "${elicitResult.action}" in ${elapsedMs}ms, which is too fast for a human to have seen a form.`,
-                `Treat this as the client not supporting or not rendering elicitation, NOT as the user refusing.`,
-              ],
-              report,
-              targetRepo,
-              "form_not_presented",
-              { action: elicitResult.action, elapsedMs },
-            );
-          }
-
-          const reasonCode =
-            elicitResult.action === "decline"
-              ? "user_declined_form"
-              : elicitResult.action === "cancel"
-                ? "user_cancelled"
-                : "user_did_not_approve";
-          return directive(
-            [
-              `[FEEDBACK NOT SUBMITTED - USER DECLINED]`,
-              `Reason: ${reasonCode} (action="${elicitResult.action}")`,
-              ``,
-              `The user reviewed the prompt and clicked Decline. Do not retry.`,
-              `Resume the user's task.`,
-            ].join("\n"),
-            { submitted: false, code: reasonCode, action: elicitResult.action },
-            {
-              kind: "feedback.declined",
-              requiredActions: ["do_not_retry_feedback_submit", "resume_user_task"],
-              context: { code: reasonCode, action: elicitResult.action },
-            },
-          );
-        }
-
-        if (revisions) {
-          // The user accepted the principle but wants the body rewritten
-          // before anything posts. Hand the notes back to the agent; agent
-          // revises the params and calls feedback(submit) again to surface
-          // a fresh approval prompt for the revised body.
-          return directive(
-            [
-              `[FEEDBACK NEEDS REVISION BEFORE SUBMIT]`,
-              ``,
-              `The user approved in principle but filled in the revisions field.`,
-              `Nothing has been posted. Revision notes from the user:`,
-              ``,
-              revisions,
-              ``,
-              `Revise the title/summary/pythonWorkaround/idealTool to address`,
-              `these notes and call feedback(submit) again. The user will see`,
-              `a fresh approval prompt for the revised body.`,
-            ].join("\n"),
-            {
-              submitted: false,
-              code: "revisions_requested",
-              revisions,
-            },
-            {
-              kind: "feedback.revisions_requested",
-              requiredActions: [
-                "revise_submission_per_user_notes",
-                "call_feedback_submit_again_with_revised_payload",
-              ],
-              context: { revisions },
-            },
-          );
-        }
-
-        // ── Submit ──────────────────────────────────────────────────
-        // The exact bytes the user saw in the elicitation prompt are the
-        // exact bytes we POST, and the authorship we promised at the prompt
-        // is the authorship we use here.
-        const result = await submitFeedback(
-          payload.title,
-          payload.body,
-          labelsForRepo(payload.labels, targetRepo),
-          { useBot: useBotForSubmit, repo: targetRepo },
-        );
-
-        if (result.kind === "bot_unavailable") {
-          // The user approved an anonymous post and the hosted signing service
-          // could not make one. The approved bytes are still good, so give them
-          // the two doors that do not need that service.
-          const manualUrl = newIssueUrl(targetRepo, payload.title, payload.body);
-          return directive(
-            [
-              `[FEEDBACK APPROVED BUT NOT POSTED - ANONYMOUS SUBMISSION UNAVAILABLE]`,
-              `${result.message}`,
-              ``,
-              `Anonymous reports are signed by a hosted service so this package`,
-              `carries no credentials. That service did not take the report.`,
-              ``,
-              `Nothing was posted. Two options for the user:`,
-              `  1. Open it manually (body prefilled): ${manualUrl}`,
-              `  2. Run \`npx ue-mcp auth\`, then re-run feedback(submit) with author="user".`,
-              ``,
-              `Surface both to the user; do not pick for them.`,
-            ].join("\n"),
-            {
-              submitted: false,
-              code: `bot_${result.code}`,
-              target_repo: repoSlug(targetRepo),
-              manual_url: manualUrl,
-              ...(result.retryAfter ? { retry_after: result.retryAfter } : {}),
-            },
-            {
-              kind: "feedback.blocked",
-              requiredActions: ["surface_manual_issue_url_to_user", "offer_user_authored_submission"],
-              context: { code: `bot_${result.code}` },
-            },
-          );
-        }
-
-        if (result.kind === "repo_unavailable") {
-          // The user approved this exact body for this exact tracker and that
-          // tracker said no. Re-aiming it at core without asking would post
-          // content to a place they did not agree to, so hand back the two
-          // honest options instead.
-          const manualUrl = newIssueUrl(targetRepo, payload.title, payload.body);
-          return directive(
-            [
-              `[FEEDBACK APPROVED BUT NOT POSTED - TRACKER REFUSED THE ISSUE]`,
-              `${result.repo} returned HTTP ${result.status}. Issues may be disabled there,`,
-              `or your account cannot open them on that repo.`,
-              ``,
-              `Nothing was posted anywhere. Two options for the user:`,
-              `  1. Open it manually (body prefilled): ${manualUrl}`,
-              `  2. Re-run feedback(submit) with repo="${repoSlug(CORE_REPO)}" to file it on ue-mcp core.`,
-              ``,
-              `Surface both to the user; do not pick for them.`,
-            ].join("\n"),
-            {
-              submitted: false,
-              code: "repo_unavailable",
-              target_repo: result.repo,
-              status: result.status,
-              manual_url: manualUrl,
-            },
-            {
-              kind: "feedback.blocked",
-              requiredActions: ["surface_manual_issue_url_to_user", "offer_core_tracker_fallback"],
-              context: { code: "repo_unavailable", target_repo: result.repo, status: result.status },
-            },
-          );
-        }
-
-        if (result.kind === "auth_required") {
-          // Should not happen: resolveAuthorship() falls back to bot when
-          // no OAuth is cached, so the only path here is a token cached at
-          // resolve time but rejected by GitHub at post time (e.g. revoked
-          // mid-session). Surface the device flow so the user can re-auth.
-          return directive(
-            [
-              `[FEEDBACK APPROVED BUT NOT POSTED - CACHED GITHUB TOKEN REJECTED]`,
-              ``,
-              `You approved the body and the cached OAuth token was used, but`,
-              `GitHub rejected it (revoked or expired). Re-authorize:`,
-              ``,
-              `  1. Open: ${result.verification_uri}`,
-              `  2. Enter code: ${result.user_code}`,
-              `  3. Authorize the ue-mcp-feedback app`,
-              ``,
-              `Code expires in ~${Math.round(result.expires_in / 60)} min.`,
-              `Or re-run feedback(submit) with author="bot" to post anonymously instead.`,
-            ].join("\n"),
-            {
-              submitted: false,
-              authRequired: true,
-              verification_uri: result.verification_uri,
-              user_code: result.user_code,
-              expires_in: result.expires_in,
-            },
-            {
-              kind: "feedback.auth_required",
-              requiredActions: ["surface_oauth_url_to_user"],
-              context: {
-                verification_uri: result.verification_uri,
-                user_code: result.user_code,
-              },
-            },
-          );
-        }
-
-        // The body has shipped, drop the session log so a follow-up doesn't
-        // re-bundle the same execute_python calls into a second issue.
-        clearWorkarounds(ctx);
-
-        return {
-          message: `Feedback submitted to ${repoSlug(targetRepo)} as ${result.authoredAs === "user" ? `@${result.authoredBy}` : "bot"}`,
-          issue_url: result.url,
-          issue_number: result.number,
-          authored_by: result.authoredBy,
-          authored_as: result.authoredAs,
-          labels: labelsForRepo(payload.labels, targetRepo),
-          target_repo: repoSlug(targetRepo),
-          routing: routingLine(routing, targetRepo),
-        };
-      },
+      handler: submit,
     },
 
     route: {
@@ -1244,6 +1162,7 @@ export const feedbackTool: ToolDef = categoryTool(
           idealTool,
           explicitRepo: params.repo as string | undefined,
           installed: ctx.getPlugins?.() ?? [],
+          tools: builtInGraph(ctx),
         });
 
         return {
@@ -1278,7 +1197,6 @@ export const feedbackTool: ToolDef = categoryTool(
       },
     },
   },
-  undefined,
   {
     title: z
       .string()

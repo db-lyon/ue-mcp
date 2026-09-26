@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 import { computeCounts } from "../../scripts/generate-tool-metadata.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { SERVER_INSTRUCTIONS } from "../../src/instructions.js";
+import { SERVER_INSTRUCTIONS } from "../../src/surface/context/instructions.js";
 
 const counts = computeCounts();
 

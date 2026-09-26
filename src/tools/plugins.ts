@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef, type PluginInfo } from "../types.js";
+import type { ToolDef, PluginInfo } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/plugins.generated.js";
 
 export const pluginsTool: ToolDef = categoryTool(
@@ -38,7 +39,6 @@ export const pluginsTool: ToolDef = categoryTool(
     },
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     name: z.string().optional().describe("Plugin npm package name (describe action)"),

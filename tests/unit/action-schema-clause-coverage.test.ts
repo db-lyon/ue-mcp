@@ -25,7 +25,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { actionSchema, ROUTING_PARAMS} from "../../src/action-schema.js";
+import { actionSchema, ROUTING_PARAMS} from "../../src/surface/action-schema.js";
 
 /** The `Params:` clause of a description, cut where the prose resumes. */
 function paramsClause(description: string): string | undefined {

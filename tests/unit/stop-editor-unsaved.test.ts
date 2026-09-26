@@ -20,11 +20,12 @@ import * as path from "node:path";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
-import type { EditorProcess } from "../../src/engine-observer.js";
-import type { ElicitFn, ElicitParams, ElicitResult } from "../../src/types.js";
+import type { EditorProcess } from "../../src/editor/engine-observer.js";
+import type { ElicitFn, ElicitParams, ElicitResult } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
-vi.mock("../../src/engine-observer.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/engine-observer.js")>();
+vi.mock("../../src/editor/engine-observer.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/editor/engine-observer.js")>();
   return {
     ...actual,
     listEditorProcesses: vi.fn(async () => []),
@@ -43,10 +44,11 @@ vi.mock("../../src/engine-observer.js", async (importOriginal) => {
   };
 });
 
-const observer = await import("../../src/engine-observer.js");
-const { stopEditor, resolveDialogMode, clientAdvertisesElicitation } = await import("../../src/editor-control.js");
-const { bridgeLockfilePath } = await import("../../src/editor-target.js");
-const { setDialogMode } = await import("../../src/user-state.js");
+const observer = await import("../../src/editor/engine-observer.js");
+const { stopEditor } = await import("../../src/editor/editor-control.js");
+const { resolveDialogMode, clientAdvertisesElicitation } = await import("../../src/editor/dialog-mode.js");
+const { bridgeLockfilePath } = await import("../../src/bridge/editor-target.js");
+const { setDialogMode } = await import("../../src/config/user-state.js");
 
 const findInteractiveEditors = vi.mocked(observer.findInteractiveEditors);
 // Stop and ownership also see headless editors; one list stands in for both here.
@@ -420,12 +422,12 @@ describe("the plugin arms no policy and invents no answer", () => {
   });
 
   it("offers no way for the module to add a policy at all", () => {
-    expect(read("Private/Handlers/DialogHandlers.h")).not.toContain("AddDefaultPolicy");
-    expect(read("Private/Handlers/DialogHandlers.cpp")).not.toContain("AddDefaultPolicy");
+    expect(readHandlerFile("DialogHandlers.h")).not.toContain("AddDefaultPolicy");
+    expect(readHandlerFile("DialogHandlers.cpp")).not.toContain("AddDefaultPolicy");
   });
 
   it("hands an unarmed dialog back to the user instead of synthesizing a reply", () => {
-    const source = read("Private/Handlers/DialogHandlers.cpp");
+    const source = readHandlerFile("DialogHandlers.cpp");
     const handler = source.slice(
       source.indexOf("EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgType::Type"),
       source.indexOf("TSharedPtr<FJsonValue> FDialogHandlers::SetDialogPolicy"),
@@ -438,7 +440,7 @@ describe("the plugin arms no policy and invents no answer", () => {
   });
 
   it("reports a dialog's message whole", () => {
-    const source = read("Private/Handlers/DialogHandlers.cpp");
+    const source = readHandlerFile("DialogHandlers.cpp");
     const listDialogs = source.slice(
       source.indexOf("TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs"),
       source.indexOf("TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog"),

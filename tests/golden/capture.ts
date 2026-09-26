@@ -394,13 +394,6 @@ export interface CaptureOptions {
   host?: string;
 }
 
-/** What the startup log says about Epic enrichment, if anything. */
-function readEnrichment(log: string): { source: string | null; count: number } {
-  const match = /Epic 5\.8 toolsets \(([^)]+)\): surfaced (\d+) tools/.exec(log);
-  if (!match) return { source: null, count: 0 };
-  return { source: match[1], count: Number(match[2]) };
-}
-
 /**
  * Start the shipped server against a throwaway project, and return its
  * `initialize` instructions plus every tool from `tools/list` with its full

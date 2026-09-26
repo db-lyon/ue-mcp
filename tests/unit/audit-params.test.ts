@@ -26,7 +26,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { maskLiterals, readCategory, readCategories } from "../../scripts/lib/tool-source.mjs";
-import { PAGINATION_PARAM_NAMES } from "../../src/pagination.js";
+import { PAGINATION_PARAM_NAMES } from "../../src/surface/pagination.js";
 import { auditParams } from "../../scripts/audit-params.mjs";
 import { auditDocs } from "../../scripts/audit-docs.mjs";
 

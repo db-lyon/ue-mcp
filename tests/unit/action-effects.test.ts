@@ -24,11 +24,11 @@ import {
   bridgeMethodEffect,
   declaredActionEffect,
   mayChangeState,
-} from "../../src/action-effects.js";
-import { classifyAction } from "../../src/locking.js";
+} from "../../src/surface/action-effects.js";
+import { classifyAction } from "../../src/dispatch/locking.js";
 import { classifyWrite } from "../../src/flow/write-methods.js";
-import { refuseUntargetedCall } from "../../src/editor-gate.js";
-import type { ActionEffect } from "../../src/types.js";
+import { refuseUntargetedCall } from "../../src/dispatch/editor-gate.js";
+import type { ActionEffect } from "../../src/core/types.js";
 
 const EFFECTS: ActionEffect[] = ["read", "mutate", "unknown"];
 
@@ -188,7 +188,7 @@ describe("bridge methods", () => {
     expect(
       unlisted,
       "a handler calls these directly and nothing says what they do. Add each to "
-      + "RAW_BRIDGE_METHODS in src/action-effects.ts with its effect, or they are "
+      + "RAW_BRIDGE_METHODS in src/surface/action-effects.ts with its effect, or they are "
       + "treated as mutations and a read among them is guarded for nothing.",
     ).toEqual([]);
   });

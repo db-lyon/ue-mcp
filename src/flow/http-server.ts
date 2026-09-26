@@ -1,11 +1,14 @@
 import * as http from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { createFlowTool } from "./flow-tool.js";
-import { sessionContext, EDITOR_TARGET_PARAM, type ToolContext } from "../types.js";
-import { refuseUntargetedCall } from "../editor-gate.js";
-import { info, warn, error as logError } from "../log.js";
+import type { ToolContext } from "../core/types.js";
+import { sessionContext } from "../surface/target-params.js";
+import { EDITOR_TARGET_PARAM } from "../surface/routing-params.js";
+import { refuseUntargetedCall } from "../dispatch/editor-gate.js";
+import { info, warn, error as logError } from "../core/log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
-import { existingGuard } from "../dialog-guard.js";
+import { existingGuard } from "../editor/dialog-guard.js";
+import { readEnv } from "../core/env.js";
 
 type FlowTool = ReturnType<typeof createFlowTool>;
 
@@ -63,7 +66,7 @@ export function startFlowHttpServer(
   // Env override lets CI scripts pin a known value without parsing stderr.
   const token =
     options.token ??
-    process.env.UE_MCP_HTTP_TOKEN ??
+    readEnv("httpToken") ??
     randomBytes(32).toString("hex");
 
   const server = http.createServer(async (req, res) => {

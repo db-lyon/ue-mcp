@@ -10,8 +10,8 @@
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import { bp, type ActionSpec } from "../../types.js";
-import { epicToolCall } from "../../epic-input.js";
+import type { ActionSpec } from "../../core/types.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_body = {"properties":{"physicsAsset":{"type":"object","properties":{"refPath":{}}},"boneName":{"type":"string"}},"required":["physicsAsset","boneName"]} as const;
 const S_epic_add_constraint = {"properties":{"physicsAsset":{"type":"object","properties":{"refPath":{}}},"bone1Name":{"type":"string"},"bone2Name":{"type":"string"}},"required":["physicsAsset","bone1Name","bone2Name"]} as const;
@@ -48,198 +48,166 @@ const S_epic_set_sphere = {"properties":{"physicsAsset":{"type":"object","proper
 
 /** 32 wrapped engine tools routed to the `gameplay` category. */
 export const actions: Record<string, ActionSpec> = {
-  epic_add_body: { epicSchema: S_epic_add_body, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds a new empty body for the given bone. Params: physicsAsset, boneName",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.AddBody", S_epic_add_body, p),
-  ) },
-  epic_add_constraint: { epicSchema: S_epic_add_constraint, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds a new constraint between two bodies. Both bodies must already exist. Params: physicsAsset, bone1Name, bone2Name",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.AddConstraint", S_epic_add_constraint, p),
-  ) },
-  epic_add_tag: { epicSchema: S_epic_add_tag, ...bp(
-    "mutate",
-    "[Epic GameplayTagsToolset.GameplayTagsToolset] Adds a new gameplay tag to the project. This should ONLY be called after getting explicit direction or permission from the user. Params: tagName, comment?, tagSource",
-    "epic_call_tool",
-    (p) => epicToolCall("GameplayTagsToolset.GameplayTagsToolset", "GameplayTagsToolset.GameplayTagsToolset.AddTag", S_epic_add_tag, p),
-  ) },
-  epic_create_from_mesh: { epicSchema: S_epic_create_from_mesh, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Creates a physics asset from a skeletal mesh, auto-generating collision bodies for each bone. The asset is placed in the same folder as the mesh with the suffix \"_PhysicsAsset\". Params: meshPath, bAssignToMesh",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.CreateFromMesh", S_epic_create_from_mesh, p),
-  ) },
-  epic_find_referencers_by_tag: { epicSchema: S_epic_find_referencers_by_tag, ...bp(
-    "read",
-    "[Epic GameplayTagsToolset.GameplayTagsToolset] Returns assets that reference a gameplay tag. Params: tagName",
-    "epic_call_tool",
-    (p) => epicToolCall("GameplayTagsToolset.GameplayTagsToolset", "GameplayTagsToolset.GameplayTagsToolset.FindReferencersByTag", S_epic_find_referencers_by_tag, p),
-  ) },
-  epic_get_blackboard: { epicSchema: S_epic_get_blackboard, ...bp(
-    "read",
-    "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns the blackboard asset for this behavior tree. Params: behavior_tree",
-    "epic_call_tool",
-    (p) => epicToolCall("aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_blackboard", S_epic_get_blackboard, p),
-  ) },
-  epic_get_body_mass_scale: { epicSchema: S_epic_get_body_mass_scale, ...bp(
-    "read",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns the mass-scale multiplier for the given body. Params: physicsAsset, boneName",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.GetBodyMassScale", S_epic_get_body_mass_scale, p),
-  ) },
-  epic_get_body_names: { epicSchema: S_epic_get_body_names, ...bp(
-    "read",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns the bone name for each rigid body in a physics asset. Params: physicsAsset",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.GetBodyNames", S_epic_get_body_names, p),
-  ) },
-  epic_get_body_physics_mode: { epicSchema: S_epic_get_body_physics_mode, ...bp(
-    "read",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns the physics simulation mode for the given body. Params: physicsAsset, boneName",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.GetBodyPhysicsMode", S_epic_get_body_physics_mode, p),
-  ) },
-  epic_get_body_shapes: { epicSchema: S_epic_get_body_shapes, ...bp(
-    "read",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns all collision shapes assigned to a body. Params: physicsAsset, boneName",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.GetBodyShapes", S_epic_get_body_shapes, p),
-  ) },
-  epic_get_children: { epicSchema: S_epic_get_children, ...bp(
-    "read",
-    "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns direct child nodes of a composite node. Params: composite",
-    "epic_call_tool",
-    (p) => epicToolCall("aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_children", S_epic_get_children, p),
-  ) },
-  epic_get_condition_description: { epicSchema: S_epic_get_condition_description, ...bp(
-    "read",
-    "[Epic WorldConditionsToolset.WorldConditionTools] Returns a human-readable description of a single world condition. The condition must be passed as an FInstancedStruct containing an FWorldConditionBase-derived struct. Params: condition",
-    "epic_call_tool",
-    (p) => epicToolCall("WorldConditionsToolset.WorldConditionTools", "WorldConditionsToolset.WorldConditionTools.GetConditionDescription", S_epic_get_condition_description, p),
-  ) },
-  epic_get_constraints: { epicSchema: S_epic_get_constraints, ...bp(
-    "read",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns all constraints in the physics asset with their current angular limits. Params: physicsAsset",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.GetConstraints", S_epic_get_constraints, p),
-  ) },
-  epic_get_node_depth: { epicSchema: S_epic_get_node_depth, ...bp(
-    "read",
-    "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns the tree depth of a node by its list_nodes index. Params: behavior_tree, node_index",
-    "epic_call_tool",
-    (p) => epicToolCall("aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_node_depth", S_epic_get_node_depth, p),
-  ) },
-  epic_get_node_depths: { epicSchema: S_epic_get_node_depths, ...bp(
-    "read",
-    "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns tree depths for all nodes, matching list_nodes order. Params: behavior_tree",
-    "epic_call_tool",
-    (p) => epicToolCall("aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_node_depths", S_epic_get_node_depths, p),
-  ) },
-  epic_get_query_description: { epicSchema: S_epic_get_query_description, ...bp(
-    "read",
-    "[Epic WorldConditionsToolset.WorldConditionTools] Returns a human-readable description of a world condition query. Params: queryDefinition",
-    "epic_call_tool",
-    (p) => epicToolCall("WorldConditionsToolset.WorldConditionTools", "WorldConditionsToolset.WorldConditionTools.GetQueryDescription", S_epic_get_query_description, p),
-  ) },
-  epic_get_root_decorators: { epicSchema: S_epic_get_root_decorators, ...bp(
-    "read",
-    "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns root-level decorators on this tree. Params: behavior_tree",
-    "epic_call_tool",
-    (p) => epicToolCall("aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_root_decorators", S_epic_get_root_decorators, p),
-  ) },
-  epic_get_subtree: { epicSchema: S_epic_get_subtree, ...bp(
-    "read",
-    "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns the sub-BT asset referenced by a RunBehavior task. Params: node",
-    "epic_call_tool",
-    (p) => epicToolCall("aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_subtree", S_epic_get_subtree, p),
-  ) },
-  epic_get_tag_info: { epicSchema: S_epic_get_tag_info, ...bp(
-    "read",
-    "[Epic GameplayTagsToolset.GameplayTagsToolset] Returns detailed information about a specific gameplay tag. Params: tagName",
-    "epic_call_tool",
-    (p) => epicToolCall("GameplayTagsToolset.GameplayTagsToolset", "GameplayTagsToolset.GameplayTagsToolset.GetTagInfo", S_epic_get_tag_info, p),
-  ) },
-  epic_list_nodes: { epicSchema: S_epic_list_nodes, ...bp(
-    "read",
-    "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns a flat list of all node UObjects in tree order. Order: root decorators, then DFS (composite, services, per-child decorators, child node). Params: behavior_tree",
-    "epic_call_tool",
-    (p) => epicToolCall("aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.list_nodes", S_epic_list_nodes, p),
-  ) },
-  epic_list_tags: { epicSchema: S_epic_list_tags, ...bp(
-    "read",
-    "[Epic GameplayTagsToolset.GameplayTagsToolset] Returns gameplay tags registered in the project. Params: parentTag",
-    "epic_call_tool",
-    (p) => epicToolCall("GameplayTagsToolset.GameplayTagsToolset", "GameplayTagsToolset.GameplayTagsToolset.ListTags", S_epic_list_tags, p),
-  ) },
-  epic_remove_body: { epicSchema: S_epic_remove_body, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Removes the body for the given bone along with any constraints that reference it. Raises a script error if PhysicsAsset is null or no body exists for BoneName. Params: physicsAsset, boneName",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.RemoveBody", S_epic_remove_body, p),
-  ) },
-  epic_remove_constraint: { epicSchema: S_epic_remove_constraint, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Removes the constraint between two bodies. Params: physicsAsset, bone1Name, bone2Name",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.RemoveConstraint", S_epic_remove_constraint, p),
-  ) },
-  epic_remove_shape: { epicSchema: S_epic_remove_shape, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Removes a collision primitive from a body by name. Params: physicsAsset, boneName, shapeName",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.RemoveShape", S_epic_remove_shape, p),
-  ) },
-  epic_remove_tag: { epicSchema: S_epic_remove_tag, ...bp(
-    "mutate",
-    "[Epic GameplayTagsToolset.GameplayTagsToolset] Removes a gameplay tag from the project. This should ONLY be called after getting explicit direction or permission from the user. Params: tagName",
-    "epic_call_tool",
-    (p) => epicToolCall("GameplayTagsToolset.GameplayTagsToolset", "GameplayTagsToolset.GameplayTagsToolset.RemoveTag", S_epic_remove_tag, p),
-  ) },
-  epic_rename_tag: { epicSchema: S_epic_rename_tag, ...bp(
-    "mutate",
-    "[Epic GameplayTagsToolset.GameplayTagsToolset] Renames a gameplay tag, updating all references in the project. This should ONLY be called after getting explicit direction or permission from the user. Params: oldTagName, newTagName",
-    "epic_call_tool",
-    (p) => epicToolCall("GameplayTagsToolset.GameplayTagsToolset", "GameplayTagsToolset.GameplayTagsToolset.RenameTag", S_epic_rename_tag, p),
-  ) },
-  epic_set_body_mass_scale: { epicSchema: S_epic_set_body_mass_scale, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Sets the mass-scale multiplier for the given body. Params: physicsAsset, boneName, massScale",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.SetBodyMassScale", S_epic_set_body_mass_scale, p),
-  ) },
-  epic_set_body_physics_mode: { epicSchema: S_epic_set_body_physics_mode, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Sets the physics simulation mode for the given body. Params: physicsAsset, boneName, mode",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.SetBodyPhysicsMode", S_epic_set_body_physics_mode, p),
-  ) },
-  epic_set_box: { epicSchema: S_epic_set_box, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds or replaces a box collision primitive on a body. If any shape with the given name already exists on the body it is removed first. Params: physicsAsset, boneName, shapeName, center, rotation, extentX, extentY, extentZ",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.SetBox", S_epic_set_box, p),
-  ) },
-  epic_set_capsule: { epicSchema: S_epic_set_capsule, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds or replaces a capsule collision primitive on a body. If any shape with the given name already exists on the body it is removed first. The capsule's long axis is its local Z after applying Rotation. Params: physicsAsset, boneName, shapeName, center, rotation, radius, length",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.SetCapsule", S_epic_set_capsule, p),
-  ) },
-  epic_set_constraint_limits: { epicSchema: S_epic_set_constraint_limits, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Updates the angular limits for an existing constraint. Params: physicsAsset, info",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.SetConstraintLimits", S_epic_set_constraint_limits, p),
-  ) },
-  epic_set_sphere: { epicSchema: S_epic_set_sphere, ...bp(
-    "mutate",
-    "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds or replaces a sphere collision primitive on a body. If any shape with the given name already exists on the body it is removed first. Params: physicsAsset, boneName, shapeName, center, radius",
-    "epic_call_tool",
-    (p) => epicToolCall("PhysicsToolsets.PhysicsAssetToolset", "PhysicsToolsets.PhysicsAssetToolset.SetSphere", S_epic_set_sphere, p),
-  ) },
+  epic_add_body: {
+    epicSchema: S_epic_add_body,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.AddBody" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds a new empty body for the given bone. Params: physicsAsset, boneName", "epic_call_tool"),
+  },
+  epic_add_constraint: {
+    epicSchema: S_epic_add_constraint,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.AddConstraint" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds a new constraint between two bodies. Both bodies must already exist. Params: physicsAsset, bone1Name, bone2Name", "epic_call_tool"),
+  },
+  epic_add_tag: {
+    epicSchema: S_epic_add_tag,
+    epicTool: { toolset: "GameplayTagsToolset.GameplayTagsToolset", name: "GameplayTagsToolset.GameplayTagsToolset.AddTag" },
+    ...bp("mutate", "[Epic GameplayTagsToolset.GameplayTagsToolset] Adds a new gameplay tag to the project. This should ONLY be called after getting explicit direction or permission from the user. Params: tagName, comment?, tagSource", "epic_call_tool"),
+  },
+  epic_create_from_mesh: {
+    epicSchema: S_epic_create_from_mesh,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.CreateFromMesh" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Creates a physics asset from a skeletal mesh, auto-generating collision bodies for each bone. The asset is placed in the same folder as the mesh with the suffix \"_PhysicsAsset\". Params: meshPath, bAssignToMesh", "epic_call_tool"),
+  },
+  epic_find_referencers_by_tag: {
+    epicSchema: S_epic_find_referencers_by_tag,
+    epicTool: { toolset: "GameplayTagsToolset.GameplayTagsToolset", name: "GameplayTagsToolset.GameplayTagsToolset.FindReferencersByTag" },
+    ...bp("read", "[Epic GameplayTagsToolset.GameplayTagsToolset] Returns assets that reference a gameplay tag. Params: tagName", "epic_call_tool"),
+  },
+  epic_get_blackboard: {
+    epicSchema: S_epic_get_blackboard,
+    epicTool: { toolset: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", name: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_blackboard" },
+    ...bp("read", "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns the blackboard asset for this behavior tree. Params: behavior_tree", "epic_call_tool"),
+  },
+  epic_get_body_mass_scale: {
+    epicSchema: S_epic_get_body_mass_scale,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.GetBodyMassScale" },
+    ...bp("read", "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns the mass-scale multiplier for the given body. Params: physicsAsset, boneName", "epic_call_tool"),
+  },
+  epic_get_body_names: {
+    epicSchema: S_epic_get_body_names,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.GetBodyNames" },
+    ...bp("read", "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns the bone name for each rigid body in a physics asset. Params: physicsAsset", "epic_call_tool"),
+  },
+  epic_get_body_physics_mode: {
+    epicSchema: S_epic_get_body_physics_mode,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.GetBodyPhysicsMode" },
+    ...bp("read", "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns the physics simulation mode for the given body. Params: physicsAsset, boneName", "epic_call_tool"),
+  },
+  epic_get_body_shapes: {
+    epicSchema: S_epic_get_body_shapes,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.GetBodyShapes" },
+    ...bp("read", "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns all collision shapes assigned to a body. Params: physicsAsset, boneName", "epic_call_tool"),
+  },
+  epic_get_children: {
+    epicSchema: S_epic_get_children,
+    epicTool: { toolset: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", name: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_children" },
+    ...bp("read", "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns direct child nodes of a composite node. Params: composite", "epic_call_tool"),
+  },
+  epic_get_condition_description: {
+    epicSchema: S_epic_get_condition_description,
+    epicTool: { toolset: "WorldConditionsToolset.WorldConditionTools", name: "WorldConditionsToolset.WorldConditionTools.GetConditionDescription" },
+    ...bp("read", "[Epic WorldConditionsToolset.WorldConditionTools] Returns a human-readable description of a single world condition. The condition must be passed as an FInstancedStruct containing an FWorldConditionBase-derived struct. Params: condition", "epic_call_tool"),
+  },
+  epic_get_constraints: {
+    epicSchema: S_epic_get_constraints,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.GetConstraints" },
+    ...bp("read", "[Epic PhysicsToolsets.PhysicsAssetToolset] Returns all constraints in the physics asset with their current angular limits. Params: physicsAsset", "epic_call_tool"),
+  },
+  epic_get_node_depth: {
+    epicSchema: S_epic_get_node_depth,
+    epicTool: { toolset: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", name: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_node_depth" },
+    ...bp("read", "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns the tree depth of a node by its list_nodes index. Params: behavior_tree, node_index", "epic_call_tool"),
+  },
+  epic_get_node_depths: {
+    epicSchema: S_epic_get_node_depths,
+    epicTool: { toolset: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", name: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_node_depths" },
+    ...bp("read", "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns tree depths for all nodes, matching list_nodes order. Params: behavior_tree", "epic_call_tool"),
+  },
+  epic_get_query_description: {
+    epicSchema: S_epic_get_query_description,
+    epicTool: { toolset: "WorldConditionsToolset.WorldConditionTools", name: "WorldConditionsToolset.WorldConditionTools.GetQueryDescription" },
+    ...bp("read", "[Epic WorldConditionsToolset.WorldConditionTools] Returns a human-readable description of a world condition query. Params: queryDefinition", "epic_call_tool"),
+  },
+  epic_get_root_decorators: {
+    epicSchema: S_epic_get_root_decorators,
+    epicTool: { toolset: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", name: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_root_decorators" },
+    ...bp("read", "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns root-level decorators on this tree. Params: behavior_tree", "epic_call_tool"),
+  },
+  epic_get_subtree: {
+    epicSchema: S_epic_get_subtree,
+    epicTool: { toolset: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", name: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.get_subtree" },
+    ...bp("read", "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns the sub-BT asset referenced by a RunBehavior task. Params: node", "epic_call_tool"),
+  },
+  epic_get_tag_info: {
+    epicSchema: S_epic_get_tag_info,
+    epicTool: { toolset: "GameplayTagsToolset.GameplayTagsToolset", name: "GameplayTagsToolset.GameplayTagsToolset.GetTagInfo" },
+    ...bp("read", "[Epic GameplayTagsToolset.GameplayTagsToolset] Returns detailed information about a specific gameplay tag. Params: tagName", "epic_call_tool"),
+  },
+  epic_list_nodes: {
+    epicSchema: S_epic_list_nodes,
+    epicTool: { toolset: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools", name: "aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools.list_nodes" },
+    ...bp("read", "[Epic aimodule_toolset.toolsets.behavior_tree.BehaviorTreeTools] Returns a flat list of all node UObjects in tree order. Order: root decorators, then DFS (composite, services, per-child decorators, child node). Params: behavior_tree", "epic_call_tool"),
+  },
+  epic_list_tags: {
+    epicSchema: S_epic_list_tags,
+    epicTool: { toolset: "GameplayTagsToolset.GameplayTagsToolset", name: "GameplayTagsToolset.GameplayTagsToolset.ListTags" },
+    ...bp("read", "[Epic GameplayTagsToolset.GameplayTagsToolset] Returns gameplay tags registered in the project. Params: parentTag", "epic_call_tool"),
+  },
+  epic_remove_body: {
+    epicSchema: S_epic_remove_body,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.RemoveBody" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Removes the body for the given bone along with any constraints that reference it. Raises a script error if PhysicsAsset is null or no body exists for BoneName. Params: physicsAsset, boneName", "epic_call_tool"),
+  },
+  epic_remove_constraint: {
+    epicSchema: S_epic_remove_constraint,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.RemoveConstraint" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Removes the constraint between two bodies. Params: physicsAsset, bone1Name, bone2Name", "epic_call_tool"),
+  },
+  epic_remove_shape: {
+    epicSchema: S_epic_remove_shape,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.RemoveShape" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Removes a collision primitive from a body by name. Params: physicsAsset, boneName, shapeName", "epic_call_tool"),
+  },
+  epic_remove_tag: {
+    epicSchema: S_epic_remove_tag,
+    epicTool: { toolset: "GameplayTagsToolset.GameplayTagsToolset", name: "GameplayTagsToolset.GameplayTagsToolset.RemoveTag" },
+    ...bp("mutate", "[Epic GameplayTagsToolset.GameplayTagsToolset] Removes a gameplay tag from the project. This should ONLY be called after getting explicit direction or permission from the user. Params: tagName", "epic_call_tool"),
+  },
+  epic_rename_tag: {
+    epicSchema: S_epic_rename_tag,
+    epicTool: { toolset: "GameplayTagsToolset.GameplayTagsToolset", name: "GameplayTagsToolset.GameplayTagsToolset.RenameTag" },
+    ...bp("mutate", "[Epic GameplayTagsToolset.GameplayTagsToolset] Renames a gameplay tag, updating all references in the project. This should ONLY be called after getting explicit direction or permission from the user. Params: oldTagName, newTagName", "epic_call_tool"),
+  },
+  epic_set_body_mass_scale: {
+    epicSchema: S_epic_set_body_mass_scale,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.SetBodyMassScale" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Sets the mass-scale multiplier for the given body. Params: physicsAsset, boneName, massScale", "epic_call_tool"),
+  },
+  epic_set_body_physics_mode: {
+    epicSchema: S_epic_set_body_physics_mode,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.SetBodyPhysicsMode" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Sets the physics simulation mode for the given body. Params: physicsAsset, boneName, mode", "epic_call_tool"),
+  },
+  epic_set_box: {
+    epicSchema: S_epic_set_box,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.SetBox" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds or replaces a box collision primitive on a body. If any shape with the given name already exists on the body it is removed first. Params: physicsAsset, boneName, shapeName, center, rotation, extentX, extentY, extentZ", "epic_call_tool"),
+  },
+  epic_set_capsule: {
+    epicSchema: S_epic_set_capsule,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.SetCapsule" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds or replaces a capsule collision primitive on a body. If any shape with the given name already exists on the body it is removed first. The capsule's long axis is its local Z after applying Rotation. Params: physicsAsset, boneName, shapeName, center, rotation, radius, length", "epic_call_tool"),
+  },
+  epic_set_constraint_limits: {
+    epicSchema: S_epic_set_constraint_limits,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.SetConstraintLimits" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Updates the angular limits for an existing constraint. Params: physicsAsset, info", "epic_call_tool"),
+  },
+  epic_set_sphere: {
+    epicSchema: S_epic_set_sphere,
+    epicTool: { toolset: "PhysicsToolsets.PhysicsAssetToolset", name: "PhysicsToolsets.PhysicsAssetToolset.SetSphere" },
+    ...bp("mutate", "[Epic PhysicsToolsets.PhysicsAssetToolset] Adds or replaces a sphere collision primitive on a body. If any shape with the given name already exists on the body it is removed first. Params: physicsAsset, boneName, shapeName, center, radius", "epic_call_tool"),
+  },
 };
 
 /** The parameters those actions accept, declared so the MCP layer stops stripping them. */

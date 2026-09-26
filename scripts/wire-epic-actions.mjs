@@ -53,15 +53,15 @@ for (const category of generated) {
   // Splice from the back so earlier offsets stay valid.
   const edits = [];
 
-  // extraSchema is the fifth argument. Absent on a category that declares no
+  // extraSchema is the fourth argument. Absent on a category that declares no
   // parameters of its own, in which case one is added.
-  if (args.length >= 5) {
-    const brace = masked.indexOf("{", args[4][0]);
-    if (brace === -1 || brace > args[4][1]) throw new Error(`${category}: fifth argument is not an object literal`);
+  if (args.length >= 4) {
+    const brace = masked.indexOf("{", args[3][0]);
+    if (brace === -1 || brace > args[3][1]) throw new Error(`${category}: fourth argument is not an object literal`);
     edits.push({ at: brace + 1, text: `\n    ...epicSchema,` });
   } else {
     const closeParen = args[args.length - 1][1];
-    const pad = args.length === 3 ? ",\n  undefined,\n  { ...epicSchema },\n" : ",\n  { ...epicSchema },\n";
+    const pad = ",\n  { ...epicSchema },\n";
     edits.push({ at: closeParen, text: pad });
   }
 

@@ -5,9 +5,10 @@
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { actionSignature, SIGNATURE_LEGEND } from "../../src/action-signature.js";
-import { bp, categoryTool, type ActionSpec, type ToolDef } from "../../src/types.js";
-import type { ParamChoice, ParamSpec } from "../../src/handler-spec.js";
+import { actionSignature, SIGNATURE_LEGEND } from "../../src/surface/action-signature.js";
+import type { ActionSpec, ToolDef } from "../../src/core/types.js";
+import { bp, categoryTool } from "../../src/surface/category-tool.js";
+import type { ParamChoice, ParamSpec } from "../../src/surface/handler-spec.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 
 function specTool(params: ParamSpec[], choices?: ParamChoice[]): ToolDef {
@@ -127,7 +128,7 @@ describe("signatures from the declared shape", () => {
   it("covers an in-process action with no spec from describe_action's reading", () => {
     const tool = categoryTool("demo", "Demo.", {
       run: { kind: "handler", effect: "read", description: "Run. Params: name, limit?", handler: async () => ({}) },
-    }, undefined, { name: z.string().optional(), limit: z.number().optional() });
+    }, { name: z.string().optional(), limit: z.number().optional() });
     expect(actionSignature(tool, "run")).toBe("run(name, limit?:n)");
   });
 });

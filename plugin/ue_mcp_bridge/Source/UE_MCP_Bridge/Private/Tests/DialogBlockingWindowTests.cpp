@@ -10,7 +10,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Handlers/DialogHandlers.h"
+#include "Handlers/Dialog/DialogHandlers.h"
 
 #include "EngineStatusHooks.h"
 #include "Framework/Application/SlateApplication.h"

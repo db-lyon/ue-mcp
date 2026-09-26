@@ -30,7 +30,7 @@ import {
   getInstalledHooks,
   setInstalledHooks,
   getUserStatePath,
-} from "../../src/user-state.js";
+} from "../../src/config/user-state.js";
 
 /**
  * Two spellings of ONE project root, derived from the running platform.

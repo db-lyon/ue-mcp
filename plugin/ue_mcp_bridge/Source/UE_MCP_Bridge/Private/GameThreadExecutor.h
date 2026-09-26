@@ -12,6 +12,13 @@ public:
 	// Handler function signature
 	using FHandlerFunction = TFunction<TSharedPtr<FJsonValue>(const TSharedPtr<FJsonObject>& Params)>;
 
+	// Game-thread timeout for a handler that registered none of its own.
+	static constexpr float DefaultTimeoutSeconds = 30.0f;
+
+	/** The answer for a request the executor did not run: success false, the
+	 *  message, and a reason of timeout, not_ready or shutting_down. */
+	static TSharedPtr<FJsonValue> MakeExecutorError(const TCHAR* Reason, const TCHAR* Message);
+
 	FMCPGameThreadExecutor();
 	~FMCPGameThreadExecutor();
 
@@ -32,7 +39,7 @@ public:
 	// kill. The two exemptions travel together because they describe one
 	// property - this handler is how a blocked engine gets unblocked, so no
 	// block may stand in front of it.
-	TSharedPtr<FJsonValue> ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds = 30.0f, bool bModalSafe = false);
+	TSharedPtr<FJsonValue> ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds = DefaultTimeoutSeconds, bool bModalSafe = false);
 
 	// Run any modal-safe work that was queued while a dialog blocked the
 	// engine loop. Called from the Slate modal loop tick. Game thread only.
@@ -67,7 +74,6 @@ public:
 	// thread that holds the editor open for exactly that long. Once this is set
 	// an in-flight wait gives up at its next slice.
 	void BeginShutdown() { bShuttingDown = true; }
-	bool IsShuttingDown() const { return bShuttingDown; }
 
 private:
 	FThreadSafeBool bEditorReady{false};

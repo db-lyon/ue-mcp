@@ -1,7 +1,7 @@
 /**
  * The offline surface, and the guard that keeps it honest (T16).
  *
- * `src/offline.ts` answers "which of these 900-odd actions can run with no
+ * `src/dispatch/offline.ts` answers "which of these 900-odd actions can run with no
  * editor". Most of that answer is mechanical, because an action carrying a
  * bridge method cannot run without one. The rest is a hand-written table, and a
  * hand-written table over a surface this size is exactly the thing that rots.
@@ -19,19 +19,19 @@ import * as path from "node:path";
 import { describe, it, expect } from "vitest";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { projectTool } from "../../src/tools/project.js";
-import { ProjectContext } from "../../src/project.js";
-import { McpError, ErrorCode } from "../../src/errors.js";
+import { ProjectContext } from "../../src/config/project.js";
+import { McpError, ErrorCode } from "../../src/core/errors.js";
 import {
   LOCAL_ACTIONS,
   EDITOR_BOUND_LOCAL_ACTIONS,
   availabilityReport,
-  classifyAction,
+  classifyAvailability,
   classifyGraph,
   editorDownMessage,
   explainEditorDown,
   offlineActionNames,
-} from "../../src/offline.js";
-import type { ToolDef } from "../../src/types.js";
+} from "../../src/dispatch/offline.js";
+import type { ToolDef } from "../../src/core/types.js";
 
 /** Every `tool.action` in this package whose work starts in a local handler. */
 function handlerBackedActions(): string[] {
@@ -57,7 +57,7 @@ describe("offline classification stays level with the dispatched graph", () => {
         `${missing.length} action(s) run in the server process and nothing says whether they ` +
           `then call the editor:\n` +
           missing.map((n) => `  ${n}`).join("\n") +
-          `\n\nAdd each to LOCAL_ACTIONS in src/offline.ts (with the reason it needs no editor) ` +
+          `\n\nAdd each to LOCAL_ACTIONS in src/dispatch/offline.ts (with the reason it needs no editor) ` +
           `or to EDITOR_BOUND_LOCAL_ACTIONS (with the bridge work it does). ` +
           `project(list_available_actions) reports this answer to callers, so an unclassified ` +
           `action is reported as unknown and treated as needing an editor.`,
@@ -74,7 +74,7 @@ describe("offline classification stays level with the dispatched graph", () => {
         `${stale.length} classified action(s) are not in the graph any more:\n` +
           stale.map((n) => `  ${n}`).join("\n") +
           `\n\nThey were renamed, deleted, or turned into bridge actions. Remove them from ` +
-          `src/offline.ts.`,
+          `src/dispatch/offline.ts.`,
       );
     }
     expect(stale).toEqual([]);
@@ -87,7 +87,7 @@ describe("offline classification stays level with the dispatched graph", () => {
     const contradictions: string[] = [];
     for (const tool of ALL_TOOLS) {
       for (const [action, spec] of Object.entries(tool.actions)) {
-        const verdict = classifyAction(tool.name, action, spec);
+        const verdict = classifyAvailability(tool.name, action, spec);
         if (verdict.availability === "always" && spec.bridge) {
           contradictions.push(`${tool.name}.${action} -> ${spec.bridge}`);
         }
@@ -97,14 +97,14 @@ describe("offline classification stays level with the dispatched graph", () => {
   });
 
   it("classifies a bridge action from its own declaration, with the method named", () => {
-    const verdict = classifyAction("asset", "list", { kind: "bridge", effect: "read", bridge: "list_assets" });
+    const verdict = classifyAvailability("asset", "list", { kind: "bridge", effect: "read", bridge: "list_assets" });
     expect(verdict.availability).toBe("editor");
     expect(verdict.bridgeMethod).toBe("list_assets");
     expect(verdict.reason).toContain("list_assets");
   });
 
   it("reports an unclassified local action as unknown rather than as offline", () => {
-    const verdict = classifyAction("someplugin", "do_a_thing", { kind: "handler", effect: "read", handler: async () => ({}) });
+    const verdict = classifyAvailability("someplugin", "do_a_thing", { kind: "handler", effect: "read", handler: async () => ({}) });
     expect(verdict.availability).toBe("unknown");
     expect(verdict.reason).toContain("plugin");
   });
@@ -116,7 +116,7 @@ describe("offline classification stays level with the dispatched graph", () => {
     // then told a migrate will work with the editor down.
     const migrate = ALL_TOOLS.find((t) => t.name === "asset")!.actions.migrate;
     expect(migrate.bridge).toBeUndefined();
-    expect(classifyAction("asset", "migrate", migrate).availability).toBe("editor");
+    expect(classifyAvailability("asset", "migrate", migrate).availability).toBe("editor");
   });
 });
 
@@ -330,6 +330,7 @@ describe("project(list_available_actions) over the real dispatcher", () => {
           throw new Error("this context must never reach the editor");
         },
       },
+      getToolGraph: () => ALL_TOOLS,
     };
   }
 
@@ -368,5 +369,22 @@ describe("project(list_available_actions) over the real dispatcher", () => {
     await expect(
       projectTool.handler(ctx as never, { action: "list_available_actions", state: "sideways" }),
     ).rejects.toThrow(/'state' must be 'available', 'blocked' or 'all'/);
+  });
+
+  it("reads the addressed editor's graph, not the union of every editor", async () => {
+    const ctx = { ...contextWith(false), getToolGraph: () => [projectTool] };
+    const result = (await projectTool.handler(ctx as never, {
+      action: "list_available_actions",
+      state: "all",
+    })) as Record<string, unknown>;
+    const whole = (await projectTool.handler(contextWith(false) as never, {
+      action: "list_available_actions",
+      state: "all",
+    })) as Record<string, unknown>;
+
+    expect(result.blocked).toBeLessThan(whole.blocked as number);
+    await expect(
+      projectTool.handler(ctx as never, { action: "list_available_actions", category: "blueprint" }),
+    ).rejects.toThrow(/Unknown category 'blueprint'\. Available: project$/);
   });
 });

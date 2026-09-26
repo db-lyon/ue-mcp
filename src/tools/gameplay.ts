@@ -1,4 +1,5 @@
-import { categoryTool, type ToolDef } from "../types.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/gameplay.generated.js";
 import { specBp, schema as specSchema } from "./specs/gameplay.generated.js";
 import { specBp as physicsSpecBp, schema as physicsSpecSchema } from "./specs/physics.generated.js";
@@ -109,7 +110,6 @@ export const gameplayTool: ToolDef = categoryTool(
     get_navmesh_details:    specBp("read", "Read RecastNavMesh generation params (cellSize, agentHeight, maxStepHeight, etc.) (#163).", "get_navmesh_details"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++

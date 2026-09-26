@@ -36,7 +36,7 @@
 import { describe, it, expect } from "vitest";
 import { auditHandlers, stripComments } from "../../scripts/audit-handler-conventions.mjs";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { classifyActionClass } from "../../src/action-class.js";
+
 
 /**
  * The counts as they stand. Lower these when you fix one; never raise them.
@@ -96,18 +96,13 @@ const KNOWN_ORPHANS: Record<string, string> = {
   acquire_lock: "asset(lock) drives this; the raw handler is the lock primitive.",
   release_lock: "as above.",
   release_session_locks: "called on session teardown, not by a caller.",
-  build_project: "editor(build_project) is a local handler that shells out to UBT instead.",
   execute_python: "editor(execute_python) wraps this with the workaround tracker and the search gate.",
   pie_start_ignoring_blueprint_errors:
     "editor(play_in_editor_ignore_blueprint_errors) calls it only after its approval gate, so no action "
     + "declares it and play_in_editor's pie_control never reads an authorization (#1057).",
   request_editor_shutdown: "editor(stop_editor) drives it through the lifecycle path.",
-  save_current_level: "level(save) supersedes it and reports per-package results.",
   search_assets: "asset(search) supersedes it.",
-  delete_datatable_row: "asset(remove_datatable_row) is the shipped spelling.",
-  get_applied_imcs: "gameplay(get_applied_imcs) reaches it under the get_input_mapping_contexts name.",
   add_instances: "level(add_hismc_instances) is the shipped spelling.",
-  add_ismc_instances: "as above.",
   list_sockets: "asset(list_sockets) reaches it under a different bridge name.",
 
   // Alias registrations: a SECOND RegisterHandler line pointing at the same
@@ -115,20 +110,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
   // were first annotated as holes; reading each function pointer showed
   // otherwise, which is why "unreferenced by name" is not the same question as
   // "unreachable".
-  add_material_function_expression:
-    "Alias of AddMaterialFunctionExpression; material(add_function_expression) calls it as add_expression_in_function.",
-  connect_material_function_expressions:
-    "Alias of ConnectMaterialFunctionExpressions; material(connect_function_expressions) calls it as connect_expressions_in_function.",
-  list_material_function_expressions:
-    "Alias of ListMaterialFunctionExpressions; material(list_function_expressions) calls it as list_expressions_in_function.",
-  populate_blendspace_1d:
-    "Alias of PopulateBlendspace, which already branches on UBlendSpace1D; animation(populate_blendspace) calls it.",
-  remove_animation_notify:
-    "Alias of RemoveAnimNotify; animation(remove_notify) calls it as remove_anim_notify. CRUD is complete.",
-  add_force:
-    "Alias of AddImpulse; gameplay(add_impulse) with mode='force' calls it.",
-  place_skeletal_actor:
-    "Alias of SpawnSkeletalMeshActor; level(spawn_skeletal_mesh_actor) calls it.",
   add_curve:
     "Alias of AddCurve; animation(add_curve) calls it under the identical name.",
 };
@@ -148,11 +129,11 @@ const KNOWN_ORPHANS: Record<string, string> = {
  */
 
 /** bridge method -> the TS tool+action that reaches it. */
-function bridgeToAction(): Map<string, { tool: string; action: string }> {
-  const out = new Map<string, { tool: string; action: string }>();
+function bridgeToAction(): Map<string, { tool: string; action: string; effect: string }> {
+  const out = new Map<string, { tool: string; action: string; effect: string }>();
   for (const tool of ALL_TOOLS) {
     for (const [action, spec] of Object.entries(tool.actions)) {
-      if (spec.bridge) out.set(spec.bridge, { tool: tool.name, action });
+      if (spec.bridge) out.set(spec.bridge, { tool: tool.name, action, effect: spec.effect });
     }
   }
   return out;
@@ -174,7 +155,7 @@ function audit(): Row[] {
   const rows = auditHandlers((bridgeName: string) => {
     const hit = byBridge.get(bridgeName);
     if (!hit) return "orphan";
-    return classifyActionClass(hit.tool, hit.action).class;
+    return hit.effect;
   }) as Row[];
   // The audit keys on the bridge method name; the read-verb test has to read
   // the TS spelling, which is what a caller actually types and is not always
@@ -187,11 +168,10 @@ function audit(): Row[] {
 /**
  * Read verbs that settle the question no matter what else the name contains.
  *
- * `classifyActionClass` scans the WHOLE action name for a mutating verb and is
- * deliberately generous, because it answers a different question: while this
- * server drives more than one editor, an unaddressed call falls through to the
- * active session, so over-classifying costs an explicit target and nothing
- * else. Erring that way is right at the gate.
+ * A row's class is the action's declared effect, which answers a different
+ * question: whether an unaddressed call may fall through to the active editor.
+ * Over-declaring a mutation there costs an explicit target and nothing else,
+ * so erring that way is right at the gate.
  *
  * It is wrong here. `editor(get_frame_timing)` matches on nothing it does,
  * `level(get_relative_transform)` reads a transform, `editor(list_dirty_packages)`

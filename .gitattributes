@@ -1,10 +1,55 @@
-# Unreal Engine 5 file attributes
+# Default: auto-detect text. Per-extension rules below take precedence.
+* text=auto
 
-# Binary files - treat as binary
-*.uasset binary
-*.umap binary
-*.uproject binary
-*.uplugin binary
+# Source that the TS toolchain and generators write with LF
+*.ts text eol=lf
+*.mts text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.rst text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+*.glsl text eol=lf
+
+# Unreal and Windows tooling expect CRLF
+*.cpp text eol=crlf
+*.h text eol=crlf
+*.cs text eol=crlf
+*.csproj text eol=crlf
+*.sln text eol=crlf
+*.vcxproj text eol=crlf
+*.vcxproj.filters text eol=crlf
+*.ini text eol=crlf
+*.cfg text eol=crlf
+*.txt text eol=crlf
+*.csv text eol=crlf
+*.tsv text eol=crlf
+*.xml text eol=crlf
+*.usf text eol=crlf
+*.ush text eol=crlf
+*.hlsl text eol=crlf
+*.uproject text eol=crlf
+*.uplugin text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Unreal assets live in LFS
+*.uasset filter=lfs diff=lfs merge=lfs -text
+*.umap filter=lfs diff=lfs merge=lfs -text
+
+# Generated and log files: don't diff or merge
+*.generated.h -diff -merge
+*.generated.cpp -diff -merge
+*.uhtmanifest -diff -merge
+*.deps -diff -merge
+*.log -diff -merge -text
+
+# Binary
 *.pak binary
 *.ucas binary
 *.utoc binary
@@ -16,47 +61,11 @@
 *.dylib binary
 *.so binary
 *.a binary
-
-# Text files - normalize line endings
-*.cpp text eol=crlf
-*.h text eol=crlf
-*.cs text eol=crlf
-*.csproj text eol=crlf
-*.sln text eol=crlf
-*.vcxproj text eol=crlf
-*.vcxproj.filters text eol=crlf
-*.Build.cs text eol=crlf
-*.Target.cs text eol=crlf
-*.ini text eol=crlf
-*.json text eol=lf
-*.md text eol=lf
-*.txt text eol=crlf
-*.py text eol=lf
-*.sh text eol=lf
-*.bat text eol=crlf
-*.ps1 text eol=crlf
-
-# Blueprint files (binary but sometimes treated as text)
-*.uasset filter=lfs diff=lfs merge=lfs -text
-*.umap filter=lfs diff=lfs merge=lfs -text
-
-# Generated files - don't diff
-*.generated.h -diff -merge
-*.generated.cpp -diff -merge
-*.uhtmanifest -diff -merge
-*.deps -diff -merge
-
-# Log files - don't diff
-*.log -diff -merge -text
-
-# Archive files
 *.zip binary
 *.rar binary
 *.7z binary
 *.tar binary
 *.gz binary
-
-# Image files
 *.png binary
 *.jpg binary
 *.jpeg binary
@@ -67,73 +76,20 @@
 *.exr binary
 *.hdr binary
 *.ico binary
-
-# Audio files
 *.wav binary
 *.mp3 binary
 *.ogg binary
 *.flac binary
-
-# Video files
 *.mp4 binary
 *.avi binary
 *.mov binary
 *.mkv binary
-
-# Font files
 *.ttf binary
 *.otf binary
 *.woff binary
 *.woff2 binary
-
-# Model files
 *.fbx binary
 *.obj binary
 *.dae binary
 *.3ds binary
 *.blend binary
-
-# Shader files
-*.usf text eol=crlf
-*.ush text eol=crlf
-*.hlsl text eol=crlf
-*.glsl text eol=lf
-
-# Config files
-*.ini text eol=crlf
-*.cfg text eol=crlf
-
-# Project files
-*.uproject text eol=crlf
-*.uplugin text eol=crlf
-
-# Build files
-*.Build.cs text eol=crlf
-*.Target.cs text eol=crlf
-
-# Python files
-*.py text eol=lf
-
-# Shell scripts
-*.sh text eol=lf
-*.bat text eol=crlf
-*.cmd text eol=crlf
-*.ps1 text eol=crlf
-
-# Documentation
-*.md text eol=lf
-*.txt text eol=crlf
-*.rst text eol=lf
-
-# Data files
-*.csv text eol=crlf
-*.tsv text eol=crlf
-*.xml text eol=crlf
-*.json text eol=lf
-*.yaml text eol=lf
-*.yml text eol=lf
-
-# Default: auto-detect text, preserve native line endings on checkout.
-# Per-extension rules above take precedence (json/md/sh/py stay LF;
-# cpp/cs/ini/bat stay CRLF for editor tooling).
-* text=auto

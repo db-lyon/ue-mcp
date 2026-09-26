@@ -26,10 +26,6 @@ public:
 	// Serialize FString to JSON
 	static TSharedPtr<FJsonValue> SerializeString(const FString& String);
 
-	// Serialize TArray to JSON
-	template<typename T>
-	static TSharedPtr<FJsonValue> SerializeArray(const TArray<T>& Array);
-
 	// Serialize UObject property to JSON
 	static TSharedPtr<FJsonValue> SerializeObjectProperty(UObject* Object, FProperty* Property);
 

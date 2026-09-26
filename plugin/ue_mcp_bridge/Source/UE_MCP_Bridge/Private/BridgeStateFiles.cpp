@@ -1,4 +1,7 @@
 #include "BridgeStateFiles.h"
+#include "BridgeServer.h"
+#include "MCPHandlerRegistration.h"
+#include "Misc/EngineVersion.h"
 #include "MCPBridgeStateDir.h"
 #include "UE_MCP_BridgeModule.h"
 #include "Dom/JsonValue.h"
@@ -9,21 +12,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
-#if PLATFORM_WINDOWS
-#include "Windows/AllowWindowsPlatformTypes.h"
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include "Windows/HideWindowsPlatformTypes.h"
-#pragma comment(lib, "ws2_32.lib")
-#elif PLATFORM_LINUX || PLATFORM_MAC
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/select.h>
-#endif
+#include "MCPSocketPlatform.h"
 
 FString FMCPBridgeStateFiles::NormalizeProjectRoot(const FString& Dir)
 {
@@ -213,31 +202,19 @@ bool FMCPBridgeStateFiles::IsPortAccepting(int32 Port, int32 TimeoutMilliseconds
 		return false;
 	}
 
-#if PLATFORM_WINDOWS
 	// Refcounted per process, so asking again from here is safe even though the
 	// server thread has already asked.
-	WSADATA WsaData;
-	if (WSAStartup(MAKEWORD(2, 2), &WsaData) != 0)
+	if (!MCPSocket::Startup())
 	{
 		return false;
 	}
-	SOCKET Sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (Sock == INVALID_SOCKET)
+	const FMCPSocketHandle Sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (Sock == MCP_INVALID_SOCKET)
 	{
-		WSACleanup();
+		MCPSocket::Cleanup();
 		return false;
 	}
-	u_long NonBlocking = 1;
-	ioctlsocket(Sock, FIONBIO, &NonBlocking);
-#else
-	int32 Sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (Sock < 0)
-	{
-		return false;
-	}
-	const int32 Flags = fcntl(Sock, F_GETFL, 0);
-	fcntl(Sock, F_SETFL, Flags | O_NONBLOCK);
-#endif
+	MCPSocket::SetNonBlocking(Sock);
 
 	sockaddr_in Addr;
 	FMemory::Memset(&Addr, 0, sizeof(Addr));
@@ -253,11 +230,7 @@ bool FMCPBridgeStateFiles::IsPortAccepting(int32 Port, int32 TimeoutMilliseconds
 	}
 	else
 	{
-#if PLATFORM_WINDOWS
-		const bool bInProgress = WSAGetLastError() == WSAEWOULDBLOCK;
-#else
-		const bool bInProgress = errno == EINPROGRESS;
-#endif
+		const bool bInProgress = MCPSocket::ConnectInProgress();
 		if (bInProgress)
 		{
 			fd_set WriteSet;
@@ -283,12 +256,8 @@ bool FMCPBridgeStateFiles::IsPortAccepting(int32 Port, int32 TimeoutMilliseconds
 		}
 	}
 
-#if PLATFORM_WINDOWS
-	closesocket(Sock);
-	WSACleanup();
-#else
-	close(Sock);
-#endif
+	MCPSocket::Close(Sock);
+	MCPSocket::Cleanup();
 	return bAccepting;
 }
 
@@ -417,4 +386,189 @@ int32 FMCPBridgeStateFiles::ReadRequestedPort(const FString& FilePath, const FSt
 	}
 
 	return Port;
+}
+
+// The port.json lockfile and bind-failure record FMCPBridgeServer publishes.
+
+// #492: per-project port lockfile. Multiple editors can run side-by-side as
+// long as each one's npm client can find the right bridge. Publishing the
+// bound port in <Project>/Saved/UE_MCP_Bridge/port.json (resolved from the
+// .uproject path the client was given) is the cheapest way to do that.
+FString FMCPBridgeServer::GetPortLockfilePath()
+{
+	return FPaths::Combine(FMCPBridgeStateFiles::StateDir(), TEXT("port.json"));
+}
+
+FString FMCPBridgeServer::GetBridgeErrorFilePath()
+{
+	return FPaths::Combine(FMCPBridgeStateFiles::StateDir(), TEXT("bridge-error.json"));
+}
+
+namespace
+{
+	/** Is the instance that published this port.json still there? Asked only of a
+	 *  record another instance wrote, before publishing over it. */
+	bool PortLockfileOwnerIsLive(const FString& FilePath)
+	{
+		FMCPInstanceRecord Owner;
+		return FMCPBridgeStateFiles::ReadInstanceRecord(FilePath, Owner)
+			&& FMCPBridgeStateFiles::IsInstanceLive(Owner);
+	}
+
+	/** Read the instanceId out of a record, or empty when there is not one. */
+	FString ReadRecordInstanceId(const FString& FilePath)
+	{
+		const TSharedPtr<FJsonObject> Parsed = FMCPBridgeStateFiles::LoadJson(FilePath);
+		if (!Parsed.IsValid())
+		{
+			return FString();
+		}
+		FString Value;
+		Parsed->TryGetStringField(TEXT("instanceId"), Value);
+		return Value;
+	}
+}
+
+void FMCPBridgeServer::WritePortLockfile(int32 PortValue)
+{
+	const FString FilePath = GetPortLockfilePath();
+	const FString OurId = InstanceId;
+
+	// #817: the write is owner-checked, the same way the delete already was.
+	// One project directory has one port.json and two editors of that project
+	// have two ports, so the second editor to boot used to publish its own
+	// address over a perfectly healthy first editor's, and every client reading
+	// the file was silently re-aimed at the newcomer. The newcomer's address is
+	// in its own instance record, where it cannot displace anyone.
+	{
+		const TSharedPtr<FJsonObject> Existing = FMCPBridgeStateFiles::LoadJson(FilePath);
+		FString ExistingOwner;
+		if (Existing.IsValid() && Existing->TryGetStringField(TEXT("instanceId"), ExistingOwner)
+			&& !ExistingOwner.IsEmpty() && ExistingOwner != OurId && PortLockfileOwnerIsLive(FilePath))
+		{
+			UE_LOG(LogMCPBridge, Warning,
+				TEXT("[UE-MCP] Another editor of this project (instance %s) is still listening and owns %s, so this bridge did not publish over it. This bridge is on port %d and its address is in %s. Clients reading port.json will reach the other editor."),
+				*ExistingOwner, *FilePath, PortValue, *FMCPBridgeStateFiles::RecordPath(FMCPBridgeStateFiles::InstancesDir(), FPlatformProcess::GetCurrentProcessId()));
+			return;
+		}
+	}
+
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetNumberField(TEXT("port"), PortValue);
+	Obj->SetNumberField(TEXT("pid"), (double)FPlatformProcess::GetCurrentProcessId());
+	Obj->SetStringField(TEXT("startedAt"), StartedAtUtc.ToIso8601());
+	// Who wrote this. A pid is not identity: pids are recycled, and two
+	// instances of one project would otherwise be indistinguishable on disk.
+	Obj->SetStringField(TEXT("instanceId"), InstanceId);
+	Obj->SetStringField(TEXT("status"), TEXT("listening"));
+	Obj->SetNumberField(TEXT("protocolVersion"), (double)UEMCP_BRIDGE_PROTOCOL_VERSION);
+	Obj->SetNumberField(TEXT("handlerApiVersion"), (double)UEMCP_BRIDGE_API_VERSION);
+
+	if (!FMCPBridgeStateFiles::PublishJson(FilePath, Obj))
+	{
+		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to write port lockfile: %s"), *FilePath);
+		return;
+	}
+
+	// A previous failed start may have left a bind-failure record. This
+	// instance is listening, so that record no longer describes reality.
+	IFileManager::Get().Delete(*GetBridgeErrorFilePath(), /*RequireExists*/ false, /*EvenReadOnly*/ false, /*Quiet*/ true);
+
+	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Port lockfile published: %s (port=%d, instance=%s)"),
+		*FilePath, PortValue, *InstanceId);
+}
+
+void FMCPBridgeServer::WriteBindFailureRecord(int32 FirstPort, int32 LastPort, int32 ErrorCode)
+{
+	// Its own path, never port.json: a failed start must not be able to erase
+	// or overwrite the record of an editor that is running perfectly well.
+	const FString FilePath = GetBridgeErrorFilePath();
+
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("status"), TEXT("bind-failed"));
+	Obj->SetNumberField(TEXT("pid"), (double)FPlatformProcess::GetCurrentProcessId());
+	Obj->SetStringField(TEXT("startedAt"), StartedAtUtc.ToIso8601());
+	Obj->SetStringField(TEXT("failedAt"), FDateTime::UtcNow().ToIso8601());
+	Obj->SetStringField(TEXT("instanceId"), InstanceId);
+	Obj->SetNumberField(TEXT("firstPortTried"), FirstPort);
+	Obj->SetNumberField(TEXT("lastPortTried"), LastPort);
+	Obj->SetNumberField(TEXT("errorCode"), ErrorCode);
+	Obj->SetStringField(TEXT("detail"), FString::Printf(
+		TEXT("The editor is running but its MCP bridge could not bind a port in [%d, %d]."), FirstPort, LastPort));
+
+	if (!FMCPBridgeStateFiles::PublishJson(FilePath, Obj))
+	{
+		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to write bridge error record: %s"), *FilePath);
+	}
+
+	// #817: and again as this instance's own record, so a failed start is
+	// visible in the same place a successful one is. bridge-error.json is one
+	// file per project and a second editor's failure would overwrite the first
+	// editor's; the per-pid record cannot be overwritten by anyone.
+	WriteInstanceRecord(TEXT("bind-failed"), /*PortValue*/ 0);
+}
+
+void FMCPBridgeServer::WriteInstanceRecord(const FString& State, int32 PortValue)
+{
+	FMCPInstanceRecord Record;
+	Record.Port = PortValue;
+	Record.Pid = FPlatformProcess::GetCurrentProcessId();
+	Record.InstanceId = InstanceId;
+	Record.ProjectRoot = FMCPBridgeStateFiles::ThisProjectRoot();
+	Record.StartedAtUtc = StartedAtUtc.ToIso8601();
+	Record.EngineVersion = FEngineVersion::Current().ToString();
+	Record.ProtocolVersion = UEMCP_BRIDGE_PROTOCOL_VERSION;
+	Record.HandlerApiVersion = UEMCP_BRIDGE_API_VERSION;
+	Record.State = State;
+
+	if (FMCPBridgeStateFiles::WriteInstanceRecord(FMCPBridgeStateFiles::InstancesDir(), Record))
+	{
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Instance record published: %s (state=%s, port=%d)"),
+			*FMCPBridgeStateFiles::RecordPath(FMCPBridgeStateFiles::InstancesDir(), Record.Pid), *State, PortValue);
+	}
+}
+
+void FMCPBridgeServer::DeleteOwnInstanceRecord()
+{
+	FMCPBridgeStateFiles::DeleteOwnInstanceRecord(
+		FMCPBridgeStateFiles::InstancesDir(),
+		FPlatformProcess::GetCurrentProcessId(),
+		InstanceId);
+}
+
+void FMCPBridgeServer::ReapStaleInstanceRecords()
+{
+	const int32 Removed = FMCPBridgeStateFiles::ReapStaleInstanceRecords(
+		FMCPBridgeStateFiles::InstancesDir(),
+		InstanceId);
+	if (Removed > 0)
+	{
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Removed %d stale bridge instance record(s)."), Removed);
+	}
+}
+
+void FMCPBridgeServer::DeletePortLockfileIfOwned()
+{
+	const FString FilePath = GetPortLockfilePath();
+	if (!FPaths::FileExists(FilePath))
+	{
+		return;
+	}
+
+	// Only take away a record this instance wrote. Exit() runs on every return
+	// from Run(), including the one where the bind failed, so an editor that
+	// never listened used to delete a live editor's record on its way out.
+	const FString OwnerId = ReadRecordInstanceId(FilePath);
+	const FString OurId = InstanceId;
+	if (OwnerId != OurId)
+	{
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Leaving port lockfile alone: it belongs to instance %s, not %s"),
+			OwnerId.IsEmpty() ? TEXT("(unknown)") : *OwnerId, *OurId);
+		return;
+	}
+
+	if (IFileManager::Get().Delete(*FilePath))
+	{
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Port lockfile removed: %s"), *FilePath);
+	}
 }

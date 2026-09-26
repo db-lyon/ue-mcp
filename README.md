@@ -68,7 +68,7 @@ If you prefer to configure manually, add to your MCP client config:
   "mcpServers": {
     "ue-mcp": {
       "command": "npx",
-      "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
+      "args": ["-y", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
     }
   }
 }

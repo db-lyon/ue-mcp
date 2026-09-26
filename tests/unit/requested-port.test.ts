@@ -2,13 +2,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { normalizeProjectRoot } from "../../src/port.js";
+import { normalizeProjectRoot } from "../../src/bridge/port.js";
 import {
   clearRequestedPort,
   publishRequestedPort,
   requestedPortPath,
   syncRequestedPort,
-} from "../../src/requested-port.js";
+} from "../../src/bridge/requested-port.js";
 
 const temporaryRoots: string[] = [];
 

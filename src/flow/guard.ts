@@ -21,12 +21,12 @@ import {
   type GuardContext,
 } from "@db-lyon/flowkit/guard";
 import * as fs from "node:fs";
-import type { IBridge } from "../bridge.js";
-import type { ProjectContext } from "../project.js";
-import type { EditorSession } from "../session.js";
+import type { IBridge } from "../bridge/bridge.js";
+import type { ProjectContext } from "../config/project.js";
+import type { EditorSession } from "../sessions/session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
-import { bridgeMethodEffect, mayChangeState } from "../action-effects.js";
-import type { ActionEffect } from "../types.js";
+import { bridgeMethodEffect, mayChangeState } from "../surface/action-effects.js";
+import type { ActionEffect } from "../core/types.js";
 
 /** Resolve a UE content path to an absolute on-disk file, or null if it does not exist. */
 export type ResolveExistingFile = (contentPath: string) => string | null;
@@ -104,7 +104,7 @@ export function mutationScope(ctx: CallContext): boolean {
  * `unknown` means an argument decides. The guard has the arguments.
  */
 function effectOf(ctx: CallContext): ActionEffect {
-  return bridgeMethodEffect(ctx.method, ctx.params).effect;
+  return bridgeMethodEffect(ctx.method, ctx.params, ctx.session?.toolGraph).effect;
 }
 
 /**
@@ -154,7 +154,7 @@ export function makeCallContext(
     session,
   } as CallContext;
 
-  const write = lazy(ctx, "write", () => classifyWrite(method, params));
+  const write = lazy(ctx, "write", () => classifyWrite(method, params, session?.toolGraph));
   const writeFiles = lazy(ctx, "writeFiles", () => {
     const c = write();
     return c.writes

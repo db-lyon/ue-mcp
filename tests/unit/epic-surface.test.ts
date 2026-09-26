@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { applyNativeToolsConfig } from "../../src/epic-surface.js";
-import { applyLeanContext } from "../../src/lean-context.js";
-import { actionEnumValues, bp, categoryTool, cloneToolGraph, type ToolDef } from "../../src/types.js";
+import { applyNativeToolsConfig } from "../../src/surface/epic-surface.js";
+import { applyLeanContext } from "../../src/surface/context/lean-context.js";
+import type { ToolDef } from "../../src/core/types.js";
+import { actionEnumValues, bp, categoryTool, cloneToolGraph } from "../../src/surface/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { unionSurface, type SessionSurface } from "../../src/session-surface.js";
-import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/plugin/injection.js";
+import { unionSurface, type SessionSurface } from "../../src/sessions/session-surface.js";
+import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/extensions/injection.js";
 
 function mixedTool(): ToolDef {
   return categoryTool(
@@ -25,7 +26,6 @@ function mixedTool(): ToolDef {
         (p) => ({ nativeOnly: p.nativeOnly, shared: p.shared }),
       ),
     },
-    undefined,
     {
       retained: z.string().optional(),
       shared: z.string().optional(),
@@ -71,7 +71,7 @@ describe("native tool surface filtering", () => {
 
     expect(actionEnumValues(mixed.schema.action)).toEqual(expect.arrayContaining(["keep", "describe"]));
     expect(actionEnumValues(mixed.schema.action)).not.toContain("epic_drop");
-    await expect(catalog.actions.describe.handler({} as never, { category: "mixed" }))
+    await expect(catalog.actions.describe.handler!({} as never, { category: "mixed" }))
       .resolves.toMatchObject({ signatures: ["keep(retained, shared)"] });
   });
 
@@ -124,7 +124,7 @@ describe("native tool surface filtering", () => {
     expect(animation.description).toContain("- epic_add_actors:");
 
     const catalog = applyLeanContext(union).find((tool) => tool.name === "catalog")!;
-    await expect(catalog.actions.describe.handler(
+    await expect(catalog.actions.describe.handler!(
       {} as never,
       { category: "animation", method: "epic_add_actors" },
     )).resolves.toMatchObject({ action: "epic_add_actors" });

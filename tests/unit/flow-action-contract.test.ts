@@ -17,17 +17,18 @@
  * name in it, on the same terms as the 24 categories.
  */
 import { describe, expect, it } from "vitest";
-import { allActionSchemas } from "../../src/action-schema.js";
-import { classifyActionClass } from "../../src/action-class.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
+import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import type { FlowConfig } from "../../src/flow/schema.js";
 
 const EMPTY_CONFIG = { flows: {}, tasks: {} } as unknown as FlowConfig;
 const flowTool = createFlowTool({} as never, () => EMPTY_CONFIG);
+const flowSchemas = () => Object.keys(flowTool.actions).map((action) => actionSchema(flowTool, action));
 
 describe("flow action contract", () => {
   it("declares every parameter it documents or reads", () => {
-    const offenders = allActionSchemas([flowTool])
+    const offenders = flowSchemas()
       .filter((a) => a.drift.length > 0)
       .map((a) => `${a.tool}.${a.action}: ${a.drift.join(", ")}`);
 
@@ -48,19 +49,18 @@ describe("flow action contract", () => {
   });
 
   it("advertises every action it dispatches, so the enum and the map agree", () => {
-    const advertised = allActionSchemas([flowTool]).map((a) => a.action).sort();
+    const advertised = flowSchemas().map((a) => a.action).sort();
     expect(advertised).toEqual(Object.keys(flowTool.actions).sort());
   });
 
-  it("classifies every action as a read or a mutation, never by accident", () => {
-    const unresolved = Object.keys(flowTool.actions).filter(
-      (action) => classifyActionClass("flow", action).source === "unresolved",
+  it("gives the editor gate a declared effect for every action", () => {
+    const undeclared = Object.keys(flowTool.actions).filter(
+      (action) => declaredActionEffect("flow", action) === undefined,
     );
     expect(
-      unresolved,
-      "With more than one editor registered, an unclassified action is gated like a\n"
-        + "mutation on a guess rather than a decision. Add each of these to OVERRIDES in\n"
-        + "src/action-class.ts with the reason:\n  " + unresolved.join("\n  "),
+      undeclared,
+      "An action the gate cannot find is refused as an untargeted change. Keep\n"
+        + "flowCategoryForCheck in src/flow/flow-surface.ts listing:\n  " + undeclared.join("\n  "),
     ).toEqual([]);
   });
 });

@@ -10,8 +10,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, it, expect } from "vitest";
-import { ProjectContext } from "../../src/project.js";
-import { listContent } from "../../src/content-index.js";
+import { ProjectContext } from "../../src/config/project.js";
+import { listContent } from "../../src/codeintel/content-index.js";
 import { projectTool } from "../../src/tools/project.js";
 
 const made: string[] = [];

@@ -14,7 +14,7 @@
 
 #include "Engine/Scene.h"
 #include "HandlerRegistry.h"
-#include "Handlers/LevelHandlers.h"
+#include "Handlers/Level/LevelHandlers.h"
 #include "Misc/AutomationTest.h"
 #include "UObject/UnrealType.h"
 

@@ -14,7 +14,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/LandscapeHandlers.h"
+#include "Handlers/Landscape/LandscapeHandlers.h"
 #include "Misc/AutomationTest.h"
 
 namespace

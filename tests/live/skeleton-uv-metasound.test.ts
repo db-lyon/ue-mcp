@@ -58,9 +58,6 @@ const call = async (tool: string, args: Record<string, unknown>) =>
 const asset = async (action: string, args: Record<string, unknown> = {}) =>
   resultJson<Record<string, any>>(await call("asset", { action, ...args }));
 
-const animation = async (action: string, args: Record<string, unknown> = {}) =>
-  resultJson<Record<string, any>>(await call("animation", { action, ...args }));
-
 /** Remove the fixture, whoever left it. Run before the build as well as after,
  *  so a run never inherits the channel count or curve table a previous one left. */
 const wipeFixture = async (): Promise<void> => {

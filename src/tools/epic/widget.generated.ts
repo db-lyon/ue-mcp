@@ -10,8 +10,8 @@
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import { bp, type ActionSpec } from "../../types.js";
-import { epicToolCall } from "../../epic-input.js";
+import type { ActionSpec } from "../../core/types.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_uicomponent = {"properties":{"widgetBlueprint":{"type":"object","properties":{"refPath":{}}},"widgetName":{"type":"string"},"componentClass":{"type":"object","properties":{"refPath":{}}}},"required":["widgetBlueprint","widgetName","componentClass"]} as const;
 const S_epic_add_widget = {"properties":{"widgetBlueprint":{"type":"object","properties":{"refPath":{}}},"widgetClass":{"type":"object","properties":{"refPath":{}}},"widgetDisplayName":{"type":"string"},"parentWidget":{"type":"object","properties":{"refPath":{}}},"childIndex":{"type":"integer"}},"required":["widgetBlueprint","widgetClass","widgetDisplayName"]} as const;
@@ -53,228 +53,191 @@ const S_epic_wrap_widgets = {"properties":{"widgetBlueprint":{"type":"object","p
 
 /** 37 wrapped engine tools routed to the `widget` category. */
 export const actions: Record<string, ActionSpec> = {
-  epic_add_uicomponent: { epicSchema: S_epic_add_uicomponent, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Adds a UI component of the given class to the named widget. Params: widgetBlueprint, widgetName, componentClass",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.AddUIComponent", S_epic_add_uicomponent, p),
-  ) },
-  epic_add_widget: { epicSchema: S_epic_add_widget, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Adds a widget to the tree at the specified position. Returns full widget info including Slot pointer. When ParentWidget is null and no root exists, the new widget becomes the root of the tree. Use ObjectTools.list_properties on the returned Widget and Slot to get property names before calling set_properties. Params: widgetBlueprint, widgetClass, widgetDisplayName, parentWidget?, childIndex?",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.AddWidget", S_epic_add_widget, p),
-  ) },
-  epic_bind_to_event_property: { epicSchema: S_epic_bind_to_event_property, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Adds a Blueprint event handler graph node bound to a widget's multicast delegate event, Typical events: UButton::OnClicked / OnPressed / OnReleased / OnHovered / OnUnhovered, UCheckBox::OnCheckStateChanged, USlider::OnValueChanged. The matching delegate UPROPERTY must exist on PropertyClass (or a parent of it). Preconditions: - PropertyName must exist in the blueprint. - PropertyClass must be the widget's class (or a parent class) that declares the delegate. Params: widgetBlueprint, eventName, propertyName, propertyClass",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.BindToEventProperty", S_epic_bind_to_event_property, p),
-  ) },
-  epic_click: { epicSchema: S_epic_click, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Click a Slate widget identified by its ref. Params: ref, button?, doubleClick?, modifiers?",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Click", S_epic_click, p),
-  ) },
-  epic_compile_widget_blueprint: { epicSchema: S_epic_compile_widget_blueprint, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Compiles a widget blueprint. Returns false with error details if compilation fails. Errors include missing BindWidget bindings, type mismatches, and graph errors. Call after all widgets and properties are set. Save separately via AssetTools.save_asset. Params: widgetBlueprint",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.CompileWidgetBlueprint", S_epic_compile_widget_blueprint, p),
-  ) },
-  epic_create_widget_blueprint: { epicSchema: S_epic_create_widget_blueprint, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Creates a new Widget Blueprint asset. Returns the blueprint or nullptr on failure. Params: folderPath, assetName, parentClass",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.CreateWidgetBlueprint", S_epic_create_widget_blueprint, p),
-  ) },
-  epic_drag: { epicSchema: S_epic_drag, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Drag from one Slate widget to another (mouse down, move, release). Params: startRef, endRef, modifiers?",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Drag", S_epic_drag, p),
-  ) },
-  epic_fill_form: { epicSchema: S_epic_fill_form, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Fill multiple Slate form fields at once. Params: fields",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.FillForm", S_epic_fill_form, p),
-  ) },
-  epic_get_named_slots: { epicSchema: S_epic_get_named_slots, ...bp(
-    "read",
-    "[Epic UMGToolSet.UMGToolSet] Returns named slot bindings (separate from tree hierarchy). Params: widgetBlueprint",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.GetNamedSlots", S_epic_get_named_slots, p),
-  ) },
-  epic_get_widget_class_info: { epicSchema: S_epic_get_widget_class_info, ...bp(
-    "read",
-    "[Epic UMGToolSet.UMGToolSet] Returns the Category, Description and if it's a Panel for a single widget class. Same per-entry data as ListWidgetClasses, but lets callers query a class they already have without scanning every UClass. Returns an empty entry if WidgetClass is null. Can be used to get more information on the class from the Description and Category. Params: widgetClass",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.GetWidgetClassInfo", S_epic_get_widget_class_info, p),
-  ) },
-  epic_get_widget_description: { epicSchema: S_epic_get_widget_description, ...bp(
-    "read",
-    "[Epic UMGToolSet.UMGToolSet] Full property dump of every widget in the tree. Each line: [N] Type Name Prop:Value ... slot:(SlotProp:Value ...) N is the 0-based index into result.Widgets -- use result.Widgets[N] to get the widget ref without text parsing. Same indentation format as GetTaggedWidgetDescription; richer per-widget detail. Params: widgetBlueprint, startWidget?, maxDepth?",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.GetWidgetDescription", S_epic_get_widget_description, p),
-  ) },
-  epic_get_widget_tree_depth: { epicSchema: S_epic_get_widget_tree_depth, ...bp(
-    "read",
-    "[Epic UMGToolSet.UMGToolSet] Returns the maximum depth of the widget tree. Depth: root with no children = 0; root + children = 1; etc. Params: widgetBlueprint, startWidget?",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.GetWidgetTreeDepth", S_epic_get_widget_tree_depth, p),
-  ) },
-  epic_get_widgets: { epicSchema: S_epic_get_widgets, ...bp(
-    "read",
-    "[Epic UMGToolSet.UMGToolSet] Returns blueprint info and all widgets in depth-first order. Children within each parent are in their panel slot order - this is the hierarchy order shown in the designer. Info contains ParentClass (pass to CreateWidgetBlueprint) and RootWidgetClass. Use ObjectTools.list_properties on each returned Widget and Slot to get property names before calling set_properties. Params: widgetBlueprint",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.GetWidgets", S_epic_get_widgets, p),
-  ) },
-  epic_hover: { epicSchema: S_epic_hover, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Hover over a Slate widget, triggering any hover state or tooltip. Params: ref",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Hover", S_epic_hover, p),
-  ) },
-  epic_list_observers: { epicSchema: S_epic_list_observers, ...bp(
-    "read",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] List all active observers as a JSON array for debugging. Each entry includes the observer identifier, whether it is the root observer, the root widget ref (if any), max depth, and cached snapshot size. Params: none",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.ListObservers", S_epic_list_observers, p),
-  ) },
-  epic_list_widget_blueprints: { epicSchema: S_epic_list_widget_blueprints, ...bp(
-    "read",
-    "[Epic UMGToolSet.UMGToolSet] Lists widget blueprints in a content folder. Params: folderPath",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.ListWidgetBlueprints", S_epic_list_widget_blueprints, p),
-  ) },
-  epic_list_widget_classes: { epicSchema: S_epic_list_widget_classes, ...bp(
-    "read",
-    "[Epic UMGToolSet.UMGToolSet] Lists available widget classes, optionally filtered by name substring. Params: filter",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.ListWidgetClasses", S_epic_list_widget_classes, p),
-  ) },
-  epic_move_uicomponent: { epicSchema: S_epic_move_uicomponent, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Moves a UI component before or after another component on the same widget. Params: widgetBlueprint, widgetName, componentClassToMove, relativeToComponentClass, bMoveAfter",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.MoveUIComponent", S_epic_move_uicomponent, p),
-  ) },
-  epic_move_widget: { epicSchema: S_epic_move_widget, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Moves a widget to a new parent panel at the specified position. Returns updated widget info with new Slot. Params: widgetBlueprint, widget, newParent, childIndex?",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.MoveWidget", S_epic_move_widget, p),
-  ) },
-  epic_observe: { epicSchema: S_epic_observe, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Register an observer on a widget subtree so its refs are continuously kept up to date (~100ms tick). Call this on the window or panel you are about to work with. It ensures new widgets appearing in that subtree are assigned refs automatically. Unobserve when you are done. A shallow root observer (depth 0) already covers top-level windows. Params: ref, maxDepth?",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Observe", S_epic_observe, p),
-  ) },
-  epic_press_key: { epicSchema: S_epic_press_key, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Press and release a keyboard key on the currently focused Slate widget. Supports modifier prefixes: \"Ctrl+C\", \"Shift+1\". Params: key",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.PressKey", S_epic_press_key, p),
-  ) },
-  epic_remove_uicomponent: { epicSchema: S_epic_remove_uicomponent, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Removes a UI component of the given class from the named widget. Params: widgetBlueprint, widgetName, componentClass",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.RemoveUIComponent", S_epic_remove_uicomponent, p),
-  ) },
-  epic_remove_widget: { epicSchema: S_epic_remove_widget, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Removes a widget and its children from the tree. Params: widgetBlueprint, widget",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.RemoveWidget", S_epic_remove_widget, p),
-  ) },
-  epic_rename_widget: { epicSchema: S_epic_rename_widget, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Renames a widget. Returns updated widget info or empty on failure. Params: widgetBlueprint, widget, newDisplayName",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.RenameWidget", S_epic_rename_widget, p),
-  ) },
-  epic_replace_widget_with_child: { epicSchema: S_epic_replace_widget_with_child, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Replaces a panel widget with its first child, removing the panel from the tree. The widget to replace must be a UPanelWidget with only one child. Params: widgetBlueprint, widgetToReplace",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.ReplaceWidgetWithChild", S_epic_replace_widget_with_child, p),
-  ) },
-  epic_replace_widget_with_named_slot: { epicSchema: S_epic_replace_widget_with_named_slot, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Replaces a host widget with the content of one of its named slots. The host must implement INamedSlotInterface (e.g., a UUserWidget exposing named slots). The slot's content widget is moved up to take the host's place in the tree. Params: widgetBlueprint, widgetToReplace, namedSlot",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.ReplaceWidgetWithNamedSlot", S_epic_replace_widget_with_named_slot, p),
-  ) },
-  epic_replace_widget_with_template: { epicSchema: S_epic_replace_widget_with_template, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Replaces a widget instance in the blueprint's widget tree with a new instance created from a different template widget class. Preserves references for members that exist on both classes with a compatible type/signature: bindings, BP graph variable references, animation bindings, and delegate bindings. Members without a compatible counterpart on the new class are listed in the returned report; references to those members in the outer blueprint will become orphaned graph nodes / dangling bindings. Params: widgetBlueprint, widgetToReplace, templateClass",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.ReplaceWidgetWithTemplate", S_epic_replace_widget_with_template, p),
-  ) },
-  epic_screenshot: { epicSchema: S_epic_screenshot, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Screenshot a Slate widget or the active editor window. Prefer this over SceneTools.take_screenshot for Editor UI; use SceneTools only for 3D viewport. Params: ref",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Screenshot", S_epic_screenshot, p),
-  ) },
-  epic_select_option: { epicSchema: S_epic_select_option, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Select an option in a Slate combobox by its text label. Opens the dropdown, finds the matching text, and clicks it. Params: ref, value",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.SelectOption", S_epic_select_option, p),
-  ) },
-  epic_set_named_slot_content: { epicSchema: S_epic_set_named_slot_content, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Sets content for a named slot. Returns full widget info including Slot pointer. Params: widgetBlueprint, hostWidget, slotName, widgetClass, widgetName",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.SetNamedSlotContent", S_epic_set_named_slot_content, p),
-  ) },
-  epic_snapshot: { epicSchema: S_epic_snapshot, ...bp(
-    "read",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Capture a Slate UI accessibility snapshot. Use this to read the current widget tree and discover refs for action tools (Click, Type, Hover, etc.). A shallow root observer (depth 0) covers top-level windows automatically. Before interacting with a specific window or panel, call Observe() on it to get deep coverage, then Snapshot that subtree to see its contents. Refs discovered by a previous Snapshot remain usable. You do NOT need to call Snapshot again before every action. Params: ref, maxDepth?, bIncludeSourceLocations?",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Snapshot", S_epic_snapshot, p),
-  ) },
-  epic_toggle_widget_as_variable: { epicSchema: S_epic_toggle_widget_as_variable, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Sets the bIsVariable flag. Params: widgetBlueprint, widget, bIsVariable",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.ToggleWidgetAsVariable", S_epic_toggle_widget_as_variable, p),
-  ) },
-  epic_type: { epicSchema: S_epic_type, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Type text into a Slate text input widget. Focuses the widget first, then sends one key event per character. Params: ref, text, submit?",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Type", S_epic_type, p),
-  ) },
-  epic_unobserve: { epicSchema: S_epic_unobserve, ...bp(
-    "mutate",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Remove an observer by its identifier. Params: identifier",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Unobserve", S_epic_unobserve, p),
-  ) },
-  epic_wait_for: { epicSchema: S_epic_wait_for, ...bp(
-    "read",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] Check if text is present or absent in the Slate widget tree. Non-blocking: checks once and returns immediately. Poll to wait. Params: text, textGone",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.WaitFor", S_epic_wait_for, p),
-  ) },
-  epic_windows: { epicSchema: S_epic_windows, ...bp(
-    "unknown",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] List, select, or close top-level Slate editor windows. Params: index?, input? (carries action, which cannot be sent at the top level)",
-    "epic_call_tool",
-    (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Windows", S_epic_windows, p),
-  ) },
-  epic_wrap_widgets: { epicSchema: S_epic_wrap_widgets, ...bp(
-    "mutate",
-    "[Epic UMGToolSet.UMGToolSet] Wraps one or more widgets in a new panel widget of the specified class. Only the root-most widgets in the selection are wrapped - children of other selected widgets are skipped because their parent will be wrapped. Returns info for each newly created wrapper. Use ObjectTools.list_properties on each returned Widget and Slot to discover property names before calling set_properties (padding, alignment, anchors, etc. vary per panel class). Params: widgetBlueprint, widgets, wrapperClass",
-    "epic_call_tool",
-    (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.WrapWidgets", S_epic_wrap_widgets, p),
-  ) },
+  epic_add_uicomponent: {
+    epicSchema: S_epic_add_uicomponent,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.AddUIComponent" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Adds a UI component of the given class to the named widget. Params: widgetBlueprint, widgetName, componentClass", "epic_call_tool"),
+  },
+  epic_add_widget: {
+    epicSchema: S_epic_add_widget,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.AddWidget" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Adds a widget to the tree at the specified position. Returns full widget info including Slot pointer. When ParentWidget is null and no root exists, the new widget becomes the root of the tree. Use ObjectTools.list_properties on the returned Widget and Slot to get property names before calling set_properties. Params: widgetBlueprint, widgetClass, widgetDisplayName, parentWidget?, childIndex?", "epic_call_tool"),
+  },
+  epic_bind_to_event_property: {
+    epicSchema: S_epic_bind_to_event_property,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.BindToEventProperty" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Adds a Blueprint event handler graph node bound to a widget's multicast delegate event, Typical events: UButton::OnClicked / OnPressed / OnReleased / OnHovered / OnUnhovered, UCheckBox::OnCheckStateChanged, USlider::OnValueChanged. The matching delegate UPROPERTY must exist on PropertyClass (or a parent of it). Preconditions: - PropertyName must exist in the blueprint. - PropertyClass must be the widget's class (or a parent class) that declares the delegate. Params: widgetBlueprint, eventName, propertyName, propertyClass", "epic_call_tool"),
+  },
+  epic_click: {
+    epicSchema: S_epic_click,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Click" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Click a Slate widget identified by its ref. Params: ref, button?, doubleClick?, modifiers?", "epic_call_tool"),
+  },
+  epic_compile_widget_blueprint: {
+    epicSchema: S_epic_compile_widget_blueprint,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.CompileWidgetBlueprint" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Compiles a widget blueprint. Returns false with error details if compilation fails. Errors include missing BindWidget bindings, type mismatches, and graph errors. Call after all widgets and properties are set. Save separately via AssetTools.save_asset. Params: widgetBlueprint", "epic_call_tool"),
+  },
+  epic_create_widget_blueprint: {
+    epicSchema: S_epic_create_widget_blueprint,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.CreateWidgetBlueprint" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Creates a new Widget Blueprint asset. Returns the blueprint or nullptr on failure. Params: folderPath, assetName, parentClass", "epic_call_tool"),
+  },
+  epic_drag: {
+    epicSchema: S_epic_drag,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Drag" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Drag from one Slate widget to another (mouse down, move, release). Params: startRef, endRef, modifiers?", "epic_call_tool"),
+  },
+  epic_fill_form: {
+    epicSchema: S_epic_fill_form,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.FillForm" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Fill multiple Slate form fields at once. Params: fields", "epic_call_tool"),
+  },
+  epic_get_named_slots: {
+    epicSchema: S_epic_get_named_slots,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.GetNamedSlots" },
+    ...bp("read", "[Epic UMGToolSet.UMGToolSet] Returns named slot bindings (separate from tree hierarchy). Params: widgetBlueprint", "epic_call_tool"),
+  },
+  epic_get_widget_class_info: {
+    epicSchema: S_epic_get_widget_class_info,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.GetWidgetClassInfo" },
+    ...bp("read", "[Epic UMGToolSet.UMGToolSet] Returns the Category, Description and if it's a Panel for a single widget class. Same per-entry data as ListWidgetClasses, but lets callers query a class they already have without scanning every UClass. Returns an empty entry if WidgetClass is null. Can be used to get more information on the class from the Description and Category. Params: widgetClass", "epic_call_tool"),
+  },
+  epic_get_widget_description: {
+    epicSchema: S_epic_get_widget_description,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.GetWidgetDescription" },
+    ...bp("read", "[Epic UMGToolSet.UMGToolSet] Full property dump of every widget in the tree. Each line: [N] Type Name Prop:Value ... slot:(SlotProp:Value ...) N is the 0-based index into result.Widgets -- use result.Widgets[N] to get the widget ref without text parsing. Same indentation format as GetTaggedWidgetDescription; richer per-widget detail. Params: widgetBlueprint, startWidget?, maxDepth?", "epic_call_tool"),
+  },
+  epic_get_widget_tree_depth: {
+    epicSchema: S_epic_get_widget_tree_depth,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.GetWidgetTreeDepth" },
+    ...bp("read", "[Epic UMGToolSet.UMGToolSet] Returns the maximum depth of the widget tree. Depth: root with no children = 0; root + children = 1; etc. Params: widgetBlueprint, startWidget?", "epic_call_tool"),
+  },
+  epic_get_widgets: {
+    epicSchema: S_epic_get_widgets,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.GetWidgets" },
+    ...bp("read", "[Epic UMGToolSet.UMGToolSet] Returns blueprint info and all widgets in depth-first order. Children within each parent are in their panel slot order - this is the hierarchy order shown in the designer. Info contains ParentClass (pass to CreateWidgetBlueprint) and RootWidgetClass. Use ObjectTools.list_properties on each returned Widget and Slot to get property names before calling set_properties. Params: widgetBlueprint", "epic_call_tool"),
+  },
+  epic_hover: {
+    epicSchema: S_epic_hover,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Hover" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Hover over a Slate widget, triggering any hover state or tooltip. Params: ref", "epic_call_tool"),
+  },
+  epic_list_observers: {
+    epicSchema: S_epic_list_observers,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.ListObservers" },
+    ...bp("read", "[Epic SlateInspectorToolset.SlateInspectorToolset] List all active observers as a JSON array for debugging. Each entry includes the observer identifier, whether it is the root observer, the root widget ref (if any), max depth, and cached snapshot size. Params: none", "epic_call_tool"),
+  },
+  epic_list_widget_blueprints: {
+    epicSchema: S_epic_list_widget_blueprints,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.ListWidgetBlueprints" },
+    ...bp("read", "[Epic UMGToolSet.UMGToolSet] Lists widget blueprints in a content folder. Params: folderPath", "epic_call_tool"),
+  },
+  epic_list_widget_classes: {
+    epicSchema: S_epic_list_widget_classes,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.ListWidgetClasses" },
+    ...bp("read", "[Epic UMGToolSet.UMGToolSet] Lists available widget classes, optionally filtered by name substring. Params: filter", "epic_call_tool"),
+  },
+  epic_move_uicomponent: {
+    epicSchema: S_epic_move_uicomponent,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.MoveUIComponent" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Moves a UI component before or after another component on the same widget. Params: widgetBlueprint, widgetName, componentClassToMove, relativeToComponentClass, bMoveAfter", "epic_call_tool"),
+  },
+  epic_move_widget: {
+    epicSchema: S_epic_move_widget,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.MoveWidget" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Moves a widget to a new parent panel at the specified position. Returns updated widget info with new Slot. Params: widgetBlueprint, widget, newParent, childIndex?", "epic_call_tool"),
+  },
+  epic_observe: {
+    epicSchema: S_epic_observe,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Observe" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Register an observer on a widget subtree so its refs are continuously kept up to date (~100ms tick). Call this on the window or panel you are about to work with. It ensures new widgets appearing in that subtree are assigned refs automatically. Unobserve when you are done. A shallow root observer (depth 0) already covers top-level windows. Params: ref, maxDepth?", "epic_call_tool"),
+  },
+  epic_press_key: {
+    epicSchema: S_epic_press_key,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.PressKey" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Press and release a keyboard key on the currently focused Slate widget. Supports modifier prefixes: \"Ctrl+C\", \"Shift+1\". Params: key", "epic_call_tool"),
+  },
+  epic_remove_uicomponent: {
+    epicSchema: S_epic_remove_uicomponent,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.RemoveUIComponent" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Removes a UI component of the given class from the named widget. Params: widgetBlueprint, widgetName, componentClass", "epic_call_tool"),
+  },
+  epic_remove_widget: {
+    epicSchema: S_epic_remove_widget,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.RemoveWidget" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Removes a widget and its children from the tree. Params: widgetBlueprint, widget", "epic_call_tool"),
+  },
+  epic_rename_widget: {
+    epicSchema: S_epic_rename_widget,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.RenameWidget" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Renames a widget. Returns updated widget info or empty on failure. Params: widgetBlueprint, widget, newDisplayName", "epic_call_tool"),
+  },
+  epic_replace_widget_with_child: {
+    epicSchema: S_epic_replace_widget_with_child,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.ReplaceWidgetWithChild" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Replaces a panel widget with its first child, removing the panel from the tree. The widget to replace must be a UPanelWidget with only one child. Params: widgetBlueprint, widgetToReplace", "epic_call_tool"),
+  },
+  epic_replace_widget_with_named_slot: {
+    epicSchema: S_epic_replace_widget_with_named_slot,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.ReplaceWidgetWithNamedSlot" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Replaces a host widget with the content of one of its named slots. The host must implement INamedSlotInterface (e.g., a UUserWidget exposing named slots). The slot's content widget is moved up to take the host's place in the tree. Params: widgetBlueprint, widgetToReplace, namedSlot", "epic_call_tool"),
+  },
+  epic_replace_widget_with_template: {
+    epicSchema: S_epic_replace_widget_with_template,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.ReplaceWidgetWithTemplate" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Replaces a widget instance in the blueprint's widget tree with a new instance created from a different template widget class. Preserves references for members that exist on both classes with a compatible type/signature: bindings, BP graph variable references, animation bindings, and delegate bindings. Members without a compatible counterpart on the new class are listed in the returned report; references to those members in the outer blueprint will become orphaned graph nodes / dangling bindings. Params: widgetBlueprint, widgetToReplace, templateClass", "epic_call_tool"),
+  },
+  epic_screenshot: {
+    epicSchema: S_epic_screenshot,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Screenshot" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Screenshot a Slate widget or the active editor window. Prefer this over SceneTools.take_screenshot for Editor UI; use SceneTools only for 3D viewport. Params: ref", "epic_call_tool"),
+  },
+  epic_select_option: {
+    epicSchema: S_epic_select_option,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.SelectOption" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Select an option in a Slate combobox by its text label. Opens the dropdown, finds the matching text, and clicks it. Params: ref, value", "epic_call_tool"),
+  },
+  epic_set_named_slot_content: {
+    epicSchema: S_epic_set_named_slot_content,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.SetNamedSlotContent" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Sets content for a named slot. Returns full widget info including Slot pointer. Params: widgetBlueprint, hostWidget, slotName, widgetClass, widgetName", "epic_call_tool"),
+  },
+  epic_snapshot: {
+    epicSchema: S_epic_snapshot,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Snapshot" },
+    ...bp("read", "[Epic SlateInspectorToolset.SlateInspectorToolset] Capture a Slate UI accessibility snapshot. Use this to read the current widget tree and discover refs for action tools (Click, Type, Hover, etc.). A shallow root observer (depth 0) covers top-level windows automatically. Before interacting with a specific window or panel, call Observe() on it to get deep coverage, then Snapshot that subtree to see its contents. Refs discovered by a previous Snapshot remain usable. You do NOT need to call Snapshot again before every action. Params: ref, maxDepth?, bIncludeSourceLocations?", "epic_call_tool"),
+  },
+  epic_toggle_widget_as_variable: {
+    epicSchema: S_epic_toggle_widget_as_variable,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.ToggleWidgetAsVariable" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Sets the bIsVariable flag. Params: widgetBlueprint, widget, bIsVariable", "epic_call_tool"),
+  },
+  epic_type: {
+    epicSchema: S_epic_type,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Type" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Type text into a Slate text input widget. Focuses the widget first, then sends one key event per character. Params: ref, text, submit?", "epic_call_tool"),
+  },
+  epic_unobserve: {
+    epicSchema: S_epic_unobserve,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Unobserve" },
+    ...bp("mutate", "[Epic SlateInspectorToolset.SlateInspectorToolset] Remove an observer by its identifier. Params: identifier", "epic_call_tool"),
+  },
+  epic_wait_for: {
+    epicSchema: S_epic_wait_for,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.WaitFor" },
+    ...bp("read", "[Epic SlateInspectorToolset.SlateInspectorToolset] Check if text is present or absent in the Slate widget tree. Non-blocking: checks once and returns immediately. Poll to wait. Params: text, textGone", "epic_call_tool"),
+  },
+  epic_windows: {
+    epicSchema: S_epic_windows,
+    epicTool: { toolset: "SlateInspectorToolset.SlateInspectorToolset", name: "SlateInspectorToolset.SlateInspectorToolset.Windows" },
+    ...bp("unknown", "[Epic SlateInspectorToolset.SlateInspectorToolset] List, select, or close top-level Slate editor windows. Params: index?, input? (carries action, which cannot be sent at the top level)", "epic_call_tool"),
+  },
+  epic_wrap_widgets: {
+    epicSchema: S_epic_wrap_widgets,
+    epicTool: { toolset: "UMGToolSet.UMGToolSet", name: "UMGToolSet.UMGToolSet.WrapWidgets" },
+    ...bp("mutate", "[Epic UMGToolSet.UMGToolSet] Wraps one or more widgets in a new panel widget of the specified class. Only the root-most widgets in the selection are wrapped - children of other selected widgets are skipped because their parent will be wrapped. Returns info for each newly created wrapper. Use ObjectTools.list_properties on each returned Widget and Slot to discover property names before calling set_properties (padding, alignment, anchors, etc. vary per panel class). Params: widgetBlueprint, widgets, wrapperClass", "epic_call_tool"),
+  },
 };
 
 /** The parameters those actions accept, declared so the MCP layer stops stripping them. */

@@ -1,4 +1,5 @@
-import { categoryTool, type ToolDef } from "../types.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/gas.generated.js";
 import { specBp, schema as specSchema } from "./specs/gas.generated.js";
 
@@ -67,7 +68,6 @@ export const gasTool: ToolDef = categoryTool(
     delete_gas_snapshot: specBp("mutate", "Drop one stored GAS snapshot, returning its contents first so nothing is lost: the returned object can be passed straight back to compare_gas_states as beforeSnapshot. Idempotent: an id that is not stored reports alreadyDeleted=true.", "delete_gas_snapshot"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++

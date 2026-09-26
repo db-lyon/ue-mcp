@@ -20,7 +20,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { EditorBridge } from "../../src/bridge.js";
+import { EditorBridge } from "../../src/bridge/bridge.js";
 import {
   assertLiveTestProjectDir,
   assertLoopbackHost,

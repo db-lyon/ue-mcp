@@ -1,0 +1,1352 @@
+// Motion Matching content-pipeline authoring. Translation-unit partition of
+// FAnimationHandlers (registration stays in AnimationHandlers.cpp).
+//
+// Closes the remaining gaps for building a Motion Matching data pipeline entirely
+// through the bridge: PoseSearchSchema (with feature channels), MirrorDataTable,
+// PoseSearchNormalizationSet, and database tuning. Paired with the existing
+// PoseSearchDatabase clip authoring (#684) and Chooser selection layer (#685),
+// this makes a locomotion database buildable end to end - no pre-made schema or
+// hand-authored mirror table required.
+
+#include "AnimationHandlers.h"
+#include "HandlerRegistry.h"
+#include "HandlerUtils.h"
+#include "HandlerAssetCreate.h"
+#include "PoseSearch/PoseSearchSchema.h"
+#include "HandlerPoseSearchSchema.h"
+#include "HandlerAnimStateGraph.h"
+#include "PoseSearch/PoseSearchFeatureChannel.h"
+#if UE_MCP_HAS_5_5_API
+#include "PoseSearch/PoseSearchFeatureChannel_Pose.h"
+#include "PoseSearch/PoseSearchFeatureChannel_Trajectory.h"
+#else
+// UE 5.4 keeps both channel headers (and the FPoseSearchBone /
+// FPoseSearchTrajectorySample structs inside them) private to the PoseSearch
+// module, so nothing outside it can name the types. The classes are still
+// UCLASSes with reflected properties, so the two channel actions author them
+// through the property system instead - same asset, same fields, no header.
+#include "HandlerJsonProperty.h"
+#endif
+#include "PoseSearch/PoseSearchDatabase.h"
+#include "PoseSearch/PoseSearchNormalizationSet.h"
+#include "Animation/MirrorDataTable.h"
+#include "Animation/Skeleton.h"
+#include "Animation/AnimBlueprint.h"
+#include "Animation/AnimInstance.h"
+#include "BoneContainer.h"
+#include "EditorAssetLibrary.h"
+#include "AnimGraphNode_MotionMatching.h"
+#include "AnimGraphNode_PoseSearchHistoryCollector.h"
+#include "AnimGraphNode_Root.h"
+#include "AnimGraphNode_SequenceEvaluator.h"
+#include "AnimGraphNode_StateResult.h"
+#include "AnimGraphNode_Base.h"
+#include "Animation/AnimSequenceBase.h"
+#include "Engine/MemberReference.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "K2Node_CallFunction.h"
+#include "K2Node_Self.h"
+#include "ChooserFunctionLibrary.h"
+#include "Chooser.h"
+#include "UObject/UnrealType.h"
+#include "Runtime/Launch/Resources/Version.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+
+// Turn a JSON array of flag names into a bitmask using a name->bit table.
+static int32 ParseFlagArray(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Field, const TMap<FString, int32>& Table, int32 Default)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (!Obj->TryGetArrayField(Field, Arr) || !Arr) return Default;
+	int32 Flags = 0;
+	for (const TSharedPtr<FJsonValue>& V : *Arr)
+	{
+		FString Name;
+		if (V->TryGetString(Name))
+		{
+			if (const int32* Bit = Table.Find(Name.ToLower())) Flags |= *Bit;
+		}
+	}
+	return Flags == 0 ? Default : Flags;
+}
+
+// Bit values of EPoseSearchBoneFlags / EPoseSearchTrajectoryFlags. They are
+// spelled out rather than taken from the enums because on 5.4 the enums are
+// declared in the private channel headers; these are the values the asset
+// serializes and they are the same from 5.4 through 5.8.
+static constexpr int32 MCPBoneFlagVelocity = 1 << 0;
+static constexpr int32 MCPBoneFlagPosition = 1 << 1;
+static constexpr int32 MCPBoneFlagRotation = 1 << 2;
+static constexpr int32 MCPBoneFlagPhase    = 1 << 3;
+
+static constexpr int32 MCPTrajFlagVelocity            = 1 << 0;
+static constexpr int32 MCPTrajFlagPosition            = 1 << 1;
+static constexpr int32 MCPTrajFlagVelocityDirection   = 1 << 2;
+static constexpr int32 MCPTrajFlagFacingDirection     = 1 << 3;
+static constexpr int32 MCPTrajFlagVelocityXY          = 1 << 4;
+static constexpr int32 MCPTrajFlagPositionXY          = 1 << 5;
+static constexpr int32 MCPTrajFlagVelocityDirectionXY = 1 << 6;
+static constexpr int32 MCPTrajFlagFacingDirectionXY   = 1 << 7;
+
+#if UE_MCP_HAS_5_5_API
+// Where the enums are reachable, hold the spelled-out values to them.
+static_assert(MCPBoneFlagVelocity == int32(EPoseSearchBoneFlags::Velocity), "EPoseSearchBoneFlags::Velocity moved");
+static_assert(MCPBoneFlagPosition == int32(EPoseSearchBoneFlags::Position), "EPoseSearchBoneFlags::Position moved");
+static_assert(MCPBoneFlagRotation == int32(EPoseSearchBoneFlags::Rotation), "EPoseSearchBoneFlags::Rotation moved");
+static_assert(MCPBoneFlagPhase == int32(EPoseSearchBoneFlags::Phase), "EPoseSearchBoneFlags::Phase moved");
+static_assert(MCPTrajFlagVelocity == int32(EPoseSearchTrajectoryFlags::Velocity), "EPoseSearchTrajectoryFlags::Velocity moved");
+static_assert(MCPTrajFlagPosition == int32(EPoseSearchTrajectoryFlags::Position), "EPoseSearchTrajectoryFlags::Position moved");
+static_assert(MCPTrajFlagVelocityDirection == int32(EPoseSearchTrajectoryFlags::VelocityDirection), "EPoseSearchTrajectoryFlags::VelocityDirection moved");
+static_assert(MCPTrajFlagFacingDirection == int32(EPoseSearchTrajectoryFlags::FacingDirection), "EPoseSearchTrajectoryFlags::FacingDirection moved");
+static_assert(MCPTrajFlagVelocityXY == int32(EPoseSearchTrajectoryFlags::VelocityXY), "EPoseSearchTrajectoryFlags::VelocityXY moved");
+static_assert(MCPTrajFlagPositionXY == int32(EPoseSearchTrajectoryFlags::PositionXY), "EPoseSearchTrajectoryFlags::PositionXY moved");
+static_assert(MCPTrajFlagVelocityDirectionXY == int32(EPoseSearchTrajectoryFlags::VelocityDirectionXY), "EPoseSearchTrajectoryFlags::VelocityDirectionXY moved");
+static_assert(MCPTrajFlagFacingDirectionXY == int32(EPoseSearchTrajectoryFlags::FacingDirectionXY), "EPoseSearchTrajectoryFlags::FacingDirectionXY moved");
+#endif
+
+static const TMap<FString, int32>& BoneFlagTable()
+{
+	static const TMap<FString, int32> Table = {
+		{ TEXT("velocity"), MCPBoneFlagVelocity },
+		{ TEXT("position"), MCPBoneFlagPosition },
+		{ TEXT("rotation"), MCPBoneFlagRotation },
+		{ TEXT("phase"),    MCPBoneFlagPhase },
+	};
+	return Table;
+}
+
+static const TMap<FString, int32>& TrajectoryFlagTable()
+{
+	static const TMap<FString, int32> Table = {
+		{ TEXT("velocity"),            MCPTrajFlagVelocity },
+		{ TEXT("position"),            MCPTrajFlagPosition },
+		{ TEXT("velocitydirection"),   MCPTrajFlagVelocityDirection },
+		{ TEXT("facingdirection"),     MCPTrajFlagFacingDirection },
+		{ TEXT("velocityxy"),          MCPTrajFlagVelocityXY },
+		{ TEXT("positionxy"),          MCPTrajFlagPositionXY },
+		{ TEXT("velocitydirectionxy"), MCPTrajFlagVelocityDirectionXY },
+		{ TEXT("facingdirectionxy"),   MCPTrajFlagFacingDirectionXY },
+	};
+	return Table;
+}
+
+#if !UE_MCP_HAS_5_5_API
+/** Construct one of the PoseSearch channel classes by its script path. On 5.4
+ *  the concrete classes are private to the PoseSearch module, but the UClass is
+ *  registered like any other, so the object is created through it. */
+static UPoseSearchFeatureChannel* MCPNewPoseSearchChannel(UPoseSearchSchema* Schema, const TCHAR* ClassPath)
+{
+	UClass* ChannelClass = FindObject<UClass>(nullptr, ClassPath);
+	if (!ChannelClass) return nullptr;
+	return NewObject<UPoseSearchFeatureChannel>(Schema, ChannelClass, NAME_None, RF_Transactional);
+}
+
+/** Write one reflected property of a channel from JSON. */
+static bool MCPSetChannelProperty(UPoseSearchFeatureChannel* Channel, const TCHAR* PropertyName, const TSharedPtr<FJsonValue>& Value, FString& OutError)
+{
+	return MCPJsonProperty::SetDottedPropertyFromJson(Channel, PropertyName, Value, OutError);
+}
+#endif
+
+// ─── AnimGraph node authoring helpers ─────────────────────────────────────
+
+// Anim graph nodes keep their settings in a private `Node` USTRUCT member. Reach
+// it by reflection so we can set fields without the (private) C++ member access.
+static void* GetAnimNodeMemory(UObject* GraphNode, UScriptStruct*& OutStruct)
+{
+	OutStruct = nullptr;
+	if (!GraphNode) return nullptr;
+	FStructProperty* NodeProp = CastField<FStructProperty>(GraphNode->GetClass()->FindPropertyByName(TEXT("Node")));
+	if (!NodeProp) return nullptr;
+	OutStruct = NodeProp->Struct;
+	return NodeProp->ContainerPtrToValuePtr<void>(GraphNode);
+}
+
+static void SetNodeObject(UScriptStruct* S, void* Data, const TCHAR* Field, UObject* Value)
+{
+	if (FObjectPropertyBase* P = CastField<FObjectPropertyBase>(S->FindPropertyByName(Field)))
+		P->SetObjectPropertyValue(P->ContainerPtrToValuePtr<void>(Data), Value);
+}
+static void SetNodeInt(UScriptStruct* S, void* Data, const TCHAR* Field, int32 Value)
+{
+	if (FIntProperty* P = CastField<FIntProperty>(S->FindPropertyByName(Field)))
+		P->SetPropertyValue(P->ContainerPtrToValuePtr<void>(Data), Value);
+}
+static void SetNodeFloat(UScriptStruct* S, void* Data, const TCHAR* Field, float Value)
+{
+	if (FFloatProperty* P = CastField<FFloatProperty>(S->FindPropertyByName(Field)))
+		P->SetPropertyValue(P->ContainerPtrToValuePtr<void>(Data), Value);
+}
+static void SetNodeBool(UScriptStruct* S, void* Data, const TCHAR* Field, bool Value)
+{
+	if (FBoolProperty* P = CastField<FBoolProperty>(S->FindPropertyByName(Field)))
+		P->SetPropertyValue(P->ContainerPtrToValuePtr<void>(Data), Value);
+}
+
+// First pose pin in the given direction (anim graph nodes expose exactly one).
+static UEdGraphPin* GetPosePin(UEdGraphNode* Node, EEdGraphPinDirection Dir)
+{
+	if (!Node) return nullptr;
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin && Pin->Direction == Dir) return Pin;
+	}
+	return nullptr;
+}
+
+static UAnimGraphNode_Root* FindOutputPoseNode(UEdGraph* Graph)
+{
+	for (UEdGraphNode* N : Graph->Nodes)
+	{
+		if (UAnimGraphNode_Root* Root = Cast<UAnimGraphNode_Root>(N)) return Root;
+	}
+	return nullptr;
+}
+
+static UAnimGraphNode_MotionMatching* FindMotionMatchingNode(UEdGraph* Graph)
+{
+	for (UEdGraphNode* N : Graph->Nodes)
+	{
+		if (UAnimGraphNode_MotionMatching* MM = Cast<UAnimGraphNode_MotionMatching>(N)) return MM;
+	}
+	return nullptr;
+}
+
+// Place a freshly-constructed anim graph node into the graph.
+static void PlaceAnimNode(UEdGraph* Graph, UEdGraphNode* Node, int32 X, int32 Y)
+{
+	Graph->AddNode(Node, false, false);
+	Node->CreateNewGuid();
+	Node->PostPlacedNewNode();
+	Node->AllocateDefaultPins();
+	Node->NodePosX = X;
+	Node->NodePosY = Y;
+}
+
+// ─── PoseSearchSchema ─────────────────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchSchema(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FString SkeletonPath;
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/MotionMatching"));
+	// Every parameter is read before anything can fail (#1057).
+	const FString MirrorPath = OptionalString(Params, TEXT("mirrorDataTablePath"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	int32 SampleRate = 0;
+	const bool bHasSampleRate = TryGetNumberParam(Params, TEXT("sampleRate"), SampleRate);
+	const bool bAddDefaultChannels = OptionalBool(Params, TEXT("addDefaultChannels"), true);
+
+	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
+	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+
+	UMirrorDataTable* MirrorTable = nullptr;
+	if (!MirrorPath.IsEmpty())
+	{
+		MirrorTable = LoadAssetByPath<UMirrorDataTable>(MirrorPath);
+		if (!MirrorTable) return MCPError(FString::Printf(TEXT("MirrorDataTable not found: %s"), *MirrorPath));
+	}
+
+	auto Created = MCPCreateAssetIdempotentNewObject<UPoseSearchSchema>(Name, PackagePath, OnConflict, TEXT("PoseSearchSchema"));
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UPoseSearchSchema* Schema = Created.Asset;
+
+	Schema->AddSkeleton(Skeleton, MirrorTable);
+	if (bHasSampleRate && SampleRate > 0)
+	{
+		Schema->SampleRate = SampleRate;
+	}
+	// Default channels (Trajectory + Pose on the root bone) give a schema you can
+	// immediately build an index against; add_pose_search_schema_*_channel refines it.
+	if (bAddDefaultChannels)
+	{
+		Schema->AddDefaultChannels();
+	}
+	MCPPoseSearch::Finalize(Schema);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Schema, Schema->GetPathName());
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("path"), Schema->GetPathName());
+	Res->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+	Res->SetStringField(TEXT("mirrorDataTablePath"), MirrorPath);
+	Res->SetNumberField(TEXT("sampleRate"), Schema->SampleRate);
+	Res->SetNumberField(TEXT("channelCount"), Schema->GetChannels().Num());
+	MCPSetDeleteAssetRollback(Res, Schema->GetPathName());
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaPoseChannel(const TSharedPtr<FJsonObject>& Params)
+{
+	// assetPath is an alias the registry resolves to schemaPath (#1057).
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("schemaPath"), AssetPath)) return Err;
+	// Read before anything can fail (#1057).
+	const TArray<TSharedPtr<FJsonValue>>* Bones = nullptr;
+	const bool bHasBones = TryGetArrayParam(Params, TEXT("bones"), Bones) && Bones && Bones->Num() > 0;
+	double ChannelWeight = 0.0;
+	const bool bHasChannelWeight = TryGetNumberParam(Params, TEXT("weight"), ChannelWeight);
+
+	UPoseSearchSchema* Schema = LoadAssetByPath<UPoseSearchSchema>(AssetPath);
+	if (!Schema) return MCPError(FString::Printf(TEXT("PoseSearchSchema not found: %s"), *AssetPath));
+
+	if (!bHasBones)
+	{
+		return MCPError(TEXT("Missing 'bones' (array of {bone, flags?:[velocity,position,rotation,phase], weight?})"));
+	}
+
+	// Parse first, engine-independently, then write the parsed bones into the
+	// channel the way the running engine allows.
+	struct FParsedBone { FString Name; int32 Flags; float Weight; };
+	TArray<FParsedBone> ParsedBones;
+	TArray<TSharedPtr<FJsonValue>> Added;
+	for (const TSharedPtr<FJsonValue>& V : *Bones)
+	{
+		const TSharedPtr<FJsonObject>* BoneObj = nullptr;
+		FString BoneName;
+		int32 Flags = MCPBoneFlagPosition;
+		float Weight = 1.f;
+		if (V->TryGetObject(BoneObj) && BoneObj && (*BoneObj).IsValid())
+		{
+			if (!(*BoneObj)->TryGetStringField(TEXT("bone"), BoneName))
+				return MCPError(TEXT("Each bone entry needs a 'bone' name"));
+			Flags = ParseFlagArray(*BoneObj, TEXT("flags"), BoneFlagTable(), MCPBoneFlagPosition);
+			double W = 0.0;
+			if ((*BoneObj)->TryGetNumberField(TEXT("weight"), W)) Weight = (float)W;
+		}
+		else if (!V->TryGetString(BoneName))
+		{
+			return MCPError(TEXT("Each bone entry must be an object or a bone-name string"));
+		}
+
+		ParsedBones.Add({ BoneName, Flags, Weight });
+		Added.Add(MakeShared<FJsonValueString>(BoneName));
+	}
+
+	Schema->Modify();
+
+#if UE_MCP_HAS_5_5_API
+	UPoseSearchFeatureChannel_Pose* Channel = NewObject<UPoseSearchFeatureChannel_Pose>(Schema, NAME_None, RF_Transactional);
+	if (bHasChannelWeight) Channel->Weight = (float)ChannelWeight;
+	for (const FParsedBone& Parsed : ParsedBones)
+	{
+		FPoseSearchBone Bone;
+		Bone.Reference.BoneName = FName(*Parsed.Name);
+		Bone.Flags = Parsed.Flags;
+		Bone.Weight = Parsed.Weight;
+		Channel->SampledBones.Add(Bone);
+	}
+#else
+	UPoseSearchFeatureChannel* Channel = MCPNewPoseSearchChannel(Schema, TEXT("/Script/PoseSearch.PoseSearchFeatureChannel_Pose"));
+	if (!Channel) return MCPError(TEXT("PoseSearchFeatureChannel_Pose class is not loaded - is the PoseSearch plugin enabled?"));
+
+	FString PropertyError;
+	if (bHasChannelWeight && !MCPSetChannelProperty(Channel, TEXT("Weight"), MakeShared<FJsonValueNumber>(ChannelWeight), PropertyError))
+	{
+		return MCPError(FString::Printf(TEXT("Could not set channel weight: %s"), *PropertyError));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BoneStructs;
+	for (const FParsedBone& Parsed : ParsedBones)
+	{
+		TSharedPtr<FJsonObject> Reference = MakeShared<FJsonObject>();
+		Reference->SetStringField(TEXT("BoneName"), Parsed.Name);
+
+		TSharedPtr<FJsonObject> Bone = MakeShared<FJsonObject>();
+		Bone->SetObjectField(TEXT("Reference"), Reference);
+		Bone->SetNumberField(TEXT("Flags"), Parsed.Flags);
+		Bone->SetNumberField(TEXT("Weight"), Parsed.Weight);
+		BoneStructs.Add(MakeShared<FJsonValueObject>(Bone));
+	}
+	if (!MCPSetChannelProperty(Channel, TEXT("SampledBones"), MakeShared<FJsonValueArray>(BoneStructs), PropertyError))
+	{
+		return MCPError(FString::Printf(TEXT("Could not set SampledBones: %s"), *PropertyError));
+	}
+#endif
+
+	Schema->AddChannel(Channel);
+	MCPPoseSearch::Finalize(Schema);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Schema, AssetPath);
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("path"), AssetPath);
+	Res->SetStringField(TEXT("channelType"), TEXT("Pose"));
+	Res->SetNumberField(TEXT("boneCount"), Added.Num());
+	Res->SetArrayField(TEXT("bones"), Added);
+	Res->SetNumberField(TEXT("channelCount"), Schema->GetChannels().Num());
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("No action removes a feature channel from a PoseSearchSchema, so there is no inverse call to name. ")
+		TEXT("Recover by rebuilding the schema with animation(create_pose_search_schema) under a new name and re-pointing the database at it with animation(set_pose_search_schema)."));
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaTrajectoryChannel(const TSharedPtr<FJsonObject>& Params)
+{
+	// assetPath is an alias the registry resolves to schemaPath (#1057).
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("schemaPath"), AssetPath)) return Err;
+	// Read before anything can fail (#1057).
+	const TArray<TSharedPtr<FJsonValue>>* Samples = nullptr;
+	const bool bHasSamples = TryGetArrayParam(Params, TEXT("samples"), Samples) && Samples && Samples->Num() > 0;
+	double ChannelWeight = 0.0;
+	const bool bHasChannelWeight = TryGetNumberParam(Params, TEXT("weight"), ChannelWeight);
+
+	UPoseSearchSchema* Schema = LoadAssetByPath<UPoseSearchSchema>(AssetPath);
+	if (!Schema) return MCPError(FString::Printf(TEXT("PoseSearchSchema not found: %s"), *AssetPath));
+
+	if (!bHasSamples)
+	{
+		return MCPError(TEXT("Missing 'samples' (array of {offset, flags?:[position,velocity,facingDirection,...], weight?}). Negative offsets are history, positive are prediction."));
+	}
+
+	struct FParsedSample { float Offset; int32 Flags; float Weight; };
+	TArray<FParsedSample> ParsedSamples;
+	for (const TSharedPtr<FJsonValue>& V : *Samples)
+	{
+		const TSharedPtr<FJsonObject>* SampleObj = nullptr;
+		if (!V->TryGetObject(SampleObj) || !SampleObj || !(*SampleObj).IsValid())
+			return MCPError(TEXT("Each sample must be an object {offset, flags?, weight?}"));
+
+		double Offset = 0.0;
+		(*SampleObj)->TryGetNumberField(TEXT("offset"), Offset);
+		const int32 Flags = ParseFlagArray(*SampleObj, TEXT("flags"), TrajectoryFlagTable(), MCPTrajFlagPosition);
+		double W = 1.0;
+		(*SampleObj)->TryGetNumberField(TEXT("weight"), W);
+		ParsedSamples.Add({ (float)Offset, Flags, (float)W });
+	}
+	const int32 Count = ParsedSamples.Num();
+
+	Schema->Modify();
+
+#if UE_MCP_HAS_5_5_API
+	UPoseSearchFeatureChannel_Trajectory* Channel = NewObject<UPoseSearchFeatureChannel_Trajectory>(Schema, NAME_None, RF_Transactional);
+	if (bHasChannelWeight) Channel->Weight = (float)ChannelWeight;
+	for (const FParsedSample& Parsed : ParsedSamples)
+	{
+		FPoseSearchTrajectorySample Sample;
+		Sample.Offset = Parsed.Offset;
+		Sample.Flags = Parsed.Flags;
+		Sample.Weight = Parsed.Weight;
+		Channel->Samples.Add(Sample);
+	}
+#else
+	UPoseSearchFeatureChannel* Channel = MCPNewPoseSearchChannel(Schema, TEXT("/Script/PoseSearch.PoseSearchFeatureChannel_Trajectory"));
+	if (!Channel) return MCPError(TEXT("PoseSearchFeatureChannel_Trajectory class is not loaded - is the PoseSearch plugin enabled?"));
+
+	FString PropertyError;
+	if (bHasChannelWeight && !MCPSetChannelProperty(Channel, TEXT("Weight"), MakeShared<FJsonValueNumber>(ChannelWeight), PropertyError))
+	{
+		return MCPError(FString::Printf(TEXT("Could not set channel weight: %s"), *PropertyError));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> SampleStructs;
+	for (const FParsedSample& Parsed : ParsedSamples)
+	{
+		TSharedPtr<FJsonObject> Sample = MakeShared<FJsonObject>();
+		Sample->SetNumberField(TEXT("Offset"), Parsed.Offset);
+		Sample->SetNumberField(TEXT("Flags"), Parsed.Flags);
+		Sample->SetNumberField(TEXT("Weight"), Parsed.Weight);
+		SampleStructs.Add(MakeShared<FJsonValueObject>(Sample));
+	}
+	if (!MCPSetChannelProperty(Channel, TEXT("Samples"), MakeShared<FJsonValueArray>(SampleStructs), PropertyError))
+	{
+		return MCPError(FString::Printf(TEXT("Could not set Samples: %s"), *PropertyError));
+	}
+#endif
+
+	Schema->AddChannel(Channel);
+	MCPPoseSearch::Finalize(Schema);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Schema, AssetPath);
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("path"), AssetPath);
+	Res->SetStringField(TEXT("channelType"), TEXT("Trajectory"));
+	Res->SetNumberField(TEXT("sampleCount"), Count);
+	Res->SetNumberField(TEXT("channelCount"), Schema->GetChannels().Num());
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("No action removes a feature channel from a PoseSearchSchema, so there is no inverse call to name. ")
+		TEXT("Recover by rebuilding the schema with animation(create_pose_search_schema) under a new name and re-pointing the database at it with animation(set_pose_search_schema)."));
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadPoseSearchSchema(const TSharedPtr<FJsonObject>& Params)
+{
+	// assetPath is an alias the registry resolves to schemaPath (#1057).
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("schemaPath"), AssetPath)) return Err;
+	UPoseSearchSchema* Schema = LoadAssetByPath<UPoseSearchSchema>(AssetPath);
+	if (!Schema) return MCPError(FString::Printf(TEXT("PoseSearchSchema not found: %s"), *AssetPath));
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	Res->SetStringField(TEXT("path"), AssetPath);
+	Res->SetNumberField(TEXT("sampleRate"), Schema->SampleRate);
+
+	TArray<TSharedPtr<FJsonValue>> Skeletons;
+	for (const FPoseSearchRoledSkeleton& Roled : MCPPoseSearch::RoledSkeletons(Schema))
+	{
+		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+		S->SetStringField(TEXT("role"), Roled.Role.ToString());
+		S->SetStringField(TEXT("skeleton"), Roled.Skeleton ? Roled.Skeleton->GetPathName() : FString());
+		S->SetStringField(TEXT("mirrorDataTable"), Roled.MirrorDataTable ? Roled.MirrorDataTable->GetPathName() : FString());
+		Skeletons.Add(MakeShared<FJsonValueObject>(S));
+	}
+	Res->SetArrayField(TEXT("skeletons"), Skeletons);
+
+	TArray<TSharedPtr<FJsonValue>> Channels;
+	for (const TObjectPtr<UPoseSearchFeatureChannel>& Ch : Schema->GetChannels())
+	{
+		if (Ch) Channels.Add(MakeShared<FJsonValueString>(Ch->GetClass()->GetName()));
+	}
+	Res->SetArrayField(TEXT("channels"), Channels);
+	Res->SetNumberField(TEXT("channelCount"), Channels.Num());
+	return MCPResult(Res);
+}
+
+// ─── MirrorDataTable ──────────────────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::CreateMirrorDataTable(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FString SkeletonPath;
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/MotionMatching"));
+	// Read before the load can fail (#1057).
+	MCPReadParamsAhead(Params, { TEXT("expressions"), TEXT("mirrorAxis"), TEXT("mirrorRootMotion"), TEXT("onConflict") });
+
+	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
+	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+
+	auto Created = MCPCreateAssetIdempotentNewObject<UMirrorDataTable>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("MirrorDataTable"));
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UMirrorDataTable* Table = Created.Asset;
+
+	Table->RowStruct = FMirrorTableRow::StaticStruct();
+	Table->Skeleton = Skeleton;
+	// mirrorAxis was accepted and ignored, always producing an X-axis table.
+	// A skeleton authored down Y mirrors to nonsense with no error anywhere.
+	const FString AxisStr = OptionalString(Params, TEXT("mirrorAxis"), TEXT("X")).ToUpper();
+	if      (AxisStr == TEXT("X")) Table->MirrorAxis = EAxis::X;
+	else if (AxisStr == TEXT("Y")) Table->MirrorAxis = EAxis::Y;
+	else if (AxisStr == TEXT("Z")) Table->MirrorAxis = EAxis::Z;
+	else
+	{
+		return MCPError(FString::Printf(TEXT("Unknown mirrorAxis '%s'. Expected X, Y or Z."), *AxisStr));
+	}
+	Table->bMirrorRootMotion = OptionalBool(Params, TEXT("mirrorRootMotion"), true);
+
+	// Build find/replace expressions. Default matches the UE mannequin (_l <-> _r suffix).
+	auto MethodFromString = [](const FString& M) -> EMirrorFindReplaceMethod::Type
+	{
+		if (M.Equals(TEXT("prefix"), ESearchCase::IgnoreCase)) return EMirrorFindReplaceMethod::Prefix;
+		if (M.Equals(TEXT("regex"), ESearchCase::IgnoreCase) || M.Equals(TEXT("regularexpression"), ESearchCase::IgnoreCase)) return EMirrorFindReplaceMethod::RegularExpression;
+		return EMirrorFindReplaceMethod::Suffix;
+	};
+
+	Table->MirrorFindReplaceExpressions.Empty();
+	const TArray<TSharedPtr<FJsonValue>>* Exprs = nullptr;
+	if (TryGetArrayParam(Params, TEXT("expressions"), Exprs) && Exprs && Exprs->Num() > 0)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Exprs)
+		{
+			const TSharedPtr<FJsonObject>* E = nullptr;
+			if (!V->TryGetObject(E) || !E || !(*E).IsValid()) continue;
+			const FString Find = OptionalString(*E, TEXT("find"));
+			const FString Replace = OptionalString(*E, TEXT("replace"));
+			if (Find.IsEmpty() || Replace.IsEmpty()) continue;
+			Table->MirrorFindReplaceExpressions.Add(FMirrorFindReplaceExpression(FName(*Find), FName(*Replace), MethodFromString(OptionalString(*E, TEXT("method"), TEXT("suffix")))));
+		}
+	}
+	if (Table->MirrorFindReplaceExpressions.Num() == 0)
+	{
+		Table->MirrorFindReplaceExpressions.Add(FMirrorFindReplaceExpression(TEXT("_l"), TEXT("_r"), EMirrorFindReplaceMethod::Suffix));
+		Table->MirrorFindReplaceExpressions.Add(FMirrorFindReplaceExpression(TEXT("_r"), TEXT("_l"), EMirrorFindReplaceMethod::Suffix));
+	}
+
+	// UMirrorDataTable::UpdateFromFindReplaceExpressions(FFindReplaceOptions) is
+	// UE 5.8+. On 5.7 the expressions are stored on the table above but the
+	// mirror rows are not auto-synced from them here; the asset editor's Sync
+	// button (or manual row entry) fills them in.
+#if UE_MCP_HAS_5_8_API
+	Table->UpdateFromFindReplaceExpressions(UMirrorDataTable::FFindReplaceOptions::Sync());
+#endif
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Table, Table->GetPathName());
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("path"), Table->GetPathName());
+	Res->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+	Res->SetNumberField(TEXT("expressionCount"), Table->MirrorFindReplaceExpressions.Num());
+	Res->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+	MCPSetDeleteAssetRollback(Res, Table->GetPathName());
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadMirrorDataTable(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	UMirrorDataTable* Table = LoadAssetByPath<UMirrorDataTable>(AssetPath);
+	if (!Table) return MCPError(FString::Printf(TEXT("MirrorDataTable not found: %s"), *AssetPath));
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	Res->SetStringField(TEXT("path"), AssetPath);
+	Res->SetStringField(TEXT("skeleton"), Table->Skeleton ? Table->Skeleton->GetPathName() : FString());
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	for (const auto& Pair : Table->GetRowMap())
+	{
+		const FMirrorTableRow* Row = reinterpret_cast<const FMirrorTableRow*>(Pair.Value);
+		if (!Row) continue;
+		TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
+		R->SetStringField(TEXT("name"), Row->Name.ToString());
+		R->SetStringField(TEXT("mirroredName"), Row->MirroredName.ToString());
+		Rows.Add(MakeShared<FJsonValueObject>(R));
+	}
+	Res->SetArrayField(TEXT("rows"), Rows);
+	Res->SetNumberField(TEXT("rowCount"), Rows.Num());
+	return MCPResult(Res);
+}
+
+// ─── NormalizationSet ─────────────────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchNormalizationSet(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/MotionMatching"));
+
+	auto Created = MCPCreateAssetIdempotentNewObject<UPoseSearchNormalizationSet>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("PoseSearchNormalizationSet"));
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UPoseSearchNormalizationSet* NormSet = Created.Asset;
+
+	TArray<TSharedPtr<FJsonValue>> AddedDatabases;
+	const TArray<TSharedPtr<FJsonValue>>* Databases = nullptr;
+	if (TryGetArrayParam(Params, TEXT("databases"), Databases) && Databases)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Databases)
+		{
+			FString DbPath;
+			if (!V->TryGetString(DbPath)) continue;
+			UPoseSearchDatabase* Db = LoadAssetByPath<UPoseSearchDatabase>(DbPath);
+			if (!Db) return MCPError(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *DbPath));
+			NormSet->Databases.Add(Db);
+			AddedDatabases.Add(MakeShared<FJsonValueString>(Db->GetPathName()));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, NormSet, NormSet->GetPathName());
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("path"), NormSet->GetPathName());
+	Res->SetNumberField(TEXT("databaseCount"), AddedDatabases.Num());
+	Res->SetArrayField(TEXT("databases"), AddedDatabases);
+	MCPSetDeleteAssetRollback(Res, NormSet->GetPathName());
+	return MCPResult(Res);
+}
+
+// ─── Database tuning ──────────────────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	// Every parameter is read before anything can fail (#1057).
+	double ContinuingPoseCostBias = 0.0;
+	const bool bHasContinuingPoseCostBias = TryGetNumberParam(Params, TEXT("continuingPoseCostBias"), ContinuingPoseCostBias);
+	double BaseCostBias = 0.0;
+	const bool bHasBaseCostBias = TryGetNumberParam(Params, TEXT("baseCostBias"), BaseCostBias);
+	double LoopingCostBias = 0.0;
+	const bool bHasLoopingCostBias = TryGetNumberParam(Params, TEXT("loopingCostBias"), LoopingCostBias);
+	int32 KDTreeQueryNumNeighbors = 0;
+	const bool bHasKDTreeQueryNumNeighbors = TryGetNumberParam(Params, TEXT("kdTreeQueryNumNeighbors"), KDTreeQueryNumNeighbors);
+	FString Mode;
+	const bool bHasMode = TryGetStringParam(Params, TEXT("poseSearchMode"), Mode);
+	int32 NumberOfPrincipalComponents = 0;
+	const bool bHasNumberOfPrincipalComponents = TryGetNumberParam(Params, TEXT("numberOfPrincipalComponents"), NumberOfPrincipalComponents);
+	const FString NormSetPath = OptionalString(Params, TEXT("normalizationSetPath"));
+
+	UPoseSearchDatabase* Database = LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
+	if (!Database) return MCPError(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *AssetPath));
+
+	// Every field this action can write, read before any of them is touched. The
+	// action is its own inverse, so the rollback carries all of them whether or
+	// not the caller passed them.
+	const float PrevContinuingPoseCostBias = Database->ContinuingPoseCostBias;
+	const float PrevBaseCostBias = Database->BaseCostBias;
+	const float PrevLoopingCostBias = Database->LoopingCostBias;
+	const int32 PrevKDTreeQueryNumNeighbors = Database->KDTreeQueryNumNeighbors;
+	const EPoseSearchMode PrevPoseSearchMode = Database->PoseSearchMode;
+	FString PrevPoseSearchModeName = TEXT("BruteForce");
+	if (PrevPoseSearchMode == EPoseSearchMode::PCAKDTree) PrevPoseSearchModeName = TEXT("PCAKDTree");
+	else if (PrevPoseSearchMode == EPoseSearchMode::VPTree) PrevPoseSearchModeName = TEXT("VPTree");
+#if UE_MCP_HAS_5_5_API
+	// EPoseSearchMode::EventOnly is a later addition to the enum.
+	else if (PrevPoseSearchMode == EPoseSearchMode::EventOnly) PrevPoseSearchModeName = TEXT("EventOnly");
+#endif
+#if WITH_EDITORONLY_DATA
+	const int32 PrevNumberOfPrincipalComponents = Database->NumberOfPrincipalComponents;
+	const FString PrevNormalizationSetPath =
+		Database->NormalizationSet ? Database->NormalizationSet->GetPathName() : FString();
+#endif
+
+	Database->Modify();
+	if (bHasContinuingPoseCostBias) Database->ContinuingPoseCostBias = (float)ContinuingPoseCostBias;
+	if (bHasBaseCostBias) Database->BaseCostBias = (float)BaseCostBias;
+	if (bHasLoopingCostBias) Database->LoopingCostBias = (float)LoopingCostBias;
+	if (bHasKDTreeQueryNumNeighbors) Database->KDTreeQueryNumNeighbors = KDTreeQueryNumNeighbors;
+
+	if (bHasMode)
+	{
+		if (Mode.Equals(TEXT("bruteforce"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::BruteForce;
+		else if (Mode.Equals(TEXT("pcakdtree"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::PCAKDTree;
+		else if (Mode.Equals(TEXT("vptree"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::VPTree;
+#if UE_MCP_HAS_5_5_API
+		else if (Mode.Equals(TEXT("eventonly"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::EventOnly;
+#endif
+	}
+
+#if WITH_EDITORONLY_DATA
+	if (bHasNumberOfPrincipalComponents) Database->NumberOfPrincipalComponents = NumberOfPrincipalComponents;
+	if (!NormSetPath.IsEmpty())
+	{
+		UPoseSearchNormalizationSet* NormSet = LoadAssetByPath<UPoseSearchNormalizationSet>(NormSetPath);
+		if (!NormSet) return MCPError(FString::Printf(TEXT("PoseSearchNormalizationSet not found: %s"), *NormSetPath));
+		Database->NormalizationSet = NormSet;
+	}
+#endif
+
+	Database->PostEditChange();
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, Database, AssetPath);
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("path"), AssetPath);
+	Res->SetNumberField(TEXT("continuingPoseCostBias"), Database->ContinuingPoseCostBias);
+	Res->SetNumberField(TEXT("baseCostBias"), Database->BaseCostBias);
+	Res->SetNumberField(TEXT("loopingCostBias"), Database->LoopingCostBias);
+	Res->SetNumberField(TEXT("kdTreeQueryNumNeighbors"), Database->KDTreeQueryNumNeighbors);
+	// Every field the writes above can touch, not just the four this result
+	// echoes: numberOfPrincipalComponents and normalizationSetPath mutate and
+	// save the asset too, and leaving them out of this comparison is how a real
+	// write reports itself as a no-op.
+	bool bUnchanged =
+		PrevContinuingPoseCostBias == Database->ContinuingPoseCostBias
+		&& PrevBaseCostBias == Database->BaseCostBias
+		&& PrevLoopingCostBias == Database->LoopingCostBias
+		&& PrevKDTreeQueryNumNeighbors == Database->KDTreeQueryNumNeighbors
+		&& PrevPoseSearchMode == Database->PoseSearchMode;
+#if WITH_EDITORONLY_DATA
+	bUnchanged = bUnchanged
+		&& PrevNumberOfPrincipalComponents == Database->NumberOfPrincipalComponents
+		&& PrevNormalizationSetPath == (Database->NormalizationSet ? Database->NormalizationSet->GetPathName() : FString());
+#endif
+	Res->SetBoolField(TEXT("unchanged"), bUnchanged);
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+	Rollback->SetNumberField(TEXT("continuingPoseCostBias"), PrevContinuingPoseCostBias);
+	Rollback->SetNumberField(TEXT("baseCostBias"), PrevBaseCostBias);
+	Rollback->SetNumberField(TEXT("loopingCostBias"), PrevLoopingCostBias);
+	Rollback->SetNumberField(TEXT("kdTreeQueryNumNeighbors"), PrevKDTreeQueryNumNeighbors);
+	Rollback->SetStringField(TEXT("poseSearchMode"), PrevPoseSearchModeName);
+#if WITH_EDITORONLY_DATA
+	Rollback->SetNumberField(TEXT("numberOfPrincipalComponents"), PrevNumberOfPrincipalComponents);
+	// normalizationSetPath is only written when non-empty, so omitting it when the
+	// database had none leaves the assignment this call made in place. That is the
+	// one field the replay cannot clear, and the note below says so.
+	if (!PrevNormalizationSetPath.IsEmpty())
+	{
+		Rollback->SetStringField(TEXT("normalizationSetPath"), PrevNormalizationSetPath);
+	}
+#endif
+	MCPSetRollback(Res, TEXT("set_pose_search_database_settings"), Rollback);
+#if WITH_EDITORONLY_DATA
+	const bool bAssignedFirstNormalizationSet =
+		PrevNormalizationSetPath.IsEmpty() && Database->NormalizationSet != nullptr;
+	Res->SetBoolField(TEXT("rollbackLossy"), bAssignedFirstNormalizationSet);
+	if (bAssignedFirstNormalizationSet)
+	{
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("The database had no normalization set before this call. set_pose_search_database_settings only writes normalizationSetPath when it is non-empty and has no form that clears one, so the replay restores every other setting and leaves the assignment in place."));
+	}
+#else
+	Res->SetBoolField(TEXT("rollbackLossy"), false);
+#endif
+	return MCPResult(Res);
+}
+
+// ─── AnimGraph runtime nodes ──────────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddMotionMatchingNode(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	// Every parameter is read before anything can fail (#1057).
+	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
+	const FString DbPath = OptionalString(Params, TEXT("databasePath"));
+	double BlendTime = 0.0;
+	const bool bHasBlendTime = TryGetNumberParam(Params, TEXT("blendTime"), BlendTime);
+	const bool bConnectToOutput = OptionalBool(Params, TEXT("connectToOutput"), true);
+
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UEdGraph* Graph = nullptr;
+	TArray<UEdGraph*> All;
+	AnimBP->GetAllGraphs(All);
+	for (UEdGraph* G : All) { if (G && G->GetName() == GraphName) { Graph = G; break; } }
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	UPoseSearchDatabase* Database = nullptr;
+	if (!DbPath.IsEmpty())
+	{
+		Database = LoadAssetByPath<UPoseSearchDatabase>(DbPath);
+		if (!Database) return MCPError(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *DbPath));
+	}
+
+	UAnimGraphNode_MotionMatching* MMNode = NewObject<UAnimGraphNode_MotionMatching>(Graph, NAME_None, RF_Transactional);
+	PlaceAnimNode(Graph, MMNode, 0, 0);
+
+	UScriptStruct* NodeStruct = nullptr;
+	void* NodeData = GetAnimNodeMemory(MMNode, NodeStruct);
+	if (NodeStruct && NodeData)
+	{
+		if (Database) SetNodeObject(NodeStruct, NodeData, TEXT("Database"), Database);
+		if (bHasBlendTime) SetNodeFloat(NodeStruct, NodeData, TEXT("BlendTime"), (float)BlendTime);
+	}
+
+	bool bConnected = false;
+	// The node that fed the output pose before this call took the pin, recorded
+	// because deleting this node does not put that link back.
+	FString DisplacedOutputSource;
+	if (bConnectToOutput)
+	{
+		if (UAnimGraphNode_Root* Root = FindOutputPoseNode(Graph))
+		{
+			UEdGraphPin* RootIn = GetPosePin(Root, EGPD_Input);
+			UEdGraphPin* NodeOut = GetPosePin(MMNode, EGPD_Output);
+			if (RootIn && NodeOut)
+			{
+				if (RootIn->LinkedTo.Num() > 0 && RootIn->LinkedTo[0] && RootIn->LinkedTo[0]->GetOwningNode())
+				{
+					DisplacedOutputSource = RootIn->LinkedTo[0]->GetOwningNode()->NodeGuid.ToString();
+				}
+				RootIn->BreakAllPinLinks(); NodeOut->MakeLinkTo(RootIn); bConnected = true;
+			}
+		}
+	}
+
+	FKismetEditorUtilities::CompileBlueprint(AnimBP);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("assetPath"), AssetPath);
+	Res->SetStringField(TEXT("graphName"), GraphName);
+	Res->SetStringField(TEXT("nodeGuid"), MMNode->NodeGuid.ToString());
+	Res->SetStringField(TEXT("databasePath"), Database ? Database->GetPathName() : FString());
+	Res->SetBoolField(TEXT("connectedToOutput"), bConnected);
+	Res->SetStringField(TEXT("displacedOutputSource"), DisplacedOutputSource);
+
+	// blueprint(delete_node) reaches an AnimBlueprint graph and matches by node
+	// GUID, which is the one this call just minted.
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+	Rollback->SetStringField(TEXT("graphName"), GraphName);
+	Rollback->SetStringField(TEXT("nodeId"), MMNode->NodeGuid.ToString());
+	MCPSetRollback(Res, TEXT("delete_node"), Rollback);
+	Res->SetBoolField(TEXT("rollbackLossy"), !DisplacedOutputSource.IsEmpty());
+	if (!DisplacedOutputSource.IsEmpty())
+	{
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("Connecting to the output pose broke the link that was already on that pin. Deleting this node removes it but does not re-link the node it displaced, so the output pose is left unconnected: ")
+			TEXT("re-wire it with blueprint(connect_pins) from the node named in displacedOutputSource."));
+	}
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseHistoryNode(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	// Every parameter is read before anything can fail (#1057).
+	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
+	int32 PoseCount = 0;
+	const bool bHasPoseCount = TryGetNumberParam(Params, TEXT("poseCount"), PoseCount);
+	double SamplingInterval = 0.0;
+	const bool bHasSamplingInterval = TryGetNumberParam(Params, TEXT("samplingInterval"), SamplingInterval);
+	// Default to self-generated trajectory so no external trajectory pin is required.
+	const bool bGenerateTrajectory = OptionalBool(Params, TEXT("generateTrajectory"), true);
+	int32 TrajectoryHistoryCount = 0;
+	const bool bHasTrajectoryHistoryCount = TryGetNumberParam(Params, TEXT("trajectoryHistoryCount"), TrajectoryHistoryCount);
+	int32 TrajectoryPredictionCount = 0;
+	const bool bHasTrajectoryPredictionCount = TryGetNumberParam(Params, TEXT("trajectoryPredictionCount"), TrajectoryPredictionCount);
+	const bool bInsertBeforeOutput = OptionalBool(Params, TEXT("insertBeforeOutput"), true);
+
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UEdGraph* Graph = nullptr;
+	TArray<UEdGraph*> All;
+	AnimBP->GetAllGraphs(All);
+	for (UEdGraph* G : All) { if (G && G->GetName() == GraphName) { Graph = G; break; } }
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	UAnimGraphNode_PoseSearchHistoryCollector* HistNode = NewObject<UAnimGraphNode_PoseSearchHistoryCollector>(Graph, NAME_None, RF_Transactional);
+	PlaceAnimNode(Graph, HistNode, -300, 0);
+
+	UScriptStruct* NodeStruct = nullptr;
+	void* NodeData = GetAnimNodeMemory(HistNode, NodeStruct);
+	if (NodeStruct && NodeData)
+	{
+		if (bHasPoseCount) SetNodeInt(NodeStruct, NodeData, TEXT("PoseCount"), PoseCount);
+		if (bHasSamplingInterval) SetNodeFloat(NodeStruct, NodeData, TEXT("SamplingInterval"), (float)SamplingInterval);
+		SetNodeBool(NodeStruct, NodeData, TEXT("bGenerateTrajectory"), bGenerateTrajectory);
+		if (bHasTrajectoryHistoryCount) SetNodeInt(NodeStruct, NodeData, TEXT("TrajectoryHistoryCount"), TrajectoryHistoryCount);
+		if (bHasTrajectoryPredictionCount) SetNodeInt(NodeStruct, NodeData, TEXT("TrajectoryPredictionCount"), TrajectoryPredictionCount);
+	}
+
+	// Insert into the pose chain feeding the output: whatever currently drives the
+	// output pose becomes this node's Source, and this node drives the output.
+	bool bInserted = false;
+	// The node that fed the output pose before this one was spliced in front of
+	// it, recorded because deleting this node does not re-link it.
+	FString DisplacedOutputSource;
+	if (bInsertBeforeOutput)
+	{
+		if (UAnimGraphNode_Root* Root = FindOutputPoseNode(Graph))
+		{
+			UEdGraphPin* RootIn = GetPosePin(Root, EGPD_Input);
+			UEdGraphPin* HistIn = GetPosePin(HistNode, EGPD_Input);
+			UEdGraphPin* HistOut = GetPosePin(HistNode, EGPD_Output);
+			if (RootIn && HistIn && HistOut)
+			{
+				if (RootIn->LinkedTo.Num() > 0)
+				{
+					UEdGraphPin* PrevSource = RootIn->LinkedTo[0];
+					if (PrevSource->GetOwningNode())
+					{
+						DisplacedOutputSource = PrevSource->GetOwningNode()->NodeGuid.ToString();
+					}
+					RootIn->BreakAllPinLinks();
+					PrevSource->MakeLinkTo(HistIn);
+				}
+				HistOut->MakeLinkTo(RootIn);
+				bInserted = true;
+			}
+		}
+	}
+
+	FKismetEditorUtilities::CompileBlueprint(AnimBP);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("assetPath"), AssetPath);
+	Res->SetStringField(TEXT("graphName"), GraphName);
+	Res->SetStringField(TEXT("nodeGuid"), HistNode->NodeGuid.ToString());
+	Res->SetBoolField(TEXT("insertedBeforeOutput"), bInserted);
+	Res->SetStringField(TEXT("displacedOutputSource"), DisplacedOutputSource);
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+	Rollback->SetStringField(TEXT("graphName"), GraphName);
+	Rollback->SetStringField(TEXT("nodeId"), HistNode->NodeGuid.ToString());
+	MCPSetRollback(Res, TEXT("delete_node"), Rollback);
+	Res->SetBoolField(TEXT("rollbackLossy"), !DisplacedOutputSource.IsEmpty());
+	if (!DisplacedOutputSource.IsEmpty())
+	{
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("This node was spliced between the output pose and whatever fed it. Deleting it breaks both links and does not restore the original one, so the output pose is left unconnected: ")
+			TEXT("re-wire it with blueprint(connect_pins) from the node named in displacedOutputSource."));
+	}
+	return MCPResult(Res);
+}
+
+// Drive a Motion Matching node's Database from a ChooserTable, so the database is
+// selected at runtime by the character's state (the whole point of a pose-search
+// chooser). EvaluateChooser is a BlueprintPure + thread-safe library call whose
+// return type follows its ObjectClass input (DeterminesOutputType), so it can feed
+// the MM node's Database input pin directly - no anim-node-function graph needed.
+// The chooser's columns are read from the ContextObject; default is the anim
+// instance itself (Self), matching choosers that branch on AnimBP variables.
+TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	// table is an alias the registry resolves to chooserPath. Every parameter
+	// is read before anything can fail (#1057).
+	FString ChooserPath;
+	TSharedPtr<FJsonValue> ChooserPathError = RequireString(Params, TEXT("chooserPath"), ChooserPath);
+	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
+	// Context object the chooser reads its column values from. "self" (default) =
+	// the anim instance (choosers that branch on AnimBP variables). "pawn" = the
+	// owning pawn via TryGetPawnOwner (choosers that branch on character/pawn state).
+	const FString ContextSource = OptionalString(Params, TEXT("contextSource"), TEXT("self")).ToLower();
+
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	if (ChooserPathError) return ChooserPathError;
+	UChooserTable* Chooser = LoadAssetByPath<UChooserTable>(ChooserPath);
+	if (!Chooser) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *ChooserPath));
+
+	UEdGraph* Graph = nullptr;
+	TArray<UEdGraph*> All;
+	AnimBP->GetAllGraphs(All);
+	for (UEdGraph* G : All) { if (G && G->GetName() == GraphName) { Graph = G; break; } }
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	UAnimGraphNode_MotionMatching* MMNode = FindMotionMatchingNode(Graph);
+	if (!MMNode) return MCPError(TEXT("No Motion Matching node in the graph - call add_motion_matching_node first"));
+	UEdGraphPin* DatabasePin = MMNode->FindPin(TEXT("Database"), EGPD_Input);
+	if (!DatabasePin) return MCPError(TEXT("Motion Matching node has no Database input pin"));
+
+	UFunction* EvalFunc = UChooserFunctionLibrary::StaticClass()->FindFunctionByName(TEXT("EvaluateChooser"));
+	if (!EvalFunc) return MCPError(TEXT("UChooserFunctionLibrary::EvaluateChooser not found"));
+
+	Graph->Modify();
+
+	// EvaluateChooser(ContextObject, ChooserTable, ObjectClass) -> UObject (typed to ObjectClass).
+	UK2Node_CallFunction* EvalNode = NewObject<UK2Node_CallFunction>(Graph, NAME_None, RF_Transactional);
+	EvalNode->SetFromFunction(EvalFunc);
+	Graph->AddNode(EvalNode, false, false);
+	EvalNode->CreateNewGuid();
+	EvalNode->PostPlacedNewNode();
+	EvalNode->AllocateDefaultPins();
+	EvalNode->NodePosX = MMNode->NodePosX - 350;
+	EvalNode->NodePosY = MMNode->NodePosY + 150;
+
+	// Chooser literal + result type = PoseSearchDatabase (retypes the return pin).
+	if (UEdGraphPin* ChooserPin = EvalNode->FindPin(TEXT("ChooserTable"), EGPD_Input)) ChooserPin->DefaultObject = Chooser;
+	if (UEdGraphPin* ClassPin = EvalNode->FindPin(TEXT("ObjectClass"), EGPD_Input)) ClassPin->DefaultObject = UPoseSearchDatabase::StaticClass();
+	EvalNode->ReconstructNode();
+
+	UEdGraphPin* ContextPin = EvalNode->FindPin(TEXT("ContextObject"), EGPD_Input);
+	bool bContextWired = false;
+	FString ContextWiredTo;
+	// Reported so a caller can find and delete the nodes this call authored;
+	// there is no single inverse action for them.
+	FString ContextNodeGuid;
+	if (ContextPin)
+	{
+		UEdGraphPin* ContextSourcePin = nullptr;
+
+		if (ContextSource == TEXT("pawn") || ContextSource == TEXT("owner") || ContextSource == TEXT("character"))
+		{
+			if (UFunction* PawnFunc = UAnimInstance::StaticClass()->FindFunctionByName(TEXT("TryGetPawnOwner")))
+			{
+				UK2Node_CallFunction* PawnNode = NewObject<UK2Node_CallFunction>(Graph, NAME_None, RF_Transactional);
+				PawnNode->SetFromFunction(PawnFunc);
+				Graph->AddNode(PawnNode, false, false);
+				PawnNode->CreateNewGuid();
+				PawnNode->PostPlacedNewNode();
+				PawnNode->AllocateDefaultPins();
+				PawnNode->NodePosX = EvalNode->NodePosX - 250;
+				PawnNode->NodePosY = EvalNode->NodePosY;
+				ContextSourcePin = PawnNode->GetReturnValuePin();
+				if (ContextSourcePin) { ContextWiredTo = TEXT("pawn"); ContextNodeGuid = PawnNode->NodeGuid.ToString(); }
+			}
+		}
+
+		if (!ContextSourcePin) // "self" (default) or pawn-getter unavailable
+		{
+			UK2Node_Self* SelfNode = NewObject<UK2Node_Self>(Graph, NAME_None, RF_Transactional);
+			Graph->AddNode(SelfNode, false, false);
+			SelfNode->CreateNewGuid();
+			SelfNode->PostPlacedNewNode();
+			SelfNode->AllocateDefaultPins();
+			SelfNode->NodePosX = EvalNode->NodePosX - 200;
+			SelfNode->NodePosY = EvalNode->NodePosY;
+			for (UEdGraphPin* Pin : SelfNode->Pins)
+			{
+				if (Pin && Pin->Direction == EGPD_Output) { ContextSourcePin = Pin; break; }
+			}
+			if (ContextSourcePin) { ContextWiredTo = TEXT("self"); ContextNodeGuid = SelfNode->NodeGuid.ToString(); }
+		}
+
+		if (ContextSourcePin)
+		{
+			ContextSourcePin->MakeLinkTo(ContextPin);
+			bContextWired = true;
+		}
+	}
+
+	// Wire the evaluated database into the MM node's Database pin.
+	UEdGraphPin* ReturnPin = EvalNode->GetReturnValuePin();
+	if (!ReturnPin) return MCPError(TEXT("EvaluateChooser node produced no return pin"));
+	DatabasePin->BreakAllPinLinks();
+	ReturnPin->MakeLinkTo(DatabasePin);
+
+	// TryGetPawnOwner is not thread-safe; a multithreaded anim update would flag a
+	// race warning. Fetching the pawn on the game thread keeps the graph clean.
+	bool bDisabledThreadedUpdate = false;
+	if (ContextWiredTo == TEXT("pawn") && AnimBP->bUseMultiThreadedAnimationUpdate)
+	{
+		AnimBP->bUseMultiThreadedAnimationUpdate = false;
+		bDisabledThreadedUpdate = true;
+	}
+
+	Graph->NotifyGraphChanged();
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
+	FKismetEditorUtilities::CompileBlueprint(AnimBP);
+
+	const bool bConnected = DatabasePin->LinkedTo.Contains(ReturnPin);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("assetPath"), AssetPath);
+	Res->SetStringField(TEXT("graphName"), GraphName);
+	Res->SetStringField(TEXT("chooserPath"), Chooser->GetPathName());
+	Res->SetStringField(TEXT("motionMatchingNodeGuid"), MMNode->NodeGuid.ToString());
+	Res->SetBoolField(TEXT("databasePinDriven"), bConnected);
+	Res->SetBoolField(TEXT("contextWired"), bContextWired);
+	Res->SetStringField(TEXT("contextSource"), ContextWiredTo);
+	Res->SetBoolField(TEXT("disabledThreadedUpdate"), bDisabledThreadedUpdate);
+	Res->SetStringField(TEXT("evaluateChooserNodeGuid"), EvalNode->NodeGuid.ToString());
+	Res->SetStringField(TEXT("contextNodeGuid"), ContextNodeGuid);
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("This call authors an EvaluateChooser node and a context-source node, breaks whatever drove the Database pin, and may turn off multithreaded animation update. ")
+		TEXT("No single action undoes that: calling it again adds another EvaluateChooser rather than replacing this one, and deleting the nodes would leave the Database pin unwired. ")
+		TEXT("Recover by deleting the nodes named in evaluateChooserNodeGuid and contextNodeGuid with blueprint(delete_node) and restoring the Database pin by hand."));
+	return MCPResult(Res);
+}
+
+// ═══ #713 - distance-matching graph authoring ═════════════════════════════
+// Distance matching drives a Sequence Evaluator's explicit time each frame from
+// a thread-safe anim-node function. blueprint(search_node_types) can't surface
+// the evaluator node, and there was no way to bind the update function. These two
+// handlers close both gaps: add_sequence_evaluator drops the node, and
+// bind_anim_node_function binds a UFUNCTION to a node's update slot.
+
+// The output pose node of a graph. In the top-level AnimGraph this is a
+// UAnimGraphNode_Root; inside a state's inner graph it is a
+// UAnimGraphNode_StateResult (both derive from UAnimGraphNode_Base and expose a
+// single pose input pin).
+static UAnimGraphNode_Base* FindGraphResultNode(UEdGraph* Graph)
+{
+	for (UEdGraphNode* N : Graph->Nodes)
+	{
+		if (UAnimGraphNode_Root* Root = Cast<UAnimGraphNode_Root>(N)) return Root;
+	}
+	for (UEdGraphNode* N : Graph->Nodes)
+	{
+		if (UAnimGraphNode_StateResult* Res = Cast<UAnimGraphNode_StateResult>(N)) return Res;
+	}
+	return nullptr;
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddSequenceEvaluator(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	// Every parameter is read before anything can fail (#1057).
+	// Distance matching usually lives inside a state's graph; pass that state name
+	// as graphName. Defaults to the top-level AnimGraph.
+	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
+	const FString SequencePath = OptionalString(Params, TEXT("sequencePath"));
+	double ExplicitTime = 0.0;
+	const bool bHasExplicitTime = TryGetNumberParam(Params, TEXT("explicitTime"), ExplicitTime);
+	bool bShouldLoop = false;
+	const bool bHasShouldLoop = TryGetBoolParam(Params, TEXT("shouldLoop"), bShouldLoop);
+	// Distance matching wants time to advance (root motion extraction), so the
+	// default here flips the engine default of bTeleportToExplicitTime=true.
+	const bool bTeleportToExplicitTime = OptionalBool(Params, TEXT("teleportToExplicitTime"), false);
+	const bool bConnectToOutput = OptionalBool(Params, TEXT("connectToOutput"), true);
+
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UEdGraph* Graph = MCPAnimStateGraph::FindGraphByName(AnimBP, GraphName);
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	UAnimSequenceBase* Sequence = nullptr;
+	if (!SequencePath.IsEmpty())
+	{
+		Sequence = LoadAssetByPath<UAnimSequenceBase>(SequencePath);
+		if (!Sequence) return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *SequencePath));
+	}
+
+	UAnimGraphNode_SequenceEvaluator* EvalNode = NewObject<UAnimGraphNode_SequenceEvaluator>(Graph, NAME_None, RF_Transactional);
+	PlaceAnimNode(Graph, EvalNode, 0, 0);
+
+	UScriptStruct* NodeStruct = nullptr;
+	void* NodeData = GetAnimNodeMemory(EvalNode, NodeStruct);
+	if (NodeStruct && NodeData)
+	{
+		if (Sequence) SetNodeObject(NodeStruct, NodeData, TEXT("Sequence"), Sequence);
+		if (bHasExplicitTime) SetNodeFloat(NodeStruct, NodeData, TEXT("ExplicitTime"), (float)ExplicitTime);
+		if (bHasShouldLoop) SetNodeBool(NodeStruct, NodeData, TEXT("bShouldLoop"), bShouldLoop);
+		SetNodeBool(NodeStruct, NodeData, TEXT("bTeleportToExplicitTime"), bTeleportToExplicitTime);
+	}
+
+	bool bConnected = false;
+	// The node that fed the result pose before this call took the pin, recorded
+	// because deleting this node does not put that link back.
+	FString DisplacedOutputSource;
+	if (bConnectToOutput)
+	{
+		if (UAnimGraphNode_Base* Result = FindGraphResultNode(Graph))
+		{
+			UEdGraphPin* ResultIn = GetPosePin(Result, EGPD_Input);
+			UEdGraphPin* NodeOut = GetPosePin(EvalNode, EGPD_Output);
+			if (ResultIn && NodeOut)
+			{
+				if (ResultIn->LinkedTo.Num() > 0 && ResultIn->LinkedTo[0] && ResultIn->LinkedTo[0]->GetOwningNode())
+				{
+					DisplacedOutputSource = ResultIn->LinkedTo[0]->GetOwningNode()->NodeGuid.ToString();
+				}
+				ResultIn->BreakAllPinLinks(); NodeOut->MakeLinkTo(ResultIn); bConnected = true;
+			}
+		}
+	}
+
+	FKismetEditorUtilities::CompileBlueprint(AnimBP);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("assetPath"), AssetPath);
+	Res->SetStringField(TEXT("graphName"), GraphName);
+	Res->SetStringField(TEXT("nodeGuid"), EvalNode->NodeGuid.ToString());
+	Res->SetStringField(TEXT("sequencePath"), Sequence ? Sequence->GetPathName() : FString());
+	Res->SetBoolField(TEXT("connectedToOutput"), bConnected);
+	Res->SetStringField(TEXT("displacedOutputSource"), DisplacedOutputSource);
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+	Rollback->SetStringField(TEXT("graphName"), GraphName);
+	Rollback->SetStringField(TEXT("nodeId"), EvalNode->NodeGuid.ToString());
+	MCPSetRollback(Res, TEXT("delete_node"), Rollback);
+	Res->SetBoolField(TEXT("rollbackLossy"), !DisplacedOutputSource.IsEmpty());
+	if (!DisplacedOutputSource.IsEmpty())
+	{
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("Connecting to the result pose broke the link that was already on that pin. Deleting this node removes it but does not re-link the node it displaced, so the result pose is left unconnected: ")
+			TEXT("re-wire it with blueprint(connect_pins) from the node named in displacedOutputSource."));
+	}
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::BindAnimNodeFunction(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	// function and nodeId are aliases the registry resolves. Every parameter is
+	// read before anything can fail (#1057).
+	FString FunctionName;
+	TSharedPtr<FJsonValue> FunctionNameError = RequireString(Params, TEXT("functionName"), FunctionName);
+	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
+	FString NodeGuidStr;
+	TSharedPtr<FJsonValue> NodeGuidError = RequireString(Params, TEXT("nodeGuid"), NodeGuidStr);
+	// Which bindable slot: OnUpdate (default), OnBecomeRelevant, OnInitialUpdate.
+	const FString Slot = OptionalString(Params, TEXT("binding"), TEXT("update")).ToLower();
+
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	if (FunctionNameError) return FunctionNameError;
+
+	UEdGraph* Graph = MCPAnimStateGraph::FindGraphByName(AnimBP, GraphName);
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	// Locate the target node by GUID (from add_sequence_evaluator / add_*_node).
+	if (NodeGuidError) return NodeGuidError;
+	FGuid NodeGuid;
+	if (!FGuid::Parse(NodeGuidStr, NodeGuid)) return MCPError(FString::Printf(TEXT("Invalid nodeGuid: %s"), *NodeGuidStr));
+
+	UAnimGraphNode_Base* Node = nullptr;
+	for (UEdGraphNode* N : Graph->Nodes)
+	{
+		if (N && N->NodeGuid == NodeGuid) { Node = Cast<UAnimGraphNode_Base>(N); break; }
+	}
+	if (!Node) return MCPError(FString::Printf(TEXT("Anim graph node with guid %s not found in graph '%s'"), *NodeGuidStr, *GraphName));
+
+	FMemberReference* Target = nullptr;
+	FString SlotResolved;
+	if (Slot == TEXT("update") || Slot == TEXT("onupdate"))                       { Target = &Node->UpdateFunction;        SlotResolved = TEXT("update"); }
+	else if (Slot == TEXT("becomerelevant") || Slot == TEXT("onbecomerelevant")) { Target = &Node->BecomeRelevantFunction; SlotResolved = TEXT("becomeRelevant"); }
+	else if (Slot == TEXT("initialupdate") || Slot == TEXT("oninitialupdate"))   { Target = &Node->InitialUpdateFunction; SlotResolved = TEXT("initialUpdate"); }
+	else return MCPError(FString::Printf(TEXT("Unknown binding slot '%s' (use 'update', 'becomeRelevant' or 'initialUpdate')"), *Slot));
+
+	// Verify the function exists on the AnimBP class so the binding resolves at
+	// compile time instead of being silently dropped. Skeleton class carries the
+	// stubs even before a full compile.
+	const FName FuncFName(*FunctionName);
+	UFunction* Found = nullptr;
+	if (UClass* SkelClass = AnimBP->SkeletonGeneratedClass) Found = SkelClass->FindFunctionByName(FuncFName);
+	if (!Found) { if (UClass* GenClass = AnimBP->GeneratedClass) Found = GenClass->FindFunctionByName(FuncFName); }
+	if (!Found)
+	{
+		return MCPError(FString::Printf(TEXT("Function '%s' not found on AnimBlueprint '%s' - create it first (a thread-safe anim-node function)"), *FunctionName, *AnimBP->GetName()));
+	}
+	// Capture metadata now: CompileBlueprint below regenerates the class and frees
+	// this UFunction*, so it must not be dereferenced afterwards.
+	const bool bThreadSafe = Found->HasMetaData(TEXT("BlueprintThreadSafe"));
+
+	// What the slot was bound to before, read before it is overwritten: this
+	// action is its own inverse, and an empty slot has no call that clears it.
+	const FName PrevFunctionName = Target->GetMemberName();
+
+	Node->Modify();
+	Target->SetSelfMember(FuncFName);
+	// Mirror to the runtime node so the setting is consistent pre-compile.
+	Node->PostEditChange();
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
+	FKismetEditorUtilities::CompileBlueprint(AnimBP);
+
+	// A bound anim-node function only runs if it is BlueprintThreadSafe with a
+	// compatible signature; the compiler rejects it otherwise. Surface that rather
+	// than reporting hollow success.
+	const bool bCompiled = (AnimBP->Status != EBlueprintStatus::BS_Error);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPAnimSaveOutcome(Res, AnimBP, AssetPath);
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("assetPath"), AssetPath);
+	Res->SetStringField(TEXT("graphName"), GraphName);
+	Res->SetStringField(TEXT("nodeGuid"), NodeGuidStr);
+	Res->SetStringField(TEXT("binding"), SlotResolved);
+	Res->SetStringField(TEXT("functionName"), FunctionName);
+	Res->SetBoolField(TEXT("threadSafe"), bThreadSafe);
+	Res->SetBoolField(TEXT("compiled"), bCompiled);
+	if (!bThreadSafe || !bCompiled)
+	{
+		Res->SetStringField(TEXT("warning"), TEXT("bound, but the function must be marked BlueprintThreadSafe with a compatible (FAnimUpdateContext, FAnim...Reference) signature for the binding to run - the compiler rejected it otherwise"));
+	}
+	Res->SetStringField(TEXT("previousFunctionName"), PrevFunctionName.ToString());
+	Res->SetBoolField(TEXT("unchanged"), PrevFunctionName == FuncFName);
+
+	if (!PrevFunctionName.IsNone())
+	{
+		TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+		Rollback->SetStringField(TEXT("graphName"), GraphName);
+		Rollback->SetStringField(TEXT("nodeGuid"), NodeGuidStr);
+		Rollback->SetStringField(TEXT("binding"), SlotResolved);
+		Rollback->SetStringField(TEXT("functionName"), PrevFunctionName.ToString());
+		MCPSetRollback(Res, TEXT("bind_anim_node_function"), Rollback);
+		Res->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Res->SetBoolField(TEXT("rollbackPossible"), false);
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("The slot carried no binding before this call. bind_anim_node_function requires a functionName and has no form that clears a slot, so there is no call that returns the node to unbound."));
+	}
+	return MCPResult(Res);
+}

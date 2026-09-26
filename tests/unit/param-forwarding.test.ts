@@ -7,10 +7,11 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { z } from "zod";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { bp, categoryTool } from "../../src/types.js";
-import { parseParams, ROUTING_PARAMS } from "../../src/action-schema.js";
-import { keysRead, mapTracked } from "../../src/param-forwarding.js";
-import { STRICT_PARAMS_ENV } from "../../src/call-pipeline.js";
+import { bp, categoryTool } from "../../src/surface/category-tool.js";
+import { parseParams, ROUTING_PARAMS } from "../../src/surface/action-schema.js";
+import { mapTracked } from "../../src/surface/param-forwarding.js";
+import { STRICT_PARAMS_ENV } from "../../src/dispatch/call-pipeline.js";
+import { paramMapperOf } from "../../src/surface/epic-input.js";
 
 
 function fakeCtx(seen: Array<Record<string, unknown>>) {
@@ -57,7 +58,7 @@ describe("unforwarded parameters at dispatch", () => {
   const probe = () => categoryTool("probe", "Probe.", {
     by_name: bp("mutate", "Delete. Params: nodeName", "probe_delete", (p) => ({ nodeName: p.nodeName })),
     by_id: bp("mutate", "Delete. Params: nodeId", "probe_delete"),
-  }, undefined, { nodeName: z.string().optional(), nodeId: z.string().optional() });
+  }, { nodeName: z.string().optional(), nodeId: z.string().optional() });
 
   afterEach(() => { delete process.env[STRICT_PARAMS_ENV]; });
 
@@ -85,7 +86,7 @@ describe("unforwarded parameters at dispatch", () => {
 describe("parameters the editor never read", () => {
   const probe = () => categoryTool("probe", "Probe.", {
     add: bp("mutate", "Add. Params: blendDuration", "probe_add"),
-  }, undefined, { blendDuration: z.number().optional() });
+  }, { blendDuration: z.number().optional() });
 
   const answering = (answer: Record<string, unknown>) => ({
     bridge: {
@@ -153,6 +154,23 @@ function sample(schema: z.ZodTypeAny | undefined): unknown {
   }
 }
 
+/** The keys a mapper reads from `bag`, including those read before it throws. */
+function keysRead(mapParams: (p: Record<string, unknown>) => Record<string, unknown>, bag: Record<string, unknown>): Set<string> {
+  const read = new Set<string>();
+  const note = (key: string | symbol) => { if (typeof key === "string") read.add(key); };
+  const view = new Proxy(bag, {
+    get(target, key, receiver) { note(key); return Reflect.get(target, key, receiver); },
+    has(target, key) { note(key); return Reflect.has(target, key); },
+    getOwnPropertyDescriptor(target, key) { note(key); return Reflect.getOwnPropertyDescriptor(target, key); },
+  });
+  try {
+    if ((mapParams(view) as unknown) === view) return new Set(Object.keys(bag));
+  } catch {
+    // A refusal still read what it validated.
+  }
+  return read;
+}
+
 /** Documented parameters of one action that its mapper never reads, alone or alongside the rest. */
 function ignoredDocumentedParams(schema: Record<string, z.ZodTypeAny>, description: string, mapParams: (p: Record<string, unknown>) => Record<string, unknown>): string[] {
   const declared = new Set(Object.keys(schema));
@@ -168,8 +186,9 @@ function surfaceOffenders(): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const tool of ALL_TOOLS) {
     for (const [action, spec] of Object.entries(tool.actions)) {
-      if (spec.kind !== "bridge" || !spec.mapParams) continue;
-      const ignored = ignoredDocumentedParams(tool.schema as Record<string, z.ZodTypeAny>, spec.description ?? "", spec.mapParams);
+      const mapper = spec.kind === "bridge" ? paramMapperOf(spec) : undefined;
+      if (!mapper) continue;
+      const ignored = ignoredDocumentedParams(tool.schema as Record<string, z.ZodTypeAny>, spec.description ?? "", mapper);
       if (ignored.length > 0) out[`${tool.name}.${action}`] = ignored;
     }
   }

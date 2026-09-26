@@ -15,7 +15,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/AssetHandlers_MeshBoolean.h"
+#include "Handlers/Asset/AssetHandlers_MeshBoolean.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"

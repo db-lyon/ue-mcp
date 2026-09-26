@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { isDirectiveResponse, type ToolContext, type ElicitFn, type ElicitResult, type PluginInfo } from "../../src/types.js";
-import { clearWorkarounds } from "../../src/workaround-tracker.js";
-import type { RegistryPlugin } from "../../src/registry-catalog.js";
+import type { ToolContext, ElicitFn, ElicitResult, PluginInfo } from "../../src/core/types.js";
+import { isDirectiveResponse } from "../../src/core/directive.js";
+import { clearWorkarounds } from "../../src/dispatch/workaround-tracker.js";
+import type { RegistryPlugin } from "../../src/extensions/registry-catalog.js";
 
 /**
  * feedback(submit) with plugin routing live: the same approval gate, but the
@@ -28,23 +29,23 @@ const CATALOG: RegistryPlugin[] = [
   },
 ];
 
-vi.mock("../../src/registry-catalog.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/registry-catalog.js")>();
+vi.mock("../../src/extensions/registry-catalog.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/extensions/registry-catalog.js")>();
   return { ...actual, fetchRegistryCatalog: async () => CATALOG };
 });
 
 const mockSubmitFeedback = vi.fn();
-vi.mock("../../src/github-app.js", () => ({
+vi.mock("../../src/feedback/github-app.js", () => ({
   submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
 }));
 
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/auth.js", () => ({
+vi.mock("../../src/feedback/github-auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 
 const { feedbackTool } = await import("../../src/tools/feedback.js");
-const { clearCoreSurfaceCache } = await import("../../src/feedback-routing.js");
+const { clearCoreSurfaceCache } = await import("../../src/feedback/feedback-routing.js");
 
 const PIE_REPO = { owner: "db-lyon", repo: "pie-studio" };
 const CORE = { owner: "db-lyon", repo: "ue-mcp" };
@@ -59,6 +60,7 @@ function pieStudioPlugin(): PluginInfo {
     version: "1.0.0",
     actionPrefix: "pie",
     status: "active",
+    degraded: [],
     injected: {},
     provided: { pie: ["replay", "record", "observe"] },
     knowledge: {},

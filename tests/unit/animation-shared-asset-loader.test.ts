@@ -1,11 +1,11 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
+import { listHandlerFiles } from "../../scripts/lib/cpp-registrations.mjs";
 
-const dir = new URL("../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/", import.meta.url);
-const animationSources = readdirSync(dir)
-  .filter((name) => name.startsWith("AnimationHandlers") && name.endsWith(".cpp"))
-  .map((name) => ({ name, source: readFileSync(new URL(name, dir), "utf8") }));
+const animationSources = listHandlerFiles()
+  .filter(({ name }) => name.startsWith("AnimationHandlers"))
+  .map(({ name, path }) => ({ name, source: readFileSync(path, "utf8") }));
 
 describe("animation handlers load assets through the shared resolver (#1108)", () => {
   it("never calls the editor asset library loader directly", () => {

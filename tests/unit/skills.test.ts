@@ -11,7 +11,7 @@ import * as path from "node:path";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import { flowCategoryForCheck } from "../../src/flow/flow-surface.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import type { FlowConfig } from "../../src/flow/schema.js";
 import {
   CORE_OWNER,
@@ -29,7 +29,7 @@ import {
   setFrontmatterName,
   skillNamespace,
   syncPluginSkills,
-} from "../../src/skills.js";
+} from "../../src/extensions/skills.js";
 
 let tmp: string;
 let projectDir: string;

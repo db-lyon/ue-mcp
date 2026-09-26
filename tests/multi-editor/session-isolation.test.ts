@@ -8,14 +8,14 @@
  * lets a guard declared by one project's plugins veto another project's calls.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { FakeBridge } from "../fake-bridge.js";
-import { SessionRegistry, type EditorSession } from "../../src/session.js";
-import { withAssetLocks, SESSION_ID } from "../../src/locking.js";
+import { SessionRegistry, type EditorSession } from "../../src/sessions/session.js";
+import { withAssetLocks } from "../../src/dispatch/locking.js";
+import { SESSION_ID } from "../../src/dispatch/lock-owner.js";
 import { assetTool } from "../../src/tools/asset.js";
-import type { ToolContext } from "../../src/types.js";
+
+import { ProjectFixture, sessionToolContext } from "../helpers/project-fixture.js";
 
 /**
  * What a session actually sent, minus the dialog guard's own probe.
@@ -29,33 +29,17 @@ function sent(methods: string[]): string[] {
   return methods.filter((m) => m !== "list_dialogs");
 }
 
-
-let root: string;
+let fixture: ProjectFixture;
 let alpha: FakeBridge;
 let beta: FakeBridge;
 let sessions: SessionRegistry;
 let a: EditorSession;
 let b: EditorSession;
 
-function makeProject(name: string): string {
-  const dir = path.join(root, name);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, `${name}.uproject`),
-    JSON.stringify({ FileVersion: 3, EngineAssociation: "5.6" }),
-    "utf-8",
-  );
-  return path.join(dir, `${name}.uproject`);
-}
-
-function ctxFor(session: EditorSession): ToolContext {
-  return { bridge: session.guarded, project: session.project, session, sessions };
-}
-
 beforeEach(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-isolation-"));
-  const alphaProject = makeProject("Alpha");
-  const betaProject = makeProject("Beta");
+  fixture = new ProjectFixture("ue-mcp-isolation-");
+  const alphaProject = fixture.makeProject("Alpha");
+  const betaProject = fixture.makeProject("Beta");
   alpha = await FakeBridge.start({ projectDir: path.dirname(alphaProject) });
   beta = await FakeBridge.start({ projectDir: path.dirname(betaProject) });
 
@@ -71,7 +55,7 @@ afterEach(async () => {
   b.bridge.disconnect();
   await alpha.stop();
   await beta.stop();
-  fs.rmSync(root, { recursive: true, force: true });
+  fixture.cleanup();
 });
 
 describe("lock ownership", () => {
@@ -99,9 +83,9 @@ describe("lock ownership", () => {
   });
 
   it("sends the addressed editor's id from the explicit lock actions too", async () => {
-    await assetTool.actions.lock.handler!(ctxFor(a), { action: "lock", assetPath: "/Game/Thing" });
-    await assetTool.actions.unlock.handler!(ctxFor(b), { action: "unlock", assetPath: "/Game/Thing" });
-    await assetTool.actions.unlock_all.handler!(ctxFor(b), { action: "unlock_all" });
+    await assetTool.actions.lock.handler!(sessionToolContext(sessions, a), { action: "lock", assetPath: "/Game/Thing" });
+    await assetTool.actions.unlock.handler!(sessionToolContext(sessions, b), { action: "unlock", assetPath: "/Game/Thing" });
+    await assetTool.actions.unlock_all.handler!(sessionToolContext(sessions, b), { action: "unlock_all" });
 
     expect(alpha.calls.find((c) => c.method === "acquire_lock")!.params.sessionId).toBe(a.lockOwnerId);
     expect(beta.calls.find((c) => c.method === "release_lock")!.params.sessionId).toBe(b.lockOwnerId);
@@ -109,8 +93,8 @@ describe("lock ownership", () => {
   });
 
   it("round-trips: what unlock releases is what lock acquired", async () => {
-    await assetTool.actions.lock.handler!(ctxFor(a), { action: "lock", assetPath: "/Game/Thing" });
-    await assetTool.actions.unlock.handler!(ctxFor(a), { action: "unlock", assetPath: "/Game/Thing" });
+    await assetTool.actions.lock.handler!(sessionToolContext(sessions, a), { action: "lock", assetPath: "/Game/Thing" });
+    await assetTool.actions.unlock.handler!(sessionToolContext(sessions, a), { action: "unlock", assetPath: "/Game/Thing" });
 
     const acquired = alpha.calls.find((c) => c.method === "acquire_lock")!.params.sessionId;
     const released = alpha.calls.find((c) => c.method === "release_lock")!.params.sessionId;
@@ -118,7 +102,7 @@ describe("lock ownership", () => {
   });
 
   it("still honours an explicitly passed sessionId, for clearing a crashed one", async () => {
-    await assetTool.actions.unlock_all.handler!(ctxFor(a), {
+    await assetTool.actions.unlock_all.handler!(sessionToolContext(sessions, a), {
       action: "unlock_all",
       sessionId: "some-crashed-session",
     });

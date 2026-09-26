@@ -11,8 +11,8 @@ import { GuardRegistry } from "../../src/flow/guard.js";
 import { GuardedBridge } from "../../src/flow/guarded-bridge.js";
 import { loadFlowConfig } from "../../src/flow/loader.js";
 import { GUARD_CONFIG_KEY } from "../../src/guard-task.js";
-import type { IBridge } from "../../src/bridge.js";
-import type { ToolContext } from "../../src/types.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 // Keep real filesystem operations, while allowing deterministic read failures
 // and file changes during a read on both Windows and Unix.

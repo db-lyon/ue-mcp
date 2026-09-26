@@ -132,6 +132,7 @@ async function countTokens(text) {
  * Returns one row per measured thing, keyed like BUDGETS.
  */
 export async function measureContextTax() {
+  /** @type {Record<string, { what: string, chars: number, tokens: number, exact: boolean, [extra: string]: unknown }>} */
   const rows = {};
   for (const strategy of STRATEGIES) {
     const seeded = await withServer(strategy, async (client) => {

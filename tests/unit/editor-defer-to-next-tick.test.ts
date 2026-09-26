@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { editorTool } from "../../src/tools/editor.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 /**
  * #973: a scripted call runs inside FEditorScriptExecutionGuard, which sets

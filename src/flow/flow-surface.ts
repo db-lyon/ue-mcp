@@ -7,7 +7,7 @@
  * Restated rather than read off the built tool because `flow-tool.ts` imports
  * what imports this, and `tests/unit/skills.test.ts` fails if the two disagree.
  */
-import type { ActionEffect, ToolDef } from "../types.js";
+import type { ActionEffect, ToolDef } from "../core/types.js";
 
 /**
  * `run` is `mutate` rather than `unknown`: a flow is whatever its steps are,

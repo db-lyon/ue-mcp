@@ -12,29 +12,13 @@
  * unexpected key would be the next defect.
  */
 import { describe, expect, it } from "vitest";
-import { categoryTool, bp, takeTimeout, type ToolContext, type ToolDef } from "../../src/types.js";
-import { MAX_BRIDGE_TIMEOUT_MS } from "../../src/bridge-timeouts.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
-import type { IBridge } from "../../src/bridge.js";
-
-interface Recorded {
-  method: string;
-  params?: Record<string, unknown>;
-  timeoutMs?: number;
-}
-
-function recordingBridge(): IBridge & { calls: Recorded[] } {
-  const calls: Recorded[] = [];
-  return {
-    calls,
-    isConnected: true,
-    connect: async () => {},
-    call: async (method: string, params?: Record<string, unknown>, timeoutMs?: number) => {
-      calls.push({ method, params, timeoutMs });
-      return { success: true };
-    },
-  } as unknown as IBridge & { calls: Recorded[] };
-}
+import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import { categoryTool, bp } from "../../src/surface/category-tool.js";
+import { takeTimeout } from "../../src/dispatch/call-pipeline.js";
+import { MAX_BRIDGE_TIMEOUT_MS } from "../../src/bridge/bridge-timeouts.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
+import { recordingBridge } from "../fake-bridge.js";
 
 function fixture(): ToolDef {
   return categoryTool("demo", "Demo", {
@@ -83,7 +67,7 @@ describe("timeoutMs on a category call (#989)", () => {
       local: { kind: "handler", effect: "read", description: "Local handler", handler: async (_ctx, p) => { seen = p; return { ok: true }; } },
     });
     await tool.handler!(ctxFor(recordingBridge()), { action: "local", name: "x", timeoutMs: 600_000 });
-    expect(seen).toEqual({ action: "local", name: "x" });
+    expect(seen).toEqual({ name: "x" });
   });
 
   it("is honoured through the micro-context gateway, beside args or inside them", async () => {

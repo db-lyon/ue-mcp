@@ -16,6 +16,7 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
+#include "HandlerUtils.h"
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
 
@@ -81,4 +82,94 @@ namespace MCPEditorState
 		return FPackageName::DoesPackageExist(LevelPath, &Filename) &&
 			Filename.EndsWith(FPackageName::GetMapPackageExtension(), ESearchCase::IgnoreCase);
 	}
+
+	/**
+	 * The refusal an action that opens another map returns while packages are
+	 * dirty, or nullptr when nothing is. OutDirty receives the dirty list either
+	 * way, so a clean call can reuse it as its dirtied-packages baseline.
+	 */
+	inline TSharedPtr<FJsonValue> RefuseIfDirty(const FString& Message, TArray<FString>& OutDirty)
+	{
+		CollectDirtyEditorPackageNames(OutDirty);
+		if (OutDirty.IsEmpty())
+		{
+			return nullptr;
+		}
+		TSharedPtr<FJsonObject> Result = MCPErrorObject(Message);
+		Result->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(OutDirty));
+		return MCPResult(Result);
+	}
+
+	/** The level(load_level) handler, passed in by the level handlers that own it. */
+	using FLoadLevelHandler = TSharedPtr<FJsonValue> (*)(const TSharedPtr<FJsonObject>&);
+
+	/** Open LevelPath through level(load_level). On failure OutError carries the
+	 *  handler's own error, or a generic sentence when it gave none. */
+	inline bool LoadLevelViaHandler(FLoadLevelHandler LoadLevel, const FString& LevelPath, FString& OutError)
+	{
+		TSharedPtr<FJsonObject> LoadParams = MakeShared<FJsonObject>();
+		LoadParams->SetStringField(TEXT("levelPath"), LevelPath);
+		const TSharedPtr<FJsonValue> LoadResult = LoadLevel(LoadParams);
+		if (!LoadResult.IsValid() || LoadResult->Type != EJson::Object)
+		{
+			OutError = FString::Printf(TEXT("Level load returned an invalid result: %s"), *LevelPath);
+			return false;
+		}
+		const TSharedPtr<FJsonObject> LoadObject = LoadResult->AsObject();
+		bool bSuccess = false;
+		LoadObject->TryGetBoolField(TEXT("success"), bSuccess);
+		if (bSuccess)
+		{
+			return true;
+		}
+		if (!LoadObject->TryGetStringField(TEXT("error"), OutError))
+		{
+			OutError = FString::Printf(TEXT("Failed to load level: %s"), *LevelPath);
+		}
+		return false;
+	}
+
+	/**
+	 * Puts the map that was open back after an action opened another one.
+	 * Restore() reports the outcome; with bRestoreOnExit the destructor restores
+	 * on any exit path that did not already call it.
+	 */
+	class FScopedLevelRestore
+	{
+	public:
+		FScopedLevelRestore(FLoadLevelHandler InLoadLevel, bool bInRestoreOnExit)
+			: LoadLevel(InLoadLevel), bRestoreOnExit(bInRestoreOnExit) {}
+		~FScopedLevelRestore()
+		{
+			if (bRestoreOnExit && !bRestored && !LevelPath.IsEmpty())
+			{
+				FString Ignored;
+				Restore(Ignored);
+			}
+		}
+		FScopedLevelRestore(const FScopedLevelRestore&) = delete;
+		FScopedLevelRestore& operator=(const FScopedLevelRestore&) = delete;
+
+		/** The map to put back. Empty means there is nothing to restore. */
+		void SetLevelPath(const FString& InLevelPath) { LevelPath = InLevelPath; }
+		const FString& GetLevelPath() const { return LevelPath; }
+
+		/** True when the original map is open again (or already was). */
+		bool Restore(FString& OutError)
+		{
+			if (LevelPath.IsEmpty())
+			{
+				return false;
+			}
+			bRestored = CurrentEditorLevelPackageName() == LevelPath
+				|| LoadLevelViaHandler(LoadLevel, LevelPath, OutError);
+			return bRestored;
+		}
+
+	private:
+		FLoadLevelHandler LoadLevel = nullptr;
+		FString LevelPath;
+		bool bRestoreOnExit = false;
+		bool bRestored = false;
+	};
 }

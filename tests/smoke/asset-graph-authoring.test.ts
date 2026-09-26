@@ -2,7 +2,7 @@
 // type the actions were built for. Skips when Mutable is not enabled.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, TEST_PREFIX } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 interface Pin { name: string; pinId: string; direction: string }
 interface Node { nodeGuid: string; nodePath: string; nodeClass: string; pins: Pin[] }

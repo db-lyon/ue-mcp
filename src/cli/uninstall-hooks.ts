@@ -1,0 +1,86 @@
+#!/usr/bin/env node
+/**
+ * `npx ue-mcp uninstall-hooks` - manual escape hatch.
+ *
+ * Walks up from cwd (or a path passed as argv[2]) to find the project
+ * root via `ue-mcp.yml`, reads `installedHooks` for that project from
+ * `~/.ue-mcp/state.json`, removes the ue-mcp PostToolUse matcher from
+ * each settings file, and clears the registry entry.
+ */
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { uninstallAllRegisteredHooks } from "../integrations/claude-code/hook-installer.js";
+import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { projectDirOf } from "../config/uproject-path.js";
+
+function resolveProjectDir(argv: string[]): string | null {
+  // A user-supplied project dir is the first argument. --editor names one of
+  // the editors this server drives and wins over it.
+  let arg: string | undefined;
+  try {
+    const target = takeEditorTarget(argv);
+    arg = target.projectPath ?? target.rest[0];
+  } catch (e) {
+    fail(e instanceof EditorFlagError ? e.message : String(e));
+    return null;
+  }
+  if (arg) {
+    if (!fs.existsSync(arg)) {
+      fail(`Path does not exist: ${arg}`);
+      return null;
+    }
+    return projectDirOf(arg);
+  }
+  // Walk up from cwd looking for a ue-mcp.yml (the project root signal).
+  let dir = process.cwd();
+  for (let i = 0; i < 32; i++) {
+    if (fs.existsSync(path.join(dir, "ue-mcp.yml"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+function main(argv: string[]): void {
+  console.log("");
+  console.log(`  ${BOLD}${CYAN}ue-mcp uninstall-hooks${RESET}`);
+  console.log("");
+
+  const projectDir = resolveProjectDir(argv);
+  if (!projectDir) {
+    fail("Could not locate a ue-mcp project. Pass the project directory as an argument:");
+    console.log(`    ${DIM}npx ue-mcp uninstall-hooks <path-to-ue-project-dir>${RESET}`);
+    process.exit(1);
+  }
+
+  const result = uninstallAllRegisteredHooks(projectDir);
+
+  if (result.removed.length === 0 && result.skipped.length === 0) {
+    info("No installed hooks recorded in ~/.ue-mcp/state.json. Nothing to remove.");
+  }
+  for (const p of result.removed) {
+    ok(`Removed hook from ${p}`);
+  }
+  for (const p of result.skipped) {
+    warn(`Already absent: ${p}`);
+  }
+
+  console.log("");
+  console.log(`  ${BOLD}${GREEN}Done.${RESET}`);
+  console.log("");
+}
+
+/** Entry point for `ue-mcp uninstall-hooks [project] [--editor <name-or-path>]`. */
+export async function run(argv: string[]): Promise<number | void> {
+  try {
+    main(argv);
+  } catch (e) {
+    console.error(
+      `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,
+    );
+    return 1;
+  }
+}

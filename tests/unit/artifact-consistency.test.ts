@@ -92,7 +92,7 @@ describe("one product, one version", () => {
       "src/index.ts writes a literal version into the McpServer options. It must read "
         + "package.json, or it will freeze at whatever was true the day it was typed.",
     ).toBe(false);
-    expect(/version:\s*pkg\.version/.test(ctor)).toBe(true);
+    expect(/version:\s*packageVersion\(\)/.test(ctor)).toBe(true);
   });
 });
 

@@ -82,7 +82,6 @@ export const GuardsSchema = z
   )
   .default({});
 
-export type GuardScope = z.infer<typeof GuardScopeSchema>;
 export type GuardHook = z.infer<typeof GuardHookSchema>;
 export type GuardDeclaration = z.infer<typeof GuardDeclarationSchema>;
 export type GuardDeclarations = z.infer<typeof GuardsSchema>;

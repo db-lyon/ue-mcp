@@ -5,7 +5,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Handlers/AssetHandlers.h"
+#include "Handlers/Asset/AssetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "Tests/MCPScopedTestMount.h"

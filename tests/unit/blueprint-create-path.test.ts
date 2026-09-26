@@ -13,7 +13,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 const ASSET = "/Game/_Project/UI/Computer/WBP_ComputerDesktop";
 

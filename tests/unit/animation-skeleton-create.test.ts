@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import { handlerSpecs } from "../../src/tools/specs/animation.generated.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("animation.create_skeleton", () => {
   it("publishes the factory-backed assignment contract", () => {
@@ -44,10 +44,7 @@ describe("animation.create_skeleton", () => {
   });
 
   it("keeps the native factory, retry, persistence, and rollback safeguards", () => {
-    const source = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers.cpp",
-      import.meta.url,
-    ), "utf8");
+    const source = readHandlerFile("AnimationHandlers.cpp");
     expect(source).toContain('TEXT("create_skeleton"), &CreateSkeleton');
     expect(source).toContain("USkeletonFactory");
     expect(source).toContain("Factory->TargetSkeletalMesh = SkeletalMesh");

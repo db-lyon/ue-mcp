@@ -2,8 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { loadPlugins } from "../../src/plugin/loader.js";
-import { categoryTool, type ToolDef } from "../../src/types.js";
+import { loadPlugins } from "../../src/extensions/loader.js";
+import type { ToolDef } from "../../src/core/types.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
 
 /**
  * #892: a plugin manifest with one malformed param used to fail validation as a

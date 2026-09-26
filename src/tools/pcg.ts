@@ -1,5 +1,5 @@
-import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/pcg.generated.js";
 import { specBp, schema as specSchema } from "./specs/pcg.generated.js";
 
@@ -29,16 +29,11 @@ export const pcgTool: ToolDef = categoryTool(
     export_graph:         specBp("read", "Export a PCG graph as JSON; includeSettings defaults to true. Round-trip safe with import_graph (#213).", "export_pcg_graph"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration. A key listed again below is shared with hand-written
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
-    // cursor + limit for the paged list actions. Declared once: the MCP layer
-    // strips a key the category never declares, so a paged action whose
-    // category omits these silently returns page one forever.
-    ...PAGINATION_SCHEMA,
   },
 );

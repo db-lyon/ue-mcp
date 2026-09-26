@@ -4,7 +4,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "HandlerUtils.h"
 #include "HandlerRegistry.h"
-#include "Handlers/DiffHandlers.h"
+#include "Handlers/Diff/DiffHandlers.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/TextBuffer.h"
 #include "ReferenceSkeleton.h"

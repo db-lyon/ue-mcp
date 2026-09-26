@@ -1,9 +1,9 @@
-import { z } from "zod";
-import { categoryTool, bp, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/level.generated.js";
 import { specBp, schema as specSchema } from "./specs/level.generated.js";
-import { specBp as editorSpecBp } from "./specs/editor.generated.js";
+import { specBp as editorSpecBp, schema as editorSpecSchema } from "./specs/editor.generated.js";
+import { borrowSchema } from "../surface/handler-spec.js";
 
 export const levelTool: ToolDef = categoryTool(
   "level",
@@ -145,20 +145,12 @@ export const levelTool: ToolDef = categoryTool(
     snap_actor_to_floor: specBp("mutate", "Snap an actor's bounds-bottom to the first downward line-trace hit. Equivalent of the End-key shortcut, works on arbitrary geometry (not just Landscape). The actor lookup and the downward trace both run in the world named by world, so a PIE snap measures against PIE geometry (#933) (#419, #933).", "snap_actor_to_floor"),
     ...epicActions,
   },
-  undefined,  // actionDocs auto-generated from descriptions
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
-    // registration. The keys below serve the hand-written create and
-    // build_lighting, which dispatch to editor handlers, and
-    // tests/unit/handler-specs.test.ts holds a shared key to one type.
+    // registration. create and build_lighting dispatch to editor handlers, so
+    // the keys only they read come from the editor spec.
     ...specSchema,
-    templateLevel: z.string().optional(),
-    quality: z.string().optional(),
-    // The shared cursor and limit, declared once for every paged action in this
-    // category. Undeclared keys are stripped, so an action that documents
-    // `cursor` without this would return an unpaged first page and call it a
-    // success.
-    ...PAGINATION_SCHEMA,
+    ...borrowSchema(editorSpecSchema, ["templateLevel", "quality"]),
   },
 );

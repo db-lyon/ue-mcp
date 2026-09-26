@@ -1,0 +1,871 @@
+import WebSocket from "ws";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+import { McpError, ErrorCode } from "../core/errors.js";
+import { resolveBridgeTimeout, TIMEOUT_ENV_VAR } from "./bridge-timeouts.js";
+import { debug, warn } from "../core/log.js";
+import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
+import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
+import { syncRequestedPort } from "./requested-port.js";
+import { packageVersion } from "../core/package-root.js";
+import { readEnv } from "../core/env.js";
+
+/**
+ * The wire protocol this client speaks. Must match
+ * UEMCP_BRIDGE_PROTOCOL_VERSION in the plugin's MCPHandlerRegistration.h.
+ *
+ * The plugin is compiled by the user, and `attach` is deliberately
+ * non-destructive, so an npm upgrade routinely leaves a new client talking to
+ * an arbitrarily old binary. Comparing these two numbers is how that gets
+ * named instead of surfacing as an unexplained "Unknown method".
+ */
+export const CLIENT_PROTOCOL_VERSION = 2;
+
+/** Answer to get_bridge_capabilities, or what we infer when there is none. */
+export interface BridgeCapabilities {
+  protocolVersion: number;
+  handlerApiVersion?: number;
+  /** Compile timestamp of the loaded plugin binary. The stale-DLL tell. */
+  builtAt?: string;
+  engineVersion?: string;
+  projectName?: string;
+  instanceId?: string;
+  pid?: number;
+  port?: number;
+  startedAt?: string;
+  features?: string[];
+  actions?: string[];
+  actionCount?: number;
+  /**
+   * Declared parameter contract of every handler registered with one (#1057),
+   * keyed by method. The surface is generated from a recording of this; the
+   * live answer is only compared against it.
+   */
+  handlerSpecs?: Record<string, unknown>;
+  /** True when the bridge did not answer the handshake at all. */
+  legacy: boolean;
+}
+
+/**
+ * How to bring the deployed plugin up to this package. `ue-mcp update` deploys
+ * and rebuilds by default, so it is the one command to name.
+ */
+export const PLUGIN_UPGRADE_POINTER =
+  "Run `ue-mcp update` in the project directory (it deploys the plugin from this package and rebuilds it), then restart the editor.";
+
+/**
+ * An "Unknown method" for a method this server dispatched means the running
+ * plugin lacks a handler the package advertises. Say so, with the fix (#1167).
+ */
+function describeUnregisteredMethod(method: string): string {
+  return `'${method}' is advertised by this ue-mcp package but not registered by the running plugin. ${PLUGIN_UPGRADE_POINTER}`;
+}
+
+/** What a bridge that predates the handshake looks like. */
+const LEGACY_CAPABILITIES: BridgeCapabilities = { protocolVersion: 1, legacy: true };
+
+
+/**
+ * Describe a client/plugin protocol mismatch in terms the reader can act on,
+ * naming both versions. Returns null when the two agree.
+ */
+export function describeProtocolMismatch(
+  capabilities: BridgeCapabilities | null,
+  method?: string,
+): string | null {
+  if (!capabilities) return null;
+  const theirs = capabilities.protocolVersion;
+  const ours = CLIENT_PROTOCOL_VERSION;
+  if (theirs === ours) return null;
+
+  const built = capabilities.builtAt ? ` The loaded plugin binary was built ${capabilities.builtAt}.` : "";
+  const missing =
+    method && capabilities.actions && !capabilities.actions.includes(method)
+      ? ` '${method}' is not among the ${capabilities.actionCount ?? capabilities.actions.length} actions the running plugin registered.`
+      : "";
+
+  if (theirs < ours) {
+    return (
+      `The Unreal bridge plugin speaks protocol version ${theirs}, this ue-mcp client (v${packageVersion()}) speaks version ${ours}.` +
+      `${missing}${built}` +
+      ` Rebuild the plugin against the current package: run 'ue-mcp update --build' in the project (or 'ue-mcp deploy' then 'ue-mcp build'), then restart the editor.`
+    );
+  }
+  return (
+    `The Unreal bridge plugin speaks protocol version ${theirs}, this ue-mcp client (v${packageVersion()}) speaks only version ${ours}.` +
+    `${built}` +
+    ` Update the npm package to match the plugin: 'npm install ue-mcp@latest'.`
+  );
+}
+
+
+/** What the bridge leaves behind when the editor started but the bridge did not. */
+export interface BridgeErrorRecord {
+  status?: string;
+  pid?: number;
+  failedAt?: string;
+  firstPortTried?: number;
+  lastPortTried?: number;
+  errorCode?: number;
+  detail?: string;
+}
+
+function readJsonFile<T>(file: string): T | null {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+
+/**
+ * #821: read the record the bridge writes when the editor came up but the
+ * bridge could not bind. Without it, "editor alive, bridge dead" was
+ * indistinguishable from "no editor", and the client said the wrong thing.
+ */
+export function readBridgeErrorRecord(uprojectPath: string | null): BridgeErrorRecord | null {
+  if (!uprojectPath) return null;
+  const parsed = readJsonFile<BridgeErrorRecord>(
+    path.join(bridgeStateDir(path.dirname(uprojectPath)), "bridge-error.json"),
+  );
+  if (!parsed || parsed.status !== "bind-failed") return null;
+  // A record from an editor that has since exited describes nothing current.
+  if (typeof parsed.pid === "number" && parsed.pid > 0 && !isPidAlive(parsed.pid)) return null;
+  return parsed;
+}
+
+export interface BridgeResponse {
+  id: string;
+  result?: unknown;
+  error?: { code: number; message: string };
+}
+
+/** One request frame, as the plugin reads it. Every sender builds it here. */
+function encodeRequest(id: string, method: string, params?: Record<string, unknown>): string {
+  return JSON.stringify({ id, method, params: params ?? {} });
+}
+
+/**
+ * What one bridge call on a throwaway socket came back with.
+ *
+ * The three failures differ: the socket never answered, the bridge answered
+ * with a JSON-RPC error (how an older plugin build reports an unregistered
+ * method), or the handler refused with `result.success === false`.
+ */
+export interface BridgeReply {
+  /** The socket answered at all. */
+  answered: boolean;
+  /** JSON-RPC error: usually a method this plugin build does not register. */
+  methodError: boolean;
+  /** The handler answered with `success: false`. */
+  refused: boolean;
+  /** The handler's payload, when the reply carried a readable one. */
+  result: Record<string, unknown> | null;
+}
+
+/** The call went out and the handler accepted it. */
+export function bridgeReplyAccepted(reply: BridgeReply): boolean {
+  return reply.answered && !reply.methodError && !reply.refused;
+}
+
+/**
+ * One call on its own socket, for callers with no EditorBridge: stopping an
+ * editor this process never connected to. Never throws; a socket that closes
+ * or stays silent past `timeoutMs` resolves as unanswered.
+ */
+export function callBridgeOnce(
+  host: string,
+  port: number,
+  method: string,
+  params: Record<string, unknown>,
+  timeoutMs = 8000,
+): Promise<BridgeReply> {
+  return new Promise<BridgeReply>((resolve) => {
+    let settled = false;
+    const ws = new WebSocket(`ws://${host}:${port}`);
+    const finish = (reply: BridgeReply) => {
+      if (settled) return;
+      settled = true;
+      try { ws.close(); } catch { /* ignore */ }
+      resolve(reply);
+    };
+    const silent: BridgeReply = { answered: false, methodError: false, refused: false, result: null };
+    const timer = setTimeout(() => finish(silent), timeoutMs);
+    ws.on("open", () => ws.send(encodeRequest("ue-mcp-once", method, params)));
+    ws.on("message", (data: unknown) => {
+      clearTimeout(timer);
+      try {
+        const msg = JSON.parse(String(data)) as { error?: unknown; result?: Record<string, unknown> };
+        if (msg.error) return finish({ answered: true, methodError: true, refused: false, result: null });
+        const result = msg.result && typeof msg.result === "object" ? msg.result : null;
+        return finish({ answered: true, methodError: false, refused: result?.success === false, result });
+      } catch {
+        // An unparseable reply still means the bridge is answering.
+        return finish({ answered: true, methodError: false, refused: false, result: null });
+      }
+    });
+    ws.on("error", () => { clearTimeout(timer); finish(silent); });
+    // A close without an answer is the timeout's verdict, reached sooner.
+    ws.on("close", () => { clearTimeout(timer); finish(silent); });
+  });
+}
+
+interface PendingRequest {
+  resolve: (value: unknown) => void;
+  reject: (reason: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+  /** Kept so an "unknown method" answer can name the method it was about. */
+  method: string;
+}
+
+/**
+ * A call the client stopped waiting for, and the reply that turned up after
+ * (#799). The editor applies and saves a mutation before it answers, so a
+ * timeout says nothing about whether the change landed. Keeping the record
+ * lets the late reply be reconciled and logged instead of dropped on the floor
+ * as an unrecognised message.
+ */
+export interface AbandonedCall {
+  operationId: string;
+  method: string;
+  /** Epoch ms the client gave up waiting. */
+  abandonedAt: number;
+  /** Epoch ms the editor's reply arrived, if it ever did. */
+  answeredAt?: number;
+  result?: unknown;
+  error?: string;
+}
+
+/** How many abandoned calls to remember. Oldest are dropped first. */
+const ABANDONED_HISTORY = 32;
+
+/**
+ * How the port the bridge is about to use was chosen.
+ *
+ * The first three are attributable to the targeted project: the lockfile is
+ * written by that project's own editor, the config port comes from that
+ * project's ue-mcp.yml, and the derived port is a hash of that project's root
+ * that the C++ side computes identically. The last two are pins that say
+ * nothing about which project answers on that port.
+ */
+export type BridgePortSource = "lockfile" | "config" | "derived" | "explicit" | "env" | "default";
+
+/** Which editor the bridge is pointed at, and how sure it is. */
+export interface BridgeTarget {
+  /** Absolute .uproject path whose editor this connection belongs to. */
+  projectPath: string | null;
+  /** Port the next connect will use, before any lockfile re-read. */
+  port: number;
+  portSource: BridgePortSource;
+  /**
+   * True when the port is attributable to `projectPath`. False means the port
+   * is a pin inherited from the environment or an earlier target, so
+   * connecting could land on some other project's editor. Connects are
+   * refused in that state (see connect()).
+   */
+  verified: boolean;
+}
+
+/** Minimal interface for tool handlers - enables mocking in tests. */
+export interface IBridge {
+  readonly isConnected: boolean;
+  /** #821: what the connected bridge reported at handshake, when there is one. */
+  readonly capabilities?: BridgeCapabilities | null;
+  call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
+  connect(timeoutMs?: number): Promise<void>;
+  /**
+   * Move the connection to another project's editor (#818). Drops the current
+   * socket before returning, so the caller can re-point path resolution in the
+   * same synchronous step and never expose a state where the two disagree.
+   */
+  retargetProject(uprojectPath: string, configPort?: number): BridgeTarget;
+  /** Snapshot of the current target, for reporting and for tests. */
+  getTarget(): BridgeTarget;
+}
+
+export class EditorBridge implements IBridge {
+  private ws: WebSocket | null = null;
+  private pending = new Map<string, PendingRequest>();
+  private abandoned = new Map<string, AbandonedCall>();
+  private reconnectTimer: ReturnType<typeof setInterval> | null = null;
+  private connectInFlight: Promise<void> | null = null;
+  private idCounter = 0;
+
+  /**
+   * #821: what the current bridge said it was, answered on connect. Null while
+   * disconnected or awaiting its handshake. `legacy` marks an unanswered handshake.
+   */
+  public capabilities: BridgeCapabilities | null = null;
+
+  // How this.port was decided. Precedence for the *preferred* port (the one
+  // used when no editor lockfile is present) is explicit > env > config >
+  // derived > default; the lockfile always overrides at connect time because
+  // it is the port the editor actually bound. Deriving only kicks in while the
+  // source is still "default", so an explicit/env/config pin is never
+  // clobbered by the path hash.
+  private portSource: BridgePortSource = "default";
+
+  /**
+   * Set once the bridge has been retargeted at a specific project (#818).
+   * A pinned port (constructor arg or UE_MCP_PORT) was chosen for whatever
+   * project the process started on, so after a switch it is not evidence about
+   * the new target. While this is true and no lockfile confirms the port,
+   * connect() refuses rather than risk answering as the wrong editor.
+   */
+  private unverifiedPin = false;
+
+  /**
+   * Bumped on every retarget and every socket teardown. A connect that was
+   * already in flight when the target moved must not install its socket, or a
+   * switch would silently reconnect to the project we just left.
+   */
+  private targetGeneration = 0;
+
+  constructor(host?: string, port?: number) {
+    // #497: default to 127.0.0.1 so the client picks the loopback IPv4 the
+    // plugin actually binds to. "localhost" can resolve to ::1 on systems
+    // where the IPv6 stack wins DNS, leaving the client stuck connecting to
+    // an empty IPv6 socket while the plugin owns 127.0.0.1:9877.
+    // UE_MCP_HOST overrides the default for non-standard topologies.
+    this.host = host ?? readEnv("host") ?? "127.0.0.1";
+
+    const envPort = Number.parseInt(readEnv("port") ?? "", 10);
+    if (typeof port === "number" && port > 0) {
+      this.port = port;
+      this.portSource = "explicit";
+    } else if (Number.isFinite(envPort) && envPort > 0) {
+      this.port = envPort;
+      this.portSource = "env";
+    } else {
+      this.port = DEFAULT_BRIDGE_PORT;
+      this.portSource = "default";
+    }
+  }
+
+  public host: string;
+  public port: number;
+
+  /**
+   * Apply `bridge.host` from ue-mcp.yml (#817).
+   *
+   * UE_MCP_HOST stays a global default: it is one value for the process, so
+   * with more than one project it points every session at the same machine.
+   * It still wins, which keeps an existing single-project setup exactly as it
+   * was, and this is what one project uses to differ when it is unset.
+   */
+  setConfigHost(host?: string): void {
+    if (readEnv("host")) return;
+    if (typeof host === "string" && host.trim() !== "") this.host = host.trim();
+  }
+
+  /**
+   * Apply an explicit `bridge.port` from ue-mcp.yml. Ignored when an
+   * explicit constructor arg or UE_MCP_PORT already pinned the port.
+   */
+  setConfigPort(port?: number): void {
+    if (typeof port === "number" && port > 0 && this.portSource !== "explicit" && this.portSource !== "env") {
+      this.port = port;
+      this.portSource = "config";
+    }
+  }
+
+  get isConnected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  async ensureConnected(timeoutMs = 5000): Promise<void> {
+    if (this.isConnected) return;
+
+    if (!this.connectInFlight) {
+      this.connectInFlight = this.connect(timeoutMs).finally(() => {
+        this.connectInFlight = null;
+      });
+    }
+
+    await this.connectInFlight;
+  }
+
+  /**
+   * #492: project context for resolving the per-project port lockfile. Set
+   * by index.ts (via setProjectContext) after the user's .uproject is loaded.
+   * Leaving this null keeps the default-port-only behaviour for callers that
+   * don't have a project context (CLI tools, tests).
+   */
+  public projectPathForLockfile: string | null = null;
+
+  /**
+   * Record the loaded .uproject and, when no port was explicitly pinned,
+   * derive this project's stable per-worktree bridge port from its root path.
+   * The C++ bridge derives the same value; the lockfile reconciles the actual
+   * bound port at connect time either way.
+   */
+  setProjectContext(uprojectPath: string | null): void {
+    this.projectPathForLockfile = uprojectPath;
+    if (uprojectPath && this.portSource === "default") {
+      this.port = deriveProjectPort(path.dirname(uprojectPath));
+      this.portSource = "derived";
+      debug("bridge", `derived per-project bridge port ${this.port} from ${path.dirname(uprojectPath)}`);
+    }
+    // #817: hand the pin to the editor. An editor launched from Explorer
+    // cannot see UE_MCP_PORT or the config merge that produced this number, so
+    // without this file a pinned project has its two halves on different ports.
+    if (uprojectPath) {
+      syncRequestedPort(path.dirname(uprojectPath), this.port, this.portSource);
+    }
+  }
+
+  /**
+   * Point the bridge at another project's editor (#818).
+   *
+   * The socket is dropped before anything else, so from the moment this
+   * returns the only editor reachable is the one belonging to `uprojectPath`.
+   * The port is re-decided from that project alone: its lockfile first (the
+   * port its editor actually bound), then its own `bridge.port` config, then
+   * the port derived from its root path. A port pinned by the constructor or
+   * UE_MCP_PORT survives only as a last resort and is flagged unverified,
+   * because it was chosen for a different project.
+   *
+   * Callers must re-point path resolution in the same synchronous step. That
+   * is what keeps the pair honest: a handler can never observe the resolved
+   * project and the connected editor referring to different projects.
+   */
+  retargetProject(uprojectPath: string, configPort?: number): BridgeTarget {
+    const resolved = path.resolve(uprojectPath);
+    const previous = this.projectPathForLockfile;
+    this.closeSocket(`Bridge retargeted to ${resolved}`);
+    this.projectPathForLockfile = resolved;
+    this.unverifiedPin = false;
+
+    // D6: the same live-address rule connect() and the lifecycle path use. A
+    // port.json a crashed editor left behind names a port that may since
+    // belong to anything, and taking it here marked the target verified, which
+    // is exactly the #818 guess this refusal exists to prevent.
+    const live = resolveLiveBridgeAddress(path.dirname(resolved));
+    if (live) {
+      this.port = live.port;
+      this.portSource = "lockfile";
+    } else if (typeof configPort === "number" && configPort > 0) {
+      this.port = configPort;
+      this.portSource = "config";
+    } else if (this.portSource === "explicit" || this.portSource === "env") {
+      this.unverifiedPin = true;
+    } else {
+      this.port = deriveProjectPort(path.dirname(resolved));
+      this.portSource = "derived";
+    }
+
+    // #817: publish the new target's pin, and only its own. An unverified pin
+    // was chosen for the project we just left, so writing it into this one
+    // would ask this editor to bind a number that says nothing about it.
+    if (!this.unverifiedPin) {
+      syncRequestedPort(path.dirname(resolved), this.port, this.portSource);
+    }
+
+    debug(
+      "bridge",
+      `retargeted from ${previous ?? "(no project)"} to ${resolved}: port ${this.port} (${this.portSource})`,
+    );
+    return this.getTarget();
+  }
+
+  getTarget(): BridgeTarget {
+    return {
+      projectPath: this.projectPathForLockfile,
+      port: this.port,
+      portSource: this.portSource,
+      verified: !this.unverifiedPin,
+    };
+  }
+
+  async connect(timeoutMs = 3000): Promise<void> {
+    if (this.isConnected) return;
+
+    this.closeSocket("Bridge reconnecting");
+
+    // #492: if a per-project lockfile exists for this .uproject, prefer the
+    // port it advertises over the default. Lets multiple editors run side-
+    // by-side without their npm clients colliding on 9877.
+    //
+    // D6: resolved through the SAME rule the lifecycle path applies. The pid
+    // named by port.json is checked for liveness, because a record a crashed
+    // editor left behind is not evidence about a running one and clearing the
+    // #818 pin refusal on it dials a port that may belong to somebody else.
+    // And when port.json is gone - which is what happens to the survivor when
+    // one of two editors of a project quits - the editor's own
+    // instances/<pid>.json still names its port, so ordinary tool calls now
+    // find the editor that editor(stop_editor) could already resolve.
+    const live = resolveLiveBridgeAddress(
+      this.projectPathForLockfile ? path.dirname(this.projectPathForLockfile) : null,
+    );
+    if (live) {
+      if (live.port !== this.port) {
+        debug(
+          "bridge",
+          `${live.source} points at port ${live.port}, using it instead of ${this.port} (${this.portSource})`,
+        );
+        this.port = live.port;
+      }
+      // The target project's own live editor published this port, which is the
+      // proof a pin could not give.
+      this.portSource = "lockfile";
+      this.unverifiedPin = false;
+    }
+
+    // #818: refuse rather than guess. The alternative is connecting to a port
+    // chosen for a different project and executing every subsequent mutation
+    // in an editor the caller never asked for.
+    if (this.unverifiedPin) {
+      throw new McpError(
+        ErrorCode.NOT_CONNECTED,
+        `Refusing to connect: the bridge is targeted at ${this.projectPathForLockfile}, ` +
+          `but port ${this.port} is pinned (${this.portSource === "env" ? "UE_MCP_PORT" : "explicit port argument"}) ` +
+          `and was not chosen for this project, so it may belong to another editor. ` +
+          `Start this project's editor (it publishes Saved/UE_MCP_Bridge/port.json), ` +
+          `or clear the pin so the per-project port is derived from the project path.`,
+      );
+    }
+
+    const url = `ws://${this.host}:${this.port}`;
+    const generation = this.targetGeneration;
+
+    // #821: an editor whose bridge failed to bind is running and unreachable at
+    // the same time. It leaves a record saying so, and quoting it here is the
+    // difference between "start the editor" and "the editor is up, its bridge
+    // is not".
+    const explainFailure = (base: string): string => {
+      const failed = readBridgeErrorRecord(this.projectPathForLockfile);
+      return failed?.detail ? `${base}. ${failed.detail}` : base;
+    };
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        ws.terminate();
+        reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, explainFailure(`Connection to editor bridge timed out (${url})`)));
+      }, timeoutMs);
+
+      const ws = new WebSocket(url);
+
+      ws.on("open", () => {
+        clearTimeout(timer);
+        // The target moved while this handshake was in flight. Installing the
+        // socket now would put the bridge back on the project we just left.
+        if (this.targetGeneration !== generation) {
+          ws.terminate();
+          reject(
+            new McpError(
+              ErrorCode.NOT_CONNECTED,
+              `Abandoned the connection to ${url}: the bridge was retargeted while connecting.`,
+            ),
+          );
+          return;
+        }
+        this.ws = ws;
+        this.setupListeners(ws);
+        // #821: ask what we are talking to before anything else does. The
+        // answer is cheap, it never touches the game thread, and without it a
+        // client running against an older plugin can only report the symptom.
+        // Bounded by the caller's own connect budget: a bridge that will not
+        // answer this is not one worth waiting past that for.
+        this.handshake(ws, timeoutMs).then(() => resolve(), () => resolve());
+      });
+
+      ws.on("error", (err) => {
+        clearTimeout(timer);
+        reject(
+          new McpError(
+            ErrorCode.NOT_CONNECTED,
+            explainFailure(`Failed to connect to editor bridge at ${url}: ${err.message}`),
+          ),
+        );
+      });
+    });
+  }
+
+  startReconnecting(intervalMs = 15000): void {
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setInterval(() => {
+      if (this.isConnected) return;
+      // ensureConnected, not connect: connect() closes the socket before it
+      // does anything else, so a tick landing inside a slow connect tore down
+      // the handshake that was already running and rejected the call waiting
+      // on it. The dedupe in ensureConnected joins that attempt instead.
+      this.ensureConnected().then(
+        () => { warn("bridge", "editor bridge reconnected"); },
+        (e) => { debug("bridge", "reconnect attempt failed (will retry)", e); },
+      );
+    }, intervalMs);
+  }
+
+  stopReconnecting(): void {
+    if (this.reconnectTimer) {
+      clearInterval(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  async call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown> {
+    if (!this.isConnected) {
+      await this.ensureConnected();
+    }
+
+    const id = String(++this.idCounter);
+    const frame = encodeRequest(id, method, params);
+    // #989: not a flat 30s any more. An explicit per-call budget is honoured,
+    // and a method the C++ side registered a longer timeout for is waited out
+    // to that limit, so the client stops declaring a failure on a call the
+    // editor is still allowed to be running. See src/bridge/bridge-timeouts.ts.
+    const timeout = resolveBridgeTimeout(method, timeoutMs);
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      throw new McpError(
+        ErrorCode.NOT_CONNECTED,
+        "Not connected to editor bridge. Is Unreal Editor running with the MCP bridge plugin?",
+      );
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        // #799: the request was sent, so the editor may have run it to
+        // completion (mutating handlers apply and save the asset before they
+        // answer). The connection is not at fault and is left open, both so
+        // concurrent calls survive and so the late reply can be reconciled.
+        this.rememberAbandoned(id, method);
+        reject(new McpError(
+          ErrorCode.BRIDGE_TIMEOUT,
+          `Bridge call '${method}' timed out after ${Math.round(timeout / 1000)}s. `
+          + `Outcome is unknown: the editor may have already applied and saved this call `
+          + `(operation ${id}). Read the current state back before retrying, and prefer `
+          + `an idempotent retry (pass the same names) so a call that did land is not repeated. `
+          + `If the editor was simply busy (a large batch, shader compilation), raise the `
+          + `budget with timeoutMs on the call, or ${TIMEOUT_ENV_VAR} for every call, `
+          + `rather than retrying at the same budget.`,
+          { outcome: "unknown", operationId: id, method },
+        ));
+      }, timeout);
+
+      this.pending.set(id, { resolve, reject, timer, method });
+      ws.send(frame, (err) => {
+        if (!err) return;
+
+        clearTimeout(timer);
+        this.pending.delete(id);
+        if (this.ws === ws) {
+          ws.terminate();
+          this.ws = null;
+          this.capabilities = null;
+        }
+        reject(new McpError(ErrorCode.CONNECTION_LOST, `Failed to send bridge call '${method}': ${err.message}`));
+      });
+    });
+  }
+
+  disconnect(): void {
+    this.stopReconnecting();
+    this.closeSocket("Bridge disconnected", { graceful: true });
+  }
+
+  /**
+   * Drop the socket and fail everything riding on it. Retargeting terminates
+   * instead of closing: a close handshake leaves the socket usable for another
+   * round trip, and the caller is switching projects precisely because nothing
+   * more should reach this editor.
+   */
+  private closeSocket(reason: string, opts?: { graceful?: boolean }): void {
+    this.targetGeneration += 1;
+    for (const [, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(new McpError(ErrorCode.CONNECTION_LOST, reason));
+    }
+    this.pending.clear();
+    const ws = this.ws;
+    this.ws = null;
+    this.capabilities = null;
+    if (!ws) return;
+    if (opts?.graceful) ws.close();
+    else ws.terminate();
+  }
+
+  /**
+   * Ask the bridge what it is. Deliberately not routed through call(): a slow
+   * or absent answer here must not terminate the socket the way a timed-out
+   * call does, and a bridge old enough to have no answer is a normal outcome
+   * rather than a failure.
+   */
+  private handshake(ws: WebSocket, timeoutMs = 5000): Promise<BridgeCapabilities> {
+    return new Promise((resolve) => {
+      const id = `cap-${++this.idCounter}`;
+      let settled = false;
+
+      const detach = (): void => {
+        clearTimeout(timer);
+        ws.off("message", onMessage);
+        ws.off("close", onClose);
+      };
+
+      // The socket went away before the bridge answered. Settle now rather
+      // than sitting out the rest of the connect budget on a dead socket, and
+      // record nothing: a dropped connection says nothing about which protocol
+      // version the plugin speaks, so claiming it is a legacy one here would
+      // put a "rebuild your plugin" warning in front of a network fault.
+      const onClose = (): void => {
+        if (settled) return;
+        settled = true;
+        detach();
+        if (this.ws === ws) this.capabilities = null;
+        resolve({ ...LEGACY_CAPABILITIES });
+      };
+
+      const finish = (capabilities: BridgeCapabilities): void => {
+        if (settled) return;
+        settled = true;
+        detach();
+        // An obsolete handshake must still settle and detach, but only the
+        // current open socket can publish metadata or mismatch diagnostics.
+        if (this.ws !== ws || ws.readyState !== WebSocket.OPEN) {
+          resolve(capabilities);
+          return;
+        }
+        this.capabilities = capabilities;
+
+        const mismatch = describeProtocolMismatch(capabilities);
+        if (mismatch) {
+          warn("bridge", mismatch);
+        } else {
+          debug("bridge", `bridge protocol ${capabilities.protocolVersion}, ${capabilities.actionCount ?? "?"} actions, built ${capabilities.builtAt ?? "unknown"}`);
+        }
+        resolve(capabilities);
+      };
+
+      const onMessage = (data: WebSocket.RawData): void => {
+        let msg: BridgeResponse;
+        try {
+          msg = JSON.parse(data.toString()) as BridgeResponse;
+        } catch {
+          return;
+        }
+        if (msg.id !== id) return;
+        if (msg.error || !msg.result) {
+          // -32601 from a bridge that has never heard of the handshake. That
+          // silence is itself the answer: it predates the protocol version.
+          finish({ ...LEGACY_CAPABILITIES });
+          return;
+        }
+        const result = msg.result as Partial<BridgeCapabilities>;
+        finish({
+          ...result,
+          protocolVersion: typeof result.protocolVersion === "number" ? result.protocolVersion : 1,
+          legacy: false,
+        });
+      };
+
+      const timer = setTimeout(() => finish({ ...LEGACY_CAPABILITIES }), timeoutMs);
+
+      ws.on("message", onMessage);
+      ws.on("close", onClose);
+      ws.send(encodeRequest(id, "get_bridge_capabilities"), (err) => {
+        if (err) onClose();
+      });
+    });
+  }
+
+  /** Record a call the client gave up on, capping the history. */
+  private rememberAbandoned(id: string, method: string): void {
+    this.abandoned.set(id, { operationId: id, method, abandonedAt: Date.now() });
+    while (this.abandoned.size > ABANDONED_HISTORY) {
+      const oldest = this.abandoned.keys().next();
+      if (oldest.done) break;
+      this.abandoned.delete(oldest.value);
+    }
+  }
+
+  /**
+   * Calls this client stopped waiting for, newest last. An entry with
+   * `answeredAt` set is one the editor finished after the timeout, which is
+   * proof the mutation ran (#799).
+   */
+  get abandonedCalls(): AbandonedCall[] {
+    return [...this.abandoned.values()];
+  }
+
+  private setupListeners(ws: WebSocket): void {
+    ws.on("message", (data) => {
+      try {
+        const msg = JSON.parse(data.toString()) as BridgeResponse;
+        const pending = this.pending.get(msg.id);
+        if (!pending) {
+          // A reply to a call that already timed out on this side. Nobody is
+          // waiting for it, but it settles whether that call ran (#799).
+          const abandonedCall = this.abandoned.get(msg.id);
+          if (abandonedCall) {
+            abandonedCall.answeredAt = Date.now();
+            if (msg.error) abandonedCall.error = msg.error.message;
+            else abandonedCall.result = msg.result;
+            warn(
+              "bridge",
+              `editor finished '${abandonedCall.method}' (operation ${msg.id}) `
+              + `${Date.now() - abandonedCall.abandonedAt}ms after the client timed out; `
+              + `the call ${msg.error ? "failed" : "completed"}`,
+            );
+          }
+          return;
+        }
+
+        this.pending.delete(msg.id);
+        clearTimeout(pending.timer);
+
+        if (msg.error) {
+          // #821: -32601 against an older plugin used to read as a typo. Say
+          // which side is behind, and name both versions.
+          // #1167: with the protocols in agreement it is still a missing
+          // handler, so the upgrade pointer goes on either way.
+          const mismatch =
+            msg.error.code === -32601
+              ? describeProtocolMismatch(this.capabilities, pending.method) ?? describeUnregisteredMethod(pending.method)
+              : null;
+          pending.reject(
+            new McpError(
+              ErrorCode.BRIDGE_ERROR,
+              mismatch ? `Bridge error: ${msg.error.message}. ${mismatch}` : `Bridge error: ${msg.error.message}`,
+            ),
+          );
+        } else {
+          pending.resolve(msg.result);
+        }
+      } catch (e) {
+        warn("bridge", "dropped malformed message from editor", e);
+      }
+    });
+
+    ws.on("close", (code: number, reasonRaw: Buffer) => {
+      // A socket we already replaced (retarget, reconnect) closes after its
+      // successor is live. Without this guard its late close event would null
+      // out the new connection and fail the calls riding on it.
+      if (this.ws !== ws) return;
+
+      // The bridge closes with a status code and a reason when it refuses a
+      // frame: 1009 for a message over its size bound, 1002 for a frame stream
+      // that stopped making sense. Repeating both verbatim is the difference
+      // between "something broke" and a caller knowing it sent too much.
+      const reason = reasonRaw?.toString("utf8") ?? "";
+      const detail = reason
+        ? `Bridge connection closed by the editor (code ${code}): ${reason}`
+        : `Bridge connection lost (close code ${code})`;
+      for (const [, pending] of this.pending) {
+        clearTimeout(pending.timer);
+        pending.reject(new McpError(ErrorCode.CONNECTION_LOST, detail));
+      }
+      this.pending.clear();
+      this.ws = null;
+      this.capabilities = null;
+    });
+
+    ws.on("error", (err) => {
+      // `close` fires next and is where we reject pending calls; log here so
+      // the underlying socket error (ECONNRESET, etc.) is not invisible.
+      debug("bridge", "websocket error (close will follow)", err);
+    });
+  }
+}

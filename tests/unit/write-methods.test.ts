@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { classifyWrite } from "../../src/flow/write-methods.js";
+import { classifyWrite, specWrittenParams } from "../../src/flow/write-methods.js";
+import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 
 describe("classifyWrite", () => {
   it("classifies a save as a write and extracts assetPath", () => {
@@ -154,6 +155,50 @@ describe("classifyWrite", () => {
         writes: true,
         contentPaths: [expectedPath],
       });
+    }
+  });
+
+  it("reads the written asset off each method's recorded spec, not only the generic keys", () => {
+    const cases: Array<[string, Record<string, unknown>, string[]]> = [
+      ["mesh_boolean", {
+        operation: "subtract",
+        targetPath: "/Game/SM_Target",
+        toolPath: "/Game/SM_Tool",
+        outputPath: "/Game/SM_Result",
+      }, ["/Game/SM_Target", "/Game/SM_Result"]],
+      ["add_virtual_bone", { skeletonPath: "/Game/SK_A_Skeleton", sourceBone: "a", targetBone: "b" }, ["/Game/SK_A_Skeleton"]],
+      ["set_bone_retargeting", { skeletonPath: "/Game/SK_A_Skeleton", mode: "Skeleton" }, ["/Game/SK_A_Skeleton"]],
+      ["add_blueprint_interface", { blueprintPath: "/Game/BP_A", interfacePath: "/Game/BPI_A" }, ["/Game/BP_A"]],
+      ["set_foliage_type_settings", { foliageTypePath: "/Game/FT_Grass", settings: {} }, ["/Game/FT_Grass"]],
+      ["add_expression_in_function", { functionPath: "/Game/MF_A", expressionType: "Add" }, ["/Game/MF_A"]],
+    ];
+    for (const [method, params, expected] of cases) {
+      expect(classifyWrite(method, params), method).toEqual({ writes: true, contentPaths: expected });
+    }
+  });
+
+  it("reads a spec'd parameter under every alias the registry accepts for it", () => {
+    const cases: Array<[string, Record<string, unknown>, string[]]> = [
+      ["set_ik_rig_mesh", { assetPath: "/Game/Rigs/IK_A", skeletalMesh: "/Game/SK_A" }, ["/Game/Rigs/IK_A"]],
+      ["set_ik_retargeter_rig", { assetPath: "/Game/Rigs/RTG_A", ikRig: "/Game/Rigs/IK_B" }, ["/Game/Rigs/RTG_A"]],
+      ["auto_align_retarget_pose", { assetPath: "/Game/Rigs/RTG_A" }, ["/Game/Rigs/RTG_A"]],
+      ["reset_retarget_pose", { assetPath: "/Game/Rigs/RTG_A" }, ["/Game/Rigs/RTG_A"]],
+      ["delete_asset_batch", { paths: ["/Game/A", "/Game/B"] }, ["/Game/A", "/Game/B"]],
+      ["add_expression_in_function", { materialFunctionPath: "/Game/MF_A", expressionType: "Add" }, ["/Game/MF_A"]],
+    ];
+    for (const [method, params, expected] of cases) {
+      expect(classifyWrite(method, params), method).toEqual({ writes: true, contentPaths: expected });
+    }
+  });
+
+  it("leaves out a spec'd name that holds no rooted content path", () => {
+    expect(classifyWrite("capture_scene_png", { outputPath: "C:/shots/a.png" }).writes).toBe(false);
+  });
+
+  it("finds every listed method in the recorded specs, so the cases above test the spec layer", () => {
+    for (const method of ["mesh_boolean", "add_virtual_bone", "set_bone_retargeting", "add_blueprint_interface",
+      "set_foliage_type_settings", "add_expression_in_function", "set_ik_rig_mesh", "delete_asset_batch"]) {
+      expect(specWrittenParams(RECORDED_HANDLER_SPECS, method).length, method).toBeGreaterThan(0);
     }
   });
 });

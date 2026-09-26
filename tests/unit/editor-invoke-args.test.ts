@@ -4,10 +4,11 @@ import type { z } from "zod";
 import { normalizeObjectSchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
 import { editorTool } from "../../src/tools/editor.js";
-import { applyLeanContext } from "../../src/lean-context.js";
+import { applyLeanContext } from "../../src/surface/context/lean-context.js";
 import { handlerSpecs } from "../../src/tools/specs/editor.generated.js";
-import { paramZod, zodSignature } from "../../src/handler-spec.js";
-import type { ToolContext, ToolDef } from "../../src/types.js";
+import { paramZod, zodSignature } from "../../src/surface/handler-spec.js";
+import type { ToolContext, ToolDef } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 /**
  * #811: `args` was advertised as a union whose object branch carried an empty
@@ -177,9 +178,9 @@ describe("args is declared once, in each handler's C++ spec (#1057)", () => {
 
 describe("the C++ normalizers", () => {
   const read = (rel: string): string => readFileSync(new URL(`../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/${rel}`, import.meta.url), "utf8");
-  const utils = read("Public/HandlerUtils.h");
+  const utils = read("Public/HandlerFunctionCall.h");
 
-  it("live in HandlerUtils.h, once, with the refusals the TS normalizers had", () => {
+  it("live in HandlerFunctionCall.h, once, with the refusals the TS normalizers had", () => {
     for (const refusal of [
       "was a string, but it is not valid JSON",
       "decoded to a string, not a parameter map",
@@ -194,9 +195,9 @@ describe("the C++ normalizers", () => {
   });
 
   it("are how every handler taking args reads it", () => {
-    const editor = read("Private/Handlers/EditorHandlers.cpp");
-    const pie = read("Private/Handlers/EditorHandlers_PIE.cpp");
-    const runtime = read("Private/Handlers/EditorHandlers_PIERuntime.cpp");
+    const editor = readHandlerFile("EditorHandlers.cpp");
+    const pie = readHandlerFile("EditorHandlers_PIE.cpp");
+    const runtime = readHandlerFile("EditorHandlers_PIERuntime.cpp");
     expect(editor).toContain('MCPReadPythonArgs(Params, TEXT("args"), ExtraArgs)');
     expect(pie.match(/MCPReadFunctionArgs\(Params, TEXT\("args"\), ArgsMap\)/g)).toHaveLength(2);
     expect(runtime).toContain('MCPReadFunctionArgs(Params, TEXT("args"), ArgsMap)');

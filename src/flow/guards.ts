@@ -11,8 +11,8 @@
  * the two is now impossible rather than load-bearing.
  */
 import type { TaskRegistry } from "@db-lyon/flowkit";
-import type { IBridge } from "../bridge.js";
-import type { ToolContext } from "../types.js";
+import type { IBridge } from "../bridge/bridge.js";
+import type { ToolContext } from "../core/types.js";
 import type { FlowContext } from "./context.js";
 import {
   mutationScope,
@@ -22,10 +22,10 @@ import {
   type BridgeGuard,
   type CallContext,
 } from "./guard.js";
-import { withoutDialogActuation } from "../dialog-guard.js";
+import { withoutDialogActuation } from "../editor/dialog-guard.js";
 import { DialogGatedBridge } from "./guarded-bridge.js";
-import { McpError, ErrorCode } from "../errors.js";
-import { debug } from "../log.js";
+import { McpError, ErrorCode } from "../core/errors.js";
+import { debug } from "../core/log.js";
 import type { GuardDeclarations, GuardHook } from "./guard-schema.js";
 import {
   GUARD_CALL_KEY,

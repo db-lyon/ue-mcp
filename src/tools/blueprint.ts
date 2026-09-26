@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/blueprint.generated.js";
 import { specBp, schema as specSchema } from "./specs/blueprint.generated.js";
 
@@ -149,7 +149,6 @@ export const blueprintTool: ToolDef = categoryTool(
     edit_struct_metadata: specBp("mutate", "Set a UserDefinedStruct's tooltip and its per-member tooltip, editableOnInstance, saveGame, multiLineText, widget3D and arbitrary metadata, in one batched call. All of these live in the struct's editor data rather than as UPROPERTYs, and each has an engine setter that recompiles the struct. fields is [{fieldName or fieldGuid, tooltip?, editableOnInstance?, saveGame?, multiLineText?, widget3D?, metadata?}]. Every member is resolved and every type-gated switch is checked (multiLineText needs a text-like member, widget3D a Vector or Transform) BEFORE the first write, so a refusal on entry nine leaves entries one through eight untouched. Idempotent; the rollback restores every value by GUID, and states the one thing it cannot: a metadata key that did not exist before is restored to an empty string rather than removed.", "edit_struct_metadata"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
@@ -169,8 +168,5 @@ export const blueprintTool: ToolDef = categoryTool(
     maxSamples: z.number().int().nonnegative().optional().describe("audit_dead_code: samples listed per finding kind per Blueprint, default 20, max 500; counts stay complete (#1166)"),
     maxBlueprints: z.number().int().positive().optional().describe("search_call_sites / audit_dead_code: cap on Blueprints loaded, default 2000 (#945/#1166)"),
     offset: z.number().int().nonnegative().optional().describe("Row offset for read_graph, and the older non-resumable form of search_call_sites paging"),
-    // cursor + limit, declared once. Every paged action in this category reads
-    // them, and an undeclared key is stripped before the handler sees it.
-    ...PAGINATION_SCHEMA,
   },
 );

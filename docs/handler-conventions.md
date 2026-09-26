@@ -39,7 +39,7 @@ one road landed on a road at the other end of the map and reported success
 (#983).
 
 Every actor-targeting handler therefore resolves its target through
-`MCPResolveActor` in `Public/HandlerUtils.h`, and never through a loop of its
+`MCPResolveActor` in `Public/HandlerActorResolve.h`, and never through a loop of its
 own:
 
 ```cpp
@@ -131,7 +131,7 @@ Where the answer genuinely is a failure, as with the lifecycle actions above, th
 
 ## Helpers
 
-`HandlerUtils.h` provides:
+`HandlerUtils.h` includes every shared helper header; among them:
 
 ```cpp
 MCPSuccess()                                  // { success: true }

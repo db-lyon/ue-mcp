@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { classifyAction, resolveLockingConfig, withAssetLocks } from "../../src/locking.js";
-import type { IBridge } from "../../src/bridge.js";
-import { McpError, ErrorCode } from "../../src/errors.js";
-import { callSubject } from "../../src/editor-gate.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
+import { classifyAction, resolveLockingConfig, withAssetLocks } from "../../src/dispatch/locking.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
+import { McpError, ErrorCode } from "../../src/core/errors.js";
+import { callSubject } from "../../src/dispatch/editor-gate.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { assetTool } from "../../src/tools/asset.js";
-import type { ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/core/types.js";
 
 describe("classifyAction", () => {
   it("treats read verbs as non-mutating", () => {

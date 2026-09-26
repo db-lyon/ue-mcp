@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveProjectPort, normalizeProjectRoot, DEFAULT_BRIDGE_PORT } from "../../src/port.js";
+import { deriveProjectPort, normalizeProjectRoot, DEFAULT_BRIDGE_PORT } from "../../src/bridge/port.js";
 
 describe("deriveProjectPort", () => {
   it("stays inside the ephemeral range [49152, 65535]", () => {
@@ -37,7 +37,7 @@ describe("deriveProjectPort", () => {
   });
 
   it("pins a known value so drift from the C++ implementation is caught", () => {
-    // If this value changes, src/port.ts and BridgeServer.cpp::DeriveProjectPort
+    // If this value changes, src/bridge/port.ts and BridgeServer.cpp::DeriveProjectPort
     // have diverged (or the algorithm changed) - update both, not just one.
     // sha1("c:/users/dev/gamea") first 4 bytes -> big-endian uint32 -> % 16384 + 49152.
     expect(deriveProjectPort("C:/Users/Dev/GameA")).toBe(referencePort("c:/users/dev/gamea"));

@@ -10,8 +10,8 @@
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import { bp, type ActionSpec } from "../../types.js";
-import { epicToolCall } from "../../epic-input.js";
+import type { ActionSpec } from "../../core/types.js";
+import { bp } from "../../surface/category-tool.js";
 
 const S_epic_add_cue_tag = {"properties":{"cueTag":{"type":"string"},"comment":{"type":"string"}},"required":["cueTag"]} as const;
 const S_epic_create_cue_notify_asset = {"properties":{"cueTag":{"type":"string"},"packagePath":{"type":"string"},"assetName":{"type":"string"},"bIsActor":{"type":"boolean"}},"required":["cueTag","packagePath","assetName","bIsActor"]} as const;
@@ -30,90 +30,76 @@ const S_epic_remove_cue_tag = {"properties":{"cueTag":{"type":"string"}},"requir
 
 /** 14 wrapped engine tools routed to the `gas` category. */
 export const actions: Record<string, ActionSpec> = {
-  epic_add_cue_tag: { epicSchema: S_epic_add_cue_tag, ...bp(
-    "mutate",
-    "[Epic GASToolsets.GameplayCueToolset] Adds a new gameplay cue tag to the project. This should ONLY be called after getting explicit direction or permission from the user. Params: cueTag, comment?",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.GameplayCueToolset", "GASToolsets.GameplayCueToolset.AddCueTag", S_epic_add_cue_tag, p),
-  ) },
-  epic_create_cue_notify_asset: { epicSchema: S_epic_create_cue_notify_asset, ...bp(
-    "mutate",
-    "[Epic GASToolsets.GameplayCueToolset] Creates a new GameplayCueNotify Blueprint asset at the specified content browser location. This should ONLY be called after getting explicit direction or permission from the user. Params: cueTag, packagePath, assetName, bIsActor",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.GameplayCueToolset", "GASToolsets.GameplayCueToolset.CreateCueNotifyAsset", S_epic_create_cue_notify_asset, p),
-  ) },
-  epic_execute_cue_on_selected_actor: { epicSchema: S_epic_execute_cue_on_selected_actor, ...bp(
-    "mutate",
-    "[Epic GASToolsets.GameplayCueToolset] Executes a gameplay cue non-replicated on the currently selected actor in the editor. Useful for previewing cue effects without network replication. Requires a PIE session or a configured GameplayCueManager to produce visible results. Params: cueTag, normalizedMagnitude, location, normal",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.GameplayCueToolset", "GASToolsets.GameplayCueToolset.ExecuteCueOnSelectedActor", S_epic_execute_cue_on_selected_actor, p),
-  ) },
-  epic_find_attribute_set_classes: { epicSchema: S_epic_find_attribute_set_classes, ...bp(
-    "read",
-    "[Epic GASToolsets.AttributeSetToolset] Returns all AttributeSet subclasses found in the project, including their attributes. Covers both native C++ subclasses and Blueprint subclasses discovered via the asset registry. Params: none",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.AttributeSetToolset", "GASToolsets.AttributeSetToolset.FindAttributeSetClasses", S_epic_find_attribute_set_classes, p),
-  ) },
-  epic_find_cue_notify_assets: { epicSchema: S_epic_find_cue_notify_assets, ...bp(
-    "read",
-    "[Epic GASToolsets.GameplayCueToolset] Returns all GameplayCueNotify assets found in the project via the asset registry. Params: parentTag",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.GameplayCueToolset", "GASToolsets.GameplayCueToolset.FindCueNotifyAssets", S_epic_find_cue_notify_assets, p),
-  ) },
-  epic_find_cue_tags_without_notifies: { epicSchema: S_epic_find_cue_tags_without_notifies, ...bp(
-    "read",
-    "[Epic GASToolsets.GameplayCueToolset] Returns gameplay cue tags that have no corresponding GameplayCueNotify asset in the project. Tags without notifies produce no visible effect when triggered at runtime. Params: none",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.GameplayCueToolset", "GASToolsets.GameplayCueToolset.FindCueTagsWithoutNotifies", S_epic_find_cue_tags_without_notifies, p),
-  ) },
-  epic_get_active_effects: { epicSchema: S_epic_get_active_effects, ...bp(
-    "read",
-    "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns all gameplay effects currently active on the actor's AbilitySystemComponent. Params: actor",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.AbilitySystemInspectorToolset", "GASToolsets.AbilitySystemInspectorToolset.GetActiveEffects", S_epic_get_active_effects, p),
-  ) },
-  epic_get_active_tags: { epicSchema: S_epic_get_active_tags, ...bp(
-    "read",
-    "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns the gameplay tags currently owned by the actor's AbilitySystemComponent (includes loose tags, effect-granted tags, etc.). Params: actor",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.AbilitySystemInspectorToolset", "GASToolsets.AbilitySystemInspectorToolset.GetActiveTags", S_epic_get_active_tags, p),
-  ) },
-  epic_get_attribute_values: { epicSchema: S_epic_get_attribute_values, ...bp(
-    "read",
-    "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns the current base and modified values of all gameplay attributes on the actor's AbilitySystemComponent. Params: actor",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.AbilitySystemInspectorToolset", "GASToolsets.AbilitySystemInspectorToolset.GetAttributeValues", S_epic_get_attribute_values, p),
-  ) },
-  epic_get_cue_info: { epicSchema: S_epic_get_cue_info, ...bp(
-    "read",
-    "[Epic GASToolsets.GameplayCueToolset] Returns information about a specific gameplay cue, including its notify asset. Params: cueTag",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.GameplayCueToolset", "GASToolsets.GameplayCueToolset.GetCueInfo", S_epic_get_cue_info, p),
-  ) },
-  epic_get_granted_abilities: { epicSchema: S_epic_get_granted_abilities, ...bp(
-    "read",
-    "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns all abilities granted to the actor's AbilitySystemComponent. Params: actor",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.AbilitySystemInspectorToolset", "GASToolsets.AbilitySystemInspectorToolset.GetGrantedAbilities", S_epic_get_granted_abilities, p),
-  ) },
-  epic_list_attributes: { epicSchema: S_epic_list_attributes, ...bp(
-    "read",
-    "[Epic GASToolsets.AttributeSetToolset] Returns the gameplay attributes defined on a specific AttributeSet class. Params: className",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.AttributeSetToolset", "GASToolsets.AttributeSetToolset.ListAttributes", S_epic_list_attributes, p),
-  ) },
-  epic_list_cues: { epicSchema: S_epic_list_cues, ...bp(
-    "read",
-    "[Epic GASToolsets.GameplayCueToolset] Returns gameplay cue tags registered in the project. Params: parentTag",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.GameplayCueToolset", "GASToolsets.GameplayCueToolset.ListCues", S_epic_list_cues, p),
-  ) },
-  epic_remove_cue_tag: { epicSchema: S_epic_remove_cue_tag, ...bp(
-    "mutate",
-    "[Epic GASToolsets.GameplayCueToolset] Removes a gameplay cue tag from the project. This should ONLY be called after getting explicit direction or permission from the user. Params: cueTag",
-    "epic_call_tool",
-    (p) => epicToolCall("GASToolsets.GameplayCueToolset", "GASToolsets.GameplayCueToolset.RemoveCueTag", S_epic_remove_cue_tag, p),
-  ) },
+  epic_add_cue_tag: {
+    epicSchema: S_epic_add_cue_tag,
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.AddCueTag" },
+    ...bp("mutate", "[Epic GASToolsets.GameplayCueToolset] Adds a new gameplay cue tag to the project. This should ONLY be called after getting explicit direction or permission from the user. Params: cueTag, comment?", "epic_call_tool"),
+  },
+  epic_create_cue_notify_asset: {
+    epicSchema: S_epic_create_cue_notify_asset,
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.CreateCueNotifyAsset" },
+    ...bp("mutate", "[Epic GASToolsets.GameplayCueToolset] Creates a new GameplayCueNotify Blueprint asset at the specified content browser location. This should ONLY be called after getting explicit direction or permission from the user. Params: cueTag, packagePath, assetName, bIsActor", "epic_call_tool"),
+  },
+  epic_execute_cue_on_selected_actor: {
+    epicSchema: S_epic_execute_cue_on_selected_actor,
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.ExecuteCueOnSelectedActor" },
+    ...bp("mutate", "[Epic GASToolsets.GameplayCueToolset] Executes a gameplay cue non-replicated on the currently selected actor in the editor. Useful for previewing cue effects without network replication. Requires a PIE session or a configured GameplayCueManager to produce visible results. Params: cueTag, normalizedMagnitude, location, normal", "epic_call_tool"),
+  },
+  epic_find_attribute_set_classes: {
+    epicSchema: S_epic_find_attribute_set_classes,
+    epicTool: { toolset: "GASToolsets.AttributeSetToolset", name: "GASToolsets.AttributeSetToolset.FindAttributeSetClasses" },
+    ...bp("read", "[Epic GASToolsets.AttributeSetToolset] Returns all AttributeSet subclasses found in the project, including their attributes. Covers both native C++ subclasses and Blueprint subclasses discovered via the asset registry. Params: none", "epic_call_tool"),
+  },
+  epic_find_cue_notify_assets: {
+    epicSchema: S_epic_find_cue_notify_assets,
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.FindCueNotifyAssets" },
+    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns all GameplayCueNotify assets found in the project via the asset registry. Params: parentTag", "epic_call_tool"),
+  },
+  epic_find_cue_tags_without_notifies: {
+    epicSchema: S_epic_find_cue_tags_without_notifies,
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.FindCueTagsWithoutNotifies" },
+    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns gameplay cue tags that have no corresponding GameplayCueNotify asset in the project. Tags without notifies produce no visible effect when triggered at runtime. Params: none", "epic_call_tool"),
+  },
+  epic_get_active_effects: {
+    epicSchema: S_epic_get_active_effects,
+    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetActiveEffects" },
+    ...bp("read", "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns all gameplay effects currently active on the actor's AbilitySystemComponent. Params: actor", "epic_call_tool"),
+  },
+  epic_get_active_tags: {
+    epicSchema: S_epic_get_active_tags,
+    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetActiveTags" },
+    ...bp("read", "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns the gameplay tags currently owned by the actor's AbilitySystemComponent (includes loose tags, effect-granted tags, etc.). Params: actor", "epic_call_tool"),
+  },
+  epic_get_attribute_values: {
+    epicSchema: S_epic_get_attribute_values,
+    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetAttributeValues" },
+    ...bp("read", "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns the current base and modified values of all gameplay attributes on the actor's AbilitySystemComponent. Params: actor", "epic_call_tool"),
+  },
+  epic_get_cue_info: {
+    epicSchema: S_epic_get_cue_info,
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.GetCueInfo" },
+    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns information about a specific gameplay cue, including its notify asset. Params: cueTag", "epic_call_tool"),
+  },
+  epic_get_granted_abilities: {
+    epicSchema: S_epic_get_granted_abilities,
+    epicTool: { toolset: "GASToolsets.AbilitySystemInspectorToolset", name: "GASToolsets.AbilitySystemInspectorToolset.GetGrantedAbilities" },
+    ...bp("read", "[Epic GASToolsets.AbilitySystemInspectorToolset] Returns all abilities granted to the actor's AbilitySystemComponent. Params: actor", "epic_call_tool"),
+  },
+  epic_list_attributes: {
+    epicSchema: S_epic_list_attributes,
+    epicTool: { toolset: "GASToolsets.AttributeSetToolset", name: "GASToolsets.AttributeSetToolset.ListAttributes" },
+    ...bp("read", "[Epic GASToolsets.AttributeSetToolset] Returns the gameplay attributes defined on a specific AttributeSet class. Params: className", "epic_call_tool"),
+  },
+  epic_list_cues: {
+    epicSchema: S_epic_list_cues,
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.ListCues" },
+    ...bp("read", "[Epic GASToolsets.GameplayCueToolset] Returns gameplay cue tags registered in the project. Params: parentTag", "epic_call_tool"),
+  },
+  epic_remove_cue_tag: {
+    epicSchema: S_epic_remove_cue_tag,
+    epicTool: { toolset: "GASToolsets.GameplayCueToolset", name: "GASToolsets.GameplayCueToolset.RemoveCueTag" },
+    ...bp("mutate", "[Epic GASToolsets.GameplayCueToolset] Removes a gameplay cue tag from the project. This should ONLY be called after getting explicit direction or permission from the user. Params: cueTag", "epic_call_tool"),
+  },
 };
 
 /** The parameters those actions accept, declared so the MCP layer stops stripping them. */

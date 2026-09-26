@@ -27,7 +27,7 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const DOC = fs.readFileSync(path.join(ROOT, "docs/tool-reference.md"), "utf8");
 
 // The names paged() appends to a paged action's Params clause. Mirrors
-// PAGINATION_PARAM_NAMES in src/pagination.ts, which this plain-node script
+// PAGINATION_PARAM_NAMES in src/surface/pagination.ts, which this plain-node script
 // cannot import; the parity is asserted in tests/unit/audit-params.test.ts.
 const PAGINATION_PARAMS = ["cursor", "limit"];
 

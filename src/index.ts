@@ -1,602 +1,165 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
-import { SessionRegistry, type EditorSession } from "./session.js";
-import type { ProjectContext } from "./project.js";
-import { ueMcpConfigRejections, describeConfigRejections } from "./project.js";
-import { attach, attachSummary } from "./deployer.js";
-import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO, multiEditorInstructions } from "./instructions.js";
-import { resolveContextStrategy, applyLeanContext, buildMicroGateway, fullSurfaceDescription } from "./lean-context.js";
-import { envelopeInputSchema, envelopeShape, unwrapArgsEnvelope, usesArgsEnvelope, validateCategoryParams } from "./call-envelope.js";
-import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
+import type { z } from "zod";
+import { SessionRegistry, type EditorSession } from "./sessions/session.js";
+import { ueMcpConfigRejections, describeConfigRejections } from "./config/project.js";
+import { attach, attachSummary } from "./editor/deployer.js";
+import { composeServerInstructions } from "./surface/context/instructions.js";
+import { resolveContextStrategy, fullSurfaceDescription } from "./surface/context/lean-context.js";
+import { envelopeInputSchema, envelopeShape, usesArgsEnvelope } from "./surface/context/call-envelope.js";
 import {
-  routeEditorCall,
-  callSubject,
-  refuseUntargetedInRegistry,
-  editorAttribution,
-  type RoutedCall,
-} from "./editor-gate.js";
-import {
-  isDirectiveResponse,
   injectEditorTarget,
   removeEditorTarget,
   injectMigrateTarget,
   removeMigrateTarget,
-  stripEditorTarget,
-  sessionContext,
-  EDITOR_TARGET_PARAM,
-  type ToolDef,
-  type ToolContext,
-  type PluginInfo,
-  type ElicitFn,
-  type ProgressFn,
-  type ProgressUpdate,
-  stripAction,
-} from "./types.js";
-import { McpError, ErrorCode } from "./errors.js";
-import * as nodePath from "node:path";
-import {
-  DialogGuard,
-  guardFor,
-  type GuardDecision,
-  existingGuard,
-  isDialogRefusal,
-  stampBlockedEditor,
-} from "./dialog-guard.js";
-import { resolveDialogMode, clientAdvertisesElicitation, connectedEditorOf } from "./editor-control.js";
-import { contestedProject } from "./project-holders.js";
-import { info, warn, debug } from "./log.js";
-import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
-import { buildFlowRegistry } from "./flow/registry.js";
+} from "./surface/target-params.js";
+import type { ToolDef } from "./core/types.js";
+import { DialogGuard, guardFor, sessionGuardDeps } from "./editor/dialog-guard.js";
+import { info, warn, error } from "./core/log.js";
+import { startVersionCheck } from "./core/version-check.js";
 import { GuardRegistry } from "./flow/guard.js";
-import { assertNoLegacyGuardTasks, buildGuards } from "./flow/guards.js";
-import { createLiveGuardSource } from "./flow/guard-config.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
-import type { FlowContext } from "./flow/context.js";
-import type { FlowConfig, PluginEntry } from "./flow/schema.js";
-import { loadPlugins, type PluginRecord } from "./plugin/loader.js";
-import { withAssetLocks, resolveLockingConfig } from "./locking.js";
-import { collapsingEnvWarnings } from "./session-env.js";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import yaml from "js-yaml";
-
-import { ALL_TOOLS, setLiveToolGraph } from "./tools.js";
-import { unknownActionMessage } from "./action-schema.js";
-import { applyNativeToolsConfig } from "./epic-surface.js";
-import { checkPluginFreshness } from "./plugin-freshness.js";
-import { readEngineSnapshot } from "./engine-observer.js";
+import { resolveLockingConfig } from "./dispatch/locking.js";
+import { collapsingEnvWarnings } from "./config/session-env.js";
+import { checkPluginFreshness } from "./editor/bridge-freshness.js";
+import { unionSurface } from "./sessions/session-surface.js";
+import { packageVersion } from "./core/package-root.js";
+import { findCliCommand, runCliCommand } from "./cli/cli-commands.js";
+import { SessionLoads } from "./sessions/session-load.js";
 import {
-  baseGraphFor,
-  unionSurface,
-  unionKnowledge,
-  explainMissingAction,
-  type SessionSurface,
-} from "./session-surface.js";
-
-type TextBlock = { type: "text"; text: string };
-
-function withUpgradeNotice(content: TextBlock[]): TextBlock[] {
-  const notice = consumeUpgradeNotice();
-  return notice ? [{ type: "text" as const, text: notice }, ...content] : content;
-}
+  buildElicit,
+  dispatchCategoryCall,
+  dispatchFlowCall,
+  type CallExtra,
+  type DispatchDeps,
+} from "./dispatch/server-dispatch.js";
 
 /**
- * Structured tail for an error a caller has to make a decision about (#799).
- * A bridge timeout is not a failed call: the editor may have finished it. The
- * prose says so, and this block says so in a form a client can branch on
- * without matching strings.
+ * Register one session per project argument, reporting each by name. A
+ * positional that fails to load is named rather than silently dropped, and
+ * with none left the project-less default session attaches to 9877.
  */
-function machineErrorBlock(e: unknown): TextBlock[] {
-  if (!(e instanceof McpError) || !e.details) return [];
-  return [{
-    type: "text" as const,
-    text: "MACHINE_ERROR=" + JSON.stringify({ code: e.code, ...e.details }),
-  }];
-}
-
-/**
- * Turn an MCP request's progress token into a reporter the tools can call.
- *
- * Without this a long tool is a frozen line in the client UI: stderr from an
- * MCP server goes to a log file the user never opens, so the startup progress
- * bar printed there was invisible. `notifications/progress` is the one channel
- * clients render live, and it only exists when the caller supplied a token.
- */
-function makeProgressReporter(extra: {
-  sendNotification?: (n: never) => Promise<void>;
-  _meta?: { progressToken?: string | number };
-}): ProgressFn | undefined {
-  const token = extra?._meta?.progressToken;
-  // The SDK types sendNotification against its own ServerNotification union.
-  // notifications/progress is a member of that union, but the params carry a
-  // token whose type the compiler cannot narrow from here.
-  const send = extra?.sendNotification as unknown as
-    | ((n: { method: string; params: Record<string, unknown> }) => Promise<void>)
-    | undefined;
-
-  // Progress is opt-in per request: a client that wants it supplies a token.
-  // When one never arrives, the server is silent by design and that is
-  // indistinguishable from a client that discards what we send, so record
-  // which it was. Debug level, so it costs nothing until someone is
-  // diagnosing a call that looks frozen.
-  debug("progress", token === undefined ? "no progressToken on this request - client did not ask for progress" : `progressToken present (${String(token)})`);
-
-  if (token === undefined || typeof send !== "function") return undefined;
-
-  return (update: ProgressUpdate): void => {
-    // Fire and forget: a progress update must never fail the call it describes.
-    void Promise.resolve(
-      send({
-        method: "notifications/progress",
-        params: {
-          progressToken: token,
-          progress: update.progress,
-          ...(update.total !== undefined ? { total: update.total } : {}),
-          message: update.message,
-        },
-      }),
-    ).catch(() => undefined);
-  };
-}
-
-async function main() {
-  // The guard pipeline is built first because every session wraps its own
-  // bridge in it. The registry owns the sessions; nothing below keeps a
-  // module-level bridge or project of its own.
-  const guardRegistry = new GuardRegistry();
-  const sessions = new SessionRegistry(guardRegistry);
-
-  // Kick off the npm registry check in the background; the next tool response
-  // injects the notice if a newer version is published.
-  const { createRequire } = await import("node:module");
-  const require = createRequire(import.meta.url);
-  const pkg = require("../package.json") as { version: string };
-  startVersionCheck(pkg.version);
-
-  // ── Project init ─────────────────────────────────────────────────
-  // Moved ahead of tool registration so plugin resolution can walk the
-  // project's node_modules.
-  //
-  // #817: every positional argument is a project, and each becomes its own
-  // session with its own bridge, port and lockfile. One argument behaves
-  // exactly as it always has. A positional that fails to load is reported by
-  // name rather than silently reducing the set, so a typo does not look like
-  // a project that quietly refuses to connect.
-  const projectArgs = process.argv.slice(2).filter((a) => !a.startsWith("-"));
-
+function registerSessions(sessions: SessionRegistry, projectArgs: string[]): void {
   for (const arg of projectArgs) {
     try {
       const session = sessions.register({ projectPath: arg });
-      console.error(
-        `[ue-mcp] Project loaded: ${session.project.projectName} (engine ${session.project.engineAssociation ?? "unknown"})` +
+      info(
+        "server",
+        `Project loaded: ${session.project.projectName} (engine ${session.project.engineAssociation ?? "unknown"})` +
           (projectArgs.length > 1 ? ` as editor '${session.name}' on port ${session.bridge.port}` : ""),
       );
 
-      // Non-destructive attach - never overwrites local bridge source.
-      // Source deployment is reserved for `ue-mcp init` / `ue-mcp deploy`.
+      // Non-destructive attach; deployment is reserved for `ue-mcp init` / `ue-mcp deploy`.
       const result = attach(session.project);
-      console.error(`[ue-mcp] ${attachSummary(result)}`);
+      info("deploy", attachSummary(result));
 
-      // #785: say loudly, once at startup, when the compiled plugin is older
-      // than its source. Otherwise the only signal is an "Unknown method"
-      // error later, which reads as "not implemented yet" and sends people
-      // hand-authoring around handlers that already work.
+      // #785: a compiled plugin older than its source otherwise only shows up
+      // later as "Unknown method", which reads as "not implemented yet".
       const freshness = checkPluginFreshness(session.project.projectPath);
       if (freshness.stale && freshness.message) {
-        console.error(`[ue-mcp] WARNING: ${freshness.message}`);
+        warn("deploy", freshness.message);
       }
 
-      // D3: a malformed `ue-mcp:` key no longer takes the whole block with it,
-      // and the key that was dropped is named where somebody starting the
-      // server can see it. bridge.port lost this way put the client on the
-      // derived port while the editor bound the pinned one.
+      // D3: a malformed `ue-mcp:` key is dropped on its own, and named here.
       for (const line of describeConfigRejections(ueMcpConfigRejections(session.project.projectDir))) {
-        console.error(`[ue-mcp] WARNING: ${line}`);
+        warn("config", line);
       }
     } catch (e) {
-      console.error(`[ue-mcp] Failed to initialize project '${arg}': ${e instanceof Error ? e.message : e}`);
+      error("server", `Failed to initialize project '${arg}'`, e);
     }
   }
 
-  // Say which environment variables are deciding for every editor at once.
-  // Silent at one editor: there is nothing to flatten and nothing to say.
+  // Which environment variables decide for every editor at once. Silent at one.
   for (const line of collapsingEnvWarnings(sessions.list().map((s) => s.name))) {
-    console.error(`[ue-mcp] ${line}`);
+    warn("env", line);
   }
 
-  // No project argument, or every argument failed: keep one project-less
-  // session on the legacy fixed port. That is the documented "attach to
-  // whatever answers 9877" mode, and project(set_project) can bind it later.
   if (sessions.size === 0) sessions.register({});
+}
 
-  // Process-level construction that has one answer per transport (the context
-  // strategy, the HTTP surface, the flow config source) reads the first
-  // session's project, which for a single-editor server is the only one there
-  // has ever been.
+async function main() {
+  // Every session wraps its own bridge in the guard pipeline, so it exists
+  // first. The registry owns the sessions; nothing here keeps a bridge of its own.
+  const sessions = new SessionRegistry(new GuardRegistry());
+
+  // The next tool response carries the notice if a newer version is published.
+  startVersionCheck(packageVersion());
+
+  // #817: every positional argument is a project with its own session.
+  registerSessions(sessions, process.argv.slice(2).filter((a) => !a.startsWith("-")));
+
+  // Process-level choices (context strategy, HTTP surface, flow config source)
+  // read the first session's project.
   const primary = sessions.active;
   const project = primary.project;
-  const bridge = primary.bridge;
-
-  // ── Per-session surfaces ─────────────────────────────────────────
-  // Plugins and the Epic catalog are project-scoped: the `plugins:` list lives
-  // in each project's ue-mcp.yml and the catalog is whatever that project's
-  // editor reports. Both are built per session against a graph cloned from the
-  // pristine declaration, so a second editor never inherits the first one's
-  // plugins or toolsets (#817). At one editor this is one clone enriched from
-  // one project, which is what the server did before.
-  const surfaces: SessionSurface[] = [];
-  const perSession = new Map<EditorSession, SessionLoad>();
-  for (const session of sessions.list()) {
-    // BEFORE the surface build, which calls epic_list_toolsets on the editor.
-    // Creating guards afterwards meant the first call this server ever makes
-    // was the one call with no guard behind it: a modal refused it, the
-    // refusal has no toolsets, and the surface silently fell back to a cached
-    // one with nothing latched. startWatching is idempotent, so the later
-    // pass over sessions.list() stays harmless.
-    dialogGuardFor(session);
-    const load = await buildSessionLoad(session, pkg.version, sessions.size > 1);
-    perSession.set(session, load);
-    surfaces.push(load.surface);
-  }
-
-  const primaryLoad = perSession.get(primary)!;
-  const pluginLoad = primaryLoad.pluginLoad;
-  const pluginRecords = primaryLoad.surface.pluginRecords;
-  const configDir = project.projectDir ?? undefined;
-  const activeTools = primaryLoad.surface.tools;
-
-  // ── Context-seeding strategy (full | lean | micro) ───────────────
-  // Applied AFTER plugin + Epic enrichment so lean/micro discovery covers the
-  // injected actions too, and BEFORE the flow registry + MCP registration so
-  // the gateway / catalog / describe surfaces are dispatchable and advertised.
-  //   full  - every category tool advertised with its full action catalog
-  //   lean  - trimmed category tools + a `catalog` discovery tool (names stay
-  //           visible, descriptions/params on demand)
-  //   micro - one `tools` gateway (list_categories / describe / call) fronts
-  //           everything; smallest possible seed
-  //
-  // The strategy is process-level: there is one transport, so one advertised
-  // shape. It comes from the first session, and any other session asking for
-  // a different one is named rather than silently overridden.
+  // One transport, one advertised shape (full | lean | micro).
   const contextStrategy = resolveContextStrategy(project.config.context?.strategy);
-  const dissenting = surfaces
-    .filter((s) => s.session !== primary)
-    .filter((s) => resolveContextStrategy(s.session.project.config.context?.strategy) !== contextStrategy)
-    .map((s) => s.session.name);
-  if (dissenting.length > 0) {
-    console.error(
-      `[ue-mcp] Context strategy '${contextStrategy}' comes from '${primary.name}' and applies to the whole server; ` +
-        `${dissenting.join(", ")} ask for a different one and it is not applied.`,
-    );
-  }
-  const disabled = primaryLoad.surface.disabled;
 
-  // Each session gets the strategy applied to its OWN graph, so its registry
-  // dispatches only what that project actually provides.
-  const loads = [...perSession.values()];
-  const applyContextStrategy = (load: SessionLoad): void => {
-    const enabled = load.surface.tools.filter((t) => !load.surface.disabled.has(t.name));
-    if (contextStrategy === "micro") {
-      const gateway = buildMicroGateway(enabled);
-      load.advertisedTools = [gateway];
-      // Keep every category task in the registry so flows still resolve.
-      load.registryTools = [gateway, ...load.surface.tools];
-    } else if (contextStrategy === "lean") {
-      const leaned = applyLeanContext(enabled);
-      load.advertisedTools = leaned;
-      // Discovery describes callable categories; internal flows retain the full registry.
-      load.registryTools = [...leaned, ...load.surface.tools.filter((t) => load.surface.disabled.has(t.name))];
-    } else {
-      load.advertisedTools = enabled;
-      load.registryTools = load.surface.tools;
-    }
-  };
-  for (const load of loads) applyContextStrategy(load);
+  // Plugins and native tools are project-scoped, so each session gets a graph
+  // cloned from the pristine declaration and loaded from its own project.
+  const loads = new SessionLoads(sessions, primary, contextStrategy, packageVersion());
+  const baseCtx = loads.contextFor(primary);
 
-  // What the client is advertised. At one editor this is that editor's list,
-  // the same objects it always was. Beyond one it is the union, so an action
-  // only one project has is still addressable there, and dispatch to a session
-  // that lacks it is refused by name rather than falling through to a bridge
-  // that cannot serve it. A category a session disabled stays advertised for
-  // the others and is refused at dispatch for that one, naming its config.
-  const advertisedTools: ToolDef[] = sessions.size > 1
-    ? unionSurface(loads.map((l) => ({ ...l.surface, tools: l.advertisedTools }))).tools
-    : primaryLoad.advertisedTools;
-
-  // The union of every session's dispatchable graph. `search_tools`, the
-  // execute_python gate and the feedback router all ask "what does this server
-  // expose", and with a graph per session that answer no longer lives in the
-  // module-level declaration they used to read.
-  //
-  // Recomputed when a session is registered at runtime: built from the startup
-  // set alone, it could not refuse for an editor added later, and that editor's
-  // own `disable:` list was not enforced anywhere (D1).
-  let dispatchUnion = unionSurface(loads.map((l) => ({ ...l.surface, tools: l.registryTools })));
-  const refreshDispatchUnion = (): void => {
-    dispatchUnion = unionSurface(
-      [...perSession.values()].map((l) => ({ ...l.surface, tools: l.registryTools })),
-    );
-    setLiveToolGraph(dispatchUnion.tools);
-  };
-  setLiveToolGraph(dispatchUnion.tools);
-  const registryTools = primaryLoad.registryTools;
-  if (contextStrategy !== "full") {
-    console.error(`[ue-mcp] Context strategy: ${contextStrategy}`);
-  }
-
-  // Lazy flow accessor - reads ue-mcp.yml fresh each call so agents see
-  // edits without a server restart. project(get_status) uses this so the
-  // first call agents make in any session reveals the registered flows.
-  // Reads the addressed session's project, so a flow declared in one project's
-  // ue-mcp.yml is not reported as belonging to another's.
-  const getFlows = (forSession?: EditorSession): Array<{ name: string; description?: string }> => {
-    // No `?? primaryLoad`. A session whose surface is not built yet has no
-    // flows of its own, and reporting the FIRST project's flows as that
-    // editor's is how project(get_status, editor="B") came to advertise
-    // project A's reset_level as something B would run (D1).
-    const load = perSession.get(forSession ?? primary);
-    if (!load) return [];
-    try {
-      const cfg = loadFlowConfig(load.surface.tools, load.configDir, {
-        tasks: load.pluginLoad.taskDefs,
-        flows: load.pluginLoad.flowDefs,
-      }).config;
-      return Object.entries(cfg.flows).map(([name, def]) => ({
-        name,
-        description: (def as { description?: string }).description,
-      }));
-    } catch {
-      return [];
-    }
-  };
-
-  const getPlugins = (forSession?: EditorSession): PluginInfo[] => {
-    const target = forSession ?? primary;
-    // Same rule as getFlows: another project's plugin list is not this
-    // editor's, and an empty list is the truthful answer for a session whose
-    // own surface has not been built (D1).
-    const load = perSession.get(target);
-    if (!load) return [];
-    return load.surface.pluginRecords.map((r) => toPluginInfo(r, target.project));
-  };
-
-  // Elicitation is only meaningful once the client has advertised support
-  // during initialize. We lazily probe at call time so the function is bound
-  // to whatever the live capabilities are, not a stale snapshot.
-  // A person answers a form when they get to it, not within the SDK's 60
-  // second request default. An answer given after that was discarded with
-  // nothing pressed, and the same question went up again (#1076).
-  const ELICIT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-  const buildElicit = (mcp: McpServer): ElicitFn | undefined => {
-    const elicit: ElicitFn = async (params) => {
-      const caps = mcp.server.getClientCapabilities();
-      if (!caps?.elicitation) {
-        // Surface a JSON-RPC-style error shape so callers can distinguish
-        // "user declined" from "client has no UI for this".
-        throw new McpError(
-          ErrorCode.UNKNOWN_ACTION,
-          "Connected MCP client did not advertise the `elicitation` capability - cannot obtain a deterministic user approval. Upgrade your client (Claude Code >= 2.1.76) or run the action from a client that supports MCP elicitation.",
-        );
-      }
-      const result = await mcp.server.elicitInput(params, { timeout: ELICIT_TIMEOUT_MS });
-      return result as Awaited<ReturnType<ElicitFn>>;
-    };
-    // The gate is built before any client has connected, so this function
-    // exists whatever the client turns out to support, and its presence proves
-    // nothing. Callers deciding whether the user CAN be asked ask this, which
-    // reads the live capability at call time. Without it, every client looks
-    // like an elicitation client and a mode that is meant to fall back to defer
-    // would resolve to interactive for clients that advertised nothing.
-    elicit.clientAdvertisesElicitation = () => !!mcp.server.getClientCapabilities()?.elicitation;
-    // Who is on the other end, read live for the same reason as the capability
-    // above: this is built before anyone has connected.
-    elicit.client = () => mcp.server.getClientVersion();
-    return elicit;
-  };
-
-  // Each session already wraps its own raw bridge in the guard pipeline; the
-  // guarded wrapper is what tools and tasks see, the raw bridge stays in scope
-  // for connection lifecycle (connect / reconnect / lockfile). The guard
-  // registry starts empty (pass-through) and is populated once the task
-  // registry exists, below.
-  const guardedBridge = primary.guarded;
   /**
-   * The dialog guard for one editor, created on first use and kept.
-   *
-   * Watching starts with the guard, so a modal raised while the session sits
-   * idle is known before anything is called: the plugin refreshes its status
-   * file from the modal-loop tick, which is the tick that keeps running while
-   * the game thread is parked.
+   * The dialog guard for one editor, created on first use and kept. Watching
+   * starts with it, so a modal raised while the session sits idle is known
+   * before anything is called.
    */
   function dialogGuardFor(forSession: EditorSession, canElicit = false): DialogGuard {
-    const guard = guardFor(forSession, {
-      mode: () => resolveDialogMode({ projectDir: forSession.projectDir, canElicit }).mode,
-      probe: () => forSession.guarded.call("list_dialogs", {}),
-      press: (buttonLabel: string, items?: Array<{ index: number; checked: boolean }>) =>
-        forSession.guarded.call("respond_to_dialog", { buttonLabel, ...(items ? { items } : {}) }),
-      elicit: () => (canElicit ? ctx.elicit : undefined),
-      isConnected: () => forSession.bridge.isConnected,
-      // The instance-aware reader, not a second one: it prefers
-      // status.<pid>.json over the shared file two editors of one project take
-      // turns writing, and it reports how old the snapshot is so a leftover
-      // from a crashed editor is not mistaken for a live modal.
-      readSnapshot: () => {
-        const proj = forSession.project.projectPath
-          ?? forSession.bridge.getTarget().projectPath
-          ?? null;
-        return proj ? readEngineSnapshot(proj) : null;
-      },
-    });
+    const guard = guardFor(forSession, sessionGuardDeps(forSession, canElicit, () => baseCtx.elicit));
     guard.startWatching();
     return guard;
   }
 
-  const getToolGraph = (forSession: EditorSession = primary): ToolDef[] => {
-    const load = perSession.get(forSession);
-    // D1 again. A session whose surface failed to build has no graph of its
-    // own, and answering from the union would name another project's actions.
-    // Returning nothing instead reads as "no action matched", which sends the
-    // caller to execute_python for something the editor does in fact provide.
-    if (!load) {
-      throw new McpError(
-        ErrorCode.NOT_FOUND,
-        `Editor '${forSession.name}' has no tool surface built, so its actions cannot be searched or described. `
-        + "Re-register it with project(add_editor); discovery does not fall back to another editor's graph.",
-      );
-    }
-    return load.surface.tools.filter((t) => !load.surface.disabled.has(t.name));
-  };
-  const ctx: ToolContext = {
-    bridge: guardedBridge,
-    project,
-    session: primary,
-    sessions,
-    getFlows,
-    getPlugins,
-    getToolGraph,
-  };
-
-  // Per-asset locking for concurrent agents. Opt-in; when off, withAssetLocks
-  // is a passthrough. The registry itself lives in the C++ bridge.
-  const lockingCfg = resolveLockingConfig(project.config.locking);
-  if (lockingCfg.enabled) {
-    console.error(`[ue-mcp] Per-asset locking enabled (TTL ${lockingCfg.ttlSeconds}s)`);
+  for (const session of sessions.list()) {
+    // BEFORE the surface build, so the first call this server makes to an
+    // editor already has a guard behind it.
+    dialogGuardFor(session);
+    await loads.buildSurface(session);
   }
 
-  // ── Flow engine: one task registry per session ──────────────────
-  // The registry is the dispatch layer, so it has to be built from the graph
-  // the addressed session actually has. Sharing one registry is what made a
-  // second editor dispatch the first editor's plugin tasks (#817).
-  const buildRegistryFor = async (load: SessionLoad): Promise<void> => {
-    const sessionRegistry = buildFlowRegistry(load.registryTools);
-    for (const { name, ctor } of load.pluginLoad.taskRegistrations) {
-      sessionRegistry.register(name, ctor);
-    }
-    for (const { classPath, ctor } of load.pluginLoad.classPathRegistrations) {
-      sessionRegistry.registerClassPath(classPath, ctor);
-    }
-    load.registry = sessionRegistry;
-  };
-  for (const load of loads) await buildRegistryFor(load);
-  const registry = primaryLoad.registry!;
-  const taskCount = registry.listRegistered().length;
+  // Any other session asking for a different strategy is named, not applied.
+  const dissenting = sessions.list()
+    .filter((s) => s !== primary)
+    .filter((s) => resolveContextStrategy(s.project.config.context?.strategy) !== contextStrategy)
+    .map((s) => s.name);
+  if (dissenting.length > 0) {
+    warn(
+      "context",
+      `Context strategy '${contextStrategy}' comes from '${primary.name}' and applies to the whole server; ` +
+        `${dissenting.join(", ")} ask for a different one and it is not applied.`,
+    );
+  }
 
-  // Populate the guard pipeline: any plugin-supplied `guard.<name>.<phase>` task
-  // becomes a BridgeGuard. Each guard task runs with the RAW bridge in its
-  // context so a guard cannot recurse through the pipeline. See flow/guards.ts.
-  // Guards are built per session, from that session's own declarations and
-  // against that session's own raw bridge, so a guard declared by one project
-  // cannot veto another project's calls.
-  //
-  // Two sources declare them in the same shape: each plugin's manifest, and the
-  // project's own ue-mcp.yml. Both are built here into pipeline guards. There
-  // is no naming convention any more: a guard is declared as a guard, so a
-  // misspelling is an error rather than something registered and never run.
-  const buildGuardsFor = async (load: SessionLoad): Promise<void> => {
-    const guardCtx: ToolContext = {
-      bridge: load.surface.session.guarded,
-      project: load.surface.session.project,
-      session: load.surface.session,
-      sessions,
-      getFlows: () => getFlows(load.surface.session),
-      getPlugins: () => getPlugins(load.surface.session),
-      getToolGraph: (forSession) => getToolGraph(forSession ?? load.surface.session),
-    };
-    const deps = {
-      registry: load.registry!,
-      ctx: guardCtx,
-      rawBridge: load.surface.session.bridge,
-    };
+  const primaryLoad = loads.get(primary)!;
 
-    const yamlSource = createLiveGuardSource(load.surface.tools, load.configDir, {
-      tasks: load.pluginLoad.taskDefs,
-      flows: load.pluginLoad.flowDefs,
-    }, (message) => {
-      console.error(`[ue-mcp] ${load.surface.session.name}: ${message}`);
-    });
-    const sources = [
-      ...load.pluginLoad.guardsByPlugin.map((g) => ({ label: g.plugin, guards: g.guards })),
-      yamlSource,
-    ];
+  // At one editor, that editor's list. Beyond one, the union, so an action only
+  // one project has is still addressable; dispatch to a session that lacks it
+  // is refused by name.
+  const advertisedTools: ToolDef[] = sessions.size > 1
+    ? unionSurface(loads.all().map((l) => ({ ...l.surface, tools: l.advertisedTools }))).tools
+    : primaryLoad.advertisedTools;
+  if (contextStrategy !== "full") {
+    info("context", `Context strategy: ${contextStrategy}`);
+  }
 
-    // A task still named like a guard is fatal, whoever declared it: under the
-    // declaration model nothing discovers it, so it would sit in the config
-    // gating nothing.
-    assertNoLegacyGuardTasks(Object.keys(yamlSource.config.tasks ?? {}), yamlSource);
-    for (const { plugin, taskNames } of load.pluginLoad.taskNamesByPlugin) {
-      assertNoLegacyGuardTasks(taskNames, { label: plugin });
-    }
+  // Per-asset locking for concurrent agents. Opt-in; off, it is a passthrough.
+  const lockingCfg = resolveLockingConfig(project.config.locking);
+  if (lockingCfg.enabled) {
+    info("locking", `Per-asset locking enabled (TTL ${lockingCfg.ttlSeconds}s)`);
+  }
 
-    const built = [];
-    for (const source of sources) {
-      if (Object.keys(source.guards).length === 0) continue;
-      for (const guard of await buildGuards(source.guards, deps, source)) {
-        built.push(guard);
-      }
-    }
-    // Publish only after every source has resolved, so retrying a failed build
-    // cannot leave a partial or duplicated guard pipeline behind.
-    for (const guard of built) load.surface.session.guards.register(guard);
-    if (built.length > 0) {
-      console.error(`[ue-mcp] ${load.surface.session.name}: ${built.length} guard(s) registered`);
-    }
-  };
-  for (const load of loads) await buildGuardsFor(load);
-  // A guard per registered editor, so a modal in the DESTINATION of a
-  // cross-editor call is seen by that editor's own guard rather than by
-  // whichever session happened to originate the call.
+  // One task registry and guard pipeline per session, built from its own graph.
+  await loads.finishStartup();
   for (const s of sessions.list()) dialogGuardFor(s);
 
-  /**
-   * The dispatch surface for one session, built on demand (D1).
-   *
-   * `perSession` used to be written exactly once, in the startup loop, so a
-   * session registered at runtime by project(add_editor) never had an entry
-   * and every lookup fell back to the FIRST project's load. That editor then
-   * dispatched through project A's task registry and A's plugin tasks, ran A's
-   * flows step by step inside B, reported A's flows as its own, and had its own
-   * `disable:` list enforced nowhere. Building the surface here, from that
-   * session's own project, is what makes the fallback unnecessary.
-   *
-   * A build already running is shared, so two callers racing on a new editor wait on
-   * one build rather than enriching the same graph twice. A build that fails
-   * leaves no entry, and every reader refuses instead of substituting another
-   * project's.
-   */
-  const pendingLoads = new Map<EditorSession, Promise<SessionLoad>>();
-  const ensureSessionLoad = async (session: EditorSession): Promise<SessionLoad> => {
-    const existing = perSession.get(session);
-    if (existing) return existing;
-    const inFlight = pendingLoads.get(session);
-    if (inFlight) return inFlight;
-
-    const build = (async () => {
-      const load = await buildSessionLoad(session, pkg.version, true);
-      applyContextStrategy(load);
-      await buildRegistryFor(load);
-      await buildGuardsFor(load);
-      perSession.set(session, load);
-      surfaces.push(load.surface);
-      // The union is what explainMissingAction refuses from, so it has to know
-      // about this editor before the first call is routed to it.
-      refreshDispatchUnion();
-      return load;
-    })().finally(() => pendingLoads.delete(session));
-
-    pendingLoads.set(session, build);
-    return build;
-  };
   // project(add_editor) awaits this, so an editor is never addressable before
-  // its own surface exists.
+  // its own surface, guard and watcher exist.
   sessions.prepareSession = async (session) => {
-    await ensureSessionLoad(session);
-    // Its own guard and its own watcher, before it is addressable. Without
-    // this an editor added at runtime had nothing watching it, so a modal
-    // there was never detected at all until a call happened to be routed in.
+    await loads.ensure(session);
     dialogGuardFor(session);
   };
   for (const session of sessions.list()) {
@@ -608,58 +171,36 @@ async function main() {
     );
   }
 
-  // ── Plugin knowledge → server instructions ──────────────────────
-  // Attach per-category markdown to the AI-facing docs. Sized to the same
-  // budget as SERVER_INSTRUCTIONS itself; deeper plugin docs remain
-  // readable on demand via the file-reading surface.
-  // The union across sessions: instructions are sent once at initialize and
-  // cannot be renegotiated, so an editor whose plugins document a category
-  // has to have that documented for the whole server or not at all.
-  const knowledgeBlock = buildKnowledgeBlock(unionKnowledge(surfaces));
-  const baseInstructions = contextStrategy === "micro"
-    ? SERVER_INSTRUCTIONS_MICRO
-    : contextStrategy === "lean"
-      ? SERVER_INSTRUCTIONS_LEAN
-      : SERVER_INSTRUCTIONS;
-  const withKnowledge = knowledgeBlock
-    ? `${baseInstructions}\n\n═══ PLUGIN KNOWLEDGE ═══\n${knowledgeBlock}`
-    : baseInstructions;
-  // A plugin that failed to load takes its actions with it, and absent actions
-  // read as "never installed" rather than "broken". Say so at initialize, where
-  // the caller is already reading the surface, instead of only in a log file
-  // and a `plugins(list)` field nobody queries until they suspect a problem.
-  const loadWarnings = buildPluginWarningBlock(surfaces);
-  const withWarnings = loadWarnings
-    ? `${withKnowledge}\n\n═══ PLUGIN LOAD WARNINGS ═══\n${loadWarnings}`
-    : withKnowledge;
-  // Targeting is documented only when there is something to target, so a
-  // single-editor client's initialize payload is unchanged.
-  const serverInstructions = sessions.size > 1
-    ? `${withWarnings}\n\n${multiEditorInstructions(sessions.list().map((s) => s.name), sessions.active.name)}`
-    : withWarnings;
-
   const server = new McpServer({
     name: "ue-mcp",
-    // Read from package.json, never written here. A literal was frozen at
-    // 0.6.4 in April and every release since told its clients that, while
-    // doctor and the update check read the real one and disagreed with it.
-    version: pkg.version,
+    // Read from package.json, never written here.
+    version: packageVersion(),
   }, {
-    instructions: serverInstructions,
+    instructions: composeServerInstructions(
+      contextStrategy,
+      loads.surfaces,
+      sessions.list().map((s) => s.name),
+      sessions.active.name,
+    ),
   });
 
-  ctx.elicit = buildElicit(server);
+  baseCtx.elicit = buildElicit(server);
 
-  const tools = advertisedTools;
+  const deps: DispatchDeps = {
+    sessions,
+    loads,
+    lockingCfg,
+    dialogGuardFor,
+    elicit: () => baseCtx.elicit,
+    client: () => server.server.getClientVersion(),
+  };
 
   // ── Per-call editor targeting (#817) ─────────────────────────────
-  // The `editor` parameter exists only while this server drives more than one
-  // editor: at one editor the advertised schema is byte-for-byte what it was
-  // before sessions existed. Adding or dropping a session at runtime
-  // re-advertises, so a client that honours tools/list_changed can target the
-  // editor it just registered without a restart.
+  // `editor` exists only while this server drives more than one editor, so a
+  // single-editor schema is byte-for-byte what it was before sessions existed.
+  // Adding or dropping a session re-advertises.
   const registeredTools = new Map<string, ReturnType<typeof server.tool>>();
-  const targetable: ToolDef[] = [...tools];
+  const targetable: ToolDef[] = [...advertisedTools];
   let targetingSignature = "";
   const syncEditorTargeting = (): void => {
     const names = sessions.list().map((s) => s.name);
@@ -669,11 +210,10 @@ async function main() {
     for (const tool of targetable) {
       if (signature) {
         const outcome = injectEditorTarget(tool, names);
-        if (!outcome.injected && outcome.reason) console.error(`[ue-mcp] ${outcome.reason}`);
-        // asset(migrate) also takes a DESTINATION editor: it is the one action
-        // whose output lands in a project other than the one it runs in (6.5).
+        if (!outcome.injected && outcome.reason) warn("targeting", outcome.reason);
+        // asset(migrate) also takes a DESTINATION editor (6.5).
         const destination = injectMigrateTarget(tool, names);
-        if (!destination.injected && destination.reason) console.error(`[ue-mcp] ${destination.reason}`);
+        if (!destination.injected && destination.reason) warn("targeting", destination.reason);
       } else {
         removeEditorTarget(tool);
         removeMigrateTarget(tool);
@@ -691,509 +231,59 @@ async function main() {
     }
   };
 
-  const routeCall = (
-    tool: ToolDef,
-    params: Record<string, unknown>,
-  ): RoutedCall => routeEditorCall(tool, params, sessions);
-
-  /**
-   * Refuse an untargeted change while more than one editor is registered
-   * (#817, plan 5.2). Returns null at one editor without classifying anything,
-   * so the single-editor path is the path it always was.
-   */
-  const gateUntargeted = (taskName: string, targeted: boolean): string | null =>
-    refuseUntargetedInRegistry(sessions, taskName, targeted);
-
-  /** The serving editor, appended to a response only beyond one editor (5.3). */
-  const attribution = (session: EditorSession): TextBlock[] => {
-    const line = editorAttribution(
-      {
-        name: session.name,
-        projectPath: session.project.projectPath,
-        pid: connectedEditorOf(session.bridge)?.pid,
-      },
-      sessions.size,
-      contestedProject(session.project.projectPath) !== null,
-    );
-    return line ? [{ type: "text" as const, text: line }] : [];
-  };
-
-  // ── Register category tools - dispatched through the task registry ──
-  for (const tool of tools) {
-    const shape: Record<string, z.ZodType> = {};
-    for (const [key, schema] of Object.entries(tool.schema)) {
-      shape[key] = schema;
-    }
-    // Category tools are advertised as `action` + `args` (#1172). The flat
-    // shape stays the validation contract, applied here instead of by the SDK.
+  // ── Category tools, dispatched through each session's task registry ──
+  for (const tool of advertisedTools) {
+    const shape: Record<string, z.ZodType> = { ...tool.schema };
+    // Advertised as `action` + `args` (#1172); the flat shape stays the
+    // validation contract, applied in dispatch instead of by the SDK.
     const envelope = usesArgsEnvelope(tool);
     const description = envelope && contextStrategy === "full" ? fullSurfaceDescription(tool) : tool.description;
-
-    const callback = async (callArgs: Record<string, unknown>, extra: Parameters<typeof makeProgressReporter>[0]) => {
-      let rawParams: Record<string, unknown>;
-      try {
-        rawParams = envelope ? validateCategoryParams(tool, unwrapArgsEnvelope(tool, callArgs)) : callArgs;
-      } catch (e) {
-        // Thrown to the SDK, which words it exactly as its own validation did.
-        if (e instanceof SdkMcpError) throw e;
-        const msg = e instanceof Error ? e.message : String(e);
-        const code = e instanceof McpError ? e.code : ErrorCode.INVALID_PARAMS;
-        return {
-          content: withUpgradeNotice([{ type: "text" as const, text: `Error [${code}]: ${msg}` }]),
-          isError: true,
-        };
-      }
-      let routed: RoutedCall;
-      try {
-        routed = routeCall(tool, rawParams);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        return {
-          content: withUpgradeNotice([{ type: "text" as const, text: `Error [NOT_FOUND]: ${msg}` }]),
-          isError: true,
-        };
-      }
-      const session = routed.session;
-      const params = routed.params;
-      const action = params.action as string;
-      const taskName = `${tool.name}.${action}`;
-      // The action actually run: the gateway's target in micro mode.
-      const subject = callSubject(tool, params);
-      const effectiveTask = subject.taskName;
-
-      // Nothing below this line runs at one editor: the gate returns null
-      // without classifying, so a single-editor server dispatches exactly as
-      // it did before targeting existed.
-      const untargeted = gateUntargeted(effectiveTask, routed.targeted);
-      if (untargeted) {
-        return {
-          content: withUpgradeNotice([
-            { type: "text" as const, text: `Error [INVALID_PARAMS]: ${untargeted}` },
-          ]),
-          isError: true,
-        };
-      }
-      // One guard per editor, shared by every route. The mode is read per
-      // call, so changing it takes effect without restarting anything.
-      const canElicit = clientAdvertisesElicitation(ctx.elicit);
-      const guard = dialogGuardFor(session, canElicit);
-
-      // Actions served in this process never reach the bridge, so the bridge
-      // boundary cannot refuse them. Same guard, same decision.
-      const preflight = await guard.check(effectiveTask, "action");
-      if (!preflight.allow) {
-        return {
-          content: withUpgradeNotice([
-            { type: "text" as const, text: JSON.stringify(preflight.refusal, null, 2) },
-          ]),
-          isError: true,
-        };
-      }
-
-      const taskParams = stripAction(params);
-      const flowCtx: FlowContext = {
-        bridge: session.guarded,
-        project: session.project,
-        session,
-        sessions,
-        getFlows: () => getFlows(session),
-        getPlugins: () => getPlugins(session),
-        getToolGraph: (forSession) => getToolGraph(forSession ?? session),
-        elicit: ctx.elicit,
-        onProgress: makeProgressReporter(extra),
-        client: server.server.getClientVersion(),
-      };
-
-      // The addressed session's own registry, built from that project's graph.
-      // A call for an action the session does not provide is refused here,
-      // naming the editors that do, rather than reaching a bridge that would
-      // answer "Unknown method" with no way to tell which editor was wrong.
-      //
-      // D1: built on demand rather than falling back to the first project's
-      // registry. That fallback is how an editor registered at runtime came to
-      // dispatch through another project's tasks and plugins.
-      let sessionLoad: SessionLoad;
-      try {
-        sessionLoad = await ensureSessionLoad(session);
-      } catch (e) {
-        return {
-          content: withUpgradeNotice([
-            {
-              type: "text" as const,
-              text:
-                `Error [NOT_CONNECTED]: Editor '${session.name}' has no tool surface of its own, so this call cannot ` +
-                `be dispatched to it. Running it through another project's registry would execute that project's ` +
-                `tasks in this editor, which is exactly what must not happen. Cause: ` +
-                `${e instanceof Error ? e.message : String(e)}`,
-            },
-          ]),
-          isError: true,
-        };
-      }
-      const sessionRegistry = sessionLoad.registry ?? registry;
-      const refusal = sessions.size > 1
-        ? explainMissingAction(
-            dispatchUnion,
-            effectiveTask,
-            session.name,
-            sessionRegistry.listRegistered().includes(effectiveTask),
-          )
-        : null;
-      if (refusal) {
-        return {
-          content: withUpgradeNotice([{ type: "text" as const, text: `Error [NOT_FOUND]: ${refusal}` }]),
-          isError: true,
-        };
-      }
-
-      // An action this registry does not have, on a server driving one editor.
-      //
-      // `action` is advertised as an enum but parsed as a string, because a
-      // strict enum made the MCP layer reject a typo with the serialized zod
-      // issue - the full options array, every action named twice, about 8KB on
-      // a large category. Parsing it loosely moves the refusal here, where the
-      // answer can be the two spellings the caller probably meant. Without
-      // this, a typo reaches flowkit's registry and comes back as a list of
-      // .ts paths it tried to load the action from, which is worse than what
-      // it replaced.
-      if (!sessionRegistry.listRegistered().includes(taskName)) {
-        return {
-          content: withUpgradeNotice([
-            {
-              type: "text" as const,
-              text: `Error [NOT_FOUND]: ${unknownActionMessage(action, tool.name, Object.keys(tool.actions))}`,
-            },
-          ]),
-          isError: true,
-        };
-      }
-
-      try {
-        const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
-        // Locks are acquired in the editor the call runs in, and through the
-        // GUARDED bridge, so a lock request made while a modal is up is
-        // refused as a dialog rather than reported as somebody else holding
-        // the asset.
-        const result = await withAssetLocks(
-          session.guarded,
-          lockingCfg,
-          effectiveTask,
-          subject.params,
-          () => task.run(),
-          session.lockOwnerId,
-        );
-
-        // A handler that makes several bridge calls can swallow a refusal and
-        // still report success, so ask the guard what it learned rather than
-        // trusting the shape. Nothing is re-run: the call already applied
-        // whatever it applied, and replaying it would double-apply.
-
-        // A task that failed for its own reasons reports that, not a dialog.
-        //
-        // But a failure DURING a modal is usually caused by it: the game thread
-        // is parked, so the call times out and the error says the editor was
-        // busy and suggests a bigger timeoutMs, which is the retry loop this
-        // gate exists to end. The task runner returns no data on a throw, so
-        // the refusal cannot be recognised from the result: ask the guard.
-        // KEPT, not just tested. This is where the guard decides what to do
-        // about the dialog: hand the text back first, or raise the form. The
-        // returned refusal used to be rebuilt below with guard.refusal(), whose
-        // phase argument defaults to "asking", so every relay was reported as an
-        // ask and the prose claimed a form had gone up when none had.
-        let postRunDecision: GuardDecision | null = null;
-        const failedUnderDialog = !result.success
-          && !isDialogRefusal(result.data)
-          && !DialogGuard.actionAllowed(effectiveTask)
-          && (postRunDecision = await guard.check(effectiveTask, "action")).allow === false;
-        if (!result.success && !isDialogRefusal(result.data) && !failedUnderDialog) {
-          const msg = result.error?.message ?? `Task ${taskName} failed`;
-          return {
-            content: withUpgradeNotice([
-              { type: "text" as const, text: `Error [TASK_FAILED]: ${msg}` },
-              ...machineErrorBlock(result.error),
-              ...attribution(session),
-            ]),
-            isError: true,
-          };
-        }
-
-        // An allow-listed read still SAYS a dialog is up. get_status is the
-        // first call every client makes, and reporting a healthy editor while
-        // the game thread is parked is the one answer it must never give.
-        if (DialogGuard.actionAllowed(effectiveTask)) {
-          // respond_to_dialog may have just cleared it. Nothing re-probes for
-          // an allow-listed bridge method (guardCall returns before check, and
-          // observe refuses to clear on a modal-safe reply), so this call came
-          // back stamped as blocked and told the caller to make the call it had
-          // just made.
-          if (effectiveTask === "editor.respond_to_dialog" && result.success) {
-            // refresh, NOT check. check applies the mode, so in interactive it
-            // raised a form for whatever prompt this answer surfaced and
-            // pressed a button on it, unasked, and then threw the decision
-            // away. Only the state needs correcting here.
-            await guard.refresh();
-          }
-          const seen = guard.current;
-          // The mode goes with it. The note names the call that presses a
-          // button, and get_status is the first call every client makes, so
-          // stamping it mode-blind told an interactive session's agent how to
-          // answer the dialog before it had been refused anything.
-          if (result.success) stampBlockedEditor(result.data, seen, guard.mode);
-        }
-
-        // Whatever the route, the caller gets ONE refusal shape, built here.
-        //
-        // A modal appearing between the preflight and the inner call means the
-        // plugin refuses, and its payload lands in result.data. Passing that
-        // through handed the caller a second shape with no dialogMode and, in
-        // defer, the very press calls defer exists to withhold.
-        //
-        // Actions allowed through a modal are exempt: reading the dialog and
-        // answering it must not come back refused because of the dialog they
-        // are about.
-        if (!DialogGuard.actionAllowed(effectiveTask)) {
-          const fromPlugin = isDialogRefusal(result.data)
-            ? (result.data as Record<string, unknown>)
-            : null;
-          if (fromPlugin) guard.observe("__refused__", fromPlugin);
-          const blocking = guard.current;
-          if (blocking) {
-
-            // The guard's OWN decision when it took one, so the phase, the mode
-            // and the prose all describe what actually happened. Only a call that
-            // succeeded and met a dialog anyway has no decision yet.
-            const decision = postRunDecision
-              ?? (await guard.check(effectiveTask, "action"));
-            const refusalForReturn = decision.allow === false
-              ? decision.refusal
-              : guard.refusal(effectiveTask, blocking);
-            // A refusal means nothing ran. Anything else means the call had
-            // already started when the dialog appeared, so it may have applied
-            // part of its work; say so rather than implying it did nothing.
-            const started = fromPlugin === null;
-            return {
-              content: withUpgradeNotice([
-                {
-                  type: "text" as const,
-                  text: JSON.stringify(
-                    started
-                      ? {
-                          ...refusalForReturn,
-                          partiallyApplied: true,
-                          note:
-                            `'${taskName}' had already started when the dialog appeared, so it may `
-                            + "have applied some of its changes. Answer the dialog, then read the "
-                            + "state back before deciding whether to run it again.",
-                          // Whatever it did manage to return, kept rather than
-                          // dropped: a mutation that completed still has the
-                          // path it created in here.
-                          partialResult: result.data ?? null,
-                        }
-                      : refusalForReturn,
-                    null,
-                    2,
-                  ),
-                },
-                ...attribution(session),
-              ]),
-              isError: true,
-            };
-          }
-        }
-
-        const stringify = (v: unknown) =>
-          typeof v === "string" ? v : JSON.stringify(v, null, 2);
-
-        // Preserve directive responses (execute_python workaround tracking).
-        // Emit three blocks: (1) prose directive, (2) machine-readable JSON
-        // so clients that strip prose still see the intent, (3) the actual
-        // tool result. Block 2 is tagged with MACHINE_DIRECTIVE and a stable
-        // JSON envelope.
-        if (result.data?.__directive) {
-          const blocks: Array<{ type: "text"; text: string }> = [
-            { type: "text" as const, text: result.data.directive as string },
-          ];
-          if (result.data.machine) {
-            blocks.push({
-              type: "text" as const,
-              text: "MACHINE_DIRECTIVE=" + JSON.stringify(result.data.machine),
-            });
-          }
-          blocks.push({ type: "text" as const, text: stringify(result.data.result) });
-          return { content: withUpgradeNotice([...blocks, ...attribution(session)]) };
-        }
-
-        return {
-          content: withUpgradeNotice([
-            { type: "text" as const, text: stringify(result.data) },
-            ...attribution(session),
-          ]),
-        };
-      } catch (e) {
-        // A refusal can arrive as a throw: acquiring an asset lock is a bridge
-        // call, so it is refused like any other, and locking reports failure by
-        // throwing. Shaped through the guard so a caller gets the same payload
-        // whether the refusal came back as a result or as an exception.
-        const thrownRefusal = e instanceof McpError && isDialogRefusal(e.details)
-          ? (e.details as unknown as Record<string, unknown>)
-          : null;
-        if (thrownRefusal) {
-          guard.observe("__refused__", thrownRefusal);
-          const blocking = guard.current;
-          if (blocking) {
-            return {
-              content: withUpgradeNotice([
-                { type: "text" as const, text: JSON.stringify(guard.refusal(effectiveTask, blocking), null, 2) },
-                ...attribution(session),
-              ]),
-              isError: true,
-            };
-          }
-        }
-        const msg = e instanceof Error ? e.message : String(e);
-        const code = e instanceof McpError ? e.code : "UNKNOWN";
-        return {
-          content: withUpgradeNotice([
-            { type: "text" as const, text: `Error [${code}]: ${msg}` },
-            ...machineErrorBlock(e),
-            ...attribution(session),
-          ]),
-          isError: true,
-        };
-      }
-    };
+    const callback = (callArgs: Record<string, unknown>, extra: CallExtra) =>
+      dispatchCategoryCall(deps, tool, envelope, callArgs, extra);
     const registration = envelope
       ? server.registerTool(tool.name, { description, inputSchema: envelopeInputSchema(tool) }, callback as never)
       : server.tool(tool.name, description, shape, callback as never);
     registeredTools.set(tool.name, registration);
   }
 
-  // ── Load ue-mcp.yml and register flow tool ──────────────────────
-  // Log initial load
-  const initialLoad = loadFlowConfig(activeTools, configDir, {
-    tasks: pluginLoad.taskDefs,
-    flows: pluginLoad.flowDefs,
+  // ── Flow tool: ue-mcp.yml is reloaded on every call ─────────────
+  const initialLoad = loadFlowConfig(primaryLoad.surface.tools, primaryLoad.configDir, {
+    tasks: primaryLoad.pluginLoad.taskDefs,
+    flows: primaryLoad.pluginLoad.flowDefs,
   });
-  console.error(`[ue-mcp] ue-mcp.yml loaded - ${Object.keys(initialLoad.config.flows).length} flow(s), ${Object.keys(initialLoad.config.tasks).length} custom task(s)`);
+  info("flow", `ue-mcp.yml loaded - ${Object.keys(initialLoad.config.flows).length} flow(s), ${Object.keys(initialLoad.config.tasks).length} custom task(s)`);
 
-  // Config is reloaded on every flow call - edit ue-mcp.yml without restarting.
-  // Guard options track all YAML layers through a separate last-good cache.
   // Resolved from the addressed editor: a flow declared in one project's
-  // ue-mcp.yml belongs to that project, and its steps have to dispatch through
-  // that project's registry or a step naming an action only that project has
-  // would fail as unknown.
-  //
-  // D1: a session with no load of its own is REFUSED, not served the first
-  // project's. flow(run, editor="B") resolved session B, passed the targeting
-  // gate, then read project A's ue-mcp.yml and ran A's steps inside B's editor.
-  // Refusing is honest; borrowing another project's config is not.
-  const loadFor = (target: ToolContext | undefined): SessionLoad => {
-    const session = target?.session;
-    if (!session) return primaryLoad;
-    const load = perSession.get(session);
-    if (load) return load;
-    throw new McpError(
-      ErrorCode.NOT_FOUND,
-      `Editor '${session.name}' has no flow config or task registry of its own yet, so nothing can be run in it. ` +
-        `Its surface is built when it is registered; re-register it with ` +
-        `project(action='add_editor', projectPath='${session.project.projectPath ?? ""}').`,
-    );
-  };
-  const reloadConfigFor = (target?: ToolContext): FlowConfig => {
-    const load = loadFor(target);
-    return loadFlowConfig(load.surface.tools, load.configDir, {
-      tasks: load.pluginLoad.taskDefs,
-      flows: load.pluginLoad.flowDefs,
-    }).config;
-  };
+  // ue-mcp.yml runs through that project's registry, never the first one's (D1).
   const flowTool = createFlowTool(
-    (target) => loadFor(target).registry ?? registry,
-    reloadConfigFor,
+    (target) => loads.loadFor(target).registry ?? primaryLoad.registry!,
+    (target) => loads.reloadConfigFor(target),
   );
   targetable.push(flowTool);
-  const flowShape: Record<string, z.ZodType> = {};
-  for (const [key, schema] of Object.entries(flowTool.schema)) {
-    flowShape[key] = schema;
-  }
-  const flowRegistration = server.tool(flowTool.name, flowTool.description, flowShape, async (rawParams) => {
-    try {
-      // A flow addresses one editor for the whole run. `params` is forwarded
-      // verbatim into every step's options, so a target left in there would
-      // reach bridge.call on every unmapped action: read it as the run's
-      // target and strip it from both places.
-      const nested = rawParams.params && typeof rawParams.params === "object"
-        ? (rawParams.params as Record<string, unknown>)
-        : undefined;
-      const target = flowTool.injectedEditorParam
-        ? rawParams[EDITOR_TARGET_PARAM] ?? nested?.[EDITOR_TARGET_PARAM]
-        : undefined;
-      const session = flowTool.injectedEditorParam ? sessions.resolve(target) : sessions.active;
-      const params = stripEditorTarget(rawParams);
-      if (nested) params.params = stripEditorTarget(nested);
-
-      // A flow is whatever its steps are, so an untargeted run is gated like
-      // any other change. `plan` and `list` read and are not.
-      const untargeted = gateUntargeted(
-        `${flowTool.name}.${String(params.action ?? "")}`,
-        typeof target === "string" && target.trim() !== "",
-      );
-      if (untargeted) {
-        return {
-          content: withUpgradeNotice([{ type: "text" as const, text: `Error: ${untargeted}` }]),
-          isError: true,
-        };
-      }
-
-      // The flow tool reaches the editor through the same guarded bridge, so
-      // its steps are refused individually. This covers the run being STARTED
-      // while a modal is already up, and flow(list)/flow(plan), which are
-      // in-process and never touch the bridge at all.
-      const flowGuard = dialogGuardFor(session, clientAdvertisesElicitation(ctx.elicit));
-      const flowCheck = await flowGuard.check(
-        `${flowTool.name}.${String(params.action ?? "")}`,
-        "action",
-      );
-      if (!flowCheck.allow) {
-        return {
-          content: withUpgradeNotice([
-            { type: "text" as const, text: JSON.stringify(flowCheck.refusal, null, 2) },
-            ...attribution(session),
-          ]),
-          isError: true,
-        };
-      }
-      const result = await flowTool.handler(sessionContext(ctx, session), params);
-      const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-      return { content: withUpgradeNotice([{ type: "text" as const, text }, ...attribution(session)]) };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return { content: withUpgradeNotice([{ type: "text" as const, text: `Error: ${msg}` }]), isError: true };
-    }
-  });
+  const flowShape: Record<string, z.ZodType> = { ...flowTool.schema };
+  const flowRegistration = server.tool(flowTool.name, flowTool.description, flowShape, (rawParams) =>
+    dispatchFlowCall(deps, flowTool, baseCtx, rawParams) as never);
   registeredTools.set(flowTool.name, flowRegistration);
 
-  // Re-advertise whenever the session set changes, and take the first pass now
-  // that every tool is registered.
+  // Re-advertise whenever the session set changes, and take the first pass now.
   sessions.onCountChanged = () => syncEditorTargeting();
   syncEditorTargeting();
 
   // ── Optional HTTP surface for flow.run (#144) ───────────────────
-  // Off by default; opt-in via ue-mcp.yml `ue-mcp.http: { enabled: true, port: 7723 }`.
-  // Binds to 127.0.0.1 only - do NOT expose to the network without adding auth.
+  // Opt-in via `ue-mcp.http`; binds to 127.0.0.1 only.
   if (project.config.http?.enabled) {
     try {
-      startFlowHttpServer(flowTool, ctx, {
+      startFlowHttpServer(flowTool, baseCtx, {
         port: project.config.http.port,
         host: project.config.http.host,
       });
     } catch (e) {
-      console.error(`[ue-mcp] Failed to start HTTP server: ${e instanceof Error ? e.message : e}`);
+      error("http", "Failed to start HTTP server", e);
     }
   }
 
   // ── Bridge connections ───────────────────────────────────────────
-  // One socket per session. A session whose editor is down is still
-  // registered and still startable; only addressing it needs a live bridge.
+  // One socket per session. A session whose editor is down stays registered.
   for (const session of sessions.list()) {
     const label = sessions.size > 1 ? `editor '${session.name}'` : "editor bridge";
     try {
@@ -1205,277 +295,28 @@ async function main() {
     session.bridge.startReconnecting();
   }
 
+  const disabled = primaryLoad.surface.disabled;
   if (disabled.size > 0) {
-    console.error(`[ue-mcp] Disabled categories: ${[...disabled].join(", ")}`);
+    info("server", `Disabled categories: ${[...disabled].join(", ")}`);
   }
+  const pluginRecords = primaryLoad.surface.pluginRecords;
   const activePluginCount = pluginRecords.filter((r) => r.status === "active").length;
   const pluginNote = pluginRecords.length > 0
     ? `, ${activePluginCount}/${pluginRecords.length} plugin(s)`
     : "";
-  console.error(`[ue-mcp] Registered ${tools.length + 1} tools, ${taskCount} tasks (flow engine)${pluginNote}`);
+  const taskCount = primaryLoad.registry!.listRegistered().length;
+  info("server", `Registered ${advertisedTools.length + 1} tools, ${taskCount} tasks (flow engine)${pluginNote}`);
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  await server.connect(new StdioServerTransport());
 }
 
-/**
- * Everything one editor session needs to serve a call: its own tool graph,
- * its own plugin load, and (once the context strategy is known) its own
- * advertised list and task registry.
- */
-interface SessionLoad {
-  surface: SessionSurface;
-  pluginLoad: Awaited<ReturnType<typeof loadPlugins>>;
-  configDir: string | undefined;
-  advertisedTools: ToolDef[];
-  registryTools: ToolDef[];
-  registry?: ReturnType<typeof buildFlowRegistry>;
-}
-
-/**
- * Build one session's surface: clone the pristine graph, load that project's
- * plugins into the clone, then enrich the clone from that project's Epic
- * catalog. Nothing here touches another session's graph or the declaration
- * they were all cloned from.
- */
-async function buildSessionLoad(
-  session: EditorSession,
-  packageVersion: string,
-  multi: boolean,
-): Promise<SessionLoad> {
-  const project = session.project;
-  const configDir = project.projectDir ?? undefined;
-  const label = multi ? `editor '${session.name}': ` : "";
-
-  // ── Plugins ──────────────────────────────────────────────────────
-  // Read the user's `plugins:` entries from ue-mcp.yml (best-effort - a
-  // missing or invalid file means zero plugins, never a fatal error). Then
-  // resolve, validate, and inject into target categories BEFORE the flow
-  // registry is built so plugin tasks register cleanly.
-  const pluginEntries = readPluginsEntries(configDir);
-  const pluginLoad = await loadPlugins(
-    baseGraphFor(ALL_TOOLS),
-    pluginEntries,
-    configDir,
-    packageVersion,
-    project.config.pluginConfig,
-  );
-  const tools = pluginLoad.tools;
-
-  // ── Unreal's wrapped engine tools ────────────────────────────────
-  // They are DECLARED in ALL_TOOLS now, generated from a recorded catalog
-  // and a reviewed effect for each one, so nothing is read from the editor
-  // here and nothing is injected. All that is left is honouring the user's
-  // `nativeTools:` config, which now means removing what it excludes.
-  //
-  // What this replaces: a startup call that pulled the live catalog, fell
-  // back to a project cache and then to a baked snapshot, and invented an
-  // effect for each tool from its NAME. 356 of the 830 rode a default nobody
-  // had reviewed, none of their parameters were declared so the MCP layer
-  // stripped every one before dispatch, and the surface differed depending on
-  // whether an editor happened to be up when the server started.
-  const nativeCfg = project.config.nativeTools ?? {};
-  const epicSurface = applyNativeToolsConfig(tools, nativeCfg);
-  if (epicSurface.removed > 0) {
-    const why = nativeCfg.enabled === false
-      ? "nativeTools.enabled=false"
-      : `nativeTools.exclude=[${(nativeCfg.exclude ?? []).join(", ")}]`;
-    console.error(
-      `[ue-mcp] ${label}Wrapped engine tools withheld (${why}): ${epicSurface.removed} actions; `
-      + "epic(call_tool) still reaches every one of them.",
-    );
-  }
-  for (const name of epicSurface.droppedCategories) {
-    const i = tools.findIndex((t) => t.name === name);
-    if (i >= 0) tools.splice(i, 1);
-  }
-
-  return {
-    surface: {
-      session,
-      tools,
-      disabled: new Set(project.config.disable ?? []),
-      pluginRecords: pluginLoad.records,
-      knowledgeByCategory: pluginLoad.knowledgeByCategory,
-    },
-    pluginLoad,
-    configDir,
-    advertisedTools: tools,
-    registryTools: tools,
-  };
-}
-
-/**
- * Best-effort read of the `plugins:` array from ue-mcp.yml. Returns [] when
- * the file is missing, unreadable, or malformed - plugin failures are loud at
- * load time, not fatal here.
- */
-function readPluginsEntries(configDir: string | undefined): PluginEntry[] {
-  if (!configDir) return [];
-  const configPath = path.join(configDir, "ue-mcp.yml");
-  if (!fs.existsSync(configPath)) return [];
-  try {
-    const raw = yaml.load(fs.readFileSync(configPath, "utf-8")) as { plugins?: unknown } | null;
-    if (!raw || !Array.isArray(raw.plugins)) return [];
-    const out: PluginEntry[] = [];
-    for (const entry of raw.plugins) {
-      if (entry && typeof entry === "object" && typeof (entry as { name?: unknown }).name === "string") {
-        const e = entry as { name: string; version?: unknown };
-        out.push({
-          name: e.name,
-          version: typeof e.version === "string" ? e.version : undefined,
-        });
-      }
-    }
-    return out;
-  } catch (e) {
-    warn("plugin", `failed to parse plugins: from ue-mcp.yml - ${(e as Error).message}`);
-    return [];
-  }
-}
-
-function buildKnowledgeBlock(knowledgeByCategory: Record<string, string[]>): string {
-  const lines: string[] = [];
-  for (const [category, blobs] of Object.entries(knowledgeByCategory)) {
-    if (blobs.length === 0) continue;
-    lines.push(`── ${category} ──`);
-    for (const blob of blobs) lines.push(blob.trim());
-    lines.push("");
-  }
-  return lines.join("\n").trim();
-}
-
-/**
- * One line per plugin that is missing from the surface or narrower than its
- * manifest declares. Empty string when every configured plugin loaded whole,
- * which is the usual case and leaves the initialize payload untouched.
- */
-function buildPluginWarningBlock(surfaces: SessionSurface[]): string {
-  const lines: string[] = [];
-  const seen = new Set<string>();
-  for (const surface of surfaces) {
-    for (const rec of surface.pluginRecords) {
-      if (rec.status === "active" && rec.degraded.length === 0) continue;
-      if (seen.has(rec.name)) continue;
-      seen.add(rec.name);
-      if (rec.status !== "active") {
-        lines.push(
-          `${rec.name}@${rec.version} did NOT load, so none of its actions exist: ${rec.statusReason ?? "unknown reason"}`,
-        );
-      } else {
-        lines.push(`${rec.name}@${rec.version} loaded with ${rec.degraded.length} part(s) dropped:`);
-        for (const d of rec.degraded) lines.push(`  - ${d}`);
-      }
-    }
-  }
-  if (lines.length === 0) return "";
-  lines.push("Run plugins(action=\"describe\", name=\"<plugin>\") for the full record.");
-  return lines.join("\n");
-}
-
-function toPluginInfo(rec: PluginRecord, project: ProjectContext): PluginInfo {
-  const uePluginPresent = rec.uePluginDependency
-    ? isUePluginEnabled(project, rec.uePluginDependency)
-    : undefined;
-  return {
-    name: rec.name,
-    version: rec.version,
-    actionPrefix: rec.actionPrefix,
-    status: rec.status,
-    statusReason: rec.statusReason,
-    degraded: rec.degraded,
-    minServerVersion: rec.minServerVersion,
-    uePluginDependency: rec.uePluginDependency,
-    uePluginPresent,
-    injected: rec.injected,
-    provided: rec.provided,
-    knowledge: rec.knowledge,
-    flows: rec.flows,
-    tasks: rec.tasks,
-    pkgDir: rec.pkgDir,
-    manifestPath: rec.manifestPath,
-  };
-}
-
-function isUePluginEnabled(project: ProjectContext, name: string): boolean | undefined {
-  if (!project.projectPath) return undefined;
-  try {
-    const raw = JSON.parse(fs.readFileSync(project.projectPath, "utf-8")) as {
-      Plugins?: Array<{ Name?: string; Enabled?: boolean }>;
-    };
-    if (!raw.Plugins) return false;
-    const entry = raw.Plugins.find((p) => p.Name === name);
-    if (!entry) return false;
-    return entry.Enabled !== false;
-  } catch {
-    return undefined;
-  }
-}
-
-// Route subcommands
-const subcmd = process.argv[2];
-if (subcmd === "init") {
-  process.argv.splice(2, 1);
-  import("./init.js");
-} else if (subcmd === "update") {
-  process.argv.splice(2, 1);
-  import("./update.js");
-} else if (subcmd === "doctor") {
-  process.argv.splice(2, 1);
-  import("./doctor.js").then((m) => m.runDoctorCli());
-} else if (subcmd === "deploy") {
-  process.argv.splice(2, 1);
-  import("./deploy-cli.js");
-} else if (subcmd === "hook") {
-  import("./hook-handler.js");
-} else if (subcmd === "uninstall-hooks") {
-  process.argv.splice(2, 1);
-  import("./uninstall-hooks.js");
-} else if (subcmd === "auth") {
-  process.argv.splice(2, 1);
-  // #620: invoked via the index.js bin, argv[1] is index.js so auth-cli's
-  // own "am I the entry point" guard never fires. Call the export directly.
-  import("./auth-cli.js").then((m) => m.runFeedbackAuthStep()).catch((e) => {
-    console.error(`[ue-mcp] auth failed: ${e instanceof Error ? e.message : e}`);
-    process.exit(1);
-  });
-} else if (subcmd === "login") {
-  process.argv.splice(2, 1);
-  import("./login-cli.js").then((m) => m.runLogin()).catch((e) => {
-    console.error(`[ue-mcp] login failed: ${e instanceof Error ? e.message : e}`);
-    process.exit(1);
-  });
-} else if (subcmd === "logout") {
-  process.argv.splice(2, 1);
-  import("./login-cli.js").then((m) => m.runLogout()).catch((e) => {
-    console.error(`[ue-mcp] logout failed: ${e instanceof Error ? e.message : e}`);
-    process.exit(1);
-  });
-} else if (subcmd === "feedback") {
-  process.argv.splice(2, 1);
-  import("./feedback-cli.js");
-} else if (subcmd === "dialog") {
-  process.argv.splice(2, 1);
-  import("./dialog-cli.js");
-} else if (subcmd === "resolve") {
-  import("./resolve.js");
-} else if (subcmd === "build") {
-  process.argv.splice(2, 1);
-  import("./build-cli.js");
-} else if (subcmd === "plugin") {
-  process.argv.splice(2, 1);
-  import("./plugin-cli.js");
-} else if (subcmd === "context") {
-  process.argv.splice(2, 1);
-  import("./context-cli.js");
-} else if (subcmd === "version" || subcmd === "--version" || subcmd === "-v") {
-  const { createRequire } = await import("node:module");
-  const require = createRequire(import.meta.url);
-  const pkg = require("../package.json");
-  console.log(pkg.version);
+// A first argument naming a command runs it; anything else starts the server.
+const command = findCliCommand(process.argv[2]);
+if (command) {
+  void runCliCommand(command, process.argv.slice(3));
 } else {
   main().catch((e) => {
-    console.error(`[ue-mcp] Fatal error: ${e}`);
+    error("server", "Fatal error", e);
     process.exit(1);
   });
 }

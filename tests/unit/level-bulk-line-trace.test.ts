@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyActionClass } from "../../src/action-class.js";
+import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { levelTool } from "../../src/tools/level.js";
 
 describe("level.bulk_line_trace", () => {
@@ -42,9 +42,6 @@ describe("level.bulk_line_trace", () => {
   });
 
   it("is a read, like line_trace", () => {
-    expect(classifyActionClass("level", "bulk_line_trace")).toEqual({
-      class: "read",
-      source: "override",
-    });
+    expect(declaredActionEffect("level", "bulk_line_trace")).toBe("read");
   });
 });

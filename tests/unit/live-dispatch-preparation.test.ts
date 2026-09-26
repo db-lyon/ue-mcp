@@ -30,37 +30,14 @@
 import { describe, expect, it } from "vitest";
 
 import { buildFlowRegistry } from "../../src/flow/registry.js";
-import { categoryTool, bp, type ToolDef, type ToolContext } from "../../src/types.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
+import type { ToolDef, ToolContext } from "../../src/core/types.js";
+import { categoryTool, bp } from "../../src/surface/category-tool.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
 import { widgetTool } from "../../src/tools/widget.js";
-import { ProjectContext } from "../../src/project.js";
-import type { IBridge } from "../../src/bridge.js";
+import { ProjectContext } from "../../src/config/project.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 import type { FlowContext } from "../../src/flow/context.js";
-
-interface Recorded {
-  method: string;
-  params: Record<string, unknown>;
-  timeoutMs?: number;
-}
-
-interface RecordingBridge extends IBridge {
-  calls: Recorded[];
-}
-
-function recordingBridge(answer: unknown = { success: true }): RecordingBridge {
-  const calls: Recorded[] = [];
-  return {
-    isConnected: true,
-    connect: async () => {},
-    retargetProject: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
-    getTarget: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
-    call: async (method: string, params?: Record<string, unknown>, timeoutMs?: number) => {
-      calls.push({ method, params: params ?? {}, timeoutMs });
-      return answer;
-    },
-    calls,
-  } as unknown as RecordingBridge;
-}
+import { recordingBridge } from "../fake-bridge.js";
 
 function flowContext(bridge: IBridge): FlowContext {
   return { bridge, project: new ProjectContext() };
@@ -182,7 +159,6 @@ describe("normalizeParams on the live dispatch route", () => {
       "Test-only category.",
       { look: { kind: "handler", effect: "read", description: "A direct handler.", handler: async (_ctx, p) => { seen = p; return { ok: true }; } } },
       undefined,
-      undefined,
       { normalizeParams: (p) => ({ ...p, canonical: p.legacy ?? p.canonical }) },
     );
     await callLive([tool], "probe.look", recordingBridge(), { action: "look", legacy: "v" });
@@ -253,6 +229,8 @@ describe("timeoutMs on the live dispatch route", () => {
     let seenParams: Record<string, unknown> | undefined;
     const tool = categoryTool("demo", "Demo", {
       local: {
+        kind: "handler",
+        effect: "read",
         description: "A direct handler",
         handler: async (ctx, p) => { seenCtx = ctx; seenParams = p; return { ok: true }; },
       },

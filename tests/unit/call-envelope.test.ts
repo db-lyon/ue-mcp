@@ -18,14 +18,17 @@ import {
   unwrapArgsEnvelope,
   usesArgsEnvelope,
   validateCategoryParams,
-} from "../../src/call-envelope.js";
-import { buildCatalogTool, buildMicroGateway, describeCategory, DESCRIBE_PAGE_CHARS, resolveMicroCall } from "../../src/lean-context.js";
-import { bp, categoryTool, injectEditorTarget, type ToolDef } from "../../src/types.js";
+} from "../../src/surface/context/call-envelope.js";
+import { buildCatalogTool, describeCategory, DESCRIBE_PAGE_CHARS } from "../../src/surface/context/lean-context.js";
+import { buildMicroGateway, resolveMicroCall } from "../../src/surface/context/micro-context.js";
+import type { ToolDef } from "../../src/core/types.js";
+import { bp, categoryTool } from "../../src/surface/category-tool.js";
+import { injectEditorTarget } from "../../src/surface/target-params.js";
 
 function levelTool(): ToolDef {
   return categoryTool("level", "Level.", {
     place_actor: bp("mutate", "Place. Params: actorClass, location?", "place_actor"),
-  }, undefined, {
+  }, {
     actorClass: z.string().optional(),
     location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
   });
@@ -34,7 +37,7 @@ function levelTool(): ToolDef {
 function editorTool(): ToolDef {
   return categoryTool("editor", "Editor.", {
     invoke_function: bp("unknown", "Call. Params: functionName, args?", "invoke_function"),
-  }, undefined, {
+  }, {
     functionName: z.string().optional(),
     args: z.record(z.unknown()).optional(),
   });
@@ -140,7 +143,7 @@ describe("describe pages a large category", () => {
   it("bounds each page and walks every action exactly once", () => {
     const actions: Record<string, ReturnType<typeof bp>> = {};
     for (let i = 0; i < 400; i++) actions[`action_number_${i}`] = bp("read", `Do ${i}. Params: someParameter, anotherOne?`, `m${i}`);
-    const tool = categoryTool("big", "Big.", actions, undefined, {
+    const tool = categoryTool("big", "Big.", actions, {
       someParameter: z.string().optional(),
       anotherOne: z.number().optional(),
     });

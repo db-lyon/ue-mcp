@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1080,
+  "handlerCount": 1070,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -876,94 +876,6 @@
         }
       ]
     },
-    "add_force": {
-      "category": "physics",
-      "params": [
-        {
-          "name": "actorLabel",
-          "type": "string",
-          "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
-        },
-        {
-          "name": "actorPath",
-          "type": "string",
-          "required": false,
-          "description": "Full actor object path; the unambiguous selector"
-        },
-        {
-          "name": "impulse",
-          "type": "vec3",
-          "required": true,
-          "description": "Impulse or force vector {x,y,z}",
-          "aliases": [
-            "force",
-            "vector"
-          ]
-        },
-        {
-          "name": "mode",
-          "type": "string",
-          "required": false,
-          "description": "impulse (default) | force"
-        },
-        {
-          "name": "componentName",
-          "type": "string",
-          "required": false,
-          "description": "Primitive component to push (default: the root, else the first primitive)"
-        },
-        {
-          "name": "boneName",
-          "type": "string",
-          "required": false,
-          "description": "Physics bone to push"
-        },
-        {
-          "name": "location",
-          "type": "vec3",
-          "required": false,
-          "description": "World point to apply the impulse at; ignores mode"
-        },
-        {
-          "name": "velChange",
-          "type": "boolean",
-          "required": false,
-          "description": "Treat the impulse as a velocity change"
-        },
-        {
-          "name": "accelChange",
-          "type": "boolean",
-          "required": false,
-          "description": "Treat the force as an acceleration change"
-        },
-        {
-          "name": "world",
-          "type": "string",
-          "required": false,
-          "description": "World scope: auto (default) | pie | editor"
-        },
-        {
-          "name": "pieInstance",
-          "type": "number",
-          "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for the primary world"
-        }
-      ],
-      "choices": [
-        {
-          "mode": "exactlyOne",
-          "branches": [
-            [
-              "actorLabel"
-            ],
-            [
-              "actorPath"
-            ]
-          ]
-        }
-      ]
-    },
     "add_function_parameter": {
       "category": "blueprint",
       "params": [
@@ -1219,42 +1131,6 @@
       ]
     },
     "add_instances": {
-      "category": "level",
-      "params": [
-        {
-          "name": "actorLabel",
-          "type": "string",
-          "required": false,
-          "description": "Actor editor label; pass actorLabel or actorPath"
-        },
-        {
-          "name": "actorPath",
-          "type": "string",
-          "required": false,
-          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
-        },
-        {
-          "name": "componentName",
-          "type": "string",
-          "required": false,
-          "description": "Component instance name"
-        },
-        {
-          "name": "transforms",
-          "type": "array",
-          "required": true,
-          "description": "Transforms {location, rotation?, scale?} to add",
-          "items": "object"
-        },
-        {
-          "name": "worldSpace",
-          "type": "boolean",
-          "required": false,
-          "description": "Treat transforms as world space (default true)"
-        }
-      ]
-    },
-    "add_ismc_instances": {
       "category": "level",
       "params": [
         {
@@ -1551,62 +1427,6 @@
           "type": "number",
           "required": false,
           "description": "Graph editor Y position for a new node"
-        }
-      ]
-    },
-    "add_material_function_expression": {
-      "category": "material",
-      "params": [
-        {
-          "name": "functionPath",
-          "type": "string",
-          "required": true,
-          "description": "MaterialFunction asset path (#463)",
-          "aliases": [
-            "materialFunctionPath"
-          ]
-        },
-        {
-          "name": "expressionType",
-          "type": "string",
-          "required": true,
-          "description": "Expression type, e.g. Constant3Vector, FunctionInput, FunctionOutput, If"
-        },
-        {
-          "name": "positionX",
-          "type": "number",
-          "required": false,
-          "description": "Graph editor X position for a new node"
-        },
-        {
-          "name": "positionY",
-          "type": "number",
-          "required": false,
-          "description": "Graph editor Y position for a new node"
-        },
-        {
-          "name": "inputName",
-          "type": "string",
-          "required": false,
-          "description": "FunctionInput name (#463)"
-        },
-        {
-          "name": "inputType",
-          "type": "string",
-          "required": false,
-          "description": "FunctionInput type: Scalar|Vector2|Vector3|Vector4|Texture2D|TextureCube|StaticBool|MaterialAttributes (#463)"
-        },
-        {
-          "name": "outputName",
-          "type": "string",
-          "required": false,
-          "description": "FunctionOutput name"
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": false,
-          "description": "Fallback for inputName on a FunctionInput and outputName on a FunctionOutput"
         }
       ]
     },
@@ -8516,44 +8336,6 @@
         }
       ]
     },
-    "connect_material_function_expressions": {
-      "category": "material",
-      "params": [
-        {
-          "name": "functionPath",
-          "type": "string",
-          "required": true,
-          "description": "MaterialFunction asset path (#463)",
-          "aliases": [
-            "materialFunctionPath"
-          ]
-        },
-        {
-          "name": "sourceExpression",
-          "type": "string",
-          "required": true,
-          "description": "Expression the wire leaves (name, or index inside a MaterialFunction)"
-        },
-        {
-          "name": "sourceOutput",
-          "type": "string",
-          "required": false,
-          "description": "Output of the source expression, by name or index (default: its first output)"
-        },
-        {
-          "name": "targetExpression",
-          "type": "string",
-          "required": true,
-          "description": "Expression the wire enters (name, or index inside a MaterialFunction)"
-        },
-        {
-          "name": "targetInput",
-          "type": "string",
-          "required": false,
-          "description": "Input of the target expression, by name or index (default: its first input)"
-        }
-      ]
-    },
     "connect_pcg_nodes": {
       "category": "pcg",
       "params": [
@@ -11877,26 +11659,6 @@
         }
       ]
     },
-    "delete_datatable_row": {
-      "category": "asset",
-      "params": [
-        {
-          "name": "assetPath",
-          "type": "string",
-          "required": true,
-          "description": "DataTable asset path",
-          "aliases": [
-            "path"
-          ]
-        },
-        {
-          "name": "rowName",
-          "type": "string",
-          "required": true,
-          "description": "Row to remove"
-        }
-      ]
-    },
     "delete_exact_labeled_actors_in_levels": {
       "category": "level",
       "params": [
@@ -14503,35 +14265,6 @@
           "type": "integer",
           "required": false,
           "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
-        }
-      ]
-    },
-    "get_applied_imcs": {
-      "category": "gameplay",
-      "params": [
-        {
-          "name": "pieInstance",
-          "type": "number",
-          "required": false,
-          "description": "PIE world instance (0 = server/primary); omit for every running PIE world"
-        },
-        {
-          "name": "playerIndex",
-          "type": "number",
-          "required": false,
-          "description": "Player index; omit for every player"
-        },
-        {
-          "name": "mappingContext",
-          "type": "string",
-          "required": false,
-          "description": "Name or path of one context to answer yes/no about"
-        },
-        {
-          "name": "includeActions",
-          "type": "boolean",
-          "required": false,
-          "description": "Include each context's action/key mappings"
         }
       ]
     },
@@ -19622,20 +19355,6 @@
         }
       ]
     },
-    "list_material_function_expressions": {
-      "category": "material",
-      "params": [
-        {
-          "name": "functionPath",
-          "type": "string",
-          "required": true,
-          "description": "MaterialFunction asset path (#463)",
-          "aliases": [
-            "materialFunctionPath"
-          ]
-        }
-      ]
-    },
     "list_material_parameters": {
       "category": "material",
       "params": [
@@ -22321,111 +22040,6 @@
         }
       ]
     },
-    "place_skeletal_actor": {
-      "category": "level",
-      "params": [
-        {
-          "name": "skeletalMesh",
-          "type": "string",
-          "required": false,
-          "description": "SkeletalMesh asset path to spawn; null is refused here",
-          "nullable": true
-        },
-        {
-          "name": "meshPath",
-          "type": "string",
-          "required": false,
-          "description": "The older spelling of skeletalMesh"
-        },
-        {
-          "name": "label",
-          "type": "string",
-          "required": false,
-          "description": "Actor label; an existing actor with this label is reported rather than duplicated"
-        },
-        {
-          "name": "onConflict",
-          "type": "string",
-          "required": false,
-          "description": "When the label or name is taken: skip (default) | error"
-        },
-        {
-          "name": "transform",
-          "type": "object",
-          "required": false,
-          "description": "Spawn transform; location, rotation and scale given on their own win over its parts",
-          "fields": [
-            {
-              "name": "location",
-              "type": "vec3",
-              "required": false,
-              "description": "World location"
-            },
-            {
-              "name": "rotation",
-              "type": "rotator",
-              "required": false,
-              "description": "World rotation"
-            },
-            {
-              "name": "scale",
-              "type": "vec3",
-              "required": false,
-              "description": "Actor scale"
-            }
-          ]
-        },
-        {
-          "name": "location",
-          "type": "vec3",
-          "required": false,
-          "description": "World location"
-        },
-        {
-          "name": "rotation",
-          "type": "rotator",
-          "required": false,
-          "description": "World rotation"
-        },
-        {
-          "name": "scale",
-          "type": "vec3",
-          "required": false,
-          "description": "Actor scale"
-        },
-        {
-          "name": "materials",
-          "type": "array",
-          "required": false,
-          "description": "Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone"
-        },
-        {
-          "name": "animSequence",
-          "type": "string",
-          "required": false,
-          "description": "Single-node preview animation"
-        },
-        {
-          "name": "loop",
-          "type": "boolean",
-          "required": false,
-          "description": "Loop the preview animation (default true)"
-        }
-      ],
-      "choices": [
-        {
-          "mode": "exactlyOne",
-          "branches": [
-            [
-              "skeletalMesh"
-            ],
-            [
-              "meshPath"
-            ]
-          ]
-        }
-      ]
-    },
     "plan_real_world_landscape": {
       "category": "landscape",
       "params": [
@@ -22574,152 +22188,6 @@
       ]
     },
     "populate_blendspace": {
-      "category": "animation",
-      "params": [
-        {
-          "name": "assetPath",
-          "type": "string",
-          "required": true,
-          "description": "BlendSpace or BlendSpace1D asset path",
-          "aliases": [
-            "path"
-          ]
-        },
-        {
-          "name": "axis",
-          "type": "object",
-          "required": false,
-          "description": "Axis params for axisIndex (default axis 0)",
-          "fields": [
-            {
-              "name": "name",
-              "type": "string",
-              "required": false,
-              "description": "Axis display name"
-            },
-            {
-              "name": "min",
-              "type": "number",
-              "required": false,
-              "description": "Axis minimum"
-            },
-            {
-              "name": "max",
-              "type": "number",
-              "required": false,
-              "description": "Axis maximum"
-            },
-            {
-              "name": "gridNum",
-              "type": "integer",
-              "required": false,
-              "description": "Grid divisions"
-            }
-          ]
-        },
-        {
-          "name": "axisIndex",
-          "type": "integer",
-          "required": false,
-          "description": "Axis the axis object applies to (default 0)"
-        },
-        {
-          "name": "blendspaceAxes",
-          "type": "array",
-          "required": false,
-          "description": "Per-axis params, in axis order",
-          "items": "object",
-          "fields": [
-            {
-              "name": "name",
-              "type": "string",
-              "required": false,
-              "description": "Axis display name"
-            },
-            {
-              "name": "min",
-              "type": "number",
-              "required": false,
-              "description": "Axis minimum"
-            },
-            {
-              "name": "max",
-              "type": "number",
-              "required": false,
-              "description": "Axis maximum"
-            },
-            {
-              "name": "gridNum",
-              "type": "integer",
-              "required": false,
-              "description": "Grid divisions"
-            }
-          ]
-        },
-        {
-          "name": "axisHorizontal",
-          "type": "string",
-          "required": false,
-          "description": "Horizontal axis name"
-        },
-        {
-          "name": "horizontalMin",
-          "type": "number",
-          "required": false,
-          "description": "Horizontal axis minimum"
-        },
-        {
-          "name": "horizontalMax",
-          "type": "number",
-          "required": false,
-          "description": "Horizontal axis maximum"
-        },
-        {
-          "name": "gridNumHorizontal",
-          "type": "integer",
-          "required": false,
-          "description": "Horizontal axis grid divisions"
-        },
-        {
-          "name": "axisVertical",
-          "type": "string",
-          "required": false,
-          "description": "Vertical axis name; ignored on a BlendSpace1D"
-        },
-        {
-          "name": "verticalMin",
-          "type": "number",
-          "required": false,
-          "description": "Vertical axis minimum; ignored on a BlendSpace1D"
-        },
-        {
-          "name": "verticalMax",
-          "type": "number",
-          "required": false,
-          "description": "Vertical axis maximum; ignored on a BlendSpace1D"
-        },
-        {
-          "name": "gridNumVertical",
-          "type": "integer",
-          "required": false,
-          "description": "Vertical axis grid divisions; ignored on a BlendSpace1D"
-        },
-        {
-          "name": "samples",
-          "type": "array",
-          "required": false,
-          "description": "Samples to add as [{animationPath, x, y?}]; an unloadable animation is reported under failed",
-          "items": "object"
-        },
-        {
-          "name": "clearExisting",
-          "type": "boolean",
-          "required": false,
-          "description": "Clear the existing samples first (default true)"
-        }
-      ]
-    },
-    "populate_blendspace_1d": {
       "category": "animation",
       "params": [
         {
@@ -25405,32 +24873,6 @@
           "type": "string",
           "required": false,
           "description": "Notify state class to match. Pass at least one of notifyName and notifyStateClass; both filters apply together"
-        }
-      ]
-    },
-    "remove_animation_notify": {
-      "category": "animation",
-      "params": [
-        {
-          "name": "assetPath",
-          "type": "string",
-          "required": true,
-          "description": "AnimSequence or AnimMontage asset path",
-          "aliases": [
-            "path"
-          ]
-        },
-        {
-          "name": "notifyName",
-          "type": "string",
-          "required": false,
-          "description": "Notify name to match"
-        },
-        {
-          "name": "notifyClass",
-          "type": "string",
-          "required": false,
-          "description": "Notify class to match. Pass at least one of notifyName and notifyClass; both filters apply together"
         }
       ]
     },

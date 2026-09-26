@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// @ts-expect-error - plain ESM script, no types
 import { lintText, RULES, EXCLUDED_PATHS, isExcluded, ALLOW_MARKER } from "../../scripts/lint-prose.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -217,8 +216,7 @@ describe("the lists a rule is built from are complete", () => {
 
 describe("exclusions name a path and a reason", () => {
   it("excludes what it says it excludes", () => {
-    expect(isExcluded("assets/epic-catalog.snapshot.json")).toBe(true);
-    expect(isExcluded("tests/ue_mcp/Content/Python/Foo.cpp")).toBe(true);
+    expect(isExcluded("tests/golden/handler-specs.json")).toBe(true);
     expect(isExcluded("tests/golden/editor-down.json")).toBe(true);
     expect(isExcluded("src/index.ts")).toBe(false);
   });

@@ -11,7 +11,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/LevelHandlers.h"
+#include "Handlers/Level/LevelHandlers.h"
 #include "Misc/AutomationTest.h"
 
 namespace

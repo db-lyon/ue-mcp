@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 // refresh_node and disconnect_pins (#1132): the C++ handlers declare assetPath,
 // graphName, nodeId (alias nodeName), pinName, linkedNodeId, linkedPinName and

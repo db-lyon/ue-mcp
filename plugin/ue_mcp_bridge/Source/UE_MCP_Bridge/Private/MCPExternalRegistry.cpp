@@ -33,17 +33,22 @@ namespace UEMCP
 
 	void RegisterExternalHandler(const FString& MethodName, FExternalHandlerFn Handler)
 	{
-		FScopeLock Lock(&ExternalRegistryMutex());
-		ExternalHandlers().Add(MethodName, MoveTemp(Handler));
+		RegisterExternalHandlerWithTimeout(MethodName, MoveTemp(Handler), 0.0f);
 	}
 
 	void RegisterExternalHandlerWithTimeout(const FString& MethodName, FExternalHandlerFn Handler, float TimeoutSeconds)
 	{
 		FScopeLock Lock(&ExternalRegistryMutex());
 		ExternalHandlers().Add(MethodName, MoveTemp(Handler));
+		// A re-registration replaces the timeout too, so a handler registered
+		// again without one falls back to the default instead of a stale value.
 		if (TimeoutSeconds > 0.0f)
 		{
 			ExternalHandlerTimeouts().Add(MethodName, TimeoutSeconds);
+		}
+		else
+		{
+			ExternalHandlerTimeouts().Remove(MethodName);
 		}
 	}
 
@@ -71,6 +76,19 @@ namespace UEMCP
 			return true;
 		}
 		return false;
+	}
+
+	bool HasExternalHandler(const FString& MethodName)
+	{
+		FScopeLock Lock(&ExternalRegistryMutex());
+		return ExternalHandlers().Contains(MethodName);
+	}
+
+	float GetExternalHandlerTimeout(const FString& MethodName)
+	{
+		FScopeLock Lock(&ExternalRegistryMutex());
+		const float* Timeout = ExternalHandlerTimeouts().Find(MethodName);
+		return Timeout ? *Timeout : 0.0f;
 	}
 
 	TArray<FString> GetExternalHandlerNames()

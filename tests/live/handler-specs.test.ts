@@ -18,7 +18,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { compareHandlerSpecs, type HandlerSpecs } from "../../src/handler-spec.js";
+import { compareHandlerSpecs, type HandlerSpecs } from "../../src/surface/handler-spec.js";
 import { closeLiveBridges, liveBridge, liveTarget } from "./harness.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");

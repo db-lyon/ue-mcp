@@ -8,11 +8,11 @@ import {
   findDirectReads,
   reportingCategories,
 } from "../../scripts/audit-direct-param-reads.mjs";
-import { ROUTING_PARAM_NAMES } from "../../src/routing-params.js";
+import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const HANDLER_UTILS = path.join(
-  REPO_ROOT, "plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Public", "HandlerUtils.h",
+const HANDLER_PARAMS = path.join(
+  REPO_ROOT, "plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Public", "HandlerParams.h",
 );
 
 describe("the #1057 C++ read tracking", () => {
@@ -31,7 +31,7 @@ describe("the #1057 C++ read tracking", () => {
   });
 
   it("ignores the same routing names as the server", () => {
-    const source = readFileSync(HANDLER_UTILS, "utf8");
+    const source = readFileSync(HANDLER_PARAMS, "utf8");
     const block = source.match(/MCPRoutingParamNames\(\)\s*\{[\s\S]*?Names\s*=\s*\{([\s\S]*?)\};/);
     expect(block).not.toBeNull();
     const names = [...block![1].matchAll(/TEXT\("([^"]+)"\)/g)].map((m) => m[1]);

@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import { handlerSpecs } from "../../src/tools/specs/animation.generated.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
-const HANDLERS = new URL("../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/", import.meta.url);
 const PARAMS = [
   "sourcePath",
   "destinationPath",
@@ -49,10 +48,10 @@ describe("animation.reverse_sequence (#1162)", () => {
   });
 
   it("reads the same parameter names in C++, through the tracked helpers", () => {
-    const registration = readFileSync(new URL("AnimationHandlers.cpp", HANDLERS), "utf8");
+    const registration = readHandlerFile("AnimationHandlers.cpp");
     expect(registration).toContain('TEXT("reverse_sequence"), &ReverseSequence');
 
-    const source = readFileSync(new URL("AnimationHandlers_Reverse.cpp", HANDLERS), "utf8");
+    const source = readHandlerFile("AnimationHandlers_Reverse.cpp");
     for (const name of PARAMS) {
       expect(source).toMatch(new RegExp(`\\(Params, TEXT\\("${name}"\\)`));
     }

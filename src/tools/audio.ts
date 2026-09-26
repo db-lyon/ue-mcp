@@ -1,5 +1,5 @@
-import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/audio.generated.js";
 
 /**
@@ -86,13 +86,9 @@ export const audioTool: ToolDef = categoryTool(
     // ── Generic property set (any audio asset) ─────────────────────────
     set_property:      specBp("mutate", "Set any UPROPERTY on an audio asset by (dotted) name, value as JSON. Handles nested structs, arrays, object refs.", "set_audio_property"),
   },
-  undefined,
   {
     // #1057: every key the audio handlers declare, generated from their C++
     // registrations.
     ...specSchema,
-    // The shared cursor and limit. Every paged action here is spec'd; these
-    // keep the fuller descriptions and match the generated types.
-    ...PAGINATION_SCHEMA,
   },
 );

@@ -1,15 +1,11 @@
-import { readFileSync } from "node:fs";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge-timeouts.js";
-import type { ToolContext } from "../../src/types.js";
+import { REGISTERED_HANDLER_TIMEOUT_SECONDS } from "../../src/bridge/bridge-timeouts.js";
+import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const HANDLERS = path.join(HERE, "..", "..", "plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Private", "Handlers");
-const AUDIT_CPP = readFileSync(path.join(HANDLERS, "BlueprintHandlers_Audit.cpp"), "utf8");
-const REGISTRATION_CPP = readFileSync(path.join(HANDLERS, "BlueprintHandlers.cpp"), "utf8");
+const AUDIT_CPP = readHandlerFile("BlueprintHandlers_Audit.cpp");
+const REGISTRATION_CPP = readHandlerFile("BlueprintHandlers.cpp");
 
 /** Every parameter key the file reads through the recorded helpers. */
 function cppParamReads(source: string): Set<string> {

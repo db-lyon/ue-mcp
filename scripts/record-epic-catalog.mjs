@@ -27,50 +27,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import WebSocket from "ws";
-import {
-  assertLoopbackHost,
-  assertTestProjectDir,
-  bridgePortCandidates,
-  describeMissingBridge,
-  extractReportedProjectDir,
-  PROJECT_IDENTITY_PYTHON,
-} from "./bridge-target.mjs";
+import { connectTestBridge } from "./bridge-target.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "tests", "golden", "epic-catalog.json");
-const HOST = "127.0.0.1";
-const TIMEOUT_MS = 60_000;
-
-function connect(url, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
-    const timer = setTimeout(() => {
-      ws.terminate();
-      reject(new Error(`Connection to ${url} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    ws.on("open", () => { clearTimeout(timer); resolve(ws); });
-    ws.on("error", (err) => { clearTimeout(timer); reject(err); });
-  });
-}
-
-let nextId = 1;
-function rpc(ws, method, params) {
-  const id = nextId++;
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${method} timed out`)), TIMEOUT_MS);
-    const onMessage = (raw) => {
-      let msg;
-      try { msg = JSON.parse(raw.toString()); } catch { return; }
-      if (msg.id !== id) return;
-      clearTimeout(timer);
-      ws.off("message", onMessage);
-      resolve(msg);
-    };
-    ws.on("message", onMessage);
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-}
 
 /** The EngineAssociation of the single .uproject in a project directory. */
 function engineAssociationOf(projectDir) {
@@ -89,27 +49,10 @@ function engineAssociationOf(projectDir) {
 }
 
 async function main() {
-  assertLoopbackHost(HOST);
-  const { candidates, lockfile } = bridgePortCandidates({});
-  let ws = null;
-  let lastError = null;
-  for (const c of candidates) {
-    try {
-      ws = await connect(`ws://${HOST}:${c.port}`, 3000);
-      console.log(`connected to ws://${HOST}:${c.port} (${c.source})`);
-      break;
-    } catch (e) {
-      lastError = e.message;
-    }
-  }
-  if (!ws) throw new Error(describeMissingBridge({ host: HOST, candidates, lockfile, lastError }));
-
-  // The catalog is read-only, but confirming the target keeps this consistent
-  // with every other script that attaches to an editor: nothing in this repo
-  // talks to an editor it has not identified.
-  const ident = await rpc(ws, "execute_python", { code: PROJECT_IDENTITY_PYTHON });
-  if (ident.error) throw new Error(`could not identify the connected editor: ${ident.error.message}`);
-  const projectDir = assertTestProjectDir(extractReportedProjectDir(ident.result));
+  // The catalog is read-only, but nothing in this repo talks to an editor it
+  // has not identified.
+  const bridge = await connectTestBridge({ log: console.log });
+  const projectDir = bridge.projectDir;
   console.log(`target confirmed: ${projectDir}`);
 
   // Off the .uproject the identified editor has open, rather than over the
@@ -117,9 +60,8 @@ async function main() {
   // thing that decides which engine this editor IS.
   const engine = engineAssociationOf(projectDir);
 
-  const answered = await rpc(ws, "epic_list_toolsets", { includeSchemas: true });
-  if (answered.error) throw new Error(`epic_list_toolsets failed: ${answered.error.message}`);
-  const toolsets = answered.result?.toolsets ?? [];
+  const answered = await bridge.call("epic_list_toolsets", { includeSchemas: true });
+  const toolsets = answered?.toolsets ?? [];
   if (toolsets.length === 0) {
     throw new Error(
       "The connected editor registered no toolsets. Recording an empty catalog would delete "
@@ -147,7 +89,7 @@ async function main() {
   fs.writeFileSync(OUT, `${JSON.stringify(snapshot, null, 2)}\n`);
   console.log(`recorded ${toolCount} tools across ${sorted.length} toolsets (engine ${engine})`);
   console.log(`wrote ${path.relative(ROOT, OUT)}`);
-  ws.close();
+  bridge.close();
 }
 
 main().catch((e) => {

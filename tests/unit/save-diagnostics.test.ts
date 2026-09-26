@@ -1,15 +1,13 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 const utils = readFileSync(
-  path.resolve("plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerUtils.h"),
+  path.resolve("plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerPackageSave.h"),
   "utf8",
 );
-const assetHandlers = readFileSync(
-  path.resolve("plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AssetHandlers.cpp"),
-  "utf8",
-);
+const assetHandlers = readHandlerFile("AssetHandlers.cpp");
 
 function body(source: string, signature: string): string {
   const start = source.indexOf(signature);

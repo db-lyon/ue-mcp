@@ -8,7 +8,7 @@ import {
   partitionUeMcpConfig,
   ueMcpConfigRejections,
   describeConfigRejections,
-} from "../../src/project.js";
+} from "../../src/config/project.js";
 
 function makeTempProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-project-test-"));
@@ -51,6 +51,68 @@ describe("ProjectContext.resolveContentPath", () => {
   it("treats a trailing backslash as a directory", () => {
     const out = ctx.resolveContentPath("/Game/MyFolder\\");
     expect(out.endsWith(".uasset")).toBe(false);
+  });
+});
+
+describe("ProjectContext mount paths", () => {
+  let ctx: ProjectContext;
+  let contentDir: string;
+
+  beforeEach(() => {
+    const uproject = makeTempProject();
+    const pluginDir = path.join(path.dirname(uproject), "Plugins", "MyPlugin");
+    fs.mkdirSync(path.join(pluginDir, "Content"), { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, "MyPlugin.uplugin"), "{}");
+    ctx = new ProjectContext();
+    ctx.setProject(uproject);
+    contentDir = ctx.contentDir!;
+  });
+
+  it("matches the content directory and the mount case-insensitively", () => {
+    expect(ctx.mountPathFor(path.join(contentDir.toUpperCase(), "Hero.uasset"))).toBe("/Game/Hero");
+    expect(ctx.resolveMountDir("/game/Characters")).toBe(path.join(contentDir, "Characters"));
+    expect(ctx.resolveMountDir("/myplugin/Meshes")).toBe(path.join(path.dirname(contentDir), "Plugins", "MyPlugin", "Content", "Meshes"));
+  });
+
+  it("requires a path boundary after the content directory", () => {
+    expect(ctx.mountPathFor(`${contentDir}Backup/Hero.uasset`)).toBeNull();
+  });
+
+  it("strips only the trailing package extension", () => {
+    expect(ctx.mountPathFor(path.join(contentDir, "Old.uasset.bak", "Hero.uasset"))).toBe("/Game/Old.uasset.bak/Hero");
+  });
+
+  it("names a .umap by its mount path too", () => {
+    expect(ctx.mountPathFor(path.join(contentDir, "Maps", "Arena.umap"))).toBe("/Game/Maps/Arena");
+  });
+
+  it("maps a plugin's package to the plugin mount", () => {
+    const file = path.join(path.dirname(contentDir), "Plugins", "MyPlugin", "Content", "Rock.uasset");
+    expect(ctx.mountPathFor(file)).toBe("/MyPlugin/Rock");
+  });
+});
+
+describe("ProjectContext.isUePluginEnabled", () => {
+  it("reads the .uproject Plugins list, treating a listed plugin without Enabled as on", () => {
+    const uproject = makeTempProject();
+    fs.writeFileSync(uproject, JSON.stringify({
+      Plugins: [{ Name: "On", Enabled: true }, { Name: "Off", Enabled: false }, { Name: "Bare" }],
+    }));
+    const ctx = new ProjectContext();
+    ctx.setProject(uproject);
+    expect(ctx.isUePluginEnabled("On")).toBe(true);
+    expect(ctx.isUePluginEnabled("Bare")).toBe(true);
+    expect(ctx.isUePluginEnabled("Off")).toBe(false);
+    expect(ctx.isUePluginEnabled("Absent")).toBe(false);
+  });
+
+  it("cannot say without a readable .uproject", () => {
+    expect(new ProjectContext().isUePluginEnabled("Any")).toBeUndefined();
+    const uproject = makeTempProject();
+    const ctx = new ProjectContext();
+    ctx.setProject(uproject);
+    fs.writeFileSync(uproject, "{ not json");
+    expect(ctx.isUePluginEnabled("Any")).toBeUndefined();
   });
 });
 

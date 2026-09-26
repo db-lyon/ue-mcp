@@ -4,7 +4,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/GameplayHandlers.h"
+#include "Handlers/Gameplay/GameplayHandlers.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputModifiers.h"

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("animation IK and retarget authoring", () => {
   it("publishes the native UE 5.8 authoring boundary", () => {
@@ -41,10 +42,7 @@ describe("animation IK and retarget authoring", () => {
     expect(animationTool.schema.fullBodyIK.safeParse({ goals: [] }).success).toBe(false);
     expect(animationTool.schema.chains.safeParse([{ name: "Spine", startBone: "pelvis" }]).success).toBe(false);
     expect(animationTool.schema.exclusions.safeParse([{ bone: "neck_01" }]).success).toBe(false);
-    const ik = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_IKRigAuthoring.cpp",
-      import.meta.url,
-    ), "utf8");
+    const ik = readHandlerFile("AnimationHandlers_IKRigAuthoring.cpp");
     expect(ik).toContain("constexpr int32 MaxChains = 256;");
     expect(ik).toContain("constexpr int32 MaxGoals = 256;");
     expect(ik).toContain("constexpr int32 MaxExclusions = 2048;");
@@ -67,10 +65,7 @@ describe("animation IK and retarget authoring", () => {
       rootOffsetZ: 2.5,
     }).success).toBe(true);
     expect(animationTool.schema.pose.safeParse({ name: "bad" }).success).toBe(false);
-    const retarget = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_IKRetargeterAuthoring.cpp",
-      import.meta.url,
-    ), "utf8");
+    const retarget = readHandlerFile("AnimationHandlers_IKRetargeterAuthoring.cpp");
     expect(retarget).toContain("pose.rootOffsetZ and pose.snapBoneToGround are mutually exclusive");
     expect(retarget).toContain("FMath::Abs(Length - 1.0) > NormalizedTolerance");
   });
@@ -116,24 +111,12 @@ describe("animation IK and retarget authoring", () => {
   });
 
   it("registers guarded native handlers with transactions and checked saves", () => {
-    const registry = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers.cpp",
-      import.meta.url,
-    ), "utf8");
-    const ik = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_IKRigAuthoring.cpp",
-      import.meta.url,
-    ), "utf8");
-    const retarget = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_IKRetargeterAuthoring.cpp",
-      import.meta.url,
-    ), "utf8");
-    const legacy = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_StateMachine.cpp",
-      import.meta.url,
-    ), "utf8");
-    const handlerUtils = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerUtils.h",
+    const registry = readHandlerFile("AnimationHandlers.cpp");
+    const ik = readHandlerFile("AnimationHandlers_IKRigAuthoring.cpp");
+    const retarget = readHandlerFile("AnimationHandlers_IKRetargeterAuthoring.cpp");
+    const legacy = readHandlerFile("AnimationHandlers_StateMachine.cpp");
+    const assetResolve = readFileSync(new URL(
+      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerAssetResolve.h",
       import.meta.url,
     ), "utf8");
 
@@ -141,12 +124,12 @@ describe("animation IK and retarget authoring", () => {
     expect(registry).toContain('TEXT("configure_ik_retargeter"), &ConfigureIKRetargeter');
     for (const source of [ik, retarget]) {
       expect(source).toContain("UE_MCP_HAS_5_8_API");
-      expect(source).toContain('TEXT("unsupported_engine_version")');
+      expect(source).toMatch(/TEXT\("unsupported_engine_version"\)|MCPUnsupportedEngineError\(/);
       expect(source).toContain("FScopedTransaction");
       expect(source).toContain("UndoTransaction");
     }
-    expect(ik).toContain("SaveLoadedAsset");
-    expect(retarget).toContain("SaveAssetPackage");
+    expect(ik).toContain("SaveAssetPackageChecked");
+    expect(retarget).toContain("SaveAssetPackageChecked");
     expect(ik).toContain("MCPIsProtectedAssetPath(RigPath)");
     expect(ik).toContain("TSet<FName> RequiredFBIKBones");
     expect(ik).toContain("ExistingSolver->GetRequiredGoals(ConnectedGoals)");
@@ -173,8 +156,8 @@ describe("animation IK and retarget authoring", () => {
     expect(setRig).toContain("FScopedTransaction");
     expect(setRig).toContain("UndoTransaction");
     expect(legacy).toContain("MCPIsProtectedAssetPath(TargetPath)");
-    expect(handlerUtils).toContain('Lower == TEXT("/engine")');
-    expect(handlerUtils).toContain('Lower == TEXT("/script")');
-    expect(handlerUtils).toContain("FPackageName::ExportTextPathToObjectPath(Normalized)");
+    expect(assetResolve).toContain('Lower == TEXT("/engine")');
+    expect(assetResolve).toContain('Lower == TEXT("/script")');
+    expect(assetResolve).toContain("FPackageName::ExportTextPathToObjectPath(Normalized)");
   });
 });

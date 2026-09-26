@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { parseParamsClause } from "../../src/action-schema.js";
+import { parseParams } from "../../src/surface/action-schema.js";
 import { gasTool } from "../../src/tools/gas.js";
 
 const ACTIONS = ["add_loose_gameplay_tag", "remove_loose_gameplay_tag"] as const;
@@ -18,7 +18,7 @@ describe("gas loose tag actions", () => {
     });
 
     it(`${action} declares every parameter it documents`, () => {
-      const documented = parseParamsClause(gasTool.actions[action].description ?? "");
+      const documented = parseParams(gasTool.actions[action].description ?? "").params;
       expect(documented.map((p) => p.name)).toEqual(
         expect.arrayContaining(["actorLabel", "actorPath", "tag", "count", "world"]),
       );

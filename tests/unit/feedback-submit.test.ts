@@ -2,19 +2,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { isDirectiveResponse, type ToolContext, type ElicitFn, type ElicitResult } from "../../src/types.js";
-import { clearWorkarounds, pushWorkaround } from "../../src/workaround-tracker.js";
+import type { ToolContext, ElicitFn, ElicitResult } from "../../src/core/types.js";
+import { isDirectiveResponse } from "../../src/core/directive.js";
+import { clearWorkarounds, pushWorkaround } from "../../src/dispatch/workaround-tracker.js";
 
 // Stub the GitHub submission so no network call happens.
 const mockSubmitFeedback = vi.fn();
-vi.mock("../../src/github-app.js", () => ({
+vi.mock("../../src/feedback/github-app.js", () => ({
   submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
 }));
 
 // Stub the OAuth cache lookup so the test environment never depends on the
 // developer's actual ~/.ue-mcp/auth.json state.
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/auth.js", () => ({
+vi.mock("../../src/feedback/github-auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 
@@ -432,6 +433,21 @@ describe("feedback(submit) elicitation gate", () => {
       expect(mockSubmitFeedback).toHaveBeenCalledTimes(1);
       expect(isDirectiveResponse(r)).toBe(false);
       expect((r as { mode?: string }).mode).toBe("auto-approve");
+    });
+
+    it("auto-approve renders an unavailable anonymous path the way an approved post does", async () => {
+      mockSubmitFeedback.mockResolvedValue({ kind: "bot_unavailable", code: "unreachable", message: "signing service down" });
+      process.env.UE_MCP_FEEDBACK_MODE = "auto-approve";
+      const r = await call(makeCtx(vi.fn<ElicitFn>(), "Vale"), {
+        title: realTitle,
+        summary: realSummary,
+        author: "bot",
+      });
+
+      if (!isDirectiveResponse(r)) throw new Error("expected a directive");
+      expect(r.directive).toContain("[FEEDBACK NOT POSTED - ANONYMOUS SUBMISSION UNAVAILABLE]");
+      expect(r.result).toMatchObject({ submitted: false, code: "bot_unreachable" });
+      expect((r.result as { manual_url?: string }).manual_url).toContain("github.com");
     });
 
     it("auto-approve preserves the privacy scrub", async () => {

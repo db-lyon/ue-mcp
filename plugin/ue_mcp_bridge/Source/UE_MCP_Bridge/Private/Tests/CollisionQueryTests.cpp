@@ -16,7 +16,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/BlueprintHandlers_Collision.h"
+#include "Handlers/Blueprint/BlueprintHandlers_Collision.h"
 
 #include "Components/CapsuleComponent.h"
 #include "Dom/JsonObject.h"

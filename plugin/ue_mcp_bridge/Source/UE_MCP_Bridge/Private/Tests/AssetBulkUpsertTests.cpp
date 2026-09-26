@@ -12,7 +12,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/AssetHandlers.h"
+#include "Handlers/Asset/AssetHandlers.h"
 #include "Misc/AutomationTest.h"
 #include "EditorAssetLibrary.h"
 

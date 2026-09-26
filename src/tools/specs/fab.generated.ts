@@ -5,7 +5,7 @@
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
 import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../handler-spec.js";
+import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd fab handler. */
 export const handlerSpecs: HandlerSpecs = {

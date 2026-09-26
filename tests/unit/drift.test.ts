@@ -13,30 +13,15 @@
  * in CI, so a rename on either side fails loud.
  */
 import { describe, it, expect } from "vitest";
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { ALL_TOOLS, enumerateBridgeActions } from "../../src/tools.js";
-
-const here = dirname(fileURLToPath(import.meta.url));
-const handlersDir = join(
-  here,
-  "..",
-  "..",
-  "plugin",
-  "ue_mcp_bridge",
-  "Source",
-  "UE_MCP_Bridge",
-  "Private",
-  "Handlers",
-);
+import { listHandlerFiles } from "../../scripts/lib/cpp-registrations.mjs";
 
 function cppHandlerNames(): Set<string> {
   const re = /Registry\.RegisterHandler(?:WithTimeout)?\(\s*TEXT\("([^"]+)"\)/g;
   const names = new Set<string>();
-  for (const entry of readdirSync(handlersDir)) {
-    if (!entry.endsWith(".cpp")) continue;
-    const body = readFileSync(join(handlersDir, entry), "utf8");
+  for (const { path } of listHandlerFiles()) {
+    const body = readFileSync(path, "utf8");
     for (const m of body.matchAll(re)) names.add(m[1]);
   }
   return names;

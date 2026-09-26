@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-// @ts-expect-error - plain ESM script, no types
 import { keysInYaml, personalKeysIn, PERSONAL_KEYS } from "../../scripts/check-tracked-config.mjs";
 
 const keys = (text: string): string[] => keysInYaml(text) as string[];

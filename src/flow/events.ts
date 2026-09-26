@@ -1,4 +1,4 @@
-import type { PlanStep, FlowStepResult, FlowRunResult } from "@db-lyon/flowkit";
+import type { PlanStep, FlowStepResult } from "@db-lyon/flowkit";
 
 /**
  * Per-flow-run lifecycle events emitted by the flow tool while a flow

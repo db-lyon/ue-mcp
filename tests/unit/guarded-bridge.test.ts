@@ -4,10 +4,11 @@ import * as path from "node:path";
 import { describe, it, expect, vi } from "vitest";
 import { DialogGatedBridge, GuardedBridge } from "../../src/flow/guarded-bridge.js";
 import { GuardRegistry, type BridgeGuard, type CallContext } from "../../src/flow/guard.js";
-import { CLIENT_PROTOCOL_VERSION, type BridgeCapabilities, type IBridge } from "../../src/bridge.js";
-import { ProjectContext } from "../../src/project.js";
+import { CLIENT_PROTOCOL_VERSION, type BridgeCapabilities, type IBridge } from "../../src/bridge/bridge.js";
+import { ProjectContext } from "../../src/config/project.js";
 import { projectTool } from "../../src/tools/project.js";
-import type { EditorSession } from "../../src/session.js";
+import { ALL_TOOLS } from "../../src/tools.js";
+import type { EditorSession } from "../../src/sessions/session.js";
 
 function fakeInner(result: unknown = { ok: true }): IBridge & { calls: Array<{ method: string; params?: Record<string, unknown> }> } {
   const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
@@ -47,7 +48,7 @@ describe("GuardedBridge pipeline", () => {
   });
 
   it("runs a write-scoped guard's before with resolved existing files", async () => {
-    const before = vi.fn(async () => {});
+    const before = vi.fn(async (_ctx: CallContext) => {});
     const { inner, gb } = bridgeWith(writeGuard("sc", before));
 
     await gb.call("save_asset", { assetPath: "/Game/Foo" });
@@ -60,7 +61,7 @@ describe("GuardedBridge pipeline", () => {
   });
 
   it("skips a write-scoped guard for reads and for not-yet-existing files", async () => {
-    const before = vi.fn(async () => {});
+    const before = vi.fn(async (_ctx: CallContext) => {});
     const { inner, gb } = bridgeWith(writeGuard("sc", before));
 
     await gb.call("read_asset", { assetPath: "/Game/Foo" });      // read verb -> no write
@@ -71,7 +72,7 @@ describe("GuardedBridge pipeline", () => {
   });
 
   it("an every-call guard runs on reads too", async () => {
-    const before = vi.fn(async () => {});
+    const before = vi.fn(async (_ctx: CallContext) => {});
     const audit: BridgeGuard = { name: "audit", before };
     const { gb } = bridgeWith(audit);
     await gb.call("read_asset", { assetPath: "/Game/Foo" });
@@ -154,7 +155,7 @@ describe("project(get_status) through the session's guarded bridge", () => {
     const inner = { ...fakeInner(), capabilities };
     const guarded = new GuardedBridge(inner, new GuardRegistry(), resolveExisting);
 
-    const status = (await projectTool.handler({ project, bridge: guarded } as never, {
+    const status = (await projectTool.handler({ project, bridge: guarded, getToolGraph: () => ALL_TOOLS } as never, {
       action: "get_status",
     })) as Record<string, unknown>;
 

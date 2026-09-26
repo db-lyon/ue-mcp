@@ -92,7 +92,7 @@ describe("EditorBridge connection handling", () => {
       socket.send(JSON.stringify({ id: request.id, result: { method: request.method, params: request.params } }));
     });
 
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -111,7 +111,7 @@ describe("EditorBridge connection handling", () => {
       socket.send(JSON.stringify({ id: request.id, result: request.method }));
     });
 
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -132,7 +132,7 @@ describe("EditorBridge connection handling", () => {
       socket.close(1009, "message of 70000000 bytes exceeds the 67108864 byte bridge limit");
     });
 
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -151,7 +151,7 @@ describe("EditorBridge connection handling", () => {
       socket.send(JSON.stringify({ id: request.id, result: "still here" }));
     });
 
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -171,8 +171,8 @@ describe("EditorBridge connection handling", () => {
   it("reports a timed-out call as an unknown outcome, not a failure", async () => {
     const server = await withBridgeServer(() => {});
 
-    const { EditorBridge } = await import("../../src/bridge.js");
-    const { McpError, ErrorCode } = await import("../../src/errors.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
+    const { McpError, ErrorCode } = await import("../../src/core/errors.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -197,7 +197,7 @@ describe("EditorBridge connection handling", () => {
       held = { id: request.id, socket };
     });
 
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -219,31 +219,25 @@ describe("EditorBridge connection handling", () => {
 });
 
 describe("bridge state records", () => {
-  it("carries the identity and version fields the bridge now publishes", async () => {
+  it("reads the port lockfile and refuses a port no socket could bind", async () => {
     const dir = makeProjectDir();
-    const uproject = path.join(dir, "Sample.uproject");
-    const { readBridgeLockfile } = await import("../../src/bridge.js");
+    const { readBridgeLockfileIn } = await import("../../src/bridge/editor-target.js");
 
-    writeBridgeRecord(dir, "port.json", {
-      port: 51234,
-      pid: process.pid,
-      instanceId: "9f1c0e2a-0000-4000-8000-000000000001",
-      status: "listening",
-      handlerApiVersion: 1,
-    });
-    const record = readBridgeLockfile(uproject);
+    writeBridgeRecord(dir, "port.json", { port: 51234, pid: process.pid, status: "listening" });
+    const record = readBridgeLockfileIn(dir);
     expect(record?.port).toBe(51234);
-    expect(record?.instanceId).toBe("9f1c0e2a-0000-4000-8000-000000000001");
-    expect(record?.status).toBe("listening");
+    expect(record?.pid).toBe(process.pid);
 
-    writeBridgeRecord(dir, "port.json", { port: 0, pid: process.pid });
-    expect(readBridgeLockfile(uproject)).toBeNull();
+    for (const port of [0, 51234.5, 65536]) {
+      writeBridgeRecord(dir, "port.json", { port, pid: process.pid });
+      expect(readBridgeLockfileIn(dir)).toBeNull();
+    }
   });
 
   it("reports a bridge that failed to bind while its editor is still running", async () => {
     const dir = makeProjectDir();
     const uproject = path.join(dir, "Sample.uproject");
-    const { readBridgeErrorRecord } = await import("../../src/bridge.js");
+    const { readBridgeErrorRecord } = await import("../../src/bridge/bridge.js");
 
     writeBridgeRecord(dir, "bridge-error.json", {
       status: "bind-failed",
@@ -262,7 +256,7 @@ describe("bridge state records", () => {
 describe("bridge capability handshake", () => {
   it.each(["disconnect", "remote close"])("clears capabilities on %s", async (event) => {
     const server = await withBridgeServer(() => {});
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -287,7 +281,7 @@ describe("bridge capability handshake", () => {
     const held = holdHandshake();
     const serverA = await withBridgeServer(() => {});
     const serverB = await withBridgeServer(() => {}, held.handle);
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", serverA.port);
     let connecting: Promise<void> | undefined;
 
@@ -314,9 +308,9 @@ describe("bridge capability handshake", () => {
     const held = holdHandshake();
     const serverA = await withBridgeServer(() => {}, held.handle);
     const serverB = await withBridgeServer(() => {}, { ...DEFAULT_CAPABILITIES, projectName: "B" });
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", serverA.port);
-    const warnings = vi.spyOn(await import("../../src/log.js"), "warn").mockImplementation(() => {});
+    const warnings = vi.spyOn(await import("../../src/core/log.js"), "warn").mockImplementation(() => {});
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const connectingA = bridge.connect(5000);
     let socketA: import("ws").WebSocket | undefined;
@@ -367,9 +361,9 @@ describe("bridge capability handshake", () => {
   it.each(["legacy timeout", "remote close", "closing timeout"])("settles the current handshake on %s and cleans up", async (event) => {
     const held = holdHandshake();
     const server = await withBridgeServer(() => {}, held.handle);
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
-    const warnings = vi.spyOn(await import("../../src/log.js"), "warn").mockImplementation(() => {});
+    const warnings = vi.spyOn(await import("../../src/core/log.js"), "warn").mockImplementation(() => {});
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const connecting = bridge.connect(1000);
 
@@ -417,7 +411,7 @@ describe("bridge capability handshake", () => {
 
   it("clears capabilities immediately when a call cannot be sent", async () => {
     const server = await withBridgeServer(() => {});
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -441,7 +435,7 @@ describe("bridge capability handshake", () => {
       socket.send(JSON.stringify({ id: request.id, result: "ok" }));
     });
 
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -463,7 +457,7 @@ describe("bridge capability handshake", () => {
       null, // a plugin built before the handshake existed
     );
 
-    const { EditorBridge, CLIENT_PROTOCOL_VERSION } = await import("../../src/bridge.js");
+    const { EditorBridge, CLIENT_PROTOCOL_VERSION } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -484,7 +478,7 @@ describe("bridge capability handshake", () => {
       socket.send(JSON.stringify({ id: request.id, error: { code: -32601, message: "Unknown method: delete_macro" } }));
     });
 
-    const { EditorBridge, PLUGIN_UPGRADE_POINTER } = await import("../../src/bridge.js");
+    const { EditorBridge, PLUGIN_UPGRADE_POINTER } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", server.port);
 
     try {
@@ -501,7 +495,7 @@ describe("bridge capability handshake", () => {
   });
 
   it("tells the user to update the package when the plugin is newer", async () => {
-    const { describeProtocolMismatch, CLIENT_PROTOCOL_VERSION } = await import("../../src/bridge.js");
+    const { describeProtocolMismatch, CLIENT_PROTOCOL_VERSION } = await import("../../src/bridge/bridge.js");
     const message = describeProtocolMismatch({
       protocolVersion: CLIENT_PROTOCOL_VERSION + 1,
       legacy: false,
@@ -512,7 +506,7 @@ describe("bridge capability handshake", () => {
   });
 
   it("says nothing when the versions agree", async () => {
-    const { describeProtocolMismatch, CLIENT_PROTOCOL_VERSION } = await import("../../src/bridge.js");
+    const { describeProtocolMismatch, CLIENT_PROTOCOL_VERSION } = await import("../../src/bridge/bridge.js");
     expect(describeProtocolMismatch({ protocolVersion: CLIENT_PROTOCOL_VERSION, legacy: false })).toBeNull();
   });
 
@@ -526,7 +520,7 @@ describe("bridge capability handshake", () => {
     await once(server, "listening");
     const { port } = server.address() as AddressInfo;
 
-    const { EditorBridge } = await import("../../src/bridge.js");
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
     const bridge = new EditorBridge("127.0.0.1", port);
 
     try {

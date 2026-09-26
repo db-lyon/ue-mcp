@@ -5,98 +5,10 @@
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
 import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../handler-spec.js";
+import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd physics handler. */
 export const handlerSpecs: HandlerSpecs = {
-  "add_force": {
-    "category": "physics",
-    "params": [
-      {
-        "name": "actorLabel",
-        "type": "string",
-        "required": false,
-        "description": "Actor editor label; pass actorLabel or actorPath"
-      },
-      {
-        "name": "actorPath",
-        "type": "string",
-        "required": false,
-        "description": "Full actor object path; the unambiguous selector"
-      },
-      {
-        "name": "impulse",
-        "type": "vec3",
-        "required": true,
-        "description": "Impulse or force vector {x,y,z}",
-        "aliases": [
-          "force",
-          "vector"
-        ]
-      },
-      {
-        "name": "mode",
-        "type": "string",
-        "required": false,
-        "description": "impulse (default) | force"
-      },
-      {
-        "name": "componentName",
-        "type": "string",
-        "required": false,
-        "description": "Primitive component to push (default: the root, else the first primitive)"
-      },
-      {
-        "name": "boneName",
-        "type": "string",
-        "required": false,
-        "description": "Physics bone to push"
-      },
-      {
-        "name": "location",
-        "type": "vec3",
-        "required": false,
-        "description": "World point to apply the impulse at; ignores mode"
-      },
-      {
-        "name": "velChange",
-        "type": "boolean",
-        "required": false,
-        "description": "Treat the impulse as a velocity change"
-      },
-      {
-        "name": "accelChange",
-        "type": "boolean",
-        "required": false,
-        "description": "Treat the force as an acceleration change"
-      },
-      {
-        "name": "world",
-        "type": "string",
-        "required": false,
-        "description": "World scope: auto (default) | pie | editor"
-      },
-      {
-        "name": "pieInstance",
-        "type": "number",
-        "required": false,
-        "description": "PIE world instance (0 = server/primary); omit for the primary world"
-      }
-    ],
-    "choices": [
-      {
-        "mode": "exactlyOne",
-        "branches": [
-          [
-            "actorLabel"
-          ],
-          [
-            "actorPath"
-          ]
-        ]
-      }
-    ]
-  },
   "add_impulse": {
     "category": "physics",
     "params": [
@@ -432,7 +344,6 @@ export const handlerSpecs: HandlerSpecs = {
 
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
-  add_force: "Params: actorLabel OR actorPath, impulse (or force, or vector), mode?, componentName?, boneName?, location?, velChange?, accelChange?, world?, pieInstance?",
   add_impulse: "Params: actorLabel OR actorPath, impulse (or force, or vector), mode?, componentName?, boneName?, location?, velChange?, accelChange?, world?, pieInstance?",
   set_collision: "Params: actorLabel OR actorPath OR assetPath, componentName?, collisionProfile?, collisionEnabled?, objectType?, responseToAllChannels?, responses?",
   set_collision_enabled: "Params: actorLabel OR actorPath, collisionEnabled (or collisionType)",
@@ -452,7 +363,7 @@ export const schema: Record<string, z.ZodType> = {
   collisionEnabled: z.string().optional().describe("NoCollision | QueryOnly | PhysicsOnly | QueryAndPhysics"),
   collisionProfile: z.string().optional().describe("Collision profile (preset) name, applied before the overrides"),
   collisionType: z.string().optional().describe("Alias for collisionEnabled"),
-  componentName: z.string().optional().describe("Primitive component to push (default: the root, else the first primitive) (add_force, add_impulse). Primitive component name (prefix match on an actor, default every one); required with assetPath (set_collision)"),
+  componentName: z.string().optional().describe("Primitive component to push (default: the root, else the first primitive) (add_impulse). Primitive component name (prefix match on an actor, default every one); required with assetPath (set_collision)"),
   enabled: z.boolean().optional().describe("Alias for simulate"),
   enableGravity: z.boolean().optional().describe("Whether gravity applies to the body"),
   force: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Alias for impulse"),

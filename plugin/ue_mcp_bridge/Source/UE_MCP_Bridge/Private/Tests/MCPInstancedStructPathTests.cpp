@@ -3,7 +3,7 @@
 #include "Tests/MCPInstancedStructPathTestTypes.h"
 
 #include "HandlerRegistry.h"
-#include "Handlers/EditorHandlers.h"
+#include "Handlers/Editor/EditorHandlers.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/AutomationTest.h"

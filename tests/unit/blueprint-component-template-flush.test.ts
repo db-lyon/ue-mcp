@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { blueprintTool } from "../../src/tools/blueprint.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 describe("blueprint.flush_component_templates", () => {
   it("routes one Blueprint path to the native maintenance handler", async () => {

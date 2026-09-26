@@ -11,6 +11,7 @@
 #include "UObject/PropertyPortFlags.h"
 #include "UObject/SoftObjectPtr.h"
 #include "MCPEngineCompat.h"
+#include "HandlerUtils.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
 #include "Engine/Blueprint.h"
@@ -85,43 +86,6 @@ namespace MCPJsonProperty
 	inline bool IsEmptyReferenceText(const FString& Text)
 	{
 		return Text.IsEmpty() || Text.Equals(TEXT("None"), ESearchCase::CaseSensitive);
-	}
-
-	// Resolve a class path the way a caller means it, without inventing a
-	// suffix the path did not ask for.
-	//
-	// #489: a caller naming a Blueprint commonly passes the asset path
-	// (/Game/Foo/BP_GameMode.BP_GameMode) for a class-typed field, and the
-	// generated class is that path plus "_C".
-	// #928: the suffix used to be appended unconditionally on the soft-class
-	// path, so a native /Script/Module.ClassName reference was stored as
-	// /Script/Module.ClassName_C, which names no class at all, and the write
-	// still reported success. The suffix is now only ever used when the path
-	// as written does not name a class and the suffixed form does.
-	inline UClass* ResolveClassPath(const FString& Path)
-	{
-		if (Path.IsEmpty()) return nullptr;
-
-		if (UClass* Direct = LoadClass<UObject>(nullptr, *Path))
-		{
-			return Direct;
-		}
-		// A native class lives at its /Script/ path and never carries "_C".
-		if (!Path.StartsWith(TEXT("/Script/")) && !Path.EndsWith(TEXT("_C")))
-		{
-			const FString WithSuffix = Path + TEXT("_C");
-			if (UClass* Generated = LoadClass<UObject>(nullptr, *WithSuffix))
-			{
-				return Generated;
-			}
-		}
-		// Last ditch: load the asset as a UBlueprint and take its generated
-		// class. Covers paths written without the .Name object suffix.
-		if (UBlueprint* BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *Path)))
-		{
-			return BP->GeneratedClass;
-		}
-		return nullptr;
 	}
 
 	// One (key, value) write for a TMap, in whichever JSON shape the caller
@@ -475,9 +439,17 @@ namespace MCPJsonProperty
 					CastFieldChecked<FClassProperty>(Prop)->SetObjectPropertyValue(ValueAddr, nullptr);
 					return true;
 				}
-				UClass* Loaded = ResolveClassPath(Path);
-				if (!Loaded) { OutError = FString::Printf(TEXT("class not found: %s"), *Path); return false; }
-				CastFieldChecked<FClassProperty>(Prop)->SetObjectPropertyValue(ValueAddr, Loaded);
+				FClassProperty* ClassProp = CastFieldChecked<FClassProperty>(Prop);
+				UClass* Loaded = MCPResolveClassOfType(Path, ClassProp->MetaClass);
+				if (!Loaded)
+				{
+					UClass* Other = ClassProp->MetaClass ? MCPResolveClass(Path) : nullptr;
+					OutError = Other
+						? FString::Printf(TEXT("class %s does not derive from %s"), *Other->GetPathName(), *ClassProp->MetaClass->GetName())
+						: FString::Printf(TEXT("class not found: %s"), *Path);
+					return false;
+				}
+				ClassProp->SetObjectPropertyValue(ValueAddr, Loaded);
 				return true;
 			}
 			break;
@@ -494,7 +466,16 @@ namespace MCPJsonProperty
 					ObjProp->SetObjectPropertyValue(ValueAddr, nullptr);
 					return true;
 				}
-				UObject* Loaded = StaticLoadObject(ObjProp->PropertyClass, nullptr, *Path);
+				// The shared resolver answers every asset path form; a subobject
+				// or /Script path it does not cover falls through to the engine load.
+				UObject* Loaded = MCPLoadAssetObject(Path);
+				if (Loaded && !Loaded->IsA(ObjProp->PropertyClass))
+				{
+					OutError = FString::Printf(TEXT("'%s' is a %s, not a %s"),
+						*Path, *Loaded->GetClass()->GetName(), *ObjProp->PropertyClass->GetName());
+					return false;
+				}
+				if (!Loaded) Loaded = StaticLoadObject(ObjProp->PropertyClass, nullptr, *Path);
 				if (!Loaded) { OutError = FString::Printf(TEXT("asset not found: %s"), *Path); return false; }
 				ObjProp->SetObjectPropertyValue(ValueAddr, Loaded);
 				return true;
@@ -522,7 +503,7 @@ namespace MCPJsonProperty
 				// stored verbatim: a soft reference to an asset that does not
 				// exist yet is legitimate, and silently rewriting it was how a
 				// native /Script/ reference got corrupted.
-				if (UClass* Resolved = ResolveClassPath(Path))
+				if (UClass* Resolved = MCPResolveClass(Path))
 				{
 					SoftClassProp->SetPropertyValue(ValueAddr, FSoftObjectPtr(FSoftObjectPath(Resolved)));
 					return true;

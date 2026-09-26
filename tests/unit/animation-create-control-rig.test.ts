@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import { handlerSpecs } from "../../src/tools/specs/animation.generated.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("animation.create_control_rig (#1133)", () => {
   it("publishes the factory-backed creation contract", () => {
@@ -39,10 +39,9 @@ describe("animation.create_control_rig (#1133)", () => {
   });
 
   it("registers the handler and keeps its safeguards", () => {
-    const handlers = new URL("../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/", import.meta.url);
-    const registration = readFileSync(new URL("AnimationHandlers.cpp", handlers), "utf8");
+    const registration = readHandlerFile("AnimationHandlers.cpp");
     expect(registration).toContain('TEXT("create_control_rig"), &CreateControlRig');
-    const source = readFileSync(new URL("AnimationHandlers_ControlRig.cpp", handlers), "utf8");
+    const source = readHandlerFile("AnimationHandlers_ControlRig.cpp");
     expect(source).toContain("UControlRigBlueprintFactory::CreateControlRigFromSkeletalMeshOrSkeleton(Source)");
     expect(source).toContain("MCPCheckAssetExists(PackagePath, Name, OnConflict");
     expect(source).toContain("UEditorAssetLibrary::DeleteAsset(CreatedPackage)");

@@ -1,0 +1,684 @@
+// Split from AssetHandlers.cpp to keep that file under 3k lines.
+// All functions below are still members of FAssetHandlers - this file is a
+// translation-unit partition, not a new class. Handler registration
+// stays in AssetHandlers.cpp::RegisterHandlers.
+
+#include "AssetHandlers.h"
+#include "HandlerRegistry.h"
+#include "HandlerUtils.h"
+#include "HandlerJsonProperty.h"
+#include "JsonSerializer.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshSocket.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/SkeletalMeshSocket.h"
+#include "Animation/Skeleton.h"
+#include "UObject/Package.h"
+#include "Misc/PackageName.h"
+#include "UObject/SavePackage.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+
+TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString SocketName;
+	if (auto Err = RequireString(Params, TEXT("socketName"), SocketName)) return Err;
+
+	FVector RelLoc = FVector::ZeroVector;
+	FRotator RelRot = FRotator::ZeroRotator;
+	FVector RelScale = FVector::OneVector;
+
+	if (const TSharedPtr<FJsonObject>* LocObj; TryGetObjectParam(Params, TEXT("relativeLocation"), LocObj))
+	{
+		RelLoc.X = (*LocObj)->GetNumberField(TEXT("x"));
+		RelLoc.Y = (*LocObj)->GetNumberField(TEXT("y"));
+		RelLoc.Z = (*LocObj)->GetNumberField(TEXT("z"));
+	}
+	if (const TSharedPtr<FJsonObject>* RotObj; TryGetObjectParam(Params, TEXT("relativeRotation"), RotObj))
+	{
+		RelRot.Pitch = (*RotObj)->GetNumberField(TEXT("pitch"));
+		RelRot.Yaw   = (*RotObj)->GetNumberField(TEXT("yaw"));
+		RelRot.Roll  = (*RotObj)->GetNumberField(TEXT("roll"));
+	}
+	if (const TSharedPtr<FJsonObject>* ScaleObj; TryGetObjectParam(Params, TEXT("relativeScale"), ScaleObj))
+	{
+		RelScale.X = (*ScaleObj)->GetNumberField(TEXT("x"));
+		RelScale.Y = (*ScaleObj)->GetNumberField(TEXT("y"));
+		RelScale.Z = (*ScaleObj)->GetNumberField(TEXT("z"));
+	}
+
+	// Every parameter is read before anything can fail (#1057).
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	const FString BoneNameParam = OptionalString(Params, TEXT("boneName"), TEXT("root"));
+
+	// Track which transform fields the caller actually supplied so onConflict=update
+	// only overwrites what was passed in (matches set_socket_transform semantics).
+	const bool bHasLoc   = HasParam(Params, TEXT("relativeLocation"));
+	const bool bHasRot   = HasParam(Params, TEXT("relativeRotation"));
+	const bool bHasScale = HasParam(Params, TEXT("relativeScale"));
+
+	UObject* Asset = MCPLoadAssetObject(AssetPath);
+	if (!Asset)
+	{
+		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
+	}
+
+	// Try StaticMesh first
+	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
+	{
+		for (UStaticMeshSocket* Existing : SM->Sockets)
+		{
+			if (Existing && Existing->SocketName == FName(*SocketName))
+			{
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("Socket '%s' already exists"), *SocketName));
+				}
+				if (OnConflict == TEXT("update"))
+				{
+					const FVector PrevLoc = Existing->RelativeLocation;
+					const FRotator PrevRot = Existing->RelativeRotation;
+					const FVector PrevScale = Existing->RelativeScale;
+					SM->Modify();
+					Existing->Modify();
+					if (bHasLoc)   Existing->RelativeLocation = RelLoc;
+					if (bHasRot)   Existing->RelativeRotation = RelRot;
+					if (bHasScale) Existing->RelativeScale = RelScale;
+					SM->MarkPackageDirty();
+
+					auto UpdatedResult = MCPSuccess();
+					MCPSetUpdated(UpdatedResult);
+					UpdatedResult->SetStringField(TEXT("socketName"), SocketName);
+					UpdatedResult->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+					UpdatedResult->SetStringField(TEXT("source"), TEXT("mesh"));
+
+					// Rollback: restore the previous transform via set_socket_transform.
+					TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+					Payload->SetStringField(TEXT("assetPath"), AssetPath);
+					Payload->SetStringField(TEXT("socketName"), SocketName);
+					TSharedPtr<FJsonObject> PrevLocObj = MCPVec3ToJsonObject(PrevLoc);
+					Payload->SetObjectField(TEXT("relativeLocation"), PrevLocObj);
+					TSharedPtr<FJsonObject> PrevRotObj = MCPRotatorToJsonObject(PrevRot);
+					Payload->SetObjectField(TEXT("relativeRotation"), PrevRotObj);
+					TSharedPtr<FJsonObject> PrevScaleObj = MCPVec3ToJsonObject(PrevScale);
+					Payload->SetObjectField(TEXT("relativeScale"), PrevScaleObj);
+					MCPSetRollback(UpdatedResult, TEXT("set_socket_transform"), Payload);
+					return MCPResult(UpdatedResult);
+				}
+				auto ExistingResult = MCPSuccess();
+				MCPSetExisted(ExistingResult);
+				ExistingResult->SetStringField(TEXT("socketName"), SocketName);
+				ExistingResult->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+				ExistingResult->SetStringField(TEXT("source"), TEXT("mesh"));
+				return MCPResult(ExistingResult);
+			}
+		}
+
+		UStaticMeshSocket* NewSocket = NewObject<UStaticMeshSocket>(SM);
+		NewSocket->SocketName = FName(*SocketName);
+		NewSocket->RelativeLocation = RelLoc;
+		NewSocket->RelativeRotation = RelRot;
+		NewSocket->RelativeScale = RelScale;
+		SM->Modify();
+		SM->Sockets.Add(NewSocket);
+		SM->MarkPackageDirty();
+
+		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
+		Result->SetStringField(TEXT("socketName"), SocketName);
+		Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+		Result->SetStringField(TEXT("source"), TEXT("mesh"));
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("socketName"), SocketName);
+		MCPSetRollback(Result, TEXT("remove_socket"), Payload);
+		return MCPResult(Result);
+	}
+
+	// Try SkeletalMesh
+	if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
+	{
+		FString BoneName = BoneNameParam;
+
+		for (USkeletalMeshSocket* Existing : SKM->GetMeshOnlySocketList())
+		{
+			if (Existing && Existing->SocketName == FName(*SocketName))
+			{
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("Socket '%s' already exists"), *SocketName));
+				}
+				if (OnConflict == TEXT("update"))
+				{
+					const FVector PrevLoc = Existing->RelativeLocation;
+					const FRotator PrevRot = Existing->RelativeRotation;
+					const FVector PrevScale = Existing->RelativeScale;
+					SKM->Modify();
+					Existing->Modify();
+					if (bHasLoc)   Existing->RelativeLocation = RelLoc;
+					if (bHasRot)   Existing->RelativeRotation = RelRot;
+					if (bHasScale) Existing->RelativeScale = RelScale;
+					SKM->MarkPackageDirty();
+					SKM->PostEditChange();
+
+					auto UpdatedResult = MCPSuccess();
+					MCPSetUpdated(UpdatedResult);
+					UpdatedResult->SetStringField(TEXT("socketName"), SocketName);
+					UpdatedResult->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+					UpdatedResult->SetStringField(TEXT("source"), TEXT("mesh"));
+
+					TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+					Payload->SetStringField(TEXT("assetPath"), AssetPath);
+					Payload->SetStringField(TEXT("socketName"), SocketName);
+					TSharedPtr<FJsonObject> PrevLocObj = MCPVec3ToJsonObject(PrevLoc);
+					Payload->SetObjectField(TEXT("relativeLocation"), PrevLocObj);
+					TSharedPtr<FJsonObject> PrevRotObj = MCPRotatorToJsonObject(PrevRot);
+					Payload->SetObjectField(TEXT("relativeRotation"), PrevRotObj);
+					TSharedPtr<FJsonObject> PrevScaleObj = MCPVec3ToJsonObject(PrevScale);
+					Payload->SetObjectField(TEXT("relativeScale"), PrevScaleObj);
+					MCPSetRollback(UpdatedResult, TEXT("set_socket_transform"), Payload);
+					return MCPResult(UpdatedResult);
+				}
+				auto ExistingResult = MCPSuccess();
+				MCPSetExisted(ExistingResult);
+				ExistingResult->SetStringField(TEXT("socketName"), SocketName);
+				ExistingResult->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+				ExistingResult->SetStringField(TEXT("source"), TEXT("mesh"));
+				return MCPResult(ExistingResult);
+			}
+		}
+
+		USkeletalMeshSocket* NewSocket = NewObject<USkeletalMeshSocket>(SKM);
+		NewSocket->SocketName = FName(*SocketName);
+		NewSocket->BoneName = FName(*BoneName);
+		NewSocket->RelativeLocation = RelLoc;
+		NewSocket->RelativeRotation = RelRot;
+		NewSocket->RelativeScale = RelScale;
+		SKM->Modify();
+		SKM->GetMeshOnlySocketList().Add(NewSocket);
+		SKM->MarkPackageDirty();
+		SKM->PostEditChange();
+
+		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
+		Result->SetStringField(TEXT("socketName"), SocketName);
+		Result->SetStringField(TEXT("boneName"), BoneName);
+		Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+		Result->SetStringField(TEXT("source"), TEXT("mesh"));
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("socketName"), SocketName);
+		MCPSetRollback(Result, TEXT("remove_socket"), Payload);
+		return MCPResult(Result);
+	}
+
+	// #465: Skeleton assets own their own socket array. Mesh-level sockets
+	// live on USkeletalMesh; rig-level sockets live on USkeleton. Both flow
+	// through asset.add_socket so callers don't have to know which one a
+	// given socket belongs to.
+	if (USkeleton* Skel = Cast<USkeleton>(Asset))
+	{
+		const FString BoneName = BoneNameParam;
+
+		for (USkeletalMeshSocket* Existing : Skel->Sockets)
+		{
+			if (Existing && Existing->SocketName == FName(*SocketName))
+			{
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("Socket '%s' already exists on Skeleton"), *SocketName));
+				}
+				if (OnConflict == TEXT("update"))
+				{
+					Skel->Modify();
+					Existing->Modify();
+					if (bHasLoc)   Existing->RelativeLocation = RelLoc;
+					if (bHasRot)   Existing->RelativeRotation = RelRot;
+					if (bHasScale) Existing->RelativeScale = RelScale;
+					Skel->MarkPackageDirty();
+					Skel->PostEditChange();
+					auto UpdatedResult = MCPSuccess();
+					MCPSetUpdated(UpdatedResult);
+					UpdatedResult->SetStringField(TEXT("socketName"), SocketName);
+					UpdatedResult->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+					UpdatedResult->SetStringField(TEXT("source"), TEXT("skeleton"));
+					return MCPResult(UpdatedResult);
+				}
+				auto ExistingResult = MCPSuccess();
+				MCPSetExisted(ExistingResult);
+				ExistingResult->SetStringField(TEXT("socketName"), SocketName);
+				ExistingResult->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+				ExistingResult->SetStringField(TEXT("source"), TEXT("skeleton"));
+				return MCPResult(ExistingResult);
+			}
+		}
+
+		USkeletalMeshSocket* NewSocket = NewObject<USkeletalMeshSocket>(Skel);
+		NewSocket->SocketName = FName(*SocketName);
+		NewSocket->BoneName = FName(*BoneName);
+		NewSocket->RelativeLocation = RelLoc;
+		NewSocket->RelativeRotation = RelRot;
+		NewSocket->RelativeScale = RelScale;
+		Skel->Modify();
+		Skel->Sockets.Add(NewSocket);
+		Skel->MarkPackageDirty();
+		Skel->PostEditChange();
+
+		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
+		Result->SetStringField(TEXT("socketName"), SocketName);
+		Result->SetStringField(TEXT("boneName"), BoneName);
+		Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+		Result->SetStringField(TEXT("source"), TEXT("skeleton"));
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("socketName"), SocketName);
+		MCPSetRollback(Result, TEXT("remove_socket"), Payload);
+		return MCPResult(Result);
+	}
+
+	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh, SkeletalMesh, or Skeleton"), *AssetPath));
+}
+
+
+TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString SocketName;
+	if (auto Err = RequireString(Params, TEXT("socketName"), SocketName)) return Err;
+
+	UObject* Asset = MCPLoadAssetObject(AssetPath);
+	if (!Asset)
+	{
+		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
+	}
+
+	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
+	{
+		for (int32 i = 0; i < SM->Sockets.Num(); ++i)
+		{
+			if (SM->Sockets[i] && SM->Sockets[i]->SocketName == FName(*SocketName))
+			{
+				// Read before the removal. After RemoveAt the array no longer
+				// holds the socket, and a transform captured then would put
+				// back a socket at the origin rather than where this one was.
+				const FVector PrevLoc = SM->Sockets[i]->RelativeLocation;
+				const FRotator PrevRot = SM->Sockets[i]->RelativeRotation;
+				const FVector PrevScale = SM->Sockets[i]->RelativeScale;
+
+				SM->Modify();
+				SM->Sockets.RemoveAt(i);
+				SM->MarkPackageDirty();
+
+				auto Result = MCPSuccess();
+				Result->SetStringField(TEXT("removed"), SocketName);
+				Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+				Result->SetStringField(TEXT("source"), TEXT("mesh"));
+				Result->SetBoolField(TEXT("deleted"), true);
+
+				// add_socket recreates it with the transform it had.
+				// onConflict=update so the restore lands whether or not a
+				// socket of that name exists again by the time it runs.
+				TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+				Payload->SetStringField(TEXT("assetPath"), AssetPath);
+				Payload->SetStringField(TEXT("socketName"), SocketName);
+				Payload->SetObjectField(TEXT("relativeLocation"), MCPVec3ToJsonObject(PrevLoc));
+				Payload->SetObjectField(TEXT("relativeRotation"), MCPRotatorToJsonObject(PrevRot));
+				Payload->SetObjectField(TEXT("relativeScale"), MCPVec3ToJsonObject(PrevScale));
+				Payload->SetStringField(TEXT("onConflict"), TEXT("update"));
+				MCPSetRollback(Result, TEXT("add_socket"), Payload);
+				return MCPResult(Result);
+			}
+		}
+		// Idempotent: socket already absent.
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("socketName"), SocketName);
+		Noop->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+		Noop->SetStringField(TEXT("source"), TEXT("mesh"));
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
+	}
+
+	if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
+	{
+		auto& Sockets = SKM->GetMeshOnlySocketList();
+		for (int32 i = 0; i < Sockets.Num(); ++i)
+		{
+			if (Sockets[i] && Sockets[i]->SocketName == FName(*SocketName))
+			{
+				// Captured before the removal, and the bone with it: a socket
+				// restored onto the wrong bone is attached to the wrong part of
+				// the skeleton however right its transform is.
+				const FVector PrevLoc = Sockets[i]->RelativeLocation;
+				const FRotator PrevRot = Sockets[i]->RelativeRotation;
+				const FVector PrevScale = Sockets[i]->RelativeScale;
+				const FString PrevBone = Sockets[i]->BoneName.ToString();
+
+				SKM->Modify();
+				Sockets[i]->Modify();
+				Sockets.RemoveAt(i);
+				SKM->MarkPackageDirty();
+				SKM->PostEditChange();
+
+				auto Result = MCPSuccess();
+				Result->SetStringField(TEXT("removed"), SocketName);
+				Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+				Result->SetStringField(TEXT("source"), TEXT("mesh"));
+				Result->SetBoolField(TEXT("deleted"), true);
+
+				TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+				Payload->SetStringField(TEXT("assetPath"), AssetPath);
+				Payload->SetStringField(TEXT("socketName"), SocketName);
+				Payload->SetStringField(TEXT("boneName"), PrevBone);
+				Payload->SetObjectField(TEXT("relativeLocation"), MCPVec3ToJsonObject(PrevLoc));
+				Payload->SetObjectField(TEXT("relativeRotation"), MCPRotatorToJsonObject(PrevRot));
+				Payload->SetObjectField(TEXT("relativeScale"), MCPVec3ToJsonObject(PrevScale));
+				Payload->SetStringField(TEXT("onConflict"), TEXT("update"));
+				MCPSetRollback(Result, TEXT("add_socket"), Payload);
+				return MCPResult(Result);
+			}
+		}
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("socketName"), SocketName);
+		Noop->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+		Noop->SetStringField(TEXT("source"), TEXT("mesh"));
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
+	}
+
+	// #465: Skeleton-level socket removal.
+	if (USkeleton* Skel = Cast<USkeleton>(Asset))
+	{
+		for (int32 i = 0; i < Skel->Sockets.Num(); ++i)
+		{
+			if (Skel->Sockets[i] && Skel->Sockets[i]->SocketName == FName(*SocketName))
+			{
+				const FVector PrevLoc = Skel->Sockets[i]->RelativeLocation;
+				const FRotator PrevRot = Skel->Sockets[i]->RelativeRotation;
+				const FVector PrevScale = Skel->Sockets[i]->RelativeScale;
+				const FString PrevBone = Skel->Sockets[i]->BoneName.ToString();
+
+				Skel->Modify();
+				Skel->Sockets[i]->Modify();
+				Skel->Sockets.RemoveAt(i);
+				Skel->MarkPackageDirty();
+				Skel->PostEditChange();
+				auto Result = MCPSuccess();
+				Result->SetStringField(TEXT("removed"), SocketName);
+				Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+				Result->SetStringField(TEXT("source"), TEXT("skeleton"));
+				Result->SetBoolField(TEXT("deleted"), true);
+
+				// The same assetPath routes add_socket back to the Skeleton's
+				// own socket array, so the rig-level socket is restored where it
+				// lived rather than on a mesh.
+				TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+				Payload->SetStringField(TEXT("assetPath"), AssetPath);
+				Payload->SetStringField(TEXT("socketName"), SocketName);
+				Payload->SetStringField(TEXT("boneName"), PrevBone);
+				Payload->SetObjectField(TEXT("relativeLocation"), MCPVec3ToJsonObject(PrevLoc));
+				Payload->SetObjectField(TEXT("relativeRotation"), MCPRotatorToJsonObject(PrevRot));
+				Payload->SetObjectField(TEXT("relativeScale"), MCPVec3ToJsonObject(PrevScale));
+				Payload->SetStringField(TEXT("onConflict"), TEXT("update"));
+				MCPSetRollback(Result, TEXT("add_socket"), Payload);
+				return MCPResult(Result);
+			}
+		}
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("socketName"), SocketName);
+		Noop->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+		Noop->SetStringField(TEXT("source"), TEXT("skeleton"));
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
+	}
+
+	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh, SkeletalMesh, or Skeleton"), *AssetPath));
+}
+
+
+TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	UObject* Asset = MCPLoadAssetObject(AssetPath);
+	if (!Asset)
+	{
+		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
+	}
+
+	auto Result = MCPSuccess();
+	TArray<TSharedPtr<FJsonValue>> SocketArray;
+	int32 MeshSocketCount = 0;
+	int32 SkeletonSocketCount = 0;
+
+	auto AppendSkeletalSocket = [&SocketArray](const USkeletalMeshSocket* Socket, const TCHAR* Source)
+	{
+		if (!Socket) return;
+		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+		S->SetStringField(TEXT("name"), Socket->SocketName.ToString());
+		S->SetStringField(TEXT("boneName"), Socket->BoneName.ToString());
+		S->SetStringField(TEXT("source"), Source);
+
+		TSharedPtr<FJsonObject> Loc = MCPVec3ToJsonObject(Socket->RelativeLocation);
+		S->SetObjectField(TEXT("relativeLocation"), Loc);
+
+		TSharedPtr<FJsonObject> Rot = MCPRotatorToJsonObject(Socket->RelativeRotation);
+		S->SetObjectField(TEXT("relativeRotation"), Rot);
+
+		TSharedPtr<FJsonObject> Scale = MCPVec3ToJsonObject(Socket->RelativeScale);
+		S->SetObjectField(TEXT("relativeScale"), Scale);
+
+		SocketArray.Add(MakeShared<FJsonValueObject>(S));
+	};
+
+	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
+	{
+		for (UStaticMeshSocket* Socket : SM->Sockets)
+		{
+			if (!Socket) continue;
+			TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+			S->SetStringField(TEXT("name"), Socket->SocketName.ToString());
+			S->SetStringField(TEXT("tag"), Socket->Tag);
+			S->SetStringField(TEXT("source"), TEXT("mesh"));
+
+			TSharedPtr<FJsonObject> Loc = MCPVec3ToJsonObject(Socket->RelativeLocation);
+			S->SetObjectField(TEXT("relativeLocation"), Loc);
+
+			TSharedPtr<FJsonObject> Rot = MCPRotatorToJsonObject(Socket->RelativeRotation);
+			S->SetObjectField(TEXT("relativeRotation"), Rot);
+
+			TSharedPtr<FJsonObject> Scale = MCPVec3ToJsonObject(Socket->RelativeScale);
+			S->SetObjectField(TEXT("relativeScale"), Scale);
+
+			SocketArray.Add(MakeShared<FJsonValueObject>(S));
+			++MeshSocketCount;
+		}
+		Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+	}
+	else if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
+	{
+		for (USkeletalMeshSocket* Socket : SKM->GetMeshOnlySocketList())
+		{
+			if (!Socket) continue;
+			AppendSkeletalSocket(Socket, TEXT("mesh"));
+			++MeshSocketCount;
+		}
+		if (USkeleton* Skel = SKM->GetSkeleton())
+		{
+			Result->SetStringField(TEXT("skeletonPath"), Skel->GetPathName());
+			for (USkeletalMeshSocket* Socket : Skel->Sockets)
+			{
+				if (!Socket) continue;
+				AppendSkeletalSocket(Socket, TEXT("skeleton"));
+				++SkeletonSocketCount;
+			}
+		}
+		Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+	}
+	else if (USkeleton* Skel = Cast<USkeleton>(Asset))
+	{
+		// #465: rig-level sockets live here. List them with the same shape as mesh sockets.
+		for (USkeletalMeshSocket* Socket : Skel->Sockets)
+		{
+			if (!Socket) continue;
+			AppendSkeletalSocket(Socket, TEXT("skeleton"));
+			++SkeletonSocketCount;
+		}
+		Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+	}
+	else
+	{
+		return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh, SkeletalMesh, or Skeleton"), *AssetPath));
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("socketCount"), SocketArray.Num());
+	Result->SetNumberField(TEXT("count"), SocketArray.Num());
+	Result->SetNumberField(TEXT("meshSocketCount"), MeshSocketCount);
+	Result->SetNumberField(TEXT("skeletonSocketCount"), SkeletonSocketCount);
+	Result->SetArrayField(TEXT("sockets"), SocketArray);
+
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_socket_transform -- Update an existing socket's relative transform on a
+// StaticMesh or SkeletalMesh. FBX-imported SOCKET_* empties commonly land with
+// relative_scale=(100,100,100) and need to be corrected without recreating
+// the socket (#412).
+// ---------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------
+// set_socket_transform -- Update an existing socket's relative transform on a
+// StaticMesh or SkeletalMesh. FBX-imported SOCKET_* empties commonly land with
+// relative_scale=(100,100,100) and need to be corrected without recreating
+// the socket (#412).
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAssetHandlers::SetSocketTransform(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString SocketName;
+	if (auto Err = RequireString(Params, TEXT("socketName"), SocketName)) return Err;
+
+	// Optional transform components - only fields that are passed are written.
+	// Every parameter is read before the asset loads (#1057).
+	const bool bHasLoc = HasParam(Params, TEXT("relativeLocation"));
+	const bool bHasRot = HasParam(Params, TEXT("relativeRotation"));
+	const bool bHasScale = HasParam(Params, TEXT("relativeScale"));
+
+	FVector NewLoc = FVector::ZeroVector;
+	FRotator NewRot = FRotator::ZeroRotator;
+	FVector NewScale = FVector::OneVector;
+	if (const TSharedPtr<FJsonObject>* LocObj; TryGetObjectParam(Params, TEXT("relativeLocation"), LocObj))
+	{
+		NewLoc.X = (*LocObj)->GetNumberField(TEXT("x"));
+		NewLoc.Y = (*LocObj)->GetNumberField(TEXT("y"));
+		NewLoc.Z = (*LocObj)->GetNumberField(TEXT("z"));
+	}
+	if (const TSharedPtr<FJsonObject>* RotObj; TryGetObjectParam(Params, TEXT("relativeRotation"), RotObj))
+	{
+		NewRot.Pitch = (*RotObj)->GetNumberField(TEXT("pitch"));
+		NewRot.Yaw   = (*RotObj)->GetNumberField(TEXT("yaw"));
+		NewRot.Roll  = (*RotObj)->GetNumberField(TEXT("roll"));
+	}
+	if (const TSharedPtr<FJsonObject>* ScaleObj; TryGetObjectParam(Params, TEXT("relativeScale"), ScaleObj))
+	{
+		NewScale.X = (*ScaleObj)->GetNumberField(TEXT("x"));
+		NewScale.Y = (*ScaleObj)->GetNumberField(TEXT("y"));
+		NewScale.Z = (*ScaleObj)->GetNumberField(TEXT("z"));
+	}
+
+	UObject* Asset = MCPLoadAssetObject(AssetPath);
+	if (!Asset)
+	{
+		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
+	}
+	if (!bHasLoc && !bHasRot && !bHasScale)
+	{
+		return MCPError(TEXT("Pass at least one of relativeLocation, relativeRotation, relativeScale"));
+	}
+
+	// Build the rollback payload from the pre-change values so we can restore.
+	auto BuildRollback = [&](const FVector& PrevLoc, const FRotator& PrevRot, const FVector& PrevScale)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("socketName"), SocketName);
+		TSharedPtr<FJsonObject> PrevLocObj = MCPVec3ToJsonObject(PrevLoc);
+		Payload->SetObjectField(TEXT("relativeLocation"), PrevLocObj);
+		TSharedPtr<FJsonObject> PrevRotObj = MCPRotatorToJsonObject(PrevRot);
+		Payload->SetObjectField(TEXT("relativeRotation"), PrevRotObj);
+		TSharedPtr<FJsonObject> PrevScaleObj = MCPVec3ToJsonObject(PrevScale);
+		Payload->SetObjectField(TEXT("relativeScale"), PrevScaleObj);
+		return Payload;
+	};
+
+	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
+	{
+		for (UStaticMeshSocket* Existing : SM->Sockets)
+		{
+			if (Existing && Existing->SocketName == FName(*SocketName))
+			{
+				const FVector PrevLoc = Existing->RelativeLocation;
+				const FRotator PrevRot = Existing->RelativeRotation;
+				const FVector PrevScale = Existing->RelativeScale;
+				SM->Modify();
+				Existing->Modify();
+				if (bHasLoc)   Existing->RelativeLocation = NewLoc;
+				if (bHasRot)   Existing->RelativeRotation = NewRot;
+				if (bHasScale) Existing->RelativeScale = NewScale;
+				SM->MarkPackageDirty();
+
+				auto Result = MCPSuccess();
+				MCPSetUpdated(Result);
+				Result->SetStringField(TEXT("socketName"), SocketName);
+				Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+				Result->SetStringField(TEXT("source"), TEXT("mesh"));
+				MCPSetRollback(Result, TEXT("set_socket_transform"), BuildRollback(PrevLoc, PrevRot, PrevScale));
+				return MCPResult(Result);
+			}
+		}
+		return MCPError(FString::Printf(TEXT("Socket '%s' not found on StaticMesh '%s'"), *SocketName, *AssetPath));
+	}
+
+	if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
+	{
+		for (USkeletalMeshSocket* Existing : SKM->GetMeshOnlySocketList())
+		{
+			if (Existing && Existing->SocketName == FName(*SocketName))
+			{
+				const FVector PrevLoc = Existing->RelativeLocation;
+				const FRotator PrevRot = Existing->RelativeRotation;
+				const FVector PrevScale = Existing->RelativeScale;
+				SKM->Modify();
+				Existing->Modify();
+				if (bHasLoc)   Existing->RelativeLocation = NewLoc;
+				if (bHasRot)   Existing->RelativeRotation = NewRot;
+				if (bHasScale) Existing->RelativeScale = NewScale;
+				SKM->MarkPackageDirty();
+				SKM->PostEditChange();
+
+				auto Result = MCPSuccess();
+				MCPSetUpdated(Result);
+				Result->SetStringField(TEXT("socketName"), SocketName);
+				Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+				Result->SetStringField(TEXT("source"), TEXT("mesh"));
+				MCPSetRollback(Result, TEXT("set_socket_transform"), BuildRollback(PrevLoc, PrevRot, PrevScale));
+				return MCPResult(Result);
+			}
+		}
+		return MCPError(FString::Printf(TEXT("Socket '%s' not found on SkeletalMesh '%s'"), *SocketName, *AssetPath));
+	}
+
+	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+}
+
+// ---------------------------------------------------------------------------
+// reload_package -- Force reload an asset package from disk (#53)
+// ---------------------------------------------------------------------------

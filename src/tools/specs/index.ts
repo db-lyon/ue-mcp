@@ -4,7 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import type { HandlerSpecs } from "../../handler-spec.js";
+import type { HandlerSpecs } from "../../surface/handler-spec.js";
 import { handlerSpecs as animation } from "./animation.generated.js";
 import { handlerSpecs as asset } from "./asset.generated.js";
 import { handlerSpecs as audio } from "./audio.generated.js";

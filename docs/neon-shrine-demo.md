@@ -72,7 +72,7 @@ This wipes `/Game/Demo/` and removes the demo actors from the level.
 - **Showcase.** It's a single command that produces something visible.
 - **Reference.** Each step is a real handler call you can imitate. If you want to know how to spawn a colored point light or set up a PCG volume, look at how the corresponding step does it.
 
-The implementation lives in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/DemoHandlers.cpp`.
+The implementation lives in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/Demo/DemoHandlers.cpp`.
 
 ## See Also
 

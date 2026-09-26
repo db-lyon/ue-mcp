@@ -12,7 +12,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
-#include "Handlers/AssetHandlers_Geometry.h"
+#include "Handlers/Asset/AssetHandlers_Geometry.h"
 #include "Misc/AutomationTest.h"
 
 namespace

@@ -17,7 +17,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/AssetHandlers.h"
+#include "Handlers/Asset/AssetHandlers.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"

@@ -12,8 +12,8 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
-#include "Handlers/AssetHandlers.h"
-#include "Handlers/ReflectionHandlers.h"
+#include "Handlers/Asset/AssetHandlers.h"
+#include "Handlers/Reflection/ReflectionHandlers.h"
 #include "Tests/MCPScopedTestMount.h"
 
 #include "Dom/JsonObject.h"

@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 // Run the deployer manually to sync plugin/ → tests/ue_mcp/Plugins/
 // without starting the full MCP server.
-import { deploy, deploySummary } from "../dist/deployer.js";
-import { ProjectContext } from "../dist/project.js";
+// Loads the TS source through tsx, so a stale or missing dist/ cannot deploy
+// with old deployer code.
+import { tsImport } from "tsx/esm/api";
+
+const { deploy, deploySummary } = await tsImport("../src/editor/deployer.ts", import.meta.url);
+const { ProjectContext } = await tsImport("../src/config/project.ts", import.meta.url);
 
 const proj = new ProjectContext();
 const target = process.argv[2] ?? "tests/ue_mcp/ue_mcp.uproject";

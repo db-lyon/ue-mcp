@@ -22,10 +22,10 @@ import {
   type HandlerSpec,
   type HandlerSpecs,
   type ParamSpec,
-} from "../../src/handler-spec.js";
-import { actionSchema, parseParams } from "../../src/action-schema.js";
-import { categoryTool } from "../../src/types.js";
-import { prepareCall } from "../../src/call-pipeline.js";
+} from "../../src/surface/handler-spec.js";
+import { actionSchema, parseParams } from "../../src/surface/action-schema.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
+import { prepareCall } from "../../src/dispatch/call-pipeline.js";
 import { bridgeTaskClass } from "../../src/flow/task-factory.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -156,7 +156,7 @@ describe("value shapes", () => {
       set: makeSpecBp({ probe_set: paramsClause({ params: shapes }) }, { probe_set: { category: "probe", params: shapes } })(
         "mutate", "Set it.", "probe_set",
       ),
-    }, undefined, Object.fromEntries(shapes.map((s) => [s.name, paramZod(s).optional()])));
+    }, Object.fromEntries(shapes.map((s) => [s.name, paramZod(s).optional()])));
     const schema = actionSchema(tool, "set");
     const typeOf = (name: string) => schema.params.find((x) => x.name === name)?.type;
     expect(typeOf("tint")).toBe("object");
@@ -237,7 +237,7 @@ describe("choices", () => {
     const specBp = makeSpecBp({ probe_settings: paramsClause(SETTINGS) }, { probe_settings: SETTINGS });
     const action = specBp("mutate", "Set node settings.", "probe_settings");
     expect(action.kind === "bridge" && action.paramChoices).toEqual(SETTINGS.choices);
-    const tool = categoryTool("probe", "Probe.", { set_node_settings: action }, undefined,
+    const tool = categoryTool("probe", "Probe.", { set_node_settings: action },
       Object.fromEntries(SETTINGS.params.flatMap((x) => [x.name, ...(x.aliases ?? [])]).map((n) => [n, z.unknown().optional()])));
     const schema = actionSchema(tool, "set_node_settings");
     expect(schema.alternatives).toEqual([{ branches: [["settings"], ["propertyName", "propertyValue"]], required: true }]);
@@ -264,7 +264,7 @@ describe("the choice check at the TS boundary", () => {
       project: {},
     };
   }
-  const tool = () => categoryTool("probe", "Probe.", { set_node_settings: specBp("mutate", "Set.", "probe_settings") }, undefined, {
+  const tool = () => categoryTool("probe", "Probe.", { set_node_settings: specBp("mutate", "Set.", "probe_settings") }, {
     assetPath: z.string().optional(), nodeName: z.string().optional(), settings: z.record(z.unknown()).optional(),
     propertyName: z.string().optional(), propertyValue: z.string().optional(),
   });

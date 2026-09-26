@@ -15,7 +15,7 @@
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
 #include "JsonSerializer.h"
-#include "Handlers/AssetHandlers.h"
+#include "Handlers/Asset/AssetHandlers.h"
 #include "Components/SceneComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -475,7 +475,7 @@ bool FJsonPropertyReferenceKindTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("a null property is not a reference"), ClassifyReference(nullptr) == ERefKind::NotAReference);
 
 	// A native class path resolves as written, and a class-typed field takes it.
-	UClass* Resolved = MCPJsonProperty::ResolveClassPath(TEXT("/Script/Engine.DefaultPawn"));
+	UClass* Resolved = MCPResolveClass(TEXT("/Script/Engine.DefaultPawn"));
 	TestTrue(TEXT("a native class path resolves without a suffix"), Resolved == ADefaultPawn::StaticClass());
 
 	FDefaultConstructedPropertyElement HardClassValue(SubclassOfProp);

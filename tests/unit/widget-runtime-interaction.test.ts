@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { widgetTool } from "../../src/tools/widget.js";
-import type { ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/core/types.js";
 
 describe("widget.invoke_runtime_function", () => {
   it("forwards the child interaction payload the C++ handler reads", async () => {

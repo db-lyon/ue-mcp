@@ -3,13 +3,14 @@ import { FlowDefinitionSchema, FlowRunner } from "@db-lyon/flowkit";
 import type { TaskConstructor, TaskResult } from "@db-lyon/flowkit";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import type { FlowContext } from "../../src/flow/context.js";
-import { applyLeanContext, buildMicroGateway } from "../../src/lean-context.js";
-import { nativeHandlerSurface } from "../../src/plugin/loader.js";
-import { PluginManifestSchema } from "../../src/plugin/manifest.js";
-import { buildProvidedTool } from "../../src/plugin/provision.js";
-import { categoryTool } from "../../src/types.js";
+import { applyLeanContext } from "../../src/surface/context/lean-context.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
+import { nativeHandlerSurface } from "../../src/extensions/loader.js";
+import { PluginManifestSchema } from "../../src/extensions/manifest.js";
+import { buildProvidedTool } from "../../src/extensions/provision.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
 import { UeMcpTask } from "../../src/task.js";
-import type { IBridge } from "../../src/bridge.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 
 // The same manifest -> registry-kind action -> native task registration path
 // as PIE Studio, without installing a plugin or contacting an editor.
@@ -94,7 +95,7 @@ describe("micro calls use the session task registry", () => {
     const answer = { success: false, error: "partially applied", detail: "keep this",
       rollback: { method: "undo_input", payload: { assetPath: "/Game/Take" } } };
     const { ctx } = context(answer);
-    if (inFlow) ctx.taskReferenceContext = {};
+    if (inFlow) ctx.taskReferenceContext = { steps: [] };
     const args = { assetPath: "/Game/Take", select: ["detail"] };
     const micro = await registry.create("tools.call", ctx, { category: "pie", method: "inject_input", args });
     const direct = await registry.create("pie.inject_input", ctx, args);
@@ -193,7 +194,7 @@ describe("micro calls use the session task registry", () => {
     let folds = 0;
     const probe = categoryTool("probe", "Probe", {
       read: { kind: "handler", effect: "read", handler: async (ctx, p) => ({ ...p, budget: ctx.callTimeoutMs }) },
-    }, undefined, undefined, { normalizeParams: (p) => { folds++; return { ...p, canonical: p.alias }; } });
+    }, undefined, { normalizeParams: (p) => { folds++; return { ...p, canonical: p.alias }; } });
     const registry = buildFlowRegistry([buildMicroGateway([probe]), probe]);
     const { ctx } = context();
     const task = await registry.create("tools.call", ctx, {

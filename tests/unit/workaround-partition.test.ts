@@ -8,43 +8,36 @@
  * stack was a single module-level array.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-import type { ToolContext, ElicitFn } from "../../src/types.js";
+import type { ToolContext, ElicitFn } from "../../src/core/types.js";
 import {
   pushWorkaround,
   getWorkarounds,
   clearWorkarounds,
   workaroundCount,
   resetAllWorkarounds,
-} from "../../src/workaround-tracker.js";
-import { SessionRegistry } from "../../src/session.js";
+} from "../../src/dispatch/workaround-tracker.js";
+import { SessionRegistry } from "../../src/sessions/session.js";
+import { ProjectFixture } from "../helpers/project-fixture.js";
 
 const mockSubmitFeedback = vi.fn();
-vi.mock("../../src/github-app.js", () => ({
+vi.mock("../../src/feedback/github-app.js", () => ({
   submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
 }));
 
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/auth.js", () => ({
+vi.mock("../../src/feedback/github-auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 
 const { feedbackTool } = await import("../../src/tools/feedback.js");
 
 let root: string;
-
-function makeProject(name: string): string {
-  const dir = path.join(root, name);
-  fs.mkdirSync(dir, { recursive: true });
-  const uproject = path.join(dir, `${name}.uproject`);
-  fs.writeFileSync(uproject, JSON.stringify({ FileVersion: 3, EngineAssociation: "5.6" }), "utf-8");
-  return uproject;
-}
+let fixture: ProjectFixture;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-workaround-"));
+  fixture = new ProjectFixture("ue-mcp-workaround-");
+  root = fixture.root;
   resetAllWorkarounds();
   process.env.UE_MCP_FEEDBACK_ROUTING = "off";
   // Redirect ~/.ue-mcp/state.json into the same temp root. resolveFeedbackMode
@@ -62,7 +55,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(root, { recursive: true, force: true });
+  fixture.cleanup();
   resetAllWorkarounds();
   delete process.env.UE_MCP_FEEDBACK_ROUTING;
   delete process.env.UE_MCP_USER_STATE;
@@ -103,8 +96,8 @@ describe("workaround tracker partitioning", () => {
 
 describe("feedback(submit) payload isolation", () => {
   it("bundles only the submitting editor's workarounds and scrubs the other's identifiers", async () => {
-    const alpha = makeProject("Alpha");
-    const beta = makeProject("BetaProjectName");
+    const alpha = fixture.makeProject("Alpha");
+    const beta = fixture.makeProject("BetaProjectName");
     const sessions = new SessionRegistry();
     const sa = sessions.register({ projectPath: alpha });
     const sb = sessions.register({ projectPath: beta });

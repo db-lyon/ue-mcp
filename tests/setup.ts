@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { EditorBridge } from "../src/bridge.js";
+import { EditorBridge } from "../src/bridge/bridge.js";
 import {
   assertLoopbackHost,
   bridgePortCandidates,

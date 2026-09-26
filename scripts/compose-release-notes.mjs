@@ -469,6 +469,9 @@ const MENTION_HEADING =
  * Which top-level section a merged heading belongs under. Fixes are tested
  * first so "Bug fixes" does not read as a mention, and anything unrecognised
  * is a feature, because that is what a new category section is.
+ *
+ * @param {string | null | undefined} heading
+ * @param {string | null} [top]
  */
 export function classifySection(heading, top = null) {
   // What the input said, when it said anything. The heuristic below is a
@@ -544,6 +547,13 @@ export function renderBody({ version, headline, preamble, sections, contributors
  *
  * With no prereleases there is nothing to accumulate, so the local file is the
  * answer as written and is returned unchanged.
+ *
+ * @param {{
+ *   version: string,
+ *   prereleases?: Array<{ tag: string, body: string, headline?: string[] }>,
+ *   localNotes?: string | null,
+ *   contributors?: string[],
+ * }} options
  */
 export function composeReleaseNotes({ version, prereleases = [], localNotes = null, contributors = [] }) {
   parseVersion(version);
@@ -687,6 +697,11 @@ function currentRepo(run = gh) {
  * Reads the compare API rather than `git log`, because a release credits
  * handles and a commit only carries an email. A tag that does not exist yet,
  * or an API that will not answer, yields nobody rather than failing the cut.
+ *
+ * @param {string} repo
+ * @param {string} base
+ * @param {string} head
+ * @param {{ exclude?: string[], run?: (args: string[]) => string }} [options]
  */
 export function contributorsBetween(repo, base, head, { exclude = [], run = gh } = {}) {
   let payload;

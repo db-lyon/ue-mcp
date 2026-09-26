@@ -11,10 +11,10 @@ import type {
 } from "@db-lyon/flowkit";
 import type { FlowContext } from "./context.js";
 import type { FlowConfig } from "./schema.js";
-import type { ToolDef, ToolContext, ActionSpec } from "../types.js";
-import { actionEnum } from "../types.js";
-import { McpError, ErrorCode } from "../errors.js";
-import { nearestActions } from "../action-schema.js";
+import type { ToolDef, ToolContext, ActionSpec } from "../core/types.js";
+import { actionEnum } from "../surface/category-tool.js";
+import { McpError, ErrorCode } from "../core/errors.js";
+import { nearestActions } from "../surface/action-schema.js";
 import {
   takeSnapshot,
   restoreSnapshot,

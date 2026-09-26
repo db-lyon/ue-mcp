@@ -9,10 +9,19 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { EditorProcess } from "../../src/engine-observer.js";
+import type { EditorProcess } from "../../src/editor/engine-observer.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
-vi.mock("../../src/engine-observer.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/engine-observer.js")>();
+// No unit test may launch a real editor. An unknown EngineAssociation still
+// resolves to the machine's default install, so the launch is stubbed here.
+const spawnMock = vi.hoisted(() => vi.fn(() => ({ unref: () => {}, on: () => {} })));
+vi.mock("child_process", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("child_process")>()),
+  spawn: spawnMock,
+}));
+
+vi.mock("../../src/editor/engine-observer.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/editor/engine-observer.js")>();
   return {
     ...actual,
     listEditorProcesses: vi.fn(async () => []),
@@ -31,10 +40,10 @@ vi.mock("../../src/engine-observer.js", async (importOriginal) => {
   };
 });
 
-const observer = await import("../../src/engine-observer.js");
-const { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../src/editor-control.js");
-const { bridgeLockfilePath } = await import("../../src/editor-target.js");
-const { ProjectContext } = await import("../../src/project.js");
+const observer = await import("../../src/editor/engine-observer.js");
+const { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../src/editor/editor-control.js");
+const { bridgeLockfilePath } = await import("../../src/bridge/editor-target.js");
+const { ProjectContext } = await import("../../src/config/project.js");
 
 const findInteractiveEditors = vi.mocked(observer.findInteractiveEditors);
 // Stop and ownership also see headless editors; one list stands in for both here.
@@ -326,7 +335,6 @@ describe("a lifecycle no-op fails, and says why it did", () => {
   });
 
   it("waits out an editor whose log is closed instead of calling it running (#1179)", async () => {
-    // Engine 9.9 resolves to no executable, so the launch this reaches spawns nothing.
     const { projectPath } = makeProject();
     fs.writeFileSync(projectPath, JSON.stringify({ EngineAssociation: "9.9" }));
     const project = new ProjectContext();
@@ -338,13 +346,23 @@ describe("a lifecycle no-op fails, and says why it did", () => {
       log: { logPath: null, secondsSinceWrite: 1, phase: "editor exited", blocking: false, lastLine: null, tail: [], errors: [], warnings: [] },
       snapshot: null,
       dialogs: [],
+      processProbeFailed: false,
+      runningEvidence: "process-table",
+      snapshotSource: "none",
       summary: "Editor is up (editor exited).",
       blocked: false,
-    } as Awaited<ReturnType<typeof observer.readEngineState>>);
+    });
 
-    const result = await startEditor(project, 1);
-    expect(result.alreadyRunning).toBeUndefined();
-    expect(result.message).not.toContain("already running");
+    // A fixed binary, so the launch is reached on a machine with no engine too.
+    vi.stubEnv("UE_EDITOR_PATH", path.join(os.tmpdir(), "UnrealEditor-stub.exe"));
+    try {
+      const result = await startEditor(project, 1);
+      expect(result.alreadyRunning).toBeUndefined();
+      expect(result.message).not.toContain("already running");
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("refuses a stop for an editor that is already down, and marks the reason", async () => {
@@ -383,13 +401,7 @@ describe("a lifecycle no-op fails, and says why it did", () => {
  * a no-op rather than a broken call.
  */
 describe("pie_control fails a no-op and marks it", () => {
-  const pieSource = fs.readFileSync(
-    new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/EditorHandlers_PIE.cpp",
-      import.meta.url,
-    ),
-    "utf8",
-  );
+  const pieSource = readHandlerFile("EditorHandlers_PIE.cpp");
 
   /** The body of one `if` branch inside PieControl, by the text that opens it. */
   function branchAfter(marker: string): string {
@@ -422,13 +434,7 @@ describe("pie_control fails a no-op and marks it", () => {
 
 describe("native editor shutdown", () => {
   it("uses MainFrame so standalone asset editors close before subsystem teardown", () => {
-    const source = fs.readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/EditorHandlers.cpp",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+    const source = readHandlerFile("EditorHandlers.cpp");
     const buildRules = fs.readFileSync(
       new URL(
         "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/UE_MCP_Bridge.Build.cs",

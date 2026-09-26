@@ -17,8 +17,8 @@ import {
   resolveEditorFlag,
   takeEditorTarget,
   EditorFlagError,
-} from "../../src/editor-flag.js";
-import { SessionRegistry } from "../../src/session.js";
+} from "../../src/cli/editor-flag.js";
+import { SessionRegistry } from "../../src/sessions/session.js";
 
 let root: string;
 
@@ -36,7 +36,7 @@ function writeMcpJson(cwd: string, projects: string[]): void {
     path.join(cwd, ".mcp.json"),
     JSON.stringify({
       mcpServers: {
-        "ue-mcp": { command: "npx", args: ["ue-mcp", ...projects.map((p) => p.replace(/\\/g, "/"))] },
+        "ue-mcp": { command: "npx", args: ["-y", "ue-mcp@latest", ...projects.map((p) => p.replace(/\\/g, "/"))] },
       },
     }),
     "utf-8",

@@ -21,14 +21,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { EditorBridge, readBridgeErrorRecord, readBridgeLockfile } from "../../src/bridge.js";
-import { resolveBridgeTarget, isPidAlive } from "../../src/editor-target.js";
-import { checkPluginFreshness } from "../../src/plugin-freshness.js";
-import { attach } from "../../src/deployer.js";
-import { startEditor } from "../../src/editor-control.js";
-import { switchProject } from "../../src/project-switch.js";
-import { ProjectContext } from "../../src/project.js";
-import { requestedPortPath } from "../../src/requested-port.js";
+import { EditorBridge, readBridgeErrorRecord } from "../../src/bridge/bridge.js";
+import { resolveBridgeTarget, isPidAlive, readBridgeLockfileIn } from "../../src/bridge/editor-target.js";
+import { checkPluginFreshness } from "../../src/editor/bridge-freshness.js";
+import { attach } from "../../src/editor/deployer.js";
+import { startEditor } from "../../src/editor/editor-control.js";
+import { switchProject } from "../../src/sessions/project-switch.js";
+import { ProjectContext } from "../../src/config/project.js";
+import { requestedPortPath } from "../../src/bridge/requested-port.js";
 import { LiveServer, resultJson } from "./server.js";
 import { closeLiveBridges, liveTarget, makeTempProject } from "./harness.js";
 
@@ -105,7 +105,7 @@ describe("the single-editor shape is the shape it always was", () => {
 
 describe("the editor's own records", () => {
   it("publishes a port lockfile whose process is alive and answering", () => {
-    const lockfile = readBridgeLockfile(target.uproject);
+    const lockfile = readBridgeLockfileIn(target.projectDir);
     expect(lockfile).toBeTruthy();
     expect(lockfile!.port).toBe(target.port);
     expect(isPidAlive(lockfile!.pid!)).toBe(true);

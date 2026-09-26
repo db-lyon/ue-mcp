@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { categoryTool, type ToolDef } from "../types.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/dataflow.generated.js";
 
 /**
@@ -19,6 +19,5 @@ export const dataflowTool: ToolDef = categoryTool(
   "dataflow",
   "Dataflow graphs: node and pin authoring, variables, comment boxes, templates, and creation of Dataflow-compatible assets (Chaos geometry and simulation graphs). Requires UE 5.8+ with the Dataflow toolsets available.",
   { ...epicActions },
-  undefined,
   { ...epicSchema },
 );

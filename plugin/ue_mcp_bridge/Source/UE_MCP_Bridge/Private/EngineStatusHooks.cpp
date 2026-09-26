@@ -2,7 +2,7 @@
 #include "MCPEngineStatus.h"
 #include "UE_MCP_BridgeModule.h"
 #include "GameThreadExecutor.h"
-#include "Handlers/DialogHandlers.h"
+#include "Handlers/Dialog/DialogHandlers.h"
 
 #include "Framework/Application/SlateApplication.h"
 

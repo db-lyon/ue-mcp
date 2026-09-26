@@ -2,24 +2,25 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { isDirectiveResponse, type ToolContext, type ElicitFn, type ElicitResult } from "../../src/types.js";
-import { clearWorkarounds } from "../../src/workaround-tracker.js";
+import type { ToolContext, ElicitFn, ElicitResult } from "../../src/core/types.js";
+import { isDirectiveResponse } from "../../src/core/directive.js";
+import { clearWorkarounds } from "../../src/dispatch/workaround-tracker.js";
 import {
   buildPrefilledIssueUrl,
   writeFallbackReport,
   findByConfirmToken,
   MaxIssueUrlChars,
-} from "../../src/feedback-fallback.js";
-import { CORE_REPO } from "../../src/registry-catalog.js";
-import { listDeferred } from "../../src/feedback-deferred.js";
+} from "../../src/feedback/feedback-fallback.js";
+import { CORE_REPO } from "../../src/extensions/registry-catalog.js";
+import { listDeferred } from "../../src/feedback/feedback-deferred.js";
 
 const mockSubmitFeedback = vi.fn();
-vi.mock("../../src/github-app.js", () => ({
+vi.mock("../../src/feedback/github-app.js", () => ({
   submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
 }));
 
 const mockReadUserAuth = vi.fn();
-vi.mock("../../src/auth.js", () => ({
+vi.mock("../../src/feedback/github-auth.js", () => ({
   readUserAuth: () => mockReadUserAuth(),
 }));
 
@@ -211,6 +212,8 @@ describe("feedback(submit, confirmToken)", () => {
     const r = await call(makeCtx(undefined), { confirmToken: token });
     if (!isDirectiveResponse(r)) throw new Error("expected a directive");
     expect((r.result as { code?: string }).code).toBe("repo_unavailable");
+    expect((r.result as { pending_id?: string }).pending_id).toBe(listDeferred()[0].id);
+    expect(r.directive).toContain("its token still works");
     expect(listDeferred()).toHaveLength(1);
     expect(findByConfirmToken(token)).not.toBeNull();
   });

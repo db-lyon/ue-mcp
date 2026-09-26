@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge, resultArray, TEST_PREFIX } from "../setup.js";
-import type { EditorBridge } from "../../src/bridge.js";
+import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 let bridge: EditorBridge;
 
@@ -63,7 +63,7 @@ describe("asset - write (with cleanup)", () => {
   it("duplicate_asset", async ({ skip }) => {
     const search = await callBridge(bridge, "search_assets", { query: "*", maxResults: 1 });
     const assets = resultArray(search.result, "assets");
-    if (!search.ok || !assets || assets.length === 0) skip();
+    if (!search.ok || !assets || assets.length === 0) return skip();
     const first = assets[0] as Record<string, unknown>;
     const src = (first.path ?? first.asset_path ?? first.objectPath) as string;
     const dest = `${TEST_PREFIX}/DuplicateTest`;

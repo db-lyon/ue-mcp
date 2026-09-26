@@ -1,12 +1,13 @@
 import { TaskRegistry, ShellTask } from "@db-lyon/flowkit";
 import type { TaskConstructor, TaskContextInput } from "@db-lyon/flowkit";
-import type { ToolDef } from "../types.js";
-import type { CallPreparation } from "../call-pipeline.js";
+import type { ToolDef } from "../core/types.js";
 import type { FlowContext } from "./context.js";
 import { BridgeTask } from "./bridge-task.js";
 import { bridgeTaskClass, handlerTaskClass } from "./task-factory.js";
-import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../lean-context.js";
-import { McpError, ErrorCode } from "../errors.js";
+import { actionPreparation } from "./run-action.js";
+import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../surface/context/micro-context.js";
+import { McpError, ErrorCode } from "../core/errors.js";
+import { paramMapperOf } from "../surface/epic-input.js";
 
 /** A gateway call is an alias for the target task, not a handler that executes
  *  another action and repackages its result. Both MCP and FlowRunner create
@@ -54,20 +55,9 @@ export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
     for (const [actionName, spec] of Object.entries(tool.actions)) {
       const taskName = `${tool.name}.${actionName}`;
 
-      // Everything the shared preparation cannot work out for itself. This is
-      // the live dispatch route, so anything missing from here is a piece of
-      // the advertised contract that only works in the tests: the category's
-      // parameter folding, the action name that folding branches on, and the
-      // nesting a gateway's parameters arrive under.
-      const prep: CallPreparation = {
-        action: actionName,
-        normalizeParams: tool.options?.normalizeParams,
-        paramGroups: tool.options?.paramGroups,
-        nestedParamsKey: tool.options?.nestedParamsKey,
-        paramChoices: spec.kind === "bridge" && spec.paramSpec && spec.paramChoices?.length
-          ? { params: spec.paramSpec, choices: spec.paramChoices }
-          : undefined,
-      };
+      // The same preparation a category tool's own handler builds, so the
+      // live route and every other route fold, repair and check alike.
+      const prep = actionPreparation(tool.options, actionName, spec);
 
       if (spec.handler) {
         // FlowContext is a structural superset of ToolContext (see
@@ -89,7 +79,7 @@ export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
           // widget.remove_widget) declare 120s because their method has no
           // entry in the editor's own timeout table, and dropping it here gave
           // them the 30s default on every live call.
-          bridgeTaskClass(taskName, spec.bridge, spec.mapParams, spec.timeoutMs, prep),
+          bridgeTaskClass(taskName, spec.bridge, paramMapperOf(spec), spec.timeoutMs, prep),
         );
       }
     }

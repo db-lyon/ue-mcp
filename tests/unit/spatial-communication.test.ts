@@ -1,12 +1,12 @@
-import * as fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { levelTool } from "../../src/tools/level.js";
-import { actionSchema } from "../../src/action-schema.js";
-import { buildMicroGateway } from "../../src/lean-context.js";
-import type { ToolContext } from "../../src/types.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
+import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
+import type { ToolContext } from "../../src/core/types.js";
 import { editorTool } from "../../src/tools/editor.js";
 import { projectTool } from "../../src/tools/project.js";
+import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 describe("spatial request contract", () => {
   it("rejects invalid capture margins: a non-number at the wire, a non-positive one in the handler", () => {
@@ -15,10 +15,7 @@ describe("spatial request contract", () => {
     for (const focusMargin of [NaN, "1.5"]) {
       expect(wire.safeParse({ action: "capture_scene_png", outputPath: "capture.png", focusMargin }).success).toBe(false);
     }
-    const source = fs.readFileSync(
-      new URL("../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/EditorHandlers.cpp", import.meta.url),
-      "utf8",
-    );
+    const source = readHandlerFile("EditorHandlers.cpp");
     expect(source).toContain("if (!FMath::IsFinite(FocusMargin) || FocusMargin <= 0.0)");
     expect(source).toContain("focusMargin must be finite and greater than zero");
   });

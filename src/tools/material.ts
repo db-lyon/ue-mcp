@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef } from "../types.js";
-import { PAGINATION_SCHEMA } from "../pagination.js";
+import type { ToolDef } from "../core/types.js";
+import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/material.generated.js";
 import { specBp, schema as specSchema } from "./specs/material.generated.js";
 
@@ -73,7 +73,6 @@ export const materialTool: ToolDef = categoryTool(
     remove_designer_layer: specBp("mutate", "Remove a layer from a Material Designer slot through UDMMaterialSlot::RemoveLayer, after CanRemoveLayer agrees (a slot keeps its base layer). Address it by objectPath, or by layerIndex or layerName in a target's slot. Runs in an editor transaction; the rollback is one editor undo (#1131).", "remove_material_designer_layer"),
     ...epicActions,
   },
-  undefined,
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
@@ -84,9 +83,5 @@ export const materialTool: ToolDef = categoryTool(
     slotIndex: z.number().int().min(0).optional().describe("read_instance / *_designer*: material slot index on the mesh component (default 0) (#1114/#1131)"),
     layerIndex: z.number().int().min(0).optional().describe("Material Designer layer index within the slot (#1131)"),
     maxDepth: z.number().int().min(1).optional().describe("read_designer: how deep to describe nested stages and values (default 10) (#1131)"),
-    // cursor + limit for the paged list actions. Declared once: the MCP layer
-    // strips a key the category never declares, so a paged action whose
-    // category omits these silently returns page one forever.
-    ...PAGINATION_SCHEMA,
   },
 );

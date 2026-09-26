@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
  * protocol correctly, and that it carries no credential of its own.
  */
 
-const { submitFeedback } = await import("../../src/github-app.js");
+const { submitFeedback } = await import("../../src/feedback/github-app.js");
 
 const REPO = { owner: "db-lyon", repo: "ue-mcp" };
 const ENDPOINT = "https://signing.example.test/api/feedback";
@@ -295,7 +295,7 @@ describe("the package ships no signing credential", () => {
       const text = fs.readFileSync(path.join(repoRoot, "src", f), "utf-8");
       return text.includes("createSign(") || text.includes("PRIVATE KEY-----");
     });
-    // src/secret-scrub.ts matches "PRIVATE KEY-----" as a redaction pattern,
+    // src/feedback/secret-scrub.ts matches "PRIVATE KEY-----" as a redaction pattern,
     // which is the opposite of shipping one.
     expect(offenders.filter((f) => !f.endsWith("secret-scrub.ts"))).toEqual([]);
   });

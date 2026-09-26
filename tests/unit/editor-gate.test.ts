@@ -6,7 +6,7 @@ import {
   refuseUntargetedCall,
   editorAttribution,
   EDITOR_ATTRIBUTION_PREFIX,
-} from "../../src/editor-gate.js";
+} from "../../src/dispatch/editor-gate.js";
 
 const TWO = { editors: ["alpha", "beta"], activeEditor: "alpha", targetParam: "editor" };
 

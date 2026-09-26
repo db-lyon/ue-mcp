@@ -37,7 +37,7 @@ describe("version-check", () => {
 
   describe("isNewer", () => {
     it("compares major/minor/patch", async () => {
-      const { isNewer } = await import("../../src/version-check.js");
+      const { isNewer } = await import("../../src/core/version-check.js");
       expect(isNewer("1.0.1", "1.0.0")).toBe(true);
       expect(isNewer("1.1.0", "1.0.9")).toBe(true);
       expect(isNewer("2.0.0", "1.99.99")).toBe(true);
@@ -46,42 +46,49 @@ describe("version-check", () => {
     });
 
     it("treats stable as newer than prerelease at same x.y.z", async () => {
-      const { isNewer } = await import("../../src/version-check.js");
+      const { isNewer } = await import("../../src/core/version-check.js");
       expect(isNewer("1.0.0", "1.0.0-rc.6")).toBe(true);
       expect(isNewer("1.0.0-rc.6", "1.0.0")).toBe(false);
     });
 
-    it("orders prereleases lexicographically", async () => {
-      const { isNewer } = await import("../../src/version-check.js");
+    it("orders numeric prerelease identifiers numerically", async () => {
+      const { isNewer } = await import("../../src/core/version-check.js");
       expect(isNewer("1.0.0-rc.7", "1.0.0-rc.6")).toBe(true);
       expect(isNewer("1.0.0-rc.6", "1.0.0-rc.6")).toBe(false);
+      expect(isNewer("1.3.10-beta.10", "1.3.10-beta.9")).toBe(true);
+      expect(isNewer("1.3.10-beta.9", "1.3.10-beta.10")).toBe(false);
+    });
+
+    it("never offers an unparseable version", async () => {
+      const { isNewer } = await import("../../src/core/version-check.js");
+      expect(isNewer("garbage", "1.0.0")).toBe(false);
     });
   });
 
   describe("resolveUpdateTarget", () => {
     it("moves a stable install forward on the stable line", async () => {
-      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      const { resolveUpdateTarget } = await import("../../src/core/version-check.js");
       expect(resolveUpdateTarget("1.1.43", "1.1.44")).toBe("1.1.44");
     });
 
     it("returns null when already on the target", async () => {
-      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      const { resolveUpdateTarget } = await import("../../src/core/version-check.js");
       expect(resolveUpdateTarget("1.1.44", "1.1.44")).toBeNull();
     });
 
     it("never moves a stable install onto a prerelease", async () => {
-      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      const { resolveUpdateTarget } = await import("../../src/core/version-check.js");
       expect(resolveUpdateTarget("1.1.44", "1.2.0-beta")).toBeNull();
       expect(resolveUpdateTarget("1.1.44", "1.2.0-rc.1")).toBeNull();
     });
 
     it("does not roll a prerelease tester back onto an older stable", async () => {
-      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      const { resolveUpdateTarget } = await import("../../src/core/version-check.js");
       expect(resolveUpdateTarget("1.2.0-beta.2", "1.1.44")).toBeNull();
     });
 
     it("moves a prerelease onto the stable release that supersedes it", async () => {
-      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      const { resolveUpdateTarget } = await import("../../src/core/version-check.js");
       expect(resolveUpdateTarget("1.2.0-rc.1", "1.2.0")).toBe("1.2.0");
       expect(resolveUpdateTarget("1.2.0-beta.2", "1.3.0")).toBe("1.3.0");
     });
@@ -89,12 +96,12 @@ describe("version-check", () => {
 
   describe("consumeUpgradeNotice", () => {
     it("returns null when nothing pending", async () => {
-      const { consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       expect(consumeUpgradeNotice()).toBeNull();
     });
 
     it("returns the notice once and then null", async () => {
-      const { consumeUpgradeNotice, _setNoticeForTests } = await import("../../src/version-check.js");
+      const { consumeUpgradeNotice, _setNoticeForTests } = await import("../../src/core/version-check.js");
       _setNoticeForTests("UPGRADE!");
       expect(consumeUpgradeNotice()).toBe("UPGRADE!");
       expect(consumeUpgradeNotice()).toBeNull();
@@ -106,7 +113,7 @@ describe("version-check", () => {
       process.env.UE_MCP_DISABLE_UPDATE_CHECK = "1";
       const fetchSpy = vi.fn();
       vi.stubGlobal("fetch", fetchSpy);
-      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       startVersionCheck("1.0.0-rc.6");
       await new Promise((r) => setImmediate(r));
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -118,7 +125,7 @@ describe("version-check", () => {
         ok: true,
         json: async () => ({ version: "1.0.0" }),
       })));
-      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       startVersionCheck("1.0.0-rc.6");
       // Allow the background promise chain to settle.
       for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
@@ -134,7 +141,7 @@ describe("version-check", () => {
         ok: true,
         json: async () => ({ version: "1.0.0" }),
       })));
-      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       startVersionCheck("1.0.0");
       for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
       expect(consumeUpgradeNotice()).toBeNull();
@@ -147,7 +154,7 @@ describe("version-check", () => {
         ok: true,
         json: async () => ({ version: "1.2.0-beta" }),
       })));
-      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       startVersionCheck("1.1.44");
       for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
       expect(consumeUpgradeNotice()).toBeNull();
@@ -158,7 +165,7 @@ describe("version-check", () => {
         ok: true,
         json: async () => ({ version: "1.2.0-beta.3" }),
       })));
-      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       startVersionCheck("1.2.0-beta.2");
       for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
       expect(consumeUpgradeNotice()).toContain("1.2.0-beta.3");
@@ -166,7 +173,7 @@ describe("version-check", () => {
 
     it("never throws on network failure", async () => {
       vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
-      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       expect(() => startVersionCheck("1.0.0-rc.6")).not.toThrow();
       for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
       expect(consumeUpgradeNotice()).toBeNull();
@@ -176,7 +183,7 @@ describe("version-check", () => {
       fs.writeFileSync(CACHE_FILE, JSON.stringify({ checkedAt: Date.now(), latest: "1.0.0" }));
       const fetchSpy = vi.fn();
       vi.stubGlobal("fetch", fetchSpy);
-      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       startVersionCheck("1.0.0-rc.6");
       for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -199,7 +206,7 @@ describe("version-check", () => {
       // it with nothing so the only possible notice would be the cached one.
       const fetchSpy = vi.fn(async () => { throw new Error("offline"); });
       vi.stubGlobal("fetch", fetchSpy);
-      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       startVersionCheck("1.0.0");
       for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
       expect(consumeUpgradeNotice()).toBeNull();
@@ -209,7 +216,7 @@ describe("version-check", () => {
       fs.writeFileSync(CACHE_FILE, JSON.stringify({ checkedAt: Date.now(), latest: null }));
       const fetchSpy = vi.fn();
       vi.stubGlobal("fetch", fetchSpy);
-      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/core/version-check.js");
       startVersionCheck("1.0.0");
       for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -218,7 +225,7 @@ describe("version-check", () => {
 
     it("writes the cache owner-readable only", async () => {
       vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ version: "9.0.0" }) })));
-      const { startVersionCheck } = await import("../../src/version-check.js");
+      const { startVersionCheck } = await import("../../src/core/version-check.js");
       startVersionCheck("1.0.0");
       for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
       expect(fs.existsSync(CACHE_FILE)).toBe(true);

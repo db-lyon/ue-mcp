@@ -20,9 +20,10 @@ import { z } from "zod";
 import { FlowConfigSchema, type FlowConfig } from "../../src/flow/schema.js";
 import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
-import { categoryTool, type ToolContext } from "../../src/types.js";
-import { ProjectContext } from "../../src/project.js";
-import type { IBridge } from "../../src/bridge.js";
+import type { ToolContext } from "../../src/core/types.js";
+import { categoryTool } from "../../src/surface/category-tool.js";
+import { ProjectContext } from "../../src/config/project.js";
+import type { IBridge } from "../../src/bridge/bridge.js";
 
 const bridge: IBridge = {
   isConnected: false,
@@ -38,6 +39,8 @@ const probeTool = categoryTool(
   "Test-only category that reports what the context handed it.",
   {
     context: {
+      kind: "handler",
+      effect: "read",
       description: "Report the context accessors this call was given.",
       handler: async (ctx) => ({
         flows: ctx.getFlows?.().map((f) => f.name) ?? null,
@@ -46,7 +49,6 @@ const probeTool = categoryTool(
       }),
     },
   },
-  undefined,
   { note: z.string().optional() } as Record<string, z.ZodType>,
 );
 
