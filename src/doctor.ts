@@ -17,6 +17,7 @@ import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
 import { packageVersion } from "./package-root.js";
 import { findUProject, isUProjectPath, projectDirOf } from "./uproject-path.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
+import { cliCommandNames } from "./cli-commands.js";
 
 export interface DoctorReport {
   selfVersion: string;            // the ue-mcp currently executing this command
@@ -107,15 +108,9 @@ function versionForScript(scriptPath: string): string | null {
   return null;
 }
 
-// Subcommands of `ue-mcp <x>` that are NOT a running server (one-shot CLIs).
-const NON_SERVER_ARGS = new Set([
-  "doctor", "update", "deploy", "build", "init", "hook", "uninstall-hooks",
-  "auth", "feedback", "resolve", "plugin", "version", "--version", "-v", "--help", "-h", "help",
-  // These three were missing, so `ue-mcp context lean`, `ue-mcp login` and
-  // `ue-mcp logout` each parsed as a running server whose project was the
-  // subcommand's own name.
-  "context", "login", "logout",
-]);
+// First arguments of `ue-mcp <x>` that are NOT a running server: every command
+// in the CLI table, plus the help spellings, which are never a project either.
+const NON_SERVER_ARGS = new Set([...cliCommandNames(), "--help", "-h", "help"]);
 
 /**
  * Parse a `node .../ue-mcp/dist/index.js <project> [<project>...]` command line

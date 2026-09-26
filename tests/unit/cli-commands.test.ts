@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { CLI_COMMANDS, cliCommandNames, findCliCommand } from "../../src/cli-commands.js";
+import { parseServerInvocation } from "../../src/doctor.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -32,5 +33,11 @@ describe("the CLI command table", () => {
     expect(findCliCommand("--version")?.name).toBe("version");
     expect(findCliCommand("C:/proj/Game.uproject")).toBeUndefined();
     expect(findCliCommand(undefined)).toBeUndefined();
+  });
+
+  it("is what doctor reads to tell a command line from a running server", () => {
+    for (const name of cliCommandNames()) {
+      expect(parseServerInvocation(`node /x/ue-mcp/dist/index.js ${name}`), name).toBeNull();
+    }
   });
 });
