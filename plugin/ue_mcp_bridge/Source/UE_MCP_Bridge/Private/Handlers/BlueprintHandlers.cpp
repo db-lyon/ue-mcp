@@ -347,7 +347,6 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecVarName,
 	});
 
-	// v0.7.8 stubs
 	Registry.RegisterHandler(TEXT("read_blueprint_graph_summary"), &ReadBlueprintGraphSummary, {
 		SpecAssetPath,
 		SpecGraphName,
@@ -698,8 +697,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 }
 
 // ---------------------------------------------------------------------------
-// v0.7.8 STUBS - agent-ergonomics actions (Milestone A)
-// Bodies intentionally minimal; flesh out one per follow-up patch.
+// Graph summaries, execution flow and dependency reads
 // ---------------------------------------------------------------------------
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraphSummary(const TSharedPtr<FJsonObject>& Params)

@@ -73,7 +73,7 @@ private:
 	// has reached the package as well as what it is (#931).
 	static TSharedPtr<FJsonValue> GetVariableDefault(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.8 - agent-ergonomics additions (stubs)
+	// Graph summaries, execution flow and dependency reads
 	static TSharedPtr<FJsonValue> ReadBlueprintGraphSummary(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetBlueprintExecutionFlow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetBlueprintDependencies(const TSharedPtr<FJsonObject>& Params);
