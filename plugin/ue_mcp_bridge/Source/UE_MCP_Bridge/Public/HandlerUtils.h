@@ -2817,7 +2817,7 @@ inline void MCPAttachSaveDiagnostics(const TSharedPtr<FJsonObject>& Result, cons
  *  so the worst outcome of a read-only or protected package is a false return
  *  rather than a fatal error. Callers that want the sentence explaining the
  *  false use SaveAssetPackageChecked. */
-[[nodiscard]] inline bool SaveAssetPackage(UObject* Asset)
+inline bool SaveAssetPackage(UObject* Asset)
 {
 	if (!Asset) return false;
 	UPackage* Package = Asset->GetOutermost();
@@ -2843,7 +2843,7 @@ inline void MCPAttachSaveDiagnostics(const TSharedPtr<FJsonObject>& Result, cons
 /** SaveAssetPackage, with the reason when it did not write. A handler that
  *  reports its own persistence uses this so a refusal reads as a named cause
  *  rather than a bare false. */
-[[nodiscard]] inline bool SaveAssetPackageChecked(UObject* Asset, FString& OutReason)
+inline bool SaveAssetPackageChecked(UObject* Asset, FString& OutReason)
 {
 	if (MCPPackageWriteBlocked(Asset, OutReason)) return false;
 	FMCPSaveDiagnostics Diagnostics;
