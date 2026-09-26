@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categoryTool, type ToolContext, type ToolDef } from "../types.js";
 import { EDITOR_TARGET_PARAM } from "../routing-params.js";
 import { PAGINATION_SCHEMA } from "../pagination.js";
+import { handlerFailure } from "../flow/handler-outcome.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/niagara.generated.js";
 import { specBp, schema as specSchema } from "./specs/niagara.generated.js";
 
@@ -108,6 +109,13 @@ export const niagaraTool: ToolDef = categoryTool(
             // The batch's own budget covers every op that names none of its own.
             if (subParams.timeoutMs === undefined && ctx.callTimeoutMs !== undefined) subParams.timeoutMs = ctx.callTimeoutMs;
             const result = await dispatchTool.handler(ctx, subParams);
+            // A handler that failed resolves with success:false rather than
+            // throwing, so the verdict is read off the body.
+            const failure = handlerFailure(result);
+            if (failure !== null) {
+              results.push({ action, result, error: failure });
+              return { results, stoppedAt: i };
+            }
             results.push({ action, result });
           } catch (e) {
             results.push({ action, error: (e as Error).message });

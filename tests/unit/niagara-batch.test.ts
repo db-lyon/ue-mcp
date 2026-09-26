@@ -247,4 +247,29 @@ describe("niagara batch dispatch (#1081)", () => {
     });
     expect(unusedCall).toHaveBeenCalledTimes(1);
   });
+
+  it("stops at an op whose handler answered success:false, keeping its body", async () => {
+    const failed = { success: false, error: "System not found: /Game/VFX/Missing" };
+    const bridge = recordingBridge();
+    let n = 0;
+    bridge.call = async (method, params, timeoutMs) => {
+      bridge.calls.push({ method, params, timeoutMs });
+      return ++n === 1 ? failed : { ok: true };
+    };
+    const tool = rebuilt();
+
+    const out = await tool.handler(activeContext(bridge, tool), {
+      action: "batch",
+      ops: [
+        { action: "compile", params: { systemPath: "/Game/VFX/Missing" } },
+        { action: "get_info", params: { assetPath: "/Game/VFX/Two" } },
+      ],
+    });
+
+    expect(out).toEqual({
+      results: [{ action: "compile", result: failed, error: "System not found: /Game/VFX/Missing" }],
+      stoppedAt: 0,
+    });
+    expect(bridge.calls).toHaveLength(1);
+  });
 });
