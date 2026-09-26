@@ -15,51 +15,9 @@
 #include "Misc/Guid.h"
 #include "Misc/DateTime.h"
 
-#if PLATFORM_WINDOWS
-#include "Windows/AllowWindowsPlatformTypes.h"
-#include <winsock2.h>
-#include "Windows/HideWindowsPlatformTypes.h"
-#endif
-
-// One name for the platform socket handle so the connection code is written
-// once instead of twice behind #if blocks that can silently drift apart.
-#if PLATFORM_WINDOWS
-typedef SOCKET FMCPSocketHandle;
-#define MCP_INVALID_SOCKET INVALID_SOCKET
-#else
-typedef int32 FMCPSocketHandle;
-#define MCP_INVALID_SOCKET (-1)
-#endif
-
-/** WebSocket opcodes the bridge understands (RFC 6455 section 5.2). */
-enum class EMCPWebSocketOpcode : uint8
-{
-	Continuation = 0x0,
-	Text         = 0x1,
-	Binary       = 0x2,
-	Close        = 0x8,
-	Ping         = 0x9,
-	Pong         = 0xA,
-};
-
-/** Outcome of trying to decode one frame off the front of a receive buffer. */
-enum class EMCPFrameDecode : uint8
-{
-	/** The buffer holds a partial frame. Read more and try again. */
-	NeedMoreData,
-	/** OutFrame is filled in and the frame's bytes were consumed. */
-	Decoded,
-	/** The stream is no longer trustworthy. Close the connection. */
-	ProtocolError,
-};
-
-/** One decoded WebSocket frame. A message may span several of these. */
-struct FMCPWebSocketFrame
-{
-	EMCPWebSocketOpcode Opcode = EMCPWebSocketOpcode::Text;
-	bool bFinal = true;
-	TArray<uint8> Payload;
-};
+#include "MCPSocketPlatform.h"
+#include "BridgeWebSocket.h"
+#include "BridgePortConfig.h"
 
 /**
  * Sole owner of one accepted client socket.
@@ -90,29 +48,6 @@ private:
 };
 
 class FMCPBridgeServer;
-
-/**
- * The port the bridge will try to bind, and where that number came from.
- *
- * The origin is carried alongside the number because the collision walk can
- * move it. A user who pinned a port needs the log to say the pin did not take
- * and what the bridge landed on, which is not something a bare int can say.
- */
-struct FMCPBridgePortChoice
-{
-	/** The port to bind first. The walk in Run() starts here. */
-	int32 Port = 0;
-
-	/** Human-readable origin, for the one log line a user greps for. */
-	FString Source = TEXT("unknown");
-
-	/**
-	 * True when a human asked for this exact number (command line, environment,
-	 * or bridge.port in a config file). Losing a pinned port to a collision is
-	 * a warning; losing a derived one is routine.
-	 */
-	bool bPinned = false;
-};
 
 /**
  * Takes the handle out of the live connection set.

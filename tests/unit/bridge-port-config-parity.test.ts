@@ -21,14 +21,14 @@ import { UeMcpConfigSchema } from "../../src/surface/schemas.js";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "..", "..");
 
-const BRIDGE_SERVER_CPP = path.join(
+const BRIDGE_PORT_CONFIG_CPP = path.join(
   REPO_ROOT,
   "plugin",
   "ue_mcp_bridge",
   "Source",
   "UE_MCP_Bridge",
   "Private",
-  "BridgeServer.cpp",
+  "BridgePortConfig.cpp",
 );
 const PROJECT_TS = path.join(REPO_ROOT, "src", "config", "project.ts");
 const CONFIG_TS = path.join(REPO_ROOT, "src", "config", "ue-mcp-config.ts");
@@ -75,7 +75,7 @@ describe("bridge.port config parity between the client and the plugin", () => {
       TS_LAYERS,
     );
     const cppOrder = layerOrder(
-      functionBody(BRIDGE_SERVER_CPP, "int32 ReadConfiguredBridgePort(", "\n\t}"),
+      functionBody(BRIDGE_PORT_CONFIG_CPP, "int32 ReadConfiguredBridgePort(", "\n\t}"),
       CPP_LAYERS,
     );
 
@@ -87,7 +87,7 @@ describe("bridge.port config parity between the client and the plugin", () => {
   });
 
   it("reads the same key path out of those files", () => {
-    const cpp = fs.readFileSync(BRIDGE_SERVER_CPP, "utf8");
+    const cpp = fs.readFileSync(BRIDGE_PORT_CONFIG_CPP, "utf8");
     // The client reaches `ue-mcp:` -> `bridge:` -> `port:`; the plugin spells
     // that path out as an array for its reader.
     expect(cpp).toContain(`{ TEXT("ue-mcp"), TEXT("bridge"), TEXT("port") }`);
@@ -95,7 +95,7 @@ describe("bridge.port config parity between the client and the plugin", () => {
   });
 
   it("accepts the same range of port numbers as the config schema", () => {
-    const cpp = fs.readFileSync(BRIDGE_SERVER_CPP, "utf8");
+    const cpp = fs.readFileSync(BRIDGE_PORT_CONFIG_CPP, "utf8");
     expect(cpp).toContain("Parsed < 1 || Parsed > 65535");
 
     // The bound the plugin hard-codes has to be the bound the schema enforces,

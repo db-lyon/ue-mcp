@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 // both compute without any coordination step.
 //
 // The C++ bridge computes the identical value in FMCPBridgeServer::DeriveProjectPort
-// (BridgeServer.cpp). If the two ever disagree (path normalization drift, etc.)
+// (BridgePortConfig.cpp). If the two ever disagree (path normalization drift, etc.)
 // the per-project port.json lockfile the bridge publishes remains the
 // authoritative source of the actual bound port, so connectivity is never at
 // the mercy of an exact hash match. Keep the two implementations in lockstep.
