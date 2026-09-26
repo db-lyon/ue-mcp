@@ -376,11 +376,12 @@ static void ConfigureColumnInput(FChooserColumnBase* Col, const FString& InputSt
 }
 
 // Persist a chooser after structural edits: recompile cooked data, notify, save.
-static void FinalizeChooser(UChooserTable* Table)
+// Returns whether the package reached disk, with the reason when it did not.
+static bool FinalizeChooser(UChooserTable* Table, FString& OutSaveError)
 {
 	Table->Compile(true);
 	Table->PostEditChange();
-	UEditorAssetLibrary::SaveLoadedAsset(Table);
+	return SaveAssetPackageChecked(Table, OutSaveError);
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────
@@ -396,13 +397,15 @@ TSharedPtr<FJsonValue> FChooserHandlers::Create(const TSharedPtr<FJsonObject>& P
 	UChooserTable* Table = Created.Asset;
 
 	Table->Compile(true);
-	UEditorAssetLibrary::SaveLoadedAsset(Table);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Table, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), Table->GetPathName());
 	Res->SetStringField(TEXT("name"), Name);
 	MCPSetDeleteAssetRollback(Res, Table->GetPathName());
+	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
 }
 
@@ -492,7 +495,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddColumn(const TSharedPtr<FJsonObject>
 	const int32 NewIndex = Table->ColumnsStructs.Num();
 	Table->ColumnsStructs.Add(MoveTemp(NewColumn));
 
-	FinalizeChooser(Table);
+	FString SaveError;
+	const bool bSaved = FinalizeChooser(Table, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -518,6 +522,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddColumn(const TSharedPtr<FJsonObject>
 			Res->SetStringField(TEXT("cellType"), ArrProp->Inner->GetCPPType());
 		}
 	}
+	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
 #else
 	return MCPError(TEXT("chooser column authoring requires an editor build"));
@@ -621,7 +626,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 		}
 	}
 
-	FinalizeChooser(Table);
+	FString SaveError;
+	const bool bSaved = FinalizeChooser(Table, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -648,6 +654,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 		TEXT("A later step that deletes a row below it shifts it down, and chooser(delete_row)'s own rollback re-adds by APPENDING rather than reinserting, ")
 		TEXT("so in a flow mixing the two this index can end up naming a different row and delete the wrong one. A chooser row has no id to address it by instead."),
 		NewRow));
+	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
 #else
 	return MCPError(TEXT("chooser row authoring requires an editor build"));
@@ -745,7 +752,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 		}
 	}
 
-	FinalizeChooser(Table);
+	FString SaveError;
+	const bool bSaved = FinalizeChooser(Table, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -788,6 +796,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 			TEXT("%d column(s) would not export their cell for this row, so the inverse leaves those columns as this call left them; every other column, the output and the disabled flag are restored."),
 			UnreadableCells));
 	}
+	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
 #else
 	return MCPError(TEXT("chooser row authoring requires an editor build"));
@@ -859,7 +868,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	Table->ResultsStructs.RemoveAt(RowIndex);
 	MCPChooserRemoveDisabledRow(Table, RowIndex);
 
-	FinalizeChooser(Table);
+	FString SaveError;
+	const bool bSaved = FinalizeChooser(Table, SaveError);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -906,6 +916,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 		}
 		Res->SetStringField(TEXT("rollbackNote"), DeleteNote.TrimStartAndEnd());
 	}
+	MCPNoteSaveOutcome(Res, Table->GetPathName(), bSaved, SaveError);
 	return MCPResult(Res);
 #else
 	return MCPError(TEXT("chooser row authoring requires an editor build"));
