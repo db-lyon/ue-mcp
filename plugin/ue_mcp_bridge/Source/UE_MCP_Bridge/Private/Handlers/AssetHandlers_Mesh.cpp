@@ -1582,7 +1582,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BindClothToSection(const TSharedPtr<FJson
 		FScopedSkeletalMeshPostEditChange ScopedPostEditChange(Mesh);
 		if (PreviousAsset)
 		{
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 			PreviousAsset->UnbindFromSkeletalMesh(Mesh, LodIndex, SectionIndex);
 #else
 			PreviousAsset->UnbindFromSkeletalMesh(Mesh, LodIndex);
@@ -1674,7 +1674,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnbindClothFromSection(const TSharedPtr<F
 
 	// 5.8 unbinds one section; older engines release every section of the LOD bound to the asset.
 	TArray<TSharedPtr<FJsonValue>> Released;
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 	Released.Add(MakeShared<FJsonValueNumber>(SectionIndex));
 #else
 	{
@@ -1690,7 +1690,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnbindClothFromSection(const TSharedPtr<F
 	{
 		Mesh->Modify();
 		FScopedSkeletalMeshPostEditChange ScopedPostEditChange(Mesh);
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 		Bound->UnbindFromSkeletalMesh(Mesh, LodIndex, SectionIndex);
 #else
 		Bound->UnbindFromSkeletalMesh(Mesh, LodIndex);

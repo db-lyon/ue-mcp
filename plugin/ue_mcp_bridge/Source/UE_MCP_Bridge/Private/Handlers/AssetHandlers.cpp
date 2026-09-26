@@ -2910,7 +2910,7 @@ static TSharedPtr<FJsonValue> MCPRefuseSplitPackages(const TArray<FAssetRenameDa
 		if (!Package || UWorld::FindWorldInPackage(Package)) continue;
 
 		TArray<UObject*> TopLevel;
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 		GetObjectsWithPackage(Package, TopLevel, EGetObjectsFlags::None);
 #else
 		GetObjectsWithPackage(Package, TopLevel, /*bIncludeNestedObjects=*/false);

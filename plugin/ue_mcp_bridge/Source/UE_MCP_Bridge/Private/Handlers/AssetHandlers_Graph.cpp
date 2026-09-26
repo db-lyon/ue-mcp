@@ -346,11 +346,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 // the graph's own schema, plus the Mutable compile.
 // ---------------------------------------------------------------------------
 
-// 5.5 replaced ActionGroup access with GetSchemaAction; 5.6 moved graph
-// locations to FVector2f.
-#define UE_MCP_EDGRAPH_HAS_GET_SCHEMA_ACTION (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
-#define UE_MCP_EDGRAPH_FLOAT_LOCATION (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
-
 namespace
 {
 	/** The actions that already author this asset type's graph, or null. */
@@ -715,7 +710,7 @@ namespace
 		Schema->GetGraphContextActions(Builder);
 		for (int32 Index = 0; Index < Builder.GetNumActions(); ++Index)
 		{
-#if UE_MCP_EDGRAPH_HAS_GET_SCHEMA_ACTION
+#if UE_MCP_HAS_5_5_API
 			const TSharedPtr<FEdGraphSchemaAction>& Action = Builder.GetSchemaAction(Index);
 			if (Action.IsValid()) Out.Add(Action);
 #else
@@ -1230,7 +1225,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddGraphNode(const TSharedPtr<FJsonObject
 		Graph->Modify();
 		if (Chosen.IsValid())
 		{
-#if UE_MCP_EDGRAPH_FLOAT_LOCATION
+#if UE_MCP_HAS_5_6_API
 			const FVector2f Location((float)PosX, (float)PosY);
 #else
 			const FVector2D Location(PosX, PosY);

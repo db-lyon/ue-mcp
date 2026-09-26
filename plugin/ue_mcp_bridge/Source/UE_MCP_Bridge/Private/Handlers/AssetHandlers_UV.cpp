@@ -160,7 +160,7 @@ TSharedPtr<FJsonValue> MCPUvResolveTarget(const TSharedPtr<FJsonObject>& Params,
 	}
 	else if (USkeletalMesh* SK = Cast<USkeletalMesh>(Object))
 	{
-#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API
+#if WITH_EDITORONLY_DATA
 		Out.SkeletalMesh = SK;
 		Out.LodCount = SK->GetNumSourceModels();
 #else

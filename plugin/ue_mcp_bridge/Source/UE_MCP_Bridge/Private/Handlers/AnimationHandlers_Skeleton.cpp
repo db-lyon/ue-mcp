@@ -87,20 +87,6 @@ static TSharedPtr<FJsonValue> SkeletonError(
 	return MCPResult(Result);
 }
 
-/** The answer when the engine predates the API this file drives. Kept as a
- *  named branch even though 5.4 is the supported floor, so the version the
- *  bone-editing surface requires is stated rather than implied. Deliberately
- *  NOT static: on a 5.4+ build every call site is preprocessed out, and an
- *  unreferenced internal-linkage function is a warning some configurations
- *  promote to an error. */
-TSharedPtr<FJsonValue> SkeletonUnsupportedEngine()
-{
-	return SkeletonError(
-		TEXT("unsupported_engine_version"),
-		TEXT("Skeleton bone editing requires Unreal Engine 5.4 or newer: USkeletonModifier, the only "
-			 "supported way to add, remove, rename or reparent a real bone, does not exist before it."));
-}
-
 // ── Name suggestion ──────────────────────────────────────────────────────────
 
 /** Edit distance, capped. Small names, small cost. */
@@ -738,9 +724,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginSkeletonEdit(const TSharedPtr<FJ
 {
 	using namespace UE_MCP_SkeletonEdit;
 
-#if !UE_MCP_HAS_5_4_API
-	return SkeletonUnsupportedEngine();
-#else
 	if (!Params.IsValid()) return SkeletonError(TEXT("invalid_params"), TEXT("Parameters are required"));
 
 	FString MeshPath;
@@ -859,7 +842,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginSkeletonEdit(const TSharedPtr<FJ
 	Rollback->SetStringField(TEXT("sessionTag"), Tag);
 	MCPSetRollback(Result, TEXT("cancel_skeleton_edit"), Rollback);
 	return MCPResult(Result);
-#endif
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -870,9 +852,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 {
 	using namespace UE_MCP_SkeletonEdit;
 
-#if !UE_MCP_HAS_5_4_API
-	return SkeletonUnsupportedEngine();
-#else
 	if (!Params.IsValid()) return SkeletonError(TEXT("invalid_params"), TEXT("Parameters are required"));
 
 	// Every parameter is read before anything can fail (#1057).
@@ -1425,7 +1404,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 	Rollback->SetBoolField(TEXT("force"), true);
 	MCPSetRollback(Result, TEXT("edit_skeleton_bones"), Rollback);
 	return MCPResult(Result);
-#endif
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1436,9 +1414,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CommitSkeletonEdit(const TSharedPtr<F
 {
 	using namespace UE_MCP_SkeletonEdit;
 
-#if !UE_MCP_HAS_5_4_API
-	return SkeletonUnsupportedEngine();
-#else
 	if (!Params.IsValid()) return SkeletonError(TEXT("invalid_params"), TEXT("Parameters are required"));
 
 	TSharedPtr<FJsonValue> SessionError;
@@ -1624,7 +1599,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CommitSkeletonEdit(const TSharedPtr<F
 	MCPNoteSaveOutcome(Result, Session->SkeletalMeshPath, bMeshSaved, MeshSaveReason);
 	SkeletonSessions().Remove(Session->Tag);
 	return MCPResult(Result);
-#endif
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1635,9 +1609,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CancelSkeletonEdit(const TSharedPtr<F
 {
 	using namespace UE_MCP_SkeletonEdit;
 
-#if !UE_MCP_HAS_5_4_API
-	return SkeletonUnsupportedEngine();
-#else
 	if (!Params.IsValid()) return SkeletonError(TEXT("invalid_params"), TEXT("Parameters are required"));
 
 	SkeletonPruneDeadSessions();
@@ -1695,7 +1666,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CancelSkeletonEdit(const TSharedPtr<F
 
 	SkeletonSessions().Remove(Session->Tag);
 	return MCPResult(Result);
-#endif
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
