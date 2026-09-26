@@ -9,9 +9,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { listRegistrations } from "./lib/cpp-registrations.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const CPP_HANDLERS = path.join(ROOT, "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers");
 const BRIDGE_SERVER = path.join(ROOT, "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/BridgeServer.cpp");
 
 // ── TS side ───────────────────────────────────────────────────────────────────
@@ -90,22 +90,13 @@ function tsBridgeMethods() {
 function cppRegistrations() {
   const methods = new Map(); // method -> [{file}]
   const byHandlerFn = new Map(); // handler fn -> Set(method)
-  function walk(dir) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) { walk(full); continue; }
-      if (!entry.name.endsWith(".cpp")) continue;
-      const src = fs.readFileSync(full, "utf8");
-      for (const m of src.matchAll(/Registry\.RegisterHandler(?:WithTimeout)?\(\s*TEXT\("([a-z_][a-z0-9_]*)"\)\s*,\s*&([\w:]+)/g)) {
-        const [, method, fn] = m;
-        if (!methods.has(method)) methods.set(method, []);
-        methods.get(method).push({ file: entry.name });
-        if (!byHandlerFn.has(fn)) byHandlerFn.set(fn, new Set());
-        byHandlerFn.get(fn).add(method);
-      }
-    }
+  for (const { method, className, fn: name, file } of listRegistrations()) {
+    const fn = className ? `${className}::${name}` : name;
+    if (!methods.has(method)) methods.set(method, []);
+    methods.get(method).push({ file });
+    if (!byHandlerFn.has(fn)) byHandlerFn.set(fn, new Set());
+    byHandlerFn.get(fn).add(method);
   }
-  walk(CPP_HANDLERS);
   // method -> every other method backed by the same handler function.
   const aliases = new Map();
   for (const names of byHandlerFn.values()) {

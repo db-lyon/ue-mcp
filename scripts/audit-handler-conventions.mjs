@@ -48,13 +48,10 @@
  * Gated by tests/unit/handler-conventions.test.ts.
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { HANDLERS_DIR, REGISTRATION_RE } from "./lib/cpp-registrations.mjs";
 
-const here = dirname(fileURLToPath(import.meta.url));
-export const HANDLERS_DIR = join(
-  here, "..", "plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Private", "Handlers",
-);
+export { HANDLERS_DIR };
 
 /** Markers that say a handler reports whether it actually changed anything. */
 const IDEMPOTENCY_MARKERS = [
@@ -201,7 +198,7 @@ function memberDefinitions(text) {
  *  that both define `ListNodeTypes` stay apart. An explicitly qualified
  *  `&FFoo::Bar` names its own class and is taken at its word. */
 export function readRegistrations() {
-  const re = /Registry\.RegisterHandler(?:WithTimeout)?\(\s*TEXT\("([^"]+)"\)\s*,\s*&(?:(F\w+)::)?(\w+)/g;
+  const re = new RegExp(REGISTRATION_RE);
   const out = new Map();
   for (const entry of readdirSync(HANDLERS_DIR)) {
     if (!entry.endsWith(".cpp")) continue;
