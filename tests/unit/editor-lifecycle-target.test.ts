@@ -11,6 +11,14 @@ import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EditorProcess } from "../../src/engine-observer.js";
 
+// No unit test may launch a real editor. An unknown EngineAssociation still
+// resolves to the machine's default install, so the launch is stubbed here.
+const spawnMock = vi.hoisted(() => vi.fn(() => ({ unref: () => {}, on: () => {} })));
+vi.mock("child_process", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("child_process")>()),
+  spawn: spawnMock,
+}));
+
 vi.mock("../../src/engine-observer.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/engine-observer.js")>();
   return {
@@ -326,7 +334,6 @@ describe("a lifecycle no-op fails, and says why it did", () => {
   });
 
   it("waits out an editor whose log is closed instead of calling it running (#1179)", async () => {
-    // Engine 9.9 resolves to no executable, so the launch this reaches spawns nothing.
     const { projectPath } = makeProject();
     fs.writeFileSync(projectPath, JSON.stringify({ EngineAssociation: "9.9" }));
     const project = new ProjectContext();
@@ -348,6 +355,7 @@ describe("a lifecycle no-op fails, and says why it did", () => {
     const result = await startEditor(project, 1);
     expect(result.alreadyRunning).toBeUndefined();
     expect(result.message).not.toContain("already running");
+    expect(spawnMock).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a stop for an editor that is already down, and marks the reason", async () => {
