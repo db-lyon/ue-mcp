@@ -1161,7 +1161,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 		return Existing;
 	}
 
-	UClass* Class = FindClassByShortName(ActorClass);
+	UClass* Class = MCPResolveClass(ActorClass);
 	if (!Class)
 	{
 		Class = LoadObject<UClass>(nullptr, *ActorClass);
@@ -2204,7 +2204,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 	}
 	if (!CompClass)
 	{
-		CompClass = FindClassByShortName(ComponentClass);
+		CompClass = MCPResolveClass(ComponentClass);
 	}
 	if (!CompClass)
 	{
@@ -2290,7 +2290,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveComponentFromActor(const TSharedPtr
 
 	const FString ComponentClass = Target->GetClass()->GetName();
 	// The PATH, not the short name, for the inverse: add_component_to_actor
-	// only reaches a short name through FindClassByShortName and a
+	// only reaches a short name through MCPResolveClass and a
 	// /Script/Engine. probe, neither of which resolves a Blueprint-generated
 	// component class.
 	const FString ComponentClassPath = Target->GetClass()->GetPathName();
@@ -3168,7 +3168,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 			UClass* GMClass = LoadObject<UClass>(nullptr, *GameModeStr);
 			if (!GMClass)
 			{
-				GMClass = FindClassByShortName(GameModeStr);
+				GMClass = MCPResolveClass(GameModeStr);
 			}
 			if (GMClass && GMClass->IsChildOf(AGameModeBase::StaticClass()))
 			{
@@ -3318,7 +3318,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonOb
 	UClass* TargetClass = nullptr;
 	if (bMatchSubclasses)
 	{
-		TargetClass = FindClassByShortName(ClassName);
+		TargetClass = MCPResolveClass(ClassName);
 		if (!TargetClass) TargetClass = LoadClass<UObject>(nullptr, *ClassName);
 		if (!TargetClass) TargetClass = LoadObject<UClass>(nullptr, *ClassName);
 		// Blueprint class path given without the _C suffix.

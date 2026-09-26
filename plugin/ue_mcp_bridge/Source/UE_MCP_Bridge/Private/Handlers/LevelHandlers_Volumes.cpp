@@ -142,7 +142,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>
 	}
 	else if (VolumeType.Equals(TEXT("CullDistanceVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("culldistance"), ESearchCase::IgnoreCase))
 	{
-		VolumeClass = FindClassByShortName(TEXT("CullDistanceVolume"));
+		VolumeClass = MCPResolveClass(TEXT("CullDistanceVolume"));
 	}
 	else if (VolumeType.Equals(TEXT("NavMeshBoundsVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("navmesh"), ESearchCase::IgnoreCase))
 	{
@@ -155,7 +155,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>
 	else
 	{
 		// Try broad class lookup
-		VolumeClass = FindClassByShortName(VolumeType);
+		VolumeClass = MCPResolveClass(VolumeType);
 	}
 
 	if (!VolumeClass)
