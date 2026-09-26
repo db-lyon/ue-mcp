@@ -681,11 +681,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRetargeter(const TSharedPt
 		TEXT("chainMappings"), TEXT("ops"), TEXT("pose"),
 	});
 #if !UE_MCP_HAS_5_8_API
-	auto Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("success"), false);
-	Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
-	Result->SetStringField(TEXT("error"), TEXT("configure_ik_retargeter requires Unreal Engine 5.8 or newer"));
-	return MCPResult(Result);
+	return MCPUnsupportedEngineError(TEXT("configure_ik_retargeter"), TEXT("5.8"));
 #else
 	FString RetargeterPath;
 	if (auto Error = RequireString(Params, TEXT("retargeterPath"), RetargeterPath)) return Error;

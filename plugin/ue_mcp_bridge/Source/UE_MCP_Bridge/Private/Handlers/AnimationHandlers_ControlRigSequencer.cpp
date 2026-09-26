@@ -11,11 +11,7 @@ namespace
 {
 	TSharedPtr<FJsonValue> ControlRigSequencerUnsupported()
 	{
-		auto Result = MakeShared<FJsonObject>();
-		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
-		Result->SetStringField(TEXT("error"), TEXT("Control Rig Sequencer authoring requires Unreal Engine 5.8 or newer"));
-		return MCPResult(Result);
+		return MCPUnsupportedEngineError(TEXT("Control Rig Sequencer authoring"), TEXT("5.8"));
 	}
 }
 

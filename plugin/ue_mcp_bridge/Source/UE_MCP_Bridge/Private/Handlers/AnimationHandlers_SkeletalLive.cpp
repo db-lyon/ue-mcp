@@ -533,11 +533,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetLivePostProcessAnimBlueprint(const
 	// post-process AnimBP belongs to the SkeletalMesh asset and a component
 	// carries no override to set or clear, so there is no live override to
 	// report on either.
-	auto Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("success"), false);
-	Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
-	Result->SetStringField(TEXT("error"), TEXT("set_live_post_process_anim_blueprint requires Unreal Engine 5.5 or newer, because the per-component post-process AnimBP override does not exist in 5.4. Set the post-process AnimBP on the SkeletalMesh asset instead."));
-	return MCPResult(Result);
+	return MCPUnsupportedEngineError(TEXT("set_live_post_process_anim_blueprint"), TEXT("5.5"),
+		TEXT("The per-component post-process AnimBP override does not exist in 5.4. Set the post-process AnimBP on the SkeletalMesh asset instead."));
 #else
 	if (ActorLabelError) return ActorLabelError;
 	if (bClear && !AnimBlueprintClassPath.IsEmpty())

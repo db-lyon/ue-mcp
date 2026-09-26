@@ -2891,11 +2891,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 		TEXT("prefix"), TEXT("suffix"), TEXT("overwrite"), TEXT("requireCompleteMapping"),
 	});
 #if !(ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
-	auto Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("success"), false);
-	Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
-	Result->SetStringField(TEXT("error"), TEXT("batch_retarget_animations requires Unreal Engine 5.8 or newer"));
-	return MCPResult(Result);
+	return MCPUnsupportedEngineError(TEXT("batch_retarget_animations"), TEXT("5.8"));
 #else
 	FString RetargeterPath;
 	if (auto Err = RequireString(Params, TEXT("retargeterPath"), RetargeterPath)) return Err;

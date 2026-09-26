@@ -24,10 +24,8 @@ static TSharedPtr<FJsonValue> Error(
 	const FString& Message,
 	const TOptional<bool>& RollbackSucceeded = TOptional<bool>())
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("success"), false);
+	TSharedPtr<FJsonObject> Result = MCPErrorObject(Message);
 	Result->SetStringField(TEXT("errorCode"), Code);
-	Result->SetStringField(TEXT("error"), Message);
 	Result->SetBoolField(TEXT("rollbackSafe"), !RollbackSucceeded.IsSet() || RollbackSucceeded.GetValue());
 	if (RollbackSucceeded.IsSet())
 	{
