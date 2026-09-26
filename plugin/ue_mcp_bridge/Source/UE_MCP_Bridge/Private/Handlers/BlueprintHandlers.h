@@ -131,7 +131,7 @@ private:
 	// path; raw property writes leave the visualizer stale)
 	static TSharedPtr<FJsonValue> SetCapsuleSize(const TSharedPtr<FJsonObject>& Params);
 
-	// V9 Blueprint depth. Defined in BlueprintHandlers_Depth.cpp. Each of these
+	// V9 Blueprint depth. Defined in BlueprintHandlers_Members.cpp. Each of these
 	// closes a hole the shipping source already documented, or authors graph
 	// state that no UPROPERTY write can reach; see that file's header comment
 	// for the audit that decided the list.

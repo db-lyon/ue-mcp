@@ -27,7 +27,7 @@ describe("animation.read_montage notify objects (#1117)", () => {
 
   it("shares one notify-state lister through a header", () => {
     expect(read("HandlerAnimNotify.h")).toContain("inline TArray<TSharedPtr<FJsonValue>> ListNotifyStates(");
-    const depth = readHandlerFile("AnimationHandlers_Depth.cpp");
+    const depth = readHandlerFile("AnimationHandlers_RemovalAndNotifies.cpp");
     expect(depth).not.toContain("static TArray<TSharedPtr<FJsonValue>> MCPAnimDepthListNotifyStates(");
     expect(depth).toContain("MCPAnimNotify::ListNotifyStates(AnimAsset)");
   });

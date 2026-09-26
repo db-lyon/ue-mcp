@@ -25,7 +25,7 @@
 // So the builder is attached to the ASSET's own document, through
 // Metasound::Engine::FDocumentBuilderRegistry::FindOrBeginBuilding - the same
 // route the MetaSound editor itself uses to open an asset, and the one the
-// removal/disconnect actions in AudioHandlers_Depth.cpp already take. Every
+// removal/disconnect actions in AudioHandlers_GraphEdit.cpp already take. Every
 // authoring call therefore writes straight into the document that
 // audio(metasound_read_document) reads and that the package serializes, and the
 // node ids handed out by metasound_add_node are the ids a read hands back.
@@ -117,7 +117,7 @@ namespace
 
 	/**
 	 * The builder that edits this asset's own document, attached if it is not
-	 * already. Mirrors MSEditResolve in AudioHandlers_Depth.cpp, which is the
+	 * already. Mirrors MSEditResolve in AudioHandlers_GraphEdit.cpp, which is the
 	 * proven path: an edit made through this builder lands in the asset's
 	 * RootMetasoundDocument immediately, with no separate flush step.
 	 */

@@ -273,7 +273,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
 	});
 
-	// V8 depth (StateTreeHandlers_Depth.cpp). Everything above could author a
+	// V8 depth (StateTreeHandlers_StatesAndRuntime.cpp). Everything above could author a
 	// tree; these close the parts of it that had no route at all.
 	Registry.RegisterHandler(TEXT("list_state_tree_node_types"), &ListStateTreeNodeTypes, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
@@ -696,7 +696,7 @@ static EStateTreeTransitionTrigger ParseTransitionTrigger(const FString& Str)
 // round-trips against. Deliberately ONE function rather than a writer plus a
 // replica: a round trip against a copy is only as good as the copy's tracking of
 // the original, and this enum already has a third, divergent parser in
-// StateTreeHandlers_Depth.cpp (case-insensitive, and it REJECTS an unrecognised
+// StateTreeHandlers_StatesAndRuntime.cpp (case-insensitive, and it REJECTS an unrecognised
 // value instead of defaulting, which is a validating contract this authoring one
 // deliberately does not share).
 //

@@ -103,7 +103,7 @@ private:
 	static TSharedPtr<FJsonValue> CompileStateTree(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ValidateStateTree(const TSharedPtr<FJsonObject>& Params);
 
-	// V8 depth. All in StateTreeHandlers_Depth.cpp; see that file's header for
+	// V8 depth. All in StateTreeHandlers_StatesAndRuntime.cpp; see that file's header for
 	// why each one needs a handler rather than a property write, and for the
 	// dead ends they close (no node-type discovery, no utility considerations,
 	// no in-asset subtree link, no state reordering, no Blueprint node class,

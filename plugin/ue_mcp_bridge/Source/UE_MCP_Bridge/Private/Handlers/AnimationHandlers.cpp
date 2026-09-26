@@ -1110,7 +1110,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		BlendPosition(),
 	});
 
-	// Authoring depth (AnimationHandlers_Depth.cpp): the entry wiring that made
+	// Authoring depth (AnimationHandlers_RemovalAndNotifies.cpp): the entry wiring that made
 	// state machines run, the five removals whose adds documented their own
 	// missing inverse, windowed notifies, and sync markers.
 	Registry.RegisterHandler(TEXT("set_state_machine_entry"), &SetStateMachineEntry, {

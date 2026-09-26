@@ -313,7 +313,7 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("Value as JSON: scalars, structs, arrays, object paths, or UE export text")),
 	});
 
-	// Authoring depth (AudioHandlers_Depth.cpp)
+	// Authoring depth (AudioHandlers_GraphEdit.cpp)
 	Registry.RegisterHandler(TEXT("metasound_remove_node"), &MetaSoundRemoveNode, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("MetaSound asset path")).Alias(TEXT("metasoundPath")),
 		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("Node id to remove")),

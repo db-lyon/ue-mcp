@@ -21,7 +21,7 @@ private:
 
 	// V12 depth: placing, removing and reading instances, level palette
 	// membership, and the procedural foliage simulation. All in
-	// FoliageHandlers_Depth.cpp; see that file's header for why each one needs
+	// FoliageHandlers_Placement.cpp; see that file's header for why each one needs
 	// a handler rather than a property write.
 	static TSharedPtr<FJsonValue> AddFoliageInstances(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveFoliageInstances(const TSharedPtr<FJsonObject>& Params);

@@ -81,7 +81,7 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("maxTypes"), EType::Integer, TEXT("Refuse to scan more than this many types (default 2000)")),
 	});
 
-	// V12 depth (FoliageHandlers_Depth.cpp): the surface above could create and
+	// V12 depth (FoliageHandlers_Placement.cpp): the surface above could create and
 	// configure a FoliageType and count instances inside a sphere, but could not
 	// place one, remove one, say where any of them are, or put a type into the
 	// level's palette at all.

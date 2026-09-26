@@ -202,7 +202,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::AddSubmixEffect(const TSharedPtr<FJsonObj
 	// The chain as it stands before the append, in UE export text. There is no
 	// remove_submix_effect action: SubmixEffectChain is a UPROPERTY and
 	// set_audio_property rewrites it whole, which is how a chain entry is taken
-	// back out (see the note at the top of AudioHandlers_Depth.cpp).
+	// back out (see the note at the top of AudioHandlers_GraphEdit.cpp).
 	FString PreviousChainType;
 	const TSharedPtr<FJsonValue> PreviousChain =
 		MCPQuery::ReadDottedProperty(Submix, TEXT("SubmixEffectChain"), PreviousChainType);

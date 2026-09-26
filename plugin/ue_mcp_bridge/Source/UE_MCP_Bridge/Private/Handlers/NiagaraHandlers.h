@@ -40,7 +40,7 @@ private:
 	// Add a stock /Niagara/Modules script to an emitter's stack context.
 	static TSharedPtr<FJsonValue> AddModule(const TSharedPtr<FJsonObject>& Params);
 
-	// Depth authoring, in NiagaraHandlers_Advanced.cpp. Dynamic inputs are
+	// Depth authoring, in NiagaraHandlers_StackEdits.cpp. Dynamic inputs are
 	// graph nodes rather than properties; simulation stages and event handlers
 	// each need a backing UNiagaraScript with an output node before their
 	// struct fields mean anything; a CustomHlsl write must reconstruct the node

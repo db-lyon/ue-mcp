@@ -553,7 +553,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("audit_blueprint_dead_code"), &AuditDeadCode, SearchCallSitesTimeoutSeconds);
 
-	// V9 Blueprint depth (BlueprintHandlers_Depth.cpp). Interface removal and
+	// V9 Blueprint depth (BlueprintHandlers_Members.cpp). Interface removal and
 	// listing, function flags and metadata, parameter CRUD across functions,
 	// macros, dispatcher signatures and custom events, member and local
 	// variable rename plus metadata, dispatcher removal, custom events with a

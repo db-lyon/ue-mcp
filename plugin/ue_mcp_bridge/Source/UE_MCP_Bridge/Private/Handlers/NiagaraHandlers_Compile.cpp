@@ -3,7 +3,7 @@
 //
 // Every other Niagara action here answers "did the call succeed". That is a
 // different question from "is the graph this call built well formed", and the
-// gap between them is where the depth authoring in NiagaraHandlers_Advanced.cpp
+// gap between them is where the depth authoring in NiagaraHandlers_StackEdits.cpp
 // lives: a simulation stage, an event handler or a module removal each rewires
 // a UNiagaraScript's node graph, returns success, and only fails when the
 // compiler is asked to translate it. The installed engine ships no NiagaraEditor

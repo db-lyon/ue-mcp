@@ -214,7 +214,7 @@ private:
 	// spawned/placed component, never a mesh or component-template asset.
 	static TSharedPtr<FJsonValue> SetLivePostProcessAnimBlueprint(const TSharedPtr<FJsonObject>& Params);
 
-	// Animation authoring depth, in AnimationHandlers_Depth.cpp. The removal
+	// Animation authoring depth, in AnimationHandlers_RemovalAndNotifies.cpp. The removal
 	// half of the surface plus the two things that could not be authored at
 	// all. Five adds already documented their own missing inverse in a source
 	// comment ("No rollback: no paired remove_* handler"); those are the five

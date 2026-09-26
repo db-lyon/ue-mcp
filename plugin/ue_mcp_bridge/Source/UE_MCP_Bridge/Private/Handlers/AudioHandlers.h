@@ -70,7 +70,7 @@ private:
 	static TSharedPtr<FJsonValue> SetSoundConcurrency(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetAudioProperty(const TSharedPtr<FJsonObject>& Params);
 
-	// ── Authoring depth (AudioHandlers_Depth.cpp) ───────────────────────
+	// ── Authoring depth (AudioHandlers_GraphEdit.cpp) ───────────────────────
 	// The editing half. Every action above that adds a MetaSound node, graph
 	// input, graph output or connection had no inverse, and every MetaSound
 	// write action refuses unless create_metasound opened a builder session in

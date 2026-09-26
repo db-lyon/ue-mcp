@@ -374,7 +374,7 @@ static TSharedPtr<FJsonObject> FieldJson(const FStructVariableDescription& Desc,
 // two are that layer, and they are inverses of each other: what PinTypeSpec
 // reports can be handed straight back to ParsePinTypeSpec. They live on
 // FBlueprintHandlers rather than in a file-local helper because the depth
-// actions in BlueprintHandlers_Depth.cpp need the identical vocabulary, and the
+// actions in BlueprintHandlers_Members.cpp need the identical vocabulary, and the
 // module is a unity build where a copied helper is a redefinition waiting for
 // the next working-set shuffle.
 // ─────────────────────────────────────────────────────────────────────────────
