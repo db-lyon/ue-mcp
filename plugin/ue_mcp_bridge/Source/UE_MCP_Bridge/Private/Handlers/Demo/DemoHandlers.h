@@ -10,10 +10,13 @@ class FMCPHandlerRegistry;
  * Demo scene builder handlers - Neon Shrine demo.
  * Ports the Python demo.py scene builder to C++ for the UE MCP Bridge.
  *
- * Registers 3 handlers:
- *   demo_step       - Execute a single step by index (param: step). If omitted, returns step list.
+ * Registers 4 handlers:
+ *   demo_step       - Build one of steps 2 to 18 by index (param: step). If omitted, returns step list.
+ *                     The server runs every step as its demo_step_N flow; steps 1 and 19 are level
+ *                     actions there, and the server adds the fields every step answers with.
  *   demo_get_steps  - Return ordered step list.
  *   demo_cleanup    - Remove all demo actors and assets.
+ *   demo_go_home    - Open /Game/MCP_Home, creating it on first use.
  */
 class FDemoHandlers
 {
@@ -32,8 +35,7 @@ private:
 	// auto-generated Untitled (which traps the editor in a save dialog).
 	static bool EnsureHomeLevelLoaded(FString& OutError);
 
-	// ---- Individual step implementations (19 steps) ----
-	static TSharedPtr<FJsonObject> StepCreateLevel();
+	// ---- The steps no existing action can build (2 to 18) ----
 	static TSharedPtr<FJsonObject> StepMaterials();
 	static TSharedPtr<FJsonObject> StepFloor();
 	static TSharedPtr<FJsonObject> StepPedestal();
@@ -51,7 +53,6 @@ private:
 	static TSharedPtr<FJsonObject> StepOrbitRings();
 	static TSharedPtr<FJsonObject> StepLevelSequence();
 	static TSharedPtr<FJsonObject> StepTuningPanel();
-	static TSharedPtr<FJsonObject> StepSave();
 
 	// ---- Utility helpers ----
 	static AActor* SpawnMesh(const FString& Label, const FString& MeshPath,

@@ -93,6 +93,8 @@ export const RAW_BRIDGE_METHODS: Readonly<Record<string, ActionEffect>> = {
   request_editor_shutdown: "mutate",
   // Resolves content roots and queries the asset registry. asset(search).
   search_assets: "read",
+  // Builds one Neon Shrine step. The demo_step_N flows behind demo(step).
+  demo_step: "mutate",
 };
 
 interface EffectIndex {

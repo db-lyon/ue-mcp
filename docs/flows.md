@@ -546,7 +546,8 @@ UE-MCP ships with three built-in flows you can run out of the box.
 | Flow | Steps | What it does |
 |------|-------|--------------|
 | `beacon` | 56 | YAML-authored shrine scene built step by step via individual tool calls. Useful as a reference for how a multi-step flow looks. |
-| `neon_shrine` | 19 | The full Neon Shrine demo, driven through the bridge's `demo.step` handler. Leaves the editor on `/Game/Demo/DemoLevel`. |
+| `neon_shrine` | 19 | The full Neon Shrine demo, one `demo_step_N` flow per step. Leaves the editor on `/Game/Demo/DemoLevel`. |
+| `demo_step_1` .. `demo_step_19` | 1 to 3 | One Neon Shrine step each. `demo(action="step", stepIndex=N)` runs `demo_step_N`. |
 | `neon_shrine_cleanup` | 1 | Wipes the Neon Shrine demo content. Switches the editor to `/Game/MCP_Home` first so you don't get stranded on Untitled. |
 
 ```
@@ -606,7 +607,7 @@ The beacon flow is defined in `src/flow/loader.ts` (compiled into `dist/`). User
 
 ### Neon Shrine
 
-A 19-step procedural scene driven through the bridge's `demo.step` handler. Each step invokes `demo(action="step", stepIndex=N)` for `N` in `1..19`. Output lands at `/Game/Demo/DemoLevel`. The matching `neon_shrine_cleanup` flow wipes the demo content and parks the editor on `/Game/MCP_Home` so you're not stranded on Untitled.
+A 19-step procedural scene, run as a flow of flows: step `N` is the `demo_step_N` flow, which is also what `demo(action="step", stepIndex=N)` runs. Steps 1 and 19 are level actions (`level.create`, `level.load`, `level.save`); the others call the bridge's `demo_step` primitive, because each needs something no action does, such as spawning under a label that is already taken on a replay. Output lands at `/Game/Demo/DemoLevel`. The matching `neon_shrine_cleanup` flow wipes the demo content and parks the editor on `/Game/MCP_Home` so you're not stranded on Untitled.
 
 ```
 flow(action="run", flowName="neon_shrine")

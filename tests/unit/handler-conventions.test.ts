@@ -102,6 +102,7 @@ const KNOWN_ORPHANS: Record<string, string> = {
     + "declares it and play_in_editor's pie_control never reads an authorization (#1057).",
   request_editor_shutdown: "editor(stop_editor) drives it through the lifecycle path.",
   search_assets: "asset(search) supersedes it.",
+  demo_step: "demo(step) reaches it through the demo_step_N flows, for the steps no action can build.",
   add_instances: "level(add_hismc_instances) is the shipped spelling.",
   list_sockets: "asset(list_sockets) reaches it under a different bridge name.",
 
