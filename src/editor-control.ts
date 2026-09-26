@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { spawn } from "child_process";
 import * as net from "net";
-import WebSocket from "ws";
+import { bridgeReplyAccepted, callBridgeOnce, type BridgeReply } from "./bridge.js";
 import { readUeMcpConfig, type ProjectContext } from "./project.js";
 import { EngineResolutionError, engineLookupFor, selectEngine, trySelectEngine } from "./engine-root.js";
 import {
@@ -618,87 +618,13 @@ const EDITOR_SELF_QUIT_PY = [
   "unreal.register_slate_post_tick_callback(_ue_mcp_quit)",
 ].join("\n");
 
-/**
- * What one bridge call on a throwaway socket came back with.
- *
- * A reply alone is not acceptance, and the three ways a call can fail need
- * telling apart: the socket never answered, the bridge answered with a
- * JSON-RPC error (which is what an unregistered method does, so it is how an
- * older plugin build announces itself), or the handler answered by refusing
- * with `result.success === false`. The stop path decides something different
- * in each case, and it needs the handler's own payload to say why.
- */
-interface BridgeReply {
-  /** The socket answered at all. */
-  answered: boolean;
-  /** JSON-RPC error: usually a method this plugin build does not register. */
-  methodError: boolean;
-  /** The handler answered with `success: false`. */
-  refused: boolean;
-  /** The handler's payload, when the reply carried a readable one. */
-  result: Record<string, unknown> | null;
-}
-
-function callBridgeOnce(
-  port: number,
-  method: string,
-  params: Record<string, unknown>,
-  host: string = bridgeHost(),
-): Promise<BridgeReply> {
-  return new Promise<BridgeReply>((resolve) => {
-    let settled = false;
-    // Same host the reachability probe uses. Probing one host and sending the
-    // quit to another is its own way of reaching an editor nobody addressed.
-    const ws = new WebSocket(`ws://${host}:${port}`);
-    const finish = (reply: BridgeReply) => {
-      if (settled) return;
-      settled = true;
-      try { ws.close(); } catch { /* ignore */ }
-      resolve(reply);
-    };
-    const silent: BridgeReply = { answered: false, methodError: false, refused: false, result: null };
-    const timer = setTimeout(() => finish(silent), 8000);
-    ws.on("open", () => ws.send(JSON.stringify({ id: "ue-mcp-stop", method, params })));
-    ws.on("message", (data: unknown) => {
-      clearTimeout(timer);
-      try {
-        const msg = JSON.parse(String(data)) as { error?: unknown; result?: Record<string, unknown> };
-        if (msg.error) return finish({ answered: true, methodError: true, refused: false, result: null });
-        const result = msg.result && typeof msg.result === "object" ? msg.result : null;
-        return finish({
-          answered: true,
-          methodError: false,
-          refused: result?.success === false,
-          result,
-        });
-      } catch {
-        // An unparseable reply still means the bridge is answering; treat it
-        // the same as it was treated before the native path existed.
-        return finish({ answered: true, methodError: false, refused: false, result: null });
-      }
-    });
-    ws.on("error", () => { clearTimeout(timer); finish(silent); });
-    // A socket that closes without answering is the same fact as a timeout,
-    // eight seconds earlier: the frame went out and nothing came back. Without
-    // this the call sat out the full budget for an editor that had already
-    // gone, and `finish` is idempotent, so the close that follows our own
-    // ws.close() changes nothing.
-    ws.on("close", () => { clearTimeout(timer); finish(silent); });
-  });
-}
-
-/** The call went out and the handler accepted it. */
-function accepted(reply: BridgeReply): boolean {
-  return reply.answered && !reply.methodError && !reply.refused;
-}
-
 function sendOneBridgeCall(
   port: number,
   method: string,
   params: Record<string, unknown>,
   host: string = bridgeHost(),
 ): Promise<boolean> {
-  return callBridgeOnce(port, method, params, host).then(accepted);
+  return callBridgeOnce(host, port, method, params).then(bridgeReplyAccepted);
 }
 
 /**
@@ -734,7 +660,7 @@ const LIST_DIRTY_KEYS = ["content", "maps"] as const;
  * all, which is not the same as "nothing is dirty" and is never treated as it.
  */
 async function readDirtyPackages(port: number, host: string): Promise<string[] | null> {
-  const reply = await callBridgeOnce(port, "list_dirty_packages", {}, host);
+  const reply = await callBridgeOnce(host, port, "list_dirty_packages", {});
   if (!reply.answered || reply.methodError || reply.refused || !reply.result) return null;
   return collectPackageNames(reply.result, LIST_DIRTY_KEYS);
 }
@@ -752,7 +678,7 @@ async function readDirtyPackages(port: number, host: string): Promise<string[] |
  * the payload is the whole point of asking.
  */
 function requestNativeShutdown(port: number, host: string, requireClean: boolean): Promise<BridgeReply> {
-  return callBridgeOnce(port, "request_editor_shutdown", { requireClean, endPIE: true }, host);
+  return callBridgeOnce(host, port, "request_editor_shutdown", { requireClean, endPIE: true });
 }
 
 /**
@@ -1262,7 +1188,7 @@ export async function stopEditor(
     };
   }
 
-  if (!accepted(shutdown)) {
+  if (!bridgeReplyAccepted(shutdown)) {
     // No native handler (an older plugin build), or no answer at all. Ask the
     // dirty question separately before falling back to the Python quit. A
     // question that cannot be answered is not an answer of "clean": it refuses

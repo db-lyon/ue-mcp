@@ -142,6 +142,76 @@ export interface BridgeResponse {
   error?: { code: number; message: string };
 }
 
+/** One request frame, as the plugin reads it. Every sender builds it here. */
+function encodeRequest(id: string, method: string, params?: Record<string, unknown>): string {
+  return JSON.stringify({ id, method, params: params ?? {} });
+}
+
+/**
+ * What one bridge call on a throwaway socket came back with.
+ *
+ * The three failures differ: the socket never answered, the bridge answered
+ * with a JSON-RPC error (how an older plugin build reports an unregistered
+ * method), or the handler refused with `result.success === false`.
+ */
+export interface BridgeReply {
+  /** The socket answered at all. */
+  answered: boolean;
+  /** JSON-RPC error: usually a method this plugin build does not register. */
+  methodError: boolean;
+  /** The handler answered with `success: false`. */
+  refused: boolean;
+  /** The handler's payload, when the reply carried a readable one. */
+  result: Record<string, unknown> | null;
+}
+
+/** The call went out and the handler accepted it. */
+export function bridgeReplyAccepted(reply: BridgeReply): boolean {
+  return reply.answered && !reply.methodError && !reply.refused;
+}
+
+/**
+ * One call on its own socket, for callers with no EditorBridge: stopping an
+ * editor this process never connected to. Never throws; a socket that closes
+ * or stays silent past `timeoutMs` resolves as unanswered.
+ */
+export function callBridgeOnce(
+  host: string,
+  port: number,
+  method: string,
+  params: Record<string, unknown>,
+  timeoutMs = 8000,
+): Promise<BridgeReply> {
+  return new Promise<BridgeReply>((resolve) => {
+    let settled = false;
+    const ws = new WebSocket(`ws://${host}:${port}`);
+    const finish = (reply: BridgeReply) => {
+      if (settled) return;
+      settled = true;
+      try { ws.close(); } catch { /* ignore */ }
+      resolve(reply);
+    };
+    const silent: BridgeReply = { answered: false, methodError: false, refused: false, result: null };
+    const timer = setTimeout(() => finish(silent), timeoutMs);
+    ws.on("open", () => ws.send(encodeRequest("ue-mcp-once", method, params)));
+    ws.on("message", (data: unknown) => {
+      clearTimeout(timer);
+      try {
+        const msg = JSON.parse(String(data)) as { error?: unknown; result?: Record<string, unknown> };
+        if (msg.error) return finish({ answered: true, methodError: true, refused: false, result: null });
+        const result = msg.result && typeof msg.result === "object" ? msg.result : null;
+        return finish({ answered: true, methodError: false, refused: result?.success === false, result });
+      } catch {
+        // An unparseable reply still means the bridge is answering.
+        return finish({ answered: true, methodError: false, refused: false, result: null });
+      }
+    });
+    ws.on("error", () => { clearTimeout(timer); finish(silent); });
+    // A close without an answer is the timeout's verdict, reached sooner.
+    ws.on("close", () => { clearTimeout(timer); finish(silent); });
+  });
+}
+
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (reason: Error) => void;
@@ -541,7 +611,7 @@ export class EditorBridge implements IBridge {
     }
 
     const id = String(++this.idCounter);
-    const request = { id, method, params: params ?? {} };
+    const frame = encodeRequest(id, method, params);
     // #989: not a flat 30s any more. An explicit per-call budget is honoured,
     // and a method the C++ side registered a longer timeout for is waited out
     // to that limit, so the client stops declaring a failure on a call the
@@ -577,7 +647,7 @@ export class EditorBridge implements IBridge {
       }, timeout);
 
       this.pending.set(id, { resolve, reject, timer, method });
-      ws.send(JSON.stringify(request), (err) => {
+      ws.send(frame, (err) => {
         if (!err) return;
 
         clearTimeout(timer);
@@ -695,7 +765,7 @@ export class EditorBridge implements IBridge {
 
       ws.on("message", onMessage);
       ws.on("close", onClose);
-      ws.send(JSON.stringify({ id, method: "get_bridge_capabilities", params: {} }), (err) => {
+      ws.send(encodeRequest(id, "get_bridge_capabilities"), (err) => {
         if (err) onClose();
       });
     });
