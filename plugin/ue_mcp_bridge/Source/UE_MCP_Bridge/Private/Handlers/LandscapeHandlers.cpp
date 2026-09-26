@@ -1177,25 +1177,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetLandscapeMaterial(const TSharedPtr
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find the target landscape
-	ALandscapeProxy* TargetLandscape = nullptr;
-
-	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
-	{
-		ALandscapeProxy* Landscape = *It;
-		if (!Landscape) continue;
-
-		if (LandscapeName.IsEmpty() || Landscape->GetName() == LandscapeName)
-		{
-			TargetLandscape = Landscape;
-			break;
-		}
-	}
-
-	if (!TargetLandscape)
-	{
-		return MCPError(TEXT("No landscape found in the current level"));
-	}
+	TSharedPtr<FJsonValue> ResolveError;
+	ALandscapeProxy* TargetLandscape = MCPLandscape::ResolveLandscapeProxyByName(World, LandscapeName, ResolveError);
+	if (!TargetLandscape) return ResolveError;
 
 	// Load the material
 	UMaterialInterface* Material = LoadAssetByPath<UMaterialInterface>(MaterialPath);
@@ -1259,25 +1243,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::AddLandscapeLayerInfo(const TSharedPt
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find the target landscape
-	ALandscapeProxy* TargetLandscape = nullptr;
-
-	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
-	{
-		ALandscapeProxy* Landscape = *It;
-		if (!Landscape) continue;
-
-		if (LandscapeName.IsEmpty() || Landscape->GetName() == LandscapeName)
-		{
-			TargetLandscape = Landscape;
-			break;
-		}
-	}
-
-	if (!TargetLandscape)
-	{
-		return MCPError(TEXT("No landscape found in the current level"));
-	}
+	TSharedPtr<FJsonValue> ResolveError;
+	ALandscapeProxy* TargetLandscape = MCPLandscape::ResolveLandscapeProxyByName(World, LandscapeName, ResolveError);
+	if (!TargetLandscape) return ResolveError;
 
 	ULandscapeInfo* LandscapeInfo = TargetLandscape->GetLandscapeInfo();
 	if (!LandscapeInfo)

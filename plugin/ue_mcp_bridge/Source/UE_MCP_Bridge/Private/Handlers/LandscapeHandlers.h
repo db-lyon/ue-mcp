@@ -4,6 +4,21 @@
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
 
+class ALandscape;
+class ALandscapeProxy;
+class UWorld;
+
+namespace MCPLandscape
+{
+	/** The landscape to edit: by actorPath or actorLabel (ambiguous labels are
+	 *  refused), else the only ALandscape in the world. */
+	ALandscape* ResolveLandscape(UWorld* World, const TSharedPtr<FJsonObject>& Params, TSharedPtr<FJsonValue>& OutError);
+
+	/** A landscape or streaming proxy by label, internal name or path; an empty
+	 *  name means the only ALandscape in the world. */
+	ALandscapeProxy* ResolveLandscapeProxyByName(UWorld* World, const FString& LandscapeName, TSharedPtr<FJsonValue>& OutError);
+}
+
 class FLandscapeHandlers
 {
 public:
