@@ -133,8 +133,6 @@ const NativeModuleSchema = z.object({
     .default({}),
 });
 
-export type ManifestNativeModule = z.infer<typeof NativeModuleSchema>;
-
 export const PluginManifestSchema = z.object({
   actionPrefix: z.string().regex(/^[a-z][a-z0-9_]*$/, {
     message: "actionPrefix must be a lowercase identifier (letters, digits, underscore; must start with a letter)",

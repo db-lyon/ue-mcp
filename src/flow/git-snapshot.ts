@@ -6,12 +6,6 @@ interface CallableBridge {
   call(method: string, params: Record<string, unknown>): Promise<unknown>;
 }
 
-export interface GitSnapshotConfig {
-  enabled: boolean;
-  paths: string[];
-  snapshot_dir: string;
-}
-
 export interface Snapshot {
   treeHash: string;
   projectDir: string;
