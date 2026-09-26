@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1070,
+  "handlerCount": 1071,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -30387,6 +30387,59 @@
           "type": "any",
           "required": true,
           "description": "Value to write"
+        }
+      ]
+    },
+    "set_datatable_cells": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "DataTable asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "cells",
+          "type": "array",
+          "required": true,
+          "description": "Cells to write; every row must exist and every column must be a top-level row-struct field",
+          "items": "object",
+          "fields": [
+            {
+              "name": "row",
+              "type": "string",
+              "required": true,
+              "description": "Existing row to edit"
+            },
+            {
+              "name": "column",
+              "type": "string",
+              "required": true,
+              "description": "Row-struct field to write"
+            },
+            {
+              "name": "value",
+              "type": "any",
+              "required": true,
+              "description": "Value to write, parsed as set_datatable_cell parses value"
+            }
+          ]
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Validate every cell and report what would change without writing (default false)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the package after the write (default false)"
         }
       ]
     },

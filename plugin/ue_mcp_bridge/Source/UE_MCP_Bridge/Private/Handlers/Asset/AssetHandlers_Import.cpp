@@ -54,6 +54,8 @@
 #include "Internationalization/TextKey.h"
 #include "Exporters/Exporter.h"
 #include "AssetExportTask.h"
+#include "Misc/ScopeExit.h"
+#include "ScopedTransaction.h"
 
 namespace
 {
@@ -2741,6 +2743,399 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableCell(const TSharedPtr<FJsonOb
 	Delegated->SetStringField(TEXT("rowName"), RowName);
 	Delegated->SetObjectField(TEXT("row"), RowObj);
 	return SetDataTableRow(Delegated);
+}
+
+// Batched cell writes with whole-table verification. The case that asked for
+// it: relabelling one column on a few hundred rows of a recipe table and
+// proving that no other field moved. set_datatable_cell is one round trip per
+// cell, fill_datatable_from_json wants whole rows, and neither compares the
+// table afterwards, so the work fell back to a JSON round trip through
+// execute_python and a hand-written diff.
+//
+// Every cell is validated first, on a staged copy of its row: the row exists,
+// the column is a top-level field of the row struct, the value parses. One
+// failure and nothing is written; every failing cell is reported. The staged
+// rows are then copied into the table inside one transaction with one
+// Modify/PostEditChange, and every row is re-exported and compared with the
+// export taken before the write: a touched row may differ only in the fields
+// that were requested, each of which must hold the requested value, and every
+// other row must export the same text. A mismatch restores every row from its
+// backup, cancels the transaction and names the row and field.
+// Params: assetPath, cells [{row, column, value}], dryRun?, save?.
+TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableCells(const TSharedPtr<FJsonObject>& Params)
+{
+	// Every parameter is read before anything can fail (#1057).
+	const TArray<TSharedPtr<FJsonValue>>* Cells = nullptr;
+	const bool bHasCells = TryGetArrayParam(Params, TEXT("cells"), Cells);
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	const bool bSave = OptionalBool(Params, TEXT("save"), false);
+
+	FString AssetPath;
+	UDataTable* DataTable = nullptr;
+	if (auto Err = MCPImportLoadTypedAsset(Params, TEXT("DataTable"), AssetPath, DataTable)) return Err;
+	if (!bHasCells || !Cells) return MCPError(TEXT("Missing 'cells' array of {row, column, value}"));
+	if (Cells->Num() == 0) return MCPError(TEXT("'cells' must contain at least one entry"));
+
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	if (!RowStruct) return MCPError(TEXT("DataTable has no row struct"));
+
+	TArray<FProperty*> Props;
+	for (TFieldIterator<FProperty> It(RowStruct); It; ++It) Props.Add(*It);
+
+	// One field as text, with no defaults so every value is written out. With
+	// the value passed as its own default, as the single-row read does, a
+	// nested struct exports as "()" and every struct would compare equal.
+	auto ExportField = [](const FProperty* Prop, const void* ContainerPtr) -> FString
+	{
+		FString Text;
+		Prop->ExportText_Direct(Text, Prop->ContainerPtrToValuePtr<void>(ContainerPtr), nullptr, nullptr, PPF_None);
+		return Text;
+	};
+	auto ExportRow = [&Props, &ExportField](const uint8* RowPtr) -> TArray<FString>
+	{
+		TArray<FString> Fields;
+		Fields.Reserve(Props.Num());
+		for (const FProperty* Prop : Props) Fields.Add(ExportField(Prop, RowPtr));
+		return Fields;
+	};
+
+	struct FCell
+	{
+		FString Row;
+		FString Column;
+		FName RowKey;
+		FProperty* Prop = nullptr;
+		TSharedPtr<FJsonValue> Value;
+		TSharedPtr<FJsonValue> Previous;
+		bool bChanged = false;
+	};
+	struct FStagedRow
+	{
+		uint8* Live = nullptr;    // the table's own row memory
+		uint8* Staged = nullptr;  // a copy carrying the requested writes
+		TArray<int32> CellIndices;
+		bool bChanged = false;
+	};
+	TArray<FCell> Parsed;
+	Parsed.Reserve(Cells->Num());
+	TArray<FStagedRow> Staged;
+	TMap<FName, int32> StagedIndexByRow;
+	TMap<FName, uint8*> Backups;
+
+	const int32 StructSize = RowStruct->GetStructureSize();
+	const int32 MinAlign = RowStruct->GetMinAlignment();
+	auto AllocCopy = [RowStruct, StructSize, MinAlign](const uint8* From) -> uint8*
+	{
+		uint8* Buffer = (uint8*)FMemory::Malloc(StructSize, MinAlign);
+		RowStruct->InitializeStruct(Buffer);
+		RowStruct->CopyScriptStruct(Buffer, From);
+		return Buffer;
+	};
+	auto FreeCopy = [RowStruct](uint8* Buffer)
+	{
+		if (!Buffer) return;
+		RowStruct->DestroyStruct(Buffer);
+		FMemory::Free(Buffer);
+	};
+	ON_SCOPE_EXIT
+	{
+		for (const FStagedRow& Row : Staged) FreeCopy(Row.Staged);
+		for (const TPair<FName, uint8*>& Pair : Backups) FreeCopy(Pair.Value);
+	};
+
+	// ── Validate every cell before anything is written. Rejections are
+	// collected rather than returned, so the caller sees all of them at once.
+	TArray<TSharedPtr<FJsonValue>> Errors;
+	auto Reject = [&Errors](int32 Index, const FString& Row, const FString& Column, const FString& Message)
+	{
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetNumberField(TEXT("index"), Index);
+		if (!Row.IsEmpty()) Entry->SetStringField(TEXT("row"), Row);
+		if (!Column.IsEmpty()) Entry->SetStringField(TEXT("column"), Column);
+		Entry->SetStringField(TEXT("error"), Message);
+		Errors.Add(MakeShared<FJsonValueObject>(Entry));
+	};
+	TMap<FString, int32> FirstIndexOfCell;
+
+	for (int32 Index = 0; Index < Cells->Num(); ++Index)
+	{
+		const TSharedPtr<FJsonObject>* CellObj = nullptr;
+		if (!(*Cells)[Index].IsValid() || !(*Cells)[Index]->TryGetObject(CellObj) || !CellObj || !CellObj->IsValid())
+		{
+			Reject(Index, FString(), FString(), FString::Printf(TEXT("cells[%d] must be an object {row, column, value}"), Index));
+			continue;
+		}
+		FCell Cell;
+		if (!(*CellObj)->TryGetStringField(TEXT("row"), Cell.Row) || Cell.Row.IsEmpty())
+		{
+			Reject(Index, FString(), FString(), FString::Printf(TEXT("cells[%d].row must be a non-empty string"), Index));
+			continue;
+		}
+		if (!(*CellObj)->TryGetStringField(TEXT("column"), Cell.Column) || Cell.Column.IsEmpty())
+		{
+			Reject(Index, Cell.Row, FString(), FString::Printf(TEXT("cells[%d].column must be a non-empty string"), Index));
+			continue;
+		}
+		Cell.Value = (*CellObj)->TryGetField(TEXT("value"));
+		if (!Cell.Value.IsValid())
+		{
+			Reject(Index, Cell.Row, Cell.Column, FString::Printf(TEXT("cells[%d] has no 'value'"), Index));
+			continue;
+		}
+
+		Cell.RowKey = FName(*Cell.Row);
+		uint8* const* LiveRow = DataTable->GetRowMap().Find(Cell.RowKey);
+		if (!LiveRow || !*LiveRow)
+		{
+			Reject(Index, Cell.Row, Cell.Column,
+				FString::Printf(TEXT("Row not found: %s (use set_datatable_row to create it)"), *Cell.Row));
+			continue;
+		}
+		for (FProperty* Prop : Props)
+		{
+			if (Prop->GetName() == Cell.Column || Prop->GetAuthoredName() == Cell.Column)
+			{
+				Cell.Prop = Prop;
+				break;
+			}
+		}
+		if (!Cell.Prop)
+		{
+			Reject(Index, Cell.Row, Cell.Column,
+				FString::Printf(TEXT("row struct '%s' has no field '%s'"), *RowStruct->GetName(), *Cell.Column));
+			continue;
+		}
+		// Two entries for one cell would make the write order decide the value.
+		const FString CellKey = Cell.RowKey.ToString() + TEXT("\n") + Cell.Prop->GetName();
+		if (const int32* First = FirstIndexOfCell.Find(CellKey))
+		{
+			Reject(Index, Cell.Row, Cell.Column, FString::Printf(
+				TEXT("cells[%d] names the same cell as cells[%d]; keep one entry per cell"), Index, *First));
+			continue;
+		}
+		FirstIndexOfCell.Add(CellKey, Index);
+
+		int32 StagedIndex = INDEX_NONE;
+		if (const int32* Existing = StagedIndexByRow.Find(Cell.RowKey))
+		{
+			StagedIndex = *Existing;
+		}
+		else
+		{
+			FStagedRow Row;
+			Row.Live = *LiveRow;
+			Row.Staged = AllocCopy(*LiveRow);
+			StagedIndex = Staged.Add(MoveTemp(Row));
+			StagedIndexByRow.Add(Cell.RowKey, StagedIndex);
+		}
+		FStagedRow& Row = Staged[StagedIndex];
+
+		// The value parses onto the staged copy, so the table is untouched
+		// however this turns out.
+		FString SetError;
+		if (!MCPJsonProperty::SetJsonOnProperty(
+				Cell.Prop, Cell.Prop->ContainerPtrToValuePtr<void>(Row.Staged), Cell.Value, SetError))
+		{
+			Reject(Index, Cell.Row, Cell.Column,
+				FString::Printf(TEXT("%s: %s"), *Cell.Prop->GetAuthoredName(), *SetError));
+			continue;
+		}
+		Cell.Previous = FMCPJsonSerializer::SerializeValue(Cell.Prop->ContainerPtrToValuePtr<void>(Row.Live), Cell.Prop);
+		Cell.bChanged = ExportField(Cell.Prop, Row.Staged) != ExportField(Cell.Prop, Row.Live);
+		Row.bChanged |= Cell.bChanged;
+		Row.CellIndices.Add(Parsed.Add(MoveTemp(Cell)));
+	}
+
+	if (Errors.Num() > 0)
+	{
+		FString FirstError;
+		Errors[0]->AsObject()->TryGetStringField(TEXT("error"), FirstError);
+		auto Rejected = MCPSuccess();
+		Rejected->SetBoolField(TEXT("success"), false);
+		Rejected->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d of %d cells failed validation; nothing was written. First failure: %s"),
+			Errors.Num(), Cells->Num(), *FirstError));
+		Rejected->SetStringField(TEXT("assetPath"), AssetPath);
+		Rejected->SetBoolField(TEXT("dryRun"), bDryRun);
+		Rejected->SetNumberField(TEXT("requestedCells"), Cells->Num());
+		Rejected->SetNumberField(TEXT("failedCells"), Errors.Num());
+		Rejected->SetArrayField(TEXT("errors"), Errors);
+		return MCPResult(Rejected);
+	}
+
+	int32 ChangedCells = 0;
+	TArray<TSharedPtr<FJsonValue>> Unchanged;
+	for (const FCell& Cell : Parsed)
+	{
+		if (Cell.bChanged)
+		{
+			++ChangedCells;
+			continue;
+		}
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("row"), Cell.Row);
+		Entry->SetStringField(TEXT("column"), Cell.Column);
+		Unchanged.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+	int32 RowsTouched = 0;
+	for (const FStagedRow& Row : Staged) RowsTouched += Row.bChanged ? 1 : 0;
+
+	auto Describe = [&](const TSharedPtr<FJsonObject>& Result)
+	{
+		Result->SetStringField(TEXT("assetPath"), AssetPath);
+		Result->SetBoolField(TEXT("dryRun"), bDryRun);
+		Result->SetNumberField(TEXT("requestedCells"), Parsed.Num());
+		Result->SetNumberField(TEXT("changedCells"), ChangedCells);
+		Result->SetNumberField(TEXT("unchangedCells"), Unchanged.Num());
+		Result->SetNumberField(TEXT("rowsRequested"), Staged.Num());
+		Result->SetNumberField(TEXT("rowsTouched"), RowsTouched);
+		Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
+		if (Unchanged.Num() > 0) Result->SetArrayField(TEXT("unchanged"), Unchanged);
+	};
+
+	if (bDryRun || ChangedCells == 0)
+	{
+		auto Result = MCPSuccess();
+		Describe(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		if (!bDryRun)
+		{
+			// Every cell already held its value: an idempotent replay, with
+			// nothing to verify against itself.
+			Result->SetBoolField(TEXT("verified"), true);
+		}
+		return MCPResult(Result);
+	}
+
+	// ── Every row as text and as bytes before the write: the text is what the
+	// comparison afterwards reads, the bytes are what a failed comparison
+	// restores. ponytail: both are O(rows x fields) per call; a per-row hash
+	// and touched-only backups are the upgrade once tables reach tens of
+	// thousands of rows.
+	TMap<FName, TArray<FString>> Before;
+	Before.Reserve(DataTable->GetRowMap().Num());
+	Backups.Reserve(DataTable->GetRowMap().Num());
+	for (const TPair<FName, uint8*>& Pair : DataTable->GetRowMap())
+	{
+		if (!Pair.Value) continue;
+		Before.Add(Pair.Key, ExportRow(Pair.Value));
+		Backups.Add(Pair.Key, AllocCopy(Pair.Value));
+	}
+
+	// One transaction, one Modify, one change notification, however many
+	// cells. The staged copies already hold the merged rows, so each touched
+	// row is one struct copy into the memory the table owns (#929).
+	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "SetDataTableCells", "Set DataTable cells"));
+	DataTable->Modify();
+	for (const FStagedRow& Row : Staged)
+	{
+		if (Row.bChanged) RowStruct->CopyScriptStruct(Row.Live, Row.Staged);
+	}
+	DataTable->PostEditChange();
+	DataTable->MarkPackageDirty();
+
+	// ── Verify against the snapshot. A requested field must hold what was
+	// asked for (#935); everything else must export the text it exported
+	// before, on touched rows and untouched rows alike.
+	FString Mismatch;
+	if (DataTable->GetRowMap().Num() != Before.Num())
+	{
+		Mismatch = FString::Printf(TEXT("the table had %d rows before the write and %d after"),
+			Before.Num(), DataTable->GetRowMap().Num());
+	}
+	for (const TPair<FName, uint8*>& Pair : DataTable->GetRowMap())
+	{
+		if (!Mismatch.IsEmpty()) break;
+		const TArray<FString>* Prior = Before.Find(Pair.Key);
+		if (!Prior || !Pair.Value)
+		{
+			Mismatch = FString::Printf(TEXT("row '%s' was not in the table before the write"), *Pair.Key.ToString());
+			break;
+		}
+		const int32* StagedIndex = StagedIndexByRow.Find(Pair.Key);
+		for (int32 PropIndex = 0; PropIndex < Props.Num() && Mismatch.IsEmpty(); ++PropIndex)
+		{
+			FProperty* Prop = Props[PropIndex];
+			const FCell* Requested = nullptr;
+			if (StagedIndex)
+			{
+				for (const int32 CellIndex : Staged[*StagedIndex].CellIndices)
+				{
+					if (Parsed[CellIndex].Prop == Prop)
+					{
+						Requested = &Parsed[CellIndex];
+						break;
+					}
+				}
+			}
+			if (Requested)
+			{
+				FString Detail;
+				if (!MCPJsonProperty::VerifyJsonOnProperty(
+						Prop, Prop->ContainerPtrToValuePtr<void>(Pair.Value), Requested->Value, Detail))
+				{
+					Mismatch = FString::Printf(TEXT("field '%s' on row '%s' did not store the requested value: %s"),
+						*Prop->GetAuthoredName(), *Requested->Row, *Detail);
+				}
+			}
+			else if (ExportField(Prop, Pair.Value) != (*Prior)[PropIndex])
+			{
+				Mismatch = FString::Printf(TEXT("field '%s' on row '%s' changed although it was not requested (was %s, now %s)"),
+					*Prop->GetAuthoredName(), *Pair.Key.ToString(), *(*Prior)[PropIndex], *ExportField(Prop, Pair.Value));
+			}
+		}
+	}
+	if (!Mismatch.IsEmpty())
+	{
+		for (const TPair<FName, uint8*>& Pair : Backups)
+		{
+			if (uint8* const* Live = DataTable->GetRowMap().Find(Pair.Key))
+			{
+				if (*Live) RowStruct->CopyScriptStruct(*Live, Pair.Value);
+			}
+		}
+		DataTable->PostEditChange();
+		Transaction.Cancel();
+		return MCPError(FString::Printf(
+			TEXT("Verification failed after the write: %s. Every row was restored, the transaction was cancelled and nothing was saved."),
+			*Mismatch));
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Describe(Result);
+	Result->SetBoolField(TEXT("verified"), true);
+	if (bSave)
+	{
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(DataTable, SaveReason);
+		MCPNoteSaveOutcome(Result, DataTable->GetPathName(), bSaved, SaveReason);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("saved"), false);
+		Result->SetStringField(TEXT("saveNote"),
+			TEXT("The package is dirty and the write is one undo step; pass save=true to write it to disk."));
+	}
+
+	// Self-inverse: the prior value of every cell that changed.
+	TArray<TSharedPtr<FJsonValue>> Inverse;
+	Inverse.Reserve(ChangedCells);
+	for (const FCell& Cell : Parsed)
+	{
+		if (!Cell.bChanged) continue;
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("row"), Cell.Row);
+		Entry->SetStringField(TEXT("column"), Cell.Column);
+		Entry->SetField(TEXT("value"), Cell.Previous);
+		Inverse.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetArrayField(TEXT("cells"), Inverse);
+	Payload->SetBoolField(TEXT("save"), bSave);
+	MCPSetRollback(Result, TEXT("set_datatable_cells"), Payload);
+	return MCPResult(Result);
 }
 
 // #535: rename a row key, preserving its field values. Params: assetPath,

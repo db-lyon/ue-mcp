@@ -8,9 +8,9 @@
 <img width="1354" height="586" alt="{6F52BA62-D736-454E-AD30-A1C98F9EEBAA}" src="https://github.com/user-attachments/assets/9380e080-c608-4609-ba21-90e6b0a3ba7f" />
 
 
-**Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->26<!-- /count --> category tools covering <!-- count:actions -->1966+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
+**Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->26<!-- /count --> category tools covering <!-- count:actions -->1967+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
 
-That total is <!-- count:ownActions -->1136+<!-- /count --> actions of ue-mcp's own plus Epic's entire native AI Toolset Registry: on UE 5.8+ its <!-- count:nativeToolActions -->830<!-- /count --> official Unreal tools are called in-process and surfaced as `epic_*` actions in the matching category, Sequencer in `animation`, PCG in `pcg`, static meshes in `asset`.
+That total is <!-- count:ownActions -->1137+<!-- /count --> actions of ue-mcp's own plus Epic's entire native AI Toolset Registry: on UE 5.8+ its <!-- count:nativeToolActions -->830<!-- /count --> official Unreal tools are called in-process and surfaced as `epic_*` actions in the matching category, Sequencer in `animation`, PCG in `pcg`, static meshes in `asset`.
 
 ```mermaid
 flowchart LR
@@ -142,7 +142,7 @@ flows:
 flow(action="run", flowName="build_and_check")
 ```
 
-Every one of the <!-- count:actions -->1966+<!-- /count --> actions is also a flow task. Flows support step references, retries, rollback, custom tasks in your own `.js`/`.ts`, and shell steps. See [Flows](https://ue-mcp.com/docs/flows/).
+Every one of the <!-- count:actions -->1967+<!-- /count --> actions is also a flow task. Flows support step references, retries, rollback, custom tasks in your own `.js`/`.ts`, and shell steps. See [Flows](https://ue-mcp.com/docs/flows/).
 
 ## Plugins
 

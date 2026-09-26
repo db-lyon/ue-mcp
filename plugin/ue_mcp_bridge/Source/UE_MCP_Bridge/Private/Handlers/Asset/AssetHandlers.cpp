@@ -803,6 +803,18 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("fieldName"), EType::String, TEXT("Row-struct field to write")),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("Value to write")),
 	});
+	// Many cells in one transaction, verified against a whole-table export
+	// taken before the write.
+	Registry.RegisterHandler(TEXT("set_datatable_cells"), &SetDataTableCells, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("cells"), EType::Array, TEXT("Cells to write; every row must exist and every column must be a top-level row-struct field")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("row"), EType::String, TEXT("Existing row to edit")),
+			MCPParam::RequiredField(TEXT("column"), EType::String, TEXT("Row-struct field to write")),
+			MCPParam::RequiredField(TEXT("value"), EType::Any, TEXT("Value to write, parsed as set_datatable_cell parses value")),
+		}),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate every cell and report what would change without writing (default false)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default false)")),
+	});
 	Registry.RegisterHandler(TEXT("rename_datatable_row"), &RenameDataTableRow, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("oldName"), EType::String, TEXT("Row to rename")).Alias(TEXT("rowName")),
