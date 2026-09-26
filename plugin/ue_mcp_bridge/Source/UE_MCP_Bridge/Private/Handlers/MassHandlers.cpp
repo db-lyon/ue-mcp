@@ -476,9 +476,10 @@ TSharedPtr<FJsonValue> FMassHandlers::EnsureEntityConfig(const TSharedPtr<FJsonO
 	}
 
 	ExistingAsset->MarkPackageDirty();
-	if (!SaveAssetPackage(ExistingAsset))
+	FString SaveError;
+	if (!SaveAssetPackageChecked(ExistingAsset, SaveError))
 	{
-		return MCPError(FString::Printf(TEXT("Failed to save MassEntityConfigAsset: %s"), *ExistingAsset->GetPathName()));
+		return MCPError(FString::Printf(TEXT("Failed to save MassEntityConfigAsset: %s. %s"), *ExistingAsset->GetPathName(), *SaveError));
 	}
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
