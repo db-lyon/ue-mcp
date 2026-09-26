@@ -663,6 +663,13 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(Cleared));
 	}
 
+	// A method nothing registered is answered as unknown before either gate, so
+	// it never reads as a dialog refusal or as the editor still starting up.
+	if (!HandlerRegistry.HasHandler(Method))
+	{
+		return CreateJsonRpcError(Request, -32601, DescribeUnknownMethod(Method));
+	}
+
 	// Execute handler on game thread
 	FMCPHandlerRegistry::FHandlerFunction Handler = [this, Method](const TSharedPtr<FJsonObject>& HandlerParams) -> TSharedPtr<FJsonValue>
 	{
@@ -749,38 +756,43 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		}
 	}
 
-	if (Result.IsValid())
+	if (!Result.IsValid())
 	{
-		return CreateJsonRpcResponse(Request, Result);
+		// The method was registered, so this is the handler failing to answer,
+		// not a method the plugin lacks.
+		return CreateJsonRpcError(Request, -32603,
+			FString::Printf(TEXT("Internal error: handler '%s' returned no result"), *Method));
 	}
-	else
+	return CreateJsonRpcResponse(Request, Result);
+}
+
+FString FMCPBridgeServer::DescribeUnknownMethod(const FString& Method) const
+{
+	// #233: a stale plugin build can dispatch a method that the TS schema
+	// advertises but the C++ side hasn't registered yet. The bare
+	// "Unknown method" error gave callers no way to tell that apart from
+	// a typo. List a few near-matches so it's obvious when the deployed
+	// plugin is behind the schema.
+	FString Detail = FString::Printf(TEXT("Unknown method: %s"), *Method);
+	const TArray<FString> All = HandlerRegistry.GetHandlerNames();
+	TArray<FString> Hints;
+	for (const FString& Name : All)
 	{
-		// #233: a stale plugin build can dispatch a method that the TS schema
-		// advertises but the C++ side hasn't registered yet. The bare
-		// "Unknown method" error gave callers no way to tell that apart from
-		// a typo. List a few near-matches so it's obvious when the deployed
-		// plugin is behind the schema.
-		FString Detail = FString::Printf(TEXT("Unknown method: %s"), *Method);
-		const TArray<FString> All = HandlerRegistry.GetHandlerNames();
-		TArray<FString> Hints;
-		for (const FString& Name : All)
+		if (Name.Contains(Method, ESearchCase::IgnoreCase) || Method.Contains(Name, ESearchCase::IgnoreCase))
 		{
-			if (Name.Contains(Method, ESearchCase::IgnoreCase) || Method.Contains(Name, ESearchCase::IgnoreCase))
-			{
-				Hints.Add(Name);
-				if (Hints.Num() >= 5) break;
-			}
+			Hints.Add(Name);
+			if (Hints.Num() >= 5) break;
 		}
-		if (Hints.Num() == 0 && !All.IsEmpty())
-		{
-			Detail += FString::Printf(TEXT(" (no near-matches in %d registered handlers - the deployed plugin may be behind the TS schema; try a clean rebuild + redeploy)."), All.Num());
-		}
-		else if (Hints.Num() > 0)
-		{
-			Detail += FString::Printf(TEXT(" (did you mean: %s)"), *FString::Join(Hints, TEXT(", ")));
-		}
-		return CreateJsonRpcError(Request, -32601, Detail);
 	}
+	if (Hints.Num() == 0 && !All.IsEmpty())
+	{
+		Detail += FString::Printf(TEXT(" (no near-matches in %d registered handlers - the deployed plugin may be behind the TS schema; try a clean rebuild + redeploy)."), All.Num());
+	}
+	else if (Hints.Num() > 0)
+	{
+		Detail += FString::Printf(TEXT(" (did you mean: %s)"), *FString::Join(Hints, TEXT(", ")));
+	}
+	return Detail;
 }
 
 FMCPClientSocket::FMCPClientSocket(FMCPSocketHandle InHandle)

@@ -250,6 +250,9 @@ private:
 	FString CreateJsonRpcResponse(const TSharedPtr<FJsonObject>& Request, const TSharedPtr<FJsonValue>& Result);
 	FString CreateJsonRpcError(const TSharedPtr<FJsonObject>& Request, int32 ErrorCode, const FString& ErrorMessage);
 
+	/** "Unknown method: x" with the registered names that look like it. */
+	FString DescribeUnknownMethod(const FString& Method) const;
+
 	// WebSocket connection handling
 	void HandleWebSocketConnection(FMCPSocketHandle ClientSocketFD);
 	void ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD, TArray<uint8>& InitialBytes);
