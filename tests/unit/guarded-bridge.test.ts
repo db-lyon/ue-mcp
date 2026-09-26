@@ -8,7 +8,7 @@ import { CLIENT_PROTOCOL_VERSION, type BridgeCapabilities, type IBridge } from "
 import { ProjectContext } from "../../src/config/project.js";
 import { projectTool } from "../../src/tools/project.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import type { EditorSession } from "../../src/session.js";
+import type { EditorSession } from "../../src/sessions/session.js";
 
 function fakeInner(result: unknown = { ok: true }): IBridge & { calls: Array<{ method: string; params?: Record<string, unknown> }> } {
   const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];

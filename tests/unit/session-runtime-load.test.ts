@@ -25,7 +25,7 @@ vi.mock("../../src/editor/deployer.js", async (importOriginal) => {
   return { ...actual, attach: vi.fn(() => ({ action: "skipped" })), attachSummary: vi.fn(() => "stubbed") };
 });
 
-const { SessionRegistry } = await import("../../src/session.js");
+const { SessionRegistry } = await import("../../src/sessions/session.js");
 const { projectTool } = await import("../../src/tools/project.js");
 
 let fixture: ProjectFixture;

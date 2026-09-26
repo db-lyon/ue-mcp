@@ -24,7 +24,7 @@
  * refusal and an on-demand probe both feed the same state, so a dialog is
  * caught by whichever notices first.
  */
-import type { EditorSession } from "../session.js";
+import type { EditorSession } from "../sessions/session.js";
 import type { IBridge } from "../bridge/bridge.js";
 import type { ElicitFn, ElicitPrimitiveSchema } from "../core/types.js";
 import type { DialogMode } from "../config/user-state.js";

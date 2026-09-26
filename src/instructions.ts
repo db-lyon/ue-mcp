@@ -1,6 +1,6 @@
 import { ALL_TOOLS } from "./tools.js";
 import { SIGNATURE_LEGEND } from "./action-signature.js";
-import { unionKnowledge, type SessionSurface } from "./session-surface.js";
+import { unionKnowledge, type SessionSurface } from "./sessions/session-surface.js";
 import type { ContextStrategy } from "./lean-context.js";
 
 /**

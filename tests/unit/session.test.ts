@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { SessionRegistry, sessionKeyFor } from "../../src/session.js";
+import { SessionRegistry, sessionKeyFor } from "../../src/sessions/session.js";
 import { deriveProjectPort, DEFAULT_BRIDGE_PORT } from "../../src/bridge/port.js";
 import { categoryTool } from "../../src/category-tool.js";
 import { injectEditorTarget, removeEditorTarget, stripEditorTarget } from "../../src/target-params.js";

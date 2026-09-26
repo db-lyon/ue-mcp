@@ -23,7 +23,7 @@ import {
 import * as fs from "node:fs";
 import type { IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
-import type { EditorSession } from "../session.js";
+import type { EditorSession } from "../sessions/session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
 import { bridgeMethodEffect, mayChangeState } from "../action-effects.js";
 import type { ActionEffect } from "../core/types.js";

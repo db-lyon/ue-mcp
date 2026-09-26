@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { McpError, ErrorCode } from "./core/errors.js";
 import { EDITOR_TARGET_PARAM, MIGRATE_TARGET_PARAM } from "./routing-params.js";
-import type { EditorSession } from "./session.js";
+import type { EditorSession } from "./sessions/session.js";
 import type { ToolContext, ToolDef } from "./core/types.js";
 
 /**

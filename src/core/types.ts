@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
-import type { EditorSession, SessionRegistry } from "../session.js";
+import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ParamChoice, ParamSpec } from "../handler-spec.js";
 import type { EpicInputSchema, EpicToolRef } from "../epic-input.js";
 

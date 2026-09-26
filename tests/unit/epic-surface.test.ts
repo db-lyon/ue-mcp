@@ -5,7 +5,7 @@ import { applyLeanContext } from "../../src/lean-context.js";
 import type { ToolDef } from "../../src/core/types.js";
 import { actionEnumValues, bp, categoryTool, cloneToolGraph } from "../../src/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { unionSurface, type SessionSurface } from "../../src/session-surface.js";
+import { unionSurface, type SessionSurface } from "../../src/sessions/session-surface.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/extensions/injection.js";
 
 function mixedTool(): ToolDef {

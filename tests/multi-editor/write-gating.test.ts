@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as path from "node:path";
 import { FakeBridge } from "../fake-bridge.js";
-import { SessionRegistry, type EditorSession } from "../../src/session.js";
+import { SessionRegistry, type EditorSession } from "../../src/sessions/session.js";
 import {
   routeEditorCall,
   effectiveTaskName,

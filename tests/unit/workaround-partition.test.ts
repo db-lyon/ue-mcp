@@ -17,7 +17,7 @@ import {
   workaroundCount,
   resetAllWorkarounds,
 } from "../../src/workaround-tracker.js";
-import { SessionRegistry } from "../../src/session.js";
+import { SessionRegistry } from "../../src/sessions/session.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 
 const mockSubmitFeedback = vi.fn();

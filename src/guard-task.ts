@@ -39,7 +39,7 @@
  * ```
  */
 import type { TaskResult } from "@db-lyon/flowkit";
-import type { EditorSession } from "./session.js";
+import type { EditorSession } from "./sessions/session.js";
 import { UeMcpTask } from "./task.js";
 
 /**

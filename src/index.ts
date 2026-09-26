@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { z } from "zod";
-import { SessionRegistry, type EditorSession } from "./session.js";
+import { SessionRegistry, type EditorSession } from "./sessions/session.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "./config/project.js";
 import { attach, attachSummary } from "./editor/deployer.js";
 import { composeServerInstructions } from "./instructions.js";
@@ -25,10 +25,10 @@ import { startFlowHttpServer } from "./flow/http-server.js";
 import { resolveLockingConfig } from "./locking.js";
 import { collapsingEnvWarnings } from "./config/session-env.js";
 import { checkPluginFreshness } from "./editor/bridge-freshness.js";
-import { unionSurface } from "./session-surface.js";
+import { unionSurface } from "./sessions/session-surface.js";
 import { packageVersion } from "./core/package-root.js";
 import { findCliCommand, runCliCommand } from "./cli-commands.js";
-import { SessionLoads } from "./session-load.js";
+import { SessionLoads } from "./sessions/session-load.js";
 import {
   buildElicit,
   dispatchCategoryCall,

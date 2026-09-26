@@ -5,7 +5,7 @@
  */
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
-import type { EditorSession, SessionRegistry } from "./session.js";
+import type { EditorSession, SessionRegistry } from "./sessions/session.js";
 import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "./core/types.js";
 import { McpError, ErrorCode } from "./core/errors.js";
 import { debug } from "./core/log.js";
@@ -32,9 +32,9 @@ import { clientAdvertisesElicitation } from "./editor/dialog-mode.js";
 import { contestedProject } from "./editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "./action-schema.js";
-import { explainMissingAction } from "./session-surface.js";
+import { explainMissingAction } from "./sessions/session-surface.js";
 import type { FlowContext } from "./flow/context.js";
-import type { SessionLoad, SessionLoads } from "./session-load.js";
+import type { SessionLoad, SessionLoads } from "./sessions/session-load.js";
 
 type TextBlock = { type: "text"; text: string };
 

@@ -21,7 +21,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as http from "node:http";
-import { SessionRegistry, type EditorSession } from "../../src/session.js";
+import { SessionRegistry, type EditorSession } from "../../src/sessions/session.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { assetTool } from "../../src/tools/asset.js";
 import { niagaraTool } from "../../src/tools/niagara.js";

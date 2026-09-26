@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { EditorBridge } from "../../src/bridge/bridge.js";
 import { ProjectContext } from "../../src/config/project.js";
-import { switchProject, isTargetDiverged } from "../../src/project-switch.js";
+import { switchProject, isTargetDiverged } from "../../src/sessions/project-switch.js";
 
 async function fakeEditor(name: string): Promise<{
   port: number;

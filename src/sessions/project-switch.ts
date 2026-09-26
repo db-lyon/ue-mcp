@@ -21,10 +21,10 @@
  *      and simply disconnected, which is safe: nothing can reach any editor.
  */
 import * as path from "node:path";
-import type { BridgeTarget, IBridge } from "./bridge/bridge.js";
-import { ProjectContext, readUeMcpConfig } from "./config/project.js";
-import { resolveUProjectPath } from "./config/uproject-path.js";
-import { debug, info } from "./core/log.js";
+import type { BridgeTarget, IBridge } from "../bridge/bridge.js";
+import { ProjectContext, readUeMcpConfig } from "../config/project.js";
+import { resolveUProjectPath } from "../config/uproject-path.js";
+import { debug, info } from "../core/log.js";
 
 export interface ProjectSwitchResult {
   /** Absolute .uproject now loaded. */

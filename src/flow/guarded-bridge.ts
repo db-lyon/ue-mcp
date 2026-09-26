@@ -12,7 +12,7 @@
  */
 import { runGuarded } from "@db-lyon/flowkit/guard";
 import type { BridgeTarget, IBridge } from "../bridge/bridge.js";
-import type { EditorSession } from "../session.js";
+import type { EditorSession } from "../sessions/session.js";
 import { explainEditorDownWithEvidence } from "../offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
 import { DialogGuard, ensureGuard, existingGuard } from "../editor/dialog-guard.js";

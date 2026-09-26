@@ -5,22 +5,22 @@
  */
 import * as path from "node:path";
 import type { EditorSession, SessionRegistry } from "./session.js";
-import type { ProjectContext } from "./config/project.js";
-import type { PluginInfo, ToolContext, ToolDef } from "./core/types.js";
-import { McpError, ErrorCode } from "./core/errors.js";
-import { info, warn } from "./core/log.js";
-import { ALL_TOOLS } from "./tools.js";
-import { applyNativeToolsConfig } from "./epic-surface.js";
+import type { ProjectContext } from "../config/project.js";
+import type { PluginInfo, ToolContext, ToolDef } from "../core/types.js";
+import { McpError, ErrorCode } from "../core/errors.js";
+import { info, warn } from "../core/log.js";
+import { ALL_TOOLS } from "../tools.js";
+import { applyNativeToolsConfig } from "../epic-surface.js";
 import { baseGraphFor, unionSurface, type SessionSurface, type UnionSurface } from "./session-surface.js";
-import { applyLeanContext, type ContextStrategy } from "./lean-context.js";
-import { buildMicroGateway } from "./micro-context.js";
-import { buildFlowRegistry } from "./flow/registry.js";
-import { assertNoLegacyGuardTasks, buildGuards } from "./flow/guards.js";
-import { createLiveGuardSource } from "./flow/guard-config.js";
-import { loadFlowConfig } from "./flow/loader.js";
-import type { FlowConfig, PluginEntry } from "./flow/schema.js";
-import { loadPlugins, type PluginRecord } from "./extensions/loader.js";
-import { readPluginsList } from "./extensions/plugins-list.js";
+import { applyLeanContext, type ContextStrategy } from "../lean-context.js";
+import { buildMicroGateway } from "../micro-context.js";
+import { buildFlowRegistry } from "../flow/registry.js";
+import { assertNoLegacyGuardTasks, buildGuards } from "../flow/guards.js";
+import { createLiveGuardSource } from "../flow/guard-config.js";
+import { loadFlowConfig } from "../flow/loader.js";
+import type { FlowConfig, PluginEntry } from "../flow/schema.js";
+import { loadPlugins, type PluginRecord } from "../extensions/loader.js";
+import { readPluginsList } from "../extensions/plugins-list.js";
 
 /**
  * Everything one editor session needs to serve a call: its own tool graph,

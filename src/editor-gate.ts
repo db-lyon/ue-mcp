@@ -24,7 +24,7 @@ import type { ToolDef } from "./core/types.js";
 import { stripEditorTarget } from "./target-params.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "./routing-params.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microCallParams } from "./micro-context.js";
-import type { EditorSession, SessionRegistry } from "./session.js";
+import type { EditorSession, SessionRegistry } from "./sessions/session.js";
 
 /**
  * Actions whose subject is the SESSION REGISTRY, not any editor.

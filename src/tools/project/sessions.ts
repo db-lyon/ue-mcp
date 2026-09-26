@@ -8,7 +8,7 @@ import { detectProjectHolders } from "../../editor/project-holders.js";
 import { readDeployedBridgeApiVersion } from "../../extensions/bridge-api.js";
 import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../../bridge/bridge.js";
 import { readLogState, readEngineSnapshot } from "../../editor/engine-observer.js";
-import { switchProject, isTargetDiverged } from "../../project-switch.js";
+import { switchProject, isTargetDiverged } from "../../sessions/project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../config/project.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
 import { toolGraphOf } from "../../target-params.js";

@@ -4,7 +4,7 @@ import { buildFlowRegistry } from "../../src/flow/registry.js";
 import { buildMicroGateway } from "../../src/micro-context.js";
 import { categoryTool } from "../../src/category-tool.js";
 import { guardFor, forgetGuard, type BlockingDialog } from "../../src/editor/dialog-guard.js";
-import type { EditorSession } from "../../src/session.js";
+import type { EditorSession } from "../../src/sessions/session.js";
 import type { FlowContext } from "../../src/flow/context.js";
 
 const DIALOG: BlockingDialog = {

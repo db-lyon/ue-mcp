@@ -26,7 +26,7 @@ import { resolveBridgeTarget, isPidAlive, readBridgeLockfileIn } from "../../src
 import { checkPluginFreshness } from "../../src/editor/bridge-freshness.js";
 import { attach } from "../../src/editor/deployer.js";
 import { startEditor } from "../../src/editor/editor-control.js";
-import { switchProject } from "../../src/project-switch.js";
+import { switchProject } from "../../src/sessions/project-switch.js";
 import { ProjectContext } from "../../src/config/project.js";
 import { requestedPortPath } from "../../src/bridge/requested-port.js";
 import { LiveServer, resultJson } from "./server.js";
