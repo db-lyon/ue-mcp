@@ -385,9 +385,16 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 		}
 	}
 	const bool bLevelSwitched = PreviousLevelPath != DemoConstants::HOME_LEVEL;
+	// Deleting the demo level while the editor still stands in it is the
+	// Untitled-map trap described above, so a failed anchor stops the cleanup.
 	{
 		FString HomeErr;
-		EnsureHomeLevelLoaded(HomeErr);
+		if (!EnsureHomeLevelLoaded(HomeErr))
+		{
+			return MCPError(FString::Printf(
+				TEXT("Cleanup stopped before deleting anything: the editor could not be moved to %s (%s)."),
+				*DemoConstants::HOME_LEVEL, *HomeErr));
+		}
 	}
 
 	UWorld* World = GetEditorWorld();
@@ -423,23 +430,22 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 		DemoConstants::MAT_DIR / TEXT("EUW_DemoTuning"),
 	};
 
+	// 3) The DemoLevel goes last, after the assets placed in it.
+	AssetsToDelete.Add(DemoConstants::DEMO_LEVEL);
+
 	int32 AssetsDeleted = 0;
+	TArray<FString> FailedDeletes;
 	for (const FString& AssetPath : AssetsToDelete)
 	{
-		if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
+		if (!UEditorAssetLibrary::DoesAssetExist(AssetPath)) continue;
+		if (UEditorAssetLibrary::DeleteAsset(AssetPath))
 		{
-			if (UEditorAssetLibrary::DeleteAsset(AssetPath))
-			{
-				++AssetsDeleted;
-			}
+			++AssetsDeleted;
 		}
-	}
-
-	// 3) Delete DemoLevel
-	if (UEditorAssetLibrary::DoesAssetExist(DemoConstants::DEMO_LEVEL))
-	{
-		UEditorAssetLibrary::DeleteAsset(DemoConstants::DEMO_LEVEL);
-		++AssetsDeleted;
+		else
+		{
+			FailedDeletes.Add(AssetPath);
+		}
 	}
 
 	// 4) Delete /Game/Demo directory if empty
@@ -458,6 +464,14 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 	Result->SetStringField(TEXT("previousLevelPath"), PreviousLevelPath);
 	Result->SetBoolField(TEXT("homeLevelCreated"), !bHomeExisted);
 	Result->SetBoolField(TEXT("levelSwitched"), bLevelSwitched);
+	if (FailedDeletes.Num() > 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetArrayField(TEXT("failedDeletes"), MCPStringListToJson(FailedDeletes));
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d demo asset(s) could not be deleted: %s. They may be referenced or read-only."),
+			FailedDeletes.Num(), *FString::Join(FailedDeletes, TEXT(", "))));
+	}
 	// Idempotency, counting the anchoring as well as the deletes: cleaning an
 	// already-clean project while already standing in the home level does
 	// nothing at all. Creating that level, or moving the editor into it, is a
