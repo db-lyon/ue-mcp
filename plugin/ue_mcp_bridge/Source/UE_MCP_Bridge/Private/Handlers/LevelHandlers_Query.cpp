@@ -395,7 +395,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 	// bridge cannot answer, so this refuses instead. And whatever happens, the
 	// map that was open when the call arrived is the map that is open when it
 	// returns.
-	FString RestoreLevelPath;
+	MCPEditorState::FScopedLevelRestore LevelRestore(&FLevelHandlers::LoadLevel, true);
 	TArray<FString> InitialDirtyPackages;
 	if (!LevelPath.IsEmpty())
 	{
@@ -416,16 +416,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 			return MCPError(FString::Printf(TEXT("Level package was not found as a .umap: %s"), *LevelPath));
 		}
 
-		MCPEditorState::CollectDirtyEditorPackageNames(InitialDirtyPackages);
-		if (!InitialDirtyPackages.IsEmpty())
+		if (auto Dirty = MCPEditorState::RefuseIfDirty(
+			TEXT("Refusing to open another level while content or map packages are dirty"), InitialDirtyPackages))
 		{
-			auto DirtyResult = MCPSuccess();
-			DirtyResult->SetBoolField(TEXT("success"), false);
-			DirtyResult->SetStringField(
-				TEXT("error"),
-				TEXT("Refusing to open another level while content or map packages are dirty"));
-			DirtyResult->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(InitialDirtyPackages));
-			return MCPResult(DirtyResult);
+			return Dirty;
 		}
 
 		const FString CurrentLevelPath = MCPEditorState::CurrentEditorLevelPackageName();
@@ -437,15 +431,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 					TEXT("The currently open level cannot be restored from package path '%s', so this refuses to leave it"),
 					*CurrentLevelPath));
 			}
-			TSharedPtr<FJsonObject> LoadParams = MakeShared<FJsonObject>();
-			LoadParams->SetStringField(TEXT("levelPath"), LevelPath);
-			const TSharedPtr<FJsonValue> LoadResult = FLevelHandlers::LoadLevel(LoadParams);
-			if (!LoadResult.IsValid() || LoadResult->Type != EJson::Object ||
-				!LoadResult->AsObject()->GetBoolField(TEXT("success")))
+			FString LoadError;
+			if (!MCPEditorState::LoadLevelViaHandler(&FLevelHandlers::LoadLevel, LevelPath, LoadError))
 			{
-				return MCPError(FString::Printf(TEXT("Failed to open level '%s'"), *LevelPath));
+				return MCPError(FString::Printf(TEXT("Failed to open level '%s': %s"), *LevelPath, *LoadError));
 			}
-			RestoreLevelPath = CurrentLevelPath;
+			LevelRestore.SetLevelPath(CurrentLevelPath);
 		}
 	}
 
@@ -456,26 +447,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 		MCPEditorState::CollectDirtyEditorPackageNames(InitialDirtyPackages);
 	}
 
-	// Everything below runs against this world. RestoreLevelPath is put back
-	// on every exit path from here on.
+	// Everything below runs against this world. LevelRestore puts the original
+	// map back on every exit path from here on.
 	UWorld* World = LevelPath.IsEmpty()
 		? ResolveWorldFromParams(Params, *WorldScope)
 		: GetEditorWorld();
 
-	auto RestoreLevel = [&RestoreLevelPath]()
-	{
-		if (RestoreLevelPath.IsEmpty())
-		{
-			return;
-		}
-		TSharedPtr<FJsonObject> RestoreParams = MakeShared<FJsonObject>();
-		RestoreParams->SetStringField(TEXT("levelPath"), RestoreLevelPath);
-		FLevelHandlers::LoadLevel(RestoreParams);
-	};
-
 	if (!World)
 	{
-		RestoreLevel();
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
 	}
 
@@ -1155,11 +1134,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 		Result->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(DirtyAfterQuery));
 	}
 
-	if (!RestoreLevelPath.IsEmpty())
+	if (!LevelRestore.GetLevelPath().IsEmpty())
 	{
-		Result->SetStringField(TEXT("restoredLevelPath"), RestoreLevelPath);
+		Result->SetStringField(TEXT("restoredLevelPath"), LevelRestore.GetLevelPath());
 	}
-	RestoreLevel();
 
 	return MCPResult(Result);
 }

@@ -369,41 +369,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 	}
 
 	TArray<FString> InitialDirtyPackages;
-	MCPEditorState::CollectDirtyEditorPackageNames(InitialDirtyPackages);
-	if (!InitialDirtyPackages.IsEmpty())
+	if (auto Dirty = MCPEditorState::RefuseIfDirty(
+		TEXT("Refusing to load levels while content or map packages are dirty"), InitialDirtyPackages))
 	{
-		auto Result = MCPSuccess();
-		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(
-			TEXT("error"),
-			TEXT("Refusing to load levels while content or map packages are dirty"));
-		Result->SetArrayField(TEXT("dirtyPackages"), MCPStringListToJson(InitialDirtyPackages));
-		return MCPResult(Result);
+		return Dirty;
 	}
 
 	auto LoadEditorLevel = [](const FString& LevelPath, FString& OutError) -> bool
 	{
-		TSharedPtr<FJsonObject> LoadParams = MakeShared<FJsonObject>();
-		LoadParams->SetStringField(TEXT("levelPath"), LevelPath);
-		const TSharedPtr<FJsonValue> LoadResult = FLevelHandlers::LoadLevel(LoadParams);
-		if (!LoadResult.IsValid() || LoadResult->Type != EJson::Object)
-		{
-			OutError = FString::Printf(TEXT("Level load returned an invalid result: %s"), *LevelPath);
-			return false;
-		}
-
-		const TSharedPtr<FJsonObject> LoadObject = LoadResult->AsObject();
-		bool bSuccess = false;
-		LoadObject->TryGetBoolField(TEXT("success"), bSuccess);
-		if (!bSuccess)
-		{
-			if (!LoadObject->TryGetStringField(TEXT("error"), OutError))
-			{
-				OutError = FString::Printf(TEXT("Failed to load level: %s"), *LevelPath);
-			}
-			return false;
-		}
-		return true;
+		return MCPEditorState::LoadLevelViaHandler(&FLevelHandlers::LoadLevel, LevelPath, OutError);
 	};
 
 	auto BuildResult = [&Requests, &OriginalLevelPath, bDryRun, bRestoreOriginalLevel](
@@ -465,20 +439,16 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 		return MCPResult(Result);
 	};
 
-	auto RestoreOriginalLevel = [&LoadEditorLevel, &OriginalLevelPath, bRestoreOriginalLevel](
-		FString& OutError) -> bool
+	// Restored explicitly rather than on exit, because each result reports
+	// whether the restore happened.
+	MCPEditorState::FScopedLevelRestore OriginalLevel(&FLevelHandlers::LoadLevel, false);
+	if (bRestoreOriginalLevel)
 	{
-		if (!bRestoreOriginalLevel)
-		{
-			return false;
-		}
-
-		UWorld* CurrentWorld = GetEditorWorld();
-		if (CurrentWorld && CurrentWorld->GetOutermost()->GetName() == OriginalLevelPath)
-		{
-			return true;
-		}
-		return LoadEditorLevel(OriginalLevelPath, OutError);
+		OriginalLevel.SetLevelPath(OriginalLevelPath);
+	}
+	auto RestoreOriginalLevel = [&OriginalLevel](FString& OutError) -> bool
+	{
+		return OriginalLevel.Restore(OutError);
 	};
 
 	// First pass validates every level and exact match before any destructive
