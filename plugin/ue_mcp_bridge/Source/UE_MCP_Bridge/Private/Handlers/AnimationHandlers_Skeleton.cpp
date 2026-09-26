@@ -202,15 +202,6 @@ static TSharedPtr<FJsonValue> SkeletonBoneNotFound(
 
 // ── Small JSON helpers ───────────────────────────────────────────────────────
 
-static TSharedPtr<FJsonObject> SkeletonTransformJson(const FTransform& Transform)
-{
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Transform.GetLocation()));
-	Obj->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Transform.Rotator()));
-	Obj->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Transform.GetScale3D()));
-	return Obj;
-}
-
 static TArray<FString> SkeletonNamesToStrings(const TArray<FName>& Names)
 {
 	TArray<FString> Out;
@@ -1297,7 +1288,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 			Call.Invoke();
 			bOk = Call.BoolReturn();
 			Row->SetStringField(TEXT("parent"), Planned.Parent.ToString());
-			Row->SetObjectField(TEXT("transform"), SkeletonTransformJson(Planned.Transform));
+			Row->SetObjectField(TEXT("transform"), MCPTransformToJsonObject(Planned.Transform));
 
 			TSharedPtr<FJsonObject> Inverse = MakeShared<FJsonObject>();
 			Inverse->SetStringField(TEXT("op"), TEXT("remove"));
@@ -1314,7 +1305,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 			bOk = Call.BoolReturn();
 			Row->SetBoolField(TEXT("removeChildren"), Planned.bRemoveChildren);
 			Row->SetStringField(TEXT("priorParent"), Planned.PriorParent.ToString());
-			Row->SetObjectField(TEXT("priorTransform"), SkeletonTransformJson(Planned.PriorTransform));
+			Row->SetObjectField(TEXT("priorTransform"), MCPTransformToJsonObject(Planned.PriorTransform));
 
 			// The inverse needs the parent and the transform, which is why both
 			// were captured before the call rather than read back after it.
@@ -1322,7 +1313,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 			Inverse->SetStringField(TEXT("op"), TEXT("add"));
 			Inverse->SetStringField(TEXT("bone"), Planned.Bone.ToString());
 			Inverse->SetStringField(TEXT("parent"), Planned.PriorParent.ToString());
-			Inverse->SetObjectField(TEXT("transform"), SkeletonTransformJson(Planned.PriorTransform));
+			Inverse->SetObjectField(TEXT("transform"), MCPTransformToJsonObject(Planned.PriorTransform));
 			InverseEdits.Insert(MakeShared<FJsonValueObject>(Inverse), 0);
 		}
 		else if (Planned.Op == TEXT("rename"))
@@ -1364,14 +1355,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 			Call.SetBool(TEXT("bMoveChildren"), Planned.bMoveChildren);
 			Call.Invoke();
 			bOk = Call.BoolReturn();
-			Row->SetObjectField(TEXT("transform"), SkeletonTransformJson(Planned.Transform));
-			Row->SetObjectField(TEXT("priorTransform"), SkeletonTransformJson(Planned.PriorTransform));
+			Row->SetObjectField(TEXT("transform"), MCPTransformToJsonObject(Planned.Transform));
+			Row->SetObjectField(TEXT("priorTransform"), MCPTransformToJsonObject(Planned.PriorTransform));
 			Row->SetBoolField(TEXT("moveChildren"), Planned.bMoveChildren);
 
 			TSharedPtr<FJsonObject> Inverse = MakeShared<FJsonObject>();
 			Inverse->SetStringField(TEXT("op"), TEXT("set_transform"));
 			Inverse->SetStringField(TEXT("bone"), Planned.Bone.ToString());
-			Inverse->SetObjectField(TEXT("transform"), SkeletonTransformJson(Planned.PriorTransform));
+			Inverse->SetObjectField(TEXT("transform"), MCPTransformToJsonObject(Planned.PriorTransform));
 			Inverse->SetBoolField(TEXT("moveChildren"), Planned.bMoveChildren);
 			InverseEdits.Insert(MakeShared<FJsonValueObject>(Inverse), 0);
 		}
@@ -1488,7 +1479,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CommitSkeletonEdit(const TSharedPtr<F
 			Inverse->SetStringField(TEXT("bone"), Bone.ToString());
 			Inverse->SetStringField(TEXT("parent"), Session->BaselineParent.FindRef(Bone).ToString());
 			Inverse->SetObjectField(TEXT("transform"),
-				SkeletonTransformJson(Session->BaselineTransform.FindRef(Bone)));
+				MCPTransformToJsonObject(Session->BaselineTransform.FindRef(Bone)));
 			InverseEdits.Add(MakeShared<FJsonValueObject>(Inverse));
 		}
 		// Remove what was added.
@@ -1521,7 +1512,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CommitSkeletonEdit(const TSharedPtr<F
 				TSharedPtr<FJsonObject> Inverse = MakeShared<FJsonObject>();
 				Inverse->SetStringField(TEXT("op"), TEXT("set_transform"));
 				Inverse->SetStringField(TEXT("bone"), Bone.ToString());
-				Inverse->SetObjectField(TEXT("transform"), SkeletonTransformJson(*BaselineTransform));
+				Inverse->SetObjectField(TEXT("transform"), MCPTransformToJsonObject(*BaselineTransform));
 				Inverse->SetBoolField(TEXT("moveChildren"), false);
 				InverseEdits.Add(MakeShared<FJsonValueObject>(Inverse));
 			}

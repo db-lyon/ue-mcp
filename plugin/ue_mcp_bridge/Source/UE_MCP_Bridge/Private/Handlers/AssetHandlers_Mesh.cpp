@@ -1045,10 +1045,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSkeletonBones(const TSharedPtr<FJsonO
 			TSharedPtr<FJsonObject> LocalObj = MakeShared<FJsonObject>();
 			LocalObj->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Local.GetLocation()));
 			const FRotator LocalRot = Local.Rotator();
-			TSharedPtr<FJsonObject> LocalRotObj = MakeShared<FJsonObject>();
-			LocalRotObj->SetNumberField(TEXT("pitch"), LocalRot.Pitch);
-			LocalRotObj->SetNumberField(TEXT("yaw"), LocalRot.Yaw);
-			LocalRotObj->SetNumberField(TEXT("roll"), LocalRot.Roll);
+			TSharedPtr<FJsonObject> LocalRotObj = MCPRotatorToJsonObject(LocalRot);
 			LocalObj->SetObjectField(TEXT("rotation"), LocalRotObj);
 			LocalObj->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Local.GetScale3D()));
 			B->SetObjectField(TEXT("localTransform"), LocalObj);
@@ -1098,25 +1095,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshBounds(const TSharedPtr<FJsonObjec
 	FVector Extent = BoundingBox.GetExtent();
 	FVector Center = BoundingBox.GetCenter();
 
-	TSharedPtr<FJsonObject> MinObj = MakeShared<FJsonObject>();
-	MinObj->SetNumberField(TEXT("x"), Min.X);
-	MinObj->SetNumberField(TEXT("y"), Min.Y);
-	MinObj->SetNumberField(TEXT("z"), Min.Z);
+	TSharedPtr<FJsonObject> MinObj = MCPVec3ToJsonObject(Min);
 
-	TSharedPtr<FJsonObject> MaxObj = MakeShared<FJsonObject>();
-	MaxObj->SetNumberField(TEXT("x"), Max.X);
-	MaxObj->SetNumberField(TEXT("y"), Max.Y);
-	MaxObj->SetNumberField(TEXT("z"), Max.Z);
+	TSharedPtr<FJsonObject> MaxObj = MCPVec3ToJsonObject(Max);
 
-	TSharedPtr<FJsonObject> ExtentObj = MakeShared<FJsonObject>();
-	ExtentObj->SetNumberField(TEXT("x"), Extent.X);
-	ExtentObj->SetNumberField(TEXT("y"), Extent.Y);
-	ExtentObj->SetNumberField(TEXT("z"), Extent.Z);
+	TSharedPtr<FJsonObject> ExtentObj = MCPVec3ToJsonObject(Extent);
 
-	TSharedPtr<FJsonObject> CenterObj = MakeShared<FJsonObject>();
-	CenterObj->SetNumberField(TEXT("x"), Center.X);
-	CenterObj->SetNumberField(TEXT("y"), Center.Y);
-	CenterObj->SetNumberField(TEXT("z"), Center.Z);
+	TSharedPtr<FJsonObject> CenterObj = MCPVec3ToJsonObject(Center);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);

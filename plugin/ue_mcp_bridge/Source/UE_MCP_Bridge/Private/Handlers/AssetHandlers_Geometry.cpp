@@ -365,11 +365,6 @@ bool GeometrySectionTriangleRange(
 	return true;
 }
 
-TSharedPtr<FJsonObject> GeometryVec3ToJson(const FVector3f& V)
-{
-	return MCPVec3ToJsonObject(FVector(V));
-}
-
 TSharedPtr<FJsonObject> GeometryUVToJson(const FVector2f& UV)
 {
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -579,7 +574,7 @@ TSharedPtr<FJsonValue> FAssetGeometryHandlers::GetMeshGeometry(const TSharedPtr<
 			for (int32 VertexIndex = SectionFirstVertex; VertexIndex <= SectionLastVertex; ++VertexIndex)
 			{
 				if (!Snapshot.Positions.IsValidIndex(VertexIndex)) break;
-				Positions.Add(MakeShared<FJsonValueObject>(GeometryVec3ToJson(Snapshot.Positions[VertexIndex])));
+				Positions.Add(MakeShared<FJsonValueObject>(MCPVec3ToJsonObject(FVector(Snapshot.Positions[VertexIndex]))));
 			}
 			SectionObj->SetArrayField(TEXT("positions"), Positions);
 		}
@@ -591,7 +586,7 @@ TSharedPtr<FJsonValue> FAssetGeometryHandlers::GetMeshGeometry(const TSharedPtr<
 			for (int32 VertexIndex = SectionFirstVertex; VertexIndex <= SectionLastVertex; ++VertexIndex)
 			{
 				if (!Snapshot.Normals.IsValidIndex(VertexIndex)) break;
-				Normals.Add(MakeShared<FJsonValueObject>(GeometryVec3ToJson(Snapshot.Normals[VertexIndex])));
+				Normals.Add(MakeShared<FJsonValueObject>(MCPVec3ToJsonObject(FVector(Snapshot.Normals[VertexIndex]))));
 			}
 			SectionObj->SetArrayField(TEXT("normals"), Normals);
 		}

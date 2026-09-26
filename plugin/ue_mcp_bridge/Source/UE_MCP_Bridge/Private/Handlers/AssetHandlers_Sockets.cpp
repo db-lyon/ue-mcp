@@ -98,20 +98,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 					TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 					Payload->SetStringField(TEXT("assetPath"), AssetPath);
 					Payload->SetStringField(TEXT("socketName"), SocketName);
-					TSharedPtr<FJsonObject> PrevLocObj = MakeShared<FJsonObject>();
-					PrevLocObj->SetNumberField(TEXT("x"), PrevLoc.X);
-					PrevLocObj->SetNumberField(TEXT("y"), PrevLoc.Y);
-					PrevLocObj->SetNumberField(TEXT("z"), PrevLoc.Z);
+					TSharedPtr<FJsonObject> PrevLocObj = MCPVec3ToJsonObject(PrevLoc);
 					Payload->SetObjectField(TEXT("relativeLocation"), PrevLocObj);
-					TSharedPtr<FJsonObject> PrevRotObj = MakeShared<FJsonObject>();
-					PrevRotObj->SetNumberField(TEXT("pitch"), PrevRot.Pitch);
-					PrevRotObj->SetNumberField(TEXT("yaw"), PrevRot.Yaw);
-					PrevRotObj->SetNumberField(TEXT("roll"), PrevRot.Roll);
+					TSharedPtr<FJsonObject> PrevRotObj = MCPRotatorToJsonObject(PrevRot);
 					Payload->SetObjectField(TEXT("relativeRotation"), PrevRotObj);
-					TSharedPtr<FJsonObject> PrevScaleObj = MakeShared<FJsonObject>();
-					PrevScaleObj->SetNumberField(TEXT("x"), PrevScale.X);
-					PrevScaleObj->SetNumberField(TEXT("y"), PrevScale.Y);
-					PrevScaleObj->SetNumberField(TEXT("z"), PrevScale.Z);
+					TSharedPtr<FJsonObject> PrevScaleObj = MCPVec3ToJsonObject(PrevScale);
 					Payload->SetObjectField(TEXT("relativeScale"), PrevScaleObj);
 					MCPSetRollback(UpdatedResult, TEXT("set_socket_transform"), Payload);
 					return MCPResult(UpdatedResult);
@@ -181,20 +172,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 					TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 					Payload->SetStringField(TEXT("assetPath"), AssetPath);
 					Payload->SetStringField(TEXT("socketName"), SocketName);
-					TSharedPtr<FJsonObject> PrevLocObj = MakeShared<FJsonObject>();
-					PrevLocObj->SetNumberField(TEXT("x"), PrevLoc.X);
-					PrevLocObj->SetNumberField(TEXT("y"), PrevLoc.Y);
-					PrevLocObj->SetNumberField(TEXT("z"), PrevLoc.Z);
+					TSharedPtr<FJsonObject> PrevLocObj = MCPVec3ToJsonObject(PrevLoc);
 					Payload->SetObjectField(TEXT("relativeLocation"), PrevLocObj);
-					TSharedPtr<FJsonObject> PrevRotObj = MakeShared<FJsonObject>();
-					PrevRotObj->SetNumberField(TEXT("pitch"), PrevRot.Pitch);
-					PrevRotObj->SetNumberField(TEXT("yaw"), PrevRot.Yaw);
-					PrevRotObj->SetNumberField(TEXT("roll"), PrevRot.Roll);
+					TSharedPtr<FJsonObject> PrevRotObj = MCPRotatorToJsonObject(PrevRot);
 					Payload->SetObjectField(TEXT("relativeRotation"), PrevRotObj);
-					TSharedPtr<FJsonObject> PrevScaleObj = MakeShared<FJsonObject>();
-					PrevScaleObj->SetNumberField(TEXT("x"), PrevScale.X);
-					PrevScaleObj->SetNumberField(TEXT("y"), PrevScale.Y);
-					PrevScaleObj->SetNumberField(TEXT("z"), PrevScale.Z);
+					TSharedPtr<FJsonObject> PrevScaleObj = MCPVec3ToJsonObject(PrevScale);
 					Payload->SetObjectField(TEXT("relativeScale"), PrevScaleObj);
 					MCPSetRollback(UpdatedResult, TEXT("set_socket_transform"), Payload);
 					return MCPResult(UpdatedResult);
@@ -481,22 +463,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 		S->SetStringField(TEXT("boneName"), Socket->BoneName.ToString());
 		S->SetStringField(TEXT("source"), Source);
 
-		TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
-		Loc->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
-		Loc->SetNumberField(TEXT("y"), Socket->RelativeLocation.Y);
-		Loc->SetNumberField(TEXT("z"), Socket->RelativeLocation.Z);
+		TSharedPtr<FJsonObject> Loc = MCPVec3ToJsonObject(Socket->RelativeLocation);
 		S->SetObjectField(TEXT("relativeLocation"), Loc);
 
-		TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>();
-		Rot->SetNumberField(TEXT("pitch"), Socket->RelativeRotation.Pitch);
-		Rot->SetNumberField(TEXT("yaw"), Socket->RelativeRotation.Yaw);
-		Rot->SetNumberField(TEXT("roll"), Socket->RelativeRotation.Roll);
+		TSharedPtr<FJsonObject> Rot = MCPRotatorToJsonObject(Socket->RelativeRotation);
 		S->SetObjectField(TEXT("relativeRotation"), Rot);
 
-		TSharedPtr<FJsonObject> Scale = MakeShared<FJsonObject>();
-		Scale->SetNumberField(TEXT("x"), Socket->RelativeScale.X);
-		Scale->SetNumberField(TEXT("y"), Socket->RelativeScale.Y);
-		Scale->SetNumberField(TEXT("z"), Socket->RelativeScale.Z);
+		TSharedPtr<FJsonObject> Scale = MCPVec3ToJsonObject(Socket->RelativeScale);
 		S->SetObjectField(TEXT("relativeScale"), Scale);
 
 		SocketArray.Add(MakeShared<FJsonValueObject>(S));
@@ -512,22 +485,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 			S->SetStringField(TEXT("tag"), Socket->Tag);
 			S->SetStringField(TEXT("source"), TEXT("mesh"));
 
-			TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
-			Loc->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
-			Loc->SetNumberField(TEXT("y"), Socket->RelativeLocation.Y);
-			Loc->SetNumberField(TEXT("z"), Socket->RelativeLocation.Z);
+			TSharedPtr<FJsonObject> Loc = MCPVec3ToJsonObject(Socket->RelativeLocation);
 			S->SetObjectField(TEXT("relativeLocation"), Loc);
 
-			TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>();
-			Rot->SetNumberField(TEXT("pitch"), Socket->RelativeRotation.Pitch);
-			Rot->SetNumberField(TEXT("yaw"), Socket->RelativeRotation.Yaw);
-			Rot->SetNumberField(TEXT("roll"), Socket->RelativeRotation.Roll);
+			TSharedPtr<FJsonObject> Rot = MCPRotatorToJsonObject(Socket->RelativeRotation);
 			S->SetObjectField(TEXT("relativeRotation"), Rot);
 
-			TSharedPtr<FJsonObject> Scale = MakeShared<FJsonObject>();
-			Scale->SetNumberField(TEXT("x"), Socket->RelativeScale.X);
-			Scale->SetNumberField(TEXT("y"), Socket->RelativeScale.Y);
-			Scale->SetNumberField(TEXT("z"), Socket->RelativeScale.Z);
+			TSharedPtr<FJsonObject> Scale = MCPVec3ToJsonObject(Socket->RelativeScale);
 			S->SetObjectField(TEXT("relativeScale"), Scale);
 
 			SocketArray.Add(MakeShared<FJsonValueObject>(S));
@@ -646,20 +610,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSocketTransform(const TSharedPtr<FJson
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), AssetPath);
 		Payload->SetStringField(TEXT("socketName"), SocketName);
-		TSharedPtr<FJsonObject> PrevLocObj = MakeShared<FJsonObject>();
-		PrevLocObj->SetNumberField(TEXT("x"), PrevLoc.X);
-		PrevLocObj->SetNumberField(TEXT("y"), PrevLoc.Y);
-		PrevLocObj->SetNumberField(TEXT("z"), PrevLoc.Z);
+		TSharedPtr<FJsonObject> PrevLocObj = MCPVec3ToJsonObject(PrevLoc);
 		Payload->SetObjectField(TEXT("relativeLocation"), PrevLocObj);
-		TSharedPtr<FJsonObject> PrevRotObj = MakeShared<FJsonObject>();
-		PrevRotObj->SetNumberField(TEXT("pitch"), PrevRot.Pitch);
-		PrevRotObj->SetNumberField(TEXT("yaw"), PrevRot.Yaw);
-		PrevRotObj->SetNumberField(TEXT("roll"), PrevRot.Roll);
+		TSharedPtr<FJsonObject> PrevRotObj = MCPRotatorToJsonObject(PrevRot);
 		Payload->SetObjectField(TEXT("relativeRotation"), PrevRotObj);
-		TSharedPtr<FJsonObject> PrevScaleObj = MakeShared<FJsonObject>();
-		PrevScaleObj->SetNumberField(TEXT("x"), PrevScale.X);
-		PrevScaleObj->SetNumberField(TEXT("y"), PrevScale.Y);
-		PrevScaleObj->SetNumberField(TEXT("z"), PrevScale.Z);
+		TSharedPtr<FJsonObject> PrevScaleObj = MCPVec3ToJsonObject(PrevScale);
 		Payload->SetObjectField(TEXT("relativeScale"), PrevScaleObj);
 		return Payload;
 	};
