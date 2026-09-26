@@ -687,11 +687,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetDynamicInput(const TSharedPtr<FJsonO
 	(void)EmitterIndex;
 	// FNiagaraStackGraphUtilities::GetStackFunctionInputs and
 	// FNiagaraStackFunctionInputBinder are declared but not exported in 5.4, and no reflected API stands in for them.
-	TSharedPtr<FJsonObject> Unsupported = MakeShared<FJsonObject>();
-	Unsupported->SetBoolField(TEXT("success"), false);
-	Unsupported->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
-	Unsupported->SetStringField(TEXT("error"), TEXT("niagara module input actions require Unreal Engine 5.5 or newer: the NiagaraEditor stack API they read and write through is not exported in 5.4."));
-	return MCPResult(Unsupported);
+	return MCPUnsupportedEngineError(TEXT("Niagara module input editing"), TEXT("5.5"),
+		TEXT("The NiagaraEditor stack API it reads and writes through is not exported in 5.4."));
 #else
 
 	if (MCPIsProtectedAssetPath(SystemPath)) return MCPProtectedPathError(SystemPath);
