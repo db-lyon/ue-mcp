@@ -25,8 +25,8 @@ export interface WorkaroundEntry {
   suggestedTool?: string;
 }
 
-/** Anything carrying an editor session. Structural so this module stays free of
- *  a cycle through types.ts, which imports the tool graph. */
+/** Anything carrying an editor session. Structural so this module needs no
+ *  import of the session or context types. */
 export interface WorkaroundScopeSource {
   session?: { key: string } | undefined;
 }

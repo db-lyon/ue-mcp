@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef, type ActionSpec } from "../types.js";
+import type { ToolDef, ActionSpec } from "../types.js";
+import { categoryTool } from "../category-tool.js";
 import {
   compileSchemaFields,
   type ManifestProvidedCategory,

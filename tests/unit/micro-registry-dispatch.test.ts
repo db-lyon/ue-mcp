@@ -7,7 +7,7 @@ import { applyLeanContext, buildMicroGateway } from "../../src/lean-context.js";
 import { nativeHandlerSurface } from "../../src/plugin/loader.js";
 import { PluginManifestSchema } from "../../src/plugin/manifest.js";
 import { buildProvidedTool } from "../../src/plugin/provision.js";
-import { categoryTool } from "../../src/types.js";
+import { categoryTool } from "../../src/category-tool.js";
 import { UeMcpTask } from "../../src/task.js";
 import type { IBridge } from "../../src/bridge.js";
 

@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { actionEnum, categoryTool, stripAction, type ActionSpec, type ToolDef } from "./types.js";
+import type { ActionSpec, ToolDef } from "./types.js";
+import { actionEnum, categoryTool } from "./category-tool.js";
+import { stripAction } from "./routing-params.js";
 import { takeTimeout } from "./call-pipeline.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { actionSchema } from "./action-schema.js";

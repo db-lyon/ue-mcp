@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef } from "../types.js";
+import type { ToolDef } from "../types.js";
+import { categoryTool } from "../category-tool.js";
 import { normalizeWidgetParams, WIDGET_PARAM_GROUPS } from "./widget-params.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/widget.generated.js";
 import { specBp, schema as specSchema } from "./specs/widget.generated.js";

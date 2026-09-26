@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { categoryTool, type ToolContext, type ToolDef } from "../types.js";
+import type { ToolContext, ToolDef } from "../types.js";
+import { categoryTool } from "../category-tool.js";
 import { EDITOR_TARGET_PARAM } from "../routing-params.js";
 import { handlerFailure } from "../flow/handler-outcome.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/niagara.generated.js";

@@ -24,7 +24,7 @@ import {
   type ParamSpec,
 } from "../../src/handler-spec.js";
 import { actionSchema, parseParams } from "../../src/action-schema.js";
-import { categoryTool } from "../../src/types.js";
+import { categoryTool } from "../../src/category-tool.js";
 import { prepareCall } from "../../src/call-pipeline.js";
 import { bridgeTaskClass } from "../../src/flow/task-factory.js";
 

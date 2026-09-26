@@ -31,7 +31,9 @@ import { loadFlowConfig } from "../../src/flow/loader.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import { startFlowHttpServer } from "../../src/flow/http-server.js";
 import { routeEditorCall } from "../../src/editor-gate.js";
-import { cloneToolDef, injectEditorTarget, sessionContext, type ToolContext, type ToolDef } from "../../src/types.js";
+import type { ToolContext, ToolDef } from "../../src/types.js";
+import { cloneToolDef } from "../../src/category-tool.js";
+import { injectEditorTarget, sessionContext } from "../../src/target-params.js";
 import type { EditorBridge } from "../../src/bridge.js";
 import { LiveServer } from "./server.js";
 import {

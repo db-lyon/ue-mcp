@@ -20,7 +20,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { categoryTool, bp} from "../../src/types.js";
+import { categoryTool, bp } from "../../src/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { requiresExplicitEditor } from "../../src/action-class.js";
 import {

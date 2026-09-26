@@ -10,7 +10,8 @@ import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../../bridge.
 import { readLogState, readEngineSnapshot } from "../../engine-observer.js";
 import { switchProject, isTargetDiverged } from "../../project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../project.js";
-import { toolGraphOf, type ToolContext, type ActionSpec } from "../../types.js";
+import type { ToolContext, ActionSpec } from "../../types.js";
+import { toolGraphOf } from "../../target-params.js";
 
 /**
  * The environment variables flattening every registered editor into one, right

@@ -13,7 +13,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { checkBridgeParity, deployedPlugin, unadvertisedMethods } from "../../src/bridge-parity.js";
-import { categoryTool, bp, type ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/types.js";
+import { categoryTool, bp } from "../../src/category-tool.js";
 import type { BridgeCapabilities } from "../../src/bridge.js";
 
 function graph(): ToolDef[] {

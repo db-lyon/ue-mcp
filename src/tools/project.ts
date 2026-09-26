@@ -1,4 +1,5 @@
-import { categoryTool, type ActionSpec, type ToolDef } from "../types.js";
+import type { ActionSpec, ToolDef } from "../types.js";
+import { categoryTool } from "../category-tool.js";
 import { z } from "zod";
 import { CURSOR_PARAM } from "../pagination.js";
 import { schema as specSchema } from "./specs/project.generated.js";

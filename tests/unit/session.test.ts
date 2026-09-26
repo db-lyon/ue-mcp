@@ -12,12 +12,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { SessionRegistry, sessionKeyFor } from "../../src/session.js";
 import { deriveProjectPort, DEFAULT_BRIDGE_PORT } from "../../src/port.js";
-import {
-  categoryTool,
-  injectEditorTarget,
-  removeEditorTarget,
-  stripEditorTarget,
-} from "../../src/types.js";
+import { categoryTool } from "../../src/category-tool.js";
+import { injectEditorTarget, removeEditorTarget, stripEditorTarget } from "../../src/target-params.js";
 import { z } from "zod";
 
 let root: string;

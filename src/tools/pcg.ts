@@ -1,4 +1,5 @@
-import { categoryTool, type ToolDef } from "../types.js";
+import type { ToolDef } from "../types.js";
+import { categoryTool } from "../category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/pcg.generated.js";
 import { specBp, schema as specSchema } from "./specs/pcg.generated.js";
 

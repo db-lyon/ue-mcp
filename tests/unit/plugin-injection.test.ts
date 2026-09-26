@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { actionEnumValues, categoryTool, bp, type ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/types.js";
+import { actionEnumValues, categoryTool, bp } from "../../src/category-tool.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/plugin/injection.js";
 import { looksLikeBaseTask, nativeHandlerSurface } from "../../src/plugin/loader.js";
 import { PluginManifestSchema } from "../../src/plugin/manifest.js";

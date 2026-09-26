@@ -14,7 +14,7 @@
  * reported as drift by `project(get_status)`.
  */
 import { z } from "zod";
-import { bp, type ActionEffect, type BridgeActionSpec } from "./types.js";
+import type { ActionEffect, BridgeActionSpec } from "./types.js";
 import { ROUTING_PARAM_NAMES } from "./routing-params.js";
 
 /** Wire types a spec can declare. Mirrors EMCPParamType in HandlerRegistry.h. */
@@ -382,7 +382,15 @@ export function makeSpecBp(clauses: Readonly<Record<string, string>>, specs: Han
         + "then run npm run specs:record and npm run specs:generate.",
       );
     }
-    const action = bp(effect, `${summary} ${clause}`, bridge);
+    // The literal `bp` builds. Importing `bp` would load category-tool.ts,
+    // which reaches this module again through the call pipeline.
+    const action: BridgeActionSpec = {
+      kind: "bridge",
+      effect,
+      description: `${summary} ${clause}`,
+      bridge,
+      mapParams: undefined,
+    };
     const spec = specs[bridge];
     if (!spec) return action;
     return spec.choices?.length

@@ -2,7 +2,8 @@ import { searchToolGraph, type ToolSearchHit } from "../../tool-search.js";
 import { actionSchema, resolveActionRef, suggestActions } from "../../action-schema.js";
 import { availabilityReport } from "../../offline.js";
 import { getWorkarounds } from "../../workaround-tracker.js";
-import { toolGraphOf, type ToolContext, type ActionSpec } from "../../types.js";
+import type { ToolContext, ActionSpec } from "../../types.js";
+import { toolGraphOf } from "../../target-params.js";
 
 /** Surface introspection: search, describe and list what this server can serve. */
 export const surfaceActions: Record<string, ActionSpec> = {

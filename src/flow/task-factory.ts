@@ -1,6 +1,6 @@
 import type { TaskResult, TaskConstructor } from "@db-lyon/flowkit";
 import { UeMcpTask } from "../task.js";
-import { stripEditorTarget } from "../types.js";
+import { stripEditorTarget } from "../target-params.js";
 import type { CallPreparation } from "../call-pipeline.js";
 import type { FlowContext } from "./context.js";
 import { runBridge, runHandler } from "./run-action.js";

@@ -1,7 +1,8 @@
 import * as http from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { createFlowTool } from "./flow-tool.js";
-import { sessionContext, type ToolContext } from "../types.js";
+import type { ToolContext } from "../types.js";
+import { sessionContext } from "../target-params.js";
 import { EDITOR_TARGET_PARAM } from "../routing-params.js";
 import { refuseUntargetedCall } from "../editor-gate.js";
 import { info, warn, error as logError } from "../log.js";

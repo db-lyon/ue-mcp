@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "../types.js";
-import { actionEnum } from "../types.js";
+import { actionEnum } from "../category-tool.js";
 import { compileSchemaFields, type ManifestInjectAction } from "./manifest.js";
 import { inferActionEffect } from "../action-class.js";
 

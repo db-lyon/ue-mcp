@@ -18,7 +18,15 @@ import {
   type RoutedCall,
 } from "./editor-gate.js";
 import { isDirectiveResponse } from "./directive.js";
-import { EDITOR_TARGET_PARAM } from "./routing-params.js";
+import { EDITOR_TARGET_PARAM, stripAction } from "./routing-params.js";
+import type {
+  ToolDef,
+  ToolContext,
+  PluginInfo,
+  ElicitFn,
+  ProgressFn,
+  ProgressUpdate,
+} from "./types.js";
 import {
   injectEditorTarget,
   removeEditorTarget,
@@ -26,14 +34,7 @@ import {
   removeMigrateTarget,
   stripEditorTarget,
   sessionContext,
-  type ToolDef,
-  type ToolContext,
-  type PluginInfo,
-  type ElicitFn,
-  type ProgressFn,
-  type ProgressUpdate,
-  stripAction,
-} from "./types.js";
+} from "./target-params.js";
 import { McpError, ErrorCode } from "./errors.js";
 import {
   DialogGuard,

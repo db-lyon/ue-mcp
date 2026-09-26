@@ -88,7 +88,8 @@ node dist/index.js init C:/path/to/MyGame.uproject
 src/
 ├── index.ts              # Entry point, tool registration, MCP server
 ├── tools.ts              # ALL_TOOLS registry (consumed by index.ts and tests)
-├── types.ts              # ToolDef, ActionSpec, categoryTool() factory
+├── types.ts              # ToolDef, ActionSpec type declarations
+├── category-tool.ts      # categoryTool() factory, bp() action builder
 ├── bridge.ts             # EditorBridge - WebSocket JSON-RPC client
 ├── project.ts            # ProjectContext - paths, INI, C++ parsing
 ├── deployer.ts           # Plugin deployment

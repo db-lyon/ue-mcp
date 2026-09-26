@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { bp, categoryTool } from "../../src/types.js";
+import { bp, categoryTool } from "../../src/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 
 const probe = (limit: z.ZodType) => categoryTool("probe", "Probe.", { list: bp("read", "List.", "list") }, { limit });

@@ -8,7 +8,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { categoryTool, cloneToolGraph, bp, type ToolDef } from "../../src/types.js";
+import type { ToolDef } from "../../src/types.js";
+import { categoryTool, cloneToolGraph, bp } from "../../src/category-tool.js";
 import {
   baseGraphFor,
   unionSurface,

@@ -10,7 +10,8 @@
 // task factory, guards and locks as every hand-written action in this package.
 // Each also carries its input schema, which the compact signatures read (#1172).
 import { z } from "zod";
-import { bp, type ActionSpec } from "../../types.js";
+import type { ActionSpec } from "../../types.js";
+import { bp } from "../../category-tool.js";
 import { epicToolCall } from "../../epic-input.js";
 
 const S_epic_add_component = {"properties":{"owner":{"type":"object","properties":{"refPath":{}}},"component_type":{"type":"object","properties":{"refPath":{}}},"name":{"type":"string"}},"required":["owner","component_type","name"]} as const;

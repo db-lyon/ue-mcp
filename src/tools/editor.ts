@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { categoryTool, toolGraphOf, type ToolDef, type ToolContext } from "../types.js";
+import type { ToolDef, ToolContext } from "../types.js";
+import { categoryTool } from "../category-tool.js";
+import { toolGraphOf } from "../target-params.js";
 import { directive } from "../directive.js";
 import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, connectedEditorOf } from "../editor-control.js";
 import { clientAdvertisesElicitation } from "../dialog-mode.js";

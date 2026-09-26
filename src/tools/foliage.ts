@@ -1,4 +1,5 @@
-import { categoryTool, type ToolDef } from "../types.js";
+import type { ToolDef } from "../types.js";
+import { categoryTool } from "../category-tool.js";
 import { specBp, schema as specSchema } from "./specs/foliage.generated.js";
 
 export const foliageTool: ToolDef = categoryTool(

@@ -12,14 +12,14 @@ import * as path from "node:path";
 import { FakeBridge } from "../fake-bridge.js";
 import { SessionRegistry, type EditorSession } from "../../src/session.js";
 import { assetTool } from "../../src/tools/asset.js";
+import type { ToolContext } from "../../src/types.js";
+import { cloneToolDef } from "../../src/category-tool.js";
 import {
-  cloneToolDef,
   injectEditorTarget,
   injectMigrateTarget,
   removeEditorTarget,
   removeMigrateTarget,
-  type ToolContext,
-} from "../../src/types.js";
+} from "../../src/target-params.js";
 import { MIGRATE_TARGET_PARAM } from "../../src/routing-params.js";
 
 let root: string;

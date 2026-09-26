@@ -8,7 +8,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { projectResult, takeFieldSelection, attachFieldReport } from "../../src/field-select.js";
-import { categoryTool, SELECT_PARAM, OMIT_PARAM, TIMEOUT_PARAM, type ToolContext } from "../../src/types.js";
+import type { ToolContext } from "../../src/types.js";
+import { categoryTool, SELECT_PARAM, OMIT_PARAM, TIMEOUT_PARAM } from "../../src/category-tool.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 
 const TREE = {

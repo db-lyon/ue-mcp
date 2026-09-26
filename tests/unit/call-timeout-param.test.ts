@@ -12,7 +12,8 @@
  * unexpected key would be the next defect.
  */
 import { describe, expect, it } from "vitest";
-import { categoryTool, bp, type ToolContext, type ToolDef } from "../../src/types.js";
+import type { ToolContext, ToolDef } from "../../src/types.js";
+import { categoryTool, bp } from "../../src/category-tool.js";
 import { takeTimeout } from "../../src/call-pipeline.js";
 import { MAX_BRIDGE_TIMEOUT_MS } from "../../src/bridge-timeouts.js";
 import { buildMicroGateway } from "../../src/lean-context.js";

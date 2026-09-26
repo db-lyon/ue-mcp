@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef } from "../types.js";
+import type { ToolDef } from "../types.js";
+import { categoryTool } from "../category-tool.js";
 import { paged } from "../pagination.js";
 import { SESSION_ID } from "../lock-owner.js";
 import { McpError, ErrorCode } from "../errors.js";

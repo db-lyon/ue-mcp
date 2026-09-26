@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef, type ToolContext } from "../types.js";
+import type { ToolDef, ToolContext } from "../types.js";
+import { categoryTool } from "../category-tool.js";
 import { directive } from "../directive.js";
 import { submitFeedback, type SubmitResult } from "../github-app.js";
 import { readUserAuth } from "../auth.js";
