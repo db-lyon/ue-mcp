@@ -1,7 +1,31 @@
 import { buildProject } from "../../editor-build.js";
 import { inspectInstall } from "../../install-check.js";
 import { specBp } from "../specs/project.generated.js";
-import type { ToolContext, ActionSpec } from "../../types.js";
+import type { ToolContext, ActionSpec, HandlerActionSpec } from "../../types.js";
+
+/**
+ * The out-of-process UnrealBuildTool build, registered as project(build) and
+ * editor(build_project). One spec for both, so the two cannot drift apart.
+ */
+export const buildProjectAction: HandlerActionSpec = {
+  kind: "handler",
+  effect: "mutate",
+  // #958: dispatched in process, because UnrealBuildTool cannot link while an
+  // editor holds the module DLLs, so the build that matters runs with it down.
+  description:
+    "Build the project's C++ out of process with UnrealBuildTool. Works with the editor STOPPED, which a full rebuild requires (UBT cannot link while an editor holds the module DLLs). Blocks until the build finishes and returns the compiler output. Params: configuration? (default Development), platform? (default the host platform), clean? (#958)",
+  handler: async (ctx, p) => {
+    ctx.project.ensureLoaded();
+    const lines: string[] = [];
+    const result = await buildProject(ctx.project.projectPath!, {
+      onOutput: (text) => lines.push(text),
+      configuration: p.configuration as string | undefined,
+      platform: p.platform as string | undefined,
+      clean: p.clean as boolean | undefined,
+    });
+    return { ...result, output: lines.join("") };
+  },
+};
 
 /** Install, build and plugins: check the install, build, live coding, enable and disable plugins. */
 export const installActions: Record<string, ActionSpec> = {
@@ -26,29 +50,7 @@ export const installActions: Record<string, ActionSpec> = {
       return inspectInstall(uproject, { skipToolchain: p.skipToolchain === true });
     },
   },
-  build: {
-    kind: "handler",
-    effect: "mutate",
-    // #958: this used to be dispatched over the editor bridge, so it failed
-    // with ECONNREFUSED whenever the editor was down. That made it unusable
-    // for its only real job: UnrealBuildTool refuses to link while an editor
-    // holds the module DLLs, so a full rebuild has to happen with the editor
-    // stopped. It runs UnrealBuildTool out of process instead, which needs no
-    // editor at all.
-    description:
-      "Build the project's C++ out of process with UnrealBuildTool. Works with the editor STOPPED, which a full rebuild requires (UBT cannot link while an editor holds the module DLLs). Blocks until the build finishes and returns the compiler output. Params: configuration? (default Development), platform? (default the host platform), clean? (#958)",
-    handler: async (ctx, p) => {
-      ctx.project.ensureLoaded();
-      const lines: string[] = [];
-      const result = await buildProject(ctx.project.projectPath!, {
-        onOutput: (text) => lines.push(text),
-        configuration: p.configuration as string | undefined,
-        platform: p.platform as string | undefined,
-        clean: p.clean as boolean | undefined,
-      });
-      return { ...result, output: lines.join("") };
-    },
-  },
+  build: buildProjectAction,
   generate_project_files: specBp("mutate", "Generate IDE project files (Visual Studio, Xcode, etc.).", "generate_project_files"),
 
   list_available_plugins: specBp("read", 

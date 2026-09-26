@@ -4,7 +4,7 @@ import { categoryTool } from "../category-tool.js";
 import { toolGraphOf } from "../target-params.js";
 import { directive } from "../directive.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor-control.js";
-import { buildProject } from "../editor-build.js";
+import { buildProjectAction } from "./project/install.js";
 import { startProgress } from "../ui/progress.js";
 import { clientAdvertisesElicitation } from "../dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../engine-observer.js";
@@ -121,19 +121,7 @@ export const editorTool: ToolDef = categoryTool(
         return restartEditor(ctx.project, ctx.bridge, startProgress);
       },
     },
-    build_project: {
-      kind: "handler",
-      effect: "mutate",
-      description: "Build the project's C++ code using Unreal Build Tool. Editor should be stopped first. Params: none",
-      handler: async (ctx: ToolContext) => {
-        ctx.project.ensureLoaded();
-        const lines: string[] = [];
-        const result = await buildProject(ctx.project.projectPath!, {
-          onOutput: (text) => lines.push(text),
-        });
-        return { ...result, output: lines.join("") };
-      },
-    },
+    build_project: buildProjectAction,
     execute_command: specBp("unknown", "Run console command.", "execute_command"),
     execute_python: {
       kind: "handler",
@@ -486,6 +474,9 @@ export const editorTool: ToolDef = categoryTool(
     taskSummary: z.string().optional().describe("execute_python: plain-words intent, searched against the tool registry to gate the call (#704)"),
     ruledOut: z.array(z.object({ action: z.string(), reason: z.string() })).optional().describe("execute_python: reason each searched candidate action does not fit; every candidate must be ruled out before Python runs. 'action' accepts the bare action name, tool(action) or tool.action; 'reason' must be at least 12 characters. Send back the array the previous refusal printed under 'sendThisBack' (#704, #938, #960)"),
     timeout: z.number().optional().describe("start_editor: seconds to wait for the bridge (default 120) (#758)"),
+    // build_project is project(build); `platform` is already declared by the specs above.
+    configuration: z.string().optional().describe("build_project: build configuration, Development (default), DebugGame, Shipping or Test"),
+    clean: z.boolean().optional().describe("build_project: rebuild from scratch (UnrealBuildTool -Clean)"),
     probeWindows: z.boolean().optional().describe("get_engine_state: also enumerate native windows to catch pre-Slate dialogs (default true, costs ~2s)"),
     dialogPolicy: z.string().optional().describe("start_editor: semicolon-separated pattern=response pairs armed before the bridge is listening, so a prompt raised during startup is answered from the first frame (e.g. \"Restore=no\"). Same effect as set_dialog_policy and the same warning: an armed pattern presses the button, so the user never sees that prompt. Responses are the ones set_dialog_policy takes (#968)"),
     paramEcho: z.boolean().optional().describe("start_editor: arm the bridge parameter echo for the launched editor. It is read at startup, so it cannot be turned on over the socket afterwards. The live tests' leak assertions skip without it"),
