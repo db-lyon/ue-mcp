@@ -2,7 +2,7 @@ import { isDialogRefusal } from "../editor/dialog-guard.js";
 import type { IBridge } from "../bridge/bridge.js";
 import { McpError, ErrorCode, type McpErrorDetails } from "../core/errors.js";
 import { debug } from "../core/log.js";
-import { taskEffect } from "../surface/action-effects.js";
+import { bridgeMethodEffect, taskEffect } from "../surface/action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
 import type { AssetLockScopeLike, ToolContext, ToolDef } from "../core/types.js";
 
@@ -86,7 +86,9 @@ export function classifyAction(
   graph?: readonly ToolDef[],
 ): ActionClassification {
   if (NEVER_LOCKED.has(taskName)) return { mutates: false, paths: [] };
-  if (taskEffect(taskName, graph).effect === "read") return { mutates: false, paths: [] };
+  // A bare bridge method (an `ue-mcp.bridge` step) is judged by the method.
+  const effect = taskName.includes(".") ? taskEffect(taskName, graph) : bridgeMethodEffect(taskName, params, graph);
+  if (effect.effect === "read") return { mutates: false, paths: [] };
 
   const paths = new Set<string>();
   for (const key of PATH_KEYS) {

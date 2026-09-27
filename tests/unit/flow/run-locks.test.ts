@@ -152,3 +152,24 @@ describe("live calls take asset locks", () => {
     expect(calls).toEqual(["acquire_lock:/Game/A"]);
   });
 });
+
+describe("ue-mcp.bridge steps (defect 3)", () => {
+  it("lock the asset they write and repair its path, like any other bridge step", async () => {
+    const { ctx, calls } = context();
+    const tool = flowTool({
+      raw: { steps: { 1: { task: "ue-mcp.bridge", options: { method: "delete_asset", assetPath: "\\Game\\A" } } } },
+    });
+    const result = await tool.handler(ctx as ToolContext, { action: "run", flowName: "raw" }) as Record<string, unknown>;
+    expect(result.success).toBe(true);
+    expect(calls).toEqual(["acquire_lock:/Game/A", "delete_asset:/Game/A", "release_lock:/Game/A"]);
+  });
+
+  it("take no lock for a method declared as a read", async () => {
+    const { ctx, calls } = context();
+    const tool = flowTool({
+      raw: { steps: { 1: { task: "ue-mcp.bridge", options: { method: "list_assets", assetPath: "/Game/A" } } } },
+    });
+    await tool.handler(ctx as ToolContext, { action: "run", flowName: "raw" });
+    expect(calls).toEqual(["list_assets:/Game/A"]);
+  });
+});
