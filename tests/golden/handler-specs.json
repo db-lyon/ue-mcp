@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1070,
+  "handlerCount": 1076,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -6613,6 +6613,32 @@
         }
       ]
     },
+    "bulk_restore_data_assets": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "updatedItems",
+          "type": "array",
+          "required": false,
+          "description": "{assetPath, properties} snapshots to write back",
+          "items": "object"
+        },
+        {
+          "name": "createdAssetPaths",
+          "type": "array",
+          "required": false,
+          "description": "Assets the upsert created, to delete",
+          "items": "string"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save what was restored (default true)"
+        }
+      ],
+      "contractExempt": "deletes and rewrites the assets its payload names"
+    },
     "bulk_set_asset_properties": {
       "category": "asset",
       "params": [
@@ -13065,6 +13091,36 @@
           ]
         }
       ]
+    },
+    "execute_python": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "code",
+          "type": "string",
+          "required": true,
+          "description": "Python source to run in the editor"
+        },
+        {
+          "name": "resultVariable",
+          "type": "string",
+          "required": false,
+          "description": "Top-level variable to return as result, separate from printed output"
+        },
+        {
+          "name": "captureLog",
+          "type": "boolean",
+          "required": false,
+          "description": "false keeps only the logged errors (default true)"
+        },
+        {
+          "name": "maxLogChars",
+          "type": "number",
+          "required": false,
+          "description": "Keep only the last N characters of logged output"
+        }
+      ],
+      "contractExempt": "runs Python"
     },
     "export_actor_fbx": {
       "category": "level",
@@ -21492,6 +21548,67 @@
         }
       ]
     },
+    "migrate": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "destinationContentDir",
+          "type": "string",
+          "required": true,
+          "description": "The Content folder of the TARGET project, not this one"
+        },
+        {
+          "name": "assetPaths",
+          "type": "array",
+          "required": false,
+          "description": "Assets to migrate",
+          "items": "string"
+        },
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": false,
+          "description": "One asset to migrate"
+        },
+        {
+          "name": "allowDirty",
+          "type": "boolean",
+          "required": false,
+          "description": "Migrate the on-disk version of an asset with unsaved edits (default false)"
+        },
+        {
+          "name": "includeDependencies",
+          "type": "boolean",
+          "required": false,
+          "description": "Also copy the assets they reference (default true)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip (default) | overwrite, for a file already at the destination"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would be copied without copying (default false)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "assetPaths"
+            ],
+            [
+              "assetPath"
+            ]
+          ]
+        }
+      ]
+    },
     "move_actor": {
       "category": "level",
       "params": [
@@ -22092,6 +22209,30 @@
         }
       ],
       "contractExempt": "rotates the running PIE player's view"
+    },
+    "pie_start_ignoring_blueprint_errors": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "authorizationSource",
+          "type": "string",
+          "required": true,
+          "description": "Which approval let the bypass through; set by the gate, never by a caller"
+        },
+        {
+          "name": "waitForAssetRegistry",
+          "type": "boolean",
+          "required": false,
+          "description": "Block until the AssetRegistry initial scan completes (default true)"
+        },
+        {
+          "name": "assetRegistryTimeoutSeconds",
+          "type": "number",
+          "required": false,
+          "description": "How long to wait for that scan (default 180)"
+        }
+      ],
+      "contractExempt": "starts Play In Editor"
     },
     "place_actor": {
       "category": "level",
@@ -27258,6 +27399,24 @@
         }
       ]
     },
+    "request_editor_shutdown": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "requireClean",
+          "type": "boolean",
+          "required": false,
+          "description": "Refuse while any content or map package is dirty (default true)"
+        },
+        {
+          "name": "endPIE",
+          "type": "boolean",
+          "required": false,
+          "description": "End an active PIE or SIE session first (default true); false refuses while play runs"
+        }
+      ],
+      "contractExempt": "shuts the editor down"
+    },
     "request_state_tree_transition": {
       "category": "statetree",
       "params": [
@@ -28486,6 +28645,44 @@
           "type": "integer",
           "required": false,
           "description": "Carry the previous data as a rollback record only up to this many vertices (default 262144 for heights, 524288 for weights)"
+        }
+      ]
+    },
+    "search_assets": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "description": "Case-insensitive substring of the asset name or object path, or a wildcard pattern with * (default: every asset)"
+        },
+        {
+          "name": "directory",
+          "type": "string",
+          "required": false,
+          "description": "Content path to search under (default /Game/)"
+        },
+        {
+          "name": "searchAll",
+          "type": "boolean",
+          "required": false,
+          "description": "Search every mounted content root, plugins and engine included; with directory, only under it"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Rows per page, 1 to 2000 (default 50)",
+          "aliases": [
+            "maxResults"
+          ]
         }
       ]
     },

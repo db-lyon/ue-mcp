@@ -462,9 +462,6 @@ export const assetTool: ToolDef = categoryTool(
     // Hand-written actions only: search, migrate and the locks.
     searchAll: SEARCH_ALL,
     exportName: z.string().optional(),
-    allowDirty: z.boolean().optional().describe("migrate: migrate the on-disk version of an asset with unsaved edits (#760)"),
-    destinationContentDir: z.string().optional().describe("migrate: the TARGET project's Content folder (#760)"),
-    includeDependencies: z.boolean().optional().describe("migrate: also copy referenced assets (default true) (#760)"),
     // lock / unlock / unlock_all all default this to the server process's own
     // session id; it is only passed explicitly to coordinate across processes.
     sessionId: z.string().optional().describe("lock / unlock / unlock_all: owning session id (defaults to this server process)"),

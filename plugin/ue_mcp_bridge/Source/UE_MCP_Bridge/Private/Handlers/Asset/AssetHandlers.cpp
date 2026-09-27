@@ -399,7 +399,13 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Name every asset and destination without changing anything (default TRUE)")),
 	});
 
-	Registry.RegisterHandler(TEXT("search_assets"), &SearchAssets);
+	Registry.RegisterHandler(TEXT("search_assets"), &SearchAssets, {
+		MCPParam::Optional(TEXT("query"), EType::String, TEXT("Case-insensitive substring of the asset name or object path, or a wildcard pattern with * (default: every asset)")),
+		MCPParam::Optional(TEXT("directory"), EType::String, TEXT("Content path to search under (default /Game/)")),
+		MCPParam::Optional(TEXT("searchAll"), EType::Boolean, TEXT("Search every mounted content root, plugins and engine included; with directory, only under it")),
+		SpecCursor,
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows per page, 1 to 2000 (default 50)")).Alias(TEXT("maxResults")),
+	});
 	Registry.RegisterHandler(TEXT("read_asset"), &ReadAsset, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path")).Alias(TEXT("path")),
 	});
@@ -477,7 +483,12 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Run the full preflight and report the planned statuses without writing (default false)")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the changed packages (default true)")),
 	});
-	Registry.RegisterHandlerWithTimeout(TEXT("bulk_restore_data_assets"), &BulkRestoreDataAssets, 120.0f);
+	// The rollback bulk_upsert_data_assets emits; no action dispatches it.
+	Registry.RegisterHandlerWithTimeout(TEXT("bulk_restore_data_assets"), &BulkRestoreDataAssets, 120.0f, {
+		MCPParam::Optional(TEXT("updatedItems"), EType::Array, TEXT("{assetPath, properties} snapshots to write back")).Items(EType::Object),
+		MCPParam::Optional(TEXT("createdAssetPaths"), EType::Array, TEXT("Assets the upsert created, to delete")).Items(EType::String),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save what was restored (default true)")),
+	}, MCPSpec::ContractExempt(TEXT("deletes and rewrites the assets its payload names")));
 	// #726: generic create-any-concrete-UObject-class asset (physical materials,
 	// curves, settings objects) - not restricted to UDataAsset subclasses.
 	Registry.RegisterHandler(TEXT("create_asset_by_class"), &CreateAssetByClass, {
@@ -1017,7 +1028,15 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("paths"), EType::Array, TEXT("Content folders to delete")).Items(EType::String),
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Also delete the assets inside (default false: only empty folders)")),
 	});
-	Registry.RegisterHandler(TEXT("migrate"), &MigrateAssets);
+	Registry.RegisterHandler(TEXT("migrate"), &MigrateAssets, {
+		MCPParam::Required(TEXT("destinationContentDir"), EType::String, TEXT("The Content folder of the TARGET project, not this one")),
+		MCPParam::Optional(TEXT("assetPaths"), EType::Array, TEXT("Assets to migrate")).Items(EType::String),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("One asset to migrate")),
+		MCPParam::Optional(TEXT("allowDirty"), EType::Boolean, TEXT("Migrate the on-disk version of an asset with unsaved edits (default false)")),
+		MCPParam::Optional(TEXT("includeDependencies"), EType::Boolean, TEXT("Also copy the assets they reference (default true)")),
+		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) | overwrite, for a file already at the destination")),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be copied without copying (default false)")),
+	}, MCPSpec::AtLeastOne({ { TEXT("assetPaths") }, { TEXT("assetPath") } }));
 
 	// #686 - UserDefinedEnum authoring
 	Registry.RegisterHandler(TEXT("create_user_defined_enum"), &CreateUserDefinedEnum, {
@@ -5111,6 +5130,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPt
 //   onConflict? ("skip" default | "overwrite"), dryRun? (default false)
 TSharedPtr<FJsonValue> FAssetHandlers::MigrateAssets(const TSharedPtr<FJsonObject>& Params)
 {
+	// Read before any refusal, so every declared parameter counts as read (#1057).
+	MCPReadParamsAhead(Params, { TEXT("destinationContentDir"), TEXT("allowDirty"), TEXT("includeDependencies"), TEXT("onConflict"), TEXT("dryRun") });
 	TArray<FString> AssetPaths;
 	const TArray<TSharedPtr<FJsonValue>>* PathArray = nullptr;
 	if (TryGetArrayParam(Params, TEXT("assetPaths"), PathArray) && PathArray)

@@ -333,6 +333,32 @@ function aliasOf(method: string): string | undefined {
  */
 const HAND_WRITTEN_CROSS_TOOL: ReadonlyMap<string, string> = new Map([]);
 
+/**
+ * Spec'd methods no bridge action dispatches: a handler action builds the call
+ * itself (the multi-root search, the migrate destination, the python gate, the
+ * approval-gated PIE start, the shutdown), or it is the rollback another
+ * handler emits. The handler action's module must still call the method.
+ */
+const DIRECT_DISPATCH: ReadonlyMap<string, string> = new Map([
+  ["search_assets", "asset.search"],
+  ["migrate", "asset.migrate"],
+  ["execute_python", "editor.execute_python"],
+  ["pie_start_ignoring_blueprint_errors", "editor.play_in_editor_ignore_blueprint_errors"],
+  ["request_editor_shutdown", "editor.request_editor_shutdown"],
+  ["bulk_restore_data_assets", "rollback"],
+]);
+
+function directlyDispatched(method: string): boolean {
+  const by = DIRECT_DISPATCH.get(method);
+  if (by === undefined) return false;
+  if (by === "rollback") return true;
+  const [toolName, action] = by.split(".");
+  const spec = ALL_TOOLS.find((t) => t.name === toolName)?.actions[action];
+  const source = fs.readFileSync(path.join(ROOT, "src", "tools", `${toolName}.ts`), "utf8");
+  const calls = [`bridge.call("${method}"`, `callOwnBridgeMethod(ctx, "${method}"`, `method: "${method}"`];
+  return spec !== undefined && spec.kind !== "bridge" && calls.some((c) => source.includes(c));
+}
+
 // Every other recorded category is held to the same surface rules as the pilot.
 const OTHER_CATEGORIES = [...new Set(Object.values(SNAPSHOT.handlers).map((s) => s.category as string))]
   .filter((c) => c !== "animation")
@@ -357,7 +383,7 @@ describe.each(OTHER_CATEGORIES)("the %s category", (category) => {
   it("is a tool, and every spec'd method is dispatched by an action or is a C++ alias of one that is", () => {
     expect(tool, category).toBeDefined();
     for (const [method] of methods) {
-      expect(DISPATCHERS.has(method) || aliasOf(method) !== undefined, `${method}: no action dispatches it`).toBe(true);
+      expect(DISPATCHERS.has(method) || aliasOf(method) !== undefined || directlyDispatched(method), `${method}: no action dispatches it`).toBe(true);
     }
   });
 

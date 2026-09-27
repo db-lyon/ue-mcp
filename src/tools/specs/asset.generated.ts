@@ -1315,6 +1315,32 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "bulk_restore_data_assets": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "updatedItems",
+        "type": "array",
+        "required": false,
+        "description": "{assetPath, properties} snapshots to write back",
+        "items": "object"
+      },
+      {
+        "name": "createdAssetPaths",
+        "type": "array",
+        "required": false,
+        "description": "Assets the upsert created, to delete",
+        "items": "string"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Save what was restored (default true)"
+      }
+    ],
+    "contractExempt": "deletes and rewrites the assets its payload names"
+  },
   "bulk_set_asset_properties": {
     "category": "asset",
     "params": [
@@ -3965,6 +3991,67 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "migrate": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "destinationContentDir",
+        "type": "string",
+        "required": true,
+        "description": "The Content folder of the TARGET project, not this one"
+      },
+      {
+        "name": "assetPaths",
+        "type": "array",
+        "required": false,
+        "description": "Assets to migrate",
+        "items": "string"
+      },
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": false,
+        "description": "One asset to migrate"
+      },
+      {
+        "name": "allowDirty",
+        "type": "boolean",
+        "required": false,
+        "description": "Migrate the on-disk version of an asset with unsaved edits (default false)"
+      },
+      {
+        "name": "includeDependencies",
+        "type": "boolean",
+        "required": false,
+        "description": "Also copy the assets they reference (default true)"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "skip (default) | overwrite, for a file already at the destination"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Report what would be copied without copying (default false)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "assetPaths"
+          ],
+          [
+            "assetPath"
+          ]
+        ]
+      }
+    ]
+  },
   "move_asset": {
     "category": "asset",
     "params": [
@@ -4704,6 +4791,44 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Write the package even when it is not dirty (needs assetPath)"
+      }
+    ]
+  },
+  "search_assets": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "query",
+        "type": "string",
+        "required": false,
+        "description": "Case-insensitive substring of the asset name or object path, or a wildcard pattern with * (default: every asset)"
+      },
+      {
+        "name": "directory",
+        "type": "string",
+        "required": false,
+        "description": "Content path to search under (default /Game/)"
+      },
+      {
+        "name": "searchAll",
+        "type": "boolean",
+        "required": false,
+        "description": "Search every mounted content root, plugins and engine included; with directory, only under it"
+      },
+      {
+        "name": "cursor",
+        "type": "string",
+        "required": false,
+        "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Rows per page, 1 to 2000 (default 50)",
+        "aliases": [
+          "maxResults"
+        ]
       }
     ]
   },
@@ -5571,6 +5696,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   bind_cloth_to_section: "Params: skeletalMeshPath (or assetPath), lodIndex, sectionIndex, clothingAsset?, assetLodIndex?",
   bulk_read_asset_properties: "Params: propertyNames, assetPaths OR directory, recursive?, classNames?, matchSubclasses?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, maxAssets?, outputPath?",
   bulk_rename_assets: "Params: renames",
+  bulk_restore_data_assets: "Params: updatedItems?, createdAssetPaths?, save?",
   bulk_set_asset_properties: "Params: items, save?, dryRun?, continueOnError?",
   bulk_upsert_data_assets: "Params: items, onConflict?, dryRun?, save?",
   check_uvs: "Params: assetPath (or path), lodIndex?, requireLightmapChannel?, maxOverlapFraction?, rasterSize?",
@@ -5640,6 +5766,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   list_textures: "Params: directory?, cursor?, limit? (or maxResults)",
   measure_mesh_geometry: "Params: assetPath (or path), lodIndex?, sectionIndex?",
   mesh_boolean: "Params: operation, targetPath, toolPath, outputPath?, inPlace?, targetTransform?, toolTransform?, lodType?, lodIndex?, fillHoles?, simplifyOutput?, simplifyPlanarTolerance?, allowEmptyResult?, recomputeNormals?, recomputeTangents?, removeDegenerates?, copyCollisionFromTarget?, copyMaterialsFromTarget?, nanite?, onConflict?, dryRun?, save?",
+  migrate: "Params: destinationContentDir, at least one of assetPaths/assetPath, allowDirty?, includeDependencies?, onConflict?, dryRun?",
   move_asset: "Params: sourcePath?, destinationPath?, assetPath?, newName?, force?",
   move_folder: "Params: sourcePath, destinationPath",
   read_asset: "Params: assetPath (or path)",
@@ -5669,6 +5796,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   rename_struct_field: "Params: assetPath (or path), fieldName OR fieldGuid, newDisplayName",
   save_all_dirty: "Params: saveMapPackages?, saveContentPackages?",
   save_asset: "Params: assetPath? (or path), force?",
+  search_assets: "Params: query?, directory?, searchAll?, cursor?, limit? (or maxResults)",
   search_assets_fts: "Params: query, classFilter?, cursor?, limit? (or maxResults)",
   set_asset_property: "Params: assetPath (or path), propertyName, value, save?",
   set_cloth_config: "Params: skeletalMeshPath (or assetPath), properties, clothingAsset?, configType?",

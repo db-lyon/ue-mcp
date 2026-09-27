@@ -485,6 +485,36 @@ export const handlerSpecs: HandlerSpecs = {
     ],
     "contractExempt": "runs a console command"
   },
+  "execute_python": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "code",
+        "type": "string",
+        "required": true,
+        "description": "Python source to run in the editor"
+      },
+      {
+        "name": "resultVariable",
+        "type": "string",
+        "required": false,
+        "description": "Top-level variable to return as result, separate from printed output"
+      },
+      {
+        "name": "captureLog",
+        "type": "boolean",
+        "required": false,
+        "description": "false keeps only the logged errors (default true)"
+      },
+      {
+        "name": "maxLogChars",
+        "type": "number",
+        "required": false,
+        "description": "Keep only the last N characters of logged output"
+      }
+    ],
+    "contractExempt": "runs Python"
+  },
   "find_object": {
     "category": "editor",
     "params": [
@@ -1478,6 +1508,30 @@ export const handlerSpecs: HandlerSpecs = {
     ],
     "contractExempt": "rotates the running PIE player's view"
   },
+  "pie_start_ignoring_blueprint_errors": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "authorizationSource",
+        "type": "string",
+        "required": true,
+        "description": "Which approval let the bypass through; set by the gate, never by a caller"
+      },
+      {
+        "name": "waitForAssetRegistry",
+        "type": "boolean",
+        "required": false,
+        "description": "Block until the AssetRegistry initial scan completes (default true)"
+      },
+      {
+        "name": "assetRegistryTimeoutSeconds",
+        "type": "number",
+        "required": false,
+        "description": "How long to wait for that scan (default 180)"
+      }
+    ],
+    "contractExempt": "starts Play In Editor"
+  },
   "play_sequence": {
     "category": "editor",
     "params": [
@@ -1716,6 +1770,24 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "writes image files"
+  },
+  "request_editor_shutdown": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "requireClean",
+        "type": "boolean",
+        "required": false,
+        "description": "Refuse while any content or map package is dirty (default true)"
+      },
+      {
+        "name": "endPIE",
+        "type": "boolean",
+        "required": false,
+        "description": "End an active PIE or SIE session first (default true); false refuses while play runs"
+      }
+    ],
+    "contractExempt": "shuts the editor down"
   },
   "respond_to_dialog": {
     "category": "editor",
@@ -2805,6 +2877,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   end_editor_transaction: "Params: none",
   end_profile_region: "Params: regionName",
   execute_command: "Params: command",
+  execute_python: "Params: code, resultVariable?, captureLog?, maxLogChars?",
   find_object: "Params: at least one of objectPath/className/nameContains, outerPath?, exactClass?, includeDefaults?, world?, pieInstance?, cursor?, limit?",
   focus_viewport_on_actor: "Params: actorLabel?, actorPath?",
   get_build_status: "Params: none",
@@ -2849,6 +2922,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pause_insights_trace: "Params: paused?",
   pie_control: "Params: pieAction?, waitForAssetRegistry?, assetRegistryTimeoutSeconds?",
   pie_set_player_view: "Params: pitch?, yaw?, roll?",
+  pie_start_ignoring_blueprint_errors: "Params: authorizationSource, waitForAssetRegistry?, assetRegistryTimeoutSeconds?",
   play_sequence: "Params: sequencePath? (or assetPath, or path), sequenceAction?",
   purge_python_modules: "Params: prefix",
   read_bone_transforms: "Params: actorLabel?, actorPath?, componentName?, bones?, relativeTo?, space?, limit?, world?, pieInstance?",
@@ -2856,6 +2930,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   redraw_viewport: "Params: allViewports?, invalidateHitProxies?, viewportIndex?",
   reload_handlers: "Params: none",
   render_sequence_frames: "Params: sequencePath (or assetPath, or path), startFrame?, endFrame?, startSeconds?, endSeconds?, frameStep?, maxFrames?, width?, height?, outputDir?, format?, cameraActorLabel?, cameraActorPath?, location?, rotation?, fov?, fullyLoadTextures?",
+  request_editor_shutdown: "Params: requireClean?, endPIE?",
   respond_to_dialog: "Params: at least one of buttonLabel/buttonIndex/dialogAction, items?",
   restore_runtime_visibility: "Params: rollbackToken, world?, pieInstance?",
   run_automation_tests: "Params: filter?, maxTests?, latentTimeoutSeconds?",
