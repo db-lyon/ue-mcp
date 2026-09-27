@@ -45,6 +45,17 @@ export interface ValueBounds {
   maxItems?: number;
 }
 
+/**
+ * What a parameter addresses, beyond its wire type. Mirrors EMCPParamRole.
+ * Recorded only: the advertised schema never carries a role.
+ */
+export const PARAM_ROLES = ["editTarget", "nodeRef", "pinRef", "slotIndex", "actorRef", "outputPath"] as const;
+export type ParamRole = (typeof PARAM_ROLES)[number];
+
+/** What a call commits after its edit. Mirrors EMCPCommitPolicy; absent means the handler's own behaviour. */
+export const COMMIT_POLICIES = ["none", "compile", "save", "both"] as const;
+export type CommitPolicy = (typeof COMMIT_POLICIES)[number];
+
 /** One field of an object parameter, or of each element of an array of objects. */
 export interface ParamField extends ValueBounds {
   name: string;
@@ -92,6 +103,12 @@ export interface ParamSpec extends ValueBounds {
   forms?: ValueForm[];
   /** The variants of a tagged `object` parameter, or of each element of a tagged array of objects. */
   oneOf?: ParamOneOf;
+  /** What the parameter addresses: `editTarget` is the asset the call writes. */
+  role?: ParamRole;
+  /** On an array of objects, the element keys that carry the role; the first one present counts. */
+  roleKeys?: string[];
+  /** The value the handler uses when the parameter is absent. */
+  default?: unknown;
 }
 
 /** How many branches of a choice a call supplies. Mirrors EMCPChoiceMode. */
@@ -122,6 +139,8 @@ export interface HandlerSpec {
    * source to it instead.
    */
   contractExempt?: string;
+  /** What the call commits after its edit. Absent means the handler's own behaviour. */
+  commit?: CommitPolicy;
 }
 
 /** Every spec'd handler, keyed by bridge method. */
@@ -169,6 +188,9 @@ export function specProblems(specs: HandlerSpecs): string[] {
     problems.push(...choiceProblems(method, spec));
     if (spec.contractExempt !== undefined && (typeof spec.contractExempt !== "string" || spec.contractExempt.trim() === "")) {
       problems.push(`${method}: a contract exemption needs a reason`);
+    }
+    if (spec.commit !== undefined && !COMMIT_POLICIES.includes(spec.commit)) {
+      problems.push(`${method}: unknown commit policy '${String(spec.commit)}'`);
     }
   }
   return problems;
@@ -235,6 +257,54 @@ function shapeProblems(method: string, param: ParamSpec): string[] {
   const bounded = BOUND_KEYS.some((k) => param[k] !== undefined);
   if (bounded && param.literal !== undefined) problems.push(`${at}: a bounded literal, which already takes one value`);
   problems.push(...boundProblems(at, param.type, param.items, param));
+  problems.push(...roleProblems(at, param));
+  return problems;
+}
+
+/** Mirrors FMCPHandlerRegistry::ValidateRoleAndDefault. */
+function roleProblems(at: string, param: ParamSpec): string[] {
+  const problems: string[] = [];
+  const holds = (t: ParamType) => param.type === t || (param.type === "array" && param.items === t);
+  const objectElements = param.type === "array" && param.items === "object";
+  const keyed = objectElements && (param.roleKeys?.length ?? 0) > 0;
+  if (param.roleKeys !== undefined) {
+    if (!objectElements) problems.push(`${at}: role keys on something that is not an array of objects`);
+    if (param.role === undefined) problems.push(`${at}: role keys without a role`);
+    if (!Array.isArray(param.roleKeys) || param.roleKeys.length === 0) problems.push(`${at}: roleKeys is not a non-empty array`);
+    for (const key of param.roleKeys ?? []) {
+      if (typeof key !== "string" || !IDENTIFIER.test(key)) problems.push(`${at}: role key '${String(key)}' is not an identifier`);
+      else if (param.fields && !param.fields.some((f) => f.name === key)) problems.push(`${at}: role key '${key}' is not one of its declared fields`);
+    }
+  }
+  if (param.role !== undefined) {
+    if (!PARAM_ROLES.includes(param.role)) problems.push(`${at}: unknown role '${String(param.role)}'`);
+    else if (param.role === "slotIndex") {
+      if (!holds("integer") && !holds("number")) problems.push(`${at}: a slot index that is not a number`);
+    } else if (param.role === "nodeRef" || param.role === "pinRef") {
+      if (!holds("string") && !holds("integer") && !keyed) problems.push(`${at}: a node or pin reference that is not a string, an integer or an array of them`);
+    } else if (!holds("string") && !keyed) {
+      problems.push(`${at}: a path role on something that is not a string, an array of strings, or an array of objects with role keys`);
+    }
+    if (objectElements && !keyed) problems.push(`${at}: a role on an array of objects with no role keys`);
+  }
+  if (param.default !== undefined) {
+    if (param.required) problems.push(`${at}: required and also has a default`);
+    if (param.literal !== undefined) problems.push(`${at}: both a literal and a default`);
+    const fits = (t: ParamType): boolean => {
+      const v = param.default;
+      switch (t) {
+        case "any": return true;
+        case "string": return typeof v === "string";
+        case "boolean": return typeof v === "boolean";
+        case "number": return typeof v === "number";
+        case "integer": return typeof v === "number" && Number.isInteger(v);
+        case "array": return Array.isArray(v);
+        default: return typeof v === "object" && v !== null && !Array.isArray(v);
+      }
+    };
+    const ok = (param.default === null && param.nullable === true) || [param.type, ...(param.orTypes ?? [])].some(fits);
+    if (!ok) problems.push(`${at}: a default that is not a value of its type`);
+  }
   return problems;
 }
 
@@ -598,7 +668,8 @@ export function paramZod(param: ParamSpec): z.ZodTypeAny {
 
 /** What one declared parameter accepts, for telling two declarations of a key apart. */
 function acceptedShape(param: ParamSpec): string {
-  const { name, description: _description, required: _required, aliases: _aliases, ...shape } = param;
+  // A role or default says nothing about what the key accepts, so a reader and a writer may share it.
+  const { name, description: _description, required: _required, aliases: _aliases, role: _role, roleKeys: _roleKeys, default: _default, ...shape } = param;
   // A forms refusal names the parameter, so the name is part of what it accepts.
   return JSON.stringify(shape.forms?.length ? { ...shape, formsOf: name } : shape);
 }
@@ -711,9 +782,11 @@ function canonical(spec: HandlerSpec | undefined): string {
       [...(p.forms ?? [])],
       p.oneOf ? [p.oneOf.key, p.oneOf.variants.map((v) => [v.tag, v.description, v.fields.map(canonicalField)])] : null,
       canonicalBounds(p),
+      p.role ?? null, [...(p.roleKeys ?? [])], p.default === undefined ? null : JSON.stringify(p.default),
     ]),
     (spec.choices ?? []).map((c) => [c.mode, c.branches]),
     spec.contractExempt ?? null,
+    spec.commit ?? null,
   ]);
 }
 

@@ -32,6 +32,7 @@ void FMCPHandlerRegistry::RegisterHandler(const FString& MethodName, FHandlerFun
 	CppHandlers.Add(MethodName, Handler);
 	TagCategory(MethodName);
 	HandlerSpecs.Remove(MethodName);
+	RefusedSpecs.Remove(MethodName);
 }
 
 bool FMCPHandlerRegistry::RegisterHandler(const FString& MethodName, FHandlerFunction Handler, const TArray<FMCPParamSpec>& Params)
@@ -46,10 +47,12 @@ bool FMCPHandlerRegistry::RegisterHandler(const FString& MethodName, FHandlerFun
 	Spec.Params = Params;
 	Spec.Choices = Rules.Choices;
 	Spec.ContractExemptReason = Rules.ContractExemptReason;
+	Spec.CommitPolicy = Rules.CommitPolicy;
 	const FString Problem = ValidateHandlerSpec(Spec);
 	if (!Problem.IsEmpty())
 	{
 		HandlerSpecs.Remove(MethodName);
+		RefusedSpecs.Add(MethodName, Problem);
 		UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] Parameter spec for '%s' refused: %s"), *MethodName, *Problem);
 		return false;
 	}
@@ -102,6 +105,10 @@ FString FMCPHandlerRegistry::ValidateParamSpecs(const TArray<FMCPParamSpec>& Par
 		if (Problem.IsEmpty())
 		{
 			Problem = ValidateValueShape(Param);
+		}
+		if (Problem.IsEmpty())
+		{
+			Problem = ValidateRoleAndDefault(Param);
 		}
 		if (!Problem.IsEmpty()) return Problem;
 	}
@@ -295,6 +302,101 @@ FString FMCPHandlerRegistry::ValidateValueShape(const FMCPParamSpec& Param)
 	return ValidateBounds(Param.Name, Param.Type, Param.ItemType, Param.Bounds);
 }
 
+FString FMCPHandlerRegistry::ValidateRoleAndDefault(const FMCPParamSpec& Param)
+{
+	const bool bArray = Param.Type == EMCPParamType::Array;
+	auto IsOrHolds = [&Param, bArray](EMCPParamType Type)
+	{
+		return Param.Type == Type || (bArray && Param.ItemType == Type);
+	};
+	const bool bObjectElements = bArray && Param.ItemType == EMCPParamType::Object;
+
+	if (Param.RoleKeys.Num() > 0 && !bObjectElements)
+	{
+		return FString::Printf(TEXT("'%s' names role keys but is not an array of objects"), *Param.Name);
+	}
+	switch (Param.ParamRole)
+	{
+	case EMCPParamRole::None:
+		break;
+	case EMCPParamRole::SlotIndex:
+		if (!IsOrHolds(EMCPParamType::Integer) && !IsOrHolds(EMCPParamType::Number))
+		{
+			return FString::Printf(TEXT("'%s' is a slot index but not a number"), *Param.Name);
+		}
+		break;
+	case EMCPParamRole::NodeRef:
+	case EMCPParamRole::PinRef:
+		if (!IsOrHolds(EMCPParamType::String) && !IsOrHolds(EMCPParamType::Integer) && !(bObjectElements && Param.RoleKeys.Num() > 0))
+		{
+			return FString::Printf(TEXT("'%s' addresses a node or pin but is not a string, an integer or an array of them"), *Param.Name);
+		}
+		break;
+	default:
+		if (!IsOrHolds(EMCPParamType::String) && !(bObjectElements && Param.RoleKeys.Num() > 0))
+		{
+			return FString::Printf(TEXT("'%s' has a path role but is not a string, an array of strings, or an array of objects with role keys"), *Param.Name);
+		}
+		break;
+	}
+	if (bObjectElements && Param.ParamRole != EMCPParamRole::None && Param.RoleKeys.Num() == 0)
+	{
+		return FString::Printf(TEXT("'%s' is an array of objects with a role and no role keys naming the element keys that carry it"), *Param.Name);
+	}
+	if (Param.RoleKeys.Num() > 0 && Param.ParamRole == EMCPParamRole::None)
+	{
+		return FString::Printf(TEXT("'%s' names role keys without a role"), *Param.Name);
+	}
+	for (const FString& Key : Param.RoleKeys)
+	{
+		if (!IsParamIdentifier(Key))
+		{
+			return FString::Printf(TEXT("'%s' role key '%s' is not an identifier"), *Param.Name, *Key);
+		}
+		if (Param.Fields.Num() > 0 && !Param.Fields.ContainsByPredicate([&Key](const FMCPParamField& Field) { return Field.Name == Key; }))
+		{
+			return FString::Printf(TEXT("'%s' role key '%s' is not one of its declared fields"), *Param.Name, *Key);
+		}
+	}
+
+	if (!Param.DefaultValue.IsValid())
+	{
+		return FString();
+	}
+	if (Param.bRequired)
+	{
+		return FString::Printf(TEXT("'%s' is required and also has a default"), *Param.Name);
+	}
+	if (Param.LiteralValue.IsValid())
+	{
+		return FString::Printf(TEXT("'%s' has both a literal and a default"), *Param.Name);
+	}
+	auto Fits = [&Param](EMCPParamType Type) -> bool
+	{
+		const TSharedPtr<FJsonValue>& Value = Param.DefaultValue;
+		switch (Type)
+		{
+		case EMCPParamType::Any: return true;
+		case EMCPParamType::String: return Value->Type == EJson::String;
+		case EMCPParamType::Boolean: return Value->Type == EJson::Boolean;
+		case EMCPParamType::Number: return Value->Type == EJson::Number;
+		case EMCPParamType::Integer: return Value->Type == EJson::Number && FMath::IsNearlyEqual(Value->AsNumber(), FMath::RoundToDouble(Value->AsNumber()));
+		case EMCPParamType::Array: return Value->Type == EJson::Array;
+		default: return Value->Type == EJson::Object;
+		}
+	};
+	bool bFits = (Param.DefaultValue->Type == EJson::Null && Param.bNullable) || Fits(Param.Type);
+	for (const EMCPParamType OrType : Param.OrTypes)
+	{
+		bFits = bFits || Fits(OrType);
+	}
+	if (!bFits)
+	{
+		return FString::Printf(TEXT("'%s' has a default that is not a value of its type"), *Param.Name);
+	}
+	return FString();
+}
+
 FString FMCPHandlerRegistry::ValidateField(const FString& Owner, const FMCPParamField& Field)
 {
 	if (!IsParamIdentifier(Field.Name))
@@ -396,6 +498,31 @@ const TCHAR* FMCPHandlerRegistry::ParamTypeName(EMCPParamType Type)
 	case EMCPParamType::Rotator: return TEXT("rotator");
 	case EMCPParamType::Color:   return TEXT("color");
 	default:                     return TEXT("any");
+	}
+}
+
+const TCHAR* FMCPHandlerRegistry::ParamRoleName(EMCPParamRole Role)
+{
+	switch (Role)
+	{
+	case EMCPParamRole::EditTarget: return TEXT("editTarget");
+	case EMCPParamRole::NodeRef:    return TEXT("nodeRef");
+	case EMCPParamRole::PinRef:     return TEXT("pinRef");
+	case EMCPParamRole::SlotIndex:  return TEXT("slotIndex");
+	case EMCPParamRole::ActorRef:   return TEXT("actorRef");
+	case EMCPParamRole::OutputPath: return TEXT("outputPath");
+	default:                        return TEXT("none");
+	}
+}
+
+const TCHAR* FMCPHandlerRegistry::CommitPolicyName(EMCPCommitPolicy Policy)
+{
+	switch (Policy)
+	{
+	case EMCPCommitPolicy::Compile: return TEXT("compile");
+	case EMCPCommitPolicy::Save:    return TEXT("save");
+	case EMCPCommitPolicy::Both:    return TEXT("both");
+	default:                        return TEXT("none");
 	}
 }
 
@@ -512,6 +639,18 @@ TSharedPtr<FJsonObject> FMCPHandlerRegistry::BuildHandlerSpecsJson() const
 				OneOf->SetArrayField(TEXT("variants"), VariantValues);
 				Entry->SetObjectField(TEXT("oneOf"), OneOf);
 			}
+			if (Param.ParamRole != EMCPParamRole::None)
+			{
+				Entry->SetStringField(TEXT("role"), ParamRoleName(Param.ParamRole));
+			}
+			if (Param.RoleKeys.Num() > 0)
+			{
+				Entry->SetArrayField(TEXT("roleKeys"), MCPStringListToJson(Param.RoleKeys));
+			}
+			if (Param.DefaultValue.IsValid())
+			{
+				Entry->SetField(TEXT("default"), Param.DefaultValue);
+			}
 			ParamValues.Add(MakeShared<FJsonValueObject>(Entry));
 		}
 
@@ -541,6 +680,10 @@ TSharedPtr<FJsonObject> FMCPHandlerRegistry::BuildHandlerSpecsJson() const
 		if (!Spec.ContractExemptReason.IsEmpty())
 		{
 			MethodEntry->SetStringField(TEXT("contractExempt"), Spec.ContractExemptReason);
+		}
+		if (Spec.CommitPolicy.IsSet())
+		{
+			MethodEntry->SetStringField(TEXT("commit"), CommitPolicyName(Spec.CommitPolicy.GetValue()));
 		}
 		Out->SetObjectField(Method, MethodEntry);
 	}
@@ -673,4 +816,5 @@ void FMCPHandlerRegistry::Clear()
 	HandlerTimeouts.Empty();
 	HandlerCategories.Empty();
 	HandlerSpecs.Empty();
+	RefusedSpecs.Empty();
 }

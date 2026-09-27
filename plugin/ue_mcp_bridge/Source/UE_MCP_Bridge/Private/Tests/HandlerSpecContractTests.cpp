@@ -23,6 +23,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
+#include "HandlerCatalog.h"
 #include "HandlerUtils.h"
 #include "Handlers/Animation/AnimationHandlers.h"
 #include "Handlers/Audio/AudioHandlers.h"
@@ -431,6 +432,43 @@ bool FMCPHandlerSpecRegistrationTest::RunTest(const FString& Parameters)
 			.Tagged(TEXT("op"), ProbeVariants),
 	}).IsEmpty());
 
+	// Roles and defaults.
+	TestTrue(TEXT("roles and defaults that fit their parameters validate"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Required(TEXT("assetPath"), EMCPParamType::String, TEXT("probe")).Role(EMCPParamRole::EditTarget),
+		MCPParam::Optional(TEXT("assetPaths"), EMCPParamType::Array, TEXT("probe")).Items(EMCPParamType::String).Role(EMCPParamRole::EditTarget),
+		MCPParam::Optional(TEXT("renames"), EMCPParamType::Array, TEXT("probe")).Items(EMCPParamType::Object).Role(EMCPParamRole::EditTarget, { TEXT("sourcePath") }),
+		MCPParam::Optional(TEXT("slot"), EMCPParamType::Integer, TEXT("probe")).Role(EMCPParamRole::SlotIndex).Default(0),
+		MCPParam::Optional(TEXT("save"), EMCPParamType::Boolean, TEXT("probe")).Default(true),
+		MCPParam::Optional(TEXT("scale"), EMCPParamType::Number, TEXT("probe")).Default(1.5),
+		MCPParam::Optional(TEXT("mode"), EMCPParamType::String, TEXT("probe")).Default(TEXT("skip")),
+	}).IsEmpty());
+	TestFalse(TEXT("a path role on a number is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("count"), EMCPParamType::Integer, TEXT("probe")).Role(EMCPParamRole::EditTarget),
+	}).IsEmpty());
+	TestFalse(TEXT("a slot index on a string is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("slot"), EMCPParamType::String, TEXT("probe")).Role(EMCPParamRole::SlotIndex),
+	}).IsEmpty());
+	TestFalse(TEXT("a role on an array of objects without role keys is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("items"), EMCPParamType::Array, TEXT("probe")).Items(EMCPParamType::Object).Role(EMCPParamRole::EditTarget),
+	}).IsEmpty());
+	TestFalse(TEXT("a role key that is not a declared field is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("items"), EMCPParamType::Array, TEXT("probe")).Items(EMCPParamType::Object)
+			.WithFields({ MCPParam::RequiredField(TEXT("assetPath"), EMCPParamType::String, TEXT("probe")) })
+			.Role(EMCPParamRole::EditTarget, { TEXT("meshPath") }),
+	}).IsEmpty());
+	TestFalse(TEXT("a default on a required parameter is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Required(TEXT("save"), EMCPParamType::Boolean, TEXT("probe")).Default(true),
+	}).IsEmpty());
+	TestFalse(TEXT("a default of another type is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("save"), EMCPParamType::Boolean, TEXT("probe")).Default(TEXT("yes")),
+	}).IsEmpty());
+	TestFalse(TEXT("a fractional default on an integer is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("slot"), EMCPParamType::Integer, TEXT("probe")).Default(0.5),
+	}).IsEmpty());
+	TestFalse(TEXT("a default beside a literal is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("confirm"), EMCPParamType::Boolean, TEXT("probe")).Literal(true).Default(true),
+	}).IsEmpty());
+
 	// Choices.
 	auto SpecWith = [](const FMCPSpecRules& Rules)
 	{
@@ -477,6 +515,15 @@ bool FMCPHandlerSpecRegistrationTest::RunTest(const FString& Parameters)
 			{ MCPParam::Required(TEXT("action"), EMCPParamType::String, TEXT("probe")) }));
 		TestTrue(TEXT("the refused handler is still registered"), Registry.HasHandler(TEXT("mcp_test_spec_refused")));
 		TestFalse(TEXT("but carries no spec"), Registry.GetHandlerSpecs().Contains(TEXT("mcp_test_spec_refused")));
+		TestTrue(TEXT("and is listed as refused"), Registry.GetRefusedSpecs().Contains(TEXT("mcp_test_spec_refused")));
+
+		TestTrue(TEXT("a spec with roles, a default and a commit policy is accepted"), Registry.RegisterHandler(
+			TEXT("mcp_test_spec_roles"), &AliasProbe, {
+				MCPParam::Required(TEXT("assetPath"), EMCPParamType::String, TEXT("probe")).Role(EMCPParamRole::EditTarget),
+				MCPParam::Optional(TEXT("renames"), EMCPParamType::Array, TEXT("probe")).Items(EMCPParamType::Object).Role(EMCPParamRole::EditTarget, { TEXT("sourcePath") }),
+				MCPParam::Optional(TEXT("save"), EMCPParamType::Boolean, TEXT("probe")).Default(true),
+			},
+			MCPSpec::Commit(EMCPCommitPolicy::Both)));
 
 		TestTrue(TEXT("a valid spec is accepted"), Registry.RegisterHandler(
 			TEXT("mcp_test_spec_alias"), &AliasProbe,
@@ -543,6 +590,21 @@ bool FMCPHandlerSpecRegistrationTest::RunTest(const FString& Parameters)
 	{
 		const TSharedPtr<FJsonObject> Json = Registry.BuildHandlerSpecsJson();
 		TestFalse(TEXT("a refused spec is not published"), Json->HasField(TEXT("mcp_test_spec_refused")));
+		const TSharedPtr<FJsonObject>* Roles = nullptr;
+		if (TestTrue(TEXT("the roles spec is published"), Json->TryGetObjectField(TEXT("mcp_test_spec_roles"), Roles) && Roles))
+		{
+			TestEqual(TEXT("with its commit policy"), (*Roles)->GetStringField(TEXT("commit")), FString(TEXT("both")));
+			const TArray<TSharedPtr<FJsonValue>>* Params = nullptr;
+			if (TestTrue(TEXT("and its params"), (*Roles)->TryGetArrayField(TEXT("params"), Params) && Params && Params->Num() == 3))
+			{
+				TestEqual(TEXT("role"), (*Params)[0]->AsObject()->GetStringField(TEXT("role")), FString(TEXT("editTarget")));
+				const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
+				TestTrue(TEXT("roleKeys"), (*Params)[1]->AsObject()->TryGetArrayField(TEXT("roleKeys"), Keys) && Keys
+					&& Keys->Num() == 1 && (*Keys)[0]->AsString() == TEXT("sourcePath"));
+				TestTrue(TEXT("default"), (*Params)[2]->AsObject()->GetBoolField(TEXT("default")));
+				TestFalse(TEXT("no role where none is set"), (*Params)[2]->AsObject()->HasField(TEXT("role")));
+			}
+		}
 		const TSharedPtr<FJsonObject>* Entry = nullptr;
 		if (TestTrue(TEXT("the accepted spec is published"), Json->TryGetObjectField(TEXT("mcp_test_spec_alias"), Entry) && Entry))
 		{
@@ -560,8 +622,8 @@ bool FMCPHandlerSpecRegistrationTest::RunTest(const FString& Parameters)
 				TestFalse(TEXT("no shape fields when none are set"), Param->HasField(TEXT("nullable")) || Param->HasField(TEXT("orTypes"))
 					|| Param->HasField(TEXT("literal")) || Param->HasField(TEXT("fields")));
 			}
-			TestFalse(TEXT("no choices or exemption when none are set"),
-				(*Entry)->HasField(TEXT("choices")) || (*Entry)->HasField(TEXT("contractExempt")));
+			TestFalse(TEXT("no choices, exemption or commit policy when none are set"),
+				(*Entry)->HasField(TEXT("choices")) || (*Entry)->HasField(TEXT("contractExempt")) || (*Entry)->HasField(TEXT("commit")));
 		}
 
 		const TSharedPtr<FJsonObject>* Rules = nullptr;
@@ -610,6 +672,25 @@ bool FMCPHandlerSpecRegistrationTest::RunTest(const FString& Parameters)
 				TestTrue(TEXT("oneOf"), bTagged);
 			}
 		}
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPHandlerSpecAllValidTest,
+	"UE.MCP.Bridge.HandlerSpec.AllValid",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// Startup logs a refused spec and drops it, so its action loses its surface on
+// the next recording. Here a refused spec fails the run.
+bool FMCPHandlerSpecAllValidTest::RunTest(const FString& Parameters)
+{
+	FMCPHandlerRegistry Registry;
+	MCPHandlerCatalog::RegisterAllHandlers(Registry);
+	TestTrue(TEXT("handlers register with a parameter spec"), Registry.GetHandlerSpecs().Num() > 0);
+	for (const TPair<FString, FString>& Refused : Registry.GetRefusedSpecs())
+	{
+		AddError(FString::Printf(TEXT("%s: parameter spec refused: %s"), *Refused.Key, *Refused.Value));
 	}
 	return true;
 }
