@@ -164,7 +164,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("rasterSize"), EType::Number, TEXT("Raster resolution for the coverage and overlap estimate (default 512)")),
 	});
 	Registry.RegisterHandler(TEXT("set_uv_channel_count"), &SetUvChannelCount, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("op"), EType::String, TEXT("set (default) | add | remove | copy")),
 		MCPParam::Optional(TEXT("channelCount"), EType::Number, TEXT("Target channel count (op=set)")),
@@ -176,7 +176,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report without writing")),
 	});
 	Registry.RegisterHandler(TEXT("unwrap_uvs"), &UnwrapUvs, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("channel"), EType::Number, TEXT("Channel to write (default 0)")),
 		MCPParam::Optional(TEXT("method"), EType::String, TEXT("xatlas (default) | patchBuilder | expMap | conformal | spectralConformal | planar | box | cylinder")),
@@ -193,7 +193,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("rasterSize"), EType::Number, TEXT("Raster resolution for the result's overlap estimate (default 512)")),
 	});
 	Registry.RegisterHandler(TEXT("transform_uvs"), &TransformUvs, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("channel"), EType::Number, TEXT("Channel to transform (default 0)")),
 		MCPParam::Optional(TEXT("translate"), EType::Object, TEXT("UV-space offset {u, v}")),
@@ -208,7 +208,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report without writing")),
 	});
 	Registry.RegisterHandler(TEXT("generate_lightmap_uvs"), &GenerateLightmapUvs, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("enable"), EType::Boolean, TEXT("Turn lightmap UV generation on (default) or off")),
 		MCPParam::Optional(TEXT("sourceChannel"), EType::Number, TEXT("Channel the generator reads (default: the current setting)")),
@@ -225,7 +225,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("channel"), EType::Number, TEXT("Channel to draw (default 0)")),
-		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("PNG to write (default under Saved/UVLayouts)")),
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("PNG to write (default under Saved/UVLayouts)")).Role(EMCPParamRole::OutputPath),
 		MCPParam::Optional(TEXT("imageSize"), EType::Number, TEXT("PNG edge length (default 1024, max 4096)")),
 		MCPParam::Optional(TEXT("showIslands"), EType::Boolean, TEXT("Colour each island separately (default true)")),
 		MCPParam::Optional(TEXT("showOverlaps"), EType::Boolean, TEXT("Highlight overlapping texels (default true)")),
@@ -259,7 +259,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecGeoSave = MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the written asset (default true)"));
 	const FMCPParamSpec SpecGeoDryRun = MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Run the operation and report the result without writing (default false)"));
 	Registry.RegisterHandlerWithTimeout(TEXT("apply_mesh_simplify"), &SimplifyMesh, 300.0f, {
-		SpecGeoAssetPath,
+		SpecGeoAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("simplifyMode"), EType::String, TEXT("triangleCount (default) | vertexCount | tolerance | edgeLength | clusterEdgeLength | planar | polygroup | editorTriangleCount | editorVertexCount")),
 		MCPParam::Optional(TEXT("triangleCount"), EType::Integer, TEXT("Triangle count to reduce to (simplifyMode triangleCount or editorTriangleCount)")),
 		MCPParam::Optional(TEXT("vertexCount"), EType::Integer, TEXT("Vertex count to reduce to, at least 4 (simplifyMode vertexCount or editorVertexCount)")),
@@ -270,13 +270,13 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("allowSeamCollapse"), EType::Boolean, TEXT("Let the simplifier collapse UV, normal and material seams (default true)")),
 		MCPParam::Optional(TEXT("preserveVertexPositions"), EType::Boolean, TEXT("Keep surviving vertices where they are (default false)")),
 		MCPParam::Optional(TEXT("autoCompact"), EType::Boolean, TEXT("Close the gaps the collapse leaves in the index space (default true)")),
-		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<assetPath>_Simplified')")),
-		SpecGeoInPlace, SpecGeoBackupPath, SpecGeoLodType, SpecGeoLodIndex, SpecGeoOnConflict,
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<assetPath>_Simplified')")).Role(EMCPParamRole::EditTarget),
+		SpecGeoInPlace, SpecGeoBackupPath.Role(EMCPParamRole::EditTarget), SpecGeoLodType, SpecGeoLodIndex, SpecGeoOnConflict,
 		SpecGeoCopyMaterials, SpecGeoCopyCollision, SpecGeoNanite,
 		SpecGeoRecomputeNormals, SpecGeoRecomputeTangents, SpecGeoRemoveDegenerates, SpecGeoSave, SpecGeoDryRun,
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("apply_mesh_remesh"), &RemeshMesh, 300.0f, {
-		SpecGeoAssetPath,
+		SpecGeoAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("remeshMode"), EType::String, TEXT("uniform (default, even edge lengths) | adaptive (denser where the surface curves)")),
 		MCPParam::Optional(TEXT("targetType"), EType::String, TEXT("TriangleCount (default) | TargetEdgeLength")),
 		MCPParam::Optional(TEXT("targetTriangleCount"), EType::Integer, TEXT("Approximate triangle count to aim for (targetType TriangleCount, default 1000)")),
@@ -288,38 +288,38 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("discardAttributes"), EType::Boolean, TEXT("Throw away UVs, normals and material IDs so the remesher moves freely (default false)")),
 		MCPParam::Optional(TEXT("reprojectToInputMesh"), EType::Boolean, TEXT("Pull new vertices back onto the original surface each pass (default true)")),
 		MCPParam::Optional(TEXT("relativeDensity"), EType::Number, TEXT("-2 to 2, bias toward more or fewer triangles in curved regions (remeshMode adaptive, default 0)")),
-		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<assetPath>_Remeshed')")),
-		SpecGeoInPlace, SpecGeoBackupPath, SpecGeoLodType, SpecGeoLodIndex, SpecGeoOnConflict,
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<assetPath>_Remeshed')")).Role(EMCPParamRole::EditTarget),
+		SpecGeoInPlace, SpecGeoBackupPath.Role(EMCPParamRole::EditTarget), SpecGeoLodType, SpecGeoLodIndex, SpecGeoOnConflict,
 		SpecGeoCopyMaterials, SpecGeoCopyCollision, SpecGeoNanite,
 		SpecGeoRecomputeNormals, SpecGeoRecomputeTangents, SpecGeoRemoveDegenerates, SpecGeoSave, SpecGeoDryRun,
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("apply_mesh_mirror"), &MirrorMesh, 300.0f, {
-		SpecGeoAssetPath,
+		SpecGeoAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("axis"), EType::String, TEXT("x (default) | y | z | custom: the mirror plane's normal, through planeOrigin")),
 		MCPParam::Optional(TEXT("planeOrigin"), EType::Vec3, TEXT("A point on the mirror plane (default the mesh origin)")),
 		MCPParam::Optional(TEXT("planeNormal"), EType::Vec3, TEXT("The mirror plane's normal when axis is custom; a zero vector is refused")),
 		MCPParam::Optional(TEXT("applyPlaneCut"), EType::Boolean, TEXT("Remove the geometry on the far side of the plane before reflecting (default true)")),
 		MCPParam::Optional(TEXT("flipCutSide"), EType::Boolean, TEXT("Keep the other side of the plane instead (default false)")),
 		MCPParam::Optional(TEXT("weldAlongPlane"), EType::Boolean, TEXT("Weld the two halves along the plane (default true)")),
-		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<assetPath>_Mirrored')")),
-		SpecGeoInPlace, SpecGeoBackupPath, SpecGeoLodType, SpecGeoLodIndex, SpecGeoOnConflict,
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<assetPath>_Mirrored')")).Role(EMCPParamRole::EditTarget),
+		SpecGeoInPlace, SpecGeoBackupPath.Role(EMCPParamRole::EditTarget), SpecGeoLodType, SpecGeoLodIndex, SpecGeoOnConflict,
 		SpecGeoCopyMaterials, SpecGeoCopyCollision, SpecGeoNanite,
 		SpecGeoRecomputeNormals, SpecGeoRecomputeTangents, SpecGeoRemoveDegenerates, SpecGeoSave, SpecGeoDryRun,
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("apply_mesh_hole_fill"), &FillMeshHoles, 300.0f, {
-		SpecGeoAssetPath,
+		SpecGeoAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("fillMethod"), EType::String, TEXT("Automatic (default) | MinimalFill | PolygonTriangulation | TriangleFan | PlanarProjection")),
 		MCPParam::Optional(TEXT("weldFirst"), EType::Boolean, TEXT("Weld coincident boundary edges before filling (default true)")),
 		MCPParam::Optional(TEXT("weldTolerance"), EType::Number, TEXT("How close two boundary edges must be to weld (default 1e-6)")),
 		MCPParam::Optional(TEXT("removeDegenerateFirst"), EType::Boolean, TEXT("Drop zero-area triangles before welding and filling (default false)")),
 		MCPParam::Optional(TEXT("deleteIsolatedTriangles"), EType::Boolean, TEXT("Delete floating disconnected triangles, whose holes no fill can close (default true)")),
-		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<assetPath>_Filled')")),
-		SpecGeoInPlace, SpecGeoBackupPath, SpecGeoLodType, SpecGeoLodIndex, SpecGeoOnConflict,
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<assetPath>_Filled')")).Role(EMCPParamRole::EditTarget),
+		SpecGeoInPlace, SpecGeoBackupPath.Role(EMCPParamRole::EditTarget), SpecGeoLodType, SpecGeoLodIndex, SpecGeoOnConflict,
 		SpecGeoCopyMaterials, SpecGeoCopyCollision, SpecGeoNanite,
 		SpecGeoRecomputeNormals, SpecGeoRecomputeTangents, SpecGeoRemoveDegenerates, SpecGeoSave, SpecGeoDryRun,
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("generate_mesh_collision"), &GenerateMeshCollision, 300.0f, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh whose collision to build or clear")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh whose collision to build or clear")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("op"), EType::String, TEXT("generate (default) | clear")),
 		MCPParam::Optional(TEXT("method"), EType::String, TEXT("AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets")),
 		MCPParam::Optional(TEXT("maxConvexHulls"), EType::Integer, TEXT("Convex hulls the decomposition may produce (default 1)")),
@@ -386,7 +386,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("fix_asset_hygiene"), &FixAssetHygiene, 300.0f, {
 		MCPParam::Required(TEXT("fix"), EType::String, TEXT("naming (rename to the convention) | unreferenced (quarantine or delete)")),
-		MCPParam::Optional(TEXT("assetPaths"), EType::Array, TEXT("The exact assets to act on, the safest way to drive it")).Items(EType::String),
+		MCPParam::Optional(TEXT("assetPaths"), EType::Array, TEXT("The exact assets to act on, the safest way to drive it")).Items(EType::String).Role(EMCPParamRole::EditTarget),
 		SpecHygDirectory, SpecHygDirectories, SpecHygRecursive, SpecHygMaxAssets,
 		SpecHygClassNames, SpecHygExcludePaths, SpecHygKeepPaths,
 		SpecHygNamingRules, SpecHygNamingRuleMode,
@@ -430,38 +430,38 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("duplicate_asset"), &DuplicateAsset, {
 		MCPParam::Required(TEXT("sourcePath"), EType::String, TEXT("Asset to duplicate")),
-		MCPParam::Required(TEXT("destinationPath"), EType::String, TEXT("Object path of the copy")),
+		MCPParam::Required(TEXT("destinationPath"), EType::String, TEXT("Object path of the copy")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing destination; error refuses")),
 	});
 	Registry.RegisterHandler(TEXT("rename_asset"), &RenameAsset, {
-		MCPParam::Optional(TEXT("sourcePath"), EType::String, TEXT("Asset to rename, together with destinationPath")),
-		MCPParam::Optional(TEXT("destinationPath"), EType::String, TEXT("New object path, together with sourcePath")),
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to rename in its own folder, together with newName")),
+		MCPParam::Optional(TEXT("sourcePath"), EType::String, TEXT("Asset to rename, together with destinationPath")).Role(EMCPParamRole::EditTarget),
+		MCPParam::Optional(TEXT("destinationPath"), EType::String, TEXT("New object path, together with sourcePath")).Role(EMCPParamRole::EditTarget),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to rename in its own folder, together with newName")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("newName"), EType::String, TEXT("New asset name, together with assetPath")),
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("World renames only: merge into a destination that already holds external packages (used by rollback)")),
 	});
 	Registry.RegisterHandler(TEXT("move_asset"), &MoveAsset, {
-		MCPParam::Optional(TEXT("sourcePath"), EType::String, TEXT("Asset to rename, together with destinationPath")),
-		MCPParam::Optional(TEXT("destinationPath"), EType::String, TEXT("New object path, together with sourcePath")),
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to rename in its own folder, together with newName")),
+		MCPParam::Optional(TEXT("sourcePath"), EType::String, TEXT("Asset to rename, together with destinationPath")).Role(EMCPParamRole::EditTarget),
+		MCPParam::Optional(TEXT("destinationPath"), EType::String, TEXT("New object path, together with sourcePath")).Role(EMCPParamRole::EditTarget),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to rename in its own folder, together with newName")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("newName"), EType::String, TEXT("New asset name, together with assetPath")),
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("World renames only: merge into a destination that already holds external packages (used by rollback)")),
 	});
 	Registry.RegisterHandler(TEXT("delete_asset"), &DeleteAsset, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to delete")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to delete")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Delete even when other packages reference it, closing open editors (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("delete_asset_batch"), &DeleteAssetBatch, {
-		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("Assets to delete")).Alias(TEXT("paths")).Items(EType::String),
+		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("Assets to delete")).Alias(TEXT("paths")).Items(EType::String).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Delete referenced assets too, closing open editors (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("bulk_rename_assets"), &BulkRename, {
-		MCPParam::Required(TEXT("renames"), EType::Array, TEXT("Rename descriptors: {sourcePath, destinationPath}, {assetPath, newName} or {sourcePath, newPackagePath, newName}")).Items(EType::Object),
+		MCPParam::Required(TEXT("renames"), EType::Array, TEXT("Rename descriptors: {sourcePath, destinationPath}, {assetPath, newName} or {sourcePath, newPackagePath, newName}")).Items(EType::Object).Role(EMCPParamRole::EditTarget, { TEXT("sourcePath"), TEXT("destinationPath"), TEXT("assetPath") }),
 	});
 	// #908: bounded redirector clean-up after a move. Timeout raised because a
 	// fix-up loads and resaves every referencing package.
 	Registry.RegisterHandlerWithTimeout(TEXT("fixup_redirectors"), &FixupRedirectors, 300.0f, {
-		MCPParam::Required(TEXT("paths"), EType::Array, TEXT("Redirector packages, or the folders holding them")).Items(EType::String),
+		MCPParam::Required(TEXT("paths"), EType::Array, TEXT("Redirector packages, or the folders holding them")).Items(EType::String).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report the redirectors, referencers and packages it would load and save, and stop (default false)")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Run the explicit save pass (default true); the editor's own fix-up writes what it can regardless")),
 		MCPParam::Optional(TEXT("allowProjectWide"), EType::Boolean, TEXT("Permit a path naming a whole content root (default false)")),
@@ -485,8 +485,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	// The rollback bulk_upsert_data_assets emits; no action dispatches it.
 	Registry.RegisterHandlerWithTimeout(TEXT("bulk_restore_data_assets"), &BulkRestoreDataAssets, 120.0f, {
-		MCPParam::Optional(TEXT("updatedItems"), EType::Array, TEXT("{assetPath, properties} snapshots to write back")).Items(EType::Object),
-		MCPParam::Optional(TEXT("createdAssetPaths"), EType::Array, TEXT("Assets the upsert created, to delete")).Items(EType::String),
+		MCPParam::Optional(TEXT("updatedItems"), EType::Array, TEXT("{assetPath, properties} snapshots to write back")).Items(EType::Object).Role(EMCPParamRole::EditTarget, { TEXT("assetPath") }),
+		MCPParam::Optional(TEXT("createdAssetPaths"), EType::Array, TEXT("Assets the upsert created, to delete")).Items(EType::String).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save what was restored (default true)")),
 	}, MCPSpec::ContractExempt(TEXT("deletes and rewrites the assets its payload names")));
 	// #726: generic create-any-concrete-UObject-class asset (physical materials,
@@ -501,7 +501,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #975: a named subobject inside an existing asset package, which
 	// create_asset_by_class cannot make because it always creates a package.
 	Registry.RegisterHandler(TEXT("create_subobject"), &CreateSubobject, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset that owns the new subobject")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset that owns the new subobject")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("className"), EType::String, TEXT("Class to instantiate, e.g. a /Script/Module.Class path")),
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Subobject name")),
 		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Property values, validated on a throwaway instance first")),
@@ -516,7 +516,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("maxNodes"), EType::Number, TEXT("Nodes reported per graph (default 500, max 5000)")),
 	});
 	Registry.RegisterHandler(TEXT("connect_graph_pins"), &ConnectGraphPins, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to author in, by name or unique substring (required when the asset has several graphs)")),
 		MCPParam::Optional(TEXT("sourceNode"), EType::String, TEXT("Node of the source pin: nodeGuid, node path, name or unique title")),
 		MCPParam::Optional(TEXT("sourcePinId"), EType::String, TEXT("pinId of the source pin (preferred)")),
@@ -529,7 +529,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("disconnect_graph_pins"), &DisconnectGraphPins, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to author in, by name or unique substring (required when the asset has several graphs)")),
 		MCPParam::Optional(TEXT("sourceNode"), EType::String, TEXT("Node of the source pin: nodeGuid, node path, name or unique title")),
 		MCPParam::Optional(TEXT("sourcePinId"), EType::String, TEXT("pinId of the source pin (preferred)")),
@@ -542,7 +542,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("add_graph_node"), &AddGraphNode, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to author in, by name or unique substring (required when the asset has several graphs)")),
 		MCPParam::Optional(TEXT("nodeClass"), EType::String, TEXT("Class the node action spawns")),
 		MCPParam::Optional(TEXT("actionName"), EType::String, TEXT("Schema menu entry name, or 'category|name'")),
@@ -552,13 +552,13 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("remove_graph_node"), &RemoveGraphNode, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("EdGraph-backed asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to author in, by name or unique substring (required when the asset has several graphs)")),
 		MCPParam::Required(TEXT("node"), EType::String, TEXT("Node to remove: nodeGuid, path, name or unique title")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after the edit (default true)")),
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("compile_customizable_object"), &CompileCustomizableObject, 600.0f, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CustomizableObject asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CustomizableObject asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("optimizationLevel"), EType::String, TEXT("Optimization level enum name, e.g. None or Maximum (default: the compile function's own)")),
 		MCPParam::Optional(TEXT("textureCompression"), EType::String, TEXT("None | Fast | HighQuality")),
 	});
@@ -569,7 +569,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the new asset (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("save_asset"), &SaveAsset, {
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to save; omit to save every dirty asset under /Game")).Alias(TEXT("path")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to save; omit to save every dirty asset under /Game")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Write the package even when it is not dirty (needs assetPath)")),
 	});
 	Registry.RegisterHandler(TEXT("save_all_dirty"), &SaveAllDirty, {
@@ -657,7 +657,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #697: texture export + compare.
 	Registry.RegisterHandler(TEXT("export_texture"), &ExportTexture, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Texture2D asset path")).Alias(TEXT("path")),
-		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("PNG file to write; a relative path resolves against the project directory")).Alias(TEXT("filePath")),
+		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("PNG file to write; a relative path resolves against the project directory")).Alias(TEXT("filePath")).Role(EMCPParamRole::OutputPath),
 	});
 	Registry.RegisterHandler(TEXT("compare_textures"), &CompareTextures, {
 		MCPParam::Required(TEXT("assetPathA"), EType::String, TEXT("First Texture2D")).Alias(TEXT("a")),
@@ -667,7 +667,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Texture2D asset path")).Alias(TEXT("path")),
 	});
 	Registry.RegisterHandler(TEXT("set_texture_settings"), &SetTextureProperties, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Texture2D asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Texture2D asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("settings"), EType::Object, TEXT("The four settings below as one object; a key also given at the top level wins over it")),
 		MCPParam::Optional(TEXT("compressionSettings"), EType::String, TEXT("Default, Normalmap, Grayscale, Displacementmap, VectorDisplacementmap, HDR, EditorIcon, Alpha, DistanceFieldFont, HDR_Compressed or BC7")),
 		MCPParam::Optional(TEXT("lodGroup"), EType::String, TEXT("Texture LOD group: World, WorldNormalMap, Character, UI, Lightmap, Effects and the rest")),
@@ -677,7 +677,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Mesh handlers
 	Registry.RegisterHandler(TEXT("set_mesh_material"), &SetMeshMaterial, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("materialPath"), EType::String, TEXT("Material to assign")),
 		MCPParam::Optional(TEXT("slotIndex"), EType::Number, TEXT("Material slot index (default 0)")),
 	});
@@ -687,19 +687,19 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("materialPath"), EType::String, TEXT("Material to assign")).NonEmpty(),
 			MCPParam::OptionalField(TEXT("slotName"), EType::String, TEXT("Slot by name, which survives a reimport reordering slot indices")),
 			MCPParam::OptionalField(TEXT("slotIndex"), EType::Integer, TEXT("Slot by index (default 0); refused when it disagrees with slotName")),
-		}),
+		}).Role(EMCPParamRole::EditTarget, { TEXT("assetPath") }),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save each changed mesh (default true)")),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Preflight and report without writing (default false)")),
 		MCPParam::Optional(TEXT("continueOnError"), EType::Boolean, TEXT("Apply the assignments that passed preflight instead of aborting the batch (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("recenter_pivot"), &RecenterPivot, {
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("StaticMesh to recenter")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("assetPaths"), EType::Array, TEXT("StaticMeshes to recenter together; the first sets the reference pivot")).Items(EType::String),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("StaticMesh to recenter")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
+		MCPParam::Optional(TEXT("assetPaths"), EType::Array, TEXT("StaticMeshes to recenter together; the first sets the reference pivot")).Items(EType::String).Role(EMCPParamRole::EditTarget),
 	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("assetPaths") } }));
 
 	// Socket handlers
 	Registry.RegisterHandler(TEXT("add_socket"), &AddSocket, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh, SkeletalMesh or Skeleton asset path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh, SkeletalMesh or Skeleton asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("socketName"), EType::String, TEXT("Socket name")),
 		MCPParam::Optional(TEXT("boneName"), EType::String, TEXT("Bone to attach to (SkeletalMesh and Skeleton, default root)")),
 		MCPParam::Optional(TEXT("relativeLocation"), EType::Vec3, TEXT("Socket location relative to its parent")),
@@ -708,26 +708,26 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) | update | error")),
 	});
 	Registry.RegisterHandler(TEXT("set_socket_transform"), &SetSocketTransform, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("socketName"), EType::String, TEXT("Socket to move")),
 		MCPParam::Optional(TEXT("relativeLocation"), EType::Vec3, TEXT("New relative location")),
 		MCPParam::Optional(TEXT("relativeRotation"), EType::Rotator, TEXT("New relative rotation")),
 		MCPParam::Optional(TEXT("relativeScale"), EType::Vec3, TEXT("New relative scale")),
 	});
 	Registry.RegisterHandler(TEXT("set_asset_property"), &SetAssetProperty, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property path; dotted and indexed paths walk structs, arrays and instanced subobjects")),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("Value to write: scalar, object, array or asset path")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("append_asset_array_elements"), &AppendAssetArrayElements, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Path of the TArray property")),
 		MCPParam::Required(TEXT("elements"), EType::Array, TEXT("Values to append, validated before any is written")).NonEmpty(),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("bulk_set_asset_properties"), &BulkSetAssetProperties, {
-		MCPParam::Required(TEXT("items"), EType::Array, TEXT("Asset updates: [{assetPath, properties}], max 500")).NonEmpty().MaxItems(500).Items(EType::Object),
+		MCPParam::Required(TEXT("items"), EType::Array, TEXT("Asset updates: [{assetPath, properties}], max 500")).NonEmpty().MaxItems(500).Items(EType::Object).Role(EMCPParamRole::EditTarget, { TEXT("assetPath") }),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the changed packages (default true)")),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Preflight and report without writing (default false)")),
 		MCPParam::Optional(TEXT("continueOnError"), EType::Boolean, TEXT("Apply the items that passed preflight instead of aborting the batch (default false)")),
@@ -736,7 +736,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("groups"), EType::Object, TEXT("Texture paths per profile: {normal?, grayscale?, baseColor?, hdr?}")),
 	});
 	Registry.RegisterHandler(TEXT("create_interchange_pipeline"), &CreateInterchangePipeline, {
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Object path of the new pipeline")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Object path of the new pipeline")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Pipeline asset name, placed in packagePath")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Folder for name (default /Game/Import)")),
 		MCPParam::Optional(TEXT("meshType"), EType::String, TEXT("skeletal (default) | static")),
@@ -744,7 +744,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing pipeline; error refuses")),
 	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("name") } }).ContractExempt(TEXT("Creates and saves a pipeline asset from the contract path before anything fails")));
 	Registry.RegisterHandler(TEXT("remove_socket"), &RemoveSocket, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh, SkeletalMesh or Skeleton asset path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh, SkeletalMesh or Skeleton asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("socketName"), EType::String, TEXT("Socket to remove")),
 	});
 	Registry.RegisterHandler(TEXT("list_sockets"), &ListSockets, {
@@ -754,14 +754,14 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh, SkeletalMesh or Skeleton asset path")),
 	});
 	Registry.RegisterHandler(TEXT("reload_package"), &ReloadPackage, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset whose package to reload")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset whose package to reload")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 	});
 	// #279: detect/recover stuck-unloadable assets
 	Registry.RegisterHandler(TEXT("asset_health_check"), &HealthCheck, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to check")).Alias(TEXT("path")),
 	});
 	Registry.RegisterHandler(TEXT("force_reload_asset"), &ForceReload, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to reload from disk")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to reload from disk")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("discardUnsaved"), EType::Boolean, TEXT("Reload even when the package has unsaved changes, discarding them (default false)")),
 	});
 
@@ -778,29 +778,29 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Write the rows to this JSON file instead of returning them; relative paths resolve under Saved/")),
 	});
 	Registry.RegisterHandler(TEXT("reimport_datatable"), &ReimportDataTable, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("jsonPath"), EType::String, TEXT("JSON file to replace the table from")),
 		MCPParam::Optional(TEXT("jsonString"), EType::String, TEXT("JSON text to replace the table from")),
 	});
 	// #437: single-row mutation. Append a new row or overwrite an existing one
 	// without exporting and re-importing the whole table.
 	Registry.RegisterHandler(TEXT("set_datatable_row"), &SetDataTableRow, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to append or overwrite")),
 		MCPParam::Required(TEXT("row"), EType::Object, TEXT("Row-struct fields to write; fields not named keep their values")).Alias(TEXT("fields")).Alias(TEXT("data")),
 	});
 	Registry.RegisterHandler(TEXT("add_datatable_row"), &SetDataTableRow, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to append or overwrite")),
 		MCPParam::Required(TEXT("row"), EType::Object, TEXT("Row-struct fields to write; fields not named keep their values")).Alias(TEXT("fields")).Alias(TEXT("data")),
 	});
 	Registry.RegisterHandler(TEXT("update_datatable_row"), &SetDataTableRow, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to append or overwrite")),
 		MCPParam::Required(TEXT("row"), EType::Object, TEXT("Row-struct fields to write; fields not named keep their values")).Alias(TEXT("fields")).Alias(TEXT("data")),
 	});
 	Registry.RegisterHandler(TEXT("remove_datatable_row"), &RemoveDataTableRow, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to remove")),
 	});
 	// #535: single-row read, single-cell write, row rename, and bulk JSON fill.
@@ -809,18 +809,18 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to read")),
 	});
 	Registry.RegisterHandler(TEXT("set_datatable_cell"), &SetDataTableCell, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Existing row to edit")),
 		MCPParam::Required(TEXT("fieldName"), EType::String, TEXT("Row-struct field to write")),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("Value to write")),
 	});
 	Registry.RegisterHandler(TEXT("rename_datatable_row"), &RenameDataTableRow, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("oldName"), EType::String, TEXT("Row to rename")).Alias(TEXT("rowName")),
 		MCPParam::Required(TEXT("newName"), EType::String, TEXT("New row name")),
 	});
 	Registry.RegisterHandler(TEXT("fill_datatable_from_json"), &FillDataTableFromJson, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("DataTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("rows"), EType::Object, TEXT("Rows to upsert: {rowName: {field: value}}")),
 		MCPParam::Optional(TEXT("jsonString"), EType::String, TEXT("The same rows object as JSON text, used when rows is omitted")),
 	});
@@ -840,7 +840,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("rowFilter"), EType::String, TEXT("Case-insensitive substring filter on row names")),
 	});
 	Registry.RegisterHandler(TEXT("import_curvetable"), &ImportCurveTable, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("jsonString"), EType::String, TEXT("JSON rows to replace the table from")),
 		MCPParam::Optional(TEXT("csvString"), EType::String, TEXT("CSV rows to replace the table from")),
 		MCPParam::Optional(TEXT("filePath"), EType::String, TEXT("JSON or CSV file to replace the table from")).Alias(TEXT("jsonPath")).Alias(TEXT("csvPath")),
@@ -848,17 +848,17 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("interpMode"), EType::String, TEXT("linear (default) | constant | cubic | none")),
 	});
 	Registry.RegisterHandler(TEXT("add_curvetable_row"), &AddCurveTableRow, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to add")),
 		MCPParam::Optional(TEXT("curveType"), EType::String, TEXT("simple | rich (default: the table's type, or rich for cubic)")).Alias(TEXT("mode")),
 		MCPParam::Optional(TEXT("interpMode"), EType::String, TEXT("linear (default) | constant | cubic | none")),
 	});
 	Registry.RegisterHandler(TEXT("remove_curvetable_row"), &RemoveCurveTableRow, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to remove")),
 	});
 	Registry.RegisterHandler(TEXT("rename_curvetable_row"), &RenameCurveTableRow, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("oldName"), EType::String, TEXT("Row to rename")).Alias(TEXT("rowName")),
 		MCPParam::Required(TEXT("newName"), EType::String, TEXT("New row name")),
 	});
@@ -867,12 +867,12 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to read")),
 	});
 	Registry.RegisterHandler(TEXT("set_curvetable_keys"), &SetCurveTableKeys, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row whose keys to replace")),
 		MCPParam::Required(TEXT("keys"), EType::Array, TEXT("Replacement keys: [{time, value, interpMode?, arriveTangent?, leaveTangent?}]")).Items(EType::Object),
 	});
 	Registry.RegisterHandler(TEXT("add_curvetable_key"), &AddCurveTableKey, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rowName"), EType::String, TEXT("Row to key")),
 		MCPParam::Required(TEXT("time"), EType::Number, TEXT("Key time")),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("Key value (a number)")),
@@ -882,12 +882,12 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Generic reimport / export
 	Registry.RegisterHandler(TEXT("reimport_asset"), &ReimportAsset, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Imported asset to rebuild from its source file")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Imported asset to rebuild from its source file")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("filePath"), EType::String, TEXT("New source file to record and reimport from")).Alias(TEXT("filename")),
 	});
 	Registry.RegisterHandler(TEXT("export_asset"), &ExportAsset, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to export")).Alias(TEXT("path")),
-		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("File to write; a relative path resolves against the project directory")),
+		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("File to write; a relative path resolves against the project directory")).Role(EMCPParamRole::OutputPath),
 	});
 
 	// StringTable handlers
@@ -910,21 +910,21 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("key"), EType::String, TEXT("Entry key")),
 	});
 	Registry.RegisterHandler(TEXT("set_stringtable_entry"), &SetStringTableEntry, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("key"), EType::String, TEXT("Entry key")),
 		MCPParam::Optional(TEXT("sourceString"), EType::String, TEXT("Source string to write")),
 		MCPParam::Optional(TEXT("value"), EType::Any, TEXT("Source string to write, when sourceString is omitted")),
 	});
 	Registry.RegisterHandler(TEXT("remove_stringtable_entry"), &RemoveStringTableEntry, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("key"), EType::String, TEXT("Entry key")),
 	});
 	Registry.RegisterHandler(TEXT("import_stringtable"), &ImportStringTable, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("CSV file to merge into the table")).Alias(TEXT("filename")).Alias(TEXT("csvPath")),
 	});
 	Registry.RegisterHandler(TEXT("import_stringtable_csv"), &ImportStringTableCsv, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StringTable asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("csvPath"), EType::String, TEXT("CSV file; a relative path resolves against the project directory")).Alias(TEXT("filePath")),
 		MCPParam::Optional(TEXT("expectedKeys"), EType::Array, TEXT("Keys the CSV must carry, checked before the asset is touched")).Items(EType::String),
 		MCPParam::Optional(TEXT("requireExactKeys"), EType::Boolean, TEXT("Also fail when the CSV carries keys expectedKeys does not list (default false)")),
@@ -963,20 +963,20 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("assetPath")),
 	});
 	Registry.RegisterHandler(TEXT("set_cloth_config"), &SetClothConfig, {
-		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("assetPath")),
+		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("assetPath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("properties"), EType::Object, TEXT("Config properties to set by reflection")),
 		MCPParam::Optional(TEXT("clothingAsset"), EType::String, TEXT("Only the clothing asset with this name")),
 		MCPParam::Optional(TEXT("configType"), EType::String, TEXT("Only configs whose class or key contains this")),
 	});
 	Registry.RegisterHandler(TEXT("bind_cloth_to_section"), &BindClothToSection, {
-		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("assetPath")),
+		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("assetPath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("lodIndex"), EType::Integer, TEXT("Mesh LOD")).Min(0),
 		MCPParam::Required(TEXT("sectionIndex"), EType::Integer, TEXT("Render section to bind")).Min(0),
 		MCPParam::Optional(TEXT("clothingAsset"), EType::String, TEXT("Clothing asset by name (optional when the mesh has one)")),
 		MCPParam::Optional(TEXT("assetLodIndex"), EType::Integer, TEXT("LOD inside the clothing asset (default: lodIndex, clamped)")).Min(0),
 	});
 	Registry.RegisterHandler(TEXT("unbind_cloth_from_section"), &UnbindClothFromSection, {
-		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("assetPath")),
+		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("assetPath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("lodIndex"), EType::Integer, TEXT("Mesh LOD")).Min(0),
 		MCPParam::Required(TEXT("sectionIndex"), EType::Integer, TEXT("Render section to unbind")).Min(0),
 		MCPParam::Optional(TEXT("clothingAsset"), EType::String, TEXT("Refuse unless the section is bound to this clothing asset")),
@@ -988,7 +988,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// v1.0.0-rc.2 - #155 (asset gaps)
 	Registry.RegisterHandler(TEXT("set_sk_material_slots"), &SetSkeletalMeshMaterialSlots, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("slots"), EType::Array, TEXT("Slot assignments: [{slotName? | slotIndex?, materialPath}]")).Items(EType::Object),
 	});
 	Registry.RegisterHandler(TEXT("diagnose_registry"), &DiagnoseRegistry, {
@@ -1011,7 +1011,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")),
 	});
 	Registry.RegisterHandler(TEXT("set_mesh_nav"), &SetMeshNav, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("bHasNavigationData"), EType::Boolean, TEXT("Whether the mesh generates navigation data")),
 		MCPParam::Optional(TEXT("clearNavCollision"), EType::Boolean, TEXT("Remove the mesh's NavCollision")),
 	});
@@ -1049,7 +1049,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UEnum or UserDefinedEnum asset path")).Alias(TEXT("path")),
 	});
 	Registry.RegisterHandler(TEXT("edit_user_defined_enum"), &EditUserDefinedEnum, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UserDefinedEnum asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UserDefinedEnum asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("op"), EType::String, TEXT("add_value | rename_value | remove_value")),
 		MCPParam::Optional(TEXT("displayName"), EType::String, TEXT("Display text for the enumerator (add_value, rename_value)")),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Enumerator to act on by short or display name; add_value uses it as the display name when displayName is omitted")),
@@ -1070,7 +1070,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UserDefinedStruct asset path")).Alias(TEXT("path")),
 	});
 	Registry.RegisterHandler(TEXT("edit_user_defined_struct"), &EditUserDefinedStruct, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UserDefinedStruct asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UserDefinedStruct asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("op"), EType::String, TEXT("add_field | rename_field | set_field_type | remove_field")),
 		MCPParam::Optional(TEXT("fieldName"), EType::String, TEXT("Member by friendly or internal name; add_field names the new member with it")),
 		MCPParam::Optional(TEXT("fieldGuid"), EType::String, TEXT("Member by GUID, stable across renames; wins over fieldName")),
@@ -1079,7 +1079,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	// rename_struct_field: edit_user_defined_struct with op=rename_field.
 	Registry.RegisterHandler(TEXT("rename_struct_field"), &RenameStructField, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UserDefinedStruct asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("UserDefinedStruct asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("fieldName"), EType::String, TEXT("Member by friendly or internal name")),
 		MCPParam::Optional(TEXT("fieldGuid"), EType::String, TEXT("Member by GUID, stable across renames")),
 		MCPParam::Required(TEXT("newDisplayName"), EType::String, TEXT("New display name; the member GUID is kept")),

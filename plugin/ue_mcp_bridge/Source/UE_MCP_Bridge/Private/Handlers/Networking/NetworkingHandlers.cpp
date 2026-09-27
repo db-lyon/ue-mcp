@@ -26,47 +26,47 @@ void FNetworkingHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
 	});
 	Registry.RegisterHandler(TEXT("set_replicates"), &SetReplicates, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("replicates"), EType::Boolean, TEXT("Replicate the actor (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("configure_net_update_frequency"), &ConfigureNetUpdateFrequency, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("netUpdateFrequency"), EType::Number, TEXT("NetUpdateFrequency in updates per second (omit to leave it)")),
 		MCPParam::Optional(TEXT("minNetUpdateFrequency"), EType::Number, TEXT("MinNetUpdateFrequency in updates per second (omit to leave it)")),
 	});
 	Registry.RegisterHandler(TEXT("set_net_dormancy"), &SetNetDormancy, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("dormancy"), EType::String, TEXT("DORM_Never | DORM_Awake | DORM_DormantAll | DORM_DormantPartial | DORM_Initial")),
 	});
 	Registry.RegisterHandler(TEXT("set_always_relevant"), &SetAlwaysRelevant, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("alwaysRelevant"), EType::Boolean, TEXT("bAlwaysRelevant (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("set_net_priority"), &SetNetPriority, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("netPriority"), EType::Number, TEXT("NetPriority (default 1.0)")),
 	});
 	Registry.RegisterHandler(TEXT("set_replicate_movement"), &SetReplicateMovement, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("replicateMovement"), EType::Boolean, TEXT("Replicate movement (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("set_property_replicated"), &SetVariableReplication, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("variableName"), EType::String, TEXT("Blueprint variable name")).Alias(TEXT("propertyName")),
 		MCPParam::Optional(TEXT("replicationType"), EType::String, TEXT("None | Replicated | RepNotify (default None). Wins over replicated and repNotify")),
 		MCPParam::Optional(TEXT("replicated"), EType::Boolean, TEXT("Shorthand: true is Replicated, false is None")),
 		MCPParam::Optional(TEXT("repNotify"), EType::Boolean, TEXT("Shorthand: true is RepNotify, and wins over replicated")),
 	});
 	Registry.RegisterHandler(TEXT("set_only_relevant_to_owner"), &SetOwnerOnlyRelevant, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("onlyRelevantToOwner"), EType::Boolean, TEXT("bOnlyRelevantToOwner (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("set_net_load_on_client"), &SetNetLoadOnClient, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("loadOnClient"), EType::Boolean, TEXT("bNetLoadOnClient (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("configure_net_cull_distance"), &ConfigureNetCullDistance, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Actor Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("netCullDistanceSquared"), EType::Number, TEXT("NetCullDistanceSquared (default 225000000)")),
 	});
 }

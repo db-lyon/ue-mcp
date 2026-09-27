@@ -1058,7 +1058,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Output .fbx path",
         "aliases": [
           "filePath"
-        ]
+        ],
+        "role": "outputPath"
       }
     ]
   },
@@ -3730,7 +3731,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh asset path",
         "aliases": [
           "meshPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "enabled",

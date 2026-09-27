@@ -81,7 +81,7 @@ void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the enum exists: skip (default, report it) | error")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves an enum asset under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("set_enum_entries"), &SetEnumEntries, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Existing UserDefinedEnum asset path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Existing UserDefinedEnum asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("entries"), EType::Array, TEXT("The complete new entry list: strings, or {name, displayName?} objects")),
 	});
 	// #689: load-state probes.

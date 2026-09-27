@@ -104,7 +104,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("create_skeleton"), &CreateSkeleton, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Skeleton asset name")),
-		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh to build the skeleton from; the factory assigns the new skeleton to it")),
+		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh to build the skeleton from; the factory assigns the new skeleton to it")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) | error. It never overwrites")),
 	});
@@ -117,29 +117,29 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		return MCPParam::Optional(TEXT("skeletalMeshPath"), EType::String, TEXT("The skeletal mesh whose one open session to address, when sessionTag is omitted"));
 	};
 	Registry.RegisterHandler(TEXT("begin_skeleton_edit"), &BeginSkeletonEdit, {
-		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose reference skeleton to edit")),
+		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose reference skeleton to edit")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("sessionTag"), EType::String, TEXT("Stable key every later call addresses (default Skel_<MeshName>)")),
 	});
 	Registry.RegisterHandler(TEXT("edit_skeleton_bones"), &EditSkeletonBones, {
 		SessionTag(),
-		SessionMesh(),
+		SessionMesh().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("edits"), EType::Array, TEXT("Hierarchy edits, each one of {op:'add',bone,parent,transform?} | {op:'remove',bone,removeChildren?} | {op:'rename',bone,newName} | {op:'reparent',bone,parent} | {op:'set_transform',bone,transform,moveChildren?}")).Items(EType::Object),
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Remove a bone despite dependents, which are listed in the refusal")),
 	});
 	Registry.RegisterHandler(TEXT("commit_skeleton_edit"), &CommitSkeletonEdit, {
 		SessionTag(),
-		SessionMesh(),
+		SessionMesh().Role(EMCPParamRole::EditTarget),
 	});
 	Registry.RegisterHandler(TEXT("cancel_skeleton_edit"), &CancelSkeletonEdit, {
 		SessionTag(),
-		SessionMesh(),
+		SessionMesh().Role(EMCPParamRole::EditTarget),
 	});
 	{
 		// Reached only as commit_skeleton_edit's rollback and the flow task
 		// internal.replay_skeleton_edit (src/flow/internal-tasks.ts).
 		FMCPHandlerRegistry::FCategoryScope InternalScope(Registry, TEXT("internal"));
 		Registry.RegisterHandler(TEXT("internal_replay_skeleton_edit"), &ReplaySkeletonEdit, {
-			MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose reference skeleton to edit")),
+			MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose reference skeleton to edit")).Role(EMCPParamRole::EditTarget),
 			MCPParam::Required(TEXT("edits"), EType::Array, TEXT("Hierarchy edits, in edit_skeleton_bones form")).Items(EType::Object),
 			MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Remove a bone despite dependents")),
 		});
@@ -147,7 +147,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// `bones` elements are untyped because the PoseSearch pose channel shares the
 	// key with entries that are strings or objects, and one key has one type.
 	Registry.RegisterHandler(TEXT("set_bone_retargeting"), &SetBoneRetargeting, {
-		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton whose bone tree to edit")),
+		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton whose bone tree to edit")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("Animation | Skeleton | AnimationScaled | AnimationRelative | OrientAndScale")),
 		MCPParam::Optional(TEXT("bones"), EType::Array, TEXT("Bone names to set (default every bone)")),
 		MCPParam::Optional(TEXT("bone"), EType::String, TEXT("A single bone, when bones is omitted")),
@@ -158,7 +158,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 	}, MCPSpec::AtLeastOne({ { TEXT("mode") }, { TEXT("restore") } }));
 	Registry.RegisterHandler(TEXT("author_blend_profile"), &AuthorBlendProfile, {
-		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton that owns the blend profile")),
+		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton that owns the blend profile")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("profileName"), EType::String, TEXT("Blend profile to create or edit")),
 		MCPParam::Optional(TEXT("operation"), EType::String, TEXT("upsert (default) | remove | rename")),
 		MCPParam::Optional(TEXT("newProfileName"), EType::String, TEXT("New name when operation=rename")),
@@ -173,7 +173,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		return MCPParam::Optional(TEXT("remove"), EType::Array, Description).Items(EType::String).Or(EType::Boolean);
 	};
 	Registry.RegisterHandler(TEXT("edit_curve_metadata"), &EditCurveMetadata, {
-		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton whose curve metadata to edit")),
+		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton whose curve metadata to edit")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("add"), EType::Array, TEXT("Curve names to add")).Items(EType::String),
 		RemoveListOrFlag(TEXT("Curve names to remove")),
 		MCPParam::Optional(TEXT("rename"), EType::Array, TEXT("Curve renames")).Items(EType::Object).WithFields({
@@ -187,7 +187,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 	}, MCPSpec::AtLeastOne({ { TEXT("add") }, { TEXT("remove") }, { TEXT("rename") }, { TEXT("flags") } }));
 	Registry.RegisterHandler(TEXT("register_compatible_skeleton"), &RegisterCompatibleSkeleton, {
-		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton that gains or loses the compatible entries")),
+		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton that gains or loses the compatible entries")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("compatibleSkeletonPath"), EType::String, TEXT("Skeleton to mark compatible")),
 		MCPParam::Optional(TEXT("compatibleSkeletonPaths"), EType::Array, TEXT("Several skeletons at once; wins over compatibleSkeletonPath")).Items(EType::String),
 		RemoveListOrFlag(TEXT("true to unregister instead of register (default false)")),
@@ -294,14 +294,14 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		});
 	};
 	Registry.RegisterHandler(TEXT("add_blend_sample"), &AddBlendSample, {
-		AssetPath(TEXT("BlendSpace or BlendSpace1D asset path")),
+		AssetPath(TEXT("BlendSpace or BlendSpace1D asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("animation"), EType::String, TEXT("AnimSequence to add as a sample")),
 		BlendSamplePosition(TEXT("Sample position on the blendspace axes; wins over flat x and y")),
 		MCPParam::Optional(TEXT("x"), EType::Number, TEXT("Horizontal axis value when position is omitted (default 0)")),
 		MCPParam::Optional(TEXT("y"), EType::Number, TEXT("Vertical axis value when position is omitted (default 0)")),
 	});
 	Registry.RegisterHandler(TEXT("set_blend_sample"), &SetBlendSample, {
-		AssetPath(TEXT("BlendSpace or BlendSpace1D asset path")),
+		AssetPath(TEXT("BlendSpace or BlendSpace1D asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("sampleIndex"), EType::Integer, TEXT("Sample to edit, as read_blendspace lists it")),
 		BlendSamplePosition(TEXT("New sample position; wins over flat x and y, and an omitted axis keeps its value")),
 		MCPParam::Optional(TEXT("x"), EType::Number, TEXT("New horizontal axis value when position is omitted")),
@@ -321,7 +321,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::OptionalField(TEXT("gridNum"), EType::Integer, TEXT("Grid divisions")),
 	};
 	const TArray<FMCPParamSpec> PopulateBlendspaceSpec = {
-		AssetPath(TEXT("BlendSpace or BlendSpace1D asset path")),
+		AssetPath(TEXT("BlendSpace or BlendSpace1D asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("axis"), EType::Object, TEXT("Axis params for axisIndex (default axis 0)")).WithFields(BlendAxisFields),
 		MCPParam::Optional(TEXT("axisIndex"), EType::Integer, TEXT("Axis the axis object applies to (default 0)")),
 		MCPParam::Optional(TEXT("blendspaceAxes"), EType::Array, TEXT("Per-axis params, in axis order")).Items(EType::Object).WithFields(BlendAxisFields),
@@ -338,7 +338,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	Registry.RegisterHandler(TEXT("populate_blendspace"), &PopulateBlendspace, PopulateBlendspaceSpec);
 	Registry.RegisterHandler(TEXT("add_anim_notify"), &AddAnimNotify, {
-		AssetPath(TEXT("AnimSequence or AnimMontage asset path")),
+		AssetPath(TEXT("AnimSequence or AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("notifyName"), EType::String, TEXT("Notify name")),
 		MCPParam::Required(TEXT("triggerTime"), EType::Number, TEXT("Trigger time in seconds, clamped to the asset length")),
 		MCPParam::Optional(TEXT("notifyClass"), EType::String, TEXT("UAnimNotify class to spawn: a class name, a name without the AnimNotify_ prefix, or a path")),
@@ -346,7 +346,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("branchingPoint"), EType::Boolean, TEXT("Force the montage notify's tick type. The PlayMontageNotify classes default to true on a montage, everything else to the engine's queued tick (#880)")),
 	});
 	Registry.RegisterHandler(TEXT("remove_anim_notify"), &RemoveAnimNotify, {
-		AssetPath(TEXT("AnimSequence or AnimMontage asset path")),
+		AssetPath(TEXT("AnimSequence or AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("notifyName"), EType::String, TEXT("Notify name to match")),
 		MCPParam::Optional(TEXT("notifyClass"), EType::String, TEXT("Notify class to match. Pass at least one of notifyName and notifyClass; both filters apply together")),
 	});
@@ -359,7 +359,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		OnConflict(TEXT("skip (default) returns an existing asset untouched, error refuses")),
 	});
 	Registry.RegisterHandler(TEXT("set_bone_keyframes"), &SetBoneKeyframes, {
-		AssetPath(TEXT("AnimSequence asset path")),
+		AssetPath(TEXT("AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("boneName"), EType::String, TEXT("Bone whose track to replace; a missing track is created")),
 		MCPParam::Required(TEXT("keyframes"), EType::Array, TEXT("One key per frame, in order; an omitted channel keeps the reference pose")).Items(EType::Object).WithFields({
 			MCPParam::OptionalField(TEXT("location"), EType::Vec3, TEXT("Bone-local translation")),
@@ -368,7 +368,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 	});
 	Registry.RegisterHandler(TEXT("bake_keyframes_batch"), &BakeKeyframesBatch, {
-		AssetPath(TEXT("AnimSequence asset path")),
+		AssetPath(TEXT("AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("tracks"), EType::Array, TEXT("Per-bone key arrays; a missing track is created")).Items(EType::Object).WithFields({
 			MCPParam::RequiredField(TEXT("bone"), EType::String, TEXT("Bone whose track to replace")),
 			MCPParam::RequiredField(TEXT("keyframes"), EType::Array, TEXT("One key per frame as {location?, rotation? {x, y, z, w}, scale?}")).Items(EType::Object),
@@ -376,8 +376,8 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the asset after baking (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("reverse_sequence"), &ReverseSequence, {
-		MCPParam::Required(TEXT("sourcePath"), EType::String, TEXT("AnimSequence to reverse")),
-		MCPParam::Optional(TEXT("destinationPath"), EType::String, TEXT("Asset path for the reversed copy; alternative to name and packagePath")),
+		MCPParam::Required(TEXT("sourcePath"), EType::String, TEXT("AnimSequence to reverse")).Role(EMCPParamRole::EditTarget),
+		MCPParam::Optional(TEXT("destinationPath"), EType::String, TEXT("Asset path for the reversed copy; alternative to name and packagePath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Name of the reversed copy (default <Source>_Reversed)")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Folder of the reversed copy (default the source's folder)")),
 		MCPParam::Optional(TEXT("inPlace"), EType::Boolean, TEXT("Reverse the source itself instead of writing a copy (default false)")),
@@ -396,13 +396,13 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose morph targets to compare against")).Alias(TEXT("meshPath")),
 	});
 	Registry.RegisterHandler(TEXT("set_montage_sequence"), &SetMontageSequence, {
-		AssetPath(TEXT("AnimMontage asset path")),
+		AssetPath(TEXT("AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("animSequencePath"), EType::String, TEXT("AnimSequence to put in the slot")),
 		MCPParam::Optional(TEXT("slotIndex"), EType::Number, TEXT("Slot track index (default 0)")),
 		MCPParam::Optional(TEXT("segmentIndex"), EType::Number, TEXT("Replace only this segment; without it every segment in the slot is replaced (#626)")),
 	});
 	Registry.RegisterHandler(TEXT("set_montage_properties"), &SetMontageProperties, {
-		AssetPath(TEXT("AnimMontage asset path")),
+		AssetPath(TEXT("AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("sequenceLength"), EType::Number, TEXT("Montage length in seconds")),
 		MCPParam::Optional(TEXT("rateScale"), EType::Number, TEXT("Playback rate scale")),
 		MCPParam::Optional(TEXT("blendIn"), EType::Number, TEXT("Blend-in time in seconds")),
@@ -415,18 +415,18 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		return MCPParam::Required(TEXT("stateMachineName"), EType::String, TEXT("State machine to edit"));
 	};
 	Registry.RegisterHandler(TEXT("create_state_machine"), &CreateStateMachine, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("State machine name (default NewStateMachine)")),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to add it to (default AnimGraph)")),
 	});
 	Registry.RegisterHandler(TEXT("add_state"), &AddState, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		StateMachineName(),
 		MCPParam::Required(TEXT("stateName"), EType::String, TEXT("State to add")),
 		OnConflict(TEXT("skip (default) returns an existing state untouched, error refuses")),
 	});
 	Registry.RegisterHandler(TEXT("add_transition"), &AddTransition, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		StateMachineName(),
 		MCPParam::Required(TEXT("fromState"), EType::String, TEXT("State the transition leaves")),
 		MCPParam::Required(TEXT("toState"), EType::String, TEXT("State the transition enters")),
@@ -434,13 +434,13 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("blendLogic"), EType::String, TEXT("Standard | Inertialization")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_animation"), &SetStateAnimation, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		StateMachineName(),
 		MCPParam::Required(TEXT("stateName"), EType::String, TEXT("State whose animation to set")),
 		MCPParam::Required(TEXT("animAssetPath"), EType::String, TEXT("AnimSequence or BlendSpace the state plays")),
 	});
 	Registry.RegisterHandler(TEXT("set_transition_blend"), &SetTransitionBlend, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		StateMachineName(),
 		MCPParam::Required(TEXT("fromState"), EType::String, TEXT("State the transition leaves")),
 		MCPParam::Required(TEXT("toState"), EType::String, TEXT("State the transition enters")),
@@ -448,7 +448,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("blendLogic"), EType::String, TEXT("Standard | Inertialization")),
 	});
 	Registry.RegisterHandler(TEXT("set_transition_condition"), &SetTransitionCondition, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		StateMachineName(),
 		MCPParam::Required(TEXT("variableName"), EType::String, TEXT("Existing bool variable the condition reads")),
 		MCPParam::Optional(TEXT("transitionGuid"), EType::String, TEXT("Transition to condition, from add_transition or read_state_machine; wins over fromState and toState")),
@@ -475,11 +475,11 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Float curve authoring (#79 / #24)
 	Registry.RegisterHandler(TEXT("add_curve"), &AddCurve, {
-		AssetPath(TEXT("AnimSequence asset path")),
+		AssetPath(TEXT("AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("curveName"), EType::String, TEXT("Float curve to add")),
 	});
 	Registry.RegisterHandler(TEXT("set_anim_curve_keys"), &SetAnimCurveKeys, {
-		AssetPath(TEXT("AnimSequence asset path")),
+		AssetPath(TEXT("AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("curveName"), EType::String, TEXT("Float curve to write; a missing curve is added")),
 		MCPParam::Required(TEXT("keys"), EType::Array, TEXT("Keys that replace the curve's own")).Items(EType::Object).WithFields({
 			MCPParam::RequiredField(TEXT("time"), EType::Number, TEXT("Key time in seconds")),
@@ -489,19 +489,19 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("interpolation"), EType::String, TEXT("Interpolation of keys without their own interp: linear (default) | constant | cubic")),
 	});
 	Registry.RegisterHandler(TEXT("apply_animation_modifier"), &ApplyAnimationModifier, {
-		AssetPath(TEXT("AnimSequence asset path")),
+		AssetPath(TEXT("AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("modifierClass"), EType::String, TEXT("UAnimationModifier subclass: a short name such as DistanceCurveModifier, or a /Script path")).Alias(TEXT("modifier")),
 		MCPParam::Optional(TEXT("props"), EType::Object, TEXT("EditAnywhere property values to set on the modifier before it runs")),
 	});
 
 	// Montage slot & section editing (#78, #27)
 	Registry.RegisterHandler(TEXT("set_montage_slot"), &SetMontageSlot, {
-		AssetPath(TEXT("AnimMontage asset path")),
+		AssetPath(TEXT("AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("slotName"), EType::String, TEXT("Slot name to write onto the track")),
 		MCPParam::Optional(TEXT("trackIndex"), EType::Integer, TEXT("Slot track index (default 0)")),
 	});
 	Registry.RegisterHandler(TEXT("add_montage_section"), &AddMontageSection, {
-		AssetPath(TEXT("AnimMontage asset path")),
+		AssetPath(TEXT("AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("sectionName"), EType::String, TEXT("Composite section to add")),
 		MCPParam::Optional(TEXT("startTime"), EType::Number, TEXT("Section start in seconds; taken from the segment when segmentIndex is given")),
 		MCPParam::Optional(TEXT("linkedSection"), EType::String, TEXT("Next section to link to")),
@@ -513,7 +513,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Montage segment authoring (#826)
 	Registry.RegisterHandler(TEXT("add_montage_segment"), &AddMontageSegment, {
-		AssetPath(TEXT("AnimMontage asset path")),
+		AssetPath(TEXT("AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("animSequencePath"), EType::String, TEXT("AnimSequence or AnimComposite to append as a segment")),
 		MCPParam::Optional(TEXT("slotName"), EType::String, TEXT("Target slot, created when absent")),
 		MCPParam::Optional(TEXT("slotIndex"), EType::Number, TEXT("Target slot index when slotName is omitted (default 0)")),
@@ -524,7 +524,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Position in the slot's segment list (default appends)")).Min(0),
 	});
 	Registry.RegisterHandler(TEXT("remove_montage_segment"), &RemoveMontageSegment, {
-		AssetPath(TEXT("AnimMontage asset path")),
+		AssetPath(TEXT("AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("segmentIndex"), EType::Number, TEXT("Segment to remove")),
 		MCPParam::Optional(TEXT("slotName"), EType::String, TEXT("Slot holding the segment; wins over slotIndex")),
 		MCPParam::Optional(TEXT("slotIndex"), EType::Number, TEXT("Slot index holding the segment (default 0)")),
@@ -559,7 +559,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	// UE 5.8 only; the older-engine stub reads its parameters ahead and refuses.
 	Registry.RegisterHandler(TEXT("configure_ik_rig"), &ConfigureIKRig, {
-		MCPParam::Required(TEXT("rigPath"), EType::String, TEXT("Existing IKRigDefinition to configure")),
+		MCPParam::Required(TEXT("rigPath"), EType::String, TEXT("Existing IKRigDefinition to configure")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("autoSetup"), EType::String, TEXT("Native setup pass: retarget | full_body, which installs the retarget definition and then Full Body IK")),
 		MCPParam::Optional(TEXT("retargetRoot"), EType::String, TEXT("Retarget root bone")),
 		MCPParam::Optional(TEXT("rootMotionBone"), EType::String, TEXT("Root-motion bone")),
@@ -577,7 +577,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::AtLeastOne({ { TEXT("autoSetup") }, { TEXT("retargetRoot") }, { TEXT("rootMotionBone") }, { TEXT("chains") }, { TEXT("fullBodyIK") }, { TEXT("exclusions") } }));
 	// #701/#703: IK authoring tail + batch retarget.
 	Registry.RegisterHandler(TEXT("set_ik_rig_mesh"), &SetIKRigMesh, {
-		MCPParam::Required(TEXT("rigPath"), EType::String, TEXT("Existing IKRigDefinition to edit")).Alias(TEXT("assetPath")),
+		MCPParam::Required(TEXT("rigPath"), EType::String, TEXT("Existing IKRigDefinition to edit")).Alias(TEXT("assetPath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("meshPath"), EType::String, TEXT("SkeletalMesh to set as the rig's preview and source mesh")).Alias(TEXT("skeletalMesh")),
 	});
 	auto RetargeterPath = []()
@@ -589,16 +589,16 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		return MCPParam::Optional(TEXT("side"), EType::String, TEXT("source | target (default target)"));
 	};
 	Registry.RegisterHandler(TEXT("set_ik_retargeter_rig"), &SetIKRetargeterRig, {
-		RetargeterPath(),
+		RetargeterPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rigPath"), EType::String, TEXT("IKRigDefinition to assign")).Alias(TEXT("ikRig")),
 		Side(),
 	});
 	Registry.RegisterHandler(TEXT("auto_align_retarget_pose"), &AutoAlignRetargetPose, {
-		RetargeterPath(),
+		RetargeterPath().Role(EMCPParamRole::EditTarget),
 		Side(),
 	});
 	Registry.RegisterHandler(TEXT("reset_retarget_pose"), &ResetRetargetPose, {
-		RetargeterPath(),
+		RetargeterPath().Role(EMCPParamRole::EditTarget),
 		Side(),
 	});
 	// UE 5.8 only; the older-engine stub reads its parameters ahead and refuses.
@@ -646,7 +646,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		return MCPParam::Required(TEXT("bindingTag"), EType::String, TEXT("Edit-session natural key from begin_control_rig_edit")).NonEmpty();
 	};
 	Registry.RegisterHandler(TEXT("begin_control_rig_edit"), &BeginControlRigEdit, {
-		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence to create, or to reuse with onConflict=skip")),
+		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence to create, or to reuse with onConflict=skip")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh the session binds")),
 		MCPParam::Required(TEXT("sourceAnimationPath"), EType::String, TEXT("AnimSequence to bake into the rig")),
 		MCPParam::Optional(TEXT("rigMode"), EType::String, TEXT("fk (default) | asset. Use asset with the verified baseline controlRigPath; use fk only when generated raw FK controls are the intended editing surface")),
@@ -701,7 +701,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			return MCPParam::OptionalField(TEXT("blendOutFrames"), EType::Integer, TEXT("Frames to ease out over, from 0 (default 0)"));
 		};
 		Registry.RegisterHandler(TEXT("apply_control_rig_edits"), &ApplyControlRigEdits, {
-			EditSequencePath(),
+			EditSequencePath().Role(EMCPParamRole::EditTarget),
 			EditBindingTag(),
 			MCPParam::Required(TEXT("operations"), EType::Array, TEXT("Typed edits applied in one transaction, in order")).Items(EType::Object).Tagged(TEXT("op"), {
 				MCPParam::Variant(TEXT("set"), TEXT("Write one full absolute transform at frame or frames"), {
@@ -767,9 +767,9 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		});
 	}
 	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit, {
-		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence holding the Control Rig edit session")),
+		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence holding the Control Rig edit session")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("bindingTag"), EType::String, TEXT("Edit-session natural key from begin_control_rig_edit")).NonEmpty(),
-		MCPParam::Required(TEXT("outputAssetPath"), EType::String, TEXT("Destination AnimSequence asset path")),
+		MCPParam::Required(TEXT("outputAssetPath"), EType::String, TEXT("Destination AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("frameRate"), EType::Number, TEXT("Frames per second of the bake (default the sequence's display rate)")),
 		MCPParam::Optional(TEXT("createLink"), EType::Boolean, TEXT("Link the AnimSequence and the LevelSequence, which saves the LevelSequence too (default false)")),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")),
@@ -782,24 +782,24 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("sampleRate"), EType::Number, TEXT("Samples per second when frames is omitted, 1 to 240 (default the source rate)")),
 		MCPParam::Optional(TEXT("loop"), EType::Boolean, TEXT("Include end-to-start loop continuity metrics")),
 		MCPParam::Optional(TEXT("facingBones"), EType::Array, TEXT("[boneA, boneB]: report the yaw of the boneA to boneB vector relative to the root bone's forward, per sample and over the clip")).Items(EType::String),
-		MCPParam::Optional(TEXT("outputDirectory"), EType::String, TEXT("Directory under Project/Saved/Codex/AnimationQA for analysis artifacts; must not already contain them")),
+		MCPParam::Optional(TEXT("outputDirectory"), EType::String, TEXT("Directory under Project/Saved/Codex/AnimationQA for analysis artifacts; must not already contain them")).Role(EMCPParamRole::OutputPath),
 	});
 
 	// v0.7.11 - depth
 	Registry.RegisterHandler(TEXT("set_root_motion_settings"), &SetRootMotionSettings, {
-		AssetPath(TEXT("AnimSequence asset path")),
+		AssetPath(TEXT("AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("enableRootMotion"), EType::Boolean, TEXT("Extract root motion from the root bone")),
 		MCPParam::Optional(TEXT("forceRootLock"), EType::Boolean, TEXT("Lock the root bone even without root motion")),
 		MCPParam::Optional(TEXT("useNormalizedRootMotionScale"), EType::Boolean, TEXT("Normalize root motion scale")),
 		MCPParam::Optional(TEXT("rootMotionRootLock"), EType::String, TEXT("Root lock mode: RefPose | AnimFirstFrame | Zero")),
 	});
 	Registry.RegisterHandler(TEXT("add_virtual_bone"), &AddVirtualBone, {
-		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton asset path")),
+		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("sourceBone"), EType::String, TEXT("Bone the virtual bone starts from")),
 		MCPParam::Required(TEXT("targetBone"), EType::String, TEXT("Bone the virtual bone points at")),
 	});
 	Registry.RegisterHandler(TEXT("remove_virtual_bone"), &RemoveVirtualBone, {
-		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton asset path")),
+		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("virtualBoneName"), EType::String, TEXT("Virtual bone to remove")),
 	});
 	Registry.RegisterHandler(TEXT("create_anim_composite"), &CreateAnimComposite, {
@@ -826,7 +826,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	// UE 5.8 only; the older-engine stub reads its parameters ahead and refuses.
 	Registry.RegisterHandler(TEXT("configure_ik_retargeter"), &ConfigureIKRetargeter, {
-		MCPParam::Required(TEXT("retargeterPath"), EType::String, TEXT("Existing IKRetargeter to configure")),
+		MCPParam::Required(TEXT("retargeterPath"), EType::String, TEXT("Existing IKRetargeter to configure")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("sourceRig"), EType::String, TEXT("Source IKRigDefinition to assign")),
 		MCPParam::Optional(TEXT("targetRig"), EType::String, TEXT("Target IKRigDefinition to assign")),
 		MCPParam::Optional(TEXT("sourcePreviewMesh"), EType::String, TEXT("Source preview SkeletalMesh")),
@@ -858,7 +858,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 	});
 	Registry.RegisterHandler(TEXT("set_anim_blueprint_skeleton"), &SetAnimBlueprintSkeleton, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("AnimBlueprint asset path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("skeletonPath"), EType::String, TEXT("USkeleton to target")),
 	});
 	Registry.RegisterHandler(TEXT("read_bone_track"), &ReadBoneTrack, {
@@ -869,12 +869,12 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// v1.0.0-rc.2 - animation authoring gaps (#153, #154)
 	Registry.RegisterHandler(TEXT("set_sequence_properties"), &SetSequenceProperties, {
-		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("AnimSequences to write, or montages when resolveFromMontages is on")).Items(EType::String),
+		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("AnimSequences to write, or montages when resolveFromMontages is on")).Items(EType::String).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("properties"), EType::Object, TEXT("{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?}")),
 		MCPParam::Optional(TEXT("resolveFromMontages"), EType::Boolean, TEXT("Resolve a montage to its first AnimSequence (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("bake_root_motion_from_bone"), &BakeRootMotionFromBone, {
-		AssetPath(TEXT("AnimSequence asset path")),
+		AssetPath(TEXT("AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("sourceBone"), EType::String, TEXT("Bone whose translation moves onto the root, e.g. pelvis")),
 		MCPParam::Optional(TEXT("rootBone"), EType::String, TEXT("Root bone name (default root)")),
 		MCPParam::Optional(TEXT("axes"), EType::Array, TEXT("Axes to bake: x, y, z (default [x, y])")).Items(EType::String),
@@ -890,11 +890,11 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		OnConflict(TEXT("skip (default) returns an existing asset untouched, error refuses")),
 	});
 	Registry.RegisterHandler(TEXT("set_pose_search_schema"), &SetPoseSearchSchema, {
-		AssetPath(TEXT("PoseSearchDatabase asset path")),
+		AssetPath(TEXT("PoseSearchDatabase asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("schemaPath"), EType::String, TEXT("PoseSearchSchema to assign; a schema that cannot index is refused")),
 	});
 	Registry.RegisterHandler(TEXT("add_pose_search_sequence"), &AddPoseSearchSequence, {
-		AssetPath(TEXT("PoseSearchDatabase asset path")),
+		AssetPath(TEXT("PoseSearchDatabase asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("AnimSequence, AnimComposite, AnimMontage or BlendSpace to append")),
 		MCPParam::Optional(TEXT("mirror"), EType::String, TEXT("original | mirrored | both")),
 		MCPParam::Optional(TEXT("disableReselection"), EType::Boolean, TEXT("Disallow reselecting poses from the same asset")),
@@ -905,12 +905,12 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// A clip is a path string or an object, so the element type is left open and
 	// the handler refuses anything else by name.
 	Registry.RegisterHandler(TEXT("set_pose_search_clips"), &SetPoseSearchClips, {
-		AssetPath(TEXT("PoseSearchDatabase asset path")),
+		AssetPath(TEXT("PoseSearchDatabase asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("clips"), EType::Array, TEXT("Clips, each an animation asset path or {sequencePath (or asset, assetPath, animationPath), mirror?: original | mirrored | both, disableReselection?, sampleStart?, sampleEnd?, enabled?}")),
 		MCPParam::Optional(TEXT("clearExisting"), EType::Boolean, TEXT("Replace the clip list rather than append to it (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("build_pose_search_index"), &BuildPoseSearchIndex, {
-		AssetPath(TEXT("PoseSearchDatabase asset path")),
+		AssetPath(TEXT("PoseSearchDatabase asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("wait"), EType::Boolean, TEXT("Block until the build resolves (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("read_pose_search_database"), &ReadPoseSearchDatabase, {
@@ -930,12 +930,12 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// A bone is a name string or an object, so the element type is left open and
 	// the handler refuses anything else by name.
 	Registry.RegisterHandler(TEXT("add_pose_search_schema_pose_channel"), &AddPoseSearchSchemaPoseChannel, {
-		MCPParam::Required(TEXT("schemaPath"), EType::String, TEXT("PoseSearchSchema to add the channel to")).Alias(TEXT("assetPath")),
+		MCPParam::Required(TEXT("schemaPath"), EType::String, TEXT("PoseSearchSchema to add the channel to")).Alias(TEXT("assetPath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("bones"), EType::Array, TEXT("Sampled bones, each a bone name (position only) or {bone, flags?: velocity | position | rotation | phase, weight?}")),
 		MCPParam::Optional(TEXT("weight"), EType::Number, TEXT("Channel weight")),
 	});
 	Registry.RegisterHandler(TEXT("add_pose_search_schema_trajectory_channel"), &AddPoseSearchSchemaTrajectoryChannel, {
-		MCPParam::Required(TEXT("schemaPath"), EType::String, TEXT("PoseSearchSchema to add the channel to")).Alias(TEXT("assetPath")),
+		MCPParam::Required(TEXT("schemaPath"), EType::String, TEXT("PoseSearchSchema to add the channel to")).Alias(TEXT("assetPath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("samples"), EType::Array, TEXT("[{offset, flags?, weight?}]: offset in seconds, negative for history and positive for prediction; flags from position, velocity, facingDirection, velocityDirection and their XY variants")).Items(EType::Object),
 		MCPParam::Optional(TEXT("weight"), EType::Number, TEXT("Channel weight")),
 	});
@@ -965,7 +965,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		OnConflict(TEXT("skip (default) returns an existing asset untouched, error refuses")),
 	}, MCPSpec::ContractExempt(TEXT("Nothing it reads can fail before the asset is created")));
 	Registry.RegisterHandler(TEXT("set_pose_search_database_settings"), &SetPoseSearchDatabaseSettings, {
-		AssetPath(TEXT("PoseSearchDatabase asset path")),
+		AssetPath(TEXT("PoseSearchDatabase asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("continuingPoseCostBias"), EType::Number, TEXT("Bias to keep playing the current clip")),
 		MCPParam::Optional(TEXT("baseCostBias"), EType::Number, TEXT("Flat cost added to every pose")),
 		MCPParam::Optional(TEXT("loopingCostBias"), EType::Number, TEXT("Bias for looping clips")),
@@ -975,14 +975,14 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("normalizationSetPath"), EType::String, TEXT("PoseSearchNormalizationSet to assign")),
 	});
 	Registry.RegisterHandler(TEXT("add_motion_matching_node"), &AddMotionMatchingNode, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("databasePath"), EType::String, TEXT("PoseSearchDatabase the node searches")),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to add the node to (default AnimGraph)")),
 		MCPParam::Optional(TEXT("connectToOutput"), EType::Boolean, TEXT("Wire the node to the Output Pose (default true)")),
 		MCPParam::Optional(TEXT("blendTime"), EType::Number, TEXT("Inertial blend time")),
 	});
 	Registry.RegisterHandler(TEXT("add_pose_history_node"), &AddPoseHistoryNode, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to add the node to (default AnimGraph)")),
 		MCPParam::Optional(TEXT("poseCount"), EType::Number, TEXT("History poses to retain")),
 		MCPParam::Optional(TEXT("samplingInterval"), EType::Number, TEXT("Seconds between history samples")),
@@ -992,7 +992,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("insertBeforeOutput"), EType::Boolean, TEXT("Splice into the pose chain feeding the Output Pose (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("set_motion_matching_chooser"), &SetMotionMatchingChooser, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("chooserPath"), EType::String, TEXT("ChooserTable that selects the database")).Alias(TEXT("table")),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph holding the Motion Matching node (default AnimGraph)")),
 		MCPParam::Optional(TEXT("contextSource"), EType::String, TEXT("What the chooser reads its columns from: self (default, the anim instance) | pawn (the owning pawn)")),
@@ -1000,7 +1000,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// #713 - distance-matching graph authoring
 	Registry.RegisterHandler(TEXT("add_sequence_evaluator"), &AddSequenceEvaluator, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("sequencePath"), EType::String, TEXT("AnimSequence to evaluate")),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("AnimGraph (default) or a state's name for its inner graph")),
 		MCPParam::Optional(TEXT("explicitTime"), EType::Number, TEXT("Initial ExplicitTime")),
@@ -1009,7 +1009,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("connectToOutput"), EType::Boolean, TEXT("Wire the node to the graph's result pose (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("bind_anim_node_function"), &BindAnimNodeFunction, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeGuid"), EType::String, TEXT("Anim graph node to bind, from add_sequence_evaluator or an add_*_node action")).Alias(TEXT("nodeId")),
 		MCPParam::Required(TEXT("functionName"), EType::String, TEXT("Existing thread-safe anim-node function on the AnimBlueprint")).Alias(TEXT("function")),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph holding the node (default AnimGraph)")),
@@ -1121,36 +1121,36 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// state machines run, the five removals whose adds documented their own
 	// missing inverse, windowed notifies, and sync markers.
 	Registry.RegisterHandler(TEXT("set_state_machine_entry"), &SetStateMachineEntry, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		StateMachineName(),
 		MCPParam::Optional(TEXT("stateName"), EType::String, TEXT("State the entry points at; omitted or empty clears the link")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state"), &RemoveState, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		StateMachineName(),
 		MCPParam::Required(TEXT("stateName"), EType::String, TEXT("State to remove, with every transition that touches it")),
 	});
 	Registry.RegisterHandler(TEXT("remove_transition"), &RemoveTransition, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		StateMachineName(),
 		MCPParam::Optional(TEXT("transitionGuid"), EType::String, TEXT("Transition to remove, from add_transition or read_state_machine")),
 		MCPParam::Optional(TEXT("fromState"), EType::String, TEXT("With toState, removes every transition between the two")),
 		MCPParam::Optional(TEXT("toState"), EType::String, TEXT("With fromState, removes every transition between the two")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_machine"), &RemoveStateMachine, {
-		AssetPath(TEXT("AnimBlueprint asset path")),
+		AssetPath(TEXT("AnimBlueprint asset path")).Role(EMCPParamRole::EditTarget),
 		StateMachineName(),
 	});
 	Registry.RegisterHandler(TEXT("remove_montage_section"), &RemoveMontageSection, {
-		AssetPath(TEXT("AnimMontage asset path")),
+		AssetPath(TEXT("AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("sectionName"), EType::String, TEXT("Composite section to remove")),
 	});
 	Registry.RegisterHandler(TEXT("remove_anim_curve"), &RemoveAnimCurve, {
-		AssetPath(TEXT("AnimSequence asset path")),
+		AssetPath(TEXT("AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("curveName"), EType::String, TEXT("Float curve to remove")),
 	});
 	Registry.RegisterHandler(TEXT("add_anim_notify_state"), &AddNotifyState, {
-		AssetPath(TEXT("AnimSequence or AnimMontage asset path")),
+		AssetPath(TEXT("AnimSequence or AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("notifyName"), EType::String, TEXT("Notify name")),
 		MCPParam::Required(TEXT("notifyStateClass"), EType::String, TEXT("UAnimNotifyState subclass: a class name, a bare suffix such as TimedParticleEffect, or a full path")),
 		MCPParam::Required(TEXT("triggerTime"), EType::Number, TEXT("Window start in seconds")),
@@ -1159,12 +1159,12 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("branchingPoint"), EType::Boolean, TEXT("On a montage, tick the window as a branching point")),
 	});
 	Registry.RegisterHandler(TEXT("remove_anim_notify_state"), &RemoveNotifyState, {
-		AssetPath(TEXT("AnimSequence or AnimMontage asset path")),
+		AssetPath(TEXT("AnimSequence or AnimMontage asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("notifyName"), EType::String, TEXT("Notify name to match")),
 		MCPParam::Optional(TEXT("notifyStateClass"), EType::String, TEXT("Notify state class to match. Pass at least one of notifyName and notifyStateClass; both filters apply together")),
 	});
 	Registry.RegisterHandler(TEXT("set_sync_markers"), &SetSyncMarkers, {
-		AssetPath(TEXT("AnimSequence asset path")),
+		AssetPath(TEXT("AnimSequence asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("markers"), EType::Array, TEXT("Sync markers to author; with markerMode=replace an empty array clears them")).Items(EType::Object).WithFields({
 			MCPParam::RequiredField(TEXT("name"), EType::String, TEXT("Marker name")),
 			MCPParam::RequiredField(TEXT("time"), EType::Number, TEXT("Marker time in seconds, within the clip")),

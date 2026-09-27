@@ -79,7 +79,7 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("includeSectionDetails"), EType::Boolean, TEXT("Include attach sockets and first-key transform values per track")),
 	});
 	Registry.RegisterHandler(TEXT("add_sequence_track"), &AddTrack, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Level Sequence asset path")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Level Sequence asset path")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		TrackTypeParam(),
 		ActorLabelParam(),
 		ActorPathParam(),
@@ -115,12 +115,12 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("fullyLoadTextures"), EType::Boolean, TEXT("Stream textures in before each capture (default true)")),
 	}, MCPSpec::ContractExempt(TEXT("writes image files")));
 	Registry.RegisterHandler(TEXT("set_sequence_playback_range"), &SetPlaybackRange, {
-		SequencePathParam(TEXT("Level Sequence asset path"), true),
+		SequencePathParam(TEXT("Level Sequence asset path"), true).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("startSeconds"), EType::Number, TEXT("Range start in seconds")),
 		MCPParam::Required(TEXT("endSeconds"), EType::Number, TEXT("Range end in seconds")),
 	});
 	Registry.RegisterHandler(TEXT("add_sequence_section"), &AddSection, {
-		SequencePathParam(TEXT("Level Sequence asset path"), true),
+		SequencePathParam(TEXT("Level Sequence asset path"), true).Role(EMCPParamRole::EditTarget),
 		TrackTypeParam(),
 		ActorLabelParam(),
 		ActorPathParam(),
@@ -130,7 +130,7 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("cameraActorPath"), EType::String, TEXT("Full object path of the camera actor. Wins over cameraActorLabel")),
 	});
 	Registry.RegisterHandler(TEXT("set_sequence_keyframes"), &SetKeyframes, {
-		SequencePathParam(TEXT("Level Sequence asset path"), true),
+		SequencePathParam(TEXT("Level Sequence asset path"), true).Role(EMCPParamRole::EditTarget),
 		TrackTypeParam(),
 		ActorLabelParam(),
 		ActorPathParam(),

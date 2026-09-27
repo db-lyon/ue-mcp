@@ -19,7 +19,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "assetPath",
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "trackType",
@@ -75,7 +76,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Level Sequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "trackType",
@@ -191,7 +193,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png",
         "aliases": [
           "filename"
-        ]
+        ],
+        "role": "outputPath"
       },
       {
         "name": "location",
@@ -406,7 +409,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "levelPath",
         "type": "string",
         "required": true,
-        "description": "Long package path of the new level, e.g. /Game/Maps/MyLevel. Validated before the engine is asked"
+        "description": "Long package path of the new level, e.g. /Game/Maps/MyLevel. Validated before the engine is asked",
+        "role": "editTarget"
       },
       {
         "name": "templateLevel",
@@ -2271,7 +2275,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "propertyName",
@@ -2437,7 +2442,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "assetPath",
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "trackType",
@@ -2495,7 +2501,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "assetPath",
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "startSeconds",

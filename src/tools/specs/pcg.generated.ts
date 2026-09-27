@@ -18,7 +18,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PCGGraph asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeType",
@@ -122,7 +123,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PCGGraph asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sourceNode",
@@ -196,7 +198,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PCGGraph asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sourceNode",
@@ -366,7 +369,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PCGGraph asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodes",
@@ -451,7 +455,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PCGGraph asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeName",
@@ -471,7 +476,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PCGGraph asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeName",
@@ -523,7 +529,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PCGGraph asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeName",
@@ -606,7 +613,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PCGGraph asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeName",

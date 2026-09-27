@@ -18,7 +18,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "columnType",
@@ -56,7 +57,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "output",
@@ -118,7 +120,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "index",
@@ -192,7 +195,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "ChooserTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "from",
@@ -242,7 +246,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "index",

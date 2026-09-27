@@ -18,7 +18,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence or AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "notifyName",
@@ -62,7 +63,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence or AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "notifyName",
@@ -112,7 +114,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "BlendSpace or BlendSpace1D asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animation",
@@ -164,7 +167,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "curveName",
@@ -184,7 +188,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sectionName",
@@ -240,7 +245,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animSequencePath",
@@ -304,7 +310,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "databasePath",
@@ -342,7 +349,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -398,7 +406,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PoseSearchSchema to add the channel to",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "bones",
@@ -424,7 +433,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PoseSearchSchema to add the channel to",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "samples",
@@ -451,7 +461,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PoseSearchDatabase asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sequencePath",
@@ -501,7 +512,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sequencePath",
@@ -551,7 +563,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "stateMachineName",
@@ -583,7 +596,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "stateMachineName",
@@ -624,7 +638,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletonPath",
         "type": "string",
         "required": true,
-        "description": "USkeleton asset path"
+        "description": "USkeleton asset path",
+        "role": "editTarget"
       },
       {
         "name": "sourceBone",
@@ -695,7 +710,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputDirectory",
         "type": "string",
         "required": false,
-        "description": "Directory under Project/Saved/Codex/AnimationQA for analysis artifacts; must not already contain them"
+        "description": "Directory under Project/Saved/Codex/AnimationQA for analysis artifacts; must not already contain them",
+        "role": "outputPath"
       }
     ]
   },
@@ -709,7 +725,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "modifierClass",
@@ -735,7 +752,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "sequencePath",
         "type": "string",
         "required": true,
-        "description": "LevelSequence holding the Control Rig edit session"
+        "description": "LevelSequence holding the Control Rig edit session",
+        "role": "editTarget"
       },
       {
         "name": "bindingTag",
@@ -1078,7 +1096,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletonPath",
         "type": "string",
         "required": true,
-        "description": "USkeleton that owns the blend profile"
+        "description": "USkeleton that owns the blend profile",
+        "role": "editTarget"
       },
       {
         "name": "profileName",
@@ -1218,7 +1237,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Existing IKRetargeter to edit",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "side",
@@ -1235,7 +1255,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "sequencePath",
         "type": "string",
         "required": true,
-        "description": "LevelSequence holding the Control Rig edit session"
+        "description": "LevelSequence holding the Control Rig edit session",
+        "role": "editTarget"
       },
       {
         "name": "bindingTag",
@@ -1248,7 +1269,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputAssetPath",
         "type": "string",
         "required": true,
-        "description": "Destination AnimSequence asset path"
+        "description": "Destination AnimSequence asset path",
+        "role": "editTarget"
       },
       {
         "name": "frameRate",
@@ -1281,7 +1303,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "tracks",
@@ -1323,7 +1346,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sourceBone",
@@ -1416,7 +1440,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "sequencePath",
         "type": "string",
         "required": true,
-        "description": "LevelSequence to create, or to reuse with onConflict=skip"
+        "description": "LevelSequence to create, or to reuse with onConflict=skip",
+        "role": "editTarget"
       },
       {
         "name": "skeletalMeshPath",
@@ -1489,7 +1514,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletalMeshPath",
         "type": "string",
         "required": true,
-        "description": "SkeletalMesh whose reference skeleton to edit"
+        "description": "SkeletalMesh whose reference skeleton to edit",
+        "role": "editTarget"
       },
       {
         "name": "sessionTag",
@@ -1509,7 +1535,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeGuid",
@@ -1553,7 +1580,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PoseSearchDatabase asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "wait",
@@ -1576,7 +1604,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletalMeshPath",
         "type": "string",
         "required": false,
-        "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted"
+        "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted",
+        "role": "editTarget"
       }
     ]
   },
@@ -1618,7 +1647,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletalMeshPath",
         "type": "string",
         "required": false,
-        "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted"
+        "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted",
+        "role": "editTarget"
       }
     ]
   },
@@ -1652,7 +1682,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "retargeterPath",
         "type": "string",
         "required": true,
-        "description": "Existing IKRetargeter to configure"
+        "description": "Existing IKRetargeter to configure",
+        "role": "editTarget"
       },
       {
         "name": "sourceRig",
@@ -1830,7 +1861,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "rigPath",
         "type": "string",
         "required": true,
-        "description": "Existing IKRigDefinition to configure"
+        "description": "Existing IKRigDefinition to configure",
+        "role": "editTarget"
       },
       {
         "name": "autoSetup",
@@ -2555,7 +2587,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletalMeshPath",
         "type": "string",
         "required": true,
-        "description": "SkeletalMesh to build the skeleton from; the factory assigns the new skeleton to it"
+        "description": "SkeletalMesh to build the skeleton from; the factory assigns the new skeleton to it",
+        "role": "editTarget"
       },
       {
         "name": "packagePath",
@@ -2581,7 +2614,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -2604,7 +2638,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletonPath",
         "type": "string",
         "required": true,
-        "description": "USkeleton whose curve metadata to edit"
+        "description": "USkeleton whose curve metadata to edit",
+        "role": "editTarget"
       },
       {
         "name": "add",
@@ -2705,7 +2740,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletalMeshPath",
         "type": "string",
         "required": false,
-        "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted"
+        "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted",
+        "role": "editTarget"
       },
       {
         "name": "edits",
@@ -3131,7 +3167,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "BlendSpace or BlendSpace1D asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "axis",
@@ -3656,7 +3693,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletonPath",
         "type": "string",
         "required": true,
-        "description": "USkeleton that gains or loses the compatible entries"
+        "description": "USkeleton that gains or loses the compatible entries",
+        "role": "editTarget"
       },
       {
         "name": "compatibleSkeletonPath",
@@ -3706,7 +3744,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "curveName",
@@ -3726,7 +3765,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence or AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "notifyName",
@@ -3752,7 +3792,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence or AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "notifyName",
@@ -3778,7 +3819,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sectionName",
@@ -3798,7 +3840,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "segmentIndex",
@@ -3830,7 +3873,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "stateMachineName",
@@ -3856,7 +3900,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "stateMachineName",
@@ -3876,7 +3921,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "stateMachineName",
@@ -3911,7 +3957,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletonPath",
         "type": "string",
         "required": true,
-        "description": "USkeleton asset path"
+        "description": "USkeleton asset path",
+        "role": "editTarget"
       },
       {
         "name": "virtualBoneName",
@@ -3931,7 +3978,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Existing IKRetargeter to edit",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "side",
@@ -3948,13 +3996,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "sourcePath",
         "type": "string",
         "required": true,
-        "description": "AnimSequence to reverse"
+        "description": "AnimSequence to reverse",
+        "role": "editTarget"
       },
       {
         "name": "destinationPath",
         "type": "string",
         "required": false,
-        "description": "Asset path for the reversed copy; alternative to name and packagePath"
+        "description": "Asset path for the reversed copy; alternative to name and packagePath",
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -4122,7 +4172,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "AnimBlueprint asset path"
+        "description": "AnimBlueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "skeletonPath",
@@ -4142,7 +4193,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "curveName",
@@ -4195,7 +4247,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "BlendSpace or BlendSpace1D asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sampleIndex",
@@ -4272,7 +4325,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "boneName",
@@ -4316,7 +4370,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletonPath",
         "type": "string",
         "required": true,
-        "description": "USkeleton whose bone tree to edit"
+        "description": "USkeleton whose bone tree to edit",
+        "role": "editTarget"
       },
       {
         "name": "mode",
@@ -4388,7 +4443,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Existing IKRetargeter to edit",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rigPath",
@@ -4417,7 +4473,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Existing IKRigDefinition to edit",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "meshPath",
@@ -4481,7 +4538,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sequenceLength",
@@ -4519,7 +4577,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animSequencePath",
@@ -4551,7 +4610,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimMontage asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "slotName",
@@ -4577,7 +4637,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "chooserPath",
@@ -4612,7 +4673,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PoseSearchDatabase asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "clips",
@@ -4638,7 +4700,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PoseSearchDatabase asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "continuingPoseCostBias",
@@ -4694,7 +4757,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PoseSearchDatabase asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "schemaPath",
@@ -4714,7 +4778,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "enableRootMotion",
@@ -4750,7 +4815,8 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "AnimSequences to write, or montages when resolveFromMontages is on",
-        "items": "string"
+        "items": "string",
+        "role": "editTarget"
       },
       {
         "name": "properties",
@@ -4776,7 +4842,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "stateMachineName",
@@ -4808,7 +4875,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "stateMachineName",
@@ -4834,7 +4902,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimSequence asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "markers",
@@ -4895,7 +4964,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "stateMachineName",
@@ -4939,7 +5009,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "AnimBlueprint asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "stateMachineName",

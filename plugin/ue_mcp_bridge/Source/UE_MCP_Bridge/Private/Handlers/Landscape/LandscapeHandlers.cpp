@@ -587,7 +587,7 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecEditLayer, SpecEditLayerIndex, SpecRollbackMaxVertices,
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("export_landscape_heightmap"), &ExportHeightmap, 300.0f, {
-		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("Where to write the heightmap; a relative path resolves under the project Saved directory")).Alias(TEXT("outputPath")),
+		MCPParam::Required(TEXT("filePath"), EType::String, TEXT("Where to write the heightmap; a relative path resolves under the project Saved directory")).Alias(TEXT("outputPath")).Role(EMCPParamRole::OutputPath),
 		SpecActorLabel, SpecActorPath, SpecHeightmapFormat, SpecRegion, SpecSpace, SpecCenter, SpecRadius, SpecMaxVertices, SpecEditLayer, SpecEditLayerIndex,
 		MCPParam::Optional(TEXT("overwrite"), EType::Boolean, TEXT("Allow replacing an existing file (default true)")),
 	});

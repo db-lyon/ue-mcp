@@ -8,7 +8,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Blueprint asset path"
+          "description": "Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "componentName",
@@ -51,7 +52,8 @@
           "description": "AnimSequence or AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "notifyName",
@@ -95,7 +97,8 @@
           "description": "AnimSequence or AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "notifyName",
@@ -142,7 +145,8 @@
           "name": "attributeSetPath",
           "type": "string",
           "required": true,
-          "description": "AttributeSet Blueprint asset path"
+          "description": "AttributeSet Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "attributeName",
@@ -159,7 +163,8 @@
           "name": "blackboardPath",
           "type": "string",
           "required": true,
-          "description": "BlackboardData asset path"
+          "description": "BlackboardData asset path",
+          "role": "editTarget"
         },
         {
           "name": "keyName",
@@ -197,7 +202,8 @@
           "description": "BlendSpace or BlendSpace1D asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animation",
@@ -246,7 +252,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Blueprint asset path"
+          "description": "Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "interfacePath",
@@ -266,7 +273,8 @@
           "description": "BehaviorTree asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeClass",
@@ -322,7 +330,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "componentClass",
@@ -401,7 +410,8 @@
           "description": "AnimSequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "curveName",
@@ -421,7 +431,8 @@
           "description": "CurveTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rowName",
@@ -465,7 +476,8 @@
           "description": "CurveTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rowName",
@@ -500,7 +512,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "eventName",
@@ -563,7 +576,8 @@
           "description": "DataTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rowName",
@@ -593,7 +607,8 @@
           "description": "GameplayEffect Blueprint asset path",
           "aliases": [
             "effectClass"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "cueTag",
@@ -628,7 +643,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "rendererType",
@@ -657,7 +673,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "emitterPath",
@@ -674,7 +691,8 @@
           "name": "queryPath",
           "type": "string",
           "required": true,
-          "description": "EnvQuery asset path"
+          "description": "EnvQuery asset path",
+          "role": "editTarget"
         },
         {
           "name": "generatorClass",
@@ -691,7 +709,8 @@
           "name": "queryPath",
           "type": "string",
           "required": true,
-          "description": "EnvQuery asset path"
+          "description": "EnvQuery asset path",
+          "role": "editTarget"
         },
         {
           "name": "testClass",
@@ -720,7 +739,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Blueprint asset path"
+          "description": "Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -747,7 +767,8 @@
           "description": "MaterialFunction asset path (#463)",
           "aliases": [
             "materialFunctionPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "expressionType",
@@ -886,7 +907,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionName",
@@ -924,7 +946,8 @@
           "description": "EdGraph-backed asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -1017,7 +1040,8 @@
           "aliases": [
             "mappingContext",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "inputActionPath",
@@ -1199,7 +1223,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionName",
@@ -1272,7 +1297,8 @@
           "name": "assetPath",
           "type": "string",
           "required": false,
-          "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one"
+          "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one",
+          "role": "editTarget"
         },
         {
           "name": "actorLabel",
@@ -1367,7 +1393,8 @@
           "aliases": [
             "path",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "expressionType",
@@ -1447,7 +1474,8 @@
           "description": "AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sectionName",
@@ -1503,7 +1531,8 @@
           "description": "AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animSequencePath",
@@ -1567,7 +1596,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "databasePath",
@@ -1602,7 +1632,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "eventName",
@@ -1637,7 +1668,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "moduleScript",
@@ -1678,7 +1710,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "stageName",
@@ -1716,7 +1749,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -1748,7 +1782,8 @@
           "description": "PCGGraph asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeType",
@@ -1813,7 +1848,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Blueprint asset path"
+          "description": "Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "senses",
@@ -1834,7 +1870,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -1890,7 +1927,8 @@
           "description": "PoseSearchSchema to add the channel to",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "bones",
@@ -1916,7 +1954,8 @@
           "description": "PoseSearchSchema to add the channel to",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "samples",
@@ -1943,7 +1982,8 @@
           "description": "PoseSearchDatabase asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sequencePath",
@@ -2057,7 +2097,8 @@
           "description": "Material asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "expressionName",
@@ -2101,7 +2142,8 @@
           "description": "Material asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rvtPath",
@@ -2183,7 +2225,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sequencePath",
@@ -2234,7 +2277,8 @@
           "aliases": [
             "assetPath",
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "trackType",
@@ -2290,7 +2334,8 @@
           "description": "Level Sequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "trackType",
@@ -2319,7 +2364,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Blueprint asset path"
+          "description": "Blueprint asset path",
+          "role": "editTarget"
         }
       ]
     },
@@ -2330,7 +2376,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "SmartObjectDefinition asset path"
+          "description": "SmartObjectDefinition asset path",
+          "role": "editTarget"
         },
         {
           "name": "behaviorClass",
@@ -2353,7 +2400,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "SmartObjectDefinition asset path"
+          "description": "SmartObjectDefinition asset path",
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -2400,7 +2448,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "SmartObjectDefinition asset path"
+          "description": "SmartObjectDefinition asset path",
+          "role": "editTarget"
         },
         {
           "name": "slotIndex",
@@ -2429,7 +2478,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StaticMesh, SkeletalMesh or Skeleton asset path"
+          "description": "StaticMesh, SkeletalMesh or Skeleton asset path",
+          "role": "editTarget"
         },
         {
           "name": "socketName",
@@ -2479,7 +2529,8 @@
           "description": "Sound asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "submixPath",
@@ -2505,7 +2556,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "stateMachineName",
@@ -2534,7 +2586,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "sourceStructId",
@@ -2569,7 +2622,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "displayName",
@@ -2592,7 +2646,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Blueprint asset path"
+          "description": "Blueprint asset path",
+          "role": "editTarget"
         }
       ]
     },
@@ -2603,7 +2658,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -2644,7 +2700,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -2685,7 +2742,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "structType",
@@ -2708,7 +2766,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "structType",
@@ -2731,7 +2790,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -2784,7 +2844,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -2819,7 +2880,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -2854,7 +2916,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -2925,7 +2988,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -3008,7 +3072,8 @@
           "name": "submixPath",
           "type": "string",
           "required": true,
-          "description": "SoundSubmix whose effect chain to append to"
+          "description": "SoundSubmix whose effect chain to append to",
+          "role": "editTarget"
         },
         {
           "name": "effectType",
@@ -3046,7 +3111,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "timelineName",
@@ -3118,7 +3184,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "stateMachineName",
@@ -3162,7 +3229,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -3194,7 +3262,8 @@
           "name": "skeletonPath",
           "type": "string",
           "required": true,
-          "description": "USkeleton asset path"
+          "description": "USkeleton asset path",
+          "role": "editTarget"
         },
         {
           "name": "sourceBone",
@@ -3221,7 +3290,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "widgetClass",
@@ -3264,7 +3334,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -3303,7 +3374,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -3369,7 +3441,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -3502,7 +3575,8 @@
           "name": "outputDirectory",
           "type": "string",
           "required": false,
-          "description": "Directory under Project/Saved/Codex/AnimationQA for analysis artifacts; must not already contain them"
+          "description": "Directory under Project/Saved/Codex/AnimationQA for analysis artifacts; must not already contain them",
+          "role": "outputPath"
         }
       ]
     },
@@ -3575,7 +3649,8 @@
           "description": "Asset path; a Blueprint path writes its generated-class CDO",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "propertyName",
@@ -3608,7 +3683,8 @@
           "description": "AnimSequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "modifierClass",
@@ -3634,7 +3710,8 @@
           "name": "sequencePath",
           "type": "string",
           "required": true,
-          "description": "LevelSequence holding the Control Rig edit session"
+          "description": "LevelSequence holding the Control Rig edit session",
+          "role": "editTarget"
         },
         {
           "name": "bindingTag",
@@ -4331,7 +4408,8 @@
           "description": "StaticMesh to read",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "fillMethod",
@@ -4367,7 +4445,8 @@
           "name": "outputPath",
           "type": "string",
           "required": false,
-          "description": "Asset to write (default '<assetPath>_Filled')"
+          "description": "Asset to write (default '<assetPath>_Filled')",
+          "role": "editTarget"
         },
         {
           "name": "inPlace",
@@ -4379,7 +4458,8 @@
           "name": "backupPath",
           "type": "string",
           "required": false,
-          "description": "Copy the source here before an inPlace edit, the only way back to the original geometry"
+          "description": "Copy the source here before an inPlace edit, the only way back to the original geometry",
+          "role": "editTarget"
         },
         {
           "name": "lodType",
@@ -4460,7 +4540,8 @@
           "description": "StaticMesh to read",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "axis",
@@ -4502,7 +4583,8 @@
           "name": "outputPath",
           "type": "string",
           "required": false,
-          "description": "Asset to write (default '<assetPath>_Mirrored')"
+          "description": "Asset to write (default '<assetPath>_Mirrored')",
+          "role": "editTarget"
         },
         {
           "name": "inPlace",
@@ -4514,7 +4596,8 @@
           "name": "backupPath",
           "type": "string",
           "required": false,
-          "description": "Copy the source here before an inPlace edit, the only way back to the original geometry"
+          "description": "Copy the source here before an inPlace edit, the only way back to the original geometry",
+          "role": "editTarget"
         },
         {
           "name": "lodType",
@@ -4595,7 +4678,8 @@
           "description": "StaticMesh to read",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "remeshMode",
@@ -4667,7 +4751,8 @@
           "name": "outputPath",
           "type": "string",
           "required": false,
-          "description": "Asset to write (default '<assetPath>_Remeshed')"
+          "description": "Asset to write (default '<assetPath>_Remeshed')",
+          "role": "editTarget"
         },
         {
           "name": "inPlace",
@@ -4679,7 +4764,8 @@
           "name": "backupPath",
           "type": "string",
           "required": false,
-          "description": "Copy the source here before an inPlace edit, the only way back to the original geometry"
+          "description": "Copy the source here before an inPlace edit, the only way back to the original geometry",
+          "role": "editTarget"
         },
         {
           "name": "lodType",
@@ -4760,7 +4846,8 @@
           "description": "StaticMesh to read",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "simplifyMode",
@@ -4826,7 +4913,8 @@
           "name": "outputPath",
           "type": "string",
           "required": false,
-          "description": "Asset to write (default '<assetPath>_Simplified')"
+          "description": "Asset to write (default '<assetPath>_Simplified')",
+          "role": "editTarget"
         },
         {
           "name": "inPlace",
@@ -4838,7 +4926,8 @@
           "name": "backupPath",
           "type": "string",
           "required": false,
-          "description": "Copy the source here before an inPlace edit, the only way back to the original geometry"
+          "description": "Copy the source here before an inPlace edit, the only way back to the original geometry",
+          "role": "editTarget"
         },
         {
           "name": "lodType",
@@ -5360,7 +5449,8 @@
           "name": "skeletonPath",
           "type": "string",
           "required": true,
-          "description": "USkeleton that owns the blend profile"
+          "description": "USkeleton that owns the blend profile",
+          "role": "editTarget"
         },
         {
           "name": "profileName",
@@ -5500,7 +5590,8 @@
           "description": "Existing IKRetargeter to edit",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "side",
@@ -5520,7 +5611,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -5561,7 +5653,8 @@
           "name": "sequencePath",
           "type": "string",
           "required": true,
-          "description": "LevelSequence holding the Control Rig edit session"
+          "description": "LevelSequence holding the Control Rig edit session",
+          "role": "editTarget"
         },
         {
           "name": "bindingTag",
@@ -5574,7 +5667,8 @@
           "name": "outputAssetPath",
           "type": "string",
           "required": true,
-          "description": "Destination AnimSequence asset path"
+          "description": "Destination AnimSequence asset path",
+          "role": "editTarget"
         },
         {
           "name": "frameRate",
@@ -5607,7 +5701,8 @@
           "description": "AnimSequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "tracks",
@@ -5649,7 +5744,8 @@
           "description": "AnimSequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sourceBone",
@@ -5840,7 +5936,8 @@
           "type": "array",
           "required": false,
           "description": "Explicit FoliageType asset paths",
-          "items": "string"
+          "items": "string",
+          "role": "editTarget"
         },
         {
           "name": "directory",
@@ -5895,7 +5992,11 @@
           "type": "array",
           "required": true,
           "description": "[{assetPath, parentPath?, parameters?:[{name, type (scalar|vector|texture), value}]}]. value: number (scalar), {r,g,b,a} (vector), or texture path (texture) (#594)",
-          "items": "object"
+          "items": "object",
+          "role": "editTarget",
+          "roleKeys": [
+            "assetPath"
+          ]
         }
       ]
     },
@@ -5953,7 +6054,8 @@
           "name": "sequencePath",
           "type": "string",
           "required": true,
-          "description": "LevelSequence to create, or to reuse with onConflict=skip"
+          "description": "LevelSequence to create, or to reuse with onConflict=skip",
+          "role": "editTarget"
         },
         {
           "name": "skeletalMeshPath",
@@ -6071,7 +6173,8 @@
           "name": "skeletalMeshPath",
           "type": "string",
           "required": true,
-          "description": "SkeletalMesh whose reference skeleton to edit"
+          "description": "SkeletalMesh whose reference skeleton to edit",
+          "role": "editTarget"
         },
         {
           "name": "sessionTag",
@@ -6132,7 +6235,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeGuid",
@@ -6176,7 +6280,8 @@
           "description": "SkeletalMesh asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "lodIndex",
@@ -6218,7 +6323,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -6277,7 +6383,8 @@
           "description": "Existing material to build into",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -6349,7 +6456,8 @@
           "description": "Material asset path",
           "aliases": [
             "materialPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodes",
@@ -6377,7 +6485,8 @@
           "description": "PoseSearchDatabase asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "wait",
@@ -6609,7 +6718,13 @@
           "type": "array",
           "required": true,
           "description": "Rename descriptors: {sourcePath, destinationPath}, {assetPath, newName} or {sourcePath, newPackagePath, newName}",
-          "items": "object"
+          "items": "object",
+          "role": "editTarget",
+          "roleKeys": [
+            "sourcePath",
+            "destinationPath",
+            "assetPath"
+          ]
         }
       ]
     },
@@ -6621,14 +6736,19 @@
           "type": "array",
           "required": false,
           "description": "{assetPath, properties} snapshots to write back",
-          "items": "object"
+          "items": "object",
+          "role": "editTarget",
+          "roleKeys": [
+            "assetPath"
+          ]
         },
         {
           "name": "createdAssetPaths",
           "type": "array",
           "required": false,
           "description": "Assets the upsert created, to delete",
-          "items": "string"
+          "items": "string",
+          "role": "editTarget"
         },
         {
           "name": "save",
@@ -6649,7 +6769,11 @@
           "description": "Asset updates: [{assetPath, properties}], max 500",
           "items": "object",
           "minItems": 1,
-          "maxItems": 500
+          "maxItems": 500,
+          "role": "editTarget",
+          "roleKeys": [
+            "assetPath"
+          ]
         },
         {
           "name": "save",
@@ -6794,7 +6918,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "properties",
@@ -6862,7 +6987,8 @@
           "name": "skeletalMeshPath",
           "type": "string",
           "required": false,
-          "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted"
+          "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted",
+          "role": "editTarget"
         }
       ]
     },
@@ -6948,7 +7074,8 @@
           "description": "Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png",
           "aliases": [
             "filename"
-          ]
+          ],
+          "role": "outputPath"
         },
         {
           "name": "location",
@@ -7152,7 +7279,8 @@
           "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "columnType",
@@ -7190,7 +7318,8 @@
           "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "output",
@@ -7252,7 +7381,8 @@
           "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "index",
@@ -7326,7 +7456,8 @@
           "description": "ChooserTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "from",
@@ -7376,7 +7507,8 @@
           "description": "ChooserTable asset path, e.g. /Game/Path/CT_Locomotion",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "index",
@@ -7426,7 +7558,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -7547,7 +7680,8 @@
           "aliases": [
             "path",
             "materialPath"
-          ]
+          ],
+          "role": "editTarget"
         }
       ]
     },
@@ -7581,7 +7715,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -7608,7 +7743,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "widgetName",
@@ -7638,7 +7774,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "widgetName",
@@ -7675,7 +7812,8 @@
           "name": "skeletalMeshPath",
           "type": "string",
           "required": false,
-          "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted"
+          "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted",
+          "role": "editTarget"
         }
       ]
     },
@@ -7764,7 +7902,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         }
       ]
     },
@@ -7776,7 +7915,8 @@
           "type": "array",
           "required": true,
           "description": "Blueprint asset paths to compile",
-          "items": "string"
+          "items": "string",
+          "role": "editTarget"
         },
         {
           "name": "save",
@@ -7796,7 +7936,8 @@
           "description": "CustomizableObject asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "optimizationLevel",
@@ -7819,7 +7960,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "force",
@@ -7842,7 +7984,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         }
       ]
     },
@@ -7853,7 +7996,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Blueprint asset path"
+          "description": "Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "senseType",
@@ -7882,7 +8026,8 @@
           "name": "retargeterPath",
           "type": "string",
           "required": true,
-          "description": "Existing IKRetargeter to configure"
+          "description": "Existing IKRetargeter to configure",
+          "role": "editTarget"
         },
         {
           "name": "sourceRig",
@@ -8060,7 +8205,8 @@
           "name": "rigPath",
           "type": "string",
           "required": true,
-          "description": "Existing IKRigDefinition to configure"
+          "description": "Existing IKRigDefinition to configure",
+          "role": "editTarget"
         },
         {
           "name": "autoSetup",
@@ -8201,7 +8347,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "netCullDistanceSquared",
@@ -8218,7 +8365,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "netUpdateFrequency",
@@ -8286,7 +8434,8 @@
           "description": "MaterialFunction asset path (#463)",
           "aliases": [
             "materialFunctionPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sourceExpression",
@@ -8324,7 +8473,8 @@
           "description": "EdGraph-backed asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -8399,7 +8549,8 @@
           "aliases": [
             "path",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sourceExpression",
@@ -8437,7 +8588,8 @@
           "description": "PCGGraph asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sourceNode",
@@ -8487,7 +8639,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -8561,7 +8714,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -8589,7 +8743,8 @@
           "aliases": [
             "path",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "texturePath",
@@ -8619,7 +8774,8 @@
           "aliases": [
             "path",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "expressionName",
@@ -9133,7 +9289,8 @@
           "description": "Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -9185,7 +9342,8 @@
           "description": "Full destination of the new Blueprint Interface",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "onConflict",
@@ -9445,7 +9603,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -9492,7 +9651,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -9659,7 +9819,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionName",
@@ -10017,7 +10178,8 @@
           "name": "assetPath",
           "type": "string",
           "required": false,
-          "description": "Object path of the new pipeline"
+          "description": "Object path of the new pipeline",
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -10194,7 +10356,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "macroName",
@@ -10503,7 +10666,8 @@
           "name": "levelPath",
           "type": "string",
           "required": true,
-          "description": "Long package path of the new level, e.g. /Game/Maps/MyLevel. Validated before the engine is asked"
+          "description": "Long package path of the new level, e.g. /Game/Maps/MyLevel. Validated before the engine is asked",
+          "role": "editTarget"
         },
         {
           "name": "templateLevel",
@@ -11086,7 +11250,8 @@
           "name": "skeletalMeshPath",
           "type": "string",
           "required": true,
-          "description": "SkeletalMesh to build the skeleton from; the factory assigns the new skeleton to it"
+          "description": "SkeletalMesh to build the skeleton from; the factory assigns the new skeleton to it",
+          "role": "editTarget"
         },
         {
           "name": "packagePath",
@@ -11277,7 +11442,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -11411,7 +11577,8 @@
           "description": "Asset that owns the new subobject",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "className",
@@ -11538,7 +11705,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -11577,7 +11745,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -11728,7 +11897,8 @@
           "description": "Asset to delete",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "force",
@@ -11749,7 +11919,8 @@
           "aliases": [
             "paths"
           ],
-          "items": "string"
+          "items": "string",
+          "role": "editTarget"
         },
         {
           "name": "force",
@@ -11844,7 +12015,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionName",
@@ -11875,7 +12047,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -11907,7 +12080,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "macroName",
@@ -11928,7 +12102,8 @@
           "aliases": [
             "path",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionPath",
@@ -11937,7 +12112,8 @@
           "description": "MaterialFunction asset path, instead of materialPath (#1138)",
           "aliases": [
             "materialFunctionPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "expressionName",
@@ -11970,7 +12146,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -12005,7 +12182,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -12026,7 +12204,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -12261,7 +12440,8 @@
           "description": "EdGraph-backed asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -12335,7 +12515,8 @@
           "description": "Material asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "property",
@@ -12355,7 +12536,8 @@
           "description": "PCGGraph asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sourceNode",
@@ -12405,7 +12587,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -12461,7 +12644,8 @@
           "name": "destinationPath",
           "type": "string",
           "required": true,
-          "description": "Object path of the copy"
+          "description": "Object path of the copy",
+          "role": "editTarget"
         },
         {
           "name": "onConflict",
@@ -12484,7 +12668,8 @@
           "name": "destinationPath",
           "type": "string",
           "required": true,
-          "description": "Full destination asset path"
+          "description": "Full destination asset path",
+          "role": "editTarget"
         }
       ]
     },
@@ -12501,7 +12686,8 @@
           "name": "destinationPath",
           "type": "string",
           "required": true,
-          "description": "Package path of the copy, including its name; a missing folder is created"
+          "description": "Package path of the copy, including its name; a missing folder is created",
+          "role": "editTarget"
         }
       ],
       "contractExempt": "Makes the destination folder under the contract values before the copy can fail"
@@ -12513,7 +12699,8 @@
           "name": "skeletonPath",
           "type": "string",
           "required": true,
-          "description": "USkeleton whose curve metadata to edit"
+          "description": "USkeleton whose curve metadata to edit",
+          "role": "editTarget"
         },
         {
           "name": "add",
@@ -12611,7 +12798,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "op",
@@ -12685,7 +12873,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionName",
@@ -12741,7 +12930,8 @@
           "name": "skeletalMeshPath",
           "type": "string",
           "required": false,
-          "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted"
+          "description": "The skeletal mesh whose one open session to address, when sessionTag is omitted",
+          "role": "editTarget"
         },
         {
           "name": "edits",
@@ -12768,7 +12958,8 @@
           "description": "UserDefinedStruct asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "tooltip",
@@ -12795,7 +12986,8 @@
           "description": "UserDefinedEnum asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "op",
@@ -12833,7 +13025,8 @@
           "description": "UserDefinedStruct asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "op",
@@ -12906,7 +13099,8 @@
           "name": "assetPath",
           "type": "string",
           "required": false,
-          "description": "MassEntityConfigAsset path, /Game/Folder/Name[.Name]"
+          "description": "MassEntityConfigAsset path, /Game/Folder/Name[.Name]",
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -13130,7 +13324,8 @@
           "description": "Output .fbx path",
           "aliases": [
             "filePath"
-          ]
+          ],
+          "role": "outputPath"
         }
       ]
     },
@@ -13150,7 +13345,8 @@
           "name": "outputPath",
           "type": "string",
           "required": true,
-          "description": "File to write; a relative path resolves against the project directory"
+          "description": "File to write; a relative path resolves against the project directory",
+          "role": "outputPath"
         }
       ]
     },
@@ -13219,7 +13415,8 @@
           "description": "Where to write the heightmap; a relative path resolves under the project Saved directory",
           "aliases": [
             "outputPath"
-          ]
+          ],
+          "role": "outputPath"
         },
         {
           "name": "actorLabel",
@@ -13369,7 +13566,8 @@
           "description": "PNG file to write; a relative path resolves against the project directory",
           "aliases": [
             "filePath"
-          ]
+          ],
+          "role": "outputPath"
         }
       ]
     },
@@ -13402,7 +13600,8 @@
           "name": "outputPath",
           "type": "string",
           "required": false,
-          "description": "PNG to write (default under Saved/UVLayouts)"
+          "description": "PNG to write (default under Saved/UVLayouts)",
+          "role": "outputPath"
         },
         {
           "name": "imageSize",
@@ -13485,7 +13684,8 @@
           "description": "Destination package path, including the new asset name",
           "aliases": [
             "destinationPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "destinationParentClass",
@@ -13579,7 +13779,8 @@
           "description": "DataTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rows",
@@ -13736,7 +13937,8 @@
           "type": "array",
           "required": false,
           "description": "The exact assets to act on, the safest way to drive it",
-          "items": "string"
+          "items": "string",
+          "role": "editTarget"
         },
         {
           "name": "directory",
@@ -13869,7 +14071,8 @@
           "type": "array",
           "required": true,
           "description": "Redirector packages, or the folders holding them",
-          "items": "string"
+          "items": "string",
+          "role": "editTarget"
         },
         {
           "name": "dryRun",
@@ -13901,7 +14104,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         }
       ]
     },
@@ -13915,7 +14119,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         }
       ]
     },
@@ -13976,7 +14181,8 @@
           "description": "Asset to reload from disk",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "discardUnsaved",
@@ -13996,7 +14202,8 @@
           "description": "StaticMesh asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "lodIndex",
@@ -14077,7 +14284,8 @@
           "description": "StaticMesh whose collision to build or clear",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "op",
@@ -17239,7 +17447,8 @@
           "description": "CurveTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "jsonString",
@@ -17459,7 +17668,8 @@
           "description": "Material asset path",
           "aliases": [
             "materialPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodes",
@@ -17487,7 +17697,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -17528,7 +17739,8 @@
           "description": "PCGGraph asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodes",
@@ -17698,7 +17910,8 @@
           "description": "StringTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "filePath",
@@ -17722,7 +17935,8 @@
           "description": "StringTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "csvPath",
@@ -18093,7 +18307,8 @@
           "name": "skeletalMeshPath",
           "type": "string",
           "required": true,
-          "description": "SkeletalMesh whose reference skeleton to edit"
+          "description": "SkeletalMesh whose reference skeleton to edit",
+          "role": "editTarget"
         },
         {
           "name": "edits",
@@ -20737,7 +20952,8 @@
           "name": "targetPath",
           "type": "string",
           "required": true,
-          "description": "StaticMesh being cut; the result inherits its transform, materials, collision and Nanite setting"
+          "description": "StaticMesh being cut; the result inherits its transform, materials, collision and Nanite setting",
+          "role": "editTarget"
         },
         {
           "name": "toolPath",
@@ -20749,7 +20965,8 @@
           "name": "outputPath",
           "type": "string",
           "required": false,
-          "description": "Asset to write (default '<targetPath>_<Operation>')"
+          "description": "Asset to write (default '<targetPath>_<Operation>')",
+          "role": "editTarget"
         },
         {
           "name": "inPlace",
@@ -20912,7 +21129,8 @@
           "description": "MetaSoundSource asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -20944,7 +21162,8 @@
           "description": "MetaSoundSource asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -20970,7 +21189,8 @@
           "description": "MetaSoundSource asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeClassName",
@@ -21106,7 +21326,8 @@
           "description": "MetaSoundSource asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         }
       ]
     },
@@ -21120,7 +21341,8 @@
           "description": "MetaSoundSource asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "fromNodeId",
@@ -21158,7 +21380,8 @@
           "description": "MetaSoundSource asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "fromNodeId",
@@ -21190,7 +21413,8 @@
           "description": "MetaSoundSource asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphInput",
@@ -21222,7 +21446,8 @@
           "description": "MetaSoundSource asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "fromNodeId",
@@ -21254,7 +21479,8 @@
           "description": "MetaSound asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "fromNodeId",
@@ -21483,7 +21709,8 @@
           "description": "MetaSound asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "memberKind",
@@ -21509,7 +21736,8 @@
           "description": "MetaSound asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeId",
@@ -21535,7 +21763,8 @@
           "description": "MetaSound asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "memberKind",
@@ -21611,7 +21840,8 @@
           "description": "MetaSoundSource asset path",
           "aliases": [
             "metasoundPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "value",
@@ -21780,19 +22010,22 @@
           "name": "sourcePath",
           "type": "string",
           "required": false,
-          "description": "Asset to rename, together with destinationPath"
+          "description": "Asset to rename, together with destinationPath",
+          "role": "editTarget"
         },
         {
           "name": "destinationPath",
           "type": "string",
           "required": false,
-          "description": "New object path, together with sourcePath"
+          "description": "New object path, together with sourcePath",
+          "role": "editTarget"
         },
         {
           "name": "assetPath",
           "type": "string",
           "required": false,
-          "description": "Asset to rename in its own folder, together with newName"
+          "description": "Asset to rename in its own folder, together with newName",
+          "role": "editTarget"
         },
         {
           "name": "newName",
@@ -21818,7 +22051,8 @@
           "description": "BehaviorTree asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "node",
@@ -21867,7 +22101,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -21918,7 +22153,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "widgetName",
@@ -22168,7 +22404,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionName",
@@ -22617,7 +22854,8 @@
           "description": "BlendSpace or BlendSpace1D asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "axis",
@@ -24738,14 +24976,16 @@
           "description": "StaticMesh to recenter",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "assetPaths",
           "type": "array",
           "required": false,
           "description": "StaticMeshes to recenter together; the first sets the reference pivot",
-          "items": "string"
+          "items": "string",
+          "role": "editTarget"
         }
       ],
       "choices": [
@@ -24773,7 +25013,8 @@
           "aliases": [
             "path",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "recompileChildren",
@@ -25062,7 +25303,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -25100,7 +25342,8 @@
           "name": "skeletonPath",
           "type": "string",
           "required": true,
-          "description": "USkeleton that gains or loses the compatible entries"
+          "description": "USkeleton that gains or loses the compatible entries",
+          "role": "editTarget"
         },
         {
           "name": "compatibleSkeletonPath",
@@ -25150,7 +25393,8 @@
           "description": "Imported asset to rebuild from its source file",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "filePath",
@@ -25173,7 +25417,8 @@
           "description": "DataTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "jsonPath",
@@ -25215,7 +25460,8 @@
           "description": "Asset whose package to reload",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         }
       ]
     },
@@ -25252,7 +25498,8 @@
           "description": "AnimSequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "curveName",
@@ -25272,7 +25519,8 @@
           "description": "AnimSequence or AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "notifyName",
@@ -25298,7 +25546,8 @@
           "description": "AnimSequence or AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "notifyName",
@@ -25321,7 +25570,8 @@
           "name": "blackboardPath",
           "type": "string",
           "required": true,
-          "description": "BlackboardData asset path"
+          "description": "BlackboardData asset path",
+          "role": "editTarget"
         },
         {
           "name": "keyName",
@@ -25341,7 +25591,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "blueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "interfacePath",
@@ -25367,7 +25618,8 @@
           "description": "BehaviorTree asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "node",
@@ -25390,7 +25642,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "componentName",
@@ -25526,7 +25779,8 @@
           "description": "CurveTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rowName",
@@ -25546,7 +25800,8 @@
           "description": "DataTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rowName",
@@ -25616,7 +25871,8 @@
           "description": "GameplayEffect Blueprint asset path",
           "aliases": [
             "effectClass"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "cueTag",
@@ -25633,7 +25889,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "emitterName",
@@ -25656,7 +25913,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "rendererIndex",
@@ -25685,7 +25943,8 @@
           "name": "queryPath",
           "type": "string",
           "required": true,
-          "description": "EnvQuery asset path"
+          "description": "EnvQuery asset path",
+          "role": "editTarget"
         },
         {
           "name": "optionIndex",
@@ -25702,7 +25961,8 @@
           "name": "queryPath",
           "type": "string",
           "required": true,
-          "description": "EnvQuery asset path"
+          "description": "EnvQuery asset path",
+          "role": "editTarget"
         },
         {
           "name": "testIndex",
@@ -25728,7 +25988,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "blueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -25826,7 +26087,8 @@
           "description": "EdGraph-backed asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -25859,7 +26121,8 @@
           "aliases": [
             "mappingContext",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "mappingIndex",
@@ -26013,7 +26276,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "MassEntityConfigAsset path"
+          "description": "MassEntityConfigAsset path",
+          "role": "editTarget"
         },
         {
           "name": "traitClass",
@@ -26042,7 +26306,8 @@
           "name": "assetPath",
           "type": "string",
           "required": false,
-          "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one"
+          "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one",
+          "role": "editTarget"
         },
         {
           "name": "actorLabel",
@@ -26140,7 +26405,8 @@
           "description": "AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sectionName",
@@ -26160,7 +26426,8 @@
           "description": "AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "segmentIndex",
@@ -26189,7 +26456,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "stackContext",
@@ -26230,7 +26498,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "eventName",
@@ -26259,7 +26528,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "stackContext",
@@ -26294,7 +26564,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "stageName",
@@ -26326,7 +26597,8 @@
           "description": "PCGGraph asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeName",
@@ -26343,7 +26615,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Blueprint carrying the AIPerceptionComponent template"
+          "description": "Blueprint carrying the AIPerceptionComponent template",
+          "role": "editTarget"
         },
         {
           "name": "index",
@@ -26372,7 +26645,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "SmartObjectDefinition asset path"
+          "description": "SmartObjectDefinition asset path",
+          "role": "editTarget"
         },
         {
           "name": "slotIndex",
@@ -26389,7 +26663,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StaticMesh, SkeletalMesh or Skeleton asset path"
+          "description": "StaticMesh, SkeletalMesh or Skeleton asset path",
+          "role": "editTarget"
         },
         {
           "name": "socketName",
@@ -26409,7 +26684,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "stateMachineName",
@@ -26435,7 +26711,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "stateMachineName",
@@ -26452,7 +26729,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "targetStructId",
@@ -26475,7 +26753,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -26504,7 +26783,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -26533,7 +26813,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "nodeId",
@@ -26550,7 +26831,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "nodeId",
@@ -26567,7 +26849,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -26590,7 +26873,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -26619,7 +26903,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -26648,7 +26933,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -26677,7 +26963,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -26729,7 +27016,8 @@
           "description": "StringTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "key",
@@ -26749,7 +27037,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "stateMachineName",
@@ -26784,7 +27073,8 @@
           "name": "skeletonPath",
           "type": "string",
           "required": true,
-          "description": "USkeleton asset path"
+          "description": "USkeleton asset path",
+          "role": "editTarget"
         },
         {
           "name": "virtualBoneName",
@@ -26805,7 +27095,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "widgetName",
@@ -26829,7 +27120,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -26862,7 +27154,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -26916,7 +27209,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -26948,19 +27242,22 @@
           "name": "sourcePath",
           "type": "string",
           "required": false,
-          "description": "Asset to rename, together with destinationPath"
+          "description": "Asset to rename, together with destinationPath",
+          "role": "editTarget"
         },
         {
           "name": "destinationPath",
           "type": "string",
           "required": false,
-          "description": "New object path, together with sourcePath"
+          "description": "New object path, together with sourcePath",
+          "role": "editTarget"
         },
         {
           "name": "assetPath",
           "type": "string",
           "required": false,
-          "description": "Asset to rename in its own folder, together with newName"
+          "description": "Asset to rename in its own folder, together with newName",
+          "role": "editTarget"
         },
         {
           "name": "newName",
@@ -26986,7 +27283,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "oldName",
@@ -27012,7 +27310,8 @@
           "description": "CurveTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "oldName",
@@ -27041,7 +27340,8 @@
           "description": "DataTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "oldName",
@@ -27070,7 +27370,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "oldName",
@@ -27096,7 +27397,8 @@
           "description": "UserDefinedStruct asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "fieldName",
@@ -27147,7 +27449,8 @@
           "name": "outputPath",
           "type": "string",
           "required": true,
-          "description": "Absolute file path for the PNG output"
+          "description": "Absolute file path for the PNG output",
+          "role": "outputPath"
         },
         {
           "name": "width",
@@ -27286,7 +27589,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "widgetName",
@@ -27315,7 +27619,8 @@
           "description": "UserDefinedEnum asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "order",
@@ -27332,7 +27637,8 @@
           "name": "queryPath",
           "type": "string",
           "required": true,
-          "description": "EnvQuery asset path"
+          "description": "EnvQuery asset path",
+          "role": "editTarget"
         },
         {
           "name": "order",
@@ -27356,7 +27662,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "MassEntityConfigAsset path"
+          "description": "MassEntityConfigAsset path",
+          "role": "editTarget"
         },
         {
           "name": "order",
@@ -27377,7 +27684,8 @@
           "description": "UserDefinedStruct asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "order",
@@ -27397,7 +27705,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "parentClass",
@@ -27417,7 +27726,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "componentName",
@@ -27652,7 +27962,8 @@
           "description": "Existing IKRetargeter to edit",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "side",
@@ -27891,7 +28202,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "previous",
@@ -27909,13 +28221,15 @@
           "name": "sourcePath",
           "type": "string",
           "required": true,
-          "description": "AnimSequence to reverse"
+          "description": "AnimSequence to reverse",
+          "role": "editTarget"
         },
         {
           "name": "destinationPath",
           "type": "string",
           "required": false,
-          "description": "Asset path for the reversed copy; alternative to name and packagePath"
+          "description": "Asset path for the reversed copy; alternative to name and packagePath",
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -28418,7 +28732,8 @@
           "description": "Asset to save; omit to save every dirty asset under /Game",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "force",
@@ -29186,7 +29501,8 @@
           "name": "abilityPath",
           "type": "string",
           "required": true,
-          "description": "GameplayAbility Blueprint asset path"
+          "description": "GameplayAbility Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "ability_tags",
@@ -29232,7 +29548,8 @@
           "name": "inputActionPath",
           "type": "string",
           "required": true,
-          "description": "InputAction asset path"
+          "description": "InputAction asset path",
+          "role": "editTarget"
         },
         {
           "name": "triggers",
@@ -29564,7 +29881,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "bCanEverTick",
@@ -29593,7 +29911,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "alwaysRelevant",
@@ -29610,7 +29929,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "AnimBlueprint asset path"
+          "description": "AnimBlueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "skeletonPath",
@@ -29630,7 +29950,8 @@
           "description": "AnimSequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "curveName",
@@ -29680,7 +30001,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Blueprint asset path carrying the AbilitySystemComponent"
+          "description": "Blueprint asset path carrying the AbilitySystemComponent",
+          "role": "editTarget"
         },
         {
           "name": "attributeSet",
@@ -29715,7 +30037,8 @@
           "description": "Asset path; a Blueprint path writes its generated-class CDO",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "propertyName",
@@ -29785,7 +30108,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "Audio asset path"
+          "description": "Audio asset path",
+          "role": "editTarget"
         },
         {
           "name": "propertyName",
@@ -29808,7 +30132,8 @@
           "name": "behaviorTreePath",
           "type": "string",
           "required": true,
-          "description": "BehaviorTree asset path"
+          "description": "BehaviorTree asset path",
+          "role": "editTarget"
         },
         {
           "name": "blackboardPath",
@@ -29825,7 +30150,8 @@
           "name": "blackboardPath",
           "type": "string",
           "required": true,
-          "description": "Child BlackboardData asset path"
+          "description": "Child BlackboardData asset path",
+          "role": "editTarget"
         },
         {
           "name": "parentPath",
@@ -29851,7 +30177,8 @@
           "description": "BlendSpace or BlendSpace1D asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sampleIndex",
@@ -29928,7 +30255,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "componentName",
@@ -29960,7 +30288,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -29992,7 +30321,8 @@
           "description": "AnimSequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "boneName",
@@ -30036,7 +30366,8 @@
           "name": "skeletonPath",
           "type": "string",
           "required": true,
-          "description": "USkeleton whose bone tree to edit"
+          "description": "USkeleton whose bone tree to edit",
+          "role": "editTarget"
         },
         {
           "name": "mode",
@@ -30108,7 +30439,8 @@
           "description": "BehaviorTree asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodePath",
@@ -30164,7 +30496,8 @@
           "description": "BehaviorTree asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodePath",
@@ -30220,7 +30553,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "componentName",
@@ -30275,7 +30609,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "propertyName",
@@ -30301,7 +30636,8 @@
           "description": "SkeletalMesh asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "properties",
@@ -30342,7 +30678,8 @@
           "name": "assetPath",
           "type": "string",
           "required": false,
-          "description": "Blueprint whose component template to edit; needs componentName"
+          "description": "Blueprint whose component template to edit; needs componentName",
+          "role": "editTarget"
         },
         {
           "name": "componentName",
@@ -30615,7 +30952,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "componentName",
@@ -30791,7 +31129,8 @@
           "description": "CurveTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rowName",
@@ -30819,7 +31158,8 @@
           "aliases": [
             "path",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionPath",
@@ -30828,7 +31168,8 @@
           "description": "MaterialFunction asset path, instead of materialPath (#1138)",
           "aliases": [
             "materialFunctionPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "expressionIndex",
@@ -30916,7 +31257,8 @@
           "description": "DataTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rowName",
@@ -30948,7 +31290,8 @@
           "description": "DataTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rowName",
@@ -31036,7 +31379,8 @@
           "name": "effectPath",
           "type": "string",
           "required": true,
-          "description": "GameplayEffect Blueprint asset path"
+          "description": "GameplayEffect Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "attribute",
@@ -31068,7 +31412,8 @@
           "description": "NiagaraSystem asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "emitterName",
@@ -31097,7 +31442,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "Existing UserDefinedEnum asset path"
+          "description": "Existing UserDefinedEnum asset path",
+          "role": "editTarget"
         },
         {
           "name": "entries",
@@ -31117,7 +31463,8 @@
           "description": "UserDefinedEnum asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "bitflags",
@@ -31145,7 +31492,8 @@
           "aliases": [
             "path",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionPath",
@@ -31154,7 +31502,8 @@
           "description": "MaterialFunction asset path, instead of materialPath (#1138)",
           "aliases": [
             "materialFunctionPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "expressionIndex",
@@ -31380,7 +31729,8 @@
           "description": "FoliageType asset path, or the name of a type already placed in the open level",
           "aliases": [
             "foliageTypeName"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "settings",
@@ -31400,7 +31750,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "functionName",
@@ -31504,7 +31855,8 @@
           "description": "Existing IKRetargeter to edit",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rigPath",
@@ -31533,7 +31885,8 @@
           "description": "Existing IKRigDefinition to edit",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "meshPath",
@@ -31553,7 +31906,8 @@
           "name": "imcPath",
           "type": "string",
           "required": true,
-          "description": "InputMappingContext asset path"
+          "description": "InputMappingContext asset path",
+          "role": "editTarget"
         },
         {
           "name": "newInputActionPath",
@@ -31594,7 +31948,8 @@
           "name": "imcPath",
           "type": "string",
           "required": true,
-          "description": "InputMappingContext asset path"
+          "description": "InputMappingContext asset path",
+          "role": "editTarget"
         },
         {
           "name": "newKey",
@@ -32180,7 +32535,8 @@
           "name": "imcPath",
           "type": "string",
           "required": true,
-          "description": "InputMappingContext asset path"
+          "description": "InputMappingContext asset path",
+          "role": "editTarget"
         },
         {
           "name": "mappingIndex",
@@ -32220,7 +32576,8 @@
           "description": "Material asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "color",
@@ -32240,7 +32597,8 @@
           "description": "Material asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "blendMode",
@@ -32300,7 +32658,8 @@
           "name": "assetPath",
           "type": "string",
           "required": false,
-          "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one"
+          "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one",
+          "role": "editTarget"
         },
         {
           "name": "actorLabel",
@@ -32391,7 +32750,8 @@
           "description": "Material asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "materialDomain",
@@ -32415,7 +32775,8 @@
           "aliases": [
             "path",
             "materialPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "newParentPath",
@@ -32438,7 +32799,8 @@
           "description": "MaterialInstanceConstant asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "parameterName",
@@ -32507,7 +32869,8 @@
           "description": "Material asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "shadingModel",
@@ -32528,7 +32891,8 @@
           "aliases": [
             "path",
             "materialPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "parameterName",
@@ -32567,7 +32931,8 @@
           "aliases": [
             "path",
             "materialPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "usages",
@@ -32607,7 +32972,8 @@
           "description": "StaticMesh asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "materialPath",
@@ -32661,7 +33027,11 @@
             }
           ],
           "minItems": 1,
-          "maxItems": 500
+          "maxItems": 500,
+          "role": "editTarget",
+          "roleKeys": [
+            "assetPath"
+          ]
         },
         {
           "name": "save",
@@ -32690,7 +33060,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StaticMesh asset path"
+          "description": "StaticMesh asset path",
+          "role": "editTarget"
         },
         {
           "name": "bHasNavigationData",
@@ -32716,7 +33087,8 @@
           "description": "AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "sequenceLength",
@@ -32754,7 +33126,8 @@
           "description": "AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animSequencePath",
@@ -32786,7 +33159,8 @@
           "description": "AnimMontage asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "slotName",
@@ -32812,7 +33186,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "chooserPath",
@@ -32894,7 +33269,8 @@
           "description": "StaticMesh asset path",
           "aliases": [
             "meshPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "enabled",
@@ -32917,7 +33293,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "dormancy",
@@ -32934,7 +33311,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "loadOnClient",
@@ -32951,7 +33329,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "netPriority",
@@ -32980,7 +33359,8 @@
           "name": "systemPath",
           "type": "string",
           "required": false,
-          "description": "NiagaraSystem whose emitter stack holds the CustomHLSL node"
+          "description": "NiagaraSystem whose emitter stack holds the CustomHLSL node",
+          "role": "editTarget"
         },
         {
           "name": "stackContext",
@@ -33028,7 +33408,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "stackContext",
@@ -33075,7 +33456,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "stackContext",
@@ -33116,7 +33498,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "moduleName",
@@ -33242,7 +33625,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "moduleName",
@@ -33292,7 +33676,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -33333,7 +33718,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "graphName",
@@ -33436,7 +33822,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "onlyRelevantToOwner",
@@ -33456,7 +33843,8 @@
           "description": "PCGGraph asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeName",
@@ -33570,7 +33958,8 @@
           "name": "inputActionPath",
           "type": "string",
           "required": true,
-          "description": "InputAction asset path"
+          "description": "InputAction asset path",
+          "role": "editTarget"
         },
         {
           "name": "mappingName",
@@ -33608,7 +33997,8 @@
           "description": "PoseSearchDatabase asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "clips",
@@ -33634,7 +34024,8 @@
           "description": "PoseSearchDatabase asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "continuingPoseCostBias",
@@ -33690,7 +34081,8 @@
           "description": "PoseSearchDatabase asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "schemaPath",
@@ -33748,7 +34140,8 @@
           "name": "spawnerPath",
           "type": "string",
           "required": true,
-          "description": "ProceduralFoliageSpawner asset path"
+          "description": "ProceduralFoliageSpawner asset path",
+          "role": "editTarget"
         },
         {
           "name": "foliageTypePaths",
@@ -33782,7 +34175,8 @@
           "aliases": [
             "path",
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "propertyName",
@@ -33811,7 +34205,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "variableName",
@@ -33861,7 +34256,8 @@
           "name": "systemPath",
           "type": "string",
           "required": true,
-          "description": "NiagaraSystem asset path"
+          "description": "NiagaraSystem asset path",
+          "role": "editTarget"
         },
         {
           "name": "rendererIndex",
@@ -33902,7 +34298,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "replicateMovement",
@@ -33919,7 +34316,8 @@
           "name": "blueprintPath",
           "type": "string",
           "required": true,
-          "description": "Actor Blueprint asset path"
+          "description": "Actor Blueprint asset path",
+          "role": "editTarget"
         },
         {
           "name": "replicates",
@@ -33939,7 +34337,8 @@
           "description": "AnimSequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "enableRootMotion",
@@ -33978,7 +34377,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "widgetName",
@@ -34203,7 +34603,8 @@
           "aliases": [
             "assetPath",
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "trackType",
@@ -34261,7 +34662,8 @@
           "aliases": [
             "assetPath",
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "startSeconds",
@@ -34285,7 +34687,8 @@
           "type": "array",
           "required": true,
           "description": "AnimSequences to write, or montages when resolveFromMontages is on",
-          "items": "string"
+          "items": "string",
+          "role": "editTarget"
         },
         {
           "name": "properties",
@@ -34350,7 +34753,8 @@
           "description": "SkeletalMesh asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "slots",
@@ -34368,7 +34772,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "SkeletalMesh asset path"
+          "description": "SkeletalMesh asset path",
+          "role": "editTarget"
         },
         {
           "name": "enabled",
@@ -34398,7 +34803,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "SkeletalMesh asset path"
+          "description": "SkeletalMesh asset path",
+          "role": "editTarget"
         },
         {
           "name": "edits",
@@ -34456,7 +34862,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "SmartObjectDefinition asset path"
+          "description": "SmartObjectDefinition asset path",
+          "role": "editTarget"
         },
         {
           "name": "slotIndex",
@@ -34497,7 +34904,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StaticMesh or SkeletalMesh asset path"
+          "description": "StaticMesh or SkeletalMesh asset path",
+          "role": "editTarget"
         },
         {
           "name": "socketName",
@@ -34535,7 +34943,8 @@
           "description": "Sound asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "attenuationPath",
@@ -34555,7 +34964,8 @@
           "description": "Sound asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "soundClassPath",
@@ -34575,7 +34985,8 @@
           "description": "SoundClass to reparent",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "parentPath",
@@ -34595,7 +35006,8 @@
           "description": "Sound asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "concurrencyPath",
@@ -34615,7 +35027,8 @@
           "description": "Sound asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "submixPath",
@@ -34770,7 +35183,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "stateMachineName",
@@ -34802,7 +35216,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "stateMachineName",
@@ -34825,7 +35240,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "nodeId",
@@ -34854,7 +35270,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "nodeId",
@@ -34883,7 +35300,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "nodeId",
@@ -34912,7 +35330,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "nodeId",
@@ -34941,7 +35360,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "nodeId",
@@ -34964,7 +35384,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "parameters",
@@ -34982,7 +35403,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "schema",
@@ -34999,7 +35421,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -35046,7 +35469,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -35081,7 +35505,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -35116,7 +35541,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -35157,7 +35583,8 @@
           "name": "assetPath",
           "type": "string",
           "required": true,
-          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+          "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+          "role": "editTarget"
         },
         {
           "name": "stateId",
@@ -35201,7 +35628,8 @@
           "description": "PCGGraph asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeName",
@@ -35286,7 +35714,8 @@
           "description": "StringTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "key",
@@ -35318,7 +35747,8 @@
           "description": "UserDefinedStruct asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "defaultValue",
@@ -35347,7 +35777,8 @@
           "name": "submixPath",
           "type": "string",
           "required": true,
-          "description": "SoundSubmix to reparent"
+          "description": "SoundSubmix to reparent",
+          "role": "editTarget"
         },
         {
           "name": "parentPath",
@@ -35367,7 +35798,8 @@
           "description": "AnimSequence asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "markers",
@@ -35428,7 +35860,8 @@
           "description": "Texture2D asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "settings",
@@ -35509,7 +35942,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "stateMachineName",
@@ -35553,7 +35987,8 @@
           "description": "AnimBlueprint asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "stateMachineName",
@@ -35603,7 +36038,8 @@
           "description": "StaticMesh or SkeletalMesh asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "lodIndex",
@@ -35672,7 +36108,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -35698,7 +36135,8 @@
           "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "name",
@@ -35929,7 +36367,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rules",
@@ -36017,7 +36456,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "widgetName",
@@ -36056,7 +36496,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "widgetName",
@@ -36358,7 +36799,8 @@
           "description": "SoundCue asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeType",
@@ -36434,7 +36876,8 @@
           "description": "SoundCue asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "childNodeId",
@@ -36466,7 +36909,8 @@
           "description": "SoundCue asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "childNodeId",
@@ -36512,7 +36956,8 @@
           "description": "SoundCue asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeId",
@@ -37617,7 +38062,8 @@
           "description": "StaticMesh or SkeletalMesh asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "lodIndex",
@@ -37722,7 +38168,8 @@
           "description": "SkeletalMesh asset path",
           "aliases": [
             "assetPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "lodIndex",
@@ -37757,7 +38204,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "animationName",
@@ -37811,7 +38259,8 @@
           "description": "PCGGraph asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "nodeName",
@@ -37831,7 +38280,8 @@
           "description": "StaticMesh or SkeletalMesh asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "lodIndex",
@@ -37930,7 +38380,8 @@
           "description": "DataTable asset path",
           "aliases": [
             "path"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "rowName",
@@ -38154,7 +38605,8 @@
           "aliases": [
             "path",
             "widgetBlueprintPath"
-          ]
+          ],
+          "role": "editTarget"
         },
         {
           "name": "wrapperClass",

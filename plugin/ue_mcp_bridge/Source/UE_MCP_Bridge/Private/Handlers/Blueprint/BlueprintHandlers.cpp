@@ -126,7 +126,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// The contract values name no class, so the parent class lookup refuses the
 	// call before anything is created, on either branch.
 	Registry.RegisterHandler(TEXT("create_blueprint"), &CreateBlueprint, {
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away")).Alias(TEXT("path")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Asset name; with packagePath, the same destination as assetPath")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder, used with name")),
 		MCPParam::Optional(TEXT("parentClass"), EType::String, TEXT("Parent class: short name or full path (default Actor)")),
@@ -137,13 +137,13 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("includeComponentProperties"), EType::Boolean, TEXT("Dump UPROPERTY name, type and value per component template (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("add_variable"), &AddVariable, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecVarName,
 		SpecVarType,
 		SpecOnConflict,
 	});
 	Registry.RegisterHandler(TEXT("add_component"), &AddComponent, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("componentClass"), EType::String, TEXT("Component class: a short name such as ChildActorComponent, or a full path")),
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Name of the new component (default: componentClass)")),
 		SpecOnConflict,
@@ -151,11 +151,11 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("childActorClass"), EType::String, TEXT("ChildActorClass for an added ChildActorComponent: a Blueprint path with or without _C, or a C++ class")),
 	});
 	Registry.RegisterHandler(TEXT("add_blueprint_interface"), &AddBlueprintInterface, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("interfacePath"), EType::String, TEXT("Interface class path")),
 	});
 	Registry.RegisterHandler(TEXT("compile_blueprint"), &CompileBlueprint, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 	});
 	Registry.RegisterHandler(TEXT("search_node_types"), &SearchNodeTypes, {
 		MCPParam::Required(TEXT("query"), EType::String, TEXT("Words to match against the C++ name, the palette label and Keywords metadata")),
@@ -176,7 +176,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows to return on this page (default 200, max 2000)")),
 	});
 	Registry.RegisterHandler(TEXT("set_variable_properties"), &SetVariableProperties, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecVarName,
 		MCPParam::Optional(TEXT("editFlag"), EType::String, TEXT("EditAnywhere, EditDefaultsOnly, EditInstanceOnly or none: the value list_variables reports")),
 		MCPParam::Optional(TEXT("instanceEditable"), EType::Boolean, TEXT("Two-state shorthand for editFlag; mutually exclusive with it")),
@@ -186,7 +186,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("exposeOnSpawn"), EType::Boolean, TEXT("ExposeOnSpawn flag")),
 	});
 	Registry.RegisterHandler(TEXT("create_function"), &CreateFunction, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecFunctionName,
 		SpecOnConflict,
 	});
@@ -197,7 +197,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows to return on this page (default 200, max 2000)")),
 	});
 	Registry.RegisterHandler(TEXT("add_node"), &AddNode, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		MCPParam::Required(TEXT("nodeClass"), EType::String, TEXT("Node class or short alias such as CallFunction, CallParent or CustomEvent")),
 		MCPParam::Optional(TEXT("nodeParams"), EType::Object, TEXT("Node-specific settings, such as functionName and className for a CallFunction node")),
@@ -217,25 +217,25 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("read_blueprint_graph"), &ReadBlueprintGraph, ReadBlueprintGraphTimeoutSeconds);
 	Registry.RegisterHandler(TEXT("add_event_dispatcher"), &AddEventDispatcher, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Dispatcher name")),
 		SpecParameters,
 	});
 	Registry.RegisterHandler(TEXT("rename_function"), &RenameFunction, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("oldName"), EType::String, TEXT("Current name")),
 		MCPParam::Required(TEXT("newName"), EType::String, TEXT("New name")),
 	});
 	Registry.RegisterHandler(TEXT("delete_function"), &DeleteFunction, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecFunctionName,
 	});
 	Registry.RegisterHandler(TEXT("create_blueprint_interface"), &CreateBlueprintInterface, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Full destination of the new Blueprint Interface")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Full destination of the new Blueprint Interface")).Alias(TEXT("path")).Role(EMCPParamRole::EditTarget),
 		SpecOnConflict,
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves an interface at the contract path; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("override_function"), &OverrideFunction, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecFunctionName,
 		MCPParam::Optional(TEXT("source"), EType::String, TEXT("Advisory hint for where the function comes from: auto (default), interface or parent. Echoed back")),
 		MCPParam::Optional(TEXT("preferFunction"), EType::Boolean, TEXT("Force the function-graph form even when the function could be placed as an override event")),
@@ -245,7 +245,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecAssetPath,
 	});
 	Registry.RegisterHandler(TEXT("connect_pins"), &ConnectPins, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		SpecGraphSelector,
 		MCPParam::Required(TEXT("sourceNodeId"), EType::String, TEXT("Source node GUID, as get_connections and find_nodes report it, or its title")).Alias(TEXT("sourceNode")),
@@ -256,20 +256,20 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("breakExistingTarget"), EType::Boolean, TEXT("Break every existing link on the target pin first")),
 	});
 	Registry.RegisterHandler(TEXT("delete_node"), &DeleteNode, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		SpecGraphSelector,
 		SpecNodeId,
 	});
 	Registry.RegisterHandler(TEXT("refresh_node"), &RefreshNode, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		SpecGraphSelector,
 		SpecNodeId,
 		MCPParam::Optional(TEXT("breakOrphanedPins"), EType::Boolean, TEXT("Also break the links holding orphaned pins alive, which removes those pins")),
 	});
 	Registry.RegisterHandler(TEXT("disconnect_pins"), &DisconnectPins, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		SpecGraphSelector,
 		SpecNodeId,
@@ -278,7 +278,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("linkedPinName"), EType::String, TEXT("With linkedNodeId, break only the link to this pin")),
 	});
 	Registry.RegisterHandler(TEXT("set_node_property"), &SetNodeProperty, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		SpecNodeId,
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Pin or struct property name")).Alias(TEXT("pinName")),
@@ -292,7 +292,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("graphName"), EType::String, TEXT("Graph name to resolve")),
 	});
 	Registry.RegisterHandler(TEXT("set_blueprint_component_property"), &SetComponentProperty, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecComponentName,
 		SpecPropertyName,
 		SpecValue,
@@ -300,46 +300,46 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #442: dedicated OverrideMaterials writer that takes a materialPaths array
 	// directly, avoiding any value coercion concerns on the generic path.
 	Registry.RegisterHandler(TEXT("set_component_override_materials"), &SetComponentOverrideMaterials, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecComponentName,
 		MCPParam::Required(TEXT("materialPaths"), EType::Array, TEXT("Material asset paths; an empty array clears")).Items(EType::String),
 	});
 	// #457: timeline track authoring (float/vector/color/event) on a Blueprint.
 	Registry.RegisterHandler(TEXT("add_timeline_track"), &AddTimelineTrack, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("timelineName"), EType::String, TEXT("Timeline name")),
 		MCPParam::Required(TEXT("trackName"), EType::String, TEXT("Track name within the timeline")),
 		MCPParam::Optional(TEXT("trackType"), EType::String, TEXT("float (default), vector, color or event")),
 		MCPParam::Optional(TEXT("keyframes"), EType::Array, TEXT("[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color")).Items(EType::Object),
 	});
 	Registry.RegisterHandler(TEXT("set_capsule_size"), &SetCapsuleSize, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecComponentName,
 		MCPParam::Optional(TEXT("halfHeight"), EType::Number, TEXT("Capsule half height (unscaled)")),
 		MCPParam::Optional(TEXT("radius"), EType::Number, TEXT("Capsule radius (unscaled)")),
 	});
 	Registry.RegisterHandler(TEXT("set_class_default"), &SetClassDefault, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecPropertyName,
 		SpecValue,
 	});
 	Registry.RegisterHandler(TEXT("remove_component"), &RemoveComponent, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecComponentName,
 	});
 	Registry.RegisterHandler(TEXT("delete_variable"), &DeleteVariable, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecVarName,
 	});
 	Registry.RegisterHandler(TEXT("add_function_parameter"), &AddFunctionParameter, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecFunctionName,
 		MCPParam::Required(TEXT("parameterName"), EType::String, TEXT("Parameter name")),
 		MCPParam::Optional(TEXT("parameterType"), EType::String, TEXT("Parameter type in the add_variable vocabulary, containers included (default float)")),
 		MCPParam::Optional(TEXT("isOutput"), EType::Boolean, TEXT("An output parameter rather than an input (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("set_variable_default"), &SetVariableDefault, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecVarName,
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New default value, as a string")),
 	});
@@ -367,10 +367,10 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// v0.7.11 - BP authoring depth
 	Registry.RegisterHandler(TEXT("duplicate_blueprint"), &DuplicateBlueprint, {
 		MCPParam::Required(TEXT("sourcePath"), EType::String, TEXT("Blueprint asset to duplicate")),
-		MCPParam::Required(TEXT("destinationPath"), EType::String, TEXT("Full destination asset path")),
+		MCPParam::Required(TEXT("destinationPath"), EType::String, TEXT("Full destination asset path")).Role(EMCPParamRole::EditTarget),
 	});
 	Registry.RegisterHandler(TEXT("add_local_variable"), &AddLocalVariable, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecFunctionName,
 		SpecVarName,
 		SpecVarType,
@@ -395,22 +395,22 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Pin or reflected node property name")).Alias(TEXT("pinName")),
 	});
 	Registry.RegisterHandler(TEXT("reparent_component"), &ReparentComponent, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecComponentName,
 		MCPParam::Required(TEXT("newParent"), EType::String, TEXT("New parent component name")),
 	});
 	Registry.RegisterHandler(TEXT("reparent_blueprint"), &ReparentBlueprint, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("parentClass"), EType::String, TEXT("New parent class: short name or full path")),
 	});
 	Registry.RegisterHandler(TEXT("flush_inheritable_component_handler"), &FlushInheritableComponentHandler, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 	});
 	Registry.RegisterHandler(TEXT("flush_blueprint_component_templates"), &FlushComponentTemplates, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 	});
 	Registry.RegisterHandler(TEXT("set_actor_tick_settings"), &SetActorTickSettings, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("bCanEverTick"), EType::Boolean, TEXT("PrimaryActorTick.bCanEverTick")),
 		MCPParam::Optional(TEXT("bStartWithTickEnabled"), EType::Boolean, TEXT("PrimaryActorTick.bStartWithTickEnabled")),
 		MCPParam::Optional(TEXT("TickInterval"), EType::Number, TEXT("PrimaryActorTick.TickInterval in seconds")),
@@ -430,7 +430,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("nodeIds"), EType::Array, TEXT("Node GUIDs or names to export (omit for the whole graph)")).Items(EType::String),
 	});
 	Registry.RegisterHandler(TEXT("import_nodes_t3d"), &ImportNodesT3D, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		MCPParam::Required(TEXT("t3d"), EType::String, TEXT("T3D blob from export_nodes_t3d, or copied from the Blueprint graph editor")).Alias(TEXT("text")),
 		MCPParam::Optional(TEXT("posX"), EType::Number, TEXT("Re-center pasted nodes around this X (with posY)")),
@@ -456,27 +456,27 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// v1.0.0-rc.15 - agent-friendly BP authoring
 	Registry.RegisterHandler(TEXT("compile_blueprints"), &CompileBlueprints, {
-		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("Blueprint asset paths to compile")).Items(EType::String),
+		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("Blueprint asset paths to compile")).Items(EType::String).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Persist on success (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("cleanup_graph"), &CleanupGraph, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Graph to clean (default: every graph)")),
 	});
 	Registry.RegisterHandler(TEXT("connect_pins_batch"), &ConnectPinsBatch, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		MCPParam::Required(TEXT("connections"), EType::Array, TEXT("[{sourceNode, sourcePin, targetNode, targetPin}]")).Items(EType::Object),
 	});
 	Registry.RegisterHandler(TEXT("set_node_position"), &SetNodePosition, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		SpecNodeId,
 		SpecPosX,
 		SpecPosY,
 	});
 	Registry.RegisterHandler(TEXT("auto_layout_graph"), &AutoLayoutGraph, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		MCPParam::Optional(TEXT("columnGap"), EType::Integer, TEXT("Horizontal spacing between columns (default 360)")),
 		MCPParam::Optional(TEXT("rowGap"), EType::Integer, TEXT("Vertical spacing between rows (default 200)")),
@@ -563,12 +563,12 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecAssetPathOrBlueprintPath,
 	});
 	Registry.RegisterHandler(TEXT("remove_blueprint_interface"), &RemoveBlueprintInterface, {
-		SpecAssetPathOrBlueprintPath,
+		SpecAssetPathOrBlueprintPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("interfacePath"), EType::String, TEXT("Interface class path, as list_interfaces reports it")),
 		MCPParam::Optional(TEXT("preserveFunctions"), EType::Boolean, TEXT("Keep the implementations as ordinary Blueprint functions (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("set_function_properties"), &SetFunctionProperties, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecFunctionName,
 		MCPParam::Optional(TEXT("pure"), EType::Boolean, TEXT("BlueprintPure: no side effects, and the node loses its exec pins")),
 		MCPParam::Optional(TEXT("isConst"), EType::Boolean, TEXT("const: the function only reads state")),
@@ -589,7 +589,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("graphName"), EType::String, TEXT("Narrows an eventName search to one graph")),
 	});
 	Registry.RegisterHandler(TEXT("edit_graph_parameters"), &EditGraphParameters, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("op"), EType::String, TEXT("add, remove, rename, set_type, set_default or reorder")),
 		MCPParam::Optional(TEXT("functionName"), EType::String, TEXT("Function, macro or dispatcher signature to edit; name exactly one of functionName and eventName")),
 		MCPParam::Optional(TEXT("eventName"), EType::String, TEXT("Custom event to edit")),
@@ -602,7 +602,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecOrder,
 	});
 	Registry.RegisterHandler(TEXT("rename_blueprint_variable"), &RenameBlueprintVariable, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("oldName"), EType::String, TEXT("Current name")),
 		MCPParam::Required(TEXT("newName"), EType::String, TEXT("New name")),
 	});
@@ -612,13 +612,13 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("functionName"), EType::String, TEXT("The function owning a local variable; omit for a member variable")),
 	});
 	Registry.RegisterHandler(TEXT("set_blueprint_variable_metadata"), &SetBlueprintVariableMetadata, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecVarName,
 		MCPParam::Required(TEXT("metadata"), EType::Object, TEXT("{key: 'value'} pairs; a null value removes that key. Unreal stores every metadata value as text")),
 		MCPParam::Optional(TEXT("functionName"), EType::String, TEXT("The function owning a local variable; omit for a member variable")),
 	});
 	Registry.RegisterHandler(TEXT("edit_local_variable"), &EditLocalVariable, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecFunctionName,
 		SpecVarName,
 		MCPParam::Required(TEXT("op"), EType::String, TEXT("rename, remove, set_type or set_default")),
@@ -630,11 +630,11 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecAssetPathOrBlueprintPath,
 	});
 	Registry.RegisterHandler(TEXT("remove_event_dispatcher"), &RemoveEventDispatcher, {
-		SpecAssetPathOrBlueprintPath,
+		SpecAssetPathOrBlueprintPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Dispatcher name")),
 	});
 	Registry.RegisterHandler(TEXT("add_custom_event"), &AddCustomEvent, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("eventName"), EType::String, TEXT("Custom event name")),
 		SpecGraphName,
 		SpecParameters,
@@ -645,18 +645,18 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecPosY,
 	});
 	Registry.RegisterHandler(TEXT("create_macro"), &CreateMacro, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("macroName"), EType::String, TEXT("Macro graph name")),
 		MCPParam::Optional(TEXT("inputs"), EType::Array, TEXT("Input parameters [{name, type}]")).Items(EType::Object),
 		MCPParam::Optional(TEXT("outputs"), EType::Array, TEXT("Output parameters [{name, type}]")).Items(EType::Object),
 		SpecOnConflict,
 	});
 	Registry.RegisterHandler(TEXT("delete_macro"), &DeleteMacro, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("macroName"), EType::String, TEXT("Macro graph name")),
 	});
 	Registry.RegisterHandler(TEXT("delete_graph"), &DeleteGraph, {
-		SpecAssetPath,
+		SpecAssetPath.Role(EMCPParamRole::EditTarget),
 		SpecGraphName,
 		SpecGraphSelector,
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Remove a graph still owned by a live node, or an event graph; both are refused without it")),
@@ -669,11 +669,11 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecEnumPath,
 	});
 	Registry.RegisterHandler(TEXT("reorder_enum_values"), &ReorderEnumValues, {
-		SpecEnumPath,
+		SpecEnumPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("order"), EType::Array, TEXT("The COMPLETE desired order, never a partial list")),
 	});
 	Registry.RegisterHandler(TEXT("set_enum_metadata"), &SetEnumMetadata, {
-		SpecEnumPath,
+		SpecEnumPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("bitflags"), EType::Boolean, TEXT("Mark the enum as a bitflags type")),
 		MCPParam::Optional(TEXT("entries"), EType::Array, TEXT("[{name or index, tooltip}] per-enumerator tooltips")).Items(EType::Object),
 	});
@@ -681,17 +681,17 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecStructPath,
 	});
 	Registry.RegisterHandler(TEXT("set_struct_field_default"), &SetStructFieldDefault, {
-		SpecStructPath,
+		SpecStructPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("defaultValue"), EType::Any, TEXT("Default value as Unreal export text; an empty string clears it")),
 		MCPParam::Optional(TEXT("fieldName"), EType::String, TEXT("Resolve the member by its display or internal name")),
 		MCPParam::Optional(TEXT("fieldGuid"), EType::String, TEXT("Resolve the member by its GUID, which is stable across renames")),
 	});
 	Registry.RegisterHandler(TEXT("reorder_struct_fields"), &ReorderStructFields, {
-		SpecStructPath,
+		SpecStructPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("order"), EType::Array, TEXT("The COMPLETE desired order, never a partial list")),
 	});
 	Registry.RegisterHandler(TEXT("edit_struct_metadata"), &EditStructMetadata, {
-		SpecStructPath,
+		SpecStructPath.Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("tooltip"), EType::String, TEXT("Tooltip")),
 		MCPParam::Optional(TEXT("fields"), EType::Array, TEXT("[{fieldName or fieldGuid, tooltip?, editableOnInstance?, saveGame?, multiLineText?, widget3D?, metadata?}]")).Items(EType::Object),
 	});

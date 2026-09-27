@@ -184,7 +184,7 @@ struct FMCPParamSpec : TMCPBoundedValue<FMCPParamSpec>
 	TArray<FMCPParamVariant> Variants;
 	/** What the parameter addresses. */
 	EMCPParamRole ParamRole = EMCPParamRole::None;
-	/** On an array of objects, the element keys that carry the role; the first one present counts. */
+	/** On an array of objects, the element keys that carry the role; each one present counts. */
 	TArray<FString> RoleKeys;
 	/** The value the handler uses when the parameter is absent. */
 	TSharedPtr<FJsonValue> DefaultValue;

@@ -286,27 +286,27 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		ImcPath(),
 	});
 	Registry.RegisterHandler(TEXT("add_imc_mapping"), &AddImcMapping, {
-		AssetImcPath(),
+		AssetImcPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("inputActionPath"), EType::String, TEXT("InputAction asset path to map")).Alias(TEXT("inputAction")),
 		MCPParam::Required(TEXT("key"), EType::String, TEXT("FKey name to bind")),
 		SaveFlag(),
 	});
 	Registry.RegisterHandler(TEXT("set_mapping_modifiers"), &SetMappingModifiers, {
-		ImcPath(),
+		ImcPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("mappingIndex"), EType::Number, TEXT("Index of the mapping in the IMC (default 0)")),
 		MCPParam::Optional(TEXT("modifiers"), EType::Array, TEXT("Modifier objects: {type, ...props} or {class, properties}. Replaces the mapping's list")).Items(EType::Object),
 		MCPParam::Optional(TEXT("triggers"), EType::Array, TEXT("Trigger objects: {type, ...props} or {class, properties}. Replaces the mapping's list")).Items(EType::Object),
 		SaveFlag(),
 	});
 	Registry.RegisterHandler(TEXT("remove_imc_mapping"), &RemoveImcMapping, {
-		AssetImcPath(),
+		AssetImcPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("mappingIndex"), EType::Number, TEXT("Index of the mapping to remove")),
 		MCPParam::Optional(TEXT("inputActionPath"), EType::String, TEXT("Select the mapping by InputAction (with key)")).Alias(TEXT("inputAction")),
 		MCPParam::Optional(TEXT("key"), EType::String, TEXT("Select the mapping by key (with inputActionPath)")),
 		SaveFlag(),
 	});
 	Registry.RegisterHandler(TEXT("set_imc_mapping_key"), &SetImcMappingKey, {
-		ImcPath(),
+		ImcPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("newKey"), EType::String, TEXT("New FKey name")),
 		MCPParam::Optional(TEXT("mappingIndex"), EType::Number, TEXT("Index of the mapping to rebind")),
 		MCPParam::Optional(TEXT("key"), EType::String, TEXT("Select the mapping by its current key")),
@@ -314,7 +314,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SaveFlag(),
 	});
 	Registry.RegisterHandler(TEXT("set_imc_mapping_action"), &SetImcMappingAction, {
-		ImcPath(),
+		ImcPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("newInputActionPath"), EType::String, TEXT("InputAction the mapping should use")),
 		MCPParam::Optional(TEXT("mappingIndex"), EType::Number, TEXT("Index of the mapping to retarget")),
 		MCPParam::Optional(TEXT("key"), EType::String, TEXT("Select the mapping by its key")),
@@ -328,13 +328,13 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("inputActionPath"), EType::String, TEXT("InputAction asset path")),
 	});
 	Registry.RegisterHandler(TEXT("set_action_triggers"), &SetActionTriggers, {
-		MCPParam::Required(TEXT("inputActionPath"), EType::String, TEXT("InputAction asset path")),
+		MCPParam::Required(TEXT("inputActionPath"), EType::String, TEXT("InputAction asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("triggers"), EType::Array, TEXT("Trigger specs that replace the action's own Triggers array")).Items(EType::Object),
 		MCPParam::Optional(TEXT("modifiers"), EType::Array, TEXT("Modifier specs that replace the action's own Modifiers array")).Items(EType::Object),
 		MCPParam::Optional(TEXT("clear"), EType::Boolean, TEXT("Empty both arrays; an omitted array then means empty rather than left alone")),
 	});
 	Registry.RegisterHandler(TEXT("set_player_mappable_settings"), &SetPlayerMappableSettings, {
-		MCPParam::Required(TEXT("inputActionPath"), EType::String, TEXT("InputAction asset path")),
+		MCPParam::Required(TEXT("inputActionPath"), EType::String, TEXT("InputAction asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("mappingName"), EType::String, TEXT("Stable FName saved with the player mapping; must be non-empty")),
 		MCPParam::Optional(TEXT("displayName"), EType::String, TEXT("Display name written onto UPlayerMappableKeySettings")),
 		MCPParam::Optional(TEXT("displayCategory"), EType::String, TEXT("Display category (Movement, Combat, ...) written onto UPlayerMappableKeySettings")),
@@ -370,12 +370,12 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("limit"), EType::Number, TEXT("How many classes per kind (default 200)")),
 	});
 	Registry.RegisterHandler(TEXT("remove_mass_trait"), &RemoveMassTrait, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("MassEntityConfigAsset path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("MassEntityConfigAsset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("traitClass"), EType::String, TEXT("Concrete UMassEntityTraitBase subclass to remove, short name or /Script path. Idempotent selector")),
 		MCPParam::Optional(TEXT("index"), EType::Number, TEXT("Positional index into Config.Traits, as read_mass_entity_config reports it")),
 	});
 	Registry.RegisterHandler(TEXT("reorder_mass_traits"), &ReorderMassTraits, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("MassEntityConfigAsset path")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("MassEntityConfigAsset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("order"), EType::Array, TEXT("Current trait indices in the order wanted; must be a full permutation")).Items(EType::Number),
 	});
 	Registry.RegisterHandler(TEXT("validate_mass_entity_config"), &ValidateMassEntityConfig, {
@@ -414,22 +414,22 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		QueryPath(),
 	});
 	Registry.RegisterHandler(TEXT("add_eqs_generator"), &AddEqsGenerator, {
-		QueryPath(),
+		QueryPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("generatorClass"), EType::String, TEXT("Generator class, short name (OnCircle) or full path")),
 	});
 	Registry.RegisterHandler(TEXT("add_eqs_test"), &AddEqsTest, {
-		QueryPath(),
+		QueryPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("testClass"), EType::String, TEXT("Test class, short name (Distance) or full path")),
 		MCPParam::Optional(TEXT("optionIndex"), EType::Number, TEXT("Option to add the test to (default 0)")),
 		MCPParam::Optional(TEXT("purpose"), EType::String, TEXT("filter | score | both")),
 	});
 	Registry.RegisterHandler(TEXT("remove_eqs_test"), &RemoveEqsTest, {
-		QueryPath(),
+		QueryPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("testIndex"), EType::Number, TEXT("Test to remove, as read_eqs_query reports it")),
 		MCPParam::Optional(TEXT("optionIndex"), EType::Number, TEXT("Option the test belongs to (default 0)")),
 	});
 	Registry.RegisterHandler(TEXT("remove_eqs_option"), &RemoveEqsOption, {
-		QueryPath(),
+		QueryPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("optionIndex"), EType::Number, TEXT("Option to remove, as read_eqs_query reports it")),
 	});
 	Registry.RegisterHandler(TEXT("get_bt_runtime"), &GetBtRuntime, {
@@ -492,7 +492,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		PerceptionComponent(),
 	});
 	Registry.RegisterHandler(TEXT("remove_sense"), &RemoveSense, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint carrying the AIPerceptionComponent template")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint carrying the AIPerceptionComponent template")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("index"), EType::Number, TEXT("Index of the sense config to remove, as read_perception reports it")),
 		MCPParam::Optional(TEXT("senseType"), EType::String, TEXT("Sense to remove when index is omitted: Sight | Hearing | Damage | Touch | Team | Prediction | Blueprint")),
 		PerceptionComponent(),
@@ -528,7 +528,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		LivePie(),
 	});
 	Registry.RegisterHandler(TEXT("reorder_eqs_tests"), &ReorderEqsTests, {
-		QueryPath(),
+		QueryPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("order"), EType::Array, TEXT("Current test indices in the order wanted; must be a full permutation")).Items(EType::Number),
 		MCPParam::Optional(TEXT("optionIndex"), EType::Number, TEXT("Option whose tests to reorder (default 0)")),
 	});
@@ -595,7 +595,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("gameModeClass"), EType::String, TEXT("GameMode class or Blueprint path")).Alias(TEXT("gameModePath")),
 	});
 	Registry.RegisterHandler(TEXT("add_blackboard_key"), &AddBlackboardKey, {
-		MCPParam::Required(TEXT("blackboardPath"), EType::String, TEXT("BlackboardData asset path")),
+		MCPParam::Required(TEXT("blackboardPath"), EType::String, TEXT("BlackboardData asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("keyName"), EType::String, TEXT("Key name to add")),
 		MCPParam::Optional(TEXT("keyType"), EType::String, TEXT("Bool (default) | Int | Float | String | Name | Vector | Rotator | Object | Class | Enum")),
 		MCPParam::Optional(TEXT("baseClass"), EType::String, TEXT("Base class for an Object/Class key (e.g. /Script/Engine.Actor); for an Enum key, the enum when enumType is absent")),
@@ -604,12 +604,12 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #469: set parent on BlackboardData so a child Blackboard can extend the
 	// parent's keys (canonical UE pattern for extending third-party AI assets).
 	Registry.RegisterHandler(TEXT("set_blackboard_parent"), &SetBlackboardParent, {
-		MCPParam::Required(TEXT("blackboardPath"), EType::String, TEXT("Child BlackboardData asset path")),
+		MCPParam::Required(TEXT("blackboardPath"), EType::String, TEXT("Child BlackboardData asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("parentPath"), EType::String, TEXT("Parent BlackboardData asset path; None or omitted clears it")),
 		MCPParam::Optional(TEXT("autoPruneDuplicateKeys"), EType::Boolean, TEXT("Remove own keys the parent chain already defines (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("remove_blackboard_key"), &RemoveBlackboardKey, {
-		MCPParam::Required(TEXT("blackboardPath"), EType::String, TEXT("BlackboardData asset path")),
+		MCPParam::Required(TEXT("blackboardPath"), EType::String, TEXT("BlackboardData asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("keyName"), EType::String, TEXT("Key name to remove")),
 	});
 	Registry.RegisterHandler(TEXT("read_blackboard"), &ReadBlackboard, {
@@ -622,7 +622,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		PageLimit(),
 	});
 	Registry.RegisterHandler(TEXT("set_behavior_tree_blackboard"), &SetBehaviorTreeBlackboard, {
-		MCPParam::Required(TEXT("behaviorTreePath"), EType::String, TEXT("BehaviorTree asset path")),
+		MCPParam::Required(TEXT("behaviorTreePath"), EType::String, TEXT("BehaviorTree asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("blackboardPath"), EType::String, TEXT("BlackboardData asset to bind")),
 	});
 	Registry.RegisterHandler(TEXT("rebuild_navigation"), &RebuildNavmesh, TArray<FMCPParamSpec>(),
@@ -670,7 +670,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// under both names because a caller reaching for the task-specific one
 	// should not have to know it is the general node setter.
 	Registry.RegisterHandler(TEXT("set_bt_node_property"), &SetBTNodeProperty, {
-		BTAssetPath(TEXT("BehaviorTree asset path")),
+		BTAssetPath(TEXT("BehaviorTree asset path")).Role(EMCPParamRole::EditTarget),
 		BTNodePath(),
 		BTNodeName(),
 		BTNodeClass(),
@@ -680,7 +680,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		BTProperties(),
 	});
 	Registry.RegisterHandler(TEXT("set_bt_task_property"), &SetBTNodeProperty, {
-		BTAssetPath(TEXT("BehaviorTree asset path")),
+		BTAssetPath(TEXT("BehaviorTree asset path")).Role(EMCPParamRole::EditTarget),
 		BTNodePath(),
 		BTNodeName(),
 		BTNodeClass(),
@@ -696,7 +696,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		BTAssetPath(TEXT("BehaviorTree asset path")),
 	});
 	Registry.RegisterHandler(TEXT("add_bt_node"), &AddBTNode, {
-		BTAssetPath(TEXT("BehaviorTree asset path")),
+		BTAssetPath(TEXT("BehaviorTree asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeClass"), EType::String, TEXT("Concrete BT node class to place, e.g. BTComposite_Selector or BTTask_MoveTo; list_bt_node_classes enumerates them")),
 		MCPParam::Optional(TEXT("nodeCategory"), EType::String, TEXT("composite | task | decorator | service. Inferred from nodeClass when omitted; supplying it fails loudly on a mismatch")),
 		BTParent(),
@@ -706,33 +706,33 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("blackboardKeys"), EType::Object, TEXT("Map of FBlackboardKeySelector property to blackboard key name, e.g. {BlackboardKey: 'TargetActor'}; resolved against the tree's blackboard")),
 	});
 	Registry.RegisterHandler(TEXT("move_bt_node"), &MoveBTNode, {
-		BTAssetPath(TEXT("BehaviorTree asset path")),
+		BTAssetPath(TEXT("BehaviorTree asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("node"), EType::String, TEXT("Node to move: a guid, a runtime address, or a unique node name")).Alias(TEXT("nodePath")),
 		BTParent(),
 		BTIndex(),
 	});
 	Registry.RegisterHandler(TEXT("remove_bt_node"), &RemoveBTNode, {
-		BTAssetPath(TEXT("BehaviorTree asset path")),
+		BTAssetPath(TEXT("BehaviorTree asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("node"), EType::String, TEXT("Node to remove: a guid, a runtime address, or a unique node name")).Alias(TEXT("nodePath")),
 	});
 	Registry.RegisterHandler(TEXT("add_perception_component"), &AddPerceptionComponent, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("senses"), EType::Array, TEXT("Sense names (Sight, Hearing, Damage, Touch, Team, Prediction), AISenseConfig_* names or class paths")).Items(EType::String),
 	});
 	Registry.RegisterHandler(TEXT("configure_ai_perception_sense"), &ConfigureAiPerceptionSense, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("senseType"), EType::String, TEXT("Sight (default) | Hearing | Damage | Touch | Team | Prediction | Blueprint")),
 		MCPParam::Optional(TEXT("settings"), EType::Object, TEXT("Per-sense property writes, e.g. {SightRadius: 1500}")),
 		PerceptionComponent(),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_component"), &AddStateTreeComponent, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 	});
 	Registry.RegisterHandler(TEXT("add_smart_object_component"), &AddSmartObjectComponent, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 	});
 	Registry.RegisterHandler(TEXT("add_smart_object_slot"), &AddSmartObjectSlot, {
-		SlotAsset(),
+		SlotAsset().Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Slot name")),
 		MCPParam::Optional(TEXT("offset"), EType::Vec3, TEXT("Slot offset {x,y,z}")),
 		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("Slot rotation {pitch,yaw,roll}")),
@@ -741,7 +741,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		InstanceProperties(),
 	});
 	Registry.RegisterHandler(TEXT("set_smart_object_slot"), &SetSmartObjectSlot, {
-		SlotAsset(),
+		SlotAsset().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("slotIndex"), EType::Number, TEXT("Slot index")),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Slot name")),
 		MCPParam::Optional(TEXT("offset"), EType::Vec3, TEXT("Slot offset {x,y,z}")),
@@ -749,20 +749,20 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("tags"), EType::Array, TEXT("Slot runtime tags (gameplay tag strings or struct shapes)")),
 	});
 	Registry.RegisterHandler(TEXT("remove_smart_object_slot"), &RemoveSmartObjectSlot, {
-		SlotAsset(),
+		SlotAsset().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("slotIndex"), EType::Number, TEXT("Slot index to remove")),
 	});
 	Registry.RegisterHandler(TEXT("list_smart_object_slots"), &ListSmartObjectSlots, {
 		SlotAsset(),
 	});
 	Registry.RegisterHandler(TEXT("add_smart_object_slot_behavior"), &AddSmartObjectSlotBehavior, {
-		SlotAsset(),
+		SlotAsset().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("slotIndex"), EType::Number, TEXT("Slot index")),
 		MCPParam::Required(TEXT("behaviorClass"), EType::String, TEXT("Behavior definition asset path or class path")),
 		InstanceProperties(),
 	});
 	Registry.RegisterHandler(TEXT("add_smart_object_default_behavior"), &AddSmartObjectDefaultBehavior, {
-		SlotAsset(),
+		SlotAsset().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("behaviorClass"), EType::String, TEXT("Behavior definition asset path or class path")),
 		InstanceProperties(),
 	});

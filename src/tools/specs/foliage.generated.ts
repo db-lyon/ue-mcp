@@ -118,7 +118,8 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": false,
         "description": "Explicit FoliageType asset paths",
-        "items": "string"
+        "items": "string",
+        "role": "editTarget"
       },
       {
         "name": "directory",
@@ -411,7 +412,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "FoliageType asset path, or the name of a type already placed in the open level",
         "aliases": [
           "foliageTypeName"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "settings",
@@ -428,7 +430,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "spawnerPath",
         "type": "string",
         "required": true,
-        "description": "ProceduralFoliageSpawner asset path"
+        "description": "ProceduralFoliageSpawner asset path",
+        "role": "editTarget"
       },
       {
         "name": "foliageTypePaths",

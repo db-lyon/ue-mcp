@@ -105,7 +105,7 @@ export interface ParamSpec extends ValueBounds {
   oneOf?: ParamOneOf;
   /** What the parameter addresses: `editTarget` is the asset the call writes. */
   role?: ParamRole;
-  /** On an array of objects, the element keys that carry the role; the first one present counts. */
+  /** On an array of objects, the element keys that carry the role; each one present counts. */
   roleKeys?: string[];
   /** The value the handler uses when the parameter is absent. */
   default?: unknown;

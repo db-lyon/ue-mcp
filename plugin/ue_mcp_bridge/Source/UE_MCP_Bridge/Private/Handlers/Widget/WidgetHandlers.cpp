@@ -345,7 +345,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		Limit(TEXT("Rows to return on this page (default 200, max 2000)")),
 	});
 	Registry.RegisterHandler(TEXT("create_widget_blueprint"), &CreateWidgetBlueprint, {
-		CreateAssetPath(),
+		CreateAssetPath().Role(EMCPParamRole::EditTarget),
 		CreateName(),
 		CreatePackagePath(TEXT("Folder for name (default /Game/UI/Widgets)")),
 		MCPParam::Optional(TEXT("parentClass"), EType::String, TEXT("UUserWidget subclass: a short name or a class path (default UserWidget)")),
@@ -357,19 +357,19 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("extract_widget_subtree"), &ExtractWidgetSubtree, {
 		MCPParam::Required(TEXT("sourceAssetPath"), EType::String, TEXT("WidgetBlueprint the subtree is read from")).Alias(TEXT("sourcePath")),
 		MCPParam::Required(TEXT("sourceWidgetName"), EType::String, TEXT("Widget in the source that becomes the extracted root")).Alias(TEXT("widgetName")).Alias(TEXT("widgetDisplayName")),
-		MCPParam::Required(TEXT("destinationAssetPath"), EType::String, TEXT("Destination package path, including the new asset name")).Alias(TEXT("destinationPath")),
+		MCPParam::Required(TEXT("destinationAssetPath"), EType::String, TEXT("Destination package path, including the new asset name")).Alias(TEXT("destinationPath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("destinationParentClass"), EType::String, TEXT("UUserWidget subclass for the destination (default UserWidget)")),
 		MCPParam::Optional(TEXT("destinationRootName"), EType::String, TEXT("Name override for the extracted root; descendants keep their names")),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Plan only, no asset is created or saved (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("create_editor_utility_widget"), &CreateEditorUtilityWidget, {
-		CreateAssetPath(),
+		CreateAssetPath().Role(EMCPParamRole::EditTarget),
 		CreateName(),
 		CreatePackagePath(TEXT("Folder for name (default /Game/EditorUtilities)")),
 		CreateOnConflict(),
 	}, MCPSpec::AtLeastOne({ { TEXT("assetPath") }, { TEXT("name") } }).ContractExempt(TEXT("Creates and saves an Editor Utility Widget under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("create_editor_utility_blueprint"), &CreateEditorUtilityBlueprint, {
-		CreateAssetPath(),
+		CreateAssetPath().Role(EMCPParamRole::EditTarget),
 		CreateName(),
 		CreatePackagePath(TEXT("Folder for name (default /Game/EditorUtilities)")),
 		CreateOnConflict(),
@@ -389,28 +389,28 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("filterProperty"), EType::String, TEXT("Only bindings of this property (#530)")),
 	});
 	Registry.RegisterHandler(TEXT("clear_widget_binding"), &ClearWidgetBinding, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		WidgetName(),
 		MCPParam::Optional(TEXT("propertyName"), EType::String, TEXT("Reflected property name on the widget")),
 	});
 	Registry.RegisterHandler(TEXT("set_widget_property"), &SetWidgetProperty, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		WidgetName(),
 		PropertyName(),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value as UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8)")).Alias(TEXT("propertyValue")),
 	});
 	Registry.RegisterHandler(TEXT("set_widget_style"), &SetWidgetStyle, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		WidgetName(),
 		PropertyName(),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("JSON object mirroring the style struct, or a scalar")),
 	});
 	Registry.RegisterHandler(TEXT("bulk_set_widget_properties"), &BulkSetWidgetProperties, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("properties"), EType::Array, TEXT("[{widgetName, propertyName, value}] (#563)")).Items(EType::Object),
 	});
 	Registry.RegisterHandler(TEXT("reorder_child"), &ReorderChild, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		WidgetName(),
 		MCPParam::Required(TEXT("index"), EType::Number, TEXT("Target sibling index within the parent panel (#635)")),
 	});
@@ -424,26 +424,26 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		AssetPath(),
 	});
 	Registry.RegisterHandler(TEXT("add_widget"), &AddWidget, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("widgetClass"), EType::String, TEXT("Widget class: a short name (TextBlock, CanvasPanel), a full path, or a Widget Blueprint path")).Alias(TEXT("typeName")),
 		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Name of a widget inside the tree (#798)")).Alias(TEXT("name")).Alias(TEXT("widgetDisplayName")),
 		MCPParam::Optional(TEXT("parentWidgetName"), EType::String, TEXT("Name of the parent panel widget (#798)")).Alias(TEXT("parentWidget")),
 	});
 	Registry.RegisterHandler(TEXT("remove_widget"), &RemoveWidget, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		WidgetName(),
 	});
 	Registry.RegisterHandler(TEXT("move_widget"), &MoveWidget, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		WidgetName(),
 		MCPParam::Required(TEXT("newParentWidgetName"), EType::String, TEXT("Panel widget to reparent into")).Alias(TEXT("parentWidgetName")).Alias(TEXT("parentWidget")),
 	});
 	Registry.RegisterHandler(TEXT("set_root_widget"), &SetRoot, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		WidgetName(),
 	});
 	Registry.RegisterHandler(TEXT("wrap_root_widget"), &WrapRoot, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("wrapperClass"), EType::String, TEXT("Panel widget class (CanvasPanel, VerticalBox, Overlay, etc.); must be a UPanelWidget subclass")).Alias(TEXT("widgetClass")),
 		MCPParam::Optional(TEXT("wrapperName"), EType::String, TEXT("Name for the new wrapper widget")),
 	});
@@ -505,14 +505,14 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// UMG animation authoring, navigation rules, focus and accessibility.
 	// Bodies live in WidgetHandlers_Animation.cpp.
 	Registry.RegisterHandler(TEXT("create_widget_animation"), &CreateWidgetAnimation, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 		MCPParam::Optional(TEXT("durationSeconds"), EType::Number, TEXT("Playback range length in seconds (default 1)")),
 		MCPParam::Optional(TEXT("displayRate"), EType::Number, TEXT("Timeline display rate in fps (default 60)")),
 		MCPParam::Optional(TEXT("displayLabel"), EType::String, TEXT("Designer-facing label (defaults to animationName)")),
 	});
 	Registry.RegisterHandler(TEXT("delete_widget_animation"), &DeleteWidgetAnimation, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 	});
 	Registry.RegisterHandler(TEXT("get_widget_animation"), &GetWidgetAnimation, {
@@ -520,19 +520,19 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		AnimationName(),
 	});
 	Registry.RegisterHandler(TEXT("add_widget_animation_track"), &AddWidgetAnimationTrack, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 		WidgetName(),
 		PropertyName(),
 	});
 	Registry.RegisterHandler(TEXT("remove_widget_animation_track"), &RemoveWidgetAnimationTrack, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 		WidgetName(),
 		PropertyName(),
 	});
 	Registry.RegisterHandler(TEXT("add_widget_animation_key"), &AddWidgetAnimationKey, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 		WidgetName(),
 		PropertyName(),
@@ -543,7 +543,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("interpolation"), EType::String, TEXT("cubic (default), linear or constant")),
 	});
 	Registry.RegisterHandler(TEXT("remove_widget_animation_key"), &RemoveWidgetAnimationKey, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 		WidgetName(),
 		PropertyName(),
@@ -552,26 +552,26 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		ChannelIndex(),
 	});
 	Registry.RegisterHandler(TEXT("add_widget_animation_event_key"), &AddWidgetAnimationEventKey, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 		MCPParam::Required(TEXT("functionName"), EType::String, TEXT("Widget Blueprint function the event key calls")),
 		EventTime(),
 		TrackName(),
 	});
 	Registry.RegisterHandler(TEXT("remove_widget_animation_event_key"), &RemoveWidgetAnimationEventKey, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 		EventTime(),
 		TrackName(),
 	});
 	Registry.RegisterHandler(TEXT("bind_widget_animation_event"), &BindWidgetAnimationEvent, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 		AnimEvent(),
 		UserTag(),
 	});
 	Registry.RegisterHandler(TEXT("unbind_widget_animation_event"), &UnbindWidgetAnimationEvent, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		AnimationName(),
 		AnimEvent(),
 		UserTag(),
@@ -579,7 +579,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// Called once per branch by the contract test: the rules array, then the
 	// single write. Either way the asset load fails first.
 	Registry.RegisterHandler(TEXT("set_widget_navigation"), &SetWidgetNavigation, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("rules"), EType::Array, TEXT("Navigation writes applied as one validated batch")).Items(EType::Object).WithFields({
 			MCPParam::RequiredField(TEXT("widgetName"), EType::String, TEXT("Widget whose navigation is written")),
 			MCPParam::RequiredField(TEXT("direction"), EType::String, TEXT("Up, Down, Left, Right, Next or Previous")),
@@ -592,12 +592,12 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("widgetToFocus"), EType::String, TEXT("Target widget of a single Explicit write")),
 	}, MCPSpec::ExactlyOne({ { TEXT("rules") }, { TEXT("widgetName") } }));
 	Registry.RegisterHandler(TEXT("clear_widget_navigation"), &ClearWidgetNavigation, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		WidgetName(),
 		MCPParam::Optional(TEXT("direction"), EType::String, TEXT("Up, Down, Left, Right, Next or Previous; omit to clear all six")),
 	});
 	Registry.RegisterHandler(TEXT("restore_widget_navigation"), &RestoreWidgetNavigation, {
-		AssetPath(),
+		AssetPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("previous"), EType::Array, TEXT("The captured navigation snapshot set_navigation / clear_navigation return in their rollback payload")).Items(EType::Object),
 	});
 	Registry.RegisterHandler(TEXT("audit_widget_focus_chain"), &AuditWidgetFocusChain, {

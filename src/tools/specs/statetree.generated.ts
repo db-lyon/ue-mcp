@@ -15,7 +15,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "sourceStructId",
@@ -50,7 +51,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "displayName",
@@ -73,7 +75,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -114,7 +117,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -155,7 +159,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "structType",
@@ -178,7 +183,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "structType",
@@ -201,7 +207,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -254,7 +261,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -289,7 +297,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -324,7 +333,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -395,7 +405,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -442,7 +453,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -465,7 +477,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       }
     ]
   },
@@ -608,7 +621,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -730,7 +744,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "targetStructId",
@@ -753,7 +768,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -782,7 +798,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -811,7 +828,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
@@ -828,7 +846,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
@@ -845,7 +864,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -868,7 +888,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -897,7 +918,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -926,7 +948,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -955,7 +978,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -1096,7 +1120,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
@@ -1125,7 +1150,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
@@ -1154,7 +1180,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
@@ -1183,7 +1210,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
@@ -1212,7 +1240,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
@@ -1235,7 +1264,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "parameters",
@@ -1253,7 +1283,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "schema",
@@ -1270,7 +1301,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -1317,7 +1349,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -1352,7 +1385,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -1387,7 +1421,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
@@ -1428,7 +1463,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",

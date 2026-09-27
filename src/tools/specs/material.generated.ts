@@ -18,7 +18,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MaterialFunction asset path (#463)",
         "aliases": [
           "materialFunctionPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "expressionType",
@@ -71,7 +72,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": false,
-        "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one"
+        "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one",
+        "role": "editTarget"
       },
       {
         "name": "actorLabel",
@@ -166,7 +168,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "expressionType",
@@ -246,7 +249,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Material asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "expressionName",
@@ -290,7 +294,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Material asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rvtPath",
@@ -419,7 +424,11 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "[{assetPath, parentPath?, parameters?:[{name, type (scalar|vector|texture), value}]}]. value: number (scalar), {r,g,b,a} (vector), or texture path (texture) (#594)",
-        "items": "object"
+        "items": "object",
+        "role": "editTarget",
+        "roleKeys": [
+          "assetPath"
+        ]
       }
     ]
   },
@@ -445,7 +454,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Existing material to build into",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -517,7 +527,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Material asset path",
         "aliases": [
           "materialPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodes",
@@ -546,7 +557,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "materialPath"
-        ]
+        ],
+        "role": "editTarget"
       }
     ]
   },
@@ -560,7 +572,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MaterialFunction asset path (#463)",
         "aliases": [
           "materialFunctionPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sourceExpression",
@@ -599,7 +612,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "sourceExpression",
@@ -638,7 +652,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "texturePath",
@@ -668,7 +683,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "expressionName",
@@ -898,7 +914,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionPath",
@@ -907,7 +924,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MaterialFunction asset path, instead of materialPath (#1138)",
         "aliases": [
           "materialFunctionPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "expressionName",
@@ -940,7 +958,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Material asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "property",
@@ -963,7 +982,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "destinationPath",
         "type": "string",
         "required": true,
-        "description": "Package path of the copy, including its name; a missing folder is created"
+        "description": "Package path of the copy, including its name; a missing folder is created",
+        "role": "editTarget"
       }
     ],
     "contractExempt": "Makes the destination folder under the contract values before the copy can fail"
@@ -1025,7 +1045,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Material asset path",
         "aliases": [
           "materialPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodes",
@@ -1403,7 +1424,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "recompileChildren",
@@ -1426,7 +1448,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": false,
-        "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one"
+        "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one",
+        "role": "editTarget"
       },
       {
         "name": "actorLabel",
@@ -1530,7 +1553,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputPath",
         "type": "string",
         "required": true,
-        "description": "Absolute file path for the PNG output"
+        "description": "Absolute file path for the PNG output",
+        "role": "outputPath"
       },
       {
         "name": "width",
@@ -1557,7 +1581,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionPath",
@@ -1566,7 +1591,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MaterialFunction asset path, instead of materialPath (#1138)",
         "aliases": [
           "materialFunctionPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "expressionIndex",
@@ -1625,7 +1651,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionPath",
@@ -1634,7 +1661,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MaterialFunction asset path, instead of materialPath (#1138)",
         "aliases": [
           "materialFunctionPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "expressionIndex",
@@ -1730,7 +1758,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Material asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "color",
@@ -1750,7 +1779,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Material asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "blendMode",
@@ -1810,7 +1840,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": false,
-        "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one"
+        "description": "A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one",
+        "role": "editTarget"
       },
       {
         "name": "actorLabel",
@@ -1901,7 +1932,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Material asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "materialDomain",
@@ -1925,7 +1957,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "materialPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "newParentPath",
@@ -1948,7 +1981,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MaterialInstanceConstant asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "parameterName",
@@ -2017,7 +2051,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Material asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "shadingModel",
@@ -2038,7 +2073,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "materialPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "parameterName",
@@ -2077,7 +2113,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "materialPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "usages",

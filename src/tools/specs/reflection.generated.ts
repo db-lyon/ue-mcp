@@ -313,7 +313,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "Existing UserDefinedEnum asset path"
+        "description": "Existing UserDefinedEnum asset path",
+        "role": "editTarget"
       },
       {
         "name": "entries",

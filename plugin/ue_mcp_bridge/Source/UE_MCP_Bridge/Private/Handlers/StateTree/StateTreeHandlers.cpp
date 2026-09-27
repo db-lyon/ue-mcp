@@ -66,7 +66,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows to return on this page (default 200, max 2000)")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_state"), &AddState, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("Parent state GUID (omit both parent selectors for a root state)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Parent state dot-path, as an alternative to stateId")),
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Name for the new state")),
@@ -76,31 +76,31 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("linkedSubtree"), EType::String, TEXT("StateTree ASSET path assigned to LinkedAsset. To link a Subtree state inside this asset, use set_state_link with linkType=subtree")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_state"), &RemoveState, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_state_property"), &SetStateProperty, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set: name, type, selectionBehavior, bEnabled, weight, linkedAsset, description, tag, customTickRate or color")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string. tag: gameplay tag or empty to clear. customTickRate: seconds or empty to disable. color: palette display name, GUID, or empty to clear")),
 	});
 	Registry.RegisterHandler(TEXT("clear_state_tree_state_nodes"), &ClearStateNodes, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_task"), &AddTask, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("structType"), EType::String, TEXT("C++ struct name, e.g. FMyStateTreeTask or an engine task like FStateTreeRunParallelStateTreesTask")),
 		MCPParam::Optional(TEXT("instanceProperties"), EType::Object, TEXT("Key-value map of instance data properties to set on the new node")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_enter_condition"), &AddEnterCondition, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("structType"), EType::String, TEXT("C++ struct name of the condition")),
@@ -108,19 +108,19 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("operand"), EType::String, TEXT("Expression operand for conditions: And or Or")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_enter_condition"), &RemoveEnterCondition, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("conditionIndex"), EType::Integer, TEXT("Condition index within the list, as read_state reports it")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_task"), &RemoveTask, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("taskIndex"), EType::Integer, TEXT("Task index within the state")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_task_instance_property"), &SetTaskInstanceProperty, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("taskIndex"), EType::Integer, TEXT("Task index within the state")),
@@ -128,7 +128,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_task_property"), &SetTaskProperty, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("taskIndex"), EType::Integer, TEXT("Task index within the state")),
@@ -136,7 +136,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_transition"), &AddTransition, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("trigger"), EType::String, TEXT("OnStateCompleted, OnStateSucceeded, OnStateFailed, OnTick or OnEvent; combine with | e.g. OnStateSucceeded|OnStateFailed")),
@@ -149,7 +149,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("bDelayTransition"), EType::Boolean, TEXT("Enable transition delay")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_transition_condition"), &AddTransitionCondition, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("transitionIndex"), EType::Integer, TEXT("Transition index within the state")),
@@ -158,20 +158,20 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("operand"), EType::String, TEXT("Expression operand for conditions: And or Or")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_transition"), &RemoveTransition, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("transitionIndex"), EType::Integer, TEXT("Transition index within the state")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_binding"), &AddBinding, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("sourceStructId"), EType::String, TEXT("Source struct GUID, as list_bindable_sources reports it")),
 		MCPParam::Required(TEXT("sourcePath"), EType::String, TEXT("Source property path")),
 		MCPParam::Required(TEXT("targetStructId"), EType::String, TEXT("Target struct GUID")),
 		MCPParam::Required(TEXT("targetPath"), EType::String, TEXT("Target property path")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_binding"), &RemoveBinding, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("targetStructId"), EType::String, TEXT("Target struct GUID")),
 		MCPParam::Required(TEXT("targetPath"), EType::String, TEXT("Target property path")),
 	});
@@ -185,43 +185,43 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows to return on this page (default 200, max 2000)")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_evaluator"), &AddEvaluator, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("structType"), EType::String, TEXT("C++ struct name deriving from FStateTreeEvaluatorBase")),
 		MCPParam::Optional(TEXT("instanceProperties"), EType::Object, TEXT("Key-value map of instance data properties to set on the new node")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_evaluator"), &RemoveEvaluator, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the evaluator node")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_evaluator_instance_property"), &SetEvaluatorInstanceProperty, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the evaluator node")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_evaluator_property"), &SetEvaluatorProperty, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the evaluator node")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_global_task"), &AddGlobalTask, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("structType"), EType::String, TEXT("C++ struct name deriving from FStateTreeTaskBase")),
 		MCPParam::Optional(TEXT("instanceProperties"), EType::Object, TEXT("Key-value map of instance data properties to set on the new node")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_global_task"), &RemoveGlobalTask, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the global task node")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_global_task_instance_property"), &SetGlobalTaskInstanceProperty, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the global task node")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_global_task_property"), &SetGlobalTaskProperty, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the global task node")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
@@ -230,7 +230,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_color"), &AddColor, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("displayName"), EType::String, TEXT("Display name for the new palette entry")),
 		MCPParam::Optional(TEXT("color"), EType::String, TEXT("FLinearColor string, e.g. (R=1.0,G=0.0,B=0.0,A=1.0)")),
 	});
@@ -240,35 +240,35 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_state_parameter"), &AddStateParameter, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("paramName"), EType::String, TEXT("Parameter name")),
 		MCPParam::Required(TEXT("paramType"), EType::String, TEXT("Bool, Int32, Int64, Float, Double, Name, String or Text")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_state_parameter"), &RemoveStateParameter, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("paramName"), EType::String, TEXT("Parameter name")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_state_parameter"), &SetStateParameter, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("paramName"), EType::String, TEXT("Parameter name")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_root_parameters"), &SetRootParameters, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("parameters"), EType::Array, TEXT("Root parameter definitions [{name, type}] where type is float, int32, bool, string, name or double")).Items(EType::Object),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_schema"), &SetSchema, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("schema"), EType::String, TEXT("Schema class path, e.g. /Script/GameplayStateTreeModule.StateTreeComponentSchema (default: the first concrete schema this editor has)")),
 	});
 	Registry.RegisterHandler(TEXT("compile_state_tree"), &CompileStateTree, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 	});
 	Registry.RegisterHandler(TEXT("validate_state_tree"), &ValidateStateTree, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
@@ -289,7 +289,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_consideration"), &AddConsideration, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("structType"), EType::String, TEXT("C++ struct name of the consideration")),
@@ -297,20 +297,20 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("operand"), EType::String, TEXT("Expression operand for conditions: And or Or")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_consideration"), &RemoveConsideration, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("considerationIndex"), EType::Integer, TEXT("Index of the consideration within the state, as read_state reports it")),
 	});
 	Registry.RegisterHandler(TEXT("remove_state_tree_transition_condition"), &RemoveTransitionCondition, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("transitionIndex"), EType::Integer, TEXT("Transition index within the state")),
 		MCPParam::Required(TEXT("conditionIndex"), EType::Integer, TEXT("Condition index within the list, as read_state reports it")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_state_link"), &SetStateLink, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Required(TEXT("linkType"), EType::String, TEXT("subtree (a Subtree state in this asset), asset (another StateTree asset), or none (clear both)")),
@@ -319,7 +319,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("linkedAsset"), EType::String, TEXT("linkType=asset: the StateTree asset this state runs")),
 	});
 	Registry.RegisterHandler(TEXT("move_state_tree_state"), &MoveState, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
 		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
 		MCPParam::Optional(TEXT("newParentStateId"), EType::String, TEXT("GUID of the state to move under")),
@@ -328,7 +328,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Position among the new state's siblings (default: append)")),
 	});
 	Registry.RegisterHandler(TEXT("set_state_tree_node_class"), &SetNodeClass, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the Blueprint node wrapper, as every add_* action returns it")),
 		MCPParam::Required(TEXT("nodeClass"), EType::String, TEXT("The Blueprint class this node runs, as a class path or a loaded class name")),
 	});
