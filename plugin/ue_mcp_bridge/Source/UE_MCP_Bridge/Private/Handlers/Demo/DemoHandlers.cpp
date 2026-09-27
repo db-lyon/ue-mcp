@@ -354,6 +354,10 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 				*DemoConstants::HOME_LEVEL, *HomeErr));
 		}
 	}
+	// The demo world stays in memory after the switch until a collection runs,
+	// and a loaded world cannot be deleted. Collect twice, as load_level does.
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
 
 	UWorld* World = GetEditorWorld();
 
@@ -405,6 +409,25 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 			FailedDeletes.Add(AssetPath);
 		}
 	}
+	// DeleteAsset reports success for the level once it is gone from memory,
+	// but the .umap can stay on disk, and the next run's step 1 reopens it.
+	const FString DemoLevelFile = FPaths::ConvertRelativePathToFull(
+		FPackageName::LongPackageNameToFilename(DemoConstants::DEMO_LEVEL, FPackageName::GetMapPackageExtension()));
+	if (IFileManager::Get().FileExists(*DemoLevelFile))
+	{
+		if (UPackage* Loaded = FindPackage(nullptr, *DemoConstants::DEMO_LEVEL))
+		{
+			ResetLoaders(Loaded);
+		}
+		if (IFileManager::Get().Delete(*DemoLevelFile, /*RequireExists*/ false, /*EvenReadOnly*/ true, /*Quiet*/ true))
+		{
+			FAssetRegistryModule::GetRegistry().ScanModifiedAssetFiles({ DemoLevelFile });
+		}
+		else
+		{
+			FailedDeletes.AddUnique(DemoConstants::DEMO_LEVEL);
+		}
+	}
 
 	// 4) Delete /Game/Demo directory if empty
 	if (UEditorAssetLibrary::DoesDirectoryExist(DemoConstants::MAT_DIR))
@@ -422,6 +445,9 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 	Result->SetStringField(TEXT("previousLevelPath"), PreviousLevelPath);
 	Result->SetBoolField(TEXT("homeLevelCreated"), !bHomeExisted);
 	Result->SetBoolField(TEXT("levelSwitched"), bLevelSwitched);
+	// A demo level left on disk is reopened by the next run's step 1, which
+	// would then spawn a second set of Demo_ actors beside the first.
+	Result->SetBoolField(TEXT("demoLevelRemoved"), !UEditorAssetLibrary::DoesAssetExist(DemoConstants::DEMO_LEVEL));
 	if (FailedDeletes.Num() > 0)
 	{
 		Result->SetBoolField(TEXT("success"), false);
