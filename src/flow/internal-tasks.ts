@@ -32,6 +32,12 @@ export const INTERNAL_BRIDGE_TASKS: Readonly<Record<string, InternalBridgeTask>>
     reason: "Spawns under a label another actor already carries, and answers with the new actor's path. "
       + "place_actor skips a taken label, and the demo steps' documented replay spawns a second set.",
   },
+  create_constant_material: {
+    method: "internal_create_constant_material",
+    effect: "mutate",
+    reason: "Builds a material from linear constants with a coloured emissive and saves it once. "
+      + "material(create_simple) takes a grey emissive, and composing the rest compiles and saves per node.",
+  },
 };
 
 export function internalTaskName(name: string): string {

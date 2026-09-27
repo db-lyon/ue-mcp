@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1077,
+  "handlerCount": 1078,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -18045,6 +18045,60 @@
           "min": 0
         }
       ]
+    },
+    "internal_create_constant_material": {
+      "category": "internal",
+      "params": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Material asset name"
+        },
+        {
+          "name": "packagePath",
+          "type": "string",
+          "required": false,
+          "description": "Folder for the new material (default /Game/Materials)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the asset exists: skip (default, report it) | error"
+        },
+        {
+          "name": "baseColor",
+          "type": "color",
+          "required": false,
+          "description": "Linear base colour {r,g,b,a}"
+        },
+        {
+          "name": "metallic",
+          "type": "number",
+          "required": false,
+          "description": "Metallic constant"
+        },
+        {
+          "name": "roughness",
+          "type": "number",
+          "required": false,
+          "description": "Roughness constant"
+        },
+        {
+          "name": "emissiveColor",
+          "type": "color",
+          "required": false,
+          "description": "Linear emissive colour {r,g,b,a}"
+        },
+        {
+          "name": "emissiveStrength",
+          "type": "number",
+          "required": false,
+          "description": "Multiplier on emissiveColor (default 1)"
+        }
+      ],
+      "contractExempt": "Creates and saves a material from constants alone, with nothing to load that could fail first"
     },
     "internal_spawn_actor": {
       "category": "internal",
