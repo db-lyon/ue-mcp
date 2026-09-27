@@ -33,7 +33,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LiveServer, resultJson } from "./server.js";
-import { closeLiveBridges, liveTarget } from "./harness.js";
+import { closeLiveBridges, liveBridge, liveTarget } from "./harness.js";
 
 const target = await liveTarget();
 let server: LiveServer;
@@ -344,6 +344,42 @@ describe("skeleton editing sessions", () => {
     // half-applied would report one here.
     expect(cancelled.discardedEditCount).toBe(0);
   }, 300_000);
+
+  it("replays a commit's rollback, restoring the hierarchy it changed", async () => {
+    const bonesNow = async (): Promise<string[]> => {
+      const open = resultJson<{ sessionTag?: string; bones?: string[] }>(
+        await call("animation", { action: "begin_skeleton_edit", skeletalMeshPath: SKELETAL_MESH }),
+      );
+      await call("animation", { action: "cancel_skeleton_edit", sessionTag: open.sessionTag });
+      return open.bones ?? [];
+    };
+    const before = await bonesNow();
+    const begun = resultJson<{ sessionTag?: string }>(
+      await call("animation", { action: "begin_skeleton_edit", skeletalMeshPath: SKELETAL_MESH }),
+    );
+    const edited = resultJson<{ success?: boolean; error?: string }>(
+      await call("animation", {
+        action: "edit_skeleton_bones",
+        sessionTag: begun.sessionTag,
+        edits: [{ op: "add", bone: "MCPUndoProbe", parent: before[0] }],
+      }),
+    );
+    expect(edited.success, edited.error).not.toBe(false);
+    const committed = resultJson<{ success?: boolean; error?: string; rollback?: { method: string; payload: Record<string, unknown> } }>(
+      await call("animation", { action: "commit_skeleton_edit", sessionTag: begun.sessionTag }),
+    );
+    expect(committed.success, committed.error).not.toBe(false);
+    expect(await bonesNow()).toContain("MCPUndoProbe");
+
+    // The inverse is replayed exactly as a flow's rollback would send it.
+    const bridge = await liveBridge();
+    const replayed = (await bridge.call(committed.rollback!.method, committed.rollback!.payload, 300_000)) as {
+      success?: boolean;
+      error?: string;
+    };
+    expect(replayed.success, replayed.error).not.toBe(false);
+    expect(await bonesNow()).toEqual(before);
+  }, 600_000);
 });
 
 describe("skeleton properties with no UPROPERTY", () => {
