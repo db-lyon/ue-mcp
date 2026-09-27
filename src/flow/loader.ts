@@ -63,9 +63,12 @@ export function builtinFlows(): Record<string, unknown> {
 function defaultFlows(): Record<string, unknown> {
   let s = 0;
   const steps: Record<string, unknown> = {};
-  const step = (task: string, options: Record<string, unknown>) => {
+  const step = (task: string, options: Record<string, unknown>): number => {
     steps[String(++s)] = { task, options };
+    return s;
   };
+  /** The engine name a step's new node came back with. */
+  const node = (n: number) => `\${steps.${n}.expressionName}`;
 
   // ── 1. Create level & atmosphere ──────────────────────────────────
   step("level.create", { levelPath: `${PKG}/BeaconLevel` });
@@ -80,26 +83,22 @@ function defaultFlows(): Record<string, unknown> {
   step("material.set_base_color", { assetPath: M_FLOOR, color: { r: 15, g: 15, b: 18 } });
   step("material.recompile", { materialPath: M_FLOOR });
 
-  // M_Pillar - brushed metallic blue-grey
+  // M_Pillar - brushed metallic blue-grey. Constants take their value at
+  // creation (set_base_color adds a node too, so an index would miss) and are
+  // wired by engine name, since a Constant's description is its value.
   step("material.create", { name: "M_Pillar", packagePath: PKG });
   step("material.set_base_color", { assetPath: M_PILLAR, color: { r: 60, g: 65, b: 80 } });
-  step("material.add_expression", {
-    materialPath: M_PILLAR, expressionType: "Constant", name: "Metallic",
-  });
-  step("material.set_expression_value", {
-    materialPath: M_PILLAR, expressionIndex: 0, value: 1.0,
+  const metallic = step("material.add_expression", {
+    materialPath: M_PILLAR, expressionType: "Constant", name: "Metallic", value: 1.0,
   });
   step("material.connect_to_property", {
-    materialPath: M_PILLAR, expressionName: "Metallic", property: "Metallic",
+    materialPath: M_PILLAR, expressionName: node(metallic), property: "Metallic",
   });
-  step("material.add_expression", {
-    materialPath: M_PILLAR, expressionType: "Constant", name: "Roughness",
-  });
-  step("material.set_expression_value", {
-    materialPath: M_PILLAR, expressionIndex: 1, value: 0.3,
+  const roughness = step("material.add_expression", {
+    materialPath: M_PILLAR, expressionType: "Constant", name: "Roughness", value: 0.3,
   });
   step("material.connect_to_property", {
-    materialPath: M_PILLAR, expressionName: "Roughness", property: "Roughness",
+    materialPath: M_PILLAR, expressionName: node(roughness), property: "Roughness",
   });
   step("material.recompile", { materialPath: M_PILLAR });
 
@@ -114,11 +113,8 @@ function defaultFlows(): Record<string, unknown> {
     materialPath: M_GLOW, expressionType: "VectorParameter",
     name: "GlowColor", parameterName: "GlowColor",
   });
-  step("material.add_expression", {
-    materialPath: M_GLOW, expressionType: "Constant", name: "GlowStrength",
-  });
-  step("material.set_expression_value", {
-    materialPath: M_GLOW, expressionIndex: 1, value: 50,
+  const glowStrength = step("material.add_expression", {
+    materialPath: M_GLOW, expressionType: "Constant", name: "GlowStrength", value: 50,
   });
   step("material.add_expression", {
     materialPath: M_GLOW, expressionType: "Multiply", name: "Multiply",
@@ -128,7 +124,7 @@ function defaultFlows(): Record<string, unknown> {
     targetExpression: "Multiply", targetInput: "A",
   });
   step("material.connect_expressions", {
-    materialPath: M_GLOW, sourceExpression: "GlowStrength",
+    materialPath: M_GLOW, sourceExpression: node(glowStrength),
     targetExpression: "Multiply", targetInput: "B",
   });
   step("material.connect_to_property", {
@@ -260,6 +256,16 @@ function defaultFlows(): Record<string, unknown> {
   const TBOMB_PATH = "/Game/Materials/Functions/MF_TextureBomb";
   const tbombSteps: Record<string, unknown> = {};
   let ts = 0;
+  // Nodes are wired by the index their add step returned: only FunctionInput
+  // and FunctionOutput take a name, and the connect handler reads a
+  // non-numeric reference as index 0.
+  const IN_TEXTURE = "${steps.2.expressionIndex}";
+  const UV = "${steps.3.expressionIndex}";
+  const CELL_DENSITY = "${steps.4.expressionIndex}";
+  const UV_X_DENSITY = "${steps.5.expressionIndex}";
+  const FRAC_IN_CELL = "${steps.8.expressionIndex}";
+  const SAMPLED = "${steps.10.expressionIndex}";
+  const OUT_COLOR = "${steps.13.expressionIndex}";
   const tbomb = (task: string, options: Record<string, unknown>) => {
     tbombSteps[String(++ts)] = { task, options };
   };
@@ -284,7 +290,6 @@ function defaultFlows(): Record<string, unknown> {
   tbomb("material.add_function_expression", {
     functionPath: TBOMB_PATH,
     expressionType: "TextureCoordinate",
-    name: "UV",
     positionX: -800, positionY: 200,
   });
   // Cell-index = floor(UV * CellDensity). CellDensity is exposed as a Scalar
@@ -299,41 +304,38 @@ function defaultFlows(): Record<string, unknown> {
   tbomb("material.add_function_expression", {
     functionPath: TBOMB_PATH,
     expressionType: "Multiply",
-    name: "UVxDensity",
     positionX: -500, positionY: 300,
   });
   tbomb("material.connect_function_expressions", {
     functionPath: TBOMB_PATH,
-    sourceExpression: "UV", targetExpression: "UVxDensity", targetInput: "A",
+    sourceExpression: UV, targetExpression: UV_X_DENSITY, targetInput: "A",
   });
   tbomb("material.connect_function_expressions", {
     functionPath: TBOMB_PATH,
-    sourceExpression: "CellDensity", targetExpression: "UVxDensity", targetInput: "B",
+    sourceExpression: CELL_DENSITY, targetExpression: UV_X_DENSITY, targetInput: "B",
   });
   tbomb("material.add_function_expression", {
     functionPath: TBOMB_PATH,
     expressionType: "Frac",
-    name: "FracInCell",
     positionX: -200, positionY: 200,
   });
   tbomb("material.connect_function_expressions", {
     functionPath: TBOMB_PATH,
-    sourceExpression: "UVxDensity", targetExpression: "FracInCell",
+    sourceExpression: UV_X_DENSITY, targetExpression: FRAC_IN_CELL,
   });
   // TextureSample driven by the frac'd UVs and the input texture.
   tbomb("material.add_function_expression", {
     functionPath: TBOMB_PATH,
     expressionType: "TextureSample",
-    name: "Sampled",
     positionX: 200, positionY: 200,
   });
   tbomb("material.connect_function_expressions", {
     functionPath: TBOMB_PATH,
-    sourceExpression: "FracInCell", targetExpression: "Sampled", targetInput: "UVs",
+    sourceExpression: FRAC_IN_CELL, targetExpression: SAMPLED, targetInput: "UVs",
   });
   tbomb("material.connect_function_expressions", {
     functionPath: TBOMB_PATH,
-    sourceExpression: "InTexture", targetExpression: "Sampled", targetInput: "Tex",
+    sourceExpression: IN_TEXTURE, targetExpression: SAMPLED, targetInput: "Tex",
   });
   // FunctionOutput - RGB.
   tbomb("material.add_function_expression", {
@@ -344,8 +346,8 @@ function defaultFlows(): Record<string, unknown> {
   });
   tbomb("material.connect_function_expressions", {
     functionPath: TBOMB_PATH,
-    sourceExpression: "Sampled", sourceOutput: "RGB",
-    targetExpression: "OutColor",
+    sourceExpression: SAMPLED, sourceOutput: "RGB",
+    targetExpression: OUT_COLOR,
   });
 
   // niagara_fire - author a valid, emitting flame from scratch and verify it.
