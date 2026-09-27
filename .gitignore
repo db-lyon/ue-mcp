@@ -155,6 +155,12 @@ tests/**/Content/MCP_SmokeScratch.umap
 tests/**/Content/Demo/**/*.uasset
 tests/**/Content/Demo/**/*.umap
 
+# Universal flow gate outputs (tests/live/universal-flows.test.ts). The gate
+# deletes them, but a map the editor still has loaded is kept.
+tests/**/Content/Flows/Beacon/
+tests/**/Content/Materials/Functions/MF_TextureBomb.uasset
+tests/**/Content/UniversalFlowGate_*/
+
 # Note: The following WILL be tracked (as they should be):
 # - *.uproject (project files)
 # - Source/**/*.cpp, *.h, *.Build.cs, *.Target.cs (source code)
