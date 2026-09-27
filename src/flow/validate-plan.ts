@@ -249,7 +249,8 @@ export async function validatePlan(input: PlanValidationInput): Promise<PlanVali
       }
       const defaults = tasks[task]?.options ?? {};
       checkReferences(name, path, defaults, inHook);
-      const written = { ...defaults, ...(def.options ?? {}), ...(inherited[task] ?? {}) };
+      // The runner's precedence: task default, enclosing override, step, runtime params.
+      const written = { ...defaults, ...(inherited[task] ?? {}), ...(def.options ?? {}) };
       checkOptions(name, path, task, { ...written, ...runtimeLayer(scope, task, path) }, Object.keys(written));
     };
 

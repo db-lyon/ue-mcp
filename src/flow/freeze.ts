@@ -168,10 +168,11 @@ export function freezeFlow(input: FreezeInput): FrozenPlan | FreezeRefusal {
     when: string | boolean | undefined,
   ): Record<string, unknown> => {
     const task = def.task!;
+    // The runner's precedence: task default, enclosing override, step, runtime params.
     const options = resolveHost({
       ...(tasks[task]?.options ?? {}),
-      ...(def.options ?? {}),
       ...(inherited[task] ?? {}),
+      ...(def.options ?? {}),
       ...runtime,
     }) as Record<string, unknown>;
     const out: Record<string, unknown> = { task };
