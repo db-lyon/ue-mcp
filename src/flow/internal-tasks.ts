@@ -38,6 +38,12 @@ export const INTERNAL_BRIDGE_TASKS: Readonly<Record<string, InternalBridgeTask>>
     reason: "Builds a material from linear constants with a coloured emissive and saves it once. "
       + "material(create_simple) takes a grey emissive, and composing the rest compiles and saves per node.",
   },
+  replay_skeleton_edit: {
+    method: "internal_replay_skeleton_edit",
+    effect: "mutate",
+    reason: "Opens, edits and commits a skeleton session in one call, which is the shape commit_skeleton_edit's "
+      + "inverse needs: a rollback is one call, and the committed session is already closed.",
+  },
 };
 
 export function internalTaskName(name: string): string {

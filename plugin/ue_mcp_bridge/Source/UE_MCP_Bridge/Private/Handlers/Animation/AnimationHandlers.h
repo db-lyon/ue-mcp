@@ -36,6 +36,9 @@ private:
 	static TSharedPtr<FJsonValue> EditSkeletonBones(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CommitSkeletonEdit(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CancelSkeletonEdit(const TSharedPtr<FJsonObject>& Params);
+	// internal_replay_skeleton_edit: begin, edit and commit as one call, the
+	// shape a commit's inverse needs.
+	static TSharedPtr<FJsonValue> ReplaySkeletonEdit(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetBoneRetargeting(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AuthorBlendProfile(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> EditCurveMetadata(const TSharedPtr<FJsonObject>& Params);

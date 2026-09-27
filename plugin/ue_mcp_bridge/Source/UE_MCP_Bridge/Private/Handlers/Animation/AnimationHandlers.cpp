@@ -134,6 +134,16 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SessionTag(),
 		SessionMesh(),
 	});
+	{
+		// Reached only as commit_skeleton_edit's rollback and the flow task
+		// internal.replay_skeleton_edit (src/flow/internal-tasks.ts).
+		FMCPHandlerRegistry::FCategoryScope InternalScope(Registry, TEXT("internal"));
+		Registry.RegisterHandler(TEXT("internal_replay_skeleton_edit"), &ReplaySkeletonEdit, {
+			MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose reference skeleton to edit")),
+			MCPParam::Required(TEXT("edits"), EType::Array, TEXT("Hierarchy edits, in edit_skeleton_bones form")).Items(EType::Object),
+			MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Remove a bone despite dependents")),
+		});
+	}
 	// `bones` elements are untyped because the PoseSearch pose channel shares the
 	// key with entries that are strings or objects, and one key has one type.
 	Registry.RegisterHandler(TEXT("set_bone_retargeting"), &SetBoneRetargeting, {

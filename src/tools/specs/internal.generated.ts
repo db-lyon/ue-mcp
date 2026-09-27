@@ -62,6 +62,30 @@ export const handlerSpecs: HandlerSpecs = {
     ],
     "contractExempt": "Creates and saves a material from constants alone, with nothing to load that could fail first"
   },
+  "internal_replay_skeleton_edit": {
+    "category": "internal",
+    "params": [
+      {
+        "name": "skeletalMeshPath",
+        "type": "string",
+        "required": true,
+        "description": "SkeletalMesh whose reference skeleton to edit"
+      },
+      {
+        "name": "edits",
+        "type": "array",
+        "required": true,
+        "description": "Hierarchy edits, in edit_skeleton_bones form",
+        "items": "object"
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "required": false,
+        "description": "Remove a bone despite dependents"
+      }
+    ]
+  },
   "internal_spawn_actor": {
     "category": "internal",
     "params": [
