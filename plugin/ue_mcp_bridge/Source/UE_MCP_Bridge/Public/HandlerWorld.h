@@ -130,6 +130,20 @@ inline UWorld* ResolveWorldFromParams(const TSharedPtr<FJsonObject>& Params, con
 	return ResolveWorldScope(Scope, PIEInstance);
 }
 
+/**
+ * The PIE instance a call names, for an action whose spec does not declare
+ * pieInstance. Read only when sent, so the spec contract still holds; a sent
+ * value is noted as read. INDEX_NONE when absent.
+ */
+inline int32 MCPPieInstanceIfSent(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid() || !Params->HasField(TEXT("pieInstance"))) return INDEX_NONE;
+	int32 Instance = INDEX_NONE;
+	MCPNoteParamRead(Params, TEXT("pieInstance"));
+	MCPTryReadNumberField(Params, TEXT("pieInstance"), Instance);
+	return Instance;
+}
+
 /** Get the editor world or return an error response. */
 #define REQUIRE_EDITOR_WORLD(WorldVar) \
 	UWorld* WorldVar = GetEditorWorld(); \
