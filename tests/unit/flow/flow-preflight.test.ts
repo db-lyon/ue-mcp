@@ -93,6 +93,14 @@ describe("the editor-connected gate in a plan", () => {
   it("clears them once an editor is connected", async () => {
     expect((await plan(mixed, "mixed", ctx(true))).preflight).toMatchObject({ ok: true, refused: [] });
   });
+
+  it("gates a flow's hook steps, keeping them a list", async () => {
+    const hooked = config({
+      hooked: { steps: { 1: { task: "project.read_config", options: { configName: "Engine" } } }, finally: [{ task: "asset.list" }] },
+    });
+    const { preflight } = await plan(hooked, "hooked");
+    expect(preflight.refused.map((r) => r.path)).toEqual(["finally/1"]);
+  });
 });
 
 describe("the untargeted-write gate in a plan", () => {

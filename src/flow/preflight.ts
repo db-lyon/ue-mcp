@@ -119,11 +119,14 @@ type StepMap = Record<string, Record<string, unknown> | undefined>;
 
 function withChecks(steps: unknown, checks: StepCheck[]): unknown {
   if (!steps || typeof steps !== "object") return steps;
-  return Object.fromEntries(Object.entries(steps as StepMap).map(([n, step]) => {
-    if (!step || typeof step !== "object") return [n, step];
+  const one = (step: Record<string, unknown> | undefined) => {
+    if (!step || typeof step !== "object") return step;
     const existing = Array.isArray(step.checks) ? (step.checks as StepCheck[]) : [];
-    return [n, { ...step, checks: [...existing, ...checks] }];
-  }));
+    return { ...step, checks: [...existing, ...checks] };
+  };
+  // Hooks are lists and main steps a numbered map; each keeps its shape.
+  if (Array.isArray(steps)) return steps.map(one);
+  return Object.fromEntries(Object.entries(steps as StepMap).map(([n, step]) => [n, one(step)]));
 }
 
 /** A copy of `flows` with the gate checks declared on every flow, step and hook step. */
