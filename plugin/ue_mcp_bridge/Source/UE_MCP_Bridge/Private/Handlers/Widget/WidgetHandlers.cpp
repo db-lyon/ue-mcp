@@ -843,8 +843,16 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 		return MCPError(TEXT("EditorUtilityWidgetBlueprint class not found. Enable Blutility plugin."));
 	}
 
+	// The editor spawns a utility widget's tab as an EditorUtilityWidget, so
+	// a UserWidget parent makes an asset that run_utility_widget cannot open.
+	UClass* EUWClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityWidget"));
+	if (!EUWClass)
+	{
+		return MCPError(TEXT("EditorUtilityWidget class not found. Enable Blutility plugin."));
+	}
+
 	UWidgetBlueprintFactory* WidgetFactory = NewObject<UWidgetBlueprintFactory>();
-	WidgetFactory->ParentClass = UUserWidget::StaticClass();
+	WidgetFactory->ParentClass = EUWClass;
 	WidgetFactory->BlueprintType = BPTYPE_Normal;
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(AssetName, PackagePath, OnConflict, TEXT("EditorUtilityWidgetBlueprint"), EUWBClass, WidgetFactory);
