@@ -79,8 +79,6 @@ void FMCPEditScope::CloseTransactions()
 
 TSharedPtr<FJsonValue> FMCPEditScope::Finish(const TSharedPtr<FJsonObject>& Result)
 {
-	bFinished = true;
-
 	// Settle inside the still-open transactions, so undo takes the fixups too.
 	if (Policy.bSettle && Ops.Settle)
 	{
