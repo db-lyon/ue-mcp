@@ -169,6 +169,18 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("material"), EType::String, TEXT("Material applied at slot 0")),
 		SpecWorld, SpecPieInstance,
 	});
+	{
+		// Reached only as the flow task internal.spawn_actor (src/flow/internal-tasks.ts).
+		FMCPHandlerRegistry::FCategoryScope InternalScope(Registry, TEXT("internal"));
+		Registry.RegisterHandler(TEXT("internal_spawn_actor"), &SpawnActorUnchecked, {
+			MCPParam::Required(TEXT("actorClass"), EType::String, TEXT("Actor class: short name, /Script path or Blueprint class path")),
+			MCPParam::Optional(TEXT("label"), EType::String, TEXT("Actor label, applied even when another actor carries it")),
+			SpecLocation, SpecRotation, SpecScale,
+			MCPParam::Optional(TEXT("staticMesh"), EType::String, TEXT("Static mesh for a StaticMeshActor")),
+			MCPParam::Optional(TEXT("material"), EType::String, TEXT("Material applied at slot 0")),
+			MCPParam::Optional(TEXT("folderPath"), EType::String, TEXT("World Outliner folder")),
+		});
+	}
 	Registry.RegisterHandler(TEXT("delete_actor"), &DeleteActor, {
 		SpecActorLabel, SpecActorPath,
 	});
@@ -1167,6 +1179,96 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 		return MCPError(FString::Printf(TEXT("Actor class not found: %s"), *ActorClass));
 	}
 
+	AActor* NewActor = SpawnForPlacement(World, Class, Params, Label);
+	if (!NewActor)
+	{
+		return MCPError(TEXT("Failed to spawn actor"));
+	}
+
+	const FString FinalLabel = NewActor->GetActorLabel();
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("actorLabel"), FinalLabel);
+	Result->SetStringField(TEXT("actorClass"), ActorClass);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), FinalLabel);
+	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
+
+	return MCPResult(Result);
+}
+
+// internal_spawn_actor: place_actor without the label check. The demo flows
+// spawn under labels a replay has already used, which place_actor skips.
+TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorUnchecked(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, {
+		TEXT("actorClass"), TEXT("label"), TEXT("location"), TEXT("rotation"), TEXT("scale"),
+		TEXT("staticMesh"), TEXT("material"), TEXT("folderPath"),
+	});
+
+	FString ActorClass;
+	if (auto Err = RequireString(Params, TEXT("actorClass"), ActorClass)) return Err;
+	const FString Label = OptionalString(Params, TEXT("label"));
+	const FString FolderPath = OptionalString(Params, TEXT("folderPath"));
+
+	REQUIRE_EDITOR_WORLD(World);
+
+	UClass* Class = MCPResolveClass(ActorClass);
+	if (!Class)
+	{
+		Class = LoadObject<UClass>(nullptr, *ActorClass);
+	}
+	if (!Class || !Class->IsChildOf(AActor::StaticClass()))
+	{
+		return MCPError(FString::Printf(TEXT("Actor class not found: %s"), *ActorClass));
+	}
+
+	AActor* NewActor = SpawnForPlacement(World, Class, Params, Label);
+	if (!NewActor)
+	{
+		return MCPError(TEXT("Failed to spawn actor"));
+	}
+
+	// A bare Actor has no root, so its transform and attachments would have
+	// nothing to hold. Give it one and put it where it was asked to be.
+	if (!NewActor->GetRootComponent())
+	{
+		USceneComponent* Root = NewObject<USceneComponent>(NewActor, TEXT("DefaultSceneRoot"));
+		Root->RegisterComponent();
+		NewActor->SetRootComponent(Root);
+		NewActor->AddInstanceComponent(Root);
+		NewActor->SetActorTransform(FTransform(
+			OptionalRotator(Params, TEXT("rotation")),
+			OptionalVec3(Params, TEXT("location")),
+			OptionalVec3(Params, TEXT("scale"), FVector::OneVector)));
+	}
+
+	if (!FolderPath.IsEmpty())
+	{
+		NewActor->SetFolderPath(*FolderPath);
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("actorLabel"), NewActor->GetActorLabel());
+	Result->SetStringField(TEXT("actorPath"), NewActor->GetPathName());
+	Result->SetStringField(TEXT("actorName"), NewActor->GetName());
+	Result->SetStringField(TEXT("actorClass"), ActorClass);
+
+	// The path, not the label: a replay leaves several actors under one label.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorPath"), NewActor->GetPathName());
+	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
+
+	return MCPResult(Result);
+}
+
+// Spawn Class at the params' transform with place_actor's mesh and material
+// shorthands. Whether the label is taken is the caller's question.
+AActor* FLevelHandlers::SpawnForPlacement(UWorld* World, UClass* Class, const TSharedPtr<FJsonObject>& Params, const FString& Label)
+{
 	const FVector Location = OptionalVec3(Params, TEXT("location"));
 	const FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
 
@@ -1174,7 +1276,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 	AActor* NewActor = World->SpawnActor<AActor>(Class, SpawnTransform);
 	if (!NewActor)
 	{
-		return MCPError(TEXT("Failed to spawn actor"));
+		return nullptr;
 	}
 
 	// #1119: SpawnActor does not run the editor's volume factory, so native
@@ -1240,18 +1342,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 		}
 	}
 
-	const FString FinalLabel = NewActor->GetActorLabel();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("actorLabel"), FinalLabel);
-	Result->SetStringField(TEXT("actorClass"), ActorClass);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("actorLabel"), FinalLabel);
-	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
-
-	return MCPResult(Result);
+	return NewActor;
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::DeleteActor(const TSharedPtr<FJsonObject>& Params)

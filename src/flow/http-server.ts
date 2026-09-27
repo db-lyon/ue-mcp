@@ -3,11 +3,11 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { createFlowTool } from "./flow-tool.js";
 import type { ToolContext } from "../core/types.js";
 import { sessionContext } from "../surface/target-params.js";
-import { EDITOR_TARGET_PARAM } from "../surface/routing-params.js";
-import { refuseUntargetedCall } from "../dispatch/editor-gate.js";
+import { refuseUntargetedInRegistry } from "../dispatch/editor-gate.js";
 import { info, warn, error as logError } from "../core/log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
 import { existingGuard } from "../editor/dialog-guard.js";
+import { dialogGate } from "./gates.js";
 import { readEnv } from "../core/env.js";
 
 type FlowTool = ReturnType<typeof createFlowTool>;
@@ -133,8 +133,8 @@ export function startFlowHttpServer(
         // No person on an HTTP request, so this route never elicits. Without
         // saying so it used the shared guard's deps, which were last set by an
         // MCP client, and a curl raised a form in that client's UI.
-        const decision = await guard.check(taskName, "action", { canElicit: false });
-        if (!decision.allow) return { refused: decision.refusal };
+        const refused = await dialogGate(guard, taskName, "action", { canElicit: false });
+        if (refused) return { refused };
         return { value: await flowTool.handler(toolCtx, params) };
       };
 
@@ -186,16 +186,9 @@ export function startFlowHttpServer(
         // Same gate as the MCP surface (#817): beyond one editor a run has to
         // say which one it means, because a flow is whatever its steps are and
         // the fall-through would edit a project nobody named. Inert at one
-        // editor, where this returns null without classifying anything.
-        if (!targeted && ctx.sessions && ctx.sessions.size > 1) {
-          const refusal = refuseUntargetedCall({
-            taskName: "flow.run",
-            editors: ctx.sessions.list().map((s) => s.name),
-            activeEditor: ctx.sessions.active.name,
-            targetParam: EDITOR_TARGET_PARAM,
-          });
-          if (refusal) return send(400, { error: refusal });
-        }
+        // editor.
+        const refusal = ctx.sessions ? refuseUntargetedInRegistry(ctx.sessions, "flow.run", targeted) : null;
+        if (refusal) return send(400, { error: refusal });
         const ran = await gatedFlow(runCtx, params, "flow.run");
         if ("refused" in ran) return send(409, ran.refused);
         const result = ran.value;

@@ -26,6 +26,7 @@
     "dist",
     "plugin",
     "skills",
+    "universal/ue-mcp.universal.yml",
     "LICENSE",
     "README.md"
   ],
@@ -77,15 +78,16 @@
     "test:automation": "node scripts/automation-tests.mjs",
     "context-tax": "node scripts/context-tax.mjs",
     "generate": "tsx scripts/generate-default-config.ts",
+    "generate:universal": "tsx scripts/generate-universal.ts",
     "generate:metadata": "tsx scripts/generate-tool-metadata.ts",
     "prepublishOnly": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && npx tsc && tsx scripts/generate-default-config.ts && tsx scripts/generate-tool-metadata.ts",
     "gen:epic-docs": "npx tsc && node scripts/gen-epic-docs.mjs",
     "prepare": "husky",
-    "epic:record": "node scripts/record-epic-catalog.mjs",
+    "epic:record": "tsx scripts/repo-flow.ts epic_record",
     "epic:generate": "node --import tsx scripts/generate-epic-actions.mjs && node --import tsx scripts/wire-epic-actions.mjs",
     "epic:seed": "node scripts/seed-epic-effects.mjs",
     "epic:unreviewed": "node scripts/epic-unreviewed.mjs",
-    "specs:record": "node scripts/record-handler-specs.mjs",
+    "specs:record": "tsx scripts/repo-flow.ts specs_record",
     "specs:generate": "node --import tsx scripts/generate-handler-specs.mjs"
   },
   "dependencies": {

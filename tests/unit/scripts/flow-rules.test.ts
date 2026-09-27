@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { flowNames, namespacedPaths, strayCleanupFlows, DEMO_FLOWS, DEMO_PATHS } from "../../../scripts/check-flows.mjs";
+import {
+  flowNames, isDemoPath, namespacedFlowPaths, namespacedPaths, strayCleanupFlows, DEMO_FLOWS, DEMO_PATHS,
+} from "../../../scripts/check-flows.mjs";
 import { lintText } from "../../../scripts/lint-prose.mjs";
 
 const paths = (src: string) =>
@@ -20,21 +22,25 @@ describe("a flow default names a real asset domain", () => {
     expect(paths('const FIRE_PKG = "/Game/VFX/Fire";')).toEqual([]);
   });
 
-  it("exempts only the exact paths the demos already use", () => {
+  it("exempts only the roots the demos already use, and what lies under them", () => {
     expect([...(DEMO_PATHS as Set<string>)]).toEqual(["/Game/Flows/Beacon", "/Game/MCP_Home"]);
+    expect(isDemoPath("/Game/Flows/Beacon/M_Floor")).toBe(true);
+    expect(isDemoPath("/Game/Flows/BeaconTwo")).toBe(false);
   });
 
-  it("ignores a path inside a comment", () => {
-    expect(paths('  // was "/Game/Flows/Old" before')).toEqual([]);
-  });
-
-  it("catches a template literal, which is how a parameterised default is written", () => {
-    expect(paths("outPath: `/Game/Flows/${name}`,")).toEqual(["/Game/Flows/${name}"]);
-    expect(paths("outPath: `/Game/MCP/Thing`,")).toEqual(["/Game/MCP/Thing"]);
+  it("catches a template, which is how a parameterised default is written", () => {
+    expect(paths("/Game/Flows/${name}")).toEqual(["/Game/Flows/${name}"]);
   });
 
   it("catches it whatever the case, since the content root is not case sensitive", () => {
-    expect(paths('outPath: "/game/Flows/Thing",')).toEqual(["/game/Flows/Thing"]);
+    expect(paths("/game/Flows/Thing")).toEqual(["/game/Flows/Thing"]);
+  });
+
+  it("finds a path anywhere in a flow's values, and says where", () => {
+    const flows = { f: { steps: { 1: { task: "material.create", options: { packagePath: "/Game/MCP/Mats" } } } } };
+    expect(namespacedFlowPaths(flows)).toEqual([
+      { flow: "f", at: "steps.1.options.packagePath", namespace: "/Game/MCP", path: "/Game/MCP/Mats" },
+    ]);
   });
 });
 
@@ -69,18 +75,10 @@ describe("cleanup twins belong to demos only", () => {
   });
 });
 
-describe("reading flow names out of the loader", () => {
-  it("finds a flow by its description key", () => {
-    const src = [
-      "  return {",
-      "    my_flow: {",
-      "      description:",
-      '        "does a thing",',
-      "      steps: {},",
-      "    },",
-      "  };",
-    ].join("\n");
-    expect(flowNames(src)).toEqual(["my_flow"]);
+describe("reading flow names out of the universal layer", () => {
+  it("lists the flows a config document declares, in order", () => {
+    expect(flowNames({ flows: { b: {}, a: {} } })).toEqual(["b", "a"]);
+    expect(flowNames({})).toEqual([]);
   });
 });
 

@@ -164,6 +164,20 @@ describe("the dialog gate's plan-time question", () => {
     const { guard: g } = guard("auto");
     expect(await g.wouldRefuse("editor.list_dialogs", "action")).toBe(false);
   });
+
+  it("answers every subject of a plan from one reading of the screen", async () => {
+    let probes = 0;
+    const g = new DialogGuard({
+      mode: () => "auto",
+      probe: async () => { probes++; return { dialogs: [{ title: "Save Content", message: "m", buttons: ["Save"], choices: [] }] }; },
+      press: async () => ({ success: true }),
+      elicit: () => undefined as never,
+    });
+    const refuses = await g.refusalsNow();
+    expect([refuses("asset.list", "action"), refuses("list_assets", "bridge"), refuses("editor.list_dialogs", "action")])
+      .toEqual([true, true, false]);
+    expect(probes).toBe(1);
+  });
 });
 
 describe("a project's own checks", () => {

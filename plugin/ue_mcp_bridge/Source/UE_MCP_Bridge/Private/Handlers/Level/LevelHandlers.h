@@ -22,6 +22,10 @@ private:
 	// #717: bulk set editor-only visibility (temporarily hidden in editor)
 	static TSharedPtr<FJsonValue> SetEditorVisibility(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PlaceActor(const TSharedPtr<FJsonObject>& Params);
+	// internal_spawn_actor: place_actor that spawns under a taken label too.
+	static TSharedPtr<FJsonValue> SpawnActorUnchecked(const TSharedPtr<FJsonObject>& Params);
+	static class AActor* SpawnForPlacement(class UWorld* World, class UClass* Class,
+		const TSharedPtr<FJsonObject>& Params, const FString& Label);
 	static TSharedPtr<FJsonValue> DeleteActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetActorDetails(const TSharedPtr<FJsonObject>& Params);
 	// #240/#241/#302/#320/#370/#353: deep component-tree introspection - per-component

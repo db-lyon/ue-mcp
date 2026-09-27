@@ -409,6 +409,12 @@ export interface FlowActionSpec<C = unknown> extends ActionSpecBase {
   compose: (run: ChildRun, input: Record<string, unknown>, ctx: ToolContext) => Promise<C>;
   result: (collected: C, input: Record<string, unknown>) => unknown;
   expand?: (input: Record<string, unknown>) => Array<{ task: string; options?: Record<string, unknown> } | { flow: string; options?: Record<string, unknown> }> | null;
+  /**
+   * Flows this action declares for itself, in the ue-mcp.yml flow shape.
+   * `compose` runs them by name; they resolve only inside this action's own
+   * runs and are never listed by flow(list).
+   */
+  flows?: Record<string, unknown>;
   /** A recorded C++ parameter spec the inputs follow, as on a bridge action, and the method it was recorded from. */
   paramSpec?: readonly ParamSpec[];
   specMethod?: string;

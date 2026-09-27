@@ -21,20 +21,6 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "demo",
     "params": [],
     "contractExempt": "Takes no parameters and acts unconditionally: creates the home level if missing and opens it"
-  },
-  "demo_step": {
-    "category": "demo",
-    "params": [
-      {
-        "name": "step",
-        "type": "integer",
-        "required": false,
-        "description": "Step index to execute, 1 to 19. Omit for the step list",
-        "aliases": [
-          "stepIndex"
-        ]
-      }
-    ]
   }
 };
 

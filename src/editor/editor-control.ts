@@ -935,21 +935,6 @@ export interface StopEditorResult {
   remainingInstances?: Array<{ pid: number; port: number }>;
 }
 
-/**
- * What a restart returns: the start half's result, unchanged.
- *
- * It used to also carry the stop half's account of any dialog met on the way -
- * the mode, its source, who pressed what. Neither half meets a dialog any more.
- * The gate refuses both while a modal is up, and reports it there.
- */
-export interface RestartEditorResult {
-  success: boolean;
-  message: string;
-  state?: EngineState;
-  timeline?: ReadyPhase[];
-  elapsedSeconds?: number;
-}
-
 
 /**
  * What this tool will and will not do to a process that is not closing.
@@ -1280,42 +1265,4 @@ export async function stopEditor(
       + " " + NEVER_KILLS,
     state: blockedState,
   };
-}
-
-export async function restartEditor(
-  project: ProjectContext,
-  bridge?: { connect: (timeoutMs?: number) => Promise<void> } & ConnectedEditorSource,
-  openDisplay?: (title: string) => ProgressDisplay,
-): Promise<RestartEditorResult> {
-  // Same rule as start and stop: without a loaded project there is no editor
-  // this is about, and the machine-wide answer is somebody else's editor (#819).
-  if (!project.projectPath) {
-    return { success: false, message: "No project loaded. Use project(action='set_project') first." };
-  }
-
-  // A stop and then a start. No dialog behaviour of its own; the gate refuses
-  // both halves while a modal is up.
-  const stopResult = await stopEditor(project.projectDir ?? undefined, { connected: connectedEditorOf(bridge) });
-  // Whether the stop mattered is a question about THIS project's editor: a
-  // failed stop with nothing of ours left running just means it was already
-  // down, and another project's editor being up says nothing either way.
-  if (!stopResult.success && (await findInteractiveEditors(project.projectPath)).length > 0) {
-    return { success: false, message: `Failed to stop editor: ${stopResult.message}` };
-  }
-
-  const startResult = await startEditor(project, undefined, undefined, { openDisplay });
-  if (!startResult.success) {
-    return startResult;
-  }
-
-  // Reconnect the bridge if provided
-  if (bridge) {
-    try {
-      await bridge.connect(5000);
-    } catch {
-      // Bridge reconnect timer will handle it
-    }
-  }
-
-  return startResult;
 }

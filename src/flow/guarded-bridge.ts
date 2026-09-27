@@ -16,6 +16,7 @@ import type { EditorSession } from "../sessions/session.js";
 import { explainEditorDownWithEvidence } from "../dispatch/offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
 import { DialogGuard, ensureGuard, existingGuard } from "../editor/dialog-guard.js";
+import { dialogGate } from "./gates.js";
 
 export type { ResolveExistingFile } from "./guard.js";
 
@@ -40,9 +41,7 @@ export async function refuseIfBlocked(
   // having one. Failing closed is right, but only because no session can reach
   // this without a guard: they were created in one startup pass, so a session
   // registered any other way was refused every call it ever made.
-  const guard = await ensureGuard(session);
-  const decision = await guard.check(method, "bridge");
-  return decision.allow ? null : decision.refusal;
+  return dialogGate(await ensureGuard(session), method, "bridge");
 }
 
 /**

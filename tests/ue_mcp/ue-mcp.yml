@@ -22,6 +22,32 @@ tasks:
     group: util
     description: Generic bridge task, addressed by method name. Live tests fixture.
 
+  # Repo automation, run by `npm run specs:record` and `npm run epic:record`
+  # through scripts/repo-flow.ts. The reads are the generic bridge task; the
+  # writes are repo tasks under scripts/tasks/, whose class paths resolve from
+  # the repository root.
+  handler_specs_read:
+    class_path: ue-mcp.bridge
+    group: repo
+    description: The running plugin's capabilities, handler specs included (#1057).
+    options:
+      method: get_bridge_capabilities
+  handler_specs_write:
+    class_path: scripts.tasks.write-handler-specs
+    group: repo
+    description: Write the published handler specs to tests/golden/handler-specs.json, sorted.
+  epic_catalog_read:
+    class_path: ue-mcp.bridge
+    group: repo
+    description: Unreal's AI Toolset Registry catalog, with every tool's input schema.
+    options:
+      method: epic_list_toolsets
+      includeSchemas: true
+  epic_catalog_write:
+    class_path: scripts.tasks.write-epic-catalog
+    group: repo
+    description: Write the catalog to tests/golden/epic-catalog.json, sorted and keyed by engine.
+
 flows:
   live_tier_leak_probe:
     description: Read-only probe the live tests runs to prove no routing key reaches the editor.
@@ -43,6 +69,27 @@ flows:
           directory: /Game
           recursive: false
           editor: ue_mcp
+
+  # Recordings the TS surface is generated from. Read-only in the editor.
+  specs_record:
+    description: Record the handler specs the running plugin publishes. Then run npm run specs:generate.
+    steps:
+      "1":
+        task: handler_specs_read
+      "2":
+        task: handler_specs_write
+        options:
+          specs: ${steps.1.handlerSpecs}
+
+  epic_record:
+    description: Record Unreal's AI Toolset Registry catalog, keyed by engine version.
+    steps:
+      "1":
+        task: epic_catalog_read
+      "2":
+        task: epic_catalog_write
+        options:
+          toolsets: ${steps.1.toolsets}
 
   # The smoke harness's scratch-level routine, as flows (plan 3.9). The live
   # gate for the universal flows runs both. scripts/smoke-test.js keeps its own

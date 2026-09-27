@@ -138,6 +138,8 @@ private:
 
 	// #225: single-call simple material authoring + EMaterialUsage flag
 	static TSharedPtr<FJsonValue> CreateMaterialSimple(const TSharedPtr<FJsonObject>& Params);
+	// internal_create_constant_material: constants and a coloured emissive, one save.
+	static TSharedPtr<FJsonValue> CreateConstantMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialUsage(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetMaterialUsage(const TSharedPtr<FJsonObject>& Params);
 

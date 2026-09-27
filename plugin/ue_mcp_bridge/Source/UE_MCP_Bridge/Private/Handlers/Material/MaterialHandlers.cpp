@@ -398,6 +398,21 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("meshSlots"), EType::Array, TEXT("Mesh material slot names or indices to assign (default every slot) (#946)")),
 	}, MCPSpec::ExactlyOne({ { TEXT("materialPath") }, { TEXT("name") } }));
 
+	{
+		// Reached only as the flow task internal.create_constant_material (src/flow/internal-tasks.ts).
+		FMCPHandlerRegistry::FCategoryScope InternalScope(Registry, TEXT("internal"));
+		Registry.RegisterHandler(TEXT("internal_create_constant_material"), &CreateConstantMaterial, {
+			SpecName(TEXT("Material asset name")),
+			SpecPackagePath(TEXT("Folder for the new material (default /Game/Materials)")),
+			SpecOnConflict(),
+			MCPParam::Optional(TEXT("baseColor"), EType::Color, TEXT("Linear base colour {r,g,b,a}")),
+			MCPParam::Optional(TEXT("metallic"), EType::Number, TEXT("Metallic constant")),
+			MCPParam::Optional(TEXT("roughness"), EType::Number, TEXT("Roughness constant")),
+			MCPParam::Optional(TEXT("emissiveColor"), EType::Color, TEXT("Linear emissive colour {r,g,b,a}")),
+			MCPParam::Optional(TEXT("emissiveStrength"), EType::Number, TEXT("Multiplier on emissiveColor (default 1)")),
+		}, MCPSpec::ContractExempt(TEXT("Creates and saves a material from constants alone, with nothing to load that could fail first")));
+	}
+
 	Registry.RegisterHandler(TEXT("create_material_simple"), &CreateMaterialSimple, {
 		SpecName(TEXT("Material asset name")),
 		SpecPackagePath(TEXT("Folder for the new material (default /Game/Materials)")),
@@ -4517,5 +4532,85 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialSimple(const TSharedPtr<
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), Material->GetPathName());
 	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
+	return MCPResult(Result);
+}
+
+// internal_create_constant_material: a lit material from linear constants,
+// the emissive as colour times strength, compiled and saved once.
+TSharedPtr<FJsonValue> FMaterialHandlers::CreateConstantMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, {
+		TEXT("name"), TEXT("packagePath"), TEXT("onConflict"), TEXT("baseColor"), TEXT("metallic"),
+		TEXT("roughness"), TEXT("emissiveColor"), TEXT("emissiveStrength"),
+	});
+
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	auto ToColor = [](const TSharedPtr<FJsonObject>& Obj)
+	{
+		double R = 0, G = 0, B = 0, A = 1;
+		Obj->TryGetNumberField(TEXT("r"), R);
+		Obj->TryGetNumberField(TEXT("g"), G);
+		Obj->TryGetNumberField(TEXT("b"), B);
+		Obj->TryGetNumberField(TEXT("a"), A);
+		return FLinearColor((float)R, (float)G, (float)B, (float)A);
+	};
+	const TSharedPtr<FJsonObject>* BaseColorObj = nullptr;
+	const bool bBaseColor = TryGetObjectParam(Params, TEXT("baseColor"), BaseColorObj) && BaseColorObj;
+	const TSharedPtr<FJsonObject>* EmissiveObj = nullptr;
+	const bool bEmissive = TryGetObjectParam(Params, TEXT("emissiveColor"), EmissiveObj) && EmissiveObj;
+
+	UMaterialFactoryNew* Factory = NewObject<UMaterialFactoryNew>();
+	auto CreatedRes = MCPCreateAssetIdempotent<UMaterial>(Name, PackagePath, OnConflict, TEXT("Material"), Factory);
+	if (CreatedRes.EarlyReturn) return CreatedRes.EarlyReturn;
+	UMaterial* Material = CreatedRes.Asset;
+	UMaterialEditorOnlyData* EOD = Material->GetEditorOnlyData();
+
+	auto AddVector = [Material](const FLinearColor& Value)
+	{
+		UMaterialExpressionConstant4Vector* Expr = NewObject<UMaterialExpressionConstant4Vector>(Material);
+		Expr->Constant = Value;
+		Material->GetExpressionCollection().AddExpression(Expr);
+		return Expr;
+	};
+	auto AddScalar = [Material](double Value)
+	{
+		UMaterialExpressionConstant* Expr = NewObject<UMaterialExpressionConstant>(Material);
+		Expr->R = (float)Value;
+		Material->GetExpressionCollection().AddExpression(Expr);
+		return Expr;
+	};
+
+	Material->PreEditChange(nullptr);
+	if (bBaseColor) EOD->BaseColor.Connect(0, AddVector(ToColor(*BaseColorObj)));
+	double Metallic = 0, Roughness = 0;
+	if (TryGetNumberParam(Params, TEXT("metallic"), Metallic)) EOD->Metallic.Connect(0, AddScalar(Metallic));
+	if (TryGetNumberParam(Params, TEXT("roughness"), Roughness)) EOD->Roughness.Connect(0, AddScalar(Roughness));
+	if (bEmissive)
+	{
+		const FLinearColor Emissive = ToColor(*EmissiveObj);
+		double Strength = 1.0;
+		TryGetNumberParam(Params, TEXT("emissiveStrength"), Strength);
+		UMaterialExpressionMultiply* Mul = NewObject<UMaterialExpressionMultiply>(Material);
+		Material->GetExpressionCollection().AddExpression(Mul);
+		Mul->A.Connect(0, AddVector(Emissive));
+		Mul->B.Connect(0, AddScalar(Strength));
+		EOD->EmissiveColor.Connect(0, Mul);
+	}
+	Material->PostEditChange();
+	Material->MarkPackageDirty();
+
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
+
+	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, Material->GetPathName(), bSaved, SaveError);
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("assetPath"), Material->GetPathName());
+	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, Material->GetPathName());
 	return MCPResult(Result);
 }

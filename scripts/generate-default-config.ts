@@ -2,7 +2,7 @@
 /**
  * Generate the default ue-mcp.yml the package ships as a reference.
  *
- * It is `buildDefaults(ALL_TOOLS)`, the same object the flow loader starts
+ * It is `buildDefaults(ALL_TOOLS)`, the universal layer the flow loader starts
  * from at runtime, dumped as YAML: every category's tasks and the built-in
  * flows, in the form a project's ue-mcp.yml uses today.
  *

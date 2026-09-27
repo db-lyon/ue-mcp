@@ -114,6 +114,8 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
+  "flow/internal-tasks.ts": "The internal primitives' task names, bridge methods and effects. A leaf with no imports and no state.",
+  "surface/flow-specs.ts": "Parameter specs of flow actions no bridge method records; the same declaration in every editor.",
   "surface/action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
   "surface/action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",
   "surface/routing-params.ts": "The dispatcher's parameter names and the helper that strips `action`. A leaf with no imports and no state.",
@@ -176,6 +178,8 @@ const SESSION_INDEPENDENT: Record<string, string> = {
 
   "flow/events.ts": "One process-wide event bus. Which editor a run belongs to rides on the event, not here.",
   "flow/schema.ts": "Shared flow schema declarations.",
+  "flow/gates.ts": "Shared declarations of the server's gates, evaluated over facts the caller hands it.",
+  "flow/universal.ts":"The universal config layer, one shipped file read once for the whole process.",
   "flow/rollback.ts": "Pure shaping of a rollback record.",
   "flow/task-call.ts": "Pure resolution of a task call against the definitions and registry on the context it is handed.",
   "flow/handler-outcome.ts": "Pure reading of a handler's own verdict off the body it answered with.",

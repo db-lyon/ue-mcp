@@ -10,14 +10,18 @@ import type {
 } from "@db-lyon/flowkit";
 import type { ToolDef } from "../core/types.js";
 import type { FlowContext } from "./context.js";
-import { BridgeTask } from "./bridge-task.js";
-import { bridgeTaskClass, compositeTaskClass, handlerTaskClass } from "./task-factory.js";
+import { BridgeTask, ReconnectTask } from "./bridge-task.js";
+import { bridgeTaskClass, compositeTaskClass, handlerTaskClass, readTaskClass } from "./task-factory.js";
+import { STATUS_PART_PREFIX, STATUS_PARTS } from "../tools/project/status-parts.js";
 import { actionPreparation } from "./run-action.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../surface/context/micro-context.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { paramMapperOf } from "../surface/epic-input.js";
 import { builtinClassPath, LIVE_REFERENCES_KEY, resolveConfiguredTask } from "./task-call.js";
 import { actionOptionSpecs } from "../surface/option-specs.js";
+import { internalTasks } from "./internal-tasks.js";
+import { RECORDED_HANDLER_SPECS } from "../tools/specs/index.js";
+import type { ParamSpec } from "../surface/handler-spec.js";
 
 /**
  * A registry that describes every action's options, from the same reading
@@ -50,6 +54,18 @@ export class DescribedTaskRegistry extends TaskRegistry {
     if (merged && Object.keys(merged).length > 0) out.options_schema = merged;
     return out;
   }
+}
+
+/** A recorded parameter as an option spec: its JSON type, and whether it is required. */
+function paramOptionSpec(param: ParamSpec): OptionSpecs[string] {
+  const type = param.type === "vec3" || param.type === "rotator" || param.type === "color" ? "object"
+    : param.type === "any" ? undefined
+    : param.type;
+  return {
+    ...(type ? { type } : {}),
+    description: param.description,
+    ...(param.required ? { required: true } : {}),
+  };
 }
 
 /** Types and allowed values only: a declared handler's required flags are advisory. */
@@ -97,7 +113,9 @@ class MicroTaskRegistry extends DescribedTaskRegistry {
  * (`ue-mcp.builtin/<category>.<action>`), which the default definitions point
  * at, so an override can replace the name and still reach the built-in.
  *
- * Also registers `ue-mcp.bridge` as a class_path for YAML-defined bridge tasks.
+ * Also registers `ue-mcp.bridge` as a class_path for YAML-defined bridge tasks,
+ * and the `internal.*` primitives the universal flows call, which are tasks
+ * and never actions (src/flow/internal-tasks.ts).
  */
 export function buildFlowRegistry(tools: ToolDef[]): DescribedTaskRegistry {
   // The registry keeps disabled categories so flows can name them directly;
@@ -109,7 +127,18 @@ export function buildFlowRegistry(tools: ToolDef[]): DescribedTaskRegistry {
 
   // Register built-in task class paths
   registry.registerClassPath("ue-mcp.bridge", BridgeTask as unknown as TaskConstructor);
+  registry.registerClassPath("ue-mcp.reconnect", ReconnectTask as unknown as TaskConstructor);
+  for (const [part, read] of Object.entries(STATUS_PARTS)) {
+    registry.registerClassPath(`${STATUS_PART_PREFIX}${part}`, readTaskClass(`${STATUS_PART_PREFIX}${part}`, read));
+  }
   registry.register("shell", ShellTask as unknown as TaskConstructor);
+  for (const [taskName, task] of internalTasks()) {
+    registry.register(taskName, bridgeTaskClass(taskName, task.method));
+    registry.declareOptions(taskName, () => {
+      const params = RECORDED_HANDLER_SPECS[task.method]?.params ?? [];
+      return Object.fromEntries(params.map((p) => [p.name, paramOptionSpec(p)]));
+    });
+  }
 
   for (const tool of tools) {
     for (const [actionName, spec] of Object.entries(tool.actions)) {

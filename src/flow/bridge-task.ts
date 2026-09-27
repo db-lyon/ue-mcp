@@ -62,3 +62,23 @@ export class BridgeTask extends UeMcpTask {
     return applyHandlerOutcome(this.ctx, obj, result);
   }
 }
+
+/**
+ * `ue-mcp.reconnect`: connect this run's bridge, waiting up to `timeoutMs`
+ * (default 5000). A connect that does not land is left to the bridge's own
+ * reconnect timer, so the step never fails.
+ */
+export class ReconnectTask extends UeMcpTask<{ timeoutMs?: number }> {
+  get taskName() {
+    return "ue-mcp.reconnect";
+  }
+
+  async execute(): Promise<TaskResult> {
+    try {
+      await this.bridge.connect(this.options.timeoutMs ?? 5000);
+    } catch {
+      // The reconnect timer handles it.
+    }
+    return { success: true, data: { connected: this.bridge.isConnected } };
+  }
+}
