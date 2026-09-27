@@ -8,6 +8,7 @@ import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "../core/types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
+import { errorEnvelope, withBodyEnvelope } from "./error-envelope.js";
 import { debug } from "../core/log.js";
 import { consumeUpgradeNotice } from "../core/version-check.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
@@ -60,31 +61,41 @@ function withUpgradeNotice(content: TextBlock[]): TextBlock[] {
 }
 
 /**
- * Structured tail for an error a caller has to make a decision about (#799).
- * A bridge timeout is not a failed call: the editor may have finished it. The
- * prose says so, and this block says so in a form a client can branch on
- * without matching strings.
+ * Structured tail for every error (#799): the code, any details (a bridge
+ * timeout says the editor may have finished the call), and the envelope under
+ * `error`, so a client branches without matching strings.
  */
-function machineErrorBlock(e: unknown): TextBlock[] {
-  if (!(e instanceof McpError) || !e.details) return [];
-  return [{
+function machineErrorBlock(code: string, message: string, e?: unknown): TextBlock {
+  const details = e instanceof McpError ? e.details : undefined;
+  const envelope = errorEnvelope({ code, message, body: details });
+  return {
     type: "text" as const,
-    text: "MACHINE_ERROR=" + JSON.stringify({ code: e.code, ...e.details }),
-  }];
+    text: "MACHINE_ERROR=" + JSON.stringify({ code, ...details, error: envelope }),
+  };
 }
 
-/** The one error shape every tool answers with: `Error [CODE]: message`, then any tail. */
-export function errorResult(code: string, message: string, tail: TextBlock[] = []): ToolResult {
+/** The one error shape every tool answers with: `Error [CODE]: message`, the machine block, then any tail. */
+export function errorResult(code: string, message: string, tail: TextBlock[] = [], cause?: unknown): ToolResult {
   return {
-    content: withUpgradeNotice([{ type: "text" as const, text: `Error [${code}]: ${message}` }, ...tail]),
+    content: withUpgradeNotice([
+      { type: "text" as const, text: `Error [${code}]: ${message}` },
+      machineErrorBlock(code, message, cause),
+      ...tail,
+    ]),
     isError: true,
   };
 }
 
-/** A refusal payload, returned as the error result it is. */
+/** A refusal payload, returned as the error result it is. A refusal waits on the editor's state. */
 function refusalResult(refusal: unknown, tail: TextBlock[] = []): ToolResult {
+  const r = refusal && typeof refusal === "object" ? (refusal as Record<string, unknown>) : {};
+  const message = [r.message, r.error, r.reason].find((v): v is string => typeof v === "string") ?? "A dialog refused this call.";
   return {
-    content: withUpgradeNotice([{ type: "text" as const, text: JSON.stringify(refusal, null, 2) }, ...tail]),
+    content: withUpgradeNotice([
+      { type: "text" as const, text: JSON.stringify(refusal, null, 2) },
+      machineErrorBlock("DIALOG_BLOCKED", message),
+      ...tail,
+    ]),
     isError: true,
   };
 }
@@ -329,7 +340,7 @@ export async function dispatchCategoryCall(
       const code = result.error instanceof McpError && result.error.code === ErrorCode.ASSET_LOCKED
         ? ErrorCode.ASSET_LOCKED
         : "TASK_FAILED";
-      return errorResult(code, msg, [...machineErrorBlock(result.error), ...served]);
+      return errorResult(code, msg, served, result.error);
     }
 
     // An allow-listed read still SAYS a dialog is up: get_status must never
@@ -395,13 +406,14 @@ export async function dispatchCategoryCall(
           text: "MACHINE_DIRECTIVE=" + JSON.stringify(result.data.machine),
         });
       }
-      blocks.push({ type: "text" as const, text: stringify(result.data.result) });
+      blocks.push({ type: "text" as const, text: stringify(withBodyEnvelope(result.data.result)) });
       return { content: withUpgradeNotice([...blocks, ...served]) };
     }
 
     return {
       content: withUpgradeNotice([
-        { type: "text" as const, text: stringify(result.data) },
+        // A handler that reported its own failure gets the envelope beside its fields.
+        { type: "text" as const, text: stringify(withBodyEnvelope(result.data)) },
         ...served,
       ]),
     };
@@ -418,7 +430,7 @@ export async function dispatchCategoryCall(
     }
     const msg = e instanceof Error ? e.message : String(e);
     const code = e instanceof McpError ? e.code : "UNKNOWN";
-    return errorResult(code, msg, [...machineErrorBlock(e), ...served]);
+    return errorResult(code, msg, served, e);
   } finally {
     await flowCtx.assetLocks?.releaseAll();
   }
@@ -480,6 +492,6 @@ export async function dispatchFlowCall(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const code = e instanceof McpError ? e.code : "UNKNOWN";
-    return errorResult(code, msg, machineErrorBlock(e));
+    return errorResult(code, msg, [], e);
   }
 }

@@ -33,6 +33,7 @@ import { unappliedRollbackCall } from "./handler-outcome.js";
 import { hostNamespaces, makeConditionEvaluator } from "./condition.js";
 import { gateGraph, gateScope, planPreflight } from "./preflight.js";
 import { keepNestedSteps } from "./composite.js";
+import { envelopeOfError, type ErrorEnvelope } from "../dispatch/error-envelope.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -498,13 +499,31 @@ function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
     steps: result.steps.map((s) => reportStep(s, replayed)),
     rollback: result.rollback,
     hookErrors: result.hookErrors,
+    error: runEnvelope(result),
   };
+}
+
+/** The envelope for a run that stopped: the stopping step's, else the run's own error. */
+function runEnvelope(result: FlowRunResult): ErrorEnvelope | undefined {
+  if (result.success) return undefined;
+  const find = (steps: FlowStepResult[], prefix: string): ErrorEnvelope | undefined => {
+    for (const s of steps) {
+      if (s.skipped || s.ignoredFailure || s.result?.success !== false) continue;
+      const path = `${prefix}${s.stepNumber}`;
+      const deeper = s.nestedSteps ? find(s.nestedSteps, `${path}/`) : undefined;
+      if (deeper) return deeper;
+      if (s.result.error) return envelopeOfError(s.result.error, path, s.result.data);
+    }
+    return undefined;
+  };
+  return find(result.steps, "") ?? (result.error ? envelopeOfError(result.error) : undefined);
 }
 
 /**
  * One step, and the child flow's steps under it, as the caller reads them.
  */
-function reportStep(s: FlowStepResult, replayed: boolean): Record<string, unknown> {
+function reportStep(s: FlowStepResult, replayed: boolean, prefix = ""): Record<string, unknown> {
+  const path = `${prefix}${s.stepNumber}`;
   return {
     stepNumber: s.stepNumber,
     name: s.name,
@@ -517,8 +536,13 @@ function reportStep(s: FlowStepResult, replayed: boolean): Record<string, unknow
     ignoredFailure: s.ignoredFailure ? true : undefined,
     duration: s.duration,
     attempts: s.attempts,
+    // The envelope's fields ride on the step's own error object.
     error: s.result?.error
-      ? { message: s.result.error.message, name: s.result.error.name }
+      ? {
+          ...envelopeOfError(s.result.error, path, s.result.data),
+          message: s.result.error.message,
+          name: s.result.error.name,
+        }
       : undefined,
     data: s.result?.data,
     // The inverse a FAILING step carried for the part of its write that landed,
@@ -542,7 +566,7 @@ function reportStep(s: FlowStepResult, replayed: boolean): Record<string, unknow
     // A `flow` step's child steps, from flowkit 0.17.1. Before it, a nested
     // step was summarised to `data.stepCount` and everything else about the
     // child was reachable only by reading its run error as prose.
-    nestedSteps: s.nestedSteps?.map((child) => reportStep(child, replayed)),
+    nestedSteps: s.nestedSteps?.map((child) => reportStep(child, replayed, `${path}/`)),
   };
 }
 
