@@ -10,6 +10,7 @@
 #include "BlueprintHandlers_Internal.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPinType.h"
 #include "Engine/Blueprint.h"
 #include "Engine/World.h"
 #include "Engine/LevelScriptBlueprint.h"
@@ -271,7 +272,7 @@ namespace MCPBlueprintBatch
 			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 			bool bRoundTrips = true;
 			Obj->SetStringField(TEXT("name"), Var.VarName.ToString());
-			Obj->SetStringField(TEXT("typeSpec"), FBlueprintHandlers::PinTypeSpec(Var.VarType, bRoundTrips));
+			Obj->SetStringField(TEXT("typeSpec"), MCPPinTypeSpec(Var.VarType, bRoundTrips));
 			Obj->SetStringField(TEXT("pinCategory"), Var.VarType.PinCategory.ToString());
 			Obj->SetStringField(TEXT("guid"), Var.VarGuid.ToString());
 			Obj->SetStringField(TEXT("category"), Var.Category.ToString());

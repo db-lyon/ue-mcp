@@ -45,6 +45,7 @@
 #include "K2Node_Composite.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPinType.h"
 
 #include "Engine/Blueprint.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -199,7 +200,7 @@ static TSharedPtr<FJsonObject> UserPinJson(const TSharedPtr<FUserPinInfo>& Info,
 	O->SetNumberField(TEXT("index"), Index);
 	O->SetStringField(TEXT("name"), Info->PinName.ToString());
 	bool bRoundTrips = true;
-	O->SetStringField(TEXT("type"), FBlueprintHandlers::PinTypeSpec(Info->PinType, bRoundTrips));
+	O->SetStringField(TEXT("type"), MCPPinTypeSpec(Info->PinType, bRoundTrips));
 	O->SetBoolField(TEXT("typeRoundTrips"), bRoundTrips);
 	O->SetStringField(TEXT("defaultValue"), Info->PinDefaultValue);
 	O->SetBoolField(TEXT("isReference"), Info->PinType.bIsReference);
@@ -1133,7 +1134,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 		// Capture the type and default before the pin is gone, so the inverse
 		// can put back the same parameter rather than an approximation.
 		bool bRoundTrips = true;
-		const FString PrevType = PinTypeSpec(Owner->UserDefinedPins[At]->PinType, bRoundTrips);
+		const FString PrevType = MCPPinTypeSpec(Owner->UserDefinedPins[At]->PinType, bRoundTrips);
 		const FString PrevDefault = Owner->UserDefinedPins[At]->PinDefaultValue;
 		const int32 PrevIndex = At;
 
@@ -1245,7 +1246,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 		if (!ParsePinTypeSpec(TypeSpec, PinType, TypeError)) return MCPError(TypeError);
 
 		bool bRoundTrips = true;
-		const FString PrevType = PinTypeSpec(Owner->UserDefinedPins[At]->PinType, bRoundTrips);
+		const FString PrevType = MCPPinTypeSpec(Owner->UserDefinedPins[At]->PinType, bRoundTrips);
 		if (PrevType == TypeSpec)
 		{
 			auto Noop = MCPSuccess();
@@ -1330,7 +1331,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 			return MCPError(FString::Printf(
 				TEXT("The editor refused '%s' as the default for %s '%s' (type %s). It has to be Unreal export text for that type; nothing was changed."),
 				*DefaultValue, Direction, *ParameterName,
-				*PinTypeSpec(Owner->UserDefinedPins[At]->PinType, bRoundTrips)));
+				*MCPPinTypeSpec(Owner->UserDefinedPins[At]->PinType, bRoundTrips)));
 		}
 
 		auto Result = MCPSuccess();
@@ -1871,7 +1872,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditLocalVariable(const TSharedPtr<FJ
 		if (auto Err = RequireScope()) return Err;
 
 		bool bRoundTrips = true;
-		const FString PrevType = PinTypeSpec(Entry->LocalVariables[At].VarType, bRoundTrips);
+		const FString PrevType = MCPPinTypeSpec(Entry->LocalVariables[At].VarType, bRoundTrips);
 		const FString PrevDefault = Entry->LocalVariables[At].DefaultValue;
 
 		FBlueprintEditorUtils::RemoveLocalVariable(Blueprint, Scope, VarFName);
@@ -1960,7 +1961,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditLocalVariable(const TSharedPtr<FJ
 		if (!ParsePinTypeSpec(TypeSpec, PinType, TypeError)) return MCPError(TypeError);
 
 		bool bRoundTrips = true;
-		const FString PrevType = PinTypeSpec(Entry->LocalVariables[At].VarType, bRoundTrips);
+		const FString PrevType = MCPPinTypeSpec(Entry->LocalVariables[At].VarType, bRoundTrips);
 		if (PrevType == TypeSpec)
 		{
 			auto Noop = MCPSuccess();
@@ -2158,7 +2159,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveEventDispatcher(const TSharedPt
 			{
 				if (!Info.IsValid()) continue;
 				bool bRoundTrips = true;
-				const FString TypeSpec = PinTypeSpec(Info->PinType, bRoundTrips);
+				const FString TypeSpec = MCPPinTypeSpec(Info->PinType, bRoundTrips);
 				TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 				P->SetStringField(TEXT("name"), Info->PinName.ToString());
 				P->SetStringField(TEXT("type"), TypeSpec);
@@ -2740,7 +2741,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteMacro(const TSharedPtr<FJsonObj
 			bool bRoundTrips = true;
 			TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 			P->SetStringField(TEXT("name"), Info->PinName.ToString());
-			P->SetStringField(TEXT("type"), PinTypeSpec(Info->PinType, bRoundTrips));
+			P->SetStringField(TEXT("type"), MCPPinTypeSpec(Info->PinType, bRoundTrips));
 			Out.Add(MakeShared<FJsonValueObject>(P));
 		}
 	};

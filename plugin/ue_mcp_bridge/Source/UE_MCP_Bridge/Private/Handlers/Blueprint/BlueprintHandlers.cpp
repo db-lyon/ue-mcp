@@ -2,6 +2,7 @@
 #include "BlueprintHandlers_Internal.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPinType.h"
 #include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
 #include "JsonSerializer.h"
@@ -2061,7 +2062,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 		Result->SetStringField(TEXT("variableName"), VarName);
 		Result->SetStringField(TEXT("variableType"), VarType);
 		bool bTypeRoundTrips = true;
-		Result->SetStringField(TEXT("resolvedType"), PinTypeSpec(PinType, bTypeRoundTrips));
+		Result->SetStringField(TEXT("resolvedType"), MCPPinTypeSpec(PinType, bTypeRoundTrips));
 
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("path"), AssetPath);
@@ -2954,7 +2955,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintVariables(const TSharedP
 		VarObj->SetStringField(TEXT("type"), Var.VarType.PinCategory.ToString());
 		// type stays the pin category; typeSpec is the full add_variable spelling, containers included.
 		bool bSpecRoundTrips = false;
-		VarObj->SetStringField(TEXT("typeSpec"), PinTypeSpec(Var.VarType, bSpecRoundTrips));
+		VarObj->SetStringField(TEXT("typeSpec"), MCPPinTypeSpec(Var.VarType, bSpecRoundTrips));
 		VarObj->SetStringField(TEXT("guid"), Var.VarGuid.ToString());
 
 		// Check metadata
@@ -3305,7 +3306,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 	// name and type. It is offered only when the type survives the round trip
 	// through add_variable's own vocabulary (ParsePinTypeSpec, containers included).
 	bool bTypeRoundTrips = true;
-	const FString RemovedTypeSpec = PinTypeSpec(RemovedType, bTypeRoundTrips);
+	const FString RemovedTypeSpec = MCPPinTypeSpec(RemovedType, bTypeRoundTrips);
 	if (bTypeRoundTrips)
 	{
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();

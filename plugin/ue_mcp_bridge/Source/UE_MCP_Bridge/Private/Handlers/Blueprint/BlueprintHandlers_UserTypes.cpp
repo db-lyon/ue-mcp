@@ -35,6 +35,7 @@
 #include "BlueprintHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPinType.h"
 
 #include "Engine/UserDefinedEnum.h"
 #include "Kismet2/EnumEditorUtils.h"
@@ -193,67 +194,11 @@ static bool UnwrapContainer(const FString& In, const TCHAR* Wrapper, FString& Ou
 	return !OutInner.IsEmpty();
 }
 
-/** The scalar half of a pin type as a string FBlueprintHandlers::ParsePinTypeSpec accepts again.
- *  bOutRoundTrips is false for the categories this plugin's type vocabulary
- *  cannot express, which is reported rather than silently mislabelled. */
-static FString ScalarSpec(const FName Category, const FName SubCategory, UObject* SubObject, bool& bOutRoundTrips)
-{
-	bOutRoundTrips = true;
-	const FString ObjectPath = SubObject ? SubObject->GetPathName() : FString();
-
-	if (Category == UEdGraphSchema_K2::PC_Boolean) return TEXT("bool");
-	if (Category == UEdGraphSchema_K2::PC_Int)     return TEXT("int");
-	if (Category == UEdGraphSchema_K2::PC_Int64)   return TEXT("int64");
-	if (Category == UEdGraphSchema_K2::PC_Float)   return TEXT("float");
-	if (Category == UEdGraphSchema_K2::PC_Double)  return TEXT("double");
-	if (Category == UEdGraphSchema_K2::PC_Real)
-	{
-		return SubCategory == UEdGraphSchema_K2::PC_Float ? TEXT("float") : TEXT("double");
-	}
-	if (Category == UEdGraphSchema_K2::PC_String) return TEXT("string");
-	if (Category == UEdGraphSchema_K2::PC_Name)   return TEXT("name");
-	if (Category == UEdGraphSchema_K2::PC_Text)   return TEXT("text");
-	if (Category == UEdGraphSchema_K2::PC_Byte || Category == UEdGraphSchema_K2::PC_Enum)
-	{
-		if (Cast<UEnum>(SubObject)) return TEXT("enum:") + ObjectPath;
-		return TEXT("byte");
-	}
-	if (Category == UEdGraphSchema_K2::PC_Struct)
-	{
-		if (SubObject) return TEXT("struct:") + ObjectPath;
-		bOutRoundTrips = false;
-		return TEXT("struct");
-	}
-	if (Category == UEdGraphSchema_K2::PC_Object)
-	{
-		if (SubObject) return TEXT("object:") + ObjectPath;
-		return TEXT("object");
-	}
-	if (Category == UEdGraphSchema_K2::PC_Class)
-	{
-		return SubObject ? FString::Printf(TEXT("TSubclassOf<%s>"), *ObjectPath) : TEXT("class");
-	}
-	if (Category == UEdGraphSchema_K2::PC_SoftObject)
-	{
-		return SubObject ? FString::Printf(TEXT("TSoftObjectPtr<%s>"), *ObjectPath) : TEXT("softobject");
-	}
-	if (Category == UEdGraphSchema_K2::PC_SoftClass)
-	{
-		return SubObject ? FString::Printf(TEXT("TSoftClassPtr<%s>"), *ObjectPath) : TEXT("softclass");
-	}
-
-	// PC_Interface, PC_FieldPath, PC_Delegate, PC_MCDelegate, PC_Wildcard: real
-	// pin categories with no spelling in this plugin's type vocabulary. Say so
-	// rather than emit a label a write would reject.
-	bOutRoundTrips = false;
-	return Category.ToString();
-}
-
 /** Full type spec for one struct member. Delegates to the shared spec so a
  *  member's reported type is exactly what the parser accepts back. */
 static FString FieldTypeSpec(const FStructVariableDescription& Desc, bool& bOutRoundTrips)
 {
-	return FBlueprintHandlers::PinTypeSpec(Desc.ToPinType(), bOutRoundTrips);
+	return MCPPinTypeSpec(Desc.ToPinType(), bOutRoundTrips);
 }
 
 /** Resolve a member by "fieldGuid" or by "fieldName" against the friendly name
@@ -456,37 +401,6 @@ bool FBlueprintHandlers::ParsePinTypeSpec(const FString& TypeStr, FEdGraphPinTyp
 
 	OutType.ContainerType = Container;
 	return true;
-}
-
-FString FBlueprintHandlers::PinTypeSpec(const FEdGraphPinType& PinType, bool& bOutRoundTrips)
-{
-	using namespace MCPUserTypes;
-
-	UObject* SubObject = PinType.PinSubCategoryObject.IsValid() ? PinType.PinSubCategoryObject.Get() : nullptr;
-	const FString Base = ScalarSpec(PinType.PinCategory, PinType.PinSubCategory, SubObject, bOutRoundTrips);
-
-	switch (PinType.ContainerType)
-	{
-	case EPinContainerType::Array:
-		return Base + TEXT("[]");
-	case EPinContainerType::Set:
-		return FString::Printf(TEXT("set<%s>"), *Base);
-	case EPinContainerType::Map:
-	{
-		bool bValueRoundTrips = true;
-		const FString ValueSpec = ScalarSpec(
-			PinType.PinValueType.TerminalCategory,
-			PinType.PinValueType.TerminalSubCategory,
-			PinType.PinValueType.TerminalSubCategoryObject.IsValid()
-				? PinType.PinValueType.TerminalSubCategoryObject.Get()
-				: nullptr,
-			bValueRoundTrips);
-		bOutRoundTrips = bOutRoundTrips && bValueRoundTrips;
-		return FString::Printf(TEXT("map<%s,%s>"), *Base, *ValueSpec);
-	}
-	default:
-		return Base;
-	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
