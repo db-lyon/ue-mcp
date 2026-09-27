@@ -76,6 +76,10 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	{
 		return MCPParam::Optional(TEXT("world"), EType::String, TEXT("Runtime world scope: auto (default) | pie | editor"));
 	};
+	auto PieInstance = []()
+	{
+		return MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world instance (0 = server/primary); omit for the primary world"));
+	};
 	auto AbilityClass = [](const TCHAR* Description)
 	{
 		return MCPParam::Required(TEXT("abilityClass"), EType::String, Description);
@@ -147,6 +151,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("level"), EType::Number, TEXT("Effect level (default 1)")),
 		MCPParam::Optional(TEXT("setByCaller"), EType::Object, TEXT("SetByCaller magnitudes keyed by gameplay tag or name")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("remove_effect"), &RemoveEffect, {
 		ActorLabel(),
@@ -155,6 +160,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("effectClass"), EType::String, TEXT("GameplayEffect content path or class name. Removes every active effect of that class")).Alias(TEXT("effectPath")),
 		MCPParam::Optional(TEXT("stacksToRemove"), EType::Integer, TEXT("Stacks to take off (default -1, the whole effect)")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("set_attribute"), &SetAttribute, {
 		ActorLabel(),
@@ -162,23 +168,27 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("attribute"), EType::String, TEXT("Attribute name: Health or SetName.Health")),
 		MCPParam::Required(TEXT("value"), EType::Number, TEXT("New base value")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("get_attribute"), &GetAttribute, {
 		ActorLabel(),
 		ActorPath(),
 		MCPParam::Optional(TEXT("attribute"), EType::String, TEXT("Attribute to read. Omit to list every attribute")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("init_asc"), &InitAsc, {
 		ActorLabel(),
 		ActorPath(),
 		MCPParam::Optional(TEXT("attributeSet"), EType::String, TEXT("AttributeSet content path or class name to make sure is registered")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("get_asc_state"), &GetAscState, {
 		ActorLabel(),
 		ActorPath(),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("get_live_attribute_value"), &GetLiveAttributeValue, {
 		ActorLabel(),
@@ -187,6 +197,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("attribute"), EType::String, TEXT("Attribute property name, or Set.Property")),
 		MCPParam::Optional(TEXT("registerOwnerSets"), EType::Boolean, TEXT("Register the actor's own attribute sets on its ASC when it has none, the way BeginPlay would (default true)")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("set_live_attribute_value"), &SetLiveAttributeValue, {
 		ActorLabel(),
@@ -197,6 +208,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("valueType"), EType::String, TEXT("current (default, writes the attribute data in place) | base (writes through the ASC aggregator)")),
 		MCPParam::Optional(TEXT("registerOwnerSets"), EType::Boolean, TEXT("Register the actor's own attribute sets on its ASC when it has none, the way BeginPlay would (default true)")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("grant_ability"), &GrantAbility, {
 		ActorLabel(),
@@ -205,17 +217,20 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("level"), EType::Number, TEXT("Ability level (default 1)")),
 		MCPParam::Optional(TEXT("inputId"), EType::Integer, TEXT("InputID for the spec (default -1, unbound)")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("revoke_ability"), &RevokeAbility, {
 		ActorLabel(),
 		ActorPath(),
 		AbilityClass(TEXT("GameplayAbility class to revoke")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("get_active_effects"), &GetActiveEffects, {
 		ActorLabel(),
 		ActorPath(),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("trace_ability_activation"), &TraceAbilityActivation, {
 		ActorLabel(),
@@ -223,6 +238,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		AbilityClass(TEXT("GameplayAbility class to trace")),
 		MCPParam::Optional(TEXT("activate"), EType::Boolean, TEXT("Also call TryActivateAbility, to prove the verdict (default false)")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("add_loose_gameplay_tag"), &AddLooseGameplayTag, {
 		ActorLabel(),
@@ -230,6 +246,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("tag"), EType::String, TEXT("A registered gameplay tag")),
 		MCPParam::Optional(TEXT("count"), EType::Integer, TEXT("References to add, at least 1 (default 1)")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("remove_loose_gameplay_tag"), &RemoveLooseGameplayTag, {
 		ActorLabel(),
@@ -237,6 +254,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("tag"), EType::String, TEXT("A registered gameplay tag")),
 		MCPParam::Optional(TEXT("count"), EType::Integer, TEXT("References to remove, at least 1 (default 1)")),
 		World(),
+		PieInstance(),
 	});
 
 	// Input binding, cues and the attribute audit (GasHandlers_Abilities.cpp).
@@ -246,12 +264,14 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		AbilityClass(TEXT("Granted GameplayAbility class to bind")),
 		MCPParam::Required(TEXT("inputId"), EType::Integer, TEXT("Input id to bind; -1 leaves the ability unbound")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("clear_ability_input"), &ClearAbilityInput, {
 		ActorLabel(),
 		ActorPath(),
 		AbilityClass(TEXT("Granted GameplayAbility class to unbind")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("send_ability_input"), &SendAbilityInput, {
 		ActorLabel(),
@@ -260,6 +280,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("inputId"), EType::Integer, TEXT("Input id to send pressed or released to")),
 		MCPParam::Optional(TEXT("abilityClass"), EType::String, TEXT("Granted ability whose bound input id to use instead of inputId")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("add_effect_cue"), &AddEffectCue, {
 		MCPParam::Required(TEXT("effectPath"), EType::String, TEXT("GameplayEffect Blueprint asset path")).Alias(TEXT("effectClass")),
@@ -286,6 +307,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		ActorPath(),
 		MCPParam::Optional(TEXT("probeClamping"), EType::Boolean, TEXT("Measure an existing clamp by driving the set's own PreAttributeChange. Needs a live registered set (default false)")),
 		World(),
+		PieInstance(),
 	});
 
 	// Snapshot and diff (GasHandlers_Snapshot.cpp).
@@ -296,6 +318,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("compareWith"), EType::String, TEXT("Earlier snapshot id to diff this capture against")),
 		MCPParam::Optional(TEXT("registerOwnerSets"), EType::Boolean, TEXT("Register the actor's own attribute sets on its ASC when it has none, the way BeginPlay would (default true)")),
 		World(),
+		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("compare_gas_states"), &CompareGasStates, {
 		MCPParam::Optional(TEXT("beforeId"), EType::String, TEXT("Snapshot id of the earlier reading. Pass this or beforeSnapshot")),

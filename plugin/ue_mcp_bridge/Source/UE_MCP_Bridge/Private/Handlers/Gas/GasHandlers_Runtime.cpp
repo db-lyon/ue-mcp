@@ -90,11 +90,21 @@ FString ListAttributeDataPropertyNames(UClass* SetClass)
 
 namespace
 {
-	// Resolve the world for this call. Defaults to "auto" (prefer PIE), since
-	// runtime GAS control is almost always exercised during Play-In-Editor.
+	// Defaults to "auto" (prefer PIE), since runtime GAS control is almost
+	// always exercised during Play-In-Editor.
 	UWorld* ResolveRuntimeWorld(const TSharedPtr<FJsonObject>& Params)
 	{
-		return ResolveWorldScope(OptionalString(Params, TEXT("world"), TEXT("auto")));
+		return ResolveWorldFromParams(Params, TEXT("auto"));
+	}
+
+	// A rollback replays against the PIE instance the call acted on.
+	void CopyPieInstanceToRollback(const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonObject>& Payload)
+	{
+		double PieInstance = 0.0;
+		if (TryGetNumberParam(Params, TEXT("pieInstance"), PieInstance))
+		{
+			Payload->SetNumberField(TEXT("pieInstance"), PieInstance);
+		}
 	}
 
 	// Find the actor in the resolved world and return its
@@ -375,6 +385,7 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 		RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 		RollbackPayload->SetStringField(TEXT("effectHandle"), Active.ToString());
 		RollbackPayload->SetStringField(TEXT("world"), WorldScope);
+		CopyPieInstanceToRollback(Params, RollbackPayload);
 		if (bStackedOntoExisting)
 		{
 			// This call added ONE stack to an effect that was already there.
@@ -538,6 +549,7 @@ TSharedPtr<FJsonValue> FGasHandlers::RemoveEffect(const TSharedPtr<FJsonObject>&
 		RollbackPayload->SetStringField(TEXT("effectClass"), RemovedClassPath);
 		RollbackPayload->SetNumberField(TEXT("level"), RemovedLevel);
 		RollbackPayload->SetStringField(TEXT("world"), WorldScope);
+		CopyPieInstanceToRollback(Params, RollbackPayload);
 		MCPSetRollback(Result, TEXT("apply_effect"), RollbackPayload);
 		Result->SetBoolField(TEXT("rollbackLossy"), true);
 		Result->SetStringField(TEXT("rollbackNote"),
@@ -627,6 +639,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAttribute(const TSharedPtr<FJsonObject>&
 		RollbackPayload->SetStringField(TEXT("attribute"), QualifiedAttribute);
 		RollbackPayload->SetNumberField(TEXT("value"), OldBase);
 		RollbackPayload->SetStringField(TEXT("world"), WorldScope);
+		CopyPieInstanceToRollback(Params, RollbackPayload);
 		MCPSetRollback(Result, TEXT("set_attribute"), RollbackPayload);
 		Result->SetBoolField(TEXT("rollbackLossy"), false);
 	}
@@ -935,6 +948,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetLiveAttributeValue(const TSharedPtr<FJso
 	RollbackPayload->SetNumberField(TEXT("value"),
 		ValueType == TEXT("base") ? PreviousBase : PreviousCurrent);
 	RollbackPayload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world"), TEXT("auto")));
+	CopyPieInstanceToRollback(Params, RollbackPayload);
 	MCPSetRollback(Result, TEXT("set_live_attribute_value"), RollbackPayload);
 	Result->SetBoolField(TEXT("rollbackLossy"), Req.bAdopted);
 	if (Req.bAdopted)
@@ -1694,6 +1708,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddLooseGameplayTag(const TSharedPtr<FJsonO
 	RollbackPayload->SetStringField(TEXT("tag"), Req.Tag.ToString());
 	RollbackPayload->SetNumberField(TEXT("count"), Added);
 	RollbackPayload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world"), TEXT("auto")));
+	CopyPieInstanceToRollback(Params, RollbackPayload);
 	MCPSetRollback(Result, TEXT("remove_loose_gameplay_tag"), RollbackPayload);
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
 	return MCPResult(Result);
@@ -1750,6 +1765,7 @@ TSharedPtr<FJsonValue> FGasHandlers::RemoveLooseGameplayTag(const TSharedPtr<FJs
 	RollbackPayload->SetStringField(TEXT("tag"), Req.Tag.ToString());
 	RollbackPayload->SetNumberField(TEXT("count"), Removed);
 	RollbackPayload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world"), TEXT("auto")));
+	CopyPieInstanceToRollback(Params, RollbackPayload);
 	MCPSetRollback(Result, TEXT("add_loose_gameplay_tag"), RollbackPayload);
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
 	return MCPResult(Result);
@@ -1783,6 +1799,7 @@ void ReadActorASCParams(const TSharedPtr<FJsonObject>& Params)
 	OptionalString(Params, TEXT("actorLabel"));
 	OptionalString(Params, TEXT("actorPath"));
 	OptionalString(Params, TEXT("world"));
+	OptionalNumber(Params, TEXT("pieInstance"), -1.0);
 }
 
 UClass* ResolveGameplayAbilityClass(const FString& Spec, TSharedPtr<FJsonValue>& OutError)

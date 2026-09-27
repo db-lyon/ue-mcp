@@ -1256,6 +1256,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -4005,6 +4011,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -5207,6 +5219,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -6095,6 +6113,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -6879,6 +6903,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -7442,6 +7472,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -14166,6 +14202,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -14332,6 +14374,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -14462,6 +14510,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -15715,6 +15769,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -16971,6 +17031,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -17779,6 +17845,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -25267,6 +25339,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -25638,6 +25716,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -27621,6 +27705,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -28719,6 +28809,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -29359,6 +29455,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -31660,6 +31762,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -37176,6 +37284,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
