@@ -131,6 +131,20 @@ Give a list instead when you know the alternatives, and the param compiles to a 
         value: { type: [number, boolean, string] }
 ```
 
+### The schema is what agents see
+
+`schema:` is the only source of an action's parameters on the agent-facing surface: the signature line in the category tool's description, the signatures `search_tools` returns, and the parameter list `describe_action` reports, with each field's type, `required` flag and `description`. The `inspect_something` action above is advertised as:
+
+```
+mypfx_inspect_something(actorLabel, includeComponents?:b)
+```
+
+The action's `description:` is shown as prose and never parsed, so a `Params:` sentence in it does not add, remove or rename a parameter. Keep names and requiredness in `schema:`.
+
+- `schema: {}` declares an action that takes no parameters: `mypfx_status()`.
+- An action with no `schema:` still loads and runs, but nothing about its parameters is known. Its signature reads `mypfx_legacy(*)`, and `describe_action` returns its description with a `paramsNote` telling the agent to read the parameters from there.
+- A field whose name a built-in key of the host category already declares keeps the built-in's wire type, since that is what the category validates. Pick a distinct name when the types differ.
+
 ## Providing new categories (`provides:`)
 
 When the plugin's actions don't belong inside any built-in category, declare a `provides:` block. Each entry registers a brand-new top-level MCP category that the plugin owns. Action names are NOT prefixed inside provided categories - the category itself is the namespace.
