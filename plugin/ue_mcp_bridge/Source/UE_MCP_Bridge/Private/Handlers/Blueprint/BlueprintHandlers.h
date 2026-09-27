@@ -22,6 +22,10 @@ public:
 	// write. Defined in BlueprintHandlers_UserTypes.cpp.
 	static bool ParsePinTypeSpec(const FString& TypeStr, struct FEdGraphPinType& OutType, FString& OutError);
 
+	// The one Blueprint resolver: an asset path, or a umap path for its level
+	// script Blueprint (#942). The Blueprint edit traits open through it.
+	static class UBlueprint* LoadBlueprint(const FString& AssetPath);
+
 private:
 	// Handler implementations
 	static TSharedPtr<FJsonValue> CreateBlueprint(const TSharedPtr<FJsonObject>& Params);
@@ -161,7 +165,6 @@ private:
 	static TSharedPtr<FJsonValue> EditStructMetadata(const TSharedPtr<FJsonObject>& Params);
 
 	// Helper functions
-	static class UBlueprint* LoadBlueprint(const FString& AssetPath);
 	static class UEdGraph* FindGraph(class UBlueprint* Blueprint, const FString& GraphName);
 	static class UEdGraphNode* FindNodeByGuidOrName(class UEdGraph* Graph, const FString& NodeId);
 };
