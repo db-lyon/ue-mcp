@@ -34,6 +34,8 @@ import { hostNamespaces, makeConditionEvaluator } from "./condition.js";
 import { gateGraph, gateScope, planPreflight } from "./preflight.js";
 import { keepNestedSteps } from "./composite.js";
 import { envelopeOfError, type ErrorEnvelope } from "../dispatch/error-envelope.js";
+import { BridgeFacts } from "./probes.js";
+import { taskEffect } from "../surface/action-effects.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -171,7 +173,7 @@ async function planFlow(
 
   // Plan mode short-circuits inside the runner before any hooks fire,
   // so the runId placeholder we pass here is never observed.
-  const runner = makeRunner(registry, config, ctx, nextRunId(), flowName);
+  const runner = makeRunner(registry, config, ctx, nextRunId(), flowName, params.params as Record<string, unknown> | undefined);
   const plan = await runner.run({ flowName, plan: true });
   // What a run would be refused for, by the same gates that refuse it.
   const preflight = await planPreflight(
@@ -207,7 +209,7 @@ async function runFlow(
   // so no other agent writes between two steps of it.
   const locks = ctx.assetLocks ? undefined : ctx.openAssetLocks?.(ctx);
   const runCtx: ToolContext = locks ? { ...ctx, assetLocks: locks } : ctx;
-  const runner = makeRunner(registry, config, runCtx, runId, flowName);
+  const runner = makeRunner(registry, config, runCtx, runId, flowName, flowParams);
   let result: FlowRunResult;
   try {
     result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure });
@@ -225,6 +227,7 @@ function makeRunner(
   ctx: ToolContext,
   runId: string,
   flowName: string,
+  params?: Record<string, unknown>,
 ): FlowRunner {
   // The whole context, not two fields of it. Rebuilding it field-by-field
   // dropped `elicit`, `getFlows`, `getPlugins` and now the editor session, so
@@ -240,6 +243,14 @@ function makeRunner(
   let activeSnapshot: Snapshot | undefined;
   let flowFailed = false;
   const snapshotEnabled = !!(snapCfg?.enabled && ctx.project.projectDir);
+
+  // One reading of each probe per run, forgotten after any step that may
+  // change the editor, so a check after a save or a restart reads it anew.
+  const facts = new BridgeFacts(ctx);
+  const graph = gateGraph(ctx);
+  const forgetAfter = (step: PlanStep): void => {
+    if (step.type === "flow" || taskEffect(step.name, graph).effect !== "read") facts.invalidate();
+  };
 
   // Always-on per-step observation. Each hook emits a single event on
   // the module-level bus that the HTTP server's /flows/events SSE
@@ -282,6 +293,7 @@ function makeRunner(
       });
     },
     afterStep: async (step: PlanStep, result: FlowStepResult) => {
+      forgetAfter(step);
       keepNestedSteps(result);
       emitFlowEvent({
         type: "step_completed",
@@ -293,6 +305,7 @@ function makeRunner(
       });
     },
     onStepError: async (step: PlanStep, error: Error) => {
+      forgetAfter(step);
       emitFlowEvent({
         type: "step_failed",
         runId,
@@ -347,9 +360,10 @@ function makeRunner(
     registry,
     context: flowCtx,
     hooks,
-    references: namespaces,
-    // A project's own checks can read `step.*` and `gate.*` as a plan does.
-    conditionEvaluator: makeConditionEvaluator(namespaces, gateScope(ctx, gateGraph(ctx))),
+    // `${params.x}` in an option reads the run's own params.
+    references: { ...namespaces, params: params ?? {} },
+    // A project's own checks can read `step.*`, `gate.*` and `probe.*` as a plan does.
+    conditionEvaluator: makeConditionEvaluator(namespaces, gateScope(ctx, graph, false, facts), facts),
   });
 }
 
