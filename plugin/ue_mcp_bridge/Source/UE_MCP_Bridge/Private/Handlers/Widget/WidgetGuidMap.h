@@ -9,6 +9,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Widget.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/CompilerResultsLog.h"
 
 // ── Widget variable GUID metadata (#728, #799) ───────────────────────────────
 //
@@ -44,8 +45,11 @@ namespace MCPWidgetGuidMap
 	{
 		/** False when this engine has no WidgetVariableNameToGuidMap at all. */
 		bool bSupported = false;
-		/** True once CompileChecked has actually run the compile. */
+		/** True only when the compiler ran without errors. */
 		bool bCompiled = false;
+		bool bCompileAttempted = false;
+		int32 CompileErrors = 0;
+		TArray<FString> CompileMessages;
 		int32 Added = 0;
 		int32 Pruned = 0;
 		/** Widgets moved out of the tree because nothing reached them. */
@@ -323,7 +327,15 @@ namespace MCPWidgetGuidMap
 			return Report;
 		}
 
-		FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+		FCompilerResultsLog CompileLog;
+		CompileLog.SetSourcePath(WidgetBP->GetPathName());
+		Report.bCompileAttempted = true;
+		FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::None, &CompileLog);
+		Report.CompileErrors = CompileLog.NumErrors;
+		for (const TSharedRef<FTokenizedMessage>& Message : CompileLog.Messages)
+		{
+			Report.CompileMessages.Add(Message->ToText().ToString());
+		}
 
 		const FSyncReport After = Sync(WidgetBP);
 		Report.Added += After.Added;
@@ -331,13 +343,22 @@ namespace MCPWidgetGuidMap
 		Report.Repaired += After.Repaired;
 		Report.Unusable = After.Unusable;
 		Report.Defects = After.Defects;
-		Report.bCompiled = true;
+		Report.bCompiled = CompileLog.NumErrors == 0 && WidgetBP->Status != EBlueprintStatus::BS_Error;
 		return Report;
 	}
 
 	/** The error a handler returns when CompileChecked refused to compile. */
 	inline TSharedPtr<FJsonValue> BlockedError(const FString& AssetPath, const FSyncReport& Report)
 	{
+		if (Report.bCompileAttempted)
+		{
+			TSharedPtr<FJsonValue> Error = MCPError(FString::Printf(
+				TEXT("Widget Blueprint '%s' failed to compile (%d errors). In-memory edits remain, but this operation did not save them. %s"),
+				*AssetPath, Report.CompileErrors, *FString::Join(Report.CompileMessages, TEXT("; "))));
+			Error->AsObject()->SetBoolField(TEXT("compiled"), false);
+			Error->AsObject()->SetNumberField(TEXT("errors"), Report.CompileErrors);
+			return Error;
+		}
 		return MCPError(FString::Printf(
 			TEXT("Refusing to compile '%s': %s. Two widget variables cannot share a GUID - the UMG ")
 			TEXT("compiler reports it and external assets that reference either one by GUID resolve to ")
