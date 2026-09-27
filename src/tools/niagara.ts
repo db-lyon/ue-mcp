@@ -71,6 +71,7 @@ export const niagaraTool: ToolDef = categoryTool(
       effect: "mutate",
       description: "Run a sequence of niagara operations against the bridge in order. Fails fast on the first error (returns results up to that point + error). Params: ops:[{action, params}] where action is any niagara subaction listed above.",
       inputs: { ops: OPS },
+      options: { params: ["ops"] },
       // Every op the input names; fail-fast may stop before the last.
       expand: (params) => Array.isArray(params.ops)
         ? (params.ops as Array<{ action?: string; params?: Record<string, unknown> }>).map((op) => ({

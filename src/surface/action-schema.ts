@@ -690,14 +690,15 @@ export function declaredOptions(options: HandlerOptions): DocumentedParams {
  */
 function structuredParams(spec: ActionSpec): DocumentedParams | undefined {
   if (spec.kind === "handler") return spec.options ? declaredOptions(spec.options) : undefined;
-  if (spec.kind !== "bridge") return undefined;
+  if (spec.kind === "flow" && !spec.paramSpec) return spec.options ? declaredOptions(spec.options) : undefined;
+  if (spec.kind !== "bridge" && spec.kind !== "flow") return undefined;
   if (spec.paramSpec) {
     // Aliases are named too: the category declares them, and describe folds them onto their parameter.
     const params = spec.paramSpec.flatMap((p) =>
       [p.name, ...(p.aliases ?? [])].map((name) => ({ name, optional: !p.required })));
     return { params, alternatives: [] };
   }
-  if (spec.epicSchema) {
+  if (spec.kind === "bridge" && spec.epicSchema) {
     const required = new Set(spec.epicSchema.required ?? []);
     const names = Object.keys(spec.epicSchema.properties ?? {});
     const params: DocumentedParam[] = names

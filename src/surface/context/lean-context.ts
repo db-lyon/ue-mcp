@@ -160,6 +160,7 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
     search: {
       kind: "handler",
       effect: "read",
+      options: { params: ["query", "limit?"] },
       description: "Rank actions across every category by keyword; returns signatures. Params: query, limit? (default 20)",
       handler: async (_ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
@@ -174,6 +175,7 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
     describe: {
       kind: "handler",
       effect: "read",
+      options: { params: ["category", "method?", "offset?"] },
       description: "A category's action signatures a page at a time, or one action's parameter schema. Params: category, method?, offset?",
       handler: async (_ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
@@ -188,6 +190,7 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
     list_categories: {
       kind: "handler",
       effect: "read",
+      options: { params: [] },
       description: "List all category tools with their one-line summaries.",
       handler: async () => ({ count: summaries.length, categories: summaries }),
     },

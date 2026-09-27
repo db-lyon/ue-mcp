@@ -74,6 +74,7 @@ export const authorAction: FlowActionSpec<{ assetPath: string; created: boolean;
   effect: "mutate",
   description: "Author a whole Blueprint in one call: optionally create it (parentClass), then add components, variables and function stubs, then compile - one agent-facing action instead of a dozen add_* round-trips. Params: assetPath, parentClass? (create/ensure the BP if given), components? [{componentClass, componentName?, parentComponent?, childActorClass?}], variables? [{name, varType}], functions? [{functionName}], compile? (default true). Returns per-step results + created flag. (#607)",
   inputs: AUTHOR_INPUTS,
+  options: { params: ["assetPath", "parentClass?", "components?", "variables?", "functions?", "compile?"] },
   expand: (p) => {
     try {
       return authorPlan(p).map((s) => ({ task: `blueprint.${s.action}`, options: s.params }));
