@@ -3,7 +3,6 @@
  * server holds: each session's own tool graph, plugin load, advertised list,
  * task registry and guard pipeline, built from that session's own project.
  */
-import * as path from "node:path";
 import type { EditorSession, SessionRegistry } from "./session.js";
 import type { ProjectContext } from "../config/project.js";
 import type { PluginInfo, ToolContext, ToolDef } from "../core/types.js";
@@ -21,7 +20,7 @@ import { FlowConfigCache } from "../flow/config-cache.js";
 import type { FlowConfig, PluginEntry } from "../flow/schema.js";
 import type { FlowSource } from "../flow/flow-describe.js";
 import { loadPlugins, type PluginRecord } from "../extensions/loader.js";
-import { readPluginsList } from "../extensions/plugins-list.js";
+import { ProjectConfig } from "../config/project-config.js";
 
 /**
  * Everything one editor session needs to serve a call: its own tool graph,
@@ -39,13 +38,13 @@ export interface SessionLoad {
   flowConfig: FlowConfigCache;
 }
 
-/** The `plugins:` entries of a project's ue-mcp.yml. A bad file means none. */
+/** The `plugins:` entries a project's cascade merges to. A layer that does not parse is skipped. */
 function readPluginEntries(configDir: string | undefined): PluginEntry[] {
   if (!configDir) return [];
   try {
-    return readPluginsList(path.join(configDir, "ue-mcp.yml"));
+    return [...ProjectConfig.for(configDir).plugins];
   } catch (e) {
-    warn("plugin", `failed to parse plugins: from ue-mcp.yml - ${(e as Error).message}`);
+    warn("plugin", `failed to read plugins: from ue-mcp.yml - ${(e as Error).message}`);
     return [];
   }
 }

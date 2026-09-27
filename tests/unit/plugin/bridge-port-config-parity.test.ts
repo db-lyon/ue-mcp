@@ -28,7 +28,7 @@ const BRIDGE_PORT_CONFIG_CPP = path.join(
   "Private",
   "BridgePortConfig.cpp",
 );
-const PROJECT_TS = path.join(REPO_ROOT, "src", "config", "project.ts");
+const PROJECT_TS = path.join(REPO_ROOT, "src", "config", "project-config.ts");
 const CONFIG_TS = path.join(REPO_ROOT, "src", "config", "ue-mcp-config.ts");
 
 /** The body of a function, from its signature to the closing brace at column zero (TS) or one tab (C++). */
@@ -66,8 +66,8 @@ const CPP_LAYERS: Array<[string, string]> = [
 
 describe("bridge.port config parity between the client and the plugin", () => {
   it("consults the same config layers, and the plugin walks them highest-first", () => {
-    // project.ts merges exactly the files configLayerFiles lists, in its order.
-    expect(functionBody(PROJECT_TS, "function loadLayeredUeMcpBlock(", "\n}")).toContain("configLayerFiles(");
+    // project-config.ts merges exactly the files configLayerFiles lists, in its order.
+    expect(functionBody(PROJECT_TS, "export function projectLayerFiles(", "\n}")).toContain("configLayerFiles(");
     const tsOrder = layerOrder(
       functionBody(CONFIG_TS, "export function configLayerFiles(", "\n}"),
       TS_LAYERS,

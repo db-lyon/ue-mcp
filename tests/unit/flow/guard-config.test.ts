@@ -337,7 +337,8 @@ describe("guard config from files", () => {
       source.liveOptions!("policy", "before");
       source.liveOptions!("policy", "after");
     }
-    expect(stat).toHaveBeenCalledTimes(2);
+    // One poll: global, project and local, stat only.
+    expect(stat).toHaveBeenCalledTimes(3);
     expect(read).not.toHaveBeenCalled();
     write(globalFile, "guards: [broken");
     expect(source.liveOptions!("policy", "before")).toEqual({ deny: true });

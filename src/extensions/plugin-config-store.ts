@@ -12,13 +12,14 @@
  *   ue-mcp.{env}.yml      (env overlay)         <
  *   ue-mcp.local.yml      (local, untracked)
  */
-import { readEnv } from "../core/env.js";
+
 import {
   configLayerFiles,
   globalConfigPath,
   localConfigPath,
   projectConfigPath,
   readConfigDoc,
+  selectedOverlay,
   writeConfigDoc,
   type ConfigLayerFile,
 } from "../config/ue-mcp-config.js";
@@ -46,7 +47,7 @@ export function targetFile(projectDir: string, target: ConfigTarget): string {
 
 /** All read layers in precedence order (low -> high), including the env overlay. */
 export function readLayers(projectDir: string): ConfigLayer[] {
-  const env = readEnv("env");
+  const env = selectedOverlay(projectDir);
   const labels: Record<ConfigLayerFile["target"], string> = {
     global: "~/.ue-mcp/config.yml (you, all projects)",
     project: "ue-mcp.yml (team, tracked)",

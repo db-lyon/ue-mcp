@@ -57,6 +57,7 @@ const PER_SESSION: Record<string, string> = {
   "dispatch/locking.ts": "The lock registry lives in the addressed editor's bridge, under that session's owner id.",
   "index.ts": "Wires the registry, the per-session loads and the MCP server together.",
   "sessions/session-load.ts": "One tool graph, task registry and guard pipeline per editor, built from that editor's own project.",
+  "config/project-config.ts": "One immutable config snapshot per project root, cached by that project's layer stamps.",
   "dispatch/server-dispatch.ts": "Routes each call to the editor it addressed and runs it through that editor's registry and guard.",
   "cli/hook-handler.ts": "Runs against the project the hook payload named.",
   "integrations/claude-code/hook-session.ts": "Resolves which project a hook invocation is about.",
