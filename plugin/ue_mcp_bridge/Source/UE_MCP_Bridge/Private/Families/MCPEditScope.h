@@ -101,18 +101,18 @@ public:
 	template <typename T>
 	TSharedPtr<FJsonValue> Open(TSharedPtr<FJsonValue> (*Check)(T*, const FString&) = &TMCPEditTraits<T>::CheckOpen)
 	{
-		FOps Ops;
-		Ops.TypeName = TMCPEditTraits<T>::TypeName();
-		Ops.Load = [](const FString& Path) -> UObject* { return LoadAssetByPath<T>(Path); };
+		FOps Declared;
+		Declared.TypeName = TMCPEditTraits<T>::TypeName();
+		Declared.Load = [](const FString& Path) -> UObject* { return LoadAssetByPath<T>(Path); };
 		if (Check)
 		{
-			Ops.Check = [Check](UObject* Asset, const FString& Path) { return Check(CastChecked<T>(Asset), Path); };
+			Declared.Check = [Check](UObject* Asset, const FString& Path) { return Check(CastChecked<T>(Asset), Path); };
 		}
-		Ops.Settle = [](UObject* Asset) { TMCPEditTraits<T>::Settle(CastChecked<T>(Asset)); };
-		Ops.Compile = [](UObject* Asset, const TSharedPtr<FJsonObject>& Out) { return TMCPEditTraits<T>::Compile(CastChecked<T>(Asset), Out); };
-		Ops.SaveSet = [](UObject* Asset, TArray<UObject*>& Out) { TMCPEditTraits<T>::SaveSet(CastChecked<T>(Asset), Out); };
-		Ops.Dialect = TMCPEditTraits<T>::Dialect;
-		return OpenTargets(MoveTemp(Ops));
+		Declared.Settle = [](UObject* Asset) { TMCPEditTraits<T>::Settle(CastChecked<T>(Asset)); };
+		Declared.Compile = [](UObject* Asset, const TSharedPtr<FJsonObject>& Out) { return TMCPEditTraits<T>::Compile(CastChecked<T>(Asset), Out); };
+		Declared.SaveSet = [](UObject* Asset, TArray<UObject*>& Out) { TMCPEditTraits<T>::SaveSet(CastChecked<T>(Asset), Out); };
+		Declared.Dialect = TMCPEditTraits<T>::Dialect;
+		return OpenTargets(MoveTemp(Declared));
 	}
 
 	int32 Num() const { return Targets.Num(); }
