@@ -52,6 +52,9 @@ describe("universal/ue-mcp.universal.yml", () => {
   });
 });
 
+/** A plan lists hooks too, numbered below 1 (on_start) or from 10000 (the rest). */
+const isMainStep = (s: { stepNumber: number }) => s.stepNumber > 0 && s.stepNumber < 10_000;
+
 describe("the universal flows, planned", () => {
   const registry = buildFlowRegistry(ALL_TOOLS);
   const config = FlowConfigSchema.parse(buildDefaults(ALL_TOOLS));
@@ -70,14 +73,14 @@ describe("the universal flows, planned", () => {
   for (const name of Object.keys(builtinFlows())) {
     it(`${name} plans with nothing refused`, async () => {
       const plan = await flow.handler(ctx, { action: "plan", flowName: name }) as {
-        steps: Array<{ name: string }>;
+        steps: Array<{ name: string; stepNumber: number }>;
         preflight: PlanPreflight;
       };
       expect(plan.preflight.refused, `${name} would be refused`).toEqual([]);
       expect(plan.preflight.ok).toBe(true);
       const declared = Object.values((config.flows[name] as { steps: Record<string, { task?: string; flow?: string }> }).steps)
         .map((s) => s.task ?? s.flow);
-      expect(plan.steps.map((s) => s.name)).toEqual(declared);
+      expect(plan.steps.filter(isMainStep).map((s) => s.name)).toEqual(declared);
     });
   }
 });
