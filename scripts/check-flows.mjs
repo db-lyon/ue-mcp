@@ -2,7 +2,8 @@
  * What a built-in flow may and may not do.
  *
  * Both of these were rules somebody had to remember while writing a new flow,
- * and both are visible in the flow definitions themselves.
+ * and both are visible in the flow definitions themselves: the universal
+ * layer, universal/ue-mcp.universal.yml.
  *
  * Usage:
  *   node scripts/check-flows.mjs
@@ -10,9 +11,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import yaml from "js-yaml";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const LOADER = path.join(REPO, "src", "flow", "loader.ts");
+const UNIVERSAL = path.join(REPO, "universal", "ue-mcp.universal.yml");
 
 /**
  * Flows that exist to be run, looked at and removed.
@@ -26,42 +28,41 @@ export const DEMO_FLOWS = new Set(["beacon", "neon_shrine", "neon_shrine_cleanup
 const TOOL_NAMESPACES = ["/Game/Flows", "/Game/MCP", "/Game/UEMCP", "/Game/Bridge"];
 
 /**
- * The namespaced paths the demos already use, listed exactly.
- *
- * Allowing "anything on a line that mentions a demo" would exempt every future
- * one too, so the exemption is the two literal paths that exist.
+ * The namespaced roots the demos already use, listed exactly. A path is exempt
+ * when it is one of these or lies under one.
  */
 export const DEMO_PATHS = new Set(["/Game/Flows/Beacon", "/Game/MCP_Home"]);
 
-/** Every flow name declared in the loader, in source order. */
-export function flowNames(source) {
-  const names = [];
-  // A flow is a key in the returned record whose value opens with `description:`.
-  const re = /^\s{4}([a-z0-9_]+):\s*\{\s*$/gm;
-  let m;
-  while ((m = re.exec(source)) !== null) {
-    const after = source.slice(m.index, m.index + 400);
-    if (/\n\s{6}description:/.test(after)) names.push(m[1]);
-  }
-  return names;
+export function isDemoPath(p) {
+  return [...DEMO_PATHS].some((root) => p === root || p.startsWith(`${root}/`));
 }
 
-/** Tool-namespaced content paths, with the line each appears on. */
-export function namespacedPaths(source) {
+/** Every flow name a config document declares, in order. */
+export function flowNames(doc) {
+  return Object.keys(doc?.flows ?? {});
+}
+
+/** Tool-namespaced content paths in one string. Case-insensitive: /game and /Game are one root. */
+export function namespacedPaths(text) {
   const out = [];
-  source.split(/\r?\n/).forEach((line, i) => {
-    if (line.includes("lint-prose-allow") || /^\s*\/\//.test(line)) return;
-    for (const ns of TOOL_NAMESPACES) {
-      // Any string form, not only a double or single quoted literal: a
-      // template literal is the natural way to write a parameterised default
-      // and was the one that escaped. Case-insensitive, since /game and /Game
-      // resolve to the same content root.
-      const m = new RegExp(`["'\`](${ns}[A-Za-z0-9_/$\\{\\}]*)`, "i").exec(line);
-      if (m) {
-        out.push({ line: i + 1, text: line.trim(), namespace: ns, path: m[1] });
-      }
+  for (const ns of TOOL_NAMESPACES) {
+    const re = new RegExp(`${ns}[A-Za-z0-9_/$\\{\\}.]*`, "gi");
+    for (const m of text.matchAll(re)) out.push({ namespace: ns, path: m[0].replace(/\.$/, "") });
+  }
+  return out;
+}
+
+/** Every tool-namespaced path in a flow's values, with where it sits. */
+export function namespacedFlowPaths(flows) {
+  const out = [];
+  const walk = (flow, at, value) => {
+    if (typeof value === "string") {
+      for (const hit of namespacedPaths(value)) out.push({ flow, at, ...hit });
+    } else if (value && typeof value === "object") {
+      for (const [k, v] of Object.entries(value)) walk(flow, at ? `${at}.${k}` : k, v);
     }
-  });
+  };
+  for (const [name, def] of Object.entries(flows ?? {})) walk(name, "", def);
   return out;
 }
 
@@ -78,12 +79,12 @@ export function strayCleanupFlows(names, demos = DEMO_FLOWS) {
 }
 
 function main() {
-  const source = fs.readFileSync(LOADER, "utf8");
-  const names = flowNames(source);
+  const doc = yaml.load(fs.readFileSync(UNIVERSAL, "utf8"));
+  const names = flowNames(doc);
   let bad = 0;
 
   if (names.length === 0) {
-    console.error("check:flows - found no flows to check, which means the parser is wrong");
+    console.error(`check:flows - ${UNIVERSAL} declares no flows, which means it did not generate`);
     return 1;
   }
 
@@ -94,11 +95,10 @@ function main() {
     console.error("    A cleanup twin doubles the surface and signals that flows are unsafe to run.");
   }
 
-  for (const hit of namespacedPaths(source)) {
-    if (DEMO_PATHS.has(hit.path)) continue;
+  for (const hit of namespacedFlowPaths(doc.flows)) {
+    if (isDemoPath(hit.path)) continue;
     bad++;
-    console.error(`check:flows - ${LOADER}:${hit.line} defaults into ${hit.namespace}.`);
-    console.error(`    ${hit.text}`);
+    console.error(`check:flows - flow '${hit.flow}' (${hit.at}) defaults into ${hit.namespace}: ${hit.path}`);
     console.error("    Name the asset's real domain instead (/Game/Materials/PBR, /Game/VFX/Fire).");
     console.error("    A tool-namespaced path says the content is throwaway. If no domain fits,");
     console.error("    make the path a required parameter and fail without it.");

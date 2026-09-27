@@ -26,6 +26,7 @@
     "dist",
     "plugin",
     "skills",
+    "universal/ue-mcp.universal.yml",
     "LICENSE",
     "README.md"
   ],
@@ -77,6 +78,7 @@
     "test:automation": "node scripts/automation-tests.mjs",
     "context-tax": "node scripts/context-tax.mjs",
     "generate": "tsx scripts/generate-default-config.ts",
+    "generate:universal": "tsx scripts/generate-universal.ts",
     "generate:metadata": "tsx scripts/generate-tool-metadata.ts",
     "prepublishOnly": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && npx tsc && tsx scripts/generate-default-config.ts && tsx scripts/generate-tool-metadata.ts",
     "gen:epic-docs": "npx tsc && node scripts/gen-epic-docs.mjs",

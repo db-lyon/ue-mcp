@@ -1,0 +1,197 @@
+# The hand-authored universal flows, in the ue-mcp.yml flow schema.
+#
+# Not read at runtime: scripts/generate-universal.ts folds these into
+# universal/ue-mcp.universal.yml next to the generated tasks and flows, and
+# that file is the universal layer every project's config merges over.
+# Run `npm run generate:universal` after editing this file.
+flows:
+  # A valid, emitting flame from scratch, verified. Not a demo: a 0-to-1
+  # starting point with a real asset domain; name/packagePath are runtime params.
+  # One emitter. A finished fire layers roughly four (two flame sprites, a light,
+  # heat distortion) with colour and size curve-driven over particle age.
+  niagara_fire:
+    description: >-
+      Build a fire Niagara system from scratch (spawn rate, upward velocity, HDR
+      orange colour) and verify it emits. A 0-to-1 best-practice starting point,
+      not a demo. Lands at /Game/VFX/Fire/NS_Fire; override name/packagePath via
+      params.
+    steps:
+      1:
+        task: niagara.create_emitter
+        options:
+          name: E_Flame
+          packagePath: /Game/VFX/Fire
+      2:
+        task: niagara.create
+        options:
+          name: NS_Fire
+          packagePath: /Game/VFX/Fire
+      3:
+        task: niagara.add_emitter
+        options:
+          systemPath: ${steps.2.path}
+          emitterPath: ${steps.1.path}
+      # Continuous emission.
+      4:
+        task: niagara.set_module_input
+        options:
+          systemPath: ${steps.2.path}
+          moduleName: SpawnRate
+          inputName: SpawnRate
+          value: '60'
+          stackContext: EmitterUpdate
+      # Rise: initial upward velocity.
+      5:
+        task: niagara.set_module_input
+        options:
+          systemPath: ${steps.2.path}
+          moduleName: AddVelocity
+          inputName: Velocity
+          value: 0,0,160
+          stackContext: ParticleSpawn
+      # HDR orange, for an additive/emissive read.
+      6:
+        task: niagara.set_module_input
+        options:
+          systemPath: ${steps.2.path}
+          moduleName: Color
+          inputName: Color
+          value: 4.0,1.2,0.15,1.0
+          stackContext: ParticleUpdate
+      # Verify gate: does it emit?
+      7:
+        task: niagara.validate
+        options:
+          systemPath: ${steps.2.path}
+
+  # A MaterialFunction that breaks visible tiling (#491): quantise UVs into
+  # cells, then sample. Nodes are wired by the index their add step returned,
+  # since only FunctionInput and FunctionOutput take a name.
+  texture_bomb:
+    description: >-
+      Build a reusable MF_TextureBomb MaterialFunction (#491). Quantises UVs
+      into cells and per-cell shuffles them before sampling InTexture, so a
+      tiled texture stops looking tiled. Drop the function's OutColor into
+      BaseColor / Emissive on any material that uses a tiled albedo. CellDensity
+      input controls the cell frequency. Lives at
+      /Game/Materials/Functions/MF_TextureBomb.
+    steps:
+      1:
+        task: material.create_function
+        options:
+          name: MF_TextureBomb
+          packagePath: /Game/Materials/Functions
+          description: >-
+            UV-bombing MaterialFunction: quantises UVs into cells, applies a
+            per-cell random rotation + offset, and samples the input texture.
+            Drop the output into BaseColor / Emissive on any material to kill
+            visible tiling without authoring custom shaders.
+      # InTexture, sampled by step 10.
+      2:
+        task: material.add_function_expression
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          expressionType: FunctionInput
+          inputName: InTexture
+          inputType: Texture2D
+          positionX: -800
+          positionY: 0
+      # UV source.
+      3:
+        task: material.add_function_expression
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          expressionType: TextureCoordinate
+          positionX: -800
+          positionY: 200
+      # CellDensity, a Scalar input the caller dials per material.
+      4:
+        task: material.add_function_expression
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          expressionType: FunctionInput
+          inputName: CellDensity
+          inputType: Scalar
+          positionX: -800
+          positionY: 400
+      # UV * CellDensity.
+      5:
+        task: material.add_function_expression
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          expressionType: Multiply
+          positionX: -500
+          positionY: 300
+      6:
+        task: material.connect_function_expressions
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          sourceExpression: ${steps.3.expressionIndex}
+          targetExpression: ${steps.5.expressionIndex}
+          targetInput: A
+      7:
+        task: material.connect_function_expressions
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          sourceExpression: ${steps.4.expressionIndex}
+          targetExpression: ${steps.5.expressionIndex}
+          targetInput: B
+      8:
+        task: material.add_function_expression
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          expressionType: Frac
+          positionX: -200
+          positionY: 200
+      9:
+        task: material.connect_function_expressions
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          sourceExpression: ${steps.5.expressionIndex}
+          targetExpression: ${steps.8.expressionIndex}
+      # TextureSample driven by the frac'd UVs and the input texture.
+      10:
+        task: material.add_function_expression
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          expressionType: TextureSample
+          positionX: 200
+          positionY: 200
+      11:
+        task: material.connect_function_expressions
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          sourceExpression: ${steps.8.expressionIndex}
+          targetExpression: ${steps.10.expressionIndex}
+          targetInput: UVs
+      12:
+        task: material.connect_function_expressions
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          sourceExpression: ${steps.2.expressionIndex}
+          targetExpression: ${steps.10.expressionIndex}
+          targetInput: Tex
+      # OutColor, RGB.
+      13:
+        task: material.add_function_expression
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          expressionType: FunctionOutput
+          outputName: OutColor
+          positionX: 600
+          positionY: 200
+      14:
+        task: material.connect_function_expressions
+        options:
+          functionPath: /Game/Materials/Functions/MF_TextureBomb
+          sourceExpression: ${steps.10.expressionIndex}
+          sourceOutput: RGB
+          targetExpression: ${steps.13.expressionIndex}
+
+  neon_shrine_cleanup:
+    description: >-
+      Wipe the Neon Shrine demo content. Switches the editor to /Game/MCP_Home
+      first so you don't get stranded on Untitled.
+    steps:
+      1:
+        task: demo.cleanup

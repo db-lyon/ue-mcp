@@ -76,4 +76,4 @@ Every step is the `demo_step_N` flow, declared in `src/tools/demo-steps.ts`. Ste
 
 ## See Also
 
-For a much larger declarative example, see the **Beacon** flow described in [Flows](flows.md#beacon) - a 56-step shrine scene composed entirely from individual MCP tool calls in `src/flow/loader.ts`.
+For a much larger declarative example, see the **Beacon** flow described in [Flows](flows.md#beacon) - a 56-step shrine scene composed entirely from individual MCP tool calls in `universal/ue-mcp.universal.yml`.
