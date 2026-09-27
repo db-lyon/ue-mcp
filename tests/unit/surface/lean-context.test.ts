@@ -1,0 +1,308 @@
+import { describe, it, expect, afterEach } from "vitest";
+import { z } from "zod";
+import type { ToolDef, ToolContext } from "../../../src/core/types.js";
+import { actionEnumValues, categoryTool, bp } from "../../../src/surface/category-tool.js";
+import {
+  resolveContextStrategy,
+  splitDescription,
+  buildCatalogTool,
+  applyLeanContext,
+} from "../../../src/surface/context/lean-context.js";
+import { buildMicroGateway } from "../../../src/surface/context/micro-context.js";
+import { searchToolGraph } from "../../../src/surface/context/tool-search.js";
+import { actionSignature } from "../../../src/surface/action-signature.js";
+import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO } from "../../../src/surface/context/instructions.js";
+
+function fixtureTools(): ToolDef[] {
+  return [
+    categoryTool("blueprint", "Blueprint authoring.", {
+      create: bp("read", "Create a new Blueprint asset", "create_blueprint"),
+      add_node: bp("read", "Add a node to a graph", "add_node"),
+    }, {}),
+    categoryTool("level", "Level actors and volumes.", {
+      place_actor: bp("read", "Spawn an actor into the level", "place_actor"),
+      delete_actor: bp("read", "Remove an actor from the level", "delete_actor"),
+    }, {}),
+  ];
+}
+
+// Minimal context; the discovery handlers ignore it.
+const ctx = {} as ToolContext;
+
+async function runAction(tool: ToolDef, action: string, params: Record<string, unknown> = {}) {
+  return tool.actions[action].handler!(ctx, { action, ...params });
+}
+
+describe("resolveContextStrategy", () => {
+  const saved = process.env.UE_MCP_CONTEXT_STRATEGY;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.UE_MCP_CONTEXT_STRATEGY;
+    else process.env.UE_MCP_CONTEXT_STRATEGY = saved;
+  });
+
+  it("defaults to micro (#1172)", () => {
+    delete process.env.UE_MCP_CONTEXT_STRATEGY;
+    expect(resolveContextStrategy()).toBe("micro");
+    expect(resolveContextStrategy(undefined)).toBe("micro");
+  });
+
+  it("reads full, lean and micro from config", () => {
+    delete process.env.UE_MCP_CONTEXT_STRATEGY;
+    expect(resolveContextStrategy("full")).toBe("full");
+    expect(resolveContextStrategy("lean")).toBe("lean");
+    expect(resolveContextStrategy("micro")).toBe("micro");
+  });
+
+  it("env overrides config, case-insensitively", () => {
+    process.env.UE_MCP_CONTEXT_STRATEGY = "LEAN";
+    expect(resolveContextStrategy("full")).toBe("lean");
+    process.env.UE_MCP_CONTEXT_STRATEGY = "full";
+    expect(resolveContextStrategy("lean")).toBe("full");
+  });
+
+  it("treats unknown values as the default", () => {
+    delete process.env.UE_MCP_CONTEXT_STRATEGY;
+    expect(resolveContextStrategy("verbose")).toBe("micro");
+  });
+});
+
+describe("splitDescription", () => {
+  it("splits a categoryTool description into summary and catalog", () => {
+    const tool = fixtureTools()[0];
+    const { summary, catalog } = splitDescription(tool.description);
+    expect(summary).toBe("Blueprint authoring.");
+    expect(catalog).toContain("- create: Create a new Blueprint asset");
+    expect(catalog).toContain("- add_node:");
+  });
+
+  it("handles a description with no catalog", () => {
+    expect(splitDescription("Just a summary")).toEqual({ summary: "Just a summary", catalog: "" });
+  });
+});
+
+describe("applyLeanContext", () => {
+  it("does not mutate the input tools", () => {
+    const tools = fixtureTools();
+    const before = tools[0].description;
+    applyLeanContext(tools);
+    expect(tools[0].description).toBe(before);
+    expect(tools[0].actions.describe).toBeUndefined();
+  });
+
+  it("prepends a catalog tool and trims category descriptions", () => {
+    const leaned = applyLeanContext(fixtureTools());
+    expect(leaned[0].name).toBe("catalog");
+    const bpTool = leaned.find((t) => t.name === "blueprint")!;
+    expect(bpTool.description).toContain("Blueprint authoring.");
+    expect(bpTool.description).not.toContain("- create:");
+    expect(bpTool.description).toContain('blueprint(action="describe")');
+  });
+
+  it("adds a describe action to each category, preserving originals", () => {
+    const leaned = applyLeanContext(fixtureTools());
+    const bpTool = leaned.find((t) => t.name === "blueprint")!;
+    expect(Object.keys(bpTool.actions)).toEqual(["create", "add_node", "describe"]);
+    // The action enum must include the injected describe so it validates.
+    const enumValues = actionEnumValues(bpTool.schema.action);
+    expect(enumValues).toContain("describe");
+  });
+
+  it("per-category describe returns that category's signatures", async () => {
+    const leaned = applyLeanContext(fixtureTools());
+    const bpTool = leaned.find((t) => t.name === "blueprint")!;
+    const out = (await runAction(bpTool, "describe")) as { category: string; count: number; signatures: string[] };
+    expect(out.category).toBe("blueprint");
+    expect(out.count).toBe(2);
+    expect(out.signatures).toEqual(["create()", "add_node()"]);
+  });
+});
+
+describe("catalog discovery tool", () => {
+  it("search ranks matching actions across categories", async () => {
+    const catalog = buildCatalogTool(fixtureTools());
+    const out = (await runAction(catalog, "search", { query: "actor" })) as {
+      count: number;
+      results: string[];
+    };
+    expect(out.count).toBeGreaterThan(0);
+    // Signatures only (#1172): `category.action(params)`, no prose.
+    const keys = out.results;
+    expect(keys).toContain("level.place_actor()");
+    expect(keys).toContain("level.delete_actor()");
+    // Blueprint actions should not match "actor".
+    expect(keys.some((k) => k.startsWith("blueprint."))).toBe(false);
+  });
+
+  it("search errors on an empty query", async () => {
+    const catalog = buildCatalogTool(fixtureTools());
+    const out = (await runAction(catalog, "search", { query: "  " })) as { error?: string };
+    expect(out.error).toBeDefined();
+  });
+
+  it("describe lists a category, and rejects unknown categories", async () => {
+    const catalog = buildCatalogTool(fixtureTools());
+    const ok = (await runAction(catalog, "describe", { category: "level" })) as { count: number };
+    expect(ok.count).toBe(2);
+    const bad = (await runAction(catalog, "describe", { category: "nope" })) as { error?: string; categories?: string[] };
+    expect(bad.error).toBeDefined();
+    expect(bad.categories).toContain("level");
+  });
+
+  it("list_categories returns every category with its summary", async () => {
+    const catalog = buildCatalogTool(fixtureTools());
+    const out = (await runAction(catalog, "list_categories")) as {
+      count: number;
+      categories: Array<{ category: string; summary: string }>;
+    };
+    expect(out.count).toBe(2);
+    expect(out.categories.find((c) => c.category === "blueprint")?.summary).toBe("Blueprint authoring.");
+  });
+});
+
+describe("buildMicroGateway", () => {
+  function microFixture(): ToolDef[] {
+    return [
+      categoryTool("blueprint", "Blueprint authoring.", {
+        create: { kind: "handler", effect: "read", description: "Create a BP", handler: async (_c, p) => ({ created: p.name }) },
+        compile: bp("read", "Compile a BP", "compile_blueprint"),
+      }, {}),
+      categoryTool("level", "Level actors.", {
+        place_actor: bp("read", "Place an actor", "place_actor"),
+      }, {}),
+    ];
+  }
+
+  const mockBridge = {
+    isConnected: true,
+    connect: async () => {},
+    call: async (method: string, params?: Record<string, unknown>) => ({ bridgeCalled: method, params }),
+  };
+  const ctxB = { bridge: mockBridge } as unknown as ToolContext;
+  const invoke = (gw: ToolDef, params: Record<string, unknown>) =>
+    gw.actions.call.handler!(ctxB, { action: "call", ...params });
+
+  // The gateway is a fourth dispatch route. `args` can carry `action`, and a
+  // mapParams that forwards its bag would send it to the bridge as an argument.
+  it("never forwards the dispatch key from args to the bridge", async () => {
+    const tools = microFixture();
+    tools[0].actions.spread = bp("read", "Spread. Params: none", "spread_method", (q) => ({ ...q }));
+    const gw = buildMicroGateway(tools);
+
+    const out = (await invoke(gw, {
+      category: "blueprint",
+      method: "spread",
+      args: { action: "spread", name: "X" },
+    })) as { params?: Record<string, unknown> };
+
+    expect(
+      Object.prototype.hasOwnProperty.call(out.params ?? {}, "action"),
+      `the bridge was handed ${JSON.stringify(out.params)}`,
+    ).toBe(false);
+    expect(out.params?.name).toBe("X");
+  });
+
+  it("exposes search alongside the three gateway actions", () => {
+    const gw = buildMicroGateway(microFixture());
+    expect(gw.name).toBe("tools");
+    expect(Object.keys(gw.actions)).toEqual(["search", "list_categories", "describe", "call"]);
+  });
+
+  it("list_categories returns every category with a summary", async () => {
+    const gw = buildMicroGateway(microFixture());
+    const out = (await gw.actions.list_categories.handler!(ctxB, { action: "list_categories" })) as {
+      count: number; categories: Array<{ category: string; summary: string }>;
+    };
+    expect(out.count).toBe(2);
+    expect(out.categories.map((c) => c.category)).toEqual(["blueprint", "level"]);
+  });
+
+  it("describe lists a category's actions and rejects unknown ones", async () => {
+    const gw = buildMicroGateway(microFixture());
+    const ok = (await gw.actions.describe.handler!(ctxB, { action: "describe", category: "blueprint" })) as { signatures: string[] };
+    expect(ok.signatures).toEqual(["create()", "compile()"]);
+    const bad = (await gw.actions.describe.handler!(ctxB, { action: "describe", category: "nope" })) as { error?: string };
+    expect(bad.error).toBeDefined();
+  });
+
+  it("call routes to a handler action", async () => {
+    const gw = buildMicroGateway(microFixture());
+    const out = await invoke(gw, { category: "blueprint", method: "create", args: { name: "BP_X" } });
+    expect(out).toEqual({ created: "BP_X" });
+  });
+
+  it("call routes a bridge action through ctx.bridge", async () => {
+    const gw = buildMicroGateway(microFixture());
+    const out = await invoke(gw, { category: "blueprint", method: "compile", args: { target: "BP_X" } });
+    expect(out).toEqual({ bridgeCalled: "compile_blueprint", params: { target: "BP_X" } });
+  });
+
+  // One preparation, not a copy of it (#1081): the call goes through the
+  // target category's own handler, and the budget still reaches the bridge.
+  it("call dispatches through the target category's handler", async () => {
+    const tools = microFixture();
+    const seen: Array<Record<string, unknown>> = [];
+    const original = tools[0].handler;
+    tools[0].handler = async (c, p) => { seen.push(p); return original(c, p); };
+    let timeout: number | undefined;
+    const bridge = { ...mockBridge, call: async (method: string, params?: Record<string, unknown>, t?: number) => { timeout = t; return { bridgeCalled: method, params }; } };
+    const gw = buildMicroGateway(tools);
+
+    const out = await gw.actions.call.handler!(
+      { bridge, callTimeoutMs: 4321 } as unknown as ToolContext,
+      { action: "call", category: "blueprint", method: "compile", args: { target: "BP_X" } },
+    );
+    expect(seen).toEqual([{ target: "BP_X", action: "compile", timeoutMs: 4321 }]);
+    expect(out).toEqual({ bridgeCalled: "compile_blueprint", params: { target: "BP_X" } });
+    expect(timeout).toBe(4321);
+  });
+
+  it("call throws on unknown category or method", async () => {
+    const gw = buildMicroGateway(microFixture());
+    await expect(invoke(gw, { category: "nope", method: "create" })).rejects.toThrow(/Unknown category/);
+    await expect(invoke(gw, { category: "blueprint", method: "nope" })).rejects.toThrow(/Unknown action/);
+  });
+});
+
+describe("compact discovery for spatial requests", () => {
+  const tools = [categoryTool("level", "Spatial tools", {
+    nudge_component: {
+      kind: "handler", effect: "read", options: { params: ["componentName", "axisRotation?"] },
+      description: "Adjust a component.", handler: async () => ({}),
+    },
+    irrelevant: { kind: "handler", effect: "read", options: { params: [] }, description: "Something else.", handler: async () => ({}) },
+  }, {
+    componentName: z.string().optional(),
+    axisRotation: z.object({ axis: z.enum(["forward", "right", "up"]), degrees: z.number() }).optional(),
+  })];
+
+  it("uses the same intent ranking in full, lean and micro, without losing plugins", async () => {
+    const ranked = searchToolGraph(tools, "clockwise");
+    expect(ranked[0].action).toBe("nudge_component");
+    const expected = ranked.map(({ tool, action }) => `${tool}.${actionSignature(tools[0], action)}`);
+    expect(expected[0]).toBe("level.nudge_component(componentName, axisRotation?:o)");
+    for (const discovery of [buildCatalogTool(tools), buildMicroGateway(tools)]) {
+      expect(await runAction(discovery, "search", { query: "clockwise" })).toMatchObject({ results: expected });
+    }
+    expect(await runAction(buildMicroGateway(tools), "search", { query: "absent_word" })).toMatchObject({ count: 0, results: [] });
+  });
+
+  it("describes one action with nested arguments without dumping the category", async () => {
+    for (const discovery of [buildCatalogTool(tools), buildMicroGateway(tools)]) {
+      const result = await runAction(discovery, "describe", { category: "level", method: "nudge_component" }) as any;
+      expect(result.action).toBe("nudge_component");
+      expect(result.actions).toBeUndefined();
+      expect(result.params.find((p: any) => p.name === "axisRotation").properties.axis).toMatchObject({
+        required: true, enumValues: ["forward", "right", "up"],
+      });
+      await expect(runAction(discovery, "describe", { category: "level", method: "missing" })).rejects.toThrow("Unknown action");
+    }
+  });
+
+  it("retains spatial interpretation and verification guidance in every context mode", () => {
+    for (const instructions of [SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO]) {
+      expect(instructions).toContain("dryRun=true");
+      expect(instructions).toContain("viewRotation");
+      expect(instructions).toContain("not visual verification");
+    }
+  });
+});

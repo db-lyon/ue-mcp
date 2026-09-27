@@ -115,7 +115,7 @@ plugin/ue_mcp_bridge/     # C++ bridge plugin (deployed to UE projects)
     └── Private/
         └── Handlers/<Category>/  # C++ handlers, one folder per category
 
-tests/unit/                # Unit tests (no editor needed)
+tests/unit/<area>/         # Unit tests, mirroring src/ (no editor needed)
 tests/multi-editor/        # Multi-session tests (no editor needed)
 tests/golden/              # Recorded advertised surface
 tests/live/, tests/smoke/  # Need a running editor on tests/ue_mcp
@@ -127,7 +127,7 @@ docs/                      # Documentation (MkDocs Material)
 
 ### Unit Tests
 
-Pure-TypeScript tests under `tests/unit/`. No editor required.
+Pure-TypeScript tests under `tests/unit/`, grouped in folders that mirror `src/` (plus `scripts/` for the scripts, `plugin/` for tests that read the C++ sources, `golden/` and `repo/`). Build a repo path with `REPO_ROOT` or `repoPath()` from `tests/helpers/repo-root.ts`, never by counting `..`. No editor required.
 
 ```bash
 npm run test:unit
@@ -287,7 +287,7 @@ For a full editor restart: `editor(action="restart_editor")`
 
 ### JSON object range loops
 
-Iterate `FJsonObject::Values` with `const auto&` and convert the key to `FString` inside the body if needed. UE 5.8 changed the key type, so an explicit `TPair<FString, TSharedPtr<FJsonValue>>` loop variable trips Clang's `-Wrange-loop-construct`, an error on Linux. `tests/unit/json-object-range-loops.test.ts` enforces this.
+Iterate `FJsonObject::Values` with `const auto&` and convert the key to `FString` inside the body if needed. UE 5.8 changed the key type, so an explicit `TPair<FString, TSharedPtr<FJsonValue>>` loop variable trips Clang's `-Wrange-loop-construct`, an error on Linux. `tests/unit/plugin/json-object-range-loops.test.ts` enforces this.
 
 ### Blueprint graph node flags
 

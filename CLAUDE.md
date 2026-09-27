@@ -54,7 +54,7 @@ The merge style follows the commit count, and writing five commits only to squas
 
 ### Golden baseline - the advertised surface
 
-`tests/golden/editor-down.json` is a recording of what a client is handed at startup with one project and no editor running: the `initialize` instructions and every tool in `tools/list` with its full input schema. `tests/unit/golden-editor-down.test.ts` starts the real server over stdio, records the same thing again, and fails if the two differ. It runs as part of `npm run test:unit`, so CI gates on it.
+`tests/golden/editor-down.json` is a recording of what a client is handed at startup with one project and no editor running: the `initialize` instructions and every tool in `tools/list` with its full input schema. `tests/unit/golden/golden-editor-down.test.ts` starts the real server over stdio, records the same thing again, and fails if the two differ. It runs as part of `npm run test:unit`, so CI gates on it.
 
 - **A failure is not automatically a bug.** It says the startup contract moved. Read the diff.
 - **Re-record intentionally** with `npm run golden:record`, then review the diff before committing it. Never edit the JSON by hand.
@@ -145,7 +145,7 @@ A version with a prerelease suffix (`1.2.0-beta`, `1.2.0-beta.2`, `1.3.0-rc.1`) 
 - **npm dist-tag** comes from the first prerelease identifier, so `1.2.0-beta` and `1.2.0-beta.2` publish under `beta` and `1.3.0-rc.1` under `rc`. `npx ue-mcp` keeps resolving to the newest plain `X.Y.Z`; testers opt in with `ue-mcp@beta`.
 - **The GitHub release** is marked as a prerelease, so it does not take the "Latest" badge or answer `/releases/latest`.
 - **The publish gate** asks whether that exact version is already on the registry, so a prerelease does not wedge every later push.
-- The rules live in `scripts/release-version.mjs` (unit tested in `tests/unit/release-version.test.ts`), mirrored for the shipped CLI in `src/core/version-check.ts`. Change one and the parity test will tell you to change the other.
+- The rules live in `scripts/release-version.mjs` (unit tested in `tests/unit/scripts/release-version.test.ts`), mirrored for the shipped CLI in `src/core/version-check.ts`. Change one and the parity test will tell you to change the other.
 
 The tag name still has to match the version exactly: `gh release create v1.2.0-beta --draft --notes-file ...`.
 

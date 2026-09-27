@@ -90,14 +90,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  ensure_mass_entity_config: "Params: assetPath OR name, packagePath?, traits, onConflict?",
-  read_mass_entity_config: "Params: assetPath",
-};
-
 /** Every key the spec'd mass handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

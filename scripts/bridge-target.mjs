@@ -44,7 +44,7 @@ export const TEST_PORT_LOCKFILE = path.join(
 export const LEGACY_BRIDGE_PORT = 9877;
 
 // Ephemeral range used by the derived-port scheme. Must match src/bridge/port.ts and
-// FMCPBridgeServer::DeriveProjectPort; tests/unit/bridge-target.test.ts pins
+// FMCPBridgeServer::DeriveProjectPort; tests/unit/bridge/bridge-target.test.ts pins
 // this implementation against src/bridge/port.ts so the two cannot drift apart.
 const EPHEMERAL_BASE = 49152;
 const EPHEMERAL_SPAN = 65535 - EPHEMERAL_BASE + 1;

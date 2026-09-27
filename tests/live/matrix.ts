@@ -72,7 +72,7 @@ export const MATRIX_CASES: MatrixCase[] = [
       { kind: "live", file: LIVE_ADDRESSING, title: "reports the project the connected editor actually has open" },
       {
         kind: "engine-free",
-        file: "tests/unit/bridge-retarget.test.ts",
+        file: "tests/unit/bridge/bridge-retarget.test.ts",
         title: "accepts the pinned port again once the new project's editor publishes a lockfile",
       },
       {
@@ -92,12 +92,12 @@ export const MATRIX_CASES: MatrixCase[] = [
       { kind: "live", file: LIVE_SINGLE, title: "answers on a fresh connection inside the ordinary connect budget" },
       {
         kind: "engine-free",
-        file: "tests/unit/bridge.test.ts",
+        file: "tests/unit/bridge/bridge.test.ts",
         title: "names both versions when an older plugin does not know a method",
       },
       {
         kind: "engine-free",
-        file: "tests/unit/bridge.test.ts",
+        file: "tests/unit/bridge/bridge.test.ts",
         title: "settles at once when the socket dies before the handshake is answered",
       },
     ],
@@ -110,17 +110,17 @@ export const MATRIX_CASES: MatrixCase[] = [
       { kind: "live", file: LIVE_ADDRESSING, title: "keeps a per-process instance record next to the port lockfile" },
       {
         kind: "engine-free",
-        file: "tests/unit/session.test.ts",
+        file: "tests/unit/sessions/session.test.ts",
         title: "records sessions that collapse onto one port, because they cannot be told apart",
       },
       {
         kind: "engine-free",
-        file: "tests/unit/session.test.ts",
+        file: "tests/unit/sessions/session.test.ts",
         title: "folds the case of the path and of the extension, where the filesystem does",
       },
       {
         kind: "engine-free",
-        file: "tests/unit/session.test.ts",
+        file: "tests/unit/sessions/session.test.ts",
         title: "keeps projects that differ by more than spelling apart",
       },
       {
@@ -140,12 +140,12 @@ export const MATRIX_CASES: MatrixCase[] = [
       { kind: "live", file: LIVE_SINGLE, title: "reads a bind-failure record only while the editor that wrote it is alive" },
       {
         kind: "engine-free",
-        file: "tests/unit/editor-lifecycle-target.test.ts",
+        file: "tests/unit/editor/editor-lifecycle-target.test.ts",
         title: "refuses a lockfile whose process is gone rather than trusting its port",
       },
       {
         kind: "engine-free",
-        file: "tests/unit/bridge.test.ts",
+        file: "tests/unit/bridge/bridge.test.ts",
         title: "reports a bridge that failed to bind while its editor is still running",
       },
     ],
@@ -157,7 +157,7 @@ export const MATRIX_CASES: MatrixCase[] = [
       { kind: "live", file: LIVE_ADDRESSING, title: "dispatches bridge actions with no project argument at all" },
       {
         kind: "engine-free",
-        file: "tests/unit/session.test.ts",
+        file: "tests/unit/sessions/session.test.ts",
         title: "keeps a project-less default session on the legacy fixed port",
       },
     ],
@@ -170,12 +170,12 @@ export const MATRIX_CASES: MatrixCase[] = [
       { kind: "live", file: LIVE_ADDRESSING, title: "keeps the same category working for the editor that did not disable it" },
       {
         kind: "engine-free",
-        file: "tests/unit/session-surface.test.ts",
+        file: "tests/unit/sessions/session-surface.test.ts",
         title: "advertises the union and records which editor provides each action",
       },
       {
         kind: "engine-free",
-        file: "tests/unit/session-surface.test.ts",
+        file: "tests/unit/sessions/session-surface.test.ts",
         title: "refuses a disabled category for the editor that disabled it, naming the config",
       },
     ],
@@ -193,7 +193,7 @@ export const MATRIX_CASES: MatrixCase[] = [
         file: "tests/multi-editor/write-gating.test.ts",
         title: "refuses a mutation and reaches neither bridge",
       },
-      { kind: "engine-free", file: "tests/unit/editor-gate.test.ts", title: "refuses an unclassifiable call rather than guessing it is a read" },
+      { kind: "engine-free", file: "tests/unit/dispatch/editor-gate.test.ts", title: "refuses an unclassifiable call rather than guessing it is a read" },
     ],
   },
   {
@@ -202,7 +202,7 @@ export const MATRIX_CASES: MatrixCase[] = [
     coverage: [
       { kind: "live", file: LIVE_ADDRESSING, title: "names the serving editor on a response" },
       { kind: "live", file: LIVE_SINGLE, title: "attributes nothing to an editor, because there is only one" },
-      { kind: "engine-free", file: "tests/unit/editor-gate.test.ts", title: "is absent at one editor" },
+      { kind: "engine-free", file: "tests/unit/dispatch/editor-gate.test.ts", title: "is absent at one editor" },
     ],
   },
   {
@@ -217,8 +217,8 @@ export const MATRIX_CASES: MatrixCase[] = [
       { kind: "live", file: LIVE_GOLDEN, title: "matches the committed baseline" },
       { kind: "live", file: LIVE_GOLDEN, title: "still matches the committed baseline" },
       { kind: "live", file: LIVE_GOLDEN, title: "records the same bytes from a catalog enumerated in a different order" },
-      { kind: "engine-free", file: "tests/unit/golden-editor-down.test.ts", title: "matches the committed baseline" },
-      { kind: "engine-free", file: "tests/unit/golden-editor-down.test.ts", title: "orders the enrichment-injected actions canonically, in the recording and in the file" },
+      { kind: "engine-free", file: "tests/unit/golden/golden-editor-down.test.ts", title: "matches the committed baseline" },
+      { kind: "engine-free", file: "tests/unit/golden/golden-editor-down.test.ts", title: "orders the enrichment-injected actions canonically, in the recording and in the file" },
     ],
   },
   {
@@ -244,7 +244,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       { kind: "live", file: LIVE_SINGLE, title: "moves path resolution and the socket together, onto a live editor" },
       {
         kind: "engine-free",
-        file: "tests/unit/project-switch.test.ts",
+        file: "tests/unit/sessions/project-switch.test.ts",
         title: "moves path resolution and the live connection to the new project together",
       },
     ],
@@ -261,7 +261,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       { kind: "live", file: LIVE_SINGLE, title: "writes no dangling plugin entry into a project that has no bridge" },
       {
         kind: "engine-free",
-        file: "tests/unit/deployer-attach.test.ts",
+        file: "tests/unit/editor/deployer-attach.test.ts",
         title: "writes nothing into a project that has no bridge installed",
       },
     ],
@@ -278,7 +278,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       { kind: "live", file: LIVE_SINGLE, title: "refuses to start an editor for a project that already has one" },
       {
         kind: "engine-free",
-        file: "tests/unit/editor-lifecycle-target.test.ts",
+        file: "tests/unit/editor/editor-lifecycle-target.test.ts",
         title: "startEditor asks for a project instead of scanning the machine",
       },
     ],
@@ -302,7 +302,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       { kind: "live", file: LIVE_SINGLE, title: "resolves this project's port from its own record, not from a guess" },
       {
         kind: "engine-free",
-        file: "tests/unit/editor-target.test.ts",
+        file: "tests/unit/bridge/editor-target.test.ts",
         title: "never falls back to the legacy fixed port 9877",
       },
     ],
@@ -320,7 +320,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       },
       {
         kind: "engine-free",
-        file: "tests/unit/guarded-bridge.test.ts",
+        file: "tests/unit/flow/guarded-bridge.test.ts",
         title: "a before denial propagates and the inner call never happens",
       },
     ],
@@ -331,7 +331,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
     coverage: [
       {
         kind: "engine-free",
-        file: "tests/unit/editor-lifecycle-target.test.ts",
+        file: "tests/unit/editor/editor-lifecycle-target.test.ts",
         title: "restartEditor asks for a project instead of scanning the machine",
       },
       {
@@ -363,7 +363,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       },
       {
         kind: "engine-free",
-        file: "tests/unit/requested-port.test.ts",
+        file: "tests/unit/bridge/requested-port.test.ts",
         title: "publishes the pin where the bridge looks for it",
       },
     ],
@@ -405,7 +405,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       { kind: "live", file: LIVE_SINGLE, title: "hands a flow the whole context, including flows and plugins" },
       {
         kind: "engine-free",
-        file: "tests/unit/flow-run-result.test.ts",
+        file: "tests/unit/flow/flow-run-result.test.ts",
         title: "hands the step the accessors the context had, not a rebuilt subset",
       },
     ],
@@ -416,7 +416,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
     coverage: [
       {
         kind: "engine-free",
-        file: "tests/unit/default-config.test.ts",
+        file: "tests/unit/scripts/default-config.test.ts",
         title: "declares a task for every action of every category the server ships",
       },
     ],
@@ -435,7 +435,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
     coverage: [
       {
         kind: "engine-free",
-        file: "tests/unit/doctor.test.ts",
+        file: "tests/unit/cli/doctor.test.ts",
         title: "rejects the context, login and logout subcommands",
       },
     ],

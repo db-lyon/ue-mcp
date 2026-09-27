@@ -5,7 +5,7 @@
  * so it is registered outside `ALL_TOOLS` and absent from the published graph.
  * Effect gating and the skill check still need its actions, so they read this.
  * Restated rather than read off the built tool because `flow-tool.ts` imports
- * what imports this, and `tests/unit/skills.test.ts` fails if the two disagree.
+ * what imports this, and `tests/unit/extensions/skills.test.ts` fails if the two disagree.
  */
 import type { ActionEffect, ToolDef } from "../core/types.js";
 

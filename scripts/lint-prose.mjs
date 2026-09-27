@@ -260,7 +260,7 @@ export const EXCLUDED_PATHS = [
       + "keeps the rule table readable; the exemption is two paths wide and both are here.",
   },
   {
-    path: "tests/unit/lint-prose.test.ts",
+    path: "tests/unit/scripts/lint-prose.test.ts",
     reason:
       "The proof. Each rule is tested against a deliberate violation, so the fixtures are "
       + "themselves violations by construction. A test that could not hold one would be a "

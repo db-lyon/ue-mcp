@@ -8,7 +8,7 @@
  * corpus is recorded twice:
  *
  *   - `editor-down.json`, with nothing listening. Needs only Node, so it is
- *     guarded by `tests/unit/golden-editor-down.test.ts` in the unit tests.
+ *     guarded by `tests/unit/golden/golden-editor-down.test.ts` in the unit tests.
  *   - `editor-connected.json`, with a real editor answering. Guarded by
  *     `tests/live/golden-connected.test.ts` in the live tests.
  *
@@ -123,7 +123,7 @@ function recordingEnv(sandbox: string, host: string, port: number): NodeJS.Proce
   // advertises one gateway whose schema names no action at all; full is the
   // surface every category tool, action enum and signature line is on, so it
   // is the one a baseline can guard. Lean and micro are projections of it,
-  // covered by tests/unit/lean-context.test.ts and the context-tax gate.
+  // covered by tests/unit/surface/lean-context.test.ts and the context-tax gate.
   env.UE_MCP_CONTEXT_STRATEGY = "full";
   return env;
 }

@@ -21,10 +21,14 @@
 // leaves the braces, parens and commas that are real code standing on their
 // own. Offsets into the mask are offsets into the source, so a span located in
 // one can be read out of the other.
+//
+// Imports the TS spec modules, so it runs under tsx (`node --import tsx`).
 
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { paramsClause } from "../../src/surface/handler-spec.js";
+import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const TOOLS_DIR = path.join(ROOT, "src", "tools");
@@ -268,24 +272,15 @@ function resolveImportedActions(categoryFile, localName) {
 }
 
 /**
- * The generated `Params:` clause of every spec'd bridge method in a category
- * (#1057), read out of `src/tools/specs/<category>.generated.ts`.
- *
- * An action declared with `specBp(effect, summary, method)` carries only its
- * summary in the category source; the clause is appended from the recorded
- * C++ spec at load time. Reading it from the generated module is what keeps
- * those actions in front of the same audits as the rest.
+ * The `Params:` clause of every spec'd bridge method in a category (#1057),
+ * derived from the loaded specs by the same function the server builds its
+ * descriptions with. A `specBp(effect, summary, method)` action carries only
+ * its summary in the source, so this is what puts it in front of the audits.
  */
-function readSpecClauses(specsDir, category) {
-  const generated = path.join(specsDir, `${category}.generated.ts`);
+function readSpecClauses(category) {
   const clauses = new Map();
-  if (!fs.existsSync(generated)) return clauses;
-  const src = fs.readFileSync(generated, "utf8").replace(/\r\n/g, "\n");
-  const decl = src.indexOf("export const paramsClauses");
-  if (decl === -1) return clauses;
-  const body = src.slice(decl, src.indexOf("\n};", decl));
-  for (const m of body.matchAll(/^\s+([a-z_][a-z0-9_]*): ("(?:[^"\\]|\\.)*"),$/gm)) {
-    clauses.set(m[1], JSON.parse(m[2]));
+  for (const [method, spec] of Object.entries(RECORDED_HANDLER_SPECS)) {
+    if (spec.category === category) clauses.set(method, paramsClause(spec));
   }
   return clauses;
 }
@@ -301,7 +296,7 @@ function readSpecBuilders(categoryFile, src) {
   const builders = new Map();
   for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"((?:\.|\.\.)\/specs)\/([a-z_]+)\.generated\.js"/g)) {
     const binding = m[1].match(/(?:^|,)\s*specBp(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*(?:,|$)/);
-    if (binding) builders.set(binding[1] ?? "specBp", readSpecClauses(path.resolve(path.dirname(categoryFile), m[2]), m[3]));
+    if (binding) builders.set(binding[1] ?? "specBp", readSpecClauses(m[3]));
   }
   return builders;
 }

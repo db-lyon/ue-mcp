@@ -343,7 +343,7 @@ function main(): void {
 }
 
 // Only when run as a script. `computeCounts` is imported by
-// tests/unit/tool-counts.test.ts, which must not rewrite the tree to read it.
+// tests/unit/scripts/tool-counts.test.ts, which must not rewrite the tree to read it.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main();
 }

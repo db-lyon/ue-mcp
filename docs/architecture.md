@@ -60,7 +60,7 @@ export const levelTool: ToolDef = categoryTool(
 **Two action types:**
 
 - **Bridge actions** (`bp()`) - forwarded to the C++ plugin over WebSocket. An action whose handler declares a [parameter spec](#parameter-specs) uses `specBp()` instead, and its parameters are generated rather than written here
-- **Local actions** - handled in Node.js (filesystem operations like INI parsing, C++ header reading). Each declares its parameters with `options: { params: ["name", "limit?"], choices? }`, naming keys of the category's zod shape, which owns their types. The declaration is what `describe_action`, the signature line and the task's option schema are built from. The description keeps its `Params:` clause for the reader, and `tests/unit/handler-options.test.ts` holds the clause and the declaration to the same names and optionality.
+- **Local actions** - handled in Node.js (filesystem operations like INI parsing, C++ header reading). Each declares its parameters with `options: { params: ["name", "limit?"], choices? }`, naming keys of the category's zod shape, which owns their types. The declaration is what `describe_action`, the signature line and the task's option schema are built from. The description keeps its `Params:` clause for the reader, and `tests/unit/surface/handler-options.test.ts` holds the clause and the declaration to the same names and optionality.
 
 ### Parameters in one reading
 
@@ -158,12 +158,12 @@ From there the contract travels one way:
 1. **The registry** validates the spec at registration and refuses the dispatcher's routing names (`action`, `timeoutMs`, `select`, `omit`, `editor`, `toEditor`), a name declared twice, an item type on anything but an array, a value shape that does not fit its type, and a choice that names an undeclared or required parameter. A refused spec is logged and dropped; the handler still registers. At dispatch it renames each declared alias to its parameter's name, so the handler reads the declared names only.
 2. **The bridge** publishes every spec in `get_bridge_capabilities.handlerSpecs`, keyed by method.
 3. **`npm run specs:record`** writes that answer from a `tests/ue_mcp` editor to `tests/golden/handler-specs.json`.
-4. **`npm run specs:generate`** renders the recording into `src/tools/specs/<category>.generated.ts`: the recorded specs and the `Params:` clause of each method. At load, `categorySchema` builds one zod entry per declared name and alias from those specs.
+4. **`npm run specs:generate`** renders the recording into `src/tools/specs/<category>.generated.ts`: the recorded specs only. At load, `categorySchema` builds one zod entry per declared name and alias from those specs, and `specBp` derives each action's `Params:` clause from its spec.
 5. **The category** declares the action with `specBp(effect, summary, method)`. The summary and the effect are the only things written by hand; there is no `mapParams`, because a rename is an alias in the spec. A spec's choices travel on the action, and `prepareCall` refuses a call that does not satisfy them before anything is sent, on the MCP route and the flow route alike.
 
 The advertised surface always comes from the recording, whether an editor is connected or not, so the startup contract does not depend on which plugin answered. When one is connected, `project(get_status)` compares its `handlerSpecs` against the recording and reports any difference under `deployedPlugin.handlerSpecDrift`.
 
-Four tests hold the chain: `tests/unit/handler-specs.test.ts` (the generated modules are exactly what the recording renders to, every spec'd action takes its clause from the spec, and a key shared with hand-written actions has one type), `tests/live/handler-specs.test.ts` (the running plugin still publishes what was recorded), the C++ suite's `UE.MCP.Bridge.HandlerSpec.Contract` (each spec'd handler, called with every declared parameter, reads exactly those and nothing else), and `tests/unit/handler-spec-exempt.test.ts` (a contract-exempt handler's source reads exactly what its spec declares).
+Four tests hold the chain: `tests/unit/surface/handler-specs.test.ts` (the generated modules are exactly what the recording renders to, every spec'd action takes its clause from the spec, and a key shared with hand-written actions has one type), `tests/live/handler-specs.test.ts` (the running plugin still publishes what was recorded), the C++ suite's `UE.MCP.Bridge.HandlerSpec.Contract` (each spec'd handler, called with every declared parameter, reads exactly those and nothing else), and `tests/unit/plugin/handler-spec-exempt.test.ts` (a contract-exempt handler's source reads exactly what its spec declares).
 
 ##### What a spec can say
 
@@ -178,7 +178,7 @@ Beyond a list of named, typed parameters:
 
 A choice or an exemption goes in the last argument, after the parameter list: `RegisterHandler(name, fn, { ... }, MCPSpec::ExactlyOne(...).ContractExempt(...))`, or `RegisterHandlerWithTimeout(name, fn, seconds, { ... }, rules)`. Each addition is written into the recording only when it is used (`choices`, `contractExempt`, and on a parameter `nullable`, `orTypes`, `literal`, `fields`, `forms`, `oneOf`, `min`, `max`, `minLength`, `maxLength`, `minItems`, `maxItems`), so a spec that uses none of them records exactly what it did before they existed.
 
-Every bridge action takes its parameters from a spec, and `tests/unit/handler-specs.test.ts` fails on one that does not. The one passthrough is the generated `epic_*` actions: each dispatches to `epic_call_tool`, whose spec declares the bag it takes (`toolset`, `tool`, `input`, `inputJson`), through a mapper that builds that bag from the wrapped tool's recorded Epic input schema. That schema is the action's contract, and the test holds every such action to building exactly the bag the spec declares.
+Every bridge action takes its parameters from a spec, and `tests/unit/surface/handler-specs.test.ts` fails on one that does not. The one passthrough is the generated `epic_*` actions: each dispatches to `epic_call_tool`, whose spec declares the bag it takes (`toolset`, `tool`, `input`, `inputJson`), through a mapper that builds that bag from the wrapped tool's recorded Epic input schema. That schema is the action's contract, and the test holds every such action to building exactly the bag the spec declares.
 
 #### Socket and thread ownership
 

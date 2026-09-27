@@ -22,19 +22,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { readCategories } from "./lib/tool-source.mjs";
+import { PAGINATION_PARAM_NAMES } from "../src/surface/pagination.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const DOC = fs.readFileSync(path.join(ROOT, "docs/tool-reference.md"), "utf8");
+const DOC_PATH = path.join(ROOT, "docs/tool-reference.md");
 
-// The names paged() appends to a paged action's Params clause. Mirrors
-// PAGINATION_PARAM_NAMES in src/surface/pagination.ts, which this plain-node script
-// cannot import; the parity is asserted in tests/unit/audit-params.test.ts.
-const PAGINATION_PARAMS = ["cursor", "limit"];
-
-function docSection(section) {
-  const start = DOC.indexOf(`\n## ${section}\n`);
+function docSection(doc, section) {
+  const start = doc.indexOf(`\n## ${section}\n`);
   if (start === -1) return null;
-  const after = DOC.slice(start + 1);
+  const after = doc.slice(start + 1);
   const endIdx = after.indexOf("\n## ");
   return endIdx === -1 ? after : after.slice(0, endIdx);
 }
@@ -82,12 +78,13 @@ function paramTokens(text) {
   return [...new Set(names)];
 }
 
-export function auditParams() {
-  const { categories, blind } = readCategories();
+/** Defaults to the real tree and docs; a test passes a fixture of either. */
+export function auditParams({ read = readCategories(), doc = fs.readFileSync(DOC_PATH, "utf8") } = {}) {
+  const { categories, blind } = read;
   const drifts = [];
   let compared = 0;
   for (const category of categories) {
-    const chunk = docSection(category.name);
+    const chunk = docSection(doc, category.name);
     if (chunk === null) {
       blind.push({
         file: path.relative(ROOT, category.file),
@@ -103,7 +100,7 @@ export function auditParams() {
       // A paged action's runtime description carries cursor and limit, added by
       // paged() after the literal in the source ends. They belong to the source
       // side of the comparison even though no literal spells them.
-      if (paged) for (const p of PAGINATION_PARAMS) if (!srcParams.includes(p)) srcParams.push(p);
+      if (paged) for (const p of PAGINATION_PARAM_NAMES) if (!srcParams.includes(p)) srcParams.push(p);
       const docParams = paramTokens(docDesc);
       const missing = srcParams.filter((p) => !docParams.includes(p));
       const extra = docParams.filter((p) => !srcParams.includes(p));

@@ -120,7 +120,7 @@ async function fetchLatest(): Promise<string | null> {
  * uses to pick the npm dist-tag. The two cannot be one module: the publish job
  * runs before tsc has produced dist/, and the package ships only dist/ and
  * plugin/, so neither side can import the other. The parity test in
- * tests/unit/release-channel-parity.test.ts holds them together.
+ * tests/unit/scripts/release-channel-parity.test.ts holds them together.
  *
  * Both degrade to the stable channel on an unparseable version instead of
  * throwing. These sit in CLI and startup paths where a crash is worse than a

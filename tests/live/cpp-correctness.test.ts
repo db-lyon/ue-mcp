@@ -5,7 +5,7 @@
  * process, so unlike the rest of this suite they do not need a running editor.
  * They do need a real engine, which is why they live here rather than in the
  * unit tests: the recognition rules are pinned against fixtures in
- * `tests/unit/engine-index.test.ts`, and what is asserted HERE is that those
+ * `tests/unit/codeintel/engine-index.test.ts`, and what is asserted HERE is that those
  * rules land on the right answer when pointed at 31,000 real headers.
  *
  * The index cache is redirected to a gitignored directory under the repo

@@ -118,7 +118,7 @@ export interface HandlerSpec {
   /**
    * Why the C++ contract test does not call this handler: its contract values
    * would reach a create, spawn, save or run. The surface is generated from it
-   * like any other; tests/unit/handler-spec-exempt.test.ts holds the handler
+   * like any other; tests/unit/plugin/handler-spec-exempt.test.ts holds the handler
    * source to it instead.
    */
   contractExempt?: string;
@@ -338,7 +338,7 @@ function choiceProblems(method: string, spec: HandlerSpec): string[] {
 /** The items of a Params clause, in spec order: a choice sits where its first member is declared. */
 type ClauseItem = { kind: "param"; param: ParamSpec } | { kind: "choice"; choice: ParamChoice };
 
-export function clauseItems(spec: HandlerSpec): ClauseItem[] {
+export function clauseItems(spec: Pick<HandlerSpec, "params" | "choices">): ClauseItem[] {
   const choiceOf = new Map<string, ParamChoice>();
   for (const choice of spec.choices ?? []) for (const branch of choice.branches) for (const name of branch) choiceOf.set(name, choice);
   const placed = new Set<ParamChoice>();
@@ -407,15 +407,31 @@ export function renderChoice(choice: ParamChoice, params: readonly ParamSpec[]):
 }
 
 /**
- * Build the action declaration for a spec'd bridge method: the summary a person
- * wrote, then the generated `Params:` clause. There is no mapParams, because the
- * spec names are the bridge names and renames are the registry's aliases. The
- * action carries the spec itself, so describe_action reports it verbatim.
+ * The `Params:` clause for one handler, in the grammar tests/helpers/params-clause.ts
+ * reads: required names bare, optional ones with `?`, aliases as `(or alias)`,
+ * and a choice where its first member is declared.
  */
-export function makeSpecBp(clauses: Readonly<Record<string, string>>, specs: HandlerSpecs = {}) {
+export function paramsClause(spec: Pick<HandlerSpec, "params" | "choices">): string {
+  if (spec.params.length === 0) return "Params: none";
+  const items = clauseItems(spec).map((item) => {
+    if (item.kind === "choice") return renderChoice(item.choice, spec.params);
+    const p = item.param;
+    const aliases = p.aliases?.length ? ` (${p.aliases.map((a) => `or ${a}`).join(", ")})` : "";
+    return `${p.name}${p.required ? "" : "?"}${aliases}`;
+  });
+  return `Params: ${items.join(", ")}`;
+}
+
+/**
+ * Build the action declaration for a spec'd bridge method: the summary a person
+ * wrote, then the `Params:` clause derived from the spec. There is no mapParams,
+ * because the spec names are the bridge names and renames are the registry's
+ * aliases. The action carries the spec itself, so describe_action reports it verbatim.
+ */
+export function makeSpecBp(specs: HandlerSpecs) {
   return (effect: ActionEffect, summary: string, bridge: string): BridgeActionSpec => {
-    const clause = clauses[bridge];
-    if (clause === undefined) {
+    const spec = specs[bridge];
+    if (!spec) {
       throw new Error(
         `No recorded parameter spec for bridge method '${bridge}'. Register it with a spec in C++, `
         + "then run npm run specs:record and npm run specs:generate.",
@@ -426,12 +442,10 @@ export function makeSpecBp(clauses: Readonly<Record<string, string>>, specs: Han
     const action: BridgeActionSpec = {
       kind: "bridge",
       effect,
-      description: `${summary} ${clause}`,
+      description: `${summary} ${paramsClause(spec)}`,
       bridge,
       mapParams: undefined,
     };
-    const spec = specs[bridge];
-    if (!spec) return action;
     return spec.choices?.length
       ? { ...action, paramSpec: spec.params, paramChoices: spec.choices }
       : { ...action, paramSpec: spec.params };

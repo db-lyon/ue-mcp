@@ -1,0 +1,62 @@
+import { describe, expect, it, vi } from "vitest";
+import { animationTool } from "../../../src/tools/animation.js";
+import { handlerSpecs } from "../../../src/tools/specs/animation.generated.js";
+import type { ToolContext } from "../../../src/core/types.js";
+import { readHandlerFile } from "../../../scripts/lib/cpp-registrations.mjs";
+
+describe("animation.create_skeleton", () => {
+  it("publishes the factory-backed assignment contract", () => {
+    const action = animationTool.actions.create_skeleton;
+    expect(action.bridge).toBe("create_skeleton");
+    expect(action.description).toContain("skeleton factory");
+    expect(action.description).toContain("assigns the new skeleton");
+    expect(action.description).toContain("onConflict=skip");
+    expect(action.description).toContain("same bone count");
+    expect(action.description).toContain("transforms are not compared");
+    expect(action.description).toContain("machine-readable recovery descriptor");
+    expect(animationTool.schema.onConflict.safeParse("skip").success).toBe(true);
+    expect(animationTool.schema.onConflict.safeParse("error").success).toBe(true);
+    expect(animationTool.schema.onConflict.description).toContain("create_skeleton");
+  });
+
+  it("takes the native creation contract from its C++ spec (#1057)", async () => {
+    expect(animationTool.actions.create_skeleton.mapParams).toBeUndefined();
+    expect(handlerSpecs.create_skeleton.params.map((p) => p.name))
+      .toEqual(["name", "skeletalMeshPath", "packagePath", "onConflict"]);
+
+    const call = vi.fn().mockResolvedValue({ success: true });
+    const context = { bridge: { call } } as unknown as ToolContext;
+
+    await animationTool.handler(context, {
+      action: "create_skeleton",
+      name: "SK_Character",
+      skeletalMeshPath: "/Game/Meshes/SK_Character",
+      packagePath: "/Game/Skeletons",
+      onConflict: "skip",
+    });
+
+    expect(call).toHaveBeenCalledWith("create_skeleton", {
+      name: "SK_Character",
+      skeletalMeshPath: "/Game/Meshes/SK_Character",
+      packagePath: "/Game/Skeletons",
+      onConflict: "skip",
+    }, undefined);
+  });
+
+  it("keeps the native factory, retry, persistence, and rollback safeguards", () => {
+    const source = readHandlerFile("AnimationHandlers.cpp");
+    expect(source).toContain('TEXT("create_skeleton"), &CreateSkeleton');
+    expect(source).toContain("USkeletonFactory");
+    expect(source).toContain("Factory->TargetSkeletalMesh = SkeletalMesh");
+    expect(source).toContain("HasExactReferenceSkeletonHierarchy");
+    expect(source).toContain("GetBoneName(BoneIndex)");
+    expect(source).toContain("GetParentIndex(BoneIndex)");
+    expect(source).toContain("bMeshAlreadyAssigned");
+    expect(source).toContain("SaveAssetPackageChecked(Skeleton");
+    expect(source).toContain("SaveAssetPackageChecked(SkeletalMesh");
+    expect(source).toContain("RestoreMeshAndDeleteCreatedSkeleton");
+    expect(source).toContain("UEditorAssetLibrary::DeleteAsset(CreatedSkeleton->GetPathName())");
+    expect(source).toContain("Created.EarlyReturn->Type == EJson::Object");
+    expect(source).toContain('MCPSetRollback(Result, TEXT("set_asset_property"), Rollback)');
+  });
+});

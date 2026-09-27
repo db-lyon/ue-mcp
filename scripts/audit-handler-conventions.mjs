@@ -45,7 +45,7 @@
  * when the registration writes `&FFoo::Bar`.
  *
  * Run: node scripts/audit-handler-conventions.mjs [--json]
- * Gated by tests/unit/handler-conventions.test.ts.
+ * Gated by tests/unit/scripts/handler-conventions.test.ts.
  */
 import { readFileSync } from "node:fs";
 import { HANDLERS_DIR, REGISTRATION_RE, listHandlerFiles } from "./lib/cpp-registrations.mjs";

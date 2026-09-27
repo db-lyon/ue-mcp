@@ -284,21 +284,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  chooser_add_column: "Params: table (or assetPath), columnType, inputStruct?, boundProperty?, enumPath?",
-  chooser_add_row: "Params: table (or assetPath), output?, outputType?, cells?, inputs?",
-  chooser_create: "Params: name, packagePath?, onConflict?",
-  chooser_delete_row: "Params: table (or assetPath), index",
-  chooser_describe: "Params: table (or assetPath)",
-  chooser_list_object_references: "Params: assetPath (or path), classFilter?, pathFilter?",
-  chooser_list_rows: "Params: table (or assetPath)",
-  chooser_remap_object_references: "Params: assetPath (or path), from?, to?, fromPrefix?, toPrefix?, dryRun?, allowMissing?",
-  chooser_set_row: "Params: table (or assetPath), index, output?, outputType?, disabled?, cells?, inputs?",
-};
-
 /** Every key the spec'd chooser handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

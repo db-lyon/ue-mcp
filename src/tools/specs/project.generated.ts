@@ -179,21 +179,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  create_cpp_class: "Params: className, parentClass?, moduleName?, classDomain?, subPath?",
-  disable_plugin: "Params: pluginName, removeReference?",
-  enable_plugin: "Params: pluginName",
-  generate_project_files: "Params: none",
-  list_available_plugins: "Params: filter?, pluginCategory?, enabledOnly?, cursor?, limit?",
-  list_project_modules: "Params: cursor?, limit?",
-  live_coding_compile: "Params: wait?",
-  live_coding_status: "Params: none",
-  set_config: "Params: configName? (or configFile), section, key, value",
-};
-
 /** Every key the spec'd project handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

@@ -2177,69 +2177,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_expression_in_function: "Params: functionPath (or materialFunctionPath), expressionType, positionX?, positionY?, inputName?, inputType?, outputName?, name?",
-  add_material_designer_layer: "Params: assetPath OR actorLabel OR actorPath, componentName?, slotIndex?, slotName?, world?, pieInstance?, designerSlot?, materialProperty?, layerName?",
-  add_material_expression: "Params: materialPath (or path, or assetPath), expressionType, name? (or expressionName), parameterName?, group?, sortPriority?, defaultValue?, value?, channels?, positionX?, positionY?",
-  add_rvt_output: "Params: materialPath (or assetPath), expressionName?, mirrorProperties?, positionX?, positionY?, recompile?",
-  add_rvt_sampler: "Params: materialPath (or assetPath), rvtPath, expressionName?, connectOutputs?, positionX?, positionY?, recompile?",
-  add_rvt_volume: "Params: rvtPath (or assetPath), actorLabel?, boundsMode?, boundsAlignActor?",
-  assign_rvt_to_landscape: "Params: actorLabel OR actorPath, rvtPaths?, rvtPath?, assignMode?",
-  batch_set_material_instances: "Params: instances",
-  begin_material_transaction: "Params: label?",
-  build_material: "Params: materialPath (or assetPath) OR name, packagePath?, textures, samplerTypes?, clearExisting?, assignToMesh? (or meshPath), meshSlots?",
-  build_material_graph: "Params: assetPath (or materialPath), nodes, propertyConnections?",
-  clear_material_instance_parameters: "Params: assetPath (or path, or materialPath)",
-  connect_expressions_in_function: "Params: functionPath (or materialFunctionPath), sourceExpression, sourceOutput?, targetExpression, targetInput?",
-  connect_material_expressions: "Params: materialPath (or path, or assetPath), sourceExpression, sourceOutput?, targetExpression, targetInput?",
-  connect_texture_to_material: "Params: materialPath (or path, or assetPath), texturePath, property? (or materialProperty)",
-  connect_to_material_property: "Params: materialPath (or path, or assetPath), expressionName, outputName?, property",
-  create_material: "Params: name, packagePath?, onConflict?",
-  create_material_designer: "Params: name, packagePath?, onConflict?",
-  create_material_function: "Params: name, packagePath?, onConflict?, description?",
-  create_material_instance: "Params: parentPath, name, packagePath?, onConflict?",
-  create_material_simple: "Params: name, packagePath?, onConflict?, baseColor?, metallic?, specular?, roughness?, emissive?, usages?",
-  create_runtime_virtual_texture: "Params: name, packagePath?, materialType?, onConflict?",
-  delete_material_expression: "Params: materialPath (or path, or assetPath) OR functionPath (or materialFunctionPath), expressionName",
-  disconnect_material_property: "Params: materialPath (or assetPath), property",
-  duplicate_material: "Params: sourcePath, destinationPath",
-  end_material_transaction: "Params: none",
-  export_material_graph: "Params: assetPath (or materialPath)",
-  get_material_shader_stats: "Params: assetPath (or materialPath)",
-  get_material_usage: "Params: assetPath (or path)",
-  import_material_graph: "Params: assetPath (or materialPath), nodes, propertyConnections?",
-  list_expression_types: "Params: cursor?, limit?",
-  list_expressions_in_function: "Params: functionPath (or materialFunctionPath)",
-  list_material_expressions: "Params: materialPath (or path, or assetPath), includeInputs?, cursor?, limit?",
-  list_material_parameters: "Params: assetPath (or path, or materialPath)",
-  list_material_static_switches: "Params: assetPath (or path, or materialPath)",
-  read_material: "Params: assetPath (or path, or materialPath)",
-  read_material_designer: "Params: assetPath OR actorLabel OR actorPath, componentName?, slotIndex?, slotName?, world?, pieInstance?, designerSlot?, layerIndex?, maxDepth?",
-  read_material_graph: "Params: materialPath (or path, or assetPath), expressionIndex?, cursor?, limit?",
-  read_material_instance: "Params: assetPath (or path, or materialPath) OR actorLabel OR actorPath, componentName?, slotIndex?, slotName?, world?, pieInstance?",
-  read_material_parameter_collection: "Params: assetPath (or path), world?, pieInstance?",
-  read_runtime_virtual_texture: "Params: rvtPath (or assetPath)",
-  recompile_material: "Params: materialPath (or path, or assetPath), recompileChildren?",
-  remove_material_designer_layer: "Params: objectPath OR assetPath OR actorLabel OR actorPath, componentName?, slotIndex?, slotName?, world?, pieInstance?, designerSlot?, layerIndex?, layerName?",
-  render_material_preview: "Params: assetPath (or materialPath), outputPath, width?, height?",
-  set_custom_expression: "Params: materialPath (or path, or assetPath) OR functionPath (or materialFunctionPath), expressionIndex, code?, inputs?, outputType?, description?",
-  set_expression_value: "Params: materialPath (or path, or assetPath) OR functionPath (or materialFunctionPath), expressionIndex, value?, color? (or colour), x?, y?, parameterName?, texturePath?, uTiling?, vTiling?, coordinateIndex?, propertyName?",
-  set_material_base_color: "Params: assetPath (or path), color",
-  set_material_blend_mode: "Params: assetPath (or path), blendMode",
-  set_material_designer_value: "Params: propertyName, value, objectPath OR componentPath OR layerIndex OR layerName, stage?, assetPath?, actorLabel?, actorPath?, componentName?, slotIndex?, slotName?, world?, pieInstance?, designerSlot?, rebuild?",
-  set_material_domain: "Params: assetPath (or path), materialDomain (or domain)",
-  set_material_instance_parent: "Params: assetPath (or path, or materialPath), newParentPath (or parentPath)",
-  set_material_parameter: "Params: assetPath (or path), parameterName, parameterType?, at least one of value/color (or colour)/texturePath, association?",
-  set_material_shading_model: "Params: assetPath (or path), shadingModel",
-  set_material_static_switch: "Params: assetPath (or path, or materialPath), parameterName, value, association?, parameterIndex?",
-  set_material_usage: "Params: assetPath (or path, or materialPath), at least one of usages/usage",
-  set_rvt_volume_bounds: "Params: rvtPath (or assetPath) OR actorLabel OR actorPath, boundsMode?, boundsAlignActor?",
-  validate_material: "Params: assetPath (or materialPath)",
-};
-
 /** Every key the spec'd material handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

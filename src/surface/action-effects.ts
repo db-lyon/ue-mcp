@@ -68,7 +68,7 @@ export const UNDECLARED_EFFECT: ActionEffect = "mutate";
  * Enumerated rather than defaulted, because two of them are reads, and a read
  * defaulted to `mutate` would put `asset(search)` and `editor(get_engine_state)`
  * in front of every guard scoped to mutations for no reason.
- * `tests/unit/action-effects.test.ts` scans the source for raw `bridge.call`
+ * `tests/unit/surface/action-effects.test.ts` scans the source for raw `bridge.call`
  * sites and fails when one appears that is not listed here, so this cannot
  * quietly fall behind the code. Same shape as the hand-written halves of
  * `offline.ts`, and for the same reason.

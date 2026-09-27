@@ -24,7 +24,7 @@
  * `asset(migrate)` calls the bridge from a module-level helper the closure only
  * names, so a source scan reads it as editor-free and an agent is told a
  * migrate will work with the editor down. `LOCAL_ACTIONS` records the answer
- * once, and `tests/unit/offline.test.ts` fails when an action is added, removed
+ * once, and `tests/unit/dispatch/offline.test.ts` fails when an action is added, removed
  * or renamed without updating it, so the table cannot silently drift away from
  * the graph the server dispatches from.
  */

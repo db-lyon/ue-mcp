@@ -61,7 +61,7 @@ export interface BlockingDialog {
  * Bridge methods the plugin answers while a modal is up.
  *
  * Mirrors ModalSafeMethods in BridgeServer.cpp plus the handshake reads served
- * before the gate. Pinned by tests/unit/dialog-modal-safe-parity.test.ts,
+ * before the gate. Pinned by tests/unit/plugin/dialog-modal-safe-parity.test.ts,
  * because a method the plugin serves but this list omits would be read as proof
  * the editor is running.
  */

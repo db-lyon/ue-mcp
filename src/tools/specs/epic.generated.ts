@@ -72,16 +72,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  epic_call_tool: "Params: toolset, tool, input?, inputJson?",
-  epic_describe_toolset: "Params: toolset",
-  epic_list_toolsets: "Params: nameFilter?, includeSchemas?",
-  epic_status: "Params: none",
-};
-
 /** Every key the spec'd epic handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

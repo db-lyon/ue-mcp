@@ -118,7 +118,7 @@ export const blueprintTool: ToolDef = categoryTool(
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration. A key listed again below is shared with the handler-kind
-    // author action, and tests/unit/handler-specs.test.ts holds the two to one
+    // author action, and tests/unit/surface/handler-specs.test.ts holds the two to one
     // type.
     ...specSchema,
     assetPath: AUTHOR_INPUTS.assetPath,
