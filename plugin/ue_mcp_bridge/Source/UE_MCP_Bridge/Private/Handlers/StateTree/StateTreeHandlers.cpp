@@ -33,6 +33,7 @@
 #include "StateTreeTaskBase.h"
 #include "StateTreeEditorTypes.h"
 #include "HandlerStateTreeSchema.h"
+#include "HandlerStateTreeProperties.h"
 
 #if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
 using FUE_MCPStateTreePropertyPath = FPropertyBindingPath;
@@ -866,62 +867,6 @@ TSharedPtr<FJsonObject> FStateTreeHandlers::SerializeStateHierarchy(const UState
 	return Obj;
 }
 
-static void SetInstancePropertiesFromJson(FInstancedStruct& Instance, const TSharedPtr<FJsonObject>& Properties)
-{
-	if (!Instance.IsValid() || !Properties.IsValid()) return;
-
-	const UScriptStruct* Struct = Instance.GetScriptStruct();
-	uint8* Memory = Instance.GetMutableMemory();
-	if (!Struct || !Memory) return;
-
-	for (const auto& Pair : Properties->Values)
-	{
-		FProperty* Prop = Struct->FindPropertyByName(*Pair.Key);
-		if (!Prop) continue;
-
-		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Memory);
-		FString ValueStr;
-
-		if (Pair.Value->Type == EJson::String)
-		{
-			ValueStr = Pair.Value->AsString();
-		}
-		else if (Pair.Value->Type == EJson::Number)
-		{
-			ValueStr = FString::SanitizeFloat(Pair.Value->AsNumber());
-		}
-		else if (Pair.Value->Type == EJson::Boolean)
-		{
-			ValueStr = Pair.Value->AsBool() ? TEXT("true") : TEXT("false");
-		}
-		else
-		{
-			continue;
-		}
-
-		Prop->ImportText_Direct(*ValueStr, ValuePtr, nullptr, PPF_None);
-	}
-}
-
-// #681: set properties on a UObject-backed node instance (BP task/condition/
-// evaluator wrapper's InstanceObject), mirroring SetInstancePropertiesFromJson.
-static void SetObjectPropertiesFromJson(UObject* Object, const TSharedPtr<FJsonObject>& Properties)
-{
-	if (!Object || !Properties.IsValid()) return;
-	for (const auto& Pair : Properties->Values)
-	{
-		FProperty* Prop = Object->GetClass()->FindPropertyByName(*Pair.Key);
-		if (!Prop) continue;
-		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Object);
-		FString ValueStr;
-		if (Pair.Value->Type == EJson::String) ValueStr = Pair.Value->AsString();
-		else if (Pair.Value->Type == EJson::Number) ValueStr = FString::SanitizeFloat(Pair.Value->AsNumber());
-		else if (Pair.Value->Type == EJson::Boolean) ValueStr = Pair.Value->AsBool() ? TEXT("true") : TEXT("false");
-		else continue;
-		Prop->ImportText_Direct(*ValueStr, ValuePtr, nullptr, PPF_None);
-	}
-}
-
 static bool AddEditorNodeToArray(TArray<FStateTreeEditorNode>& Arr, const FString& StructTypeName, const TSharedPtr<FJsonObject>& InstanceProperties, UObject* Outer, FStateTreeEditorNode*& OutNode, FString& OutError)
 {
 	FString ResolveError;
@@ -963,16 +908,11 @@ static bool AddEditorNodeToArray(TArray<FStateTreeEditorNode>& Arr, const FStrin
 	(void)Outer; // unused on 5.7 (the Outer-based path above is 5.8+ only)
 #endif
 
-	if (InstanceProperties.IsValid())
+	// A key or value that does not land fails the add, and the node goes with it.
+	if (!MCPStateTreeProperties::ApplyInstanceProperties(EditorNode, InstanceProperties, OutError))
 	{
-		if (EditorNode.InstanceObject)
-		{
-			SetObjectPropertiesFromJson(EditorNode.InstanceObject, InstanceProperties);
-		}
-		else if (EditorNode.Instance.IsValid())
-		{
-			SetInstancePropertiesFromJson(EditorNode.Instance, InstanceProperties);
-		}
+		Arr.Pop();
+		return false;
 	}
 
 	OutNode = &EditorNode;
@@ -1916,7 +1856,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskInstanceProperty(const TShared
 	// Exported before the import so the inverse replays the value that was there.
 	FString PriorValue;
 	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
-	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
+	FString ImportError;
+	if (!MCPStateTreeProperties::ImportValue(Prop, ValuePtr, Value, PriorValue, ImportError)) return MCPError(ImportError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1980,12 +1921,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskProperty(const TSharedPtr<FJso
 	// Exported before the import so the inverse replays the value that was there.
 	FString PriorValue;
 	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
-	const TCHAR* ImportResult = Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
-	if (!ImportResult)
-	{
-		return MCPError(FString::Printf(TEXT("Failed to parse value '%s' for property '%s' (type %s)"),
-			*Value, *PropName, *Prop->GetClass()->GetName()));
-	}
+	FString ImportError;
+	if (!MCPStateTreeProperties::ImportValue(Prop, ValuePtr, Value, PriorValue, ImportError)) return MCPError(ImportError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2162,7 +2099,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorInstanceProperty(const TS
 	// Exported before the import so the inverse replays the value that was there.
 	FString PriorValue;
 	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
-	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
+	FString ImportError;
+	if (!MCPStateTreeProperties::ImportValue(Prop, ValuePtr, Value, PriorValue, ImportError)) return MCPError(ImportError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2224,7 +2162,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorProperty(const TSharedPtr
 	// Exported before the import so the inverse replays the value that was there.
 	FString PriorValue;
 	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
-	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
+	FString ImportError;
+	if (!MCPStateTreeProperties::ImportValue(Prop, ValuePtr, Value, PriorValue, ImportError)) return MCPError(ImportError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2400,7 +2339,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskInstanceProperty(const T
 	// Exported before the import so the inverse replays the value that was there.
 	FString PriorValue;
 	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
-	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
+	FString ImportError;
+	if (!MCPStateTreeProperties::ImportValue(Prop, ValuePtr, Value, PriorValue, ImportError)) return MCPError(ImportError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2462,7 +2402,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskProperty(const TSharedPt
 	// Exported before the import so the inverse replays the value that was there.
 	FString PriorValue;
 	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
-	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
+	FString ImportError;
+	if (!MCPStateTreeProperties::ImportValue(Prop, ValuePtr, Value, PriorValue, ImportError)) return MCPError(ImportError);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -3381,7 +3322,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJ
 	// Exported before the import so the inverse replays the value that was there.
 	FString PriorValue;
 	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
-	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
+	FString ImportError;
+	if (!MCPStateTreeProperties::ImportValue(Prop, ValuePtr, Value, PriorValue, ImportError)) return MCPError(ImportError);
 
 	const bool bFixedLayout = State->Parameters.bFixedLayout;
 	if (bFixedLayout)

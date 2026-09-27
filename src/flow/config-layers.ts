@@ -5,8 +5,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { readEnv } from "../core/env.js";
-import { globalConfigPath } from "../config/ue-mcp-config.js";
+import { globalConfigPath, selectedOverlay } from "../config/ue-mcp-config.js";
 
 export interface ConfigLayer {
   file: string;
@@ -31,7 +30,8 @@ export function configLayers(configDir: string): ConfigLayer[] {
   const project = configLayer(path.join(configDir, "ue-mcp.yml"));
   const layers = [configLayer(globalConfigPath()), project];
   if (project.stamp !== null) {
-    if (readEnv("env")) layers.push(configLayer(path.join(configDir, `ue-mcp.${readEnv("env")}.yml`)));
+    const overlay = selectedOverlay(configDir);
+    if (overlay) layers.push(configLayer(path.join(configDir, `ue-mcp.${overlay}.yml`)));
     layers.push(configLayer(path.join(configDir, "ue-mcp.local.yml")));
   }
   return layers;

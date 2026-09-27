@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadConfig, deepMerge, type LoadedConfig } from "@db-lyon/flowkit";
 import { FlowConfigSchema, type FlowConfig } from "./schema.js";
-import { readGlobalConfigDoc } from "../config/ue-mcp-config.js";
+import { readGlobalConfigDoc, selectedOverlay } from "../config/ue-mcp-config.js";
 import type { ToolDef } from "../core/types.js";
 import { actionTaskEntry, universalFlows, universalTask } from "./universal.js";
 
@@ -87,7 +87,8 @@ export function loadFlowConfig(
     filename: "ue-mcp.yml",
     schema: FlowConfigSchema,
     defaults,
-    envVar: "UE_MCP_ENV",
+    // The same overlay the `ue-mcp:` block merges, `env:` included.
+    env: selectedOverlay(dir),
     configDir: dir,
   });
 }

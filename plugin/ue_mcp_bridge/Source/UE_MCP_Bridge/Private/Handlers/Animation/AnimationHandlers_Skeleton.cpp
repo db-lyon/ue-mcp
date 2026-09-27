@@ -51,6 +51,7 @@
 #include "Animation/BoneReference.h"
 #include "Animation/Skeleton.h"
 #include "Engine/SkeletalMesh.h"
+#include "Misc/Guid.h"
 #include "Modules/ModuleManager.h"
 #include "ReferenceSkeleton.h"
 #include "Rendering/SkeletalMeshLODModel.h"
@@ -1588,17 +1589,67 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CommitSkeletonEdit(const TSharedPtr<F
 			 "dropped with a removed bone, nor the fix-ups the commit applied to dependent "
 			 "AnimSequences, physics assets, IK rigs or blend profiles. Treat it as a repair, "
 			 "not an undo."));
+	// The session closes below, so the inverse opens, edits and commits its own.
 	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
 	Rollback->SetStringField(TEXT("skeletalMeshPath"), Session->SkeletalMeshPath);
-	Rollback->SetStringField(TEXT("sessionTag"), Session->Tag + TEXT("_Undo"));
 	Rollback->SetArrayField(TEXT("edits"), InverseEdits);
 	Rollback->SetBoolField(TEXT("force"), true);
-	Rollback->SetBoolField(TEXT("autoCommit"), true);
-	MCPSetRollback(Result, TEXT("edit_skeleton_bones"), Rollback);
+	MCPSetRollback(Result, TEXT("internal_replay_skeleton_edit"), Rollback);
 
 	MCPNoteSaveOutcome(Result, Session->SkeletalMeshPath, bMeshSaved, MeshSaveReason);
 	SkeletonSessions().Remove(Session->Tag);
 	return MCPResult(Result);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// internal_replay_skeleton_edit
+// ═════════════════════════════════════════════════════════════════════════════
+
+TSharedPtr<FJsonValue> FAnimationHandlers::ReplaySkeletonEdit(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace UE_MCP_SkeletonEdit;
+
+	if (!Params.IsValid()) return SkeletonError(TEXT("invalid_params"), TEXT("Parameters are required"));
+
+	// Every parameter is read before anything can fail (#1057).
+	FString MeshPath;
+	const TSharedPtr<FJsonValue> MeshErr = RequireString(Params, TEXT("skeletalMeshPath"), MeshPath);
+	const TArray<TSharedPtr<FJsonValue>>* Edits = nullptr;
+	const bool bHasEdits = TryGetArrayParam(Params, TEXT("edits"), Edits) && Edits;
+	const bool bForce = OptionalBool(Params, TEXT("force"), false);
+	if (MeshErr) return MeshErr;
+	if (!bHasEdits) return SkeletonError(TEXT("invalid_params"), TEXT("'edits' is required"));
+
+	auto Succeeded = [](const TSharedPtr<FJsonValue>& Value)
+	{
+		bool bSuccess = true;
+		return Value.IsValid() && Value->Type == EJson::Object
+			&& (!Value->AsObject()->TryGetBoolField(TEXT("success"), bSuccess) || bSuccess);
+	};
+
+	const FString Tag = TEXT("MCPReplay_") + FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	TSharedPtr<FJsonObject> Begin = MakeShared<FJsonObject>();
+	Begin->SetStringField(TEXT("skeletalMeshPath"), MeshPath);
+	Begin->SetStringField(TEXT("sessionTag"), Tag);
+	const TSharedPtr<FJsonValue> Begun = BeginSkeletonEdit(Begin);
+	if (!Succeeded(Begun)) return Begun;
+
+	TSharedPtr<FJsonObject> Edit = MakeShared<FJsonObject>();
+	Edit->SetStringField(TEXT("sessionTag"), Tag);
+	Edit->SetArrayField(TEXT("edits"), *Edits);
+	Edit->SetBoolField(TEXT("force"), bForce);
+	const TSharedPtr<FJsonValue> Edited = EditSkeletonBones(Edit);
+	if (!Succeeded(Edited))
+	{
+		TSharedPtr<FJsonObject> Cancel = MakeShared<FJsonObject>();
+		Cancel->SetStringField(TEXT("sessionTag"), Tag);
+		CancelSkeletonEdit(Cancel);
+		return Edited;
+	}
+
+	TSharedPtr<FJsonObject> Commit = MakeShared<FJsonObject>();
+	Commit->SetStringField(TEXT("sessionTag"), Tag);
+	return CommitSkeletonEdit(Commit);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

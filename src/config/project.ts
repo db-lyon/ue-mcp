@@ -9,6 +9,7 @@ import {
   configLayerFiles,
   localConfigPath,
   overlayConfigPath,
+  selectedOverlay,
   projectConfigPath,
   readConfigDoc,
   readGlobalUeMcpBlock,
@@ -461,7 +462,7 @@ function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
   const project = readUeMcpBlock(projectConfigPath(projectDir));
 
   const layers: Record<string, unknown>[] = [global, project];
-  for (const layer of configLayerFiles(projectDir, overlayFor(projectDir, global, project))) {
+  for (const layer of configLayerFiles(projectDir, overlayFor(projectDir))) {
     if (layer.target === "env" || layer.target === "local") layers.push(readUeMcpBlock(layer.file));
   }
 
@@ -485,17 +486,9 @@ function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
  * would leave the client connecting to one port while the editor bound
  * another.
  */
-function overlayFor(
-  projectDir: string,
-  global: Record<string, unknown>,
-  project: Record<string, unknown>,
-): string | undefined {
-  const fromVariable = firstString(readEnv("env"));
-  if (fromVariable) return fromVariable;
-
-  const local = readUeMcpBlock(localConfigPath(projectDir));
-  const named = firstString(local.env, project.env, global.env);
-  if (!named) return undefined;
+function overlayFor(projectDir: string): string | undefined {
+  const named = selectedOverlay(projectDir);
+  if (!named || readEnv("env")) return named;
 
   const overlay = readUeMcpBlock(overlayConfigPath(projectDir, named));
   if ((overlay.bridge as { port?: unknown } | undefined)?.port !== undefined) {
@@ -508,13 +501,6 @@ function overlayFor(
     );
   }
   return named;
-}
-
-function firstString(...values: unknown[]): string | undefined {
-  for (const v of values) {
-    if (typeof v === "string" && v.trim() !== "") return v.trim();
-  }
-  return undefined;
 }
 
 /**

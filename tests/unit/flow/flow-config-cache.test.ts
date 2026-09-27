@@ -98,3 +98,38 @@ describe("FlowConfigCache", () => {
     expect(cache.get().flows.fixed).toBeDefined();
   });
 });
+
+describe("an overlay selected by env: in the project config (defect 2)", () => {
+  const overlay = [
+    "flows:",
+    "  staging_flow:",
+    "    steps:",
+    "      1: { task: shell, options: { command: \"echo staging\" } }",
+    "tasks:",
+    "  staging_task:",
+    "    class_path: shell",
+    "guards:",
+    "  staging_guard:",
+    "    before: { class_path: shell }",
+    "",
+  ].join("\n");
+
+  it("merges that overlay's flows, tasks and guards", () => {
+    write(path.join(dir, "ue-mcp.yml"), "ue-mcp:\n  version: 1\n  env: staging\n", 1);
+    write(path.join(dir, "ue-mcp.staging.yml"), overlay, 1);
+    const config = new FlowConfigCache(tools, dir).get();
+    expect(config.flows.staging_flow).toBeDefined();
+    expect(config.tasks.staging_task).toBeDefined();
+    expect(config.guards.staging_guard).toBeDefined();
+  });
+
+  it("rereads when that overlay changes", () => {
+    write(path.join(dir, "ue-mcp.yml"), "ue-mcp:\n  version: 1\n  env: staging\n", 1);
+    const file = path.join(dir, "ue-mcp.staging.yml");
+    write(file, flowYaml("first"), 1);
+    const cache = new FlowConfigCache(tools, dir);
+    expect(cache.get().flows.first).toBeDefined();
+    write(file, flowYaml("second", "longer"), 2);
+    expect(cache.get().flows.second).toBeDefined();
+  });
+});

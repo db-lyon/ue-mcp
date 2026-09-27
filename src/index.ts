@@ -164,6 +164,10 @@ async function main() {
     await loads.ensure(session);
     dialogGuardFor(session);
   };
+  sessions.reloadSession = async (session) => {
+    await loads.rebuild(session);
+    dialogGuardFor(session);
+  };
   for (const session of sessions.list()) {
     if (session.guards.size === 0) continue;
     const label = sessions.size > 1 ? `editor '${session.name}': ` : "";

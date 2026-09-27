@@ -54,14 +54,6 @@
 
 namespace ImcEdit_Internal
 {
-	// Packages holding an IMC edit that Unreal refused to mark dirty (PIE,
-	// loading, undo). A no-op call with save=true still owes them a write.
-	static TSet<FName>& UnmarkedEdits()
-	{
-		static TSet<FName> Packages;
-		return Packages;
-	}
-
 	// Spec'd handlers read every declared parameter before anything can fail
 	// (#1057). save is consumed later by RefuseUnwritable and FinishEdit.
 	static void ReadSaveFlag(const TSharedPtr<FJsonObject>& Params)
@@ -95,13 +87,6 @@ namespace ImcEdit_Internal
 		const TSharedPtr<FJsonObject>& Result,
 		bool bChanged)
 	{
-		UPackage* Package = Asset->GetOutermost();
-		if (bChanged && Package)
-		{
-			Package->MarkPackageDirty();
-			if (!Package->IsDirty()) UnmarkedEdits().Add(Package->GetFName());
-		}
-
 		const bool bSave = OptionalBool(Params, TEXT("save"), true);
 		// The inverse must use the same persistence policy. Saving a deferred
 		// edit's rollback would also flush unrelated pending edits in this IMC.
@@ -113,45 +98,7 @@ namespace ImcEdit_Internal
 			(*Payload)->SetBoolField(TEXT("save"), bSave);
 		}
 
-		bool bSaved = false;
-		bool bPersisted = false;
-		FString Reason;
-		if (bSave)
-		{
-			// A no-op writes only when an earlier edit is still pending: a dirty
-			// package, or one whose dirty flag was suppressed. A clean one already
-			// matches disk.
-			const bool bPending = bChanged
-				|| (Package && (Package->IsDirty() || UnmarkedEdits().Contains(Package->GetFName())));
-			if (bPending)
-			{
-				// SaveAssetPackageChecked refuses unwritable packages before
-				// SavePackage, which covers the FinalizeFile crash of #197 (#932).
-				bSaved = SaveAssetPackageChecked(Asset, Reason);
-				MCPNoteSaveOutcome(Result, Asset->GetPathName(), bSaved, Reason);
-				if (bSaved && Package) UnmarkedEdits().Remove(Package->GetFName());
-			}
-			bPersisted = bSaved || !bPending;
-		}
-		else
-		{
-			Reason = TEXT("save=false was requested; no package write was attempted. Call asset(save) to persist the asset.");
-			if (bChanged && (!Package || !Package->IsDirty()))
-			{
-				// Unreal can suppress MarkPackageDirty during PIE, loading or undo.
-				// Respect that policy and expose the failure instead of overriding
-				// it or promising that save_dirty can discover this changed asset.
-				Reason = TEXT("The asset changed in memory, but Unreal did not mark its package dirty. Dirty-package saves will not discover this edit; retry with save=true or explicitly save the asset.");
-				Result->SetBoolField(TEXT("success"), false);
-				Result->SetStringField(TEXT("error"), Reason);
-			}
-		}
-
-		Result->SetBoolField(TEXT("saved"), bSaved);
-		Result->SetBoolField(TEXT("persisted"), bPersisted);
-		Result->SetBoolField(TEXT("packageDirty"), Package && Package->IsDirty());
-		if (Package) Result->SetStringField(TEXT("packageName"), Package->GetName());
-		if (!bPersisted) Result->SetStringField(TEXT("persistError"), Reason);
+		MCPFinishPackageWrite(Result, Asset, bSave, bChanged);
 	}
 }
 

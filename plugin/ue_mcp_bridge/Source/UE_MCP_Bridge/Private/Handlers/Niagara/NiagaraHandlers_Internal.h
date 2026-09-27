@@ -15,6 +15,16 @@
 
 namespace MCPNiagara
 {
+	/** Request a compile and wait for it, so the save that follows writes the
+	 *  compiled scripts rather than the ones from before the edit. */
+	inline void CompileAndWait(UNiagaraSystem* System)
+	{
+		if (!System) return;
+		System->RequestCompile(false);
+		System->WaitForCompilationComplete(false, false);
+		System->PollForCompilationComplete(true);
+	}
+
 	/** The four emitter stack contexts a module can live in, spelled once. */
 	inline const TCHAR* ValidStackContexts()
 	{

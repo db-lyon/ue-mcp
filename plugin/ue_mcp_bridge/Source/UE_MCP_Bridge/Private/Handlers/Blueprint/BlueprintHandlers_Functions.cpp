@@ -852,9 +852,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprintInterface(const TShare
 	FKismetEditorUtilities::CompileBlueprint(NewInterface);
 
 	const FString ObjectPath = NewInterface->GetPathName();
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(NewInterface, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, ObjectPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("name"), NewInterface->GetName());
 

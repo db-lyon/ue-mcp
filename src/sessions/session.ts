@@ -160,6 +160,11 @@ export class SessionRegistry {
    * project's flows and plugin tasks inside itself (D1).
    */
   prepareSession?: (session: EditorSession) => Promise<void>;
+  /**
+   * Rebuilds a session's dispatch surface after its project moved, so it
+   * stops serving the previous project's flows, tasks, plugins and guards.
+   */
+  reloadSession?: (session: EditorSession) => Promise<void>;
   /** Held while a compound edit is mid-flight, so observers see one change. */
   private suppressNotify = false;
 
@@ -329,6 +334,11 @@ export class SessionRegistry {
    */
   async prepare(session: EditorSession): Promise<void> {
     await this.prepareSession?.(session);
+  }
+
+  /** Rebuild a session's surface from the project it now holds. */
+  async reload(session: EditorSession): Promise<void> {
+    await this.reloadSession?.(session);
   }
 
   /** Resolve without throwing. */

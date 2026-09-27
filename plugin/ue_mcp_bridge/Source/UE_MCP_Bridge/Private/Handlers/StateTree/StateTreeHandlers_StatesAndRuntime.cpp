@@ -93,6 +93,7 @@
 #include "StateTreeReference.h"
 #include "StateTreeSchema.h"
 #include "StateTreeState.h"
+#include "HandlerStateTreeProperties.h"
 #include "StateTreeTaskBase.h"
 #include "StateTreeTypes.h"
 #include "Blueprint/StateTreeConditionBlueprintBase.h"
@@ -349,32 +350,11 @@ namespace
 			StateTreeDepthReallocInstance(EditorNode, Outer);
 		}
 
-		if (InstanceProperties.IsValid())
+		// A key or value that does not land fails the add, and the node goes with it.
+		if (!MCPStateTreeProperties::ApplyInstanceProperties(EditorNode, InstanceProperties, OutError))
 		{
-			for (const auto& Pair : InstanceProperties->Values)
-			{
-				FString ValueStr;
-				if (Pair.Value->Type == EJson::String) ValueStr = Pair.Value->AsString();
-				else if (Pair.Value->Type == EJson::Number) ValueStr = FString::SanitizeFloat(Pair.Value->AsNumber());
-				else if (Pair.Value->Type == EJson::Boolean) ValueStr = Pair.Value->AsBool() ? TEXT("true") : TEXT("false");
-				else continue;
-
-				if (UObject* InstObj = EditorNode.InstanceObject.Get())
-				{
-					if (FProperty* Prop = InstObj->GetClass()->FindPropertyByName(*Pair.Key))
-					{
-						Prop->ImportText_Direct(*ValueStr, Prop->ContainerPtrToValuePtr<void>(InstObj), nullptr, PPF_None);
-					}
-				}
-				else if (EditorNode.Instance.IsValid())
-				{
-					const UScriptStruct* InstStruct = EditorNode.Instance.GetScriptStruct();
-					if (FProperty* Prop = InstStruct ? InstStruct->FindPropertyByName(*Pair.Key) : nullptr)
-					{
-						Prop->ImportText_Direct(*ValueStr, Prop->ContainerPtrToValuePtr<void>(EditorNode.Instance.GetMutableMemory()), nullptr, PPF_None);
-					}
-				}
-			}
+			Arr.Pop();
+			return false;
 		}
 
 		OutNode = &EditorNode;

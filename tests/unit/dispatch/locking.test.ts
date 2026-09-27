@@ -175,3 +175,26 @@ describe("withAssetLocks", () => {
     }
   });
 });
+
+describe("lock keys from the recorded C++ spec (defect 4)", () => {
+  it("locks the asset an edit names through a param outside the fixed key list", () => {
+    expect(classifyAction("animation.add_virtual_bone", { skeletonPath: "/Game/Chars/SK_Skel", sourceBone: "root", targetBone: "hand_r" }).paths)
+      .toEqual(["/Game/Chars/SK_Skel"]);
+    expect(classifyAction("niagara.add_renderer", { systemPath: "/Game/FX/NS_Fire", emitterName: "E" }).paths)
+      .toEqual(["/Game/FX/NS_Fire"]);
+    expect(classifyAction("audio.cue_add_node", { cuePath: "/Game/Audio/SC_Hit", nodeType: "Random" }).paths)
+      .toEqual(["/Game/Audio/SC_Hit"]);
+  });
+
+  it("locks a bare bridge method's spec'd asset path", () => {
+    expect(classifyAction("add_virtual_bone", { skeletonPath: "/Game/Chars/SK_Skel" }).paths).toEqual(["/Game/Chars/SK_Skel"]);
+  });
+
+  it("does not take in-asset addresses, actors, folders or files as lock keys", () => {
+    expect(classifyAction("statetree.add_state", {
+      assetPath: "/Game/AI/ST_Guard", statePath: "Root.Patrol", name: "Idle",
+    }).paths).toEqual(["/Game/AI/ST_Guard"]);
+    expect(classifyAction("level.add_actor_tag", { actorPath: "/Game/Maps/L.L:PersistentLevel.A", tag: "t" }).paths).toEqual([]);
+    expect(classifyAction("material.build_material", { packagePath: "/Game/Materials", name: "M" }).paths).toEqual([]);
+  });
+});

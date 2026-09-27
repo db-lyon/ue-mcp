@@ -2016,11 +2016,26 @@ namespace WidgetRuntime_Internal
 	static TMap<FString, uint64> PreviousLayoutCaptureFrames;
 	static uint64 LayoutCaptureSequence = 0;
 
-	static UWorld* ResolveWidgetRuntimeWorld()
+	// The live world the call names: pieInstance picks one PIE client, and
+	// without it the first PIE or Game world answers.
+	static UWorld* ResolveWidgetRuntimeWorld(const TSharedPtr<FJsonObject>& Params)
 	{
-		if (!GEditor) return nullptr;
-		FWorldContext* PIE = GEditor->GetPIEWorldContext();
-		return PIE ? PIE->World() : nullptr;
+		UWorld* World = GetPIEWorldByInstance(MCPPieInstanceIfSent(Params));
+		const bool bLive = World && (World->WorldType == EWorldType::PIE || World->WorldType == EWorldType::Game);
+		return bLive ? World : nullptr;
+	}
+
+	// Why no live world answered, naming the pieInstance when one was asked for.
+	static FString NoRuntimeWorldMessage(const TSharedPtr<FJsonObject>& Params, const TCHAR* Default)
+	{
+		const int32 Requested = MCPPieInstanceIfSent(Params);
+		if (Requested != INDEX_NONE)
+		{
+			return FString::Printf(
+				TEXT("No live PIE world has pieInstance %d. editor(list_pie_instances) lists the running ones."),
+				Requested);
+		}
+		return Default;
 	}
 
 	static FString SafeGetText(UWidget* Widget)
@@ -2640,10 +2655,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListRuntimeWidgets(const TSharedPtr<FJso
 		return Err;
 	}
 
-	UWorld* World = ResolveWidgetRuntimeWorld();
+	UWorld* World = ResolveWidgetRuntimeWorld(Params);
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Is Play-In-Editor running?")));
 	}
 
 	TArray<MCPPagination::FPageRow> Rows;
@@ -2702,10 +2717,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 	const FString ChildName = OptionalString(Params, TEXT("childName"), TEXT(""));
 	const bool bIncludeLayout = OptionalBool(Params, TEXT("includeLayout"), false);
 
-	UWorld* World = ResolveWidgetRuntimeWorld();
+	UWorld* World = ResolveWidgetRuntimeWorld(Params);
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Is Play-In-Editor running?")));
 	}
 
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
@@ -2889,10 +2904,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetToViewport(const TSharedPtr<FJs
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const int32 ZOrder = OptionalInt(Params, TEXT("zOrder"), 0);
 
-	UWorld* World = ResolveWidgetRuntimeWorld();
+	UWorld* World = ResolveWidgetRuntimeWorld(Params);
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Start Play-In-Editor first (editor pie_control action=play)."));
+		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Start Play-In-Editor first (editor pie_control action=play).")));
 	}
 
 	// Resolve the WidgetBlueprint's generated UUserWidget class.
@@ -2956,10 +2971,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::InvokeRuntimeWidgetFunction(const TShare
 	// Read by the child interaction, on the paths that take them.
 	MCPReadParamsAhead(Params, { TEXT("value"), TEXT("commitMethod") });
 
-	UWorld* World = ResolveWidgetRuntimeWorld();
+	UWorld* World = ResolveWidgetRuntimeWorld(Params);
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Is Play-In-Editor running?")));
 	}
 
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
@@ -3102,10 +3117,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeDelegates(const TSharedPtr<FJs
 	FString ClassFilter;
 	TryGetStringParam(Params, TEXT("className"), ClassFilter);
 
-	UWorld* World = ResolveWidgetRuntimeWorld();
+	UWorld* World = ResolveWidgetRuntimeWorld(Params);
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Is Play-In-Editor running?")));
 	}
 
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())

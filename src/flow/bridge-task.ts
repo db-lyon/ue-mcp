@@ -1,8 +1,7 @@
 import type { TaskResult } from "@db-lyon/flowkit";
-import { liftRollback } from "./rollback.js";
-import { applyHandlerOutcome } from "./handler-outcome.js";
 import { UeMcpTask } from "../task.js";
 import { stripEditorTarget } from "../surface/target-params.js";
+import { runBridge } from "./run-action.js";
 
 /**
  * Generic task for bridge-delegation actions.
@@ -39,27 +38,10 @@ export class BridgeTask extends UeMcpTask {
     if (!method || typeof method !== "string") {
       throw new Error('BridgeTask requires a "method" option');
     }
-    // The caller's budget, as a handler's own bridge call carries it.
-    const budget = this.ctx.callTimeoutMs;
-    const raw = budget === undefined
-      ? await this.bridge.call(method as string, params)
-      : await this.bridge.call(method as string, params, budget);
-
-    if (typeof raw !== "object" || raw === null) {
-      return { success: true, data: { result: raw } };
-    }
-
-    // Pass the response through intact; the rollback descriptor is part of the
-    // documented response shape, not an internal field to be consumed here.
-    const obj = raw as Record<string, unknown>;
-    const result: TaskResult = { success: true, data: obj };
-    const record = liftRollback(obj.rollback);
-    if (record) result.rollback = record;
-    // The step's verdict comes from the body, not from the promise settling:
-    // the bridge resolves a `success: false` answer normally. Applied AFTER
-    // the lift and never touching `data`, because a destructive call that
-    // failed is exactly when the inverse and the detail matter most.
-    return applyHandlerOutcome(this.ctx, obj, result);
+    // Through the one per-call path, so the step repairs paths, takes the
+    // locks its method writes and reads its verdict like any action does.
+    // The method name stands in for the action; its effect is the method's.
+    return runBridge(this.ctx, method, method, undefined, this.ctx.callTimeoutMs, params);
   }
 }
 

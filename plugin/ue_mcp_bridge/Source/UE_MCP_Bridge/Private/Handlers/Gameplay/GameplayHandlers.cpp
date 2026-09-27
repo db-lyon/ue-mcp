@@ -3148,6 +3148,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 	}
 	if (!TargetNode)
 	{
+		if (!BP->SimpleConstructionScript)
+		{
+			return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold an AIPerceptionComponent."));
+		}
 		TargetNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("AIPerceptionComp"));
 		if (!TargetNode)
 		{
@@ -3547,21 +3551,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 		}
 	}
 
-	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("StateTreeComp"));
-	bool bSaveAttempted = false;
-	bool bSaved = false;
-	FString SaveError;
-	if (NewNode)
+	if (!BP->SimpleConstructionScript)
 	{
-		BP->SimpleConstructionScript->AddNode(NewNode);
-		FKismetEditorUtilities::CompileBlueprint(BP);
-
-		bSaveAttempted = true;
-		bSaved = SaveAssetPackageChecked(BP, SaveError);
+		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold a StateTreeComponent."));
 	}
+	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("StateTreeComp"));
+	if (!NewNode)
+	{
+		return MCPError(TEXT("Failed to create the StateTreeComponent SCS node."));
+	}
+	BP->SimpleConstructionScript->AddNode(NewNode);
+	FKismetEditorUtilities::CompileBlueprint(BP);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BP, SaveError);
 
 	auto Result = MCPSuccess();
-	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
+	MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("StateTreeComp"));
@@ -3604,21 +3609,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 		}
 	}
 
-	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("SmartObjectComp"));
-	bool bSaveAttempted = false;
-	bool bSaved = false;
-	FString SaveError;
-	if (NewNode)
+	if (!BP->SimpleConstructionScript)
 	{
-		BP->SimpleConstructionScript->AddNode(NewNode);
-		FKismetEditorUtilities::CompileBlueprint(BP);
-
-		bSaveAttempted = true;
-		bSaved = SaveAssetPackageChecked(BP, SaveError);
+		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold a SmartObjectComponent."));
 	}
+	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("SmartObjectComp"));
+	if (!NewNode)
+	{
+		return MCPError(TEXT("Failed to create the SmartObjectComponent SCS node."));
+	}
+	BP->SimpleConstructionScript->AddNode(NewNode);
+	FKismetEditorUtilities::CompileBlueprint(BP);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BP, SaveError);
 
 	auto Result = MCPSuccess();
-	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
+	MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("SmartObjectComp"));
