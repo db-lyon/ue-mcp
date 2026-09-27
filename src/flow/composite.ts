@@ -94,13 +94,13 @@ function flowsOf(ctx: FlowContext): Record<string, FlowDefinition> {
   return (ctx[LIVE_FLOWS_KEY] as Record<string, FlowDefinition> | undefined) ?? builtinFlows() as Record<string, FlowDefinition>;
 }
 
-/** The runner a live call's composite runs under. */
-function liveRunner(ctx: FlowContext, registry: TaskRegistry, held: HeldComposite): FlowRunner {
+/** The runner a live call's composite runs under, with any flows the action declares for itself. */
+function liveRunner(ctx: FlowContext, registry: TaskRegistry, held: HeldComposite, own?: Record<string, unknown>): FlowRunner {
   const live = ctx[LIVE_REFERENCES_KEY] as ReferenceContext | undefined;
   const namespaces = live?.namespaces ?? hostNamespaces(ctx);
   return new FlowRunner({
     tasks: (ctx.taskDefinitions ?? {}) as Record<string, TaskDefinition>,
-    flows: flowsOf(ctx),
+    flows: own ? { ...flowsOf(ctx), ...(own as Record<string, FlowDefinition>) } : flowsOf(ctx),
     registry,
     context: { ...ctx, [HELD_KEY]: held },
     hooks: { afterStep: async (_step, record) => keepNestedSteps(record) },
@@ -152,7 +152,8 @@ export async function composeAction(
   pipeline: CallPipeline,
   home?: ToolDef,
 ): Promise<TaskResult> {
-  if (typeof ctx.step === "function") {
+  // An enclosing runner cannot resolve the action's own flows, so those run under one of their own.
+  if (typeof ctx.step === "function" && !spec.flows) {
     return settle(spec, ctx, pipeline, runnerChildRun(ctx.step), false);
   }
   const live = !inFlowRun(outer);
@@ -163,5 +164,5 @@ export async function composeAction(
   };
   // The input rides on the held composite, not in the options, so runTask
   // never interpolates a caller's `${...}` data.
-  return liveRunner(ctx, registryFor(ctx, home), held).runTask(builtinClassPath(name), {});
+  return liveRunner(ctx, registryFor(ctx, home), held, spec.flows).runTask(builtinClassPath(name), {});
 }

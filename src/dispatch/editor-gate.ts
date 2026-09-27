@@ -25,6 +25,7 @@ import { stripEditorTarget } from "../surface/target-params.js";
 import { EDITOR_TARGET_PARAM, stripAction } from "../surface/routing-params.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microCallParams } from "../surface/context/micro-context.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
+import { gateFires } from "../flow/gates.js";
 
 /**
  * Actions whose subject is the SESSION REGISTRY, not any editor.
@@ -67,19 +68,34 @@ export interface UntargetedCall {
 }
 
 /**
- * Why this untargeted call cannot be routed, or null when it can.
- *
- * Never called at one editor: a single-session server has nothing to choose
- * between, so there is nothing to refuse.
+ * Whether `taskName` has to name its editor beyond one. The action's own
+ * declaration decides, not a reading of its name; a task the graph does not
+ * carry reads as a flat `mutate`.
+ */
+export function needsExplicitEditor(taskName: string, graph?: readonly ToolDef[]): boolean {
+  if (ADDRESSES_THE_SERVER.has(taskName)) return false;
+  return requiresExplicitEditor(taskEffect(taskName, graph).effect);
+}
+
+/** The facts the declared untargeted gate reads. */
+function untargetedFacts(count: number, taskName: string, targeted: boolean, graph?: readonly ToolDef[]) {
+  return {
+    session: { count },
+    call: { task: taskName, targeted, get needs_target() { return needsExplicitEditor(taskName, graph); } },
+  };
+}
+
+/**
+ * Why this untargeted call cannot be routed, or null when it can: the declared
+ * untargeted gate (flow/gates.ts) over the editors it is handed.
  */
 export function refuseUntargetedCall(call: UntargetedCall): string | null {
-  if (ADDRESSES_THE_SERVER.has(call.taskName)) return null;
-  // The action's own declaration, not a reading of its name. A name is only
-  // consulted for a task the tool graph does not carry, and the answer there
-  // is a flat `mutate` rather than a second opinion about the name.
-  const { effect: cls } = taskEffect(call.taskName, call.graph);
-  if (!requiresExplicitEditor(cls)) return null;
+  if (!gateFires("untargeted", untargetedFacts(call.editors.length, call.taskName, false, call.graph))) return null;
+  return untargetedMessage(call);
+}
 
+function untargetedMessage(call: UntargetedCall): string {
+  const { effect: cls } = taskEffect(call.taskName, call.graph);
   const others = call.editors.filter((n) => n !== call.activeEditor);
   return (
     `${describeWhy(call.taskName, cls)} This server drives ${call.editors.length} editors ` +
@@ -166,10 +182,9 @@ export function callSubject(
 }
 
 /**
- * The gate, against a live session registry.
- *
- * Returns null at one editor without classifying anything, which is what keeps
- * a single-editor server on exactly the path it was on before.
+ * The gate, against a live session registry: the declared untargeted gate over
+ * the registry's session count and whether the call named its editor. Null at
+ * one editor, which keeps a single-editor server on the path it always took.
  */
 export function refuseUntargetedInRegistry(
   sessions: SessionRegistry,
@@ -177,8 +192,8 @@ export function refuseUntargetedInRegistry(
   targeted: boolean,
   graph?: readonly ToolDef[],
 ): string | null {
-  if (sessions.size <= 1 || targeted) return null;
-  return refuseUntargetedCall({
+  if (!gateFires("untargeted", untargetedFacts(sessions.size, taskName, targeted, graph))) return null;
+  return untargetedMessage({
     taskName,
     editors: sessions.list().map((s) => s.name),
     activeEditor: sessions.active.name,

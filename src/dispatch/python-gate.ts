@@ -276,15 +276,36 @@ export async function notInRunningPlugin(ctx: ToolContext): Promise<(c: GateCand
   };
 }
 
+/** What the search gate found for one taskSummary. */
+export type PythonGateOutcome =
+  | { kind: "missing_task_summary" }
+  | { kind: "candidates_not_ruled_out"; candidates: GateCandidate[]; verdict: GateVerdict }
+  | { kind: "clear" };
+
+/**
+ * The search gate's facts for one call. `record` folds the rulings into the
+ * session's memory, as a run does; a plan passes false and remembers nothing.
+ */
+export async function pythonGateOutcome(
+  ctx: ToolContext,
+  taskSummary: string,
+  ruledOut: unknown,
+  record: boolean,
+): Promise<PythonGateOutcome> {
+  if (!taskSummary) return { kind: "missing_task_summary" };
+  const candidates = gateCandidates(ctx, taskSummary);
+  if (candidates.length === 0) return { kind: "clear" };
+  const verdict = evaluateGate(candidates, ruledOut, ctx, await notInRunningPlugin(ctx), record);
+  return verdict.unresolved.length > 0 ? { kind: "candidates_not_ruled_out", candidates, verdict } : { kind: "clear" };
+}
+
 /**
  * Why execute_python would refuse these parameters, or null when it would run.
  * Decides exactly as the handler does and remembers nothing, so a plan can ask.
  */
 export async function pythonGateRefusal(ctx: ToolContext, params: Record<string, unknown>): Promise<string | null> {
   const taskSummary = String(params.taskSummary ?? "").trim();
-  if (!taskSummary) return "execute_python requires a 'taskSummary' (plain-words intent).";
-  const candidates = gateCandidates(ctx, taskSummary);
-  if (candidates.length === 0) return null;
-  const verdict = evaluateGate(candidates, params.ruledOut, ctx, await notInRunningPlugin(ctx), false);
-  return verdict.unresolved.length > 0 ? gateRefusalMessage(taskSummary, candidates, verdict) : null;
+  const outcome = await pythonGateOutcome(ctx, taskSummary, params.ruledOut, false);
+  if (outcome.kind === "missing_task_summary") return "execute_python requires a 'taskSummary' (plain-words intent).";
+  return outcome.kind === "clear" ? null : gateRefusalMessage(taskSummary, outcome.candidates, outcome.verdict);
 }

@@ -85,4 +85,4 @@ Steps are not idempotent. Running one again without `demo(action="cleanup")` in 
 
 ## See Also
 
-For a much larger declarative example, see the **Beacon** flow described in [Flows](flows.md#beacon) - a 56-step shrine scene composed entirely from individual MCP tool calls in `src/flow/loader.ts`.
+For a much larger declarative example, see the **Beacon** flow described in [Flows](flows.md#beacon) - a 56-step shrine scene composed entirely from individual MCP tool calls in `universal/ue-mcp.universal.yml`.

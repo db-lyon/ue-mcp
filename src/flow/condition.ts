@@ -229,6 +229,11 @@ export function makeConditionEvaluator(namespaces: Record<string, unknown>, step
     : base(expression, ctx, {});
 }
 
+/** One expression over plain namespaces, outside any flow run. */
+export function evaluateCondition(expression: string, namespaces: Record<string, unknown>): boolean {
+  return evaluatorOver(namespaces, [])(expression, { steps: [] } as unknown as ConditionContext, {});
+}
+
 function evaluatorOver(
   namespaces: Record<string, unknown>,
   stepNames: readonly string[],

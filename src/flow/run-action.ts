@@ -9,6 +9,7 @@ import { applyHandlerOutcome } from "./handler-outcome.js";
 import { ensureGuard, isDialogRefusal } from "../editor/dialog-guard.js";
 import { paramMapperOf } from "../surface/epic-input.js";
 import { composeAction } from "./composite.js";
+import { dialogGate } from "./gates.js";
 
 /**
  * Refuse a handler-backed call while a modal is up, through the one guard.
@@ -29,9 +30,7 @@ async function refuseIfBlocked(
   // and it additionally applies the mode to the one allow-listed subject that
   // PRESSES a button, so short-circuiting here let a step answer a modal under
   // interactive by walking around the gate rather than through it.
-  const guard = await ensureGuard(session);
-  const decision = await guard.check(taskName, "action");
-  return decision.allow ? null : (decision.refusal ?? null);
+  return dialogGate(await ensureGuard(session), taskName, "action");
 }
 
 /** The error a refused call reports, worded by the refusal itself. */

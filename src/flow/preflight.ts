@@ -4,13 +4,14 @@
  * Four gates can refuse a call: the untargeted-write gate (a change with more
  * than one editor and none named), the editor-connected gate (a bridge action
  * with no editor), the dialog gate (a modal on screen) and the Python gate
- * (execute_python before its candidates are ruled out). Each is written here as
- * a `checks:` entry over the `gate` namespace, so flowkit's preflight evaluates
- * them for every step and a plan reports what a run would be refused for.
+ * (execute_python before its candidates are ruled out). They are declared once
+ * in flow/gates.ts. Here each becomes a `checks:` entry over the `gate`
+ * namespace, whose values are those declarations evaluated over facts read
+ * without acting, so a plan reports what a run would be refused for.
  *
- * Enforcement stays where it is: dispatch and runAction refuse live calls and
- * flow steps exactly as before. These checks are added to the plan's copy of
- * the config only, so a run behaves as it always did.
+ * A run is refused by the same declarations, evaluated live where each route
+ * always refused: dispatch, runAction, the guarded bridge and execute_python.
+ * These checks are added to the plan's copy of the config only.
  */
 import { FlowRunner } from "@db-lyon/flowkit";
 import type {
@@ -25,14 +26,18 @@ import type { ToolContext, ToolDef } from "../core/types.js";
 import { taskEffect } from "../surface/action-effects.js";
 import { ensureGuard } from "../editor/dialog-guard.js";
 import { pythonGateRefusal } from "../dispatch/python-gate.js";
-import { refuseUntargetedCall } from "../dispatch/editor-gate.js";
-import { EDITOR_TARGET_PARAM } from "../surface/routing-params.js";
+import { needsExplicitEditor, refuseUntargetedInRegistry } from "../dispatch/editor-gate.js";
 import { hostNamespaces, makeConditionEvaluator, type StepScope } from "./condition.js";
 import { stepAvailability } from "./flow-describe.js";
+import { GATE_IDS, GATES, gateFires } from "./gates.js";
+
+/** What a plan gates: a run of the flow, whatever step is being looked at. */
+const PLANNED_CALL = "flow.run";
 
 /**
- * `step.*` and `gate.*`, read for the step being gated. A flow-level check
- * sees no step, and only `gate.untargeted` applies there.
+ * `step.*`, `call.*` and `gate.*`, read for the step being gated. `gate.<id>`
+ * is the declared gate evaluated over the others and the host namespaces. A
+ * flow-level check sees no step, and only `gate.untargeted` can fire there.
  */
 export function gateScope(ctx: ToolContext, graph: readonly ToolDef[], oneReading = false): StepScope {
   let dialogProbe: Promise<((subject: string, kind: "bridge" | "action") => Promise<boolean>) | undefined> | undefined;
@@ -45,13 +50,17 @@ export function gateScope(ctx: ToolContext, graph: readonly ToolDef[], oneReadin
     }, () => undefined)
     : Promise.resolve(undefined));
 
+  const gates = (facts: Record<string, unknown>) =>
+    Object.fromEntries(GATE_IDS.map((id) => [id, gateFires(id, { ...hostNamespaces(ctx), ...facts })]));
+
   return {
-    names: ["step", "gate"],
+    names: ["step", "call", "gate"],
     read: async (c: ConditionContext) => {
-      const untargeted = (ctx.sessions?.size ?? 1) > 1 && ctx.callTargeted !== true;
+      const call = { task: PLANNED_CALL, targeted: ctx.callTargeted === true, needs_target: needsExplicitEditor(PLANNED_CALL, graph) };
       const step = c.step;
       if (!step || step.type !== "task") {
-        return { step: step ? { name: step.name, type: step.type } : {}, gate: { untargeted, editor: false, dialog: false, python: false } };
+        const facts = { call, step: step ? { name: step.name, type: step.type } : {} };
+        return { ...facts, gate: gates(facts) };
       }
       const name = step.name;
       const dot = name.indexOf(".");
@@ -65,10 +74,14 @@ export function gateScope(ctx: ToolContext, graph: readonly ToolDef[], oneReadin
       // Runtime params reach every step under the default flat scope.
       const options = { ...(step.options ?? {}), ...(c.params ?? {}) };
       const python = name === "editor.execute_python" && (await pythonGateRefusal(ctx, options)) !== null;
-      return {
-        step: { name, type: step.type, effect: taskEffect(name, graph).effect, availability, bridge: spec?.bridge },
-        gate: { untargeted, editor: availability === "editor" && !ctx.bridge.isConnected, dialog: blocked, python },
+      const facts = {
+        call,
+        step: {
+          name, type: step.type, effect: taskEffect(name, graph).effect, availability, bridge: spec?.bridge,
+          dialog_blocked: blocked, python_refused: python,
+        },
       };
+      return { ...facts, gate: gates(facts) };
     },
   };
 }
@@ -82,30 +95,17 @@ export function gateGraph(ctx: ToolContext): ToolDef[] {
   }
 }
 
-/** The gates as checks: one on the flow, the rest on every step. */
+/** The declared gates as checks: the flow's on the flow, the rest on every step. */
 export function gateChecks(ctx: ToolContext, graph: readonly ToolDef[]): { flow: StepCheck[]; step: StepCheck[] } {
-  const sessions = ctx.sessions;
-  const untargeted = sessions && sessions.size > 1
-    ? refuseUntargetedCall({
-        taskName: "flow.run",
-        editors: sessions.list().map((s) => s.name),
-        activeEditor: sessions.active.name,
-        targetParam: EDITOR_TARGET_PARAM,
-        graph,
-      })
-    : null;
+  const untargeted = ctx.sessions ? refuseUntargetedInRegistry(ctx.sessions, PLANNED_CALL, false, graph) : null;
+  const check = (id: keyof typeof GATES): StepCheck => ({
+    when: `gate.${id}`,
+    action: "error",
+    message: GATES[id].message ?? untargeted ?? "An untargeted run would be refused.",
+  });
   return {
-    flow: [{ when: "gate.untargeted", action: "error", message: untargeted ?? "An untargeted run would be refused." }],
-    step: [
-      { when: "gate.editor", action: "error", message: "No editor is connected, and this step dispatches to one." },
-      { when: "gate.dialog", action: "error", message: "A modal dialog is blocking the editor, and this step would be refused until it is answered." },
-      {
-        when: "gate.python",
-        action: "error",
-        message: "execute_python's gate would refuse this step: give it a taskSummary and rule out, in ruledOut, every "
-          + "candidate action a search for it returns. editor(execute_python) with the same taskSummary lists them.",
-      },
-    ],
+    flow: GATE_IDS.filter((id) => GATES[id].on === "flow").map(check),
+    step: GATE_IDS.filter((id) => GATES[id].on === "step").map(check),
   };
 }
 

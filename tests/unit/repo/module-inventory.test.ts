@@ -178,6 +178,8 @@ const SESSION_INDEPENDENT: Record<string, string> = {
 
   "flow/events.ts": "One process-wide event bus. Which editor a run belongs to rides on the event, not here.",
   "flow/schema.ts": "Shared flow schema declarations.",
+  "flow/gates.ts": "Shared declarations of the server's gates, evaluated over facts the caller hands it.",
+  "flow/universal.ts":"The universal config layer, one shipped file read once for the whole process.",
   "flow/rollback.ts": "Pure shaping of a rollback record.",
   "flow/task-call.ts": "Pure resolution of a task call against the definitions and registry on the context it is handed.",
   "flow/handler-outcome.ts": "Pure reading of a handler's own verdict off the body it answered with.",
