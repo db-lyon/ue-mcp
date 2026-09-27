@@ -296,37 +296,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 	// Saving in the same call is what closes the garbage-collection window the
 	// issue is about: after this the subobject is an export on disk, so a later
 	// call resolves it by path even if the in-memory copy is collected.
-	bool bPersisted = false;
-	FString PersistReason;
-	if (bSave)
-	{
-		FString SaveError;
-		bPersisted = SaveAssetPackageChecked(OwnerAsset, SaveError);
-		if (!bPersisted)
-		{
-			PersistReason = FString::Printf(
-				TEXT("'%s' was not written: %s The subobject exists in memory and is kept alive, but it is not on disk yet."),
-				*OwnerPackage->GetName(), *SaveError);
-		}
-	}
-	else
-	{
-		PersistReason = FString::Printf(
-			TEXT("save=false was requested, so '%s' is dirty in memory only. The subobject survives garbage collection while the editor runs, but it is not on disk until the package is saved."),
-			*OwnerPackage->GetName());
-	}
-	Result->SetBoolField(TEXT("persisted"), bPersisted);
-	Result->SetBoolField(TEXT("saved"), bPersisted);
-	Result->SetBoolField(TEXT("packageDirty"), OwnerPackage->IsDirty());
-	if (!bPersisted)
-	{
-		Result->SetStringField(TEXT("persistError"), PersistReason);
-		if (bSave)
-		{
-			Result->SetBoolField(TEXT("success"), false);
-			Result->SetStringField(TEXT("error"), PersistReason);
-		}
-	}
+	MCPFinishPackageWrite(Result, OwnerAsset, bSave, true);
 
 	if (PropertyErrors.Num() > 0)
 	{

@@ -1233,12 +1233,11 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SetProceduralFoliageSpawnerTypes(const 
 	if (bChanged)
 	{
 		MCPSetUpdated(Result);
-		FString SaveReason;
-		const bool bSaved = bSave
-			? SaveAssetPackageChecked(Spawner, SaveReason)
-			: false;
-		Result->SetBoolField(TEXT("persisted"), bSaved);
-		if (!bSaved && !SaveReason.IsEmpty()) Result->SetStringField(TEXT("persistReason"), SaveReason);
+		if (!MCPFinishPackageWrite(Result, Spawner, bSave, true))
+		{
+			// The older name for persistError, kept for callers that read it.
+			Result->SetStringField(TEXT("persistReason"), Result->GetStringField(TEXT("persistError")));
+		}
 	}
 	else
 	{

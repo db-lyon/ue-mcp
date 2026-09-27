@@ -3473,25 +3473,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 		}
 	}
 
-	UPackage* Package = StringTable->GetOutermost();
-	bool bPersisted = false;
-	FString PersistReason;
-	if (bSave)
-	{
-		FString SaveError;
-		bPersisted = SaveAssetPackageChecked(StringTable, SaveError);
-		if (!bPersisted)
-		{
-			PersistReason = FString::Printf(
-				TEXT("'%s' was not written: %s The entries are in memory only."),
-				Package ? *Package->GetName() : *AssetPath, *SaveError);
-		}
-	}
-	else
-	{
-		PersistReason = TEXT("save=false was requested, so the imported entries are in memory only until the package is saved.");
-	}
-
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
 	SetStringTableInfoFields(Result, StringTable);
@@ -3531,22 +3512,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 		TEXT("so restoring the entries in updatedKeys and removedKeys and dropping the ones in addedKeys takes one call each, ")
 		TEXT("and a rollback record is a single call. previousEntries carries the pre-call sourceString for every key in ")
 		TEXT("updatedKeys and removedKeys, which is what a caller replays by hand."));
-	Result->SetBoolField(TEXT("persisted"), bPersisted);
-	Result->SetBoolField(TEXT("saved"), bPersisted);
-	if (Package)
-	{
-		Result->SetStringField(TEXT("packageName"), Package->GetName());
-		Result->SetBoolField(TEXT("packageDirty"), Package->IsDirty());
-	}
-	if (!bPersisted)
-	{
-		Result->SetStringField(TEXT("persistError"), PersistReason);
-		if (bSave)
-		{
-			Result->SetBoolField(TEXT("success"), false);
-			Result->SetStringField(TEXT("error"), PersistReason);
-		}
-	}
+	const bool bChanged = AddedKeys.Num() + UpdatedKeys.Num() + RemovedKeys.Num() > 0;
+	MCPFinishPackageWrite(Result, StringTable, bSave, bChanged);
 	return MCPResult(Result);
 }
 

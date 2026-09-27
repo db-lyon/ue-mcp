@@ -338,3 +338,66 @@ inline void MCPNoteSaveOutcome(
 		TEXT("The change was applied in memory but '%s' was not written: %s"),
 		*AssetPath, *Reason));
 }
+
+/** Packages holding an edit Unreal refused to mark dirty (PIE, loading, undo).
+ *  A later call with save=true still owes them a write (#1097). */
+inline TSet<FName>& MCPUnmarkedEdits()
+{
+	static TSet<FName> Packages;
+	return Packages;
+}
+
+/**
+ * Report whether an edit reached disk, by the one rule every write follows
+ * (#1097/#1109). A save runs only when something is pending, and a no-op on a
+ * clean package counts as persisted. With save=false, an edit Unreal did not
+ * mark dirty fails, since nothing would ever discover it.
+ *
+ * Writes saved, persisted, packageDirty (read after the save), packageName and
+ * persistError; a failed save goes through MCPNoteSaveOutcome. Returns persisted.
+ */
+inline bool MCPFinishPackageWrite(const TSharedPtr<FJsonObject>& Result, UObject* Asset, bool bSave, bool bChanged)
+{
+	UPackage* Package = Asset ? Asset->GetOutermost() : nullptr;
+	if (bChanged && Package)
+	{
+		Package->MarkPackageDirty();
+		if (!Package->IsDirty()) MCPUnmarkedEdits().Add(Package->GetFName());
+	}
+
+	bool bSaved = false;
+	bool bPersisted = false;
+	FString Reason;
+	if (!Package)
+	{
+		Reason = TEXT("The asset has no package, so there is nothing to write.");
+	}
+	else if (bSave)
+	{
+		const bool bPending = bChanged || Package->IsDirty() || MCPUnmarkedEdits().Contains(Package->GetFName());
+		if (bPending)
+		{
+			bSaved = SaveAssetPackageChecked(Asset, Reason);
+			MCPNoteSaveOutcome(Result, Asset->GetPathName(), bSaved, Reason);
+			if (bSaved) MCPUnmarkedEdits().Remove(Package->GetFName());
+		}
+		bPersisted = bSaved || !bPending;
+	}
+	else
+	{
+		Reason = TEXT("save=false was requested; no package write was attempted. Call asset(save) to persist the asset.");
+		if (bChanged && !Package->IsDirty())
+		{
+			Reason = TEXT("The asset changed in memory, but Unreal did not mark its package dirty. Dirty-package saves will not discover this edit; retry with save=true or explicitly save the asset.");
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), Reason);
+		}
+	}
+
+	Result->SetBoolField(TEXT("saved"), bSaved);
+	Result->SetBoolField(TEXT("persisted"), bPersisted);
+	Result->SetBoolField(TEXT("packageDirty"), Package && Package->IsDirty());
+	if (Package) Result->SetStringField(TEXT("packageName"), Package->GetName());
+	if (!bPersisted) Result->SetStringField(TEXT("persistError"), Reason);
+	return bPersisted;
+}
