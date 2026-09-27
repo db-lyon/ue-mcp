@@ -465,10 +465,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetSlotNodeProperty(const TSharedPtr<
 	FProperty* Prop = Struct->FindPropertyByName(*PropName);
 	if (!Prop)
 	{
-		return MCPError(FString::Printf(bInstance
-			? TEXT("Property not found on %s instance data '%s': %s")
-			: TEXT("Property not found on %s node struct '%s': %s. This action writes the node struct's own UPROPERTYs (bTaskEnabled and the like); the instance-property action writes instance data fields."),
-			Slot.Kind, *Struct->GetName(), *PropName));
+		return MCPError(bInstance
+			? FString::Printf(TEXT("Property not found on %s instance data '%s': %s"), Slot.Kind, *Struct->GetName(), *PropName)
+			: FString::Printf(TEXT("Property not found on %s node struct '%s': %s. This action writes the node struct's own UPROPERTYs (bTaskEnabled and the like); the instance-property action writes instance data fields."),
+				Slot.Kind, *Struct->GetName(), *PropName));
 	}
 
 	FMCPEditTransaction Txn(Edit);
