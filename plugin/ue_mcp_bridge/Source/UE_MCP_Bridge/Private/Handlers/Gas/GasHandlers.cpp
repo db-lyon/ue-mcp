@@ -524,21 +524,22 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<
 		}
 	}
 
-	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(ASCClass, *CompName);
-	bool bSaveAttempted = false;
-	bool bSaved = false;
-	FString SaveError;
-	if (NewNode)
+	if (!BP->SimpleConstructionScript)
 	{
-		BP->SimpleConstructionScript->AddNode(NewNode);
-		FKismetEditorUtilities::CompileBlueprint(BP);
-
-		bSaveAttempted = true;
-		bSaved = SaveAssetPackageChecked(BP, SaveError);
+		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold a AbilitySystemComponent."));
 	}
+	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(ASCClass, *CompName);
+	if (!NewNode)
+	{
+		return MCPError(TEXT("Failed to create the AbilitySystemComponent SCS node."));
+	}
+	BP->SimpleConstructionScript->AddNode(NewNode);
+	FKismetEditorUtilities::CompileBlueprint(BP);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(BP, SaveError);
 
 	auto Result = MCPSuccess();
-	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
+	MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), CompName);
