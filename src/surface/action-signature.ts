@@ -13,7 +13,8 @@
  * Every signature is built from structured data, never from prose: a spec'd
  * bridge action from its recorded C++ spec, an `epic_*` action from the input
  * schema it was generated with, and anything else (in-process handlers, plugin
- * actions) from the declared schema `describe_action` reports. The notation is
+ * actions from their manifest schema) from the declared schema
+ * `describe_action` reports. A plugin action with no schema reads `name(*)`. The notation is
  * explained once, by SIGNATURE_LEGEND, in the server instructions.
  */
 import type { ParamChoice, ParamSpec, ParamType, ValueForm } from "./handler-spec.js";
@@ -215,6 +216,8 @@ function declaredItems(tool: ToolDef, action: string): SigItem[] {
 function signatureItems(tool: ToolDef, action: string, spec: ActionSpec): SigItem[] {
   if ((spec.kind === "bridge" || spec.kind === "flow") && spec.paramSpec) return specItems(spec.paramSpec, spec.paramChoices);
   if (spec.kind === "bridge" && spec.epicSchema) return epicItems(spec.epicSchema);
+  // A plugin action without a manifest schema takes something unknown, not nothing.
+  if (spec.kind === "registry" && !spec.optionsSchema) return [{ kind: "param", param: { label: "*", type: "", required: true } }];
   try {
     return declaredItems(tool, action);
   } catch {

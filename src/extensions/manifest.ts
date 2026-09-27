@@ -267,11 +267,15 @@ export function loadManifest(pkgDir: string): ManifestParseResult {
   return { manifest, manifestPath, dropped };
 }
 
-/** A manifest schema field map as flowkit option specs, for describing the plugin's task. */
+/**
+ * A manifest schema field map as flowkit option specs: the plugin action's
+ * describe schema and signature. `schema: {}` declares no parameters, which
+ * is not the same as having no schema.
+ */
 export function manifestOptionSpecs(
   fields: Record<string, ManifestSchemaField> | undefined,
 ): OptionSpecs | undefined {
-  if (!fields || Object.keys(fields).length === 0) return undefined;
+  if (!fields) return undefined;
   const out: OptionSpecs = {};
   for (const [key, def] of Object.entries(fields)) {
     const spec: OptionSpec = {};

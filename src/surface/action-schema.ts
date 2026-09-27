@@ -118,7 +118,14 @@ export interface ActionSchema {
    * does not declare. Passing one of these has no effect.
    */
   drift: string[];
+  /** Set when the action declares no parameters anywhere, so `params` cannot list them. */
+  paramsNote?: string;
 }
+
+/** What describe says about a plugin action whose manifest has no `schema:`. */
+export const UNDECLARED_PLUGIN_PARAMS =
+  "This plugin action's manifest declares no schema, so its parameters are not listed here. "
+  + "Read them from the description, and ask the plugin's author to add a schema: block.";
 
 /* ── zod introspection ─────────────────────────────────────────────── */
 
@@ -690,6 +697,11 @@ export function declaredOptions(options: HandlerOptions): DocumentedParams {
  */
 function structuredParams(spec: ActionSpec): DocumentedParams | undefined {
   if (spec.kind === "handler") return spec.options ? declaredOptions(spec.options) : undefined;
+  if (spec.kind === "registry") {
+    if (!spec.optionsSchema) return undefined;
+    const params = Object.entries(spec.optionsSchema).map(([name, field]) => ({ name, optional: field.required !== true }));
+    return { params, alternatives: [] };
+  }
   if (spec.kind === "flow" && !spec.paramSpec) return spec.options ? declaredOptions(spec.options) : undefined;
   if (spec.kind !== "bridge" && spec.kind !== "flow") return undefined;
   if (spec.paramSpec) {
@@ -799,7 +811,11 @@ export function actionSchema(tool: ToolDef, action: string): ActionSchema {
   // The category's declared keys settle the two spots where the clause alone
   // is ambiguous, so the parse is done against them rather than in the dark.
   const declaredNames = new Set(Object.keys(tool.schema));
-  const parsed = structuredParams(spec) ?? parseParams(description, declaredNames);
+  const structured = structuredParams(spec);
+  const parsed = structured
+    ?? (spec.kind === "registry" ? { params: [], alternatives: [] } : parseParams(description, declaredNames));
+  // A plugin field's type is the wire's, compiled from the manifest unless a built-in key shadows it.
+  const manifest = spec.kind === "registry" ? spec.optionsSchema : undefined;
   const documented = parsed.params;
   const forwards = new Set(forwardedParams(spec));
   const documentedByName = new Map(documented.map((d) => [d.name, d]));
@@ -877,7 +893,7 @@ export function actionSchema(tool: ToolDef, action: string): ActionSchema {
       // category shape has to declare nearly everything optional to let its
       // other actions through.
       required: doc ? group === undefined && !doc.optional : !optional,
-      description: paramDoc,
+      description: manifest?.[name]?.description ?? paramDoc,
       enumValues: enumValues(inner),
       default: dflt,
       sources,
@@ -914,6 +930,7 @@ export function actionSchema(tool: ToolDef, action: string): ActionSchema {
     params,
     alternatives: alternatives.length > 0 ? alternatives : undefined,
     drift,
+    paramsNote: !structured && spec.kind === "registry" ? UNDECLARED_PLUGIN_PARAMS : undefined,
   };
 }
 
