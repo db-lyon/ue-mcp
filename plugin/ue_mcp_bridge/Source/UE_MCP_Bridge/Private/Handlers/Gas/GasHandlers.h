@@ -133,7 +133,8 @@ private:
 		const FString& DefaultPackagePath,
 		class UClass* ParentClass,
 		const FString& FriendlyType,
-		TFunction<void(TSharedPtr<FJsonObject>&)> ExtraResultFields = nullptr);
+		TFunction<void(TSharedPtr<FJsonObject>&)> ExtraResultFields = nullptr,
+		TFunction<void(class UBlueprint*)> ConfigureBeforeSave = nullptr);
 
 	static TSharedPtr<FJsonValue> CreateGameplayEffect(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetGasInfo(const TSharedPtr<FJsonObject>& Params);
