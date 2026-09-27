@@ -192,7 +192,18 @@ export function paramReadsInBody(body, bag, sources, bindings = new Map(), depth
     else opaque.push(`${what}(${arg})`);
   };
 
+  // FMCPEditScope Edit(Params, Action, TargetParam, Policy) reads its target param when it opens.
+  const scopes = new Set();
+  for (const m of code.matchAll(/\bFMCPEditScope\s+(\w+)\s*\(/g)) {
+    const open = m.index + m[0].length - 1;
+    const args = splitArgs(code.slice(open + 1, closeOf(code, open) - 1));
+    if (args[0] !== bag) continue;
+    scopes.add(m[1]);
+    addKey(args[2], "FMCPEditScope");
+  }
+
   for (const call of callsIn(code)) {
+    if (scopes.has(call.name)) continue;
     if (call.receiver === bag && DIRECT_READ.test(`${call.name}(`)) {
       addKey(call.args[0], `${bag}->${call.name}`);
       continue;
