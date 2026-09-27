@@ -7,11 +7,17 @@
 class UStateTree;
 class UStateTreeEditorData;
 class UStateTreeState;
+struct FStateTreeEditorNode;
+template <typename TElem> class TMCPSlotList;
 
 class FStateTreeHandlers
 {
 public:
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
+
+	/** One node list (tasks, conditions, considerations, evaluators, global
+	 *  tasks), declared once in StateTreeHandlers_Slots.cpp. */
+	struct FNodeSlot;
 
 private:
 	// Helpers
@@ -40,6 +46,15 @@ private:
 	static TSharedPtr<FJsonValue> LoadForEdit(const FString& AssetPath, UStateTree*& OutTree, UStateTreeEditorData*& OutEditorData);
 	static TSharedPtr<FJsonValue> RequireSchema(UStateTree* StateTree, const FString& AssetPath);
 	static TSharedPtr<FJsonObject> SerializeStateHierarchy(const UStateTreeState* State);
+
+	// F3 slot operations every node-list handler goes through (StateTreeHandlers_Slots.cpp).
+	struct FSlotRequest;
+	static void ReadSlotRequest(const TSharedPtr<FJsonObject>& Params, const FNodeSlot& Slot, bool bAddressNode, FSlotRequest& Out);
+	static TSharedPtr<FJsonValue> ResolveSlot(const FNodeSlot& Slot, const FSlotRequest& Request, UStateTreeEditorData* EditorData, UStateTreeState*& OutState);
+	static TSharedPtr<FJsonValue> FindSlotNode(TMCPSlotList<FStateTreeEditorNode>& List, const FNodeSlot& Slot, const FSlotRequest& Request, int32& OutIndex);
+	static TSharedPtr<FJsonValue> AddSlotNode(const TSharedPtr<FJsonObject>& Params, const FNodeSlot& Slot);
+	static TSharedPtr<FJsonValue> RemoveSlotNode(const TSharedPtr<FJsonObject>& Params, const FNodeSlot& Slot);
+	static TSharedPtr<FJsonValue> SetSlotNodeProperty(const TSharedPtr<FJsonObject>& Params, const FNodeSlot& Slot, bool bInstance);
 
 	// Read / Introspect
 	static TSharedPtr<FJsonValue> ReadStateTree(const TSharedPtr<FJsonObject>& Params);
