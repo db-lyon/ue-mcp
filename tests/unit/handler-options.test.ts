@@ -25,8 +25,6 @@ import { z } from "zod";
  * its own option schema; the entry goes when that lands, and a name here that
  * is no longer an undeclared handler fails the test.
  */
-const UNDECLARED = new Set(["blueprint.author", "niagara.batch", "asset.search"]);
-
 const flowTool = createFlowTool(new TaskRegistry(), () => ({ tasks: {}, flows: {} }) as never);
 
 function handlers(): Array<{ key: string; spec: HandlerActionSpec }> {
@@ -67,10 +65,8 @@ function marking(clause: string, name: string): "absent" | "required" | "optiona
 
 describe("declared handler options", () => {
   it("are declared by every in-process action", () => {
-    const missing = handlers().filter(({ key, spec }) => !spec.options && !UNDECLARED.has(key)).map(({ key }) => key);
+    const missing = handlers().filter(({ spec }) => !spec.options).map(({ key }) => key);
     expect(missing, "Declare options: { params: [...] } on these actions").toEqual([]);
-    const stale = [...UNDECLARED].filter((key) => !handlers().some((h) => h.key === key && !h.spec.options));
-    expect(stale, "No longer an undeclared handler; drop it from UNDECLARED").toEqual([]);
   });
 
   it("agree with the Params clause the description carries", () => {
