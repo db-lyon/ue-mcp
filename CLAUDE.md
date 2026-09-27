@@ -50,6 +50,7 @@ The merge style follows the commit count, and writing five commits only to squas
 - Target **only** `tests/ue_mcp/ue_mcp.uproject`. Confirm the MCP connection via `project(get_status)` before running. If the editor is connected to anything else (the user's real project, another workspace), abort.
 - Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
 - <!-- count:bridgeActions -->1904<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
+- `npm run test:live` includes the universal flow gate (`tests/live/universal-flows.test.ts`): every flow the default layer ships, planned and run against `tests/ue_mcp`. It is part of the release check; CI has no editor, so it is not a CI job.
 
 ### Golden baseline - the advertised surface
 
@@ -93,6 +94,8 @@ UBT's incremental build + Live Coding can mask registration failures from earlie
 ## Release process
 
 CI **gates the publish job** on a single pre-staged input: the draft GitHub release for `vX.Y.Z`. The draft body must begin with YAML frontmatter declaring a `headline:` array. CI parses, validates against the regex enforced by `scripts/release-headline.mjs`, joins with ` · `, posts the `landing/headline` commit status itself, strips the frontmatter from the body, then promotes the draft. No manual `gh api ... statuses` step.
+
+0. **Green live gates first:** `npm run test:smoke` and `npm run test:live` (which runs the universal flow gate) pass against `tests/ue_mcp`.
 
 1. **Author release notes locally** with frontmatter. Notes file lives anywhere (gitignored, scratch, /tmp). The frontmatter must be the first thing in the file:
    ```yaml
