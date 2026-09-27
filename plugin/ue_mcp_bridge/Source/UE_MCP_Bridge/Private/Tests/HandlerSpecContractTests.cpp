@@ -349,6 +349,37 @@ bool FMCPHandlerSpecRegistrationTest::RunTest(const FString& Parameters)
 		}),
 	}).IsEmpty());
 
+	// Bounds.
+	TestTrue(TEXT("bounds that fit their types validate"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("width"), EMCPParamType::Integer, TEXT("probe")).Range(1, 8192),
+		MCPParam::Optional(TEXT("gamma"), EMCPParamType::Number, TEXT("probe")).Min(0.5),
+		MCPParam::Optional(TEXT("slot"), EMCPParamType::String, TEXT("probe")).NonEmpty().MaxLength(128),
+		MCPParam::Optional(TEXT("indices"), EMCPParamType::Array, TEXT("probe")).Items(EMCPParamType::Integer).Min(0).NonEmpty().MaxItems(256),
+		MCPParam::Optional(TEXT("edits"), EMCPParamType::Array, TEXT("probe")).Items(EMCPParamType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("vertexIndex"), EMCPParamType::Integer, TEXT("probe")).Min(0),
+		}),
+	}).IsEmpty());
+	TestFalse(TEXT("a minimum on a string is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("slot"), EMCPParamType::String, TEXT("probe")).Min(1),
+	}).IsEmpty());
+	TestFalse(TEXT("an item count on a number is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("width"), EMCPParamType::Integer, TEXT("probe")).MinItems(1),
+	}).IsEmpty());
+	TestFalse(TEXT("a fractional bound on an integer is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("width"), EMCPParamType::Integer, TEXT("probe")).Min(0.5),
+	}).IsEmpty());
+	TestFalse(TEXT("a minimum above its maximum is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("width"), EMCPParamType::Integer, TEXT("probe")).Range(10, 1),
+	}).IsEmpty());
+	TestFalse(TEXT("a bounded literal is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("version"), EMCPParamType::String, TEXT("probe")).Literal(TEXT("v1")).NonEmpty(),
+	}).IsEmpty());
+	TestFalse(TEXT("a length bound on a field of another type is refused"), FMCPHandlerRegistry::ValidateParamSpecs({
+		MCPParam::Optional(TEXT("edits"), EMCPParamType::Array, TEXT("probe")).Items(EMCPParamType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("vertexIndex"), EMCPParamType::Integer, TEXT("probe")).MaxLength(3),
+		}),
+	}).IsEmpty());
+
 	// Value forms.
 	TestTrue(TEXT("an any parameter with forms, and a field with forms, validate"), FMCPHandlerRegistry::ValidateParamSpecs({
 		MCPParam::Optional(TEXT("args"), EMCPParamType::Any, TEXT("probe")).OneOfForms({ EMCPValueForm::ArgMap, EMCPValueForm::String }),

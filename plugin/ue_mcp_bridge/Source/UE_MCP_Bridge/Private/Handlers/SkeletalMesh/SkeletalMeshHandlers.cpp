@@ -698,10 +698,10 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("asset"));
 	using EType = EMCPParamType;
 	const FMCPParamSpec SpecAssetPath = MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("SkeletalMesh asset path"));
-	const FMCPParamSpec SpecBuildLodIndex = MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to target (default 0); not with allLods"));
+	const FMCPParamSpec SpecBuildLodIndex = MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to target (default 0); not with allLods")).Min(0);
 	const FMCPParamSpec SpecAllLods = MCPParam::Optional(TEXT("allLods"), EType::Boolean, TEXT("Target every LOD instead of one; not with lodIndex"));
-	const FMCPParamSpec SpecSkinLodIndex = MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD (default 0); generated LODs without source geometry are refused"));
-	const FMCPParamSpec SpecProfileName = MCPParam::Optional(TEXT("profileName"), EType::String, TEXT("Existing skin-weight profile; omit or pass 'default' for the default profile"));
+	const FMCPParamSpec SpecSkinLodIndex = MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD (default 0); generated LODs without source geometry are refused")).Min(0);
+	const FMCPParamSpec SpecProfileName = MCPParam::Optional(TEXT("profileName"), EType::String, TEXT("Existing skin-weight profile; omit or pass 'default' for the default profile")).NonEmpty();
 	Registry.RegisterHandler(TEXT("set_skeletal_mesh_optimize_for_instancing"), &SetOptimizeForInstancing, {
 		SpecAssetPath,
 		MCPParam::Required(TEXT("enabled"), EType::Boolean, TEXT("Value to write to bOptimizeForInstancing")),
@@ -712,14 +712,14 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("read_skeletal_mesh_skin_weights"), &ReadSkinWeights, {
 		SpecAssetPath,
-		MCPParam::Required(TEXT("vertexIndices"), EType::Array, TEXT("Source MeshDescription vertex IDs to read (1-256)")).Items(EType::Integer),
+		MCPParam::Required(TEXT("vertexIndices"), EType::Array, TEXT("Source MeshDescription vertex IDs to read (1-256)")).Min(0).NonEmpty().MaxItems(256).Items(EType::Integer),
 		SpecSkinLodIndex, SpecProfileName,
 	});
 	Registry.RegisterHandler(TEXT("set_skeletal_mesh_skin_weights"), &SetSkinWeights, {
 		SpecAssetPath,
-		MCPParam::Required(TEXT("edits"), EType::Array, TEXT("Selected source vertices and their complete replacement influences (1-256)")).Items(EType::Object).WithFields({
-			MCPParam::RequiredField(TEXT("vertexIndex"), EType::Integer, TEXT("Source MeshDescription vertex ID")),
-			MCPParam::RequiredField(TEXT("influences"), EType::Array, TEXT("1-64 entries of {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}")).Items(EType::Object),
+		MCPParam::Required(TEXT("edits"), EType::Array, TEXT("Selected source vertices and their complete replacement influences (1-256)")).NonEmpty().MaxItems(256).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("vertexIndex"), EType::Integer, TEXT("Source MeshDescription vertex ID")).Min(0),
+			MCPParam::RequiredField(TEXT("influences"), EType::Array, TEXT("1-64 entries of {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}")).Items(EType::Object).NonEmpty().MaxItems(64),
 		}),
 		SpecSkinLodIndex, SpecProfileName,
 		MCPParam::Optional(TEXT("restoreRawWeights"), EType::Boolean, TEXT("Rollback payloads only: restore the exact uint16 rawWeight values")),

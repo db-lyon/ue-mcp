@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/animation.generated.js";
@@ -138,11 +137,7 @@ export const animationTool: ToolDef = categoryTool(
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
-    // registration. The keys below add a bound the registration cannot state.
+    // registration.
     ...specSchema,
-    loopCount: z.number().int().min(1).optional().describe("add_montage_segment: how many times the segment repeats (default 1)"),
-    insertIndex: z.number().int().min(0).optional().describe("add_montage_segment: position within the slot's segment list (default: append)"),
-    bindingTag: z.string().min(1).optional().describe("Stable Control Rig edit-session natural key used by begin/read/apply/bake."),
-    tolerance: z.number().nonnegative().optional().describe("bake_control_rig_edit: key-reduction tolerance."),
   },
 );

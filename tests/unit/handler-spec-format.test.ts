@@ -113,6 +113,37 @@ describe("value shapes", () => {
     expect(zodOf("bounds").safeParse({ min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }).success).toBe(true);
   });
 
+  it("carry the bounds the C++ spec declares", () => {
+    const bounded: ParamSpec[] = [
+      p("width", "integer", { min: 1, max: 8192 }),
+      p("slotName", "string", { minLength: 1, maxLength: 128 }),
+      p("vertexIndices", "array", { items: "integer", min: 0, minItems: 1, maxItems: 256 }),
+      p("edits", "array", {
+        items: "object",
+        minItems: 1,
+        fields: [
+          { name: "vertexIndex", type: "integer", required: true, description: "", min: 0 },
+          { name: "influences", type: "array", items: "object", required: true, description: "", minItems: 1, maxItems: 2 },
+        ],
+      }),
+    ];
+    expect(specProblems({ probe: { category: "asset", params: bounded } })).toEqual([]);
+    const accepts = (i: number, v: unknown) => paramZod(bounded[i]).safeParse(v).success;
+    expect([accepts(0, 1), accepts(0, 8192), accepts(0, 0), accepts(0, 8193)]).toEqual([true, true, false, false]);
+    expect([accepts(1, "a"), accepts(1, ""), accepts(1, "x".repeat(129))]).toEqual([true, false, false]);
+    expect([accepts(2, [0, 3]), accepts(2, []), accepts(2, [-1])]).toEqual([true, false, false]);
+    expect(accepts(3, [{ vertexIndex: 0, influences: [{}] }])).toBe(true);
+    expect(accepts(3, [{ vertexIndex: -1, influences: [{}] }]), "a field's minimum").toBe(false);
+    expect(accepts(3, [{ vertexIndex: 0, influences: [{}, {}, {}] }]), "a field's item count").toBe(false);
+
+    const refused = (param: ParamSpec) => specProblems({ probe: { params: [param] } }).join("\n");
+    expect(refused(p("a", "string", { min: 1 }))).toContain("not a number");
+    expect(refused(p("a", "integer", { minItems: 1 }))).toContain("not an array");
+    expect(refused(p("a", "integer", { min: 0.5 }))).toContain("fractional");
+    expect(refused(p("a", "number", { min: 2, max: 1 }))).toContain("lower bound above");
+    expect(refused(p("a", "string", { literal: "v1", minLength: 1 }))).toContain("bounded literal");
+  });
+
   it("are refused when they do not fit their type", () => {
     const refused = (param: ParamSpec) => specProblems({ probe: { params: [param] } }).join("\n");
     expect(refused(p("a", "number", { orTypes: ["number"] }))).toContain("its own type");

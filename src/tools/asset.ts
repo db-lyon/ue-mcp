@@ -455,36 +455,6 @@ export const assetTool: ToolDef = categoryTool(
     // registration. A key listed again below is shared with hand-written
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
-    // Spec'd keys whose zod refinements (bounds, integer, non-empty) the spec
-    // types cannot carry. Each matches its spec's type, which
-    // tests/unit/handler-specs.test.ts holds it to.
-    width: z.number().int().min(1).max(8192).optional().describe("create_render_target_2d: pixel width, 1-8192 (default 512)"),
-    height: z.number().int().min(1).max(8192).optional().describe("create_render_target_2d: pixel height, 1-8192 (default 512)"),
-    targetGamma: z.number().min(0).optional().describe("create_render_target_2d: target gamma (default 0 uses engine behavior)"),
-    elements: z.array(z.unknown()).min(1).optional().describe("append_array_elements: one or more values to append after full prevalidation"),
-    assetLodIndex: z.number().int().min(0).optional().describe("bind_cloth_to_section: which LOD inside the clothing asset to bind (default: lodIndex, clamped to the asset's LOD count) (#1139)"),
-    sectionIndex: z.number().int().min(0).optional().describe("get_mesh_geometry / measure_mesh_geometry: restrict to one render section; omit for every section. bind_cloth_to_section / unbind_cloth_from_section: the render section (required)"),
-    uvChannel: z.number().int().min(0).optional().describe("get_mesh_geometry: which UV channel to return (default 0)"),
-    assignments: z.array(z.object({
-      assetPath: z.string().min(1),
-      materialPath: z.string().min(1),
-      slotName: z.string().optional(),
-      slotIndex: z.number().int().optional(),
-    })).min(1).max(500).optional().describe("set_mesh_materials_batch entries: [{assetPath, materialPath, slotName? | slotIndex?}] (max 500). slotName is preferred for imported kits because slot indices are not stable across reimports"),
-    // Three handlers share this key with three element shapes, and one key has
-    // one type, so each element's fields are checked by its handler.
-    items: z.array(z.record(z.unknown())).min(1).max(500).optional().describe("Batch entries (max 500): import_texture_batch takes {filePath, packagePath?, name?, replaceExisting?}; bulk_set_properties takes {assetPath, properties}; bulk_upsert_data_assets takes {name, packagePath, className, properties?}"),
-    expandDepth: z.number().int().min(0).max(5).optional().describe("read_properties / get_properties: inline owned subobjects to this depth, 0-5 (default 0) (#755)"),
-    maxExpandedObjects: z.number().int().positive().optional().describe("read_properties / get_properties: cap on expanded objects (default 64) (#755)"),
-    lodIndex: z.number().int().min(0).optional().describe("get_mesh_geometry / measure_mesh_geometry: which LOD to read (default 0). mesh_boolean: which LOD of each input mesh to read (default 0). skeletal mesh build-setting and skin-weight actions: which source LOD to target (default 0). UV actions: which LOD to act on (default 0). bind_cloth_to_section / unbind_cloth_from_section: the mesh LOD holding the section (required)"),
-    vertexIndices: z.array(z.number().int().min(0)).min(1).max(256).optional().describe("read_skeletal_mesh_skin_weights: source MeshDescription vertex IDs to read (1-256)"),
-    profileName: z.string().min(1).optional().describe("skeletal mesh skin-weight actions: existing skin-weight profile; omit or pass 'default' for the default profile"),
-    // The influence entries have no field declaration a spec can carry, so the
-    // handler checks them, before anything is written.
-    edits: z.array(z.object({
-      vertexIndex: z.number().int().min(0),
-      influences: z.array(z.record(z.unknown())).min(1).max(64),
-    })).min(1).max(256).optional().describe("set_skeletal_mesh_skin_weights: selected source vertices and their complete replacement influences, each {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}"),
     // The IMC actions dispatch to gameplay handlers, so their keys come from
     // that spec. `key` is also the StringTable entry key, so it names both.
     ...borrowSchema(gameplaySpecSchema, ["mappingContext", "inputAction", "imcPath", "inputActionPath", "mappingIndex"]),

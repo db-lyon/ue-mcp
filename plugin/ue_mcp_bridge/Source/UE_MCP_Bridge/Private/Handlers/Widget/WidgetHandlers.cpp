@@ -480,8 +480,8 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("viewportOnly"), EType::Boolean, TEXT("Only widgets currently added to the viewport")),
 		MCPParam::Optional(TEXT("world"), EType::String, TEXT("Runtime world scope: pie (default) | game | auto. The editor world is never a valid target")),
 		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("PIE instance id for multi-client sessions")),
-		MCPParam::Optional(TEXT("maxInstances"), EType::Integer, TEXT("Maximum matching widget instances returned (1 to 500, default 100)")),
-		MCPParam::Optional(TEXT("maxNodesPerInstance"), EType::Integer, TEXT("Maximum root/subtree nodes per instance (1 to 2000, default 250)")),
+		MCPParam::Optional(TEXT("maxInstances"), EType::Integer, TEXT("Maximum matching widget instances returned (1 to 500, default 100)")).Range(1, 500),
+		MCPParam::Optional(TEXT("maxNodesPerInstance"), EType::Integer, TEXT("Maximum root/subtree nodes per instance (1 to 2000, default 250)")).Range(1, 2000),
 	});
 	// #161: Runtime delegate inspection
 	Registry.RegisterHandler(TEXT("get_runtime_delegates"), &GetRuntimeDelegates, {

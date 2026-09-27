@@ -95,7 +95,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "slotIndex",
         "type": "integer",
         "required": false,
-        "description": "Material slot index on the component (default 0)"
+        "description": "Material slot index on the component (default 0)",
+        "min": 0
       },
       {
         "name": "slotName",
@@ -1182,7 +1183,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "slotIndex",
         "type": "integer",
         "required": false,
-        "description": "Material slot index on the component (default 0)"
+        "description": "Material slot index on the component (default 0)",
+        "min": 0
       },
       {
         "name": "slotName",
@@ -1215,13 +1217,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "layerIndex",
         "type": "integer",
         "required": false,
-        "description": "Only this layer of the slot"
+        "description": "Only this layer of the slot",
+        "min": 0
       },
       {
         "name": "maxDepth",
         "type": "integer",
         "required": false,
-        "description": "How deep to describe nested stages and values (default 10)"
+        "description": "How deep to describe nested stages and values (default 10)",
+        "min": 1
       }
     ],
     "choices": [
@@ -1309,7 +1313,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "slotIndex",
         "type": "integer",
         "required": false,
-        "description": "Material slot index on the component (default 0)"
+        "description": "Material slot index on the component (default 0)",
+        "min": 0
       },
       {
         "name": "slotName",
@@ -1445,7 +1450,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "slotIndex",
         "type": "integer",
         "required": false,
-        "description": "Material slot index on the component (default 0)"
+        "description": "Material slot index on the component (default 0)",
+        "min": 0
       },
       {
         "name": "slotName",
@@ -1478,7 +1484,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "layerIndex",
         "type": "integer",
         "required": false,
-        "description": "Material Designer layer index within the slot"
+        "description": "Material Designer layer index within the slot",
+        "min": 0
       },
       {
         "name": "layerName",
@@ -1784,7 +1791,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "layerIndex",
         "type": "integer",
         "required": false,
-        "description": "Material Designer layer index within the slot"
+        "description": "Material Designer layer index within the slot",
+        "min": 0
       },
       {
         "name": "layerName",
@@ -1826,7 +1834,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "slotIndex",
         "type": "integer",
         "required": false,
-        "description": "Material slot index on the component (default 0)"
+        "description": "Material slot index on the component (default 0)",
+        "min": 0
       },
       {
         "name": "slotName",

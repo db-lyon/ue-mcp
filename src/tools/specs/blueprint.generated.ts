@@ -373,13 +373,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "maxBlueprints",
         "type": "integer",
         "required": false,
-        "description": "Cap on Blueprints loaded (default 2000)"
+        "description": "Cap on Blueprints loaded (default 2000)",
+        "min": 1
       },
       {
         "name": "maxSamples",
         "type": "integer",
         "required": false,
-        "description": "Samples listed per finding kind per Blueprint (default 20, max 500); counts stay complete"
+        "description": "Samples listed per finding kind per Blueprint (default 20, max 500); counts stay complete",
+        "min": 0
       },
       {
         "name": "limit",
@@ -1164,7 +1166,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "maxAssets",
         "type": "integer",
         "required": false,
-        "description": "Cap on Blueprints exported (default 200, max 5000)"
+        "description": "Cap on Blueprints exported (default 200, max 5000)",
+        "min": 1
       },
       {
         "name": "includeT3D",
@@ -1769,7 +1772,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "offset",
         "type": "integer",
         "required": false,
-        "description": "Row offset into the (filtered) node list"
+        "description": "Row offset into the (filtered) node list",
+        "min": 0
       },
       {
         "name": "limit",
@@ -2297,7 +2301,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "offset",
         "type": "integer",
         "required": false,
-        "description": "Row offset, the older non-resumable form of paging"
+        "description": "Row offset, the older non-resumable form of paging",
+        "min": 0
       },
       {
         "name": "cursor",
@@ -2315,7 +2320,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "maxBlueprints",
         "type": "integer",
         "required": false,
-        "description": "Cap on Blueprints loaded (default 2000)"
+        "description": "Cap on Blueprints loaded (default 2000)",
+        "min": 1
       },
       {
         "name": "dumpToFile",

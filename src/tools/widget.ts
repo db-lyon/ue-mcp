@@ -103,9 +103,6 @@ export const widgetTool: ToolDef = categoryTool(
     assetPath: z.string().optional().describe("Canonical Widget Blueprint / Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)"),
     widgetName: z.string().optional().describe("Canonical name of a widget inside the tree (#798)"),
     parentWidgetName: z.string().optional().describe("Canonical name of the parent panel widget (#798)"),
-    // The spec cannot carry bounds; these keep them, with the type the spec declares.
-    maxInstances: z.number().int().min(1).max(500).optional().describe("inspect_runtime_instances: maximum matching widget instances returned"),
-    maxNodesPerInstance: z.number().int().min(1).max(2000).optional().describe("inspect_runtime_instances: maximum root/subtree nodes per instance"),
     // Accepted spellings of the canonical names above. Declared so the
     // transport does not strip them before the normalizer can fold them in.
     path: z.string().optional().describe("Legacy alias for assetPath. Use assetPath (#798)"),

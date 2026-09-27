@@ -157,7 +157,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("read_uv_channels"), &ReadUvChannels, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("channels"), EType::Array, TEXT("Only these channels (omit for every channel)")).Items(EType::Number),
 		MCPParam::Optional(TEXT("includeIslands"), EType::Boolean, TEXT("Include the per-island breakdown (default true)")),
 		MCPParam::Optional(TEXT("includeOverlap"), EType::Boolean, TEXT("Compute the overlapping-area fraction (default true)")),
@@ -165,7 +165,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("set_uv_channel_count"), &SetUvChannelCount, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("op"), EType::String, TEXT("set (default) | add | remove | copy")),
 		MCPParam::Optional(TEXT("channelCount"), EType::Number, TEXT("Target channel count (op=set)")),
 		MCPParam::Optional(TEXT("count"), EType::Number, TEXT("Channels to add (op=add, default 1)")),
@@ -177,7 +177,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("unwrap_uvs"), &UnwrapUvs, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("channel"), EType::Number, TEXT("Channel to write (default 0)")),
 		MCPParam::Optional(TEXT("method"), EType::String, TEXT("xatlas (default) | patchBuilder | expMap | conformal | spectralConformal | planar | box | cylinder")),
 		MCPParam::Optional(TEXT("pack"), EType::Boolean, TEXT("Repack the islands after unwrapping (default true)")),
@@ -194,7 +194,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("transform_uvs"), &TransformUvs, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("channel"), EType::Number, TEXT("Channel to transform (default 0)")),
 		MCPParam::Optional(TEXT("translate"), EType::Object, TEXT("UV-space offset {u, v}")),
 		MCPParam::Optional(TEXT("scale"), EType::Object, TEXT("UV-space scale {u, v}; a zero component is refused")),
@@ -209,7 +209,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("generate_lightmap_uvs"), &GenerateLightmapUvs, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("enable"), EType::Boolean, TEXT("Turn lightmap UV generation on (default) or off")),
 		MCPParam::Optional(TEXT("sourceChannel"), EType::Number, TEXT("Channel the generator reads (default: the current setting)")),
 		MCPParam::Optional(TEXT("destinationChannel"), EType::Number, TEXT("Channel it writes (default: the current setting, or the next free channel)")),
@@ -223,7 +223,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("export_uv_layout"), &ExportUvLayout, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("channel"), EType::Number, TEXT("Channel to draw (default 0)")),
 		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("PNG to write (default under Saved/UVLayouts)")),
 		MCPParam::Optional(TEXT("imageSize"), EType::Number, TEXT("PNG edge length (default 1024, max 4096)")),
@@ -233,7 +233,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("check_uvs"), &CheckUvs, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source LOD to act on (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("requireLightmapChannel"), EType::Boolean, TEXT("Treat a missing lightmap channel as a fault (default true for StaticMesh)")),
 		MCPParam::Optional(TEXT("maxOverlapFraction"), EType::Number, TEXT("Overlap above this fraction of the lightmap channel is a fault (default 0.001)")),
 		MCPParam::Optional(TEXT("rasterSize"), EType::Number, TEXT("Raster resolution for the overlap estimate (default 512)")),
@@ -248,7 +248,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecGeoInPlace = MCPParam::Optional(TEXT("inPlace"), EType::Boolean, TEXT("Overwrite assetPath instead of writing a separate asset (default false); not with outputPath, and the one form with no rollback"));
 	const FMCPParamSpec SpecGeoBackupPath = MCPParam::Optional(TEXT("backupPath"), EType::String, TEXT("Copy the source here before an inPlace edit, the only way back to the original geometry"));
 	const FMCPParamSpec SpecGeoLodType = MCPParam::Optional(TEXT("lodType"), EType::String, TEXT("MaxAvailable (default, ignores lodIndex) | HiResSourceModel | SourceModel | RenderData"));
-	const FMCPParamSpec SpecGeoLodIndex = MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to read when lodType names one (default 0)"));
+	const FMCPParamSpec SpecGeoLodIndex = MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to read when lodType names one (default 0)")).Min(0);
 	const FMCPParamSpec SpecGeoOnConflict = MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the output asset exists: error (default) | replace"));
 	const FMCPParamSpec SpecGeoCopyMaterials = MCPParam::Optional(TEXT("copyMaterialsFromSource"), EType::Boolean, TEXT("Copy the source's material slots onto the written asset (default true)"));
 	const FMCPParamSpec SpecGeoCopyCollision = MCPParam::Optional(TEXT("copyCollisionFromSource"), EType::Boolean, TEXT("Copy the source's simple collision and trace flag onto the written asset (default true)"));
@@ -408,9 +408,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("propertyName"), EType::String, TEXT("One property to read; dotted and indexed paths walk structs, arrays and instanced subobjects")),
 		MCPParam::Optional(TEXT("includeValues"), EType::Boolean, TEXT("Include each property's value (default false)")),
 		MCPParam::Optional(TEXT("valueFormat"), EType::String, TEXT("text (default, Unreal export text) | json (structured values)")),
-		MCPParam::Optional(TEXT("expandDepth"), EType::Integer, TEXT("Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)")),
+		MCPParam::Optional(TEXT("expandDepth"), EType::Integer, TEXT("Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)")).Range(0, 5),
 		MCPParam::Optional(TEXT("expandExternal"), EType::Boolean, TEXT("Also follow references to other assets when expanding (default false)")),
-		MCPParam::Optional(TEXT("maxExpandedObjects"), EType::Integer, TEXT("Cap on expanded objects (default 64)")),
+		MCPParam::Optional(TEXT("maxExpandedObjects"), EType::Integer, TEXT("Cap on expanded objects (default 64)")).Min(1),
 	});
 	// get_properties: the same read with values on by default.
 	Registry.RegisterHandler(TEXT("get_asset_properties"), &GetAssetProperties, {
@@ -418,9 +418,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("propertyName"), EType::String, TEXT("One property to read; dotted and indexed paths walk structs, arrays and instanced subobjects")),
 		MCPParam::Optional(TEXT("includeValues"), EType::Boolean, TEXT("Include each property's value (default true)")),
 		MCPParam::Optional(TEXT("valueFormat"), EType::String, TEXT("text (default, Unreal export text) | json (structured values)")),
-		MCPParam::Optional(TEXT("expandDepth"), EType::Integer, TEXT("Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)")),
+		MCPParam::Optional(TEXT("expandDepth"), EType::Integer, TEXT("Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)")).Range(0, 5),
 		MCPParam::Optional(TEXT("expandExternal"), EType::Boolean, TEXT("Also follow references to other assets when expanding (default false)")),
-		MCPParam::Optional(TEXT("maxExpandedObjects"), EType::Integer, TEXT("Cap on expanded objects (default 64)")),
+		MCPParam::Optional(TEXT("maxExpandedObjects"), EType::Integer, TEXT("Cap on expanded objects (default 64)")).Min(1),
 	});
 	Registry.RegisterHandler(TEXT("duplicate_asset"), &DuplicateAsset, {
 		MCPParam::Required(TEXT("sourcePath"), EType::String, TEXT("Asset to duplicate")),
@@ -472,7 +472,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// legitimately outrun the default game-thread budget, so both carry an
 	// explicit timeout.
 	Registry.RegisterHandlerWithTimeout(TEXT("bulk_upsert_data_assets"), &BulkUpsertDataAssets, 120.0f, {
-		MCPParam::Required(TEXT("items"), EType::Array, TEXT("DataAsset descriptors: [{name, packagePath, className, properties?}], max 500")).Items(EType::Object),
+		MCPParam::Required(TEXT("items"), EType::Array, TEXT("DataAsset descriptors: [{name, packagePath, className, properties?}], max 500")).NonEmpty().MaxItems(500).Items(EType::Object),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("update (default) | skip | error")),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Run the full preflight and report the planned statuses without writing (default false)")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the changed packages (default true)")),
@@ -627,7 +627,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("noAlpha"), EType::Boolean, TEXT("Factory option: drop the alpha channel")),
 	});
 	Registry.RegisterHandler(TEXT("import_texture_batch"), &ImportTextureBatch, {
-		MCPParam::Required(TEXT("items"), EType::Array, TEXT("Textures to import: [{filePath, packagePath?, name?, replaceExisting?}]")).Items(EType::Object),
+		MCPParam::Required(TEXT("items"), EType::Array, TEXT("Textures to import: [{filePath, packagePath?, name?, replaceExisting?}]")).NonEmpty().MaxItems(500).Items(EType::Object),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Folder for items that name none (default /Game/Textures)")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the imported textures (default true)")),
 		MCPParam::Optional(TEXT("automated"), EType::Boolean, TEXT("Suppress interactive dialogs (default true)")),
@@ -635,12 +635,12 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_render_target_2d"), &CreateRenderTarget2D, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Asset name, without '/' or '.'")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Destination folder (default /Game)")),
-		MCPParam::Optional(TEXT("width"), EType::Integer, TEXT("Pixel width, 1-8192 (default 512)")),
-		MCPParam::Optional(TEXT("height"), EType::Integer, TEXT("Pixel height, 1-8192 (default 512)")),
+		MCPParam::Optional(TEXT("width"), EType::Integer, TEXT("Pixel width, 1-8192 (default 512)")).Range(1, 8192),
+		MCPParam::Optional(TEXT("height"), EType::Integer, TEXT("Pixel height, 1-8192 (default 512)")).Range(1, 8192),
 		MCPParam::Optional(TEXT("format"), EType::String, TEXT("R8 | RG8 | RGBA8 | RGBA8_SRGB | R16F | RG16F | RGBA16F | R32F | RG32F | RGBA32F | RGB10A2 (default RGBA8_SRGB)")),
 		MCPParam::Optional(TEXT("clearColor"), EType::Object, TEXT("Linear clear color {r, g, b, a} (default transparent)")),
 		MCPParam::Optional(TEXT("generateMips"), EType::Boolean, TEXT("Generate mipmaps automatically (default false)")),
-		MCPParam::Optional(TEXT("targetGamma"), EType::Number, TEXT("Target gamma (default 0, the engine behavior)")),
+		MCPParam::Optional(TEXT("targetGamma"), EType::Number, TEXT("Target gamma (default 0, the engine behavior)")).Min(0),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default) returns an existing asset; error refuses")),
 	});
 	// #697: texture export + compare.
@@ -671,9 +671,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("slotIndex"), EType::Number, TEXT("Material slot index (default 0)")),
 	});
 	Registry.RegisterHandler(TEXT("set_mesh_materials_batch"), &SetMeshMaterialsBatch, {
-		MCPParam::Required(TEXT("assignments"), EType::Array, TEXT("Slot assignments, max 500")).Items(EType::Object).WithFields({
-			MCPParam::RequiredField(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
-			MCPParam::RequiredField(TEXT("materialPath"), EType::String, TEXT("Material to assign")),
+		MCPParam::Required(TEXT("assignments"), EType::Array, TEXT("Slot assignments, max 500")).NonEmpty().MaxItems(500).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).NonEmpty(),
+			MCPParam::RequiredField(TEXT("materialPath"), EType::String, TEXT("Material to assign")).NonEmpty(),
 			MCPParam::OptionalField(TEXT("slotName"), EType::String, TEXT("Slot by name, which survives a reimport reordering slot indices")),
 			MCPParam::OptionalField(TEXT("slotIndex"), EType::Integer, TEXT("Slot by index (default 0); refused when it disagrees with slotName")),
 		}),
@@ -712,11 +712,11 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("append_asset_array_elements"), &AppendAssetArrayElements, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Path of the TArray property")),
-		MCPParam::Required(TEXT("elements"), EType::Array, TEXT("Values to append, validated before any is written")),
+		MCPParam::Required(TEXT("elements"), EType::Array, TEXT("Values to append, validated before any is written")).NonEmpty(),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("bulk_set_asset_properties"), &BulkSetAssetProperties, {
-		MCPParam::Required(TEXT("items"), EType::Array, TEXT("Asset updates: [{assetPath, properties}], max 500")).Items(EType::Object),
+		MCPParam::Required(TEXT("items"), EType::Array, TEXT("Asset updates: [{assetPath, properties}], max 500")).NonEmpty().MaxItems(500).Items(EType::Object),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the changed packages (default true)")),
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Preflight and report without writing (default false)")),
 		MCPParam::Optional(TEXT("continueOnError"), EType::Boolean, TEXT("Apply the items that passed preflight instead of aborting the batch (default false)")),
@@ -959,15 +959,15 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("bind_cloth_to_section"), &BindClothToSection, {
 		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("assetPath")),
-		MCPParam::Required(TEXT("lodIndex"), EType::Integer, TEXT("Mesh LOD")),
-		MCPParam::Required(TEXT("sectionIndex"), EType::Integer, TEXT("Render section to bind")),
+		MCPParam::Required(TEXT("lodIndex"), EType::Integer, TEXT("Mesh LOD")).Min(0),
+		MCPParam::Required(TEXT("sectionIndex"), EType::Integer, TEXT("Render section to bind")).Min(0),
 		MCPParam::Optional(TEXT("clothingAsset"), EType::String, TEXT("Clothing asset by name (optional when the mesh has one)")),
-		MCPParam::Optional(TEXT("assetLodIndex"), EType::Integer, TEXT("LOD inside the clothing asset (default: lodIndex, clamped)")),
+		MCPParam::Optional(TEXT("assetLodIndex"), EType::Integer, TEXT("LOD inside the clothing asset (default: lodIndex, clamped)")).Min(0),
 	});
 	Registry.RegisterHandler(TEXT("unbind_cloth_from_section"), &UnbindClothFromSection, {
 		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh asset path")).Alias(TEXT("assetPath")),
-		MCPParam::Required(TEXT("lodIndex"), EType::Integer, TEXT("Mesh LOD")),
-		MCPParam::Required(TEXT("sectionIndex"), EType::Integer, TEXT("Render section to unbind")),
+		MCPParam::Required(TEXT("lodIndex"), EType::Integer, TEXT("Mesh LOD")).Min(0),
+		MCPParam::Required(TEXT("sectionIndex"), EType::Integer, TEXT("Render section to unbind")).Min(0),
 		MCPParam::Optional(TEXT("clothingAsset"), EType::String, TEXT("Refuse unless the section is bound to this clothing asset")),
 	});
 	Registry.RegisterHandler(TEXT("get_primary_asset_ids"), &GetPrimaryAssetIds, {

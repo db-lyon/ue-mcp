@@ -105,7 +105,7 @@ void FAssetMeshBooleanHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("scale"), EType::Vec3, TEXT("Scale (default 1)")),
 		}),
 		MCPParam::Optional(TEXT("lodType"), EType::String, TEXT("MaxAvailable (default, ignores lodIndex) | HiResSourceModel | SourceModel | RenderData")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD of each input to read when lodType names one (default 0)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD of each input to read when lodType names one (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("fillHoles"), EType::Boolean, TEXT("Close the holes the cut opens (default true)")),
 		MCPParam::Optional(TEXT("simplifyOutput"), EType::Boolean, TEXT("Collapse coplanar triangles the boolean introduced (default true)")),
 		MCPParam::Optional(TEXT("simplifyPlanarTolerance"), EType::Number, TEXT("How far from coplanar still counts as coplanar when simplifying (default 0.01)")),

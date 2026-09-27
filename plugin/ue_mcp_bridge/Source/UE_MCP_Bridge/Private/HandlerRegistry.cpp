@@ -287,7 +287,12 @@ FString FMCPHandlerRegistry::ValidateValueShape(const FMCPParamSpec& Param)
 			}
 		}
 	}
-	return FString();
+
+	if (Param.Bounds.IsSet() && Param.LiteralValue.IsValid())
+	{
+		return FString::Printf(TEXT("'%s' bounds a literal, which already takes one value"), *Param.Name);
+	}
+	return ValidateBounds(Param.Name, Param.Type, Param.ItemType, Param.Bounds);
 }
 
 FString FMCPHandlerRegistry::ValidateField(const FString& Owner, const FMCPParamField& Field)
@@ -313,6 +318,50 @@ FString FMCPHandlerRegistry::ValidateField(const FString& Owner, const FMCPParam
 				return FString::Printf(TEXT("'%s.%s' lists a form twice"), *Owner, *Field.Name);
 			}
 		}
+	}
+	return ValidateBounds(Owner + TEXT(".") + Field.Name, Field.Type, Field.ItemType, Field.Bounds);
+}
+
+FString FMCPHandlerRegistry::ValidateBounds(const FString& Owner, EMCPParamType Type, EMCPParamType ItemType, const FMCPValueBounds& Bounds)
+{
+	const bool bArray = Type == EMCPParamType::Array;
+	const EMCPParamType ValueType = bArray ? ItemType : Type;
+	const bool bNumeric = ValueType == EMCPParamType::Number || ValueType == EMCPParamType::Integer;
+
+	if ((Bounds.Min.IsSet() || Bounds.Max.IsSet()) && !bNumeric)
+	{
+		return FString::Printf(TEXT("'%s' has a minimum or maximum but is not a number or an array of numbers"), *Owner);
+	}
+	if (ValueType == EMCPParamType::Integer)
+	{
+		for (const TOptional<double>& Limit : { Bounds.Min, Bounds.Max })
+		{
+			if (Limit.IsSet() && FMath::Frac(Limit.GetValue()) != 0.0)
+			{
+				return FString::Printf(TEXT("'%s' is an integer with a fractional bound"), *Owner);
+			}
+		}
+	}
+	if ((Bounds.MinLength.IsSet() || Bounds.MaxLength.IsSet()) && ValueType != EMCPParamType::String)
+	{
+		return FString::Printf(TEXT("'%s' has a length bound but is not a string or an array of strings"), *Owner);
+	}
+	if ((Bounds.MinItems.IsSet() || Bounds.MaxItems.IsSet()) && !bArray)
+	{
+		return FString::Printf(TEXT("'%s' has an item count bound but is not an array"), *Owner);
+	}
+	for (const TOptional<int32>& Count : { Bounds.MinLength, Bounds.MaxLength, Bounds.MinItems, Bounds.MaxItems })
+	{
+		if (Count.IsSet() && Count.GetValue() < 0)
+		{
+			return FString::Printf(TEXT("'%s' has a negative length or item count bound"), *Owner);
+		}
+	}
+	if ((Bounds.Min.IsSet() && Bounds.Max.IsSet() && Bounds.Min.GetValue() > Bounds.Max.GetValue())
+		|| (Bounds.MinLength.IsSet() && Bounds.MaxLength.IsSet() && Bounds.MinLength.GetValue() > Bounds.MaxLength.GetValue())
+		|| (Bounds.MinItems.IsSet() && Bounds.MaxItems.IsSet() && Bounds.MinItems.GetValue() > Bounds.MaxItems.GetValue()))
+	{
+		return FString::Printf(TEXT("'%s' has a lower bound above its upper bound"), *Owner);
 	}
 	return FString();
 }
@@ -365,7 +414,17 @@ TSharedPtr<FJsonObject> FMCPHandlerRegistry::BuildHandlerSpecsJson() const
 		}
 		return MCPStringListToJson(Names);
 	};
-	auto FieldsJson = [&FormsJson](const TArray<FMCPParamField>& Fields)
+	// Written only when set, so an unbounded value publishes what it did before bounds existed.
+	auto WriteBounds = [](const TSharedPtr<FJsonObject>& Entry, const FMCPValueBounds& Bounds)
+	{
+		if (Bounds.Min.IsSet()) Entry->SetNumberField(TEXT("min"), Bounds.Min.GetValue());
+		if (Bounds.Max.IsSet()) Entry->SetNumberField(TEXT("max"), Bounds.Max.GetValue());
+		if (Bounds.MinLength.IsSet()) Entry->SetNumberField(TEXT("minLength"), Bounds.MinLength.GetValue());
+		if (Bounds.MaxLength.IsSet()) Entry->SetNumberField(TEXT("maxLength"), Bounds.MaxLength.GetValue());
+		if (Bounds.MinItems.IsSet()) Entry->SetNumberField(TEXT("minItems"), Bounds.MinItems.GetValue());
+		if (Bounds.MaxItems.IsSet()) Entry->SetNumberField(TEXT("maxItems"), Bounds.MaxItems.GetValue());
+	};
+	auto FieldsJson = [&FormsJson, &WriteBounds](const TArray<FMCPParamField>& Fields)
 	{
 		TArray<TSharedPtr<FJsonValue>> FieldValues;
 		for (const FMCPParamField& Field : Fields)
@@ -383,6 +442,7 @@ TSharedPtr<FJsonObject> FMCPHandlerRegistry::BuildHandlerSpecsJson() const
 			{
 				FieldEntry->SetArrayField(TEXT("forms"), FormsJson(Field.Forms));
 			}
+			WriteBounds(FieldEntry, Field.Bounds);
 			FieldValues.Add(MakeShared<FJsonValueObject>(FieldEntry));
 		}
 		return FieldValues;
@@ -435,6 +495,7 @@ TSharedPtr<FJsonObject> FMCPHandlerRegistry::BuildHandlerSpecsJson() const
 			{
 				Entry->SetArrayField(TEXT("forms"), FormsJson(Param.Forms));
 			}
+			WriteBounds(Entry, Param.Bounds);
 			if (Param.Variants.Num() > 0)
 			{
 				TArray<TSharedPtr<FJsonValue>> VariantValues;

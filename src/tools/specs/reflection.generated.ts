@@ -63,13 +63,16 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "slotName",
         "type": "string",
         "required": true,
-        "description": "Logical save slot name, a plain filename without a path"
+        "description": "Logical save slot name, a plain filename without a path",
+        "minLength": 1,
+        "maxLength": 128
       },
       {
         "name": "userIndex",
         "type": "integer",
         "required": false,
-        "description": "Platform user index (default 0)"
+        "description": "Platform user index (default 0)",
+        "min": 0
       }
     ]
   },

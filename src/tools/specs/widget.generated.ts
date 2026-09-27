@@ -847,13 +847,17 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "maxInstances",
         "type": "integer",
         "required": false,
-        "description": "Maximum matching widget instances returned (1 to 500, default 100)"
+        "description": "Maximum matching widget instances returned (1 to 500, default 100)",
+        "min": 1,
+        "max": 500
       },
       {
         "name": "maxNodesPerInstance",
         "type": "integer",
         "required": false,
-        "description": "Maximum root/subtree nodes per instance (1 to 2000, default 250)"
+        "description": "Maximum root/subtree nodes per instance (1 to 2000, default 250)",
+        "min": 1,
+        "max": 2000
       }
     ]
   },

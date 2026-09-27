@@ -282,13 +282,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "loopCount",
         "type": "integer",
         "required": false,
-        "description": "How many times the segment repeats (default 1)"
+        "description": "How many times the segment repeats (default 1)",
+        "min": 1
       },
       {
         "name": "insertIndex",
         "type": "integer",
         "required": false,
-        "description": "Position in the slot's segment list (default appends)"
+        "description": "Position in the slot's segment list (default appends)",
+        "min": 0
       }
     ]
   },
@@ -739,7 +741,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "bindingTag",
         "type": "string",
         "required": true,
-        "description": "Edit-session natural key from begin_control_rig_edit"
+        "description": "Edit-session natural key from begin_control_rig_edit",
+        "minLength": 1
       },
       {
         "name": "operations",
@@ -1238,7 +1241,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "bindingTag",
         "type": "string",
         "required": true,
-        "description": "Edit-session natural key from begin_control_rig_edit"
+        "description": "Edit-session natural key from begin_control_rig_edit",
+        "minLength": 1
       },
       {
         "name": "outputAssetPath",
@@ -1263,7 +1267,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "tolerance",
         "type": "number",
         "required": false,
-        "description": "Key-reduction tolerance (default 0.001)"
+        "description": "Key-reduction tolerance (default 0.001)",
+        "min": 0
       },
       {
         "name": "createLink",
@@ -1487,7 +1492,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "bindingTag",
         "type": "string",
         "required": false,
-        "description": "Stable natural key the later calls address (default derived from the mesh name)"
+        "description": "Stable natural key the later calls address (default derived from the mesh name)",
+        "minLength": 1
       },
       {
         "name": "onConflict",
@@ -1609,7 +1615,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "bindingTag",
         "type": "string",
         "required": true,
-        "description": "Edit-session natural key from begin_control_rig_edit"
+        "description": "Edit-session natural key from begin_control_rig_edit",
+        "minLength": 1
       },
       {
         "name": "controlNames",
@@ -3462,7 +3469,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "bindingTag",
         "type": "string",
         "required": true,
-        "description": "Edit-session natural key from begin_control_rig_edit"
+        "description": "Edit-session natural key from begin_control_rig_edit",
+        "minLength": 1
       },
       {
         "name": "controlNames",

@@ -118,7 +118,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecDirectory = MCPParam::Optional(TEXT("directory"), EType::String, TEXT("Content path to search under (default /Game)"));
 	const FMCPParamSpec SpecRecursive = MCPParam::Optional(TEXT("recursive"), EType::Boolean, TEXT("Include subfolders of directory (default true)"));
 	const FMCPParamSpec SpecAssetPaths = MCPParam::Optional(TEXT("assetPaths"), EType::Array, TEXT("Blueprint asset paths; a World path resolves to its level script")).Items(EType::String);
-	const FMCPParamSpec SpecMaxBlueprints = MCPParam::Optional(TEXT("maxBlueprints"), EType::Integer, TEXT("Cap on Blueprints loaded (default 2000)"));
+	const FMCPParamSpec SpecMaxBlueprints = MCPParam::Optional(TEXT("maxBlueprints"), EType::Integer, TEXT("Cap on Blueprints loaded (default 2000)")).Min(1);
 	const FMCPParamSpec SpecCursor = MCPParam::Optional(TEXT("cursor"), EType::String, TEXT("Resume a paged read: pass back the nextCursor from the previous page, unmodified"));
 	const FMCPParamSpec SpecParameters = MCPParam::Optional(TEXT("parameters"), EType::Array, TEXT("Typed signature parameters [{name, type}]; type takes the add_variable vocabulary, containers included")).Items(EType::Object);
 
@@ -204,7 +204,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_blueprint_graph"), &ReadBlueprintGraph, {
 		SpecAssetPath,
 		SpecGraphName,
-		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("Row offset into the (filtered) node list")),
+		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("Row offset into the (filtered) node list")).Min(0),
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Nodes to return; omit for a safe default page, or dump the whole graph with dumpToFile")),
 		MCPParam::Optional(TEXT("includePins"), EType::Boolean, TEXT("Include pins (default true)")),
 		MCPParam::Optional(TEXT("includeDefaults"), EType::Boolean, TEXT("Include pin default values (default true)")),
@@ -492,7 +492,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecIncludeLevelScripts,
 		MCPParam::Optional(TEXT("includeNeighbours"), EType::Boolean, TEXT("Include each hit's immediate execution and data neighbours")),
 		MCPParam::Optional(TEXT("narrowByRegistry"), EType::Boolean, TEXT("Use Asset Registry dependencies to rule out Blueprints before loading them (default true)")),
-		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("Row offset, the older non-resumable form of paging")),
+		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("Row offset, the older non-resumable form of paging")).Min(0),
 		SpecCursor,
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows to return on this page (default 200, max 1000)")),
 		SpecMaxBlueprints,
@@ -535,7 +535,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("parentClass"), EType::String, TEXT("Only Blueprints deriving from this class")),
 		SpecIncludeLevelScripts,
 		MCPParam::Optional(TEXT("outputDir"), EType::String, TEXT("Absolute directory, or one relative to Saved/ (default Saved/UE_MCP/BlueprintExport)")),
-		MCPParam::Optional(TEXT("maxAssets"), EType::Integer, TEXT("Cap on Blueprints exported (default 200, max 5000)")),
+		MCPParam::Optional(TEXT("maxAssets"), EType::Integer, TEXT("Cap on Blueprints exported (default 200, max 5000)")).Min(1),
 		MCPParam::Optional(TEXT("includeT3D"), EType::Boolean, TEXT("Also write one T3D file per graph (default false)")),
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("export_blueprint_batch"), &ExportBlueprintBatch, SearchCallSitesTimeoutSeconds);
@@ -546,7 +546,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecIncludeLevelScripts,
 		MCPParam::Optional(TEXT("scanReferencers"), EType::Boolean, TEXT("Also scan every Blueprint package that depends on an audited one for references (default true)")),
 		SpecMaxBlueprints,
-		MCPParam::Optional(TEXT("maxSamples"), EType::Integer, TEXT("Samples listed per finding kind per Blueprint (default 20, max 500); counts stay complete")),
+		MCPParam::Optional(TEXT("maxSamples"), EType::Integer, TEXT("Samples listed per finding kind per Blueprint (default 20, max 500); counts stay complete")).Min(0),
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows to return (default 200, max 5000)")),
 		SpecDumpToFile,
 		SpecOutputPath,

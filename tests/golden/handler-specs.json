@@ -1290,7 +1290,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -1538,13 +1539,15 @@
           "name": "loopCount",
           "type": "integer",
           "required": false,
-          "description": "How many times the segment repeats (default 1)"
+          "description": "How many times the segment repeats (default 1)",
+          "min": 1
         },
         {
           "name": "insertIndex",
           "type": "integer",
           "required": false,
-          "description": "Position in the slot's segment list (default appends)"
+          "description": "Position in the slot's segment list (default appends)",
+          "min": 0
         }
       ]
     },
@@ -3564,7 +3567,8 @@
           "name": "elements",
           "type": "array",
           "required": true,
-          "description": "Values to append, validated before any is written"
+          "description": "Values to append, validated before any is written",
+          "minItems": 1
         },
         {
           "name": "save",
@@ -3616,7 +3620,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": true,
-          "description": "Edit-session natural key from begin_control_rig_edit"
+          "description": "Edit-session natural key from begin_control_rig_edit",
+          "minLength": 1
         },
         {
           "name": "operations",
@@ -4273,7 +4278,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "save",
@@ -4359,7 +4365,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -4493,7 +4500,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -4657,7 +4665,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -4815,7 +4824,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -5224,13 +5234,15 @@
           "name": "maxBlueprints",
           "type": "integer",
           "required": false,
-          "description": "Cap on Blueprints loaded (default 2000)"
+          "description": "Cap on Blueprints loaded (default 2000)",
+          "min": 1
         },
         {
           "name": "maxSamples",
           "type": "integer",
           "required": false,
-          "description": "Samples listed per finding kind per Blueprint (default 20, max 500); counts stay complete"
+          "description": "Samples listed per finding kind per Blueprint (default 20, max 500); counts stay complete",
+          "min": 0
         },
         {
           "name": "limit",
@@ -5520,7 +5532,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": true,
-          "description": "Edit-session natural key from begin_control_rig_edit"
+          "description": "Edit-session natural key from begin_control_rig_edit",
+          "minLength": 1
         },
         {
           "name": "outputAssetPath",
@@ -5545,7 +5558,8 @@
           "name": "tolerance",
           "type": "number",
           "required": false,
-          "description": "Key-reduction tolerance (default 0.001)"
+          "description": "Key-reduction tolerance (default 0.001)",
+          "min": 0
         },
         {
           "name": "createLink",
@@ -5980,7 +5994,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": false,
-          "description": "Stable natural key the later calls address (default derived from the mesh name)"
+          "description": "Stable natural key the later calls address (default derived from the mesh name)",
+          "minLength": 1
         },
         {
           "name": "onConflict",
@@ -6148,13 +6163,15 @@
           "name": "lodIndex",
           "type": "integer",
           "required": true,
-          "description": "Mesh LOD"
+          "description": "Mesh LOD",
+          "min": 0
         },
         {
           "name": "sectionIndex",
           "type": "integer",
           "required": true,
-          "description": "Render section to bind"
+          "description": "Render section to bind",
+          "min": 0
         },
         {
           "name": "clothingAsset",
@@ -6166,7 +6183,8 @@
           "name": "assetLodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD inside the clothing asset (default: lodIndex, clamped)"
+          "description": "LOD inside the clothing asset (default: lodIndex, clamped)",
+          "min": 0
         }
       ]
     },
@@ -6583,7 +6601,9 @@
           "type": "array",
           "required": true,
           "description": "Asset updates: [{assetPath, properties}], max 500",
-          "items": "object"
+          "items": "object",
+          "minItems": 1,
+          "maxItems": 500
         },
         {
           "name": "save",
@@ -6746,7 +6766,9 @@
           "type": "array",
           "required": true,
           "description": "DataAsset descriptors: [{name, packagePath, className, properties?}], max 500",
-          "items": "object"
+          "items": "object",
+          "minItems": 1,
+          "maxItems": 500
         },
         {
           "name": "onConflict",
@@ -6810,7 +6832,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": true,
-          "description": "Edit-session natural key from begin_control_rig_edit"
+          "description": "Edit-session natural key from begin_control_rig_edit",
+          "minLength": 1
         },
         {
           "name": "controlNames",
@@ -7043,7 +7066,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "requireLightmapChannel",
@@ -10799,13 +10823,17 @@
           "name": "width",
           "type": "integer",
           "required": false,
-          "description": "Pixel width, 1-8192 (default 512)"
+          "description": "Pixel width, 1-8192 (default 512)",
+          "min": 1,
+          "max": 8192
         },
         {
           "name": "height",
           "type": "integer",
           "required": false,
-          "description": "Pixel height, 1-8192 (default 512)"
+          "description": "Pixel height, 1-8192 (default 512)",
+          "min": 1,
+          "max": 8192
         },
         {
           "name": "format",
@@ -10829,7 +10857,8 @@
           "name": "targetGamma",
           "type": "number",
           "required": false,
-          "description": "Target gamma (default 0, the engine behavior)"
+          "description": "Target gamma (default 0, the engine behavior)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -13081,7 +13110,8 @@
           "name": "maxAssets",
           "type": "integer",
           "required": false,
-          "description": "Cap on Blueprints exported (default 200, max 5000)"
+          "description": "Cap on Blueprints exported (default 200, max 5000)",
+          "min": 1
         },
         {
           "name": "includeT3D",
@@ -13271,7 +13301,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "channel",
@@ -13882,7 +13913,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "enable",
@@ -14058,7 +14090,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "save",
@@ -14355,7 +14388,9 @@
           "name": "expandDepth",
           "type": "integer",
           "required": false,
-          "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)"
+          "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)",
+          "min": 0,
+          "max": 5
         },
         {
           "name": "expandExternal",
@@ -14367,7 +14402,8 @@
           "name": "maxExpandedObjects",
           "type": "integer",
           "required": false,
-          "description": "Cap on expanded objects (default 64)"
+          "description": "Cap on expanded objects (default 64)",
+          "min": 1
         }
       ]
     },
@@ -15819,13 +15855,15 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read (default 0)"
+          "description": "LOD to read (default 0)",
+          "min": 0
         },
         {
           "name": "sectionIndex",
           "type": "integer",
           "required": false,
-          "description": "One render section (omit for every section)"
+          "description": "One render section (omit for every section)",
+          "min": 0
         },
         {
           "name": "include",
@@ -15838,7 +15876,8 @@
           "name": "uvChannel",
           "type": "integer",
           "required": false,
-          "description": "UV channel to return (default 0)"
+          "description": "UV channel to return (default 0)",
+          "min": 0
         },
         {
           "name": "dumpToFile",
@@ -17662,7 +17701,9 @@
           "type": "array",
           "required": true,
           "description": "Textures to import: [{filePath, packagePath?, name?, replaceExisting?}]",
-          "items": "object"
+          "items": "object",
+          "minItems": 1,
+          "maxItems": 500
         },
         {
           "name": "packagePath",
@@ -17813,13 +17854,17 @@
           "name": "maxInstances",
           "type": "integer",
           "required": false,
-          "description": "Maximum matching widget instances returned (1 to 500, default 100)"
+          "description": "Maximum matching widget instances returned (1 to 500, default 100)",
+          "min": 1,
+          "max": 500
         },
         {
           "name": "maxNodesPerInstance",
           "type": "integer",
           "required": false,
-          "description": "Maximum root/subtree nodes per instance (1 to 2000, default 250)"
+          "description": "Maximum root/subtree nodes per instance (1 to 2000, default 250)",
+          "min": 1,
+          "max": 2000
         }
       ]
     },
@@ -17830,13 +17875,16 @@
           "name": "slotName",
           "type": "string",
           "required": true,
-          "description": "Logical save slot name, a plain filename without a path"
+          "description": "Logical save slot name, a plain filename without a path",
+          "minLength": 1,
+          "maxLength": 128
         },
         {
           "name": "userIndex",
           "type": "integer",
           "required": false,
-          "description": "Platform user index (default 0)"
+          "description": "Platform user index (default 0)",
+          "min": 0
         }
       ]
     },
@@ -20289,13 +20337,15 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to measure (default 0)"
+          "description": "LOD to measure (default 0)",
+          "min": 0
         },
         {
           "name": "sectionIndex",
           "type": "integer",
           "required": false,
-          "description": "One render section (omit to measure the whole LOD)"
+          "description": "One render section (omit to measure the whole LOD)",
+          "min": 0
         }
       ]
     },
@@ -20490,7 +20540,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD of each input to read when lodType names one (default 0)"
+          "description": "LOD of each input to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "fillHoles",
@@ -22918,7 +22969,9 @@
           "name": "expandDepth",
           "type": "integer",
           "required": false,
-          "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)"
+          "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)",
+          "min": 0,
+          "max": 5
         },
         {
           "name": "expandExternal",
@@ -22930,7 +22983,8 @@
           "name": "maxExpandedObjects",
           "type": "integer",
           "required": false,
-          "description": "Cap on expanded objects (default 64)"
+          "description": "Cap on expanded objects (default 64)",
+          "min": 1
         }
       ]
     },
@@ -23037,7 +23091,8 @@
           "name": "offset",
           "type": "integer",
           "required": false,
-          "description": "Row offset into the (filtered) node list"
+          "description": "Row offset into the (filtered) node list",
+          "min": 0
         },
         {
           "name": "limit",
@@ -23303,7 +23358,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": true,
-          "description": "Edit-session natural key from begin_control_rig_edit"
+          "description": "Edit-session natural key from begin_control_rig_edit",
+          "minLength": 1
         },
         {
           "name": "controlNames",
@@ -23573,7 +23629,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -23606,13 +23663,15 @@
           "name": "layerIndex",
           "type": "integer",
           "required": false,
-          "description": "Only this layer of the slot"
+          "description": "Only this layer of the slot",
+          "min": 0
         },
         {
           "name": "maxDepth",
           "type": "integer",
           "required": false,
-          "description": "How deep to describe nested stages and values (default 10)"
+          "description": "How deep to describe nested stages and values (default 10)",
+          "min": 1
         }
       ],
       "choices": [
@@ -23700,7 +23759,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -23957,7 +24017,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to target (default 0); not with allLods"
+          "description": "LOD to target (default 0); not with allLods",
+          "min": 0
         },
         {
           "name": "allLods",
@@ -23981,19 +24042,24 @@
           "type": "array",
           "required": true,
           "description": "Source MeshDescription vertex IDs to read (1-256)",
-          "items": "integer"
+          "items": "integer",
+          "min": 0,
+          "minItems": 1,
+          "maxItems": 256
         },
         {
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+          "description": "Source LOD (default 0); generated LODs without source geometry are refused",
+          "min": 0
         },
         {
           "name": "profileName",
           "type": "string",
           "required": false,
-          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
+          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile",
+          "minLength": 1
         }
       ]
     },
@@ -24170,7 +24236,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "channels",
@@ -25616,7 +25683,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -25649,7 +25717,8 @@
           "name": "layerIndex",
           "type": "integer",
           "required": false,
-          "description": "Material Designer layer index within the slot"
+          "description": "Material Designer layer index within the slot",
+          "min": 0
         },
         {
           "name": "layerName",
@@ -28351,7 +28420,8 @@
           "name": "offset",
           "type": "integer",
           "required": false,
-          "description": "Row offset, the older non-resumable form of paging"
+          "description": "Row offset, the older non-resumable form of paging",
+          "min": 0
         },
         {
           "name": "cursor",
@@ -28369,7 +28439,8 @@
           "name": "maxBlueprints",
           "type": "integer",
           "required": false,
-          "description": "Cap on Blueprints loaded (default 2000)"
+          "description": "Cap on Blueprints loaded (default 2000)",
+          "min": 1
         },
         {
           "name": "dumpToFile",
@@ -31727,7 +31798,8 @@
           "name": "layerIndex",
           "type": "integer",
           "required": false,
-          "description": "Material Designer layer index within the slot"
+          "description": "Material Designer layer index within the slot",
+          "min": 0
         },
         {
           "name": "layerName",
@@ -31769,7 +31841,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -32081,13 +32154,15 @@
               "name": "assetPath",
               "type": "string",
               "required": true,
-              "description": "StaticMesh or SkeletalMesh asset path"
+              "description": "StaticMesh or SkeletalMesh asset path",
+              "minLength": 1
             },
             {
               "name": "materialPath",
               "type": "string",
               "required": true,
-              "description": "Material to assign"
+              "description": "Material to assign",
+              "minLength": 1
             },
             {
               "name": "slotName",
@@ -32101,7 +32176,9 @@
               "required": false,
               "description": "Slot by index (default 0); refused when it disagrees with slotName"
             }
-          ]
+          ],
+          "minItems": 1,
+          "maxItems": 500
         },
         {
           "name": "save",
@@ -33813,7 +33890,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to target (default 0); not with allLods"
+          "description": "LOD to target (default 0); not with allLods",
+          "min": 0
         },
         {
           "name": "allLods",
@@ -33843,28 +33921,35 @@
               "name": "vertexIndex",
               "type": "integer",
               "required": true,
-              "description": "Source MeshDescription vertex ID"
+              "description": "Source MeshDescription vertex ID",
+              "min": 0
             },
             {
               "name": "influences",
               "type": "array",
               "required": true,
               "description": "1-64 entries of {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}",
-              "items": "object"
+              "items": "object",
+              "minItems": 1,
+              "maxItems": 64
             }
-          ]
+          ],
+          "minItems": 1,
+          "maxItems": 256
         },
         {
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+          "description": "Source LOD (default 0); generated LODs without source geometry are refused",
+          "min": 0
         },
         {
           "name": "profileName",
           "type": "string",
           "required": false,
-          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
+          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile",
+          "minLength": 1
         },
         {
           "name": "restoreRawWeights",
@@ -35034,7 +35119,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "op",
@@ -37029,7 +37115,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "channel",
@@ -37133,13 +37220,15 @@
           "name": "lodIndex",
           "type": "integer",
           "required": true,
-          "description": "Mesh LOD"
+          "description": "Mesh LOD",
+          "min": 0
         },
         {
           "name": "sectionIndex",
           "type": "integer",
           "required": true,
-          "description": "Render section to unbind"
+          "description": "Render section to unbind",
+          "min": 0
         },
         {
           "name": "clothingAsset",
@@ -37239,7 +37328,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "channel",

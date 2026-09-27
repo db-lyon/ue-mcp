@@ -98,8 +98,8 @@ void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows to return on this page (default 500, max 5000)")),
 	});
 	Registry.RegisterHandler(TEXT("inspect_save_game"), &InspectSaveGame, {
-		MCPParam::Required(TEXT("slotName"), EType::String, TEXT("Logical save slot name, a plain filename without a path")),
-		MCPParam::Optional(TEXT("userIndex"), EType::Integer, TEXT("Platform user index (default 0)")),
+		MCPParam::Required(TEXT("slotName"), EType::String, TEXT("Logical save slot name, a plain filename without a path")).NonEmpty().MaxLength(128),
+		MCPParam::Optional(TEXT("userIndex"), EType::Integer, TEXT("Platform user index (default 0)")).Min(0),
 	});
 	// T1: per-instance writable schema (ReflectionHandlers_Schema.cpp).
 	Registry.RegisterHandler(TEXT("reflect_instance"), &ReflectInstance, {

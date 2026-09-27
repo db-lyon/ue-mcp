@@ -242,7 +242,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "elements",
         "type": "array",
         "required": true,
-        "description": "Values to append, validated before any is written"
+        "description": "Values to append, validated before any is written",
+        "minItems": 1
       },
       {
         "name": "save",
@@ -382,7 +383,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to read when lodType names one (default 0)"
+        "description": "LOD to read when lodType names one (default 0)",
+        "min": 0
       },
       {
         "name": "save",
@@ -468,7 +470,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to read when lodType names one (default 0)"
+        "description": "LOD to read when lodType names one (default 0)",
+        "min": 0
       },
       {
         "name": "onConflict",
@@ -602,7 +605,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to read when lodType names one (default 0)"
+        "description": "LOD to read when lodType names one (default 0)",
+        "min": 0
       },
       {
         "name": "onConflict",
@@ -766,7 +770,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to read when lodType names one (default 0)"
+        "description": "LOD to read when lodType names one (default 0)",
+        "min": 0
       },
       {
         "name": "onConflict",
@@ -924,7 +929,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to read when lodType names one (default 0)"
+        "description": "LOD to read when lodType names one (default 0)",
+        "min": 0
       },
       {
         "name": "onConflict",
@@ -1127,13 +1133,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": true,
-        "description": "Mesh LOD"
+        "description": "Mesh LOD",
+        "min": 0
       },
       {
         "name": "sectionIndex",
         "type": "integer",
         "required": true,
-        "description": "Render section to bind"
+        "description": "Render section to bind",
+        "min": 0
       },
       {
         "name": "clothingAsset",
@@ -1145,7 +1153,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetLodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD inside the clothing asset (default: lodIndex, clamped)"
+        "description": "LOD inside the clothing asset (default: lodIndex, clamped)",
+        "min": 0
       }
     ]
   },
@@ -1314,7 +1323,9 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "Asset updates: [{assetPath, properties}], max 500",
-        "items": "object"
+        "items": "object",
+        "minItems": 1,
+        "maxItems": 500
       },
       {
         "name": "save",
@@ -1344,7 +1355,9 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "DataAsset descriptors: [{name, packagePath, className, properties?}], max 500",
-        "items": "object"
+        "items": "object",
+        "minItems": 1,
+        "maxItems": 500
       },
       {
         "name": "onConflict",
@@ -1382,7 +1395,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "Source LOD to act on (default 0)"
+        "description": "Source LOD to act on (default 0)",
+        "min": 0
       },
       {
         "name": "requireLightmapChannel",
@@ -1791,13 +1805,17 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "width",
         "type": "integer",
         "required": false,
-        "description": "Pixel width, 1-8192 (default 512)"
+        "description": "Pixel width, 1-8192 (default 512)",
+        "min": 1,
+        "max": 8192
       },
       {
         "name": "height",
         "type": "integer",
         "required": false,
-        "description": "Pixel height, 1-8192 (default 512)"
+        "description": "Pixel height, 1-8192 (default 512)",
+        "min": 1,
+        "max": 8192
       },
       {
         "name": "format",
@@ -1821,7 +1839,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "targetGamma",
         "type": "number",
         "required": false,
-        "description": "Target gamma (default 0, the engine behavior)"
+        "description": "Target gamma (default 0, the engine behavior)",
+        "min": 0
       },
       {
         "name": "onConflict",
@@ -2333,7 +2352,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "Source LOD to act on (default 0)"
+        "description": "Source LOD to act on (default 0)",
+        "min": 0
       },
       {
         "name": "channel",
@@ -2604,7 +2624,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "Source LOD to act on (default 0)"
+        "description": "Source LOD to act on (default 0)",
+        "min": 0
       },
       {
         "name": "enable",
@@ -2780,7 +2801,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to read when lodType names one (default 0)"
+        "description": "LOD to read when lodType names one (default 0)",
+        "min": 0
       },
       {
         "name": "save",
@@ -2860,7 +2882,9 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "expandDepth",
         "type": "integer",
         "required": false,
-        "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)"
+        "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)",
+        "min": 0,
+        "max": 5
       },
       {
         "name": "expandExternal",
@@ -2872,7 +2896,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "maxExpandedObjects",
         "type": "integer",
         "required": false,
-        "description": "Cap on expanded objects (default 64)"
+        "description": "Cap on expanded objects (default 64)",
+        "min": 1
       }
     ]
   },
@@ -2972,13 +2997,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to read (default 0)"
+        "description": "LOD to read (default 0)",
+        "min": 0
       },
       {
         "name": "sectionIndex",
         "type": "integer",
         "required": false,
-        "description": "One render section (omit for every section)"
+        "description": "One render section (omit for every section)",
+        "min": 0
       },
       {
         "name": "include",
@@ -2991,7 +3018,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "uvChannel",
         "type": "integer",
         "required": false,
-        "description": "UV channel to return (default 0)"
+        "description": "UV channel to return (default 0)",
+        "min": 0
       },
       {
         "name": "dumpToFile",
@@ -3519,7 +3547,9 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "Textures to import: [{filePath, packagePath?, name?, replaceExisting?}]",
-        "items": "object"
+        "items": "object",
+        "minItems": 1,
+        "maxItems": 500
       },
       {
         "name": "packagePath",
@@ -3745,13 +3775,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to measure (default 0)"
+        "description": "LOD to measure (default 0)",
+        "min": 0
       },
       {
         "name": "sectionIndex",
         "type": "integer",
         "required": false,
-        "description": "One render section (omit to measure the whole LOD)"
+        "description": "One render section (omit to measure the whole LOD)",
+        "min": 0
       }
     ]
   },
@@ -3850,7 +3882,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD of each input to read when lodType names one (default 0)"
+        "description": "LOD of each input to read when lodType names one (default 0)",
+        "min": 0
       },
       {
         "name": "fillHoles",
@@ -4064,7 +4097,9 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "expandDepth",
         "type": "integer",
         "required": false,
-        "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)"
+        "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)",
+        "min": 0,
+        "max": 5
       },
       {
         "name": "expandExternal",
@@ -4076,7 +4111,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "maxExpandedObjects",
         "type": "integer",
         "required": false,
-        "description": "Cap on expanded objects (default 64)"
+        "description": "Cap on expanded objects (default 64)",
+        "min": 1
       }
     ]
   },
@@ -4167,7 +4203,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to target (default 0); not with allLods"
+        "description": "LOD to target (default 0); not with allLods",
+        "min": 0
       },
       {
         "name": "allLods",
@@ -4191,19 +4228,24 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "Source MeshDescription vertex IDs to read (1-256)",
-        "items": "integer"
+        "items": "integer",
+        "min": 0,
+        "minItems": 1,
+        "maxItems": 256
       },
       {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+        "description": "Source LOD (default 0); generated LODs without source geometry are refused",
+        "min": 0
       },
       {
         "name": "profileName",
         "type": "string",
         "required": false,
-        "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
+        "description": "Existing skin-weight profile; omit or pass 'default' for the default profile",
+        "minLength": 1
       }
     ]
   },
@@ -4243,7 +4285,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "Source LOD to act on (default 0)"
+        "description": "Source LOD to act on (default 0)",
+        "min": 0
       },
       {
         "name": "channels",
@@ -4889,13 +4932,15 @@ export const handlerSpecs: HandlerSpecs = {
             "name": "assetPath",
             "type": "string",
             "required": true,
-            "description": "StaticMesh or SkeletalMesh asset path"
+            "description": "StaticMesh or SkeletalMesh asset path",
+            "minLength": 1
           },
           {
             "name": "materialPath",
             "type": "string",
             "required": true,
-            "description": "Material to assign"
+            "description": "Material to assign",
+            "minLength": 1
           },
           {
             "name": "slotName",
@@ -4909,7 +4954,9 @@ export const handlerSpecs: HandlerSpecs = {
             "required": false,
             "description": "Slot by index (default 0); refused when it disagrees with slotName"
           }
-        ]
+        ],
+        "minItems": 1,
+        "maxItems": 500
       },
       {
         "name": "save",
@@ -4994,7 +5041,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "LOD to target (default 0); not with allLods"
+        "description": "LOD to target (default 0); not with allLods",
+        "min": 0
       },
       {
         "name": "allLods",
@@ -5024,28 +5072,35 @@ export const handlerSpecs: HandlerSpecs = {
             "name": "vertexIndex",
             "type": "integer",
             "required": true,
-            "description": "Source MeshDescription vertex ID"
+            "description": "Source MeshDescription vertex ID",
+            "min": 0
           },
           {
             "name": "influences",
             "type": "array",
             "required": true,
             "description": "1-64 entries of {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}",
-            "items": "object"
+            "items": "object",
+            "minItems": 1,
+            "maxItems": 64
           }
-        ]
+        ],
+        "minItems": 1,
+        "maxItems": 256
       },
       {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+        "description": "Source LOD (default 0); generated LODs without source geometry are refused",
+        "min": 0
       },
       {
         "name": "profileName",
         "type": "string",
         "required": false,
-        "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
+        "description": "Existing skin-weight profile; omit or pass 'default' for the default profile",
+        "minLength": 1
       },
       {
         "name": "restoreRawWeights",
@@ -5193,7 +5248,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "Source LOD to act on (default 0)"
+        "description": "Source LOD to act on (default 0)",
+        "min": 0
       },
       {
         "name": "op",
@@ -5261,7 +5317,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "Source LOD to act on (default 0)"
+        "description": "Source LOD to act on (default 0)",
+        "min": 0
       },
       {
         "name": "channel",
@@ -5347,13 +5404,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": true,
-        "description": "Mesh LOD"
+        "description": "Mesh LOD",
+        "min": 0
       },
       {
         "name": "sectionIndex",
         "type": "integer",
         "required": true,
-        "description": "Render section to unbind"
+        "description": "Render section to unbind",
+        "min": 0
       },
       {
         "name": "clothingAsset",
@@ -5379,7 +5438,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "lodIndex",
         "type": "integer",
         "required": false,
-        "description": "Source LOD to act on (default 0)"
+        "description": "Source LOD to act on (default 0)",
+        "min": 0
       },
       {
         "name": "channel",
