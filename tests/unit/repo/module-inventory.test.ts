@@ -58,6 +58,7 @@ const PER_SESSION: Record<string, string> = {
   "index.ts": "Wires the registry, the per-session loads and the MCP server together.",
   "sessions/session-load.ts": "One tool graph, task registry and guard pipeline per editor, built from that editor's own project.",
   "runtime/runtime.ts": "The composition root: registers every editor, builds each one's load and guard, and holds the server-wide settings.",
+  "runtime/context-commands.ts": "Creates, chooses or moves the editor a call targets, outside the task registry.",
   "runtime/startup.ts": "Registers one editor per project argument and reports each by name.",
   "sessions/editor-facts.ts": "Cached facts about one editor, fetched through that editor's own bridge.",
   "config/project-config.ts": "One immutable config snapshot per project root, cached by that project's layer stamps.",

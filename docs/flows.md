@@ -157,6 +157,8 @@ Every MCP action is registered as a task using its `category.action` name. Some 
 | `editor.start_editor` | Launch the Unreal Editor |
 | `shell` | Run a shell command |
 
+Four project actions are not tasks: `project.set_project`, `project.add_editor`, `project.use_editor` and `project.drop_editor` change which editor calls run in, so the server runs them as context commands and a flow step naming one fails. Call them directly, before or after the flow.
+
 See the full list by running `flow(action="list")` (the bundled defaults are the universal layer, `universal/ue-mcp.universal.yml`, which every project config merges over).
 
 ### Task Types
@@ -919,6 +921,8 @@ abstract class UeMcpTask<TOpts = Record<string, unknown>> {
   protected logger: Logger;             // Scoped logger
 
   protected get bridge(): IBridge;      // Shortcut for this.ctx.bridge
+  protected get env(): TaskEnv;         // project, projectConfig, editor, facts, call, locks
+  static requires?: TaskRequirements;   // { editor?: true, project?: true }, checked before execute
 
   abstract get taskName(): string;      // Descriptive name for logging
   abstract execute(): Promise<TaskResult>;  // Your task logic

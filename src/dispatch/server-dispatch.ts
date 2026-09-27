@@ -40,6 +40,10 @@ import { hostNamespaces } from "../flow/condition.js";
 import { dialogGate } from "../flow/gates.js";
 import type { FlowDefinition, TaskDefinition } from "@db-lyon/flowkit";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
+import { isContextCommand, runContextCommand } from "../runtime/context-commands.js";
+import { actionPreparation } from "../flow/run-action.js";
+import type { CallPreparation } from "./call-pipeline.js";
+import { MICRO_GATEWAY_TOOL, resolveMicroCall } from "../surface/context/micro-context.js";
 
 type TextBlock = { type: "text"; text: string };
 
@@ -216,6 +220,31 @@ function liveDefinitions(
 }
 
 /**
+ * The options and category preparation a context command reads, seen past
+ * the micro gateway, whose arguments are checked against the category's
+ * shape exactly as the gateway task would check them.
+ */
+function contextCommandCall(
+  tool: ToolDef,
+  params: Record<string, unknown>,
+  taskName: string,
+  ctx: ToolContext,
+): { options: Record<string, unknown>; prep: CallPreparation } {
+  const dot = taskName.indexOf(".");
+  const category = taskName.slice(0, dot);
+  const action = taskName.slice(dot + 1);
+  let home = tool;
+  let options = stripAction(params);
+  if (tool.name === MICRO_GATEWAY_TOOL) {
+    const graph = ctx.getToolGraph?.() ?? [];
+    options = resolveMicroCall(graph, params).params;
+    home = graph.find((t) => t.name === category) ?? tool;
+  }
+  const spec = home.actions[action];
+  return { options, prep: spec ? actionPreparation(home.options, action, spec) : { action } };
+}
+
+/**
  * One call to a category tool (or the micro gateway). `envelope` says the
  * tool is advertised as `action` + `args`, so the flat shape is validated here
  * rather than by the SDK.
@@ -277,6 +306,30 @@ export async function dispatchCategoryCall(
   // One lock scope per call: every action it runs, the action's own children
   // included, locks into it, and it is released when the call returns.
   flowCtx.assetLocks = flowCtx.openAssetLocks?.(flowCtx);
+
+  // A context command creates, chooses or moves an editor. The runtime runs
+  // it, outside the task registry, so it never needs the session's load.
+  const command = isContextCommand(effectiveTask);
+  if (command) {
+    const served = attribution(sessions, session);
+    try {
+      const commandCall = contextCommandCall(tool, params, subject.taskName, flowCtx);
+      const result = await runContextCommand(flowCtx, subject.taskName, commandCall.options, commandCall.prep);
+      if (!result.success && !isDialogRefusal(result.data)) {
+        const msg = result.error?.message ?? `Task ${taskName} failed`;
+        return errorResult("TASK_FAILED", msg, served, result.error);
+      }
+      if (!result.success) return refusalResult(result.data, served);
+      const text = typeof result.data === "string" ? result.data : JSON.stringify(result.data, null, 2);
+      return { content: withUpgradeNotice([{ type: "text" as const, text }, ...served]) };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const code = e instanceof McpError ? e.code : "UNKNOWN";
+      return errorResult(code, msg, served, e);
+    } finally {
+      await flowCtx.assetLocks?.releaseAll();
+    }
+  }
 
   // The addressed session's own registry, built on demand rather than falling
   // back to the first project's (D1). A call for an action this session does

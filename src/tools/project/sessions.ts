@@ -1,39 +1,25 @@
 import { checkPluginFreshness, type PluginFreshness } from "../../editor/bridge-freshness.js";
 import { deployedPlugin, type BridgeParity } from "../../bridge/bridge-parity.js";
 import * as fs from "node:fs";
-import { deploy, deploySummary, attach, attachSummary } from "../../editor/deployer.js";
-import { collapsingEnvWarnings } from "../../config/session-env.js";
-import { startEditor, isBridgeReachable, connectedEditorOf } from "../../editor/editor-control.js";
+import { isBridgeReachable, connectedEditorOf } from "../../editor/editor-control.js";
 import type { ProjectHolders } from "../../editor/project-holders.js";
 import { readDeployedBridgeApiVersion } from "../../extensions/bridge-api.js";
 import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch, type BridgeCapabilities, type BridgeTarget } from "../../bridge/bridge.js";
 import { readLogState, readEngineSnapshot } from "../../editor/engine-observer.js";
-import { switchProject, isTargetDiverged } from "../../sessions/project-switch.js";
+import { isTargetDiverged } from "../../sessions/project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../config/project.js";
-import type { ToolContext, ActionSpec, FlowActionSpec } from "../../core/types.js";
+import type { ActionSpec, FlowActionSpec } from "../../core/types.js";
 import { STATUS_PART_PREFIX } from "./status-parts.js";
-import { startProgress } from "../../cli/ui/progress.js";
+import {
+  addEditorCommand,
+  dropEditorCommand,
+  envWarningsFor,
+  setProjectCommand,
+  useEditorCommand,
+} from "../../runtime/context-commands.js";
 
-/**
- * The environment variables flattening every registered editor into one, right
- * now.
- *
- * `collapsingEnvWarnings` is answered from the session set, and the session set
- * is not fixed. index.ts computes it once over the projects named on the
- * command line, where the list is empty by design at one editor - and
- * `add_editor` is the only runtime path to a second one, so a server that
- * started single and grew had asked the question exactly once, at the moment
- * the answer was guaranteed to be "nothing to say".
- *
- * Asking again wherever the set is read or changed is the fix. Undefined
- * rather than an empty array when there is nothing to report, so a
- * single-editor response is byte-identical to what it always was.
- */
-export function envWarningsFor(ctx: ToolContext): string[] | undefined {
-  if (!ctx.sessions) return undefined;
-  const lines = collapsingEnvWarnings(ctx.sessions.list().map((s) => s.name));
-  return lines.length > 0 ? lines : undefined;
-}
+// The context commands run outside the task registry; see runtime/context-commands.ts.
+export { envWarningsFor };
 
 /** What get_status is reduced from: its parts, and the reads of its own context. */
 interface StatusParts {
@@ -201,62 +187,7 @@ export const sessionActions: Record<string, ActionSpec> = {
     effect: "mutate",
     options: { params: ["projectPath"] },
     description: "Switch project: moves both path resolution and the editor connection to the new .uproject. Params: projectPath",
-    handler: async (ctx, p) => {
-      const projectPath = p.projectPath as string;
-      if (!projectPath) throw new Error("Missing 'projectPath'");
-
-      // #817: with several editors registered, switching this session onto a
-      // project another session already holds would leave two sessions
-      // pointed at one editor. Name the one that already has it instead.
-      const existing = ctx.sessions?.find(projectPath);
-      if (existing && existing !== ctx.session) {
-        throw new Error(
-          `'${existing.name}' is already registered for that project. ` +
-            `Use project(action='use_editor', editorTarget='${existing.name}') to switch to it.`,
-        );
-      }
-
-      // switchProject moves the bridge and the path resolver together (#818).
-      // Doing it here by hand is what left the socket on the previous
-      // project's editor while every path resolved against the new one.
-      const switched = await switchProject(ctx.project, ctx.bridge, projectPath);
-      // Sessions are keyed by project root, so the key has to move with the
-      // project. Without this the session stays addressable only under the
-      // project it just left.
-      const editor = ctx.sessions && ctx.session ? ctx.sessions.rekey(ctx.session) : undefined;
-      // The flows, task overrides, plugins and guards belong to the project
-      // too, so they move with it.
-      if (ctx.sessions && ctx.session) {
-        try {
-          await ctx.sessions.reload(ctx.session);
-        } catch (e) {
-          throw new Error(
-            `Switched to ${ctx.project.projectName} but could not build its tool surface, so nothing is dispatched to it: ` +
-              `${e instanceof Error ? e.message : String(e)}. Fix that project's ue-mcp.yml and call set_project again.`,
-          );
-        }
-      }
-      const result = deploy(ctx.project);
-      return {
-        success: true,
-        editor: editor?.name,
-        projectName: ctx.project.projectName,
-        contentDir: ctx.project.contentDir,
-        engineAssociation: ctx.project.engineAssociation,
-        previousProject: switched.previousProjectPath ?? undefined,
-        editorConnected: switched.connected,
-        // The editor this connection belongs to. Always the project above.
-        editorTarget: {
-          projectPath: switched.target.projectPath,
-          port: switched.target.port,
-          portSource: switched.target.portSource,
-        },
-        // Present when no editor answered: the switch still completed, and
-        // nothing can reach the previous project's editor any more.
-        editorUnreachable: switched.connectError,
-        bridgeSetup: deploySummary(result),
-      };
-    },
+    handler: setProjectCommand,
   },
   list_editors: {
     kind: "handler",
@@ -315,112 +246,21 @@ export const sessionActions: Record<string, ActionSpec> = {
     effect: "mutate",
     options: { params: ["editorTarget"] },
     description: "Make one editor session the default target for untargeted calls. Does not change the session set and never touches any editor process. Params: editorTarget (session name, project name, or .uproject path) (#817)",
-    handler: async (ctx, p) => {
-      if (!ctx.sessions) throw new Error("This server drives one editor; there is nothing to switch between.");
-      const target = p.editorTarget as string;
-      if (!target) throw new Error("Missing 'editorTarget'");
-      const session = ctx.sessions.use(target);
-      return {
-        success: true,
-        activeEditor: session.name,
-        projectPath: session.project.projectPath,
-        bridgePort: session.bridge.port,
-        editorConnected: session.bridge.isConnected,
-      };
-    },
+    handler: useEditorCommand,
   },
   add_editor: {
     kind: "handler",
     effect: "mutate",
     options: { params: ["projectPath", "editorName?", "start?", "timeout?"] },
     description: "Register another project as an addressable editor session, with its own bridge connection and port. Optionally launch its editor. Every category then accepts editor=\"<name>\" to run a call there. Params: projectPath, editorName? (defaults to the project name), start? (launch the editor and wait for it to be ready), timeout? (seconds, default 300) (#817)",
-    handler: async (ctx, p) => {
-      if (!ctx.sessions) throw new Error("This server was built without a session registry.");
-      const projectPath = p.projectPath as string;
-      if (!projectPath) throw new Error("Missing 'projectPath'");
-      const before = ctx.sessions.size;
-      const session = ctx.sessions.register({
-        projectPath,
-        name: typeof p.editorName === "string" && p.editorName ? p.editorName : undefined,
-      });
-      const alreadyRegistered = ctx.sessions.size === before;
-
-      // D1: build this editor's own tool graph, plugins, task registry and
-      // guards BEFORE it is addressable. Without it every per-session lookup
-      // missed and fell back to the first project's load, so a call or a
-      // flow targeted at this editor ran the FIRST project's steps inside it.
-      // A failure here is reported rather than swallowed: an editor that
-      // cannot be given its own surface must not borrow another's.
-      try {
-        await ctx.sessions.prepare(session);
-      } catch (e) {
-        throw new Error(
-          `Registered '${session.name}' but could not build its tool surface, so it is not safe to dispatch to: ` +
-            `${e instanceof Error ? e.message : String(e)}. ` +
-            `Drop it with project(action='drop_editor', editorTarget='${session.name}') and check that project's ue-mcp.yml.`,
-        );
-      }
-
-      const attachResult = attach(session.project);
-      let started: unknown;
-      if (p.start === true) {
-        const timeout = typeof p.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
-        started = await startEditor(session.project, timeout, ctx.onProgress, { openDisplay: startProgress });
-      }
-      try { await session.bridge.connect(); } catch { /* editor may not be running yet */ }
-
-      // Same lines the startup path prints, on the same stream, because the
-      // person watching the console is the one who exported the variable.
-      const envWarnings = envWarningsFor(ctx);
-      for (const line of envWarnings ?? []) console.error(`[ue-mcp] ${line}`);
-
-      return {
-        success: true,
-        editor: session.name,
-        alreadyRegistered: alreadyRegistered || undefined,
-        projectName: session.project.projectName,
-        projectPath: session.project.projectPath,
-        bridgePort: session.bridge.port,
-        editorConnected: session.bridge.isConnected,
-        bridgeSetup: attachSummary(attachResult),
-        started,
-        editorCount: ctx.sessions.size,
-        // The env vars that flatten every editor into one are reported at
-        // startup from the startup session set, and at one editor there is
-        // nothing to report - so a server that started on one project and
-        // grew to two here had never said anything and never would.
-        //
-        // That is the whole failure: `UE_MCP_TEST_ENGINE_ROOT` exported for
-        // the first project decides the engine tree for THIS one too, ahead
-        // of its own editor.path, so a 5.6 project launches and builds
-        // against a 5.8 engine and the only symptom is a build that should
-        // not have worked. The list is a function of the session set, and
-        // this call is the one that changes it, so it is recomputed here and
-        // said out loud on the same response that created the second editor.
-        envWarnings,
-        hint: `Call any action with editor="${session.name}" to run it there, or project(action="use_editor", editorTarget="${session.name}") to make it the default.`,
-      };
-    },
+    handler: addEditorCommand,
   },
   drop_editor: {
     kind: "handler",
     effect: "mutate",
     options: { params: ["editorTarget"] },
     description: "Forget an editor session and close its bridge socket. The editor process is LEFT RUNNING and untouched - this detaches, it does not stop anything (use editor(stop_editor) for that). Params: editorTarget (#817)",
-    handler: async (ctx, p) => {
-      if (!ctx.sessions) throw new Error("This server drives one editor; there is nothing to drop.");
-      const target = p.editorTarget as string;
-      if (!target) throw new Error("Missing 'editorTarget'");
-      const dropped = ctx.sessions.drop(target);
-      return {
-        success: true,
-        dropped: dropped.name,
-        projectPath: dropped.projectPath,
-        editorLeftRunning: true,
-        activeEditor: ctx.sessions.active.name,
-        editorCount: ctx.sessions.size,
-      };
-    },
+    handler: dropEditorCommand,
   },
   get_info: {
     kind: "handler",
