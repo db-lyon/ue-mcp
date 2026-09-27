@@ -188,6 +188,7 @@ export const assetTool: ToolDef = categoryTool(
         ...borrowSchema(specSchema, ["query", "directory", "maxResults", "limit", "cursor"]),
         searchAll: SEARCH_ALL,
       },
+      options: { params: ["query", "directory?", "maxResults?", "searchAll?", "cursor?", "limit?"] },
       // Opaque: how many roots are searched depends on what each one returns.
       expand: () => null,
       compose: async (run, p, ctx) => {

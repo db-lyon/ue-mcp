@@ -54,11 +54,9 @@ export const PAGINATION_PARAM_NAMES = ["cursor", "limit"] as const;
  *
  * An action whose clause is `Params: none` ends up with `none, cursor?,
  * limit?`, which reads oddly but says the truth: the action has no parameters
- * of its own and two for paging. The reader that matters is
- * `parseParams()`, which treats `none` as a sentinel and carries on through
- * the rest of the clause rather than stopping at it - stopping is what once
- * hid the paging parameters of every action in this shape, leaving page two
- * unreachable from the advertised schema.
+ * of its own and two for paging. An agent reading the description treats
+ * `none` as a sentinel and carries on through the rest of the clause, and the
+ * tests' clause reader (tests/helpers/params-clause.ts) does the same.
  */
 export function paged(description: string): string {
   const marker = /\bParams:/.exec(description);

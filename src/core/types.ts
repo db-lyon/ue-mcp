@@ -404,6 +404,8 @@ export interface FlowActionSpec<C = unknown> extends ActionSpecBase {
   kind: "flow";
   /** Declared inputs. Rendered into the category schema under any key it does not already declare. */
   inputs: Record<string, z.ZodType>;
+  /** Which inputs are required and which choices it offers, as on a handler. Unused when `paramSpec` is set. */
+  options?: HandlerOptions;
   compose: (run: ChildRun, input: Record<string, unknown>, ctx: ToolContext) => Promise<C>;
   result: (collected: C, input: Record<string, unknown>) => unknown;
   expand?: (input: Record<string, unknown>) => Array<{ task: string; options?: Record<string, unknown> } | { flow: string; options?: Record<string, unknown> }> | null;

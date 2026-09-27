@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseParams } from "../../src/surface/action-schema.js";
+import { parseParams } from "../helpers/params-clause.js";
 import { pcgTool } from "../../src/tools/pcg.js";
 import { handlerSpecs } from "../../src/tools/specs/pcg.generated.js";
 

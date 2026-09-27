@@ -13,12 +13,10 @@ function mixedTool(): ToolDef {
     "mixed",
     "A category with local and wrapped actions.",
     {
-      keep: bp(
-        "read",
-        "Keep the local action. Params: retained, shared",
-        "keep",
-        (p) => ({ retained: p.retained, shared: p.shared }),
-      ),
+      keep: {
+        ...bp("read", "Keep the local action.", "keep", (p) => ({ retained: p.retained, shared: p.shared })),
+        paramSpec: ["retained", "shared"].map((name) => ({ name, type: "string" as const, required: true, description: "" })),
+      },
       epic_drop: bp(
         "read",
         "Remove the wrapped action. Params: nativeOnly, shared",

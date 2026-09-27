@@ -29,11 +29,11 @@ import {
   forwardedParams,
   nearestActions,
   unknownActionMessage,
-  parseParams,
   resolveActionRef,
   similarity,
   suggestActions,
 } from "../../src/surface/action-schema.js";
+import { parseParams } from "../helpers/params-clause.js";
 
 const surfaceSchemas = () => ALL_TOOLS.flatMap((tool) => Object.keys(tool.actions).map((action) => actionSchema(tool, action)));
 
@@ -50,6 +50,21 @@ describe("action parameter schema", () => {
         + "call still reports success. Declare it in the category's extraSchema, or\n"
         + "stop documenting/reading it:\n  " + offenders.join("\n  "),
     ).toEqual([]);
+  });
+
+  // describe_action never reads a description, so an action with nothing declared would document nothing.
+  it("declares every built-in action's parameters in structured form", () => {
+    const offenders: string[] = [];
+    for (const tool of ALL_TOOLS) {
+      for (const [name, spec] of Object.entries(tool.actions)) {
+        const declared = spec.kind === "handler" ? !!spec.options
+          : spec.kind === "flow" ? !!(spec.paramSpec || spec.options)
+          : spec.kind === "bridge" ? !!(spec.paramSpec || spec.epicSchema)
+          : false;
+        if (!declared) offenders.push(`${tool.name}.${name} (${spec.kind})`);
+      }
+    }
+    expect(offenders, "Declare options (or a C++ spec) on:\n  " + offenders.join("\n  ")).toEqual([]);
   });
 
   // ROUTING_PARAMS exempts `action` from the drift check above, which is also
@@ -403,18 +418,28 @@ describe("forwardedParams", () => {
 });
 
 describe("actionSchema", () => {
-  it("still reads an alias in a hand-written clause as a choice", () => {
+  it("reads a choice from declared options, never from the description", () => {
     const tool = categoryTool("example", "Example", {
-      pick: bp("read", "Pick. Params: actorLabel (or actorPath)", "pick"),
+      pick: {
+        kind: "handler", effect: "read",
+        options: { params: ["actorLabel", "actorPath"], choices: [{ branches: [["actorLabel"], ["actorPath"]], required: true }] },
+        description: "Pick. Params: actorLabel, actorPath, ghost",
+        handler: async () => ({}),
+      },
+      prose: bp("read", "Prose only. Params: actorLabel (or actorPath)", "prose"),
     }, { actorLabel: z.string().optional(), actorPath: z.string().optional() });
     const schema = actionSchema(tool, "pick");
     expect(schema.alternatives).toEqual([{ branches: [["actorLabel"], ["actorPath"]], required: true }]);
-    expect(schema.params.every((p) => p.aliases === undefined)).toBe(true);
+    expect(schema.params.map((p) => p.name)).not.toContain("ghost");
+    expect(schema.drift).toEqual([]);
+    const prose = actionSchema(tool, "prose");
+    expect(prose.alternatives).toBeUndefined();
+    expect(prose.params.filter((p) => p.sources.includes("documented"))).toEqual([]);
   });
 
   it("preserves nested fields, array items, enums, defaults and required nullable values", () => {
     const tool = categoryTool("example", "Example", {
-      inspect: bp("read", "Inspect. Params: request", "inspect"),
+      inspect: { kind: "handler", effect: "read", options: { params: ["request"] }, description: "Inspect.", handler: async () => ({}) },
     }, {
       request: z.object({
         targets: z.array(z.object({
@@ -437,7 +462,9 @@ describe("actionSchema", () => {
   it("bounds nested discovery and explicitly marks omitted detail", () => {
     let nested: z.ZodTypeAny = z.string();
     for (let i = 0; i < 10; i++) nested = z.object({ child: nested });
-    const tool = categoryTool("example", "Example", { inspect: bp("read", "Inspect. Params: request", "inspect") }, { request: nested });
+    const tool = categoryTool("example", "Example", {
+      inspect: { kind: "handler", effect: "read", options: { params: ["request"] }, description: "Inspect.", handler: async () => ({}) },
+    }, { request: nested });
     let result = actionSchema(tool, "inspect").params.find((p) => p.name === "request")!;
     for (let i = 0; i < 6; i++) result = result.properties!.child as typeof result;
     expect(result.truncated).toBe(true);

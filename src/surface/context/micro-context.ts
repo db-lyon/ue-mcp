@@ -100,6 +100,7 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
     search: {
       kind: "handler",
       effect: "read",
+      options: { params: ["query", "limit?"] },
       description: "Find actions by keyword or intent; returns category.signature lines. Params: query, limit? (default 20)",
       handler: async (_ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
@@ -112,6 +113,7 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
     list_categories: {
       kind: "handler",
       effect: "read",
+      options: { params: [] },
       description: "List every category with a one-line summary.",
       handler: async () => ({
         count: summaries.length,
@@ -122,6 +124,7 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
     describe: {
       kind: "handler",
       effect: "read",
+      options: { params: ["category", "method?", "offset?"] },
       description: "A category's action signatures a page at a time, or one action's parameter schema. Params: category, method?, offset?",
       handler: async (_ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
@@ -136,6 +139,7 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
     call: {
       kind: "handler",
       effect: "unknown",
+      options: { params: ["category", "method", "args"] },
       description: "Invoke any action. Params: category, method (the action name), args (object of the action's params).",
       handler: async (ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
