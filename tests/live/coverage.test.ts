@@ -14,11 +14,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MATRIX_CASES, SINGLE_EDITOR_CHANGES, type CoverageRef, type MatrixCase } from "./matrix.js";
+import { MATRIX_CASES, RELEASE_GATES, SINGLE_EDITOR_CHANGES, type CoverageRef, type MatrixCase } from "./matrix.js";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-const ALL_CASES: MatrixCase[] = [...MATRIX_CASES, ...SINGLE_EDITOR_CHANGES];
+const ALL_CASES: MatrixCase[] = [...MATRIX_CASES, ...SINGLE_EDITOR_CHANGES, ...RELEASE_GATES];
 
 function read(file: string): string {
   return fs.readFileSync(path.join(REPO_ROOT, file), "utf-8");
