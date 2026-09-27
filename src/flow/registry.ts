@@ -10,7 +10,7 @@ import type {
 } from "@db-lyon/flowkit";
 import type { ToolDef } from "../core/types.js";
 import type { FlowContext } from "./context.js";
-import { BridgeTask } from "./bridge-task.js";
+import { BridgeTask, ReconnectTask } from "./bridge-task.js";
 import { bridgeTaskClass, compositeTaskClass, handlerTaskClass } from "./task-factory.js";
 import { actionPreparation } from "./run-action.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../surface/context/micro-context.js";
@@ -109,6 +109,7 @@ export function buildFlowRegistry(tools: ToolDef[]): DescribedTaskRegistry {
 
   // Register built-in task class paths
   registry.registerClassPath("ue-mcp.bridge", BridgeTask as unknown as TaskConstructor);
+  registry.registerClassPath("ue-mcp.reconnect", ReconnectTask as unknown as TaskConstructor);
   registry.register("shell", ShellTask as unknown as TaskConstructor);
 
   for (const tool of tools) {

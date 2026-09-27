@@ -42,7 +42,7 @@ vi.mock("../../../src/editor/engine-observer.js", async (importOriginal) => {
 });
 
 const observer = await import("../../../src/editor/engine-observer.js");
-const { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../../src/editor/editor-control.js");
+const { startEditor, stopEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../../src/editor/editor-control.js");
 const { bridgeLockfilePath } = await import("../../../src/bridge/editor-target.js");
 const { ProjectContext } = await import("../../../src/config/project.js");
 
@@ -287,16 +287,9 @@ describe("connectedEditorOf", () => {
   });
 });
 
-describe("start and restart without a loaded project", () => {
+describe("start without a loaded project", () => {
   it("startEditor asks for a project instead of scanning the machine", async () => {
     const result = await startEditor(new ProjectContext());
-    expect(result.success).toBe(false);
-    expect(result.message).toContain("set_project");
-    expect(findInteractiveEditors).not.toHaveBeenCalled();
-  });
-
-  it("restartEditor asks for a project instead of scanning the machine", async () => {
-    const result = await restartEditor(new ProjectContext());
     expect(result.success).toBe(false);
     expect(result.message).toContain("set_project");
     expect(findInteractiveEditors).not.toHaveBeenCalled();

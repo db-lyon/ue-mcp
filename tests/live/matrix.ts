@@ -331,8 +331,8 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
     coverage: [
       {
         kind: "engine-free",
-        file: "tests/unit/editor/editor-lifecycle-target.test.ts",
-        title: "restartEditor asks for a project instead of scanning the machine",
+        file: "tests/unit/tools/editor-restart-parity.test.ts",
+        title: "aborts when the stop fails and an interactive editor of this project is still up",
       },
       {
         kind: "cpp",
