@@ -155,70 +155,24 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialFunctionExpressions(con
 	FString FunctionPath;
 	if (auto Err = RequireString(Params, TEXT("functionPath"), FunctionPath)) return Err;
 
-	// Every parameter is read before anything can fail (#1057). An expression
-	// is named or indexed, so each reference keeps both readings.
-	struct FExpressionRef
-	{
-		bool bHasIndex = false;
-		int32 Index = -1;
-		bool bHasName = false;
-		FString Name;
-	};
-	auto ReadRef = [&Params](const TCHAR* Key) -> FExpressionRef
-	{
-		FExpressionRef Ref;
-		Ref.bHasIndex = TryGetNumberParam(Params, Key, Ref.Index);
-		if (!Ref.bHasIndex) Ref.bHasName = TryGetStringParam(Params, Key, Ref.Name);
-		return Ref;
-	};
-	const FExpressionRef SourceRef = ReadRef(TEXT("sourceExpression"));
-	const FExpressionRef TargetRef = ReadRef(TEXT("targetExpression"));
+	// Every parameter is read before anything can fail (#1057). A reference is
+	// resolved by the rule connect_material_expressions uses; a JSON number
+	// arrives as its text and resolves as an index.
+	FString SourceName;
+	const TSharedPtr<FJsonValue> SourceErr = RequireString(Params, TEXT("sourceExpression"), SourceName);
+	FString TargetName;
+	const TSharedPtr<FJsonValue> TargetErr = RequireString(Params, TEXT("targetExpression"), TargetName);
 	const FString SourceOutput = OptionalString(Params, TEXT("sourceOutput"));
 	const FString TargetInput = OptionalString(Params, TEXT("targetInput"));
+	if (SourceErr) return SourceErr;
+	if (TargetErr) return TargetErr;
 
 	REQUIRE_ASSET(UMaterialFunction, MF, FunctionPath);
 
-	auto ResolveExpr = [&](const FExpressionRef& Ref) -> UMaterialExpression*
-	{
-		// Numeric index?
-		if (Ref.bHasIndex)
-		{
-			const int32 Idx = Ref.Index;
-			if (Idx >= 0 && Idx < MF->GetExpressions().Num()) return MF->GetExpressions()[Idx];
-			return nullptr;
-		}
-		if (Ref.bHasName)
-		{
-			const FString& Str = Ref.Name;
-			// FunctionInput/Output exposes InputName/OutputName; everything else uses Desc.
-			for (UMaterialExpression* Expr : MF->GetExpressions())
-			{
-				if (!Expr) continue;
-				if (Expr->Desc == Str) return Expr;
-				if (Expr->GetName() == Str) return Expr;
-				if (UMaterialExpressionFunctionInput* In = Cast<UMaterialExpressionFunctionInput>(Expr))
-				{
-					if (In->InputName.ToString() == Str) return Expr;
-				}
-				if (UMaterialExpressionFunctionOutput* Out = Cast<UMaterialExpressionFunctionOutput>(Expr))
-				{
-					if (Out->OutputName.ToString() == Str) return Expr;
-				}
-			}
-			// Numeric in string form
-			int32 ParsedIdx = FCString::Atoi(*Str);
-			if (ParsedIdx >= 0 && ParsedIdx < MF->GetExpressions().Num() && Str.IsNumeric())
-			{
-				return MF->GetExpressions()[ParsedIdx];
-			}
-		}
-		return nullptr;
-	};
-
-	UMaterialExpression* From = ResolveExpr(SourceRef);
-	UMaterialExpression* To = ResolveExpr(TargetRef);
-	if (!From) return MCPError(TEXT("sourceExpression not found in function"));
-	if (!To) return MCPError(TEXT("targetExpression not found in function"));
+	UMaterialExpression* From = FindExpressionInList(MF->GetExpressions(), SourceName);
+	UMaterialExpression* To = FindExpressionInList(MF->GetExpressions(), TargetName);
+	if (!From) return MCPError(FString::Printf(TEXT("sourceExpression not found in function: '%s'"), *SourceName));
+	if (!To) return MCPError(FString::Printf(TEXT("targetExpression not found in function: '%s'"), *TargetName));
 
 	// Snapshot every input on the target BEFORE the write, then diff after it.
 	// The engine decides which pin a targetInput name lands on, and guessing at
