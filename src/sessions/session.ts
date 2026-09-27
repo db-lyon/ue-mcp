@@ -32,6 +32,11 @@ import { newLockOwnerId } from "../dispatch/lock-owner.js";
 import { withoutDialogActuation } from "../editor/dialog-guard.js";
 import { projectDirOf } from "../config/uproject-path.js";
 import type { ToolDef } from "../core/types.js";
+import type { DialogGuard } from "../editor/dialog-guard.js";
+import type { SessionLoad } from "./session-load.js";
+import type { WorkaroundEntry } from "../dispatch/workaround-tracker.js";
+import type { ProjectConfig } from "../config/project-config.js";
+import { EditorFacts } from "./editor-facts.js";
 
 /** Key used for the session that has no project bound. */
 export const DEFAULT_SESSION_KEY = "";
@@ -61,7 +66,13 @@ export function sessionKeyFor(projectPathOrDir: string): string {
   return normalizeProjectRoot(projectDirOf(projectPathOrDir));
 }
 
-export class EditorSession {
+/**
+ * One live editor target and everything that belongs to it: the bridge and
+ * its guarded view, the dialog guard, the lock owner, the load, the facts and
+ * the per-editor memory of the Python gate and workaround tracker. Nothing
+ * per editor lives in a module-level map.
+ */
+export class EditorHandle {
   /** Raw bridge: connection lifecycle, port, lockfile. */
   readonly bridge: EditorBridge;
   /** What tools and tasks see - the guard pipeline wrapped around `bridge`. */
@@ -83,6 +94,18 @@ export class EditorSession {
    * and outside the server, where the pristine declaration answers.
    */
   toolGraph?: readonly ToolDef[];
+  /** This editor's dialog guard; see editor/dialog-guard.ts, which creates and keeps it. */
+  dialogGuard?: DialogGuard;
+  /** This editor's tool graph, registry and guards, once built; see session-load.ts. */
+  load?: SessionLoad;
+  /** A load being built, shared by callers racing on it. */
+  loadPending?: Promise<SessionLoad>;
+  /** execute_python calls made in this editor, for feedback(submit) (#817, 6.4). */
+  readonly workarounds: WorkaroundEntry[] = [];
+  /** execute_python gate rulings this editor has accepted, oldest first. */
+  readonly pythonRulings = new Map<string, string>();
+  /** Cached facts about the editor, invalidated on the events that move them. */
+  readonly facts: EditorFacts;
 
   constructor(
     public name: string,
@@ -112,10 +135,22 @@ export class EditorSession {
       makeResolveExistingFile(this.project),
       this,
     );
+    const handle = this;
+    this.facts = new EditorFacts({
+      bridge: this.bridge,
+      call: (method, params) => this.guarded.call(method, params),
+      project: this.project,
+      get toolGraph() { return handle.toolGraph; },
+    });
   }
 
   get projectDir(): string | null {
     return this.project.projectDir;
+  }
+
+  /** The project's config snapshot. Replaced when set_project moves the project. */
+  get projectConfig(): ProjectConfig | null {
+    return this.project.projectConfig;
   }
 
 
@@ -131,6 +166,10 @@ export class EditorSession {
     };
   }
 }
+
+/** The name the rest of the server and the public guard API know an editor handle by. */
+export const EditorSession = EditorHandle;
+export type EditorSession = EditorHandle;
 
 export interface RegisterSessionInput {
   /** .uproject file or the directory holding one. Omit for the project-less default session. */
@@ -221,7 +260,7 @@ export class SessionRegistry {
     }
 
     const name = this.uniqueName(input.name ?? project.projectName ?? DEFAULT_SESSION_NAME);
-    const session = new EditorSession(name, key, project, this.guardsForNewSession());
+    const session = new EditorHandle(name, key, project, this.guardsForNewSession());
     this.byKey.set(key, session);
     if (input.makeActive || this.activeKey === null) this.activeKey = key;
     this.noteSharedPorts(session);

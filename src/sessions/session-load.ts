@@ -145,8 +145,8 @@ export function toPluginInfo(rec: PluginRecord, project: ProjectContext): Plugin
  * is refused by every reader rather than answered from the first project.
  */
 export class SessionLoads {
-  private readonly perSession = new Map<EditorSession, SessionLoad>();
-  private readonly pending = new Map<EditorSession, Promise<SessionLoad>>();
+  /** The editors this set has loaded, in load order. Each load lives on its handle. */
+  private readonly loaded = new Set<EditorSession>();
   /** Every session's surface, in the order the loads were built. */
   readonly surfaces: SessionSurface[] = [];
   /**
@@ -165,11 +165,11 @@ export class SessionLoads {
   ) {}
 
   get(session: EditorSession): SessionLoad | undefined {
-    return this.perSession.get(session);
+    return this.loaded.has(session) ? session.load : undefined;
   }
 
   all(): SessionLoad[] {
-    return [...this.perSession.values()];
+    return [...this.loaded].map((s) => s.load).filter((l): l is SessionLoad => l !== undefined);
   }
 
   /** Build a session's surface during startup. Registry and guards come later. */
@@ -195,9 +195,9 @@ export class SessionLoads {
    * entry, and every reader refuses instead of substituting another project's.
    */
   ensure(session: EditorSession): Promise<SessionLoad> {
-    const existing = this.perSession.get(session);
+    const existing = this.get(session);
     if (existing) return Promise.resolve(existing);
-    const inFlight = this.pending.get(session);
+    const inFlight = session.loadPending;
     if (inFlight) return inFlight;
 
     const build = (async () => {
@@ -207,9 +207,11 @@ export class SessionLoads {
       await this.buildGuardsFor(load);
       this.publish(session, load);
       return load;
-    })().finally(() => this.pending.delete(session));
+    })().finally(() => {
+      if (session.loadPending === build) session.loadPending = undefined;
+    });
 
-    this.pending.set(session, build);
+    session.loadPending = build;
     return build;
   }
 
@@ -219,9 +221,10 @@ export class SessionLoads {
    * session is refused rather than served the old project's surface.
    */
   async rebuild(session: EditorSession): Promise<SessionLoad> {
-    await this.pending.get(session)?.catch(() => undefined);
-    const previous = this.perSession.get(session);
-    this.perSession.delete(session);
+    await session.loadPending?.catch(() => undefined);
+    const previous = this.get(session);
+    this.loaded.delete(session);
+    session.load = undefined;
     const at = previous ? this.surfaces.indexOf(previous.surface) : -1;
     if (at >= 0) this.surfaces.splice(at, 1);
     session.guards.clear();
@@ -234,7 +237,7 @@ export class SessionLoads {
    * edits show without a restart. A session with no load has none.
    */
   getFlows(forSession: EditorSession = this.primary): Array<{ name: string; description?: string }> {
-    const load = this.perSession.get(forSession);
+    const load = this.get(forSession);
     if (!load) return [];
     try {
       const cfg = load.flowConfig.get();
@@ -253,7 +256,7 @@ export class SessionLoads {
    * config does not parse.
    */
   getFlowSource(forSession: EditorSession = this.primary): FlowSource | undefined {
-    const load = this.perSession.get(forSession);
+    const load = this.get(forSession);
     if (!load?.registry) return undefined;
     try {
       const config = load.flowConfig.get();
@@ -278,7 +281,7 @@ export class SessionLoads {
 
   /** The session's own plugin records. A session with no load has none. */
   getPlugins(forSession: EditorSession = this.primary): PluginInfo[] {
-    const load = this.perSession.get(forSession);
+    const load = this.get(forSession);
     if (!load) return [];
     return load.surface.pluginRecords.map((r) => toPluginInfo(r, forSession.project));
   }
@@ -289,7 +292,7 @@ export class SessionLoads {
    * editor does not have.
    */
   getToolGraph(forSession: EditorSession = this.primary): ToolDef[] {
-    const load = this.perSession.get(forSession);
+    const load = this.get(forSession);
     if (!load) {
       throw new McpError(
         ErrorCode.NOT_FOUND,
@@ -320,7 +323,7 @@ export class SessionLoads {
    */
   loadFor(target: ToolContext | undefined): SessionLoad {
     const session = target?.session ?? this.primary;
-    const load = this.perSession.get(session);
+    const load = this.get(session);
     if (load) return load;
     throw new McpError(
       ErrorCode.NOT_FOUND,
@@ -356,7 +359,8 @@ export class SessionLoads {
 
   /** Record a finished load and make it visible to every reader. */
   private publish(session: EditorSession, load: SessionLoad): void {
-    this.perSession.set(session, load);
+    session.load = load;
+    this.loaded.add(session);
     // The session's guard pipeline reads action effects from its own graph.
     session.toolGraph = load.registryTools;
     this.surfaces.push(load.surface);
