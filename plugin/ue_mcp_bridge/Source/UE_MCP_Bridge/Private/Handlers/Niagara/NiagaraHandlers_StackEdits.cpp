@@ -357,7 +357,7 @@ namespace
 			return false;
 		}
 		System->PostEditChange();
-		System->RequestCompile(false);
+		MCPNiagara::CompileAndWait(System);
 		return SaveAssetPackageChecked(System, OutSaveError);
 	}
 
