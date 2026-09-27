@@ -157,7 +157,7 @@ From there the contract travels one way:
 
 1. **The registry** validates the spec at registration and refuses the dispatcher's routing names (`action`, `timeoutMs`, `select`, `omit`, `editor`, `toEditor`), a name declared twice, an item type on anything but an array, a value shape that does not fit its type, and a choice that names an undeclared or required parameter. A refused spec is logged and dropped; the handler still registers. At dispatch it renames each declared alias to its parameter's name, so the handler reads the declared names only.
 2. **The bridge** publishes every spec in `get_bridge_capabilities.handlerSpecs`, keyed by method.
-3. **`npm run specs:record`** writes that answer from a `tests/ue_mcp` editor to `tests/golden/handler-specs.json`.
+3. **`npm run specs:record`** writes that answer from a `tests/ue_mcp` editor to `tests/golden/handler-specs.json`. It runs the repo flow `specs_record`, declared in `tests/ue_mcp/ue-mcp.yml`, through the shipped flow tool (`scripts/repo-flow.ts`); `epic:record` runs `epic_record` the same way.
 4. **`npm run specs:generate`** renders the recording into `src/tools/specs/<category>.generated.ts`: the recorded specs only. At load, `categorySchema` builds one zod entry per declared name and alias from those specs, and `specBp` derives each action's `Params:` clause from its spec.
 5. **The category** declares the action with `specBp(effect, summary, method)`. The summary and the effect are the only things written by hand; there is no `mapParams`, because a rename is an alias in the spec. A spec's choices travel on the action, and `prepareCall` refuses a call that does not satisfy them before anything is sent, on the MCP route and the flow route alike.
 
