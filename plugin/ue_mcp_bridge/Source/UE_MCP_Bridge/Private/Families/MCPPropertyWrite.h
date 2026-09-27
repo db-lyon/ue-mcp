@@ -130,13 +130,14 @@ namespace MCPPropertyWrite
 		};
 
 		NotifyPre(Owner, Member);
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Values->Values)
+		for (const auto& Pair : Values->Values)
 		{
-			FProperty* Prop = Struct->FindPropertyByName(*Pair.Key);
+			const FString Key(Pair.Key);
+			FProperty* Prop = Struct->FindPropertyByName(*Key);
 			if (!Prop)
 			{
 				RestoreAll();
-				OutError = FString::Printf(TEXT("%s: '%s' is not a property of %s"), Label, *Pair.Key, *Struct->GetName());
+				OutError = FString::Printf(TEXT("%s: '%s' is not a property of %s"), Label, *Key, *Struct->GetName());
 				return false;
 			}
 			void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Container);
@@ -146,7 +147,7 @@ namespace MCPPropertyWrite
 			if (!MCPJsonProperty::SetJsonOnProperty(Prop, ValuePtr, Pair.Value, Error))
 			{
 				RestoreAll();
-				OutError = FString::Printf(TEXT("%s: '%s' was not written: %s"), Label, *Pair.Key, *Error);
+				OutError = FString::Printf(TEXT("%s: '%s' was not written: %s"), Label, *Key, *Error);
 				return false;
 			}
 		}

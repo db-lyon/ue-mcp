@@ -75,10 +75,10 @@ namespace UEMCPCharacterisation
 			{
 				const TSharedPtr<FJsonObject> Source = In->AsObject();
 				TArray<FString> Keys;
-				Source->Values.GetKeys(Keys);
+				for (const auto& Pair : Source->Values) Keys.Add(FString(Pair.Key));
 				Keys.Sort();
 				TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-				for (const FString& Key : Keys) Out->SetField(Key, Value(Source->Values[Key]));
+				for (const FString& Key : Keys) Out->SetField(Key, Value(Source->TryGetField(Key)));
 				return MakeShared<FJsonValueObject>(Out);
 			}
 			default:
@@ -106,9 +106,10 @@ namespace UEMCPCharacterisation
 		if (Expected->Type == EJson::Object)
 		{
 			const TSharedPtr<FJsonObject> Actuals = Actual->AsObject();
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Expected->AsObject()->Values)
+			for (const auto& Pair : Expected->AsObject()->Values)
 			{
-				const FString Break = FindBreak(Pair.Value, Actuals->TryGetField(Pair.Key), Path + TEXT(".") + Pair.Key);
+				const FString Key(Pair.Key);
+				const FString Break = FindBreak(Pair.Value, Actuals->TryGetField(Key), Path + TEXT(".") + Key);
 				if (!Break.IsEmpty()) return Break;
 			}
 			return FString();
@@ -190,9 +191,10 @@ namespace UEMCPCharacterisation
 		}
 
 		const TSharedPtr<FJsonObject> Actual = Run.ToObject();
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Step : Expected->Values)
+		for (const auto& Step : Expected->Values)
 		{
-			const FString Break = FindBreak(Step.Value, Actual->TryGetField(Step.Key), Step.Key);
+			const FString Key(Step.Key);
+			const FString Break = FindBreak(Step.Value, Actual->TryGetField(Key), Key);
 			if (!Break.IsEmpty()) Breaks.Add(Break);
 		}
 		if (Breaks.Num() > 0)
