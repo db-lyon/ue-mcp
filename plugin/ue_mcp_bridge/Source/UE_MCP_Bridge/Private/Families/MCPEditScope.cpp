@@ -16,6 +16,7 @@ FMCPEditScope::~FMCPEditScope()
 TSharedPtr<FJsonValue> FMCPEditScope::OpenTargets(FOps&& InOps)
 {
 	Ops = MoveTemp(InOps);
+	CloseTransactions();
 	Targets.Reset();
 
 	// One path, or an array of them when the action's spec takes several.
@@ -46,45 +47,96 @@ TSharedPtr<FJsonValue> FMCPEditScope::OpenTargets(FOps&& InOps)
 
 	for (const FString& Path : Paths)
 	{
-		UObject* Asset = Ops.Load ? Ops.Load(Path) : nullptr;
-		if (!Asset) return MCPAssetLoadError(Path, Ops.TypeName);
+		TSharedPtr<FJsonValue> LoadError;
+		UObject* Asset = Ops.Load ? Ops.Load(Path, LoadError) : nullptr;
+		if (!Asset) return LoadError.IsValid() ? LoadError : MCPAssetLoadError(Path, Ops.TypeName);
 		if (Ops.Check)
 		{
 			if (auto Err = Ops.Check(Asset, Path)) return Err;
-		}
-		// #932: an action that saves refuses an unwritable package before it changes anything.
-		if (Policy.bSave)
-		{
-			if (auto Blocked = MCPAssetWriteBlockedError(Asset, Path, *FString::Printf(TEXT("%s '%s'"), *Action, *Path)))
-			{
-				return Blocked;
-			}
 		}
 		FTarget& Entry = Targets.AddDefaulted_GetRef();
 		Entry.Path = Path;
 		Entry.Asset = Asset;
 	}
+
+	// A save that happens whatever the edit does is guarded before anything runs.
+	if (Policy.bSave && Policy.bEvenIfUnchanged)
+	{
+		for (FTarget& Entry : Targets)
+		{
+			if (auto Blocked = Guard(Entry)) return Blocked;
+		}
+	}
 	return nullptr;
+}
+
+TSharedPtr<FJsonValue> FMCPEditScope::Guard(FTarget& Entry)
+{
+	// #932: the guard belongs to the save, so an action that does not write never meets it.
+	if (!Policy.bSave || Entry.bGuarded) return nullptr;
+	if (auto Blocked = MCPAssetWriteBlockedError(Entry.Asset, Entry.Path, *FString::Printf(TEXT("%s '%s'"), *Action, *Entry.Path)))
+	{
+		return Blocked;
+	}
+	Entry.bGuarded = true;
+	return nullptr;
+}
+
+TSharedPtr<FJsonValue> FMCPEditScope::Begin(int32 Index)
+{
+	if (!Targets.IsValidIndex(Index))
+	{
+		return MCPError(FString::Printf(TEXT("%s: there is no target %d to edit."), *Action, Index));
+	}
+	FTarget& Entry = Targets[Index];
+	if (auto Blocked = Guard(Entry)) return Blocked;
+	if (!Entry.Transaction.IsValid())
+	{
+		Entry.Transaction = MakeUnique<FScopedTransaction>(TEXT("UE_MCP"), FText::FromString(Action), Entry.Asset);
+	}
+	return nullptr;
+}
+
+void FMCPEditScope::Commit(int32 Index)
+{
+	if (!Targets.IsValidIndex(Index)) return;
+	FTarget& Entry = Targets[Index];
+	// A commit with no Begin still marks the change, so Finish commits it; there is just no undo record.
+	Entry.bChanged = true;
+}
+
+void FMCPEditScope::Cancel(int32 Index)
+{
+	if (!Targets.IsValidIndex(Index)) return;
+	FTarget& Entry = Targets[Index];
+	Entry.bChanged = false;
+	if (Entry.Transaction.IsValid())
+	{
+		Entry.Transaction->Cancel();
+		Entry.Transaction.Reset();
+	}
 }
 
 void FMCPEditScope::CloseTransactions()
 {
-	const TArray<FMCPEditTransaction*> Open = OpenTransactions;
-	for (FMCPEditTransaction* Transaction : Open)
+	// Newest first, the way nested records unwind. An unchanged target's record is dropped.
+	for (int32 i = Targets.Num() - 1; i >= 0; --i)
 	{
-		Transaction->Close();
+		FTarget& Entry = Targets[i];
+		if (!Entry.Transaction.IsValid()) continue;
+		if (!Entry.bChanged) Entry.Transaction->Cancel();
+		Entry.Transaction.Reset();
 	}
-	OpenTransactions.Reset();
 }
 
 TSharedPtr<FJsonValue> FMCPEditScope::Finish(const TSharedPtr<FJsonObject>& Result)
 {
-	// Settle inside the still-open transactions, so undo takes the fixups too.
-	if (Policy.bSettle && Ops.Settle)
+	// Settle inside the still-open records, so undo takes the fixups too.
+	if (Policy.Settle != EMCPSettle::None && Ops.Settle)
 	{
 		for (const FTarget& Entry : Targets)
 		{
-			if (Entry.bChanged) Ops.Settle(Entry.Asset);
+			if (Entry.bChanged) Ops.Settle(Entry.Asset, Policy.Settle);
 		}
 	}
 	CloseTransactions();
@@ -131,7 +183,11 @@ bool FMCPEditScope::CommitTarget(FTarget& Entry, const TSharedPtr<FJsonObject>& 
 	{
 		Out->SetBoolField(TEXT("success"), false);
 		Out->SetBoolField(TEXT("saved"), false);
-		Out->SetStringField(TEXT("error"), FString::Printf(TEXT("'%s' did not compile, so it was not saved."), *Entry.Path));
+		// The type's compile op may already have said why, in its own words.
+		if (!Out->HasField(TEXT("error")))
+		{
+			Out->SetStringField(TEXT("error"), FString::Printf(TEXT("'%s' did not compile, so it was not saved."), *Entry.Path));
+		}
 		return false;
 	}
 	if (!Policy.bSave) return true;
@@ -161,46 +217,4 @@ bool FMCPEditScope::CommitTarget(FTarget& Entry, const TSharedPtr<FJsonObject>& 
 	}
 	MCPNoteSaveOutcome(Out, Entry.Asset->GetPathName(), bSaved, Reason);
 	return bSaved;
-}
-
-FMCPEditTransaction::FMCPEditTransaction(FMCPEditScope& InScope, int32 InTargetIndex)
-	: Scope(&InScope)
-	, TargetIndex(InTargetIndex)
-{
-	UObject* Primary = InScope.Targets.IsValidIndex(TargetIndex) ? InScope.Targets[TargetIndex].Asset : nullptr;
-	Transaction.Emplace(TEXT("UE_MCP"), FText::FromString(InScope.Action), Primary);
-	InScope.OpenTransactions.Add(this);
-}
-
-FMCPEditTransaction::~FMCPEditTransaction()
-{
-	Close();
-}
-
-void FMCPEditTransaction::Commit()
-{
-	bCommitted = true;
-	if (Scope && Scope->Targets.IsValidIndex(TargetIndex)) Scope->Targets[TargetIndex].bChanged = true;
-}
-
-void FMCPEditTransaction::Cancel()
-{
-	// Drops the undo record only. Callers restore memory on refusal (F3 and F5 do).
-	if (bCommitted && Scope && Scope->Targets.IsValidIndex(TargetIndex)) Scope->Targets[TargetIndex].bChanged = false;
-	bCommitted = false;
-	Close();
-}
-
-void FMCPEditTransaction::Close()
-{
-	if (Transaction.IsSet())
-	{
-		if (!bCommitted) Transaction->Cancel();
-		Transaction.Reset();
-	}
-	if (Scope)
-	{
-		Scope->OpenTransactions.Remove(this);
-		Scope = nullptr;
-	}
 }

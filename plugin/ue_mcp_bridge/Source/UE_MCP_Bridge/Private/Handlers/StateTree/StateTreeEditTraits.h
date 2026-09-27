@@ -99,9 +99,9 @@ namespace MCPStateTree
 		return bSuccess;
 	}
 
-	/** Value writes, bindings and the palette do not settle; node and state structure does. */
-	inline FMCPCommitPolicy ValueEdit() { return FMCPCommitPolicy::Edit(/*bInSettle=*/false); }
-	inline FMCPCommitPolicy StructureEdit() { return FMCPCommitPolicy::Edit(/*bInSettle=*/true); }
+	/** Value writes, bindings and the palette do not validate; node and state structure does. */
+	inline FMCPCommitPolicy ValueEdit() { return FMCPCommitPolicy::Edit(EMCPSettle::Value); }
+	inline FMCPCommitPolicy StructureEdit() { return FMCPCommitPolicy::Edit(EMCPSettle::Structure); }
 }
 
 template <>
@@ -109,15 +109,22 @@ struct TMCPEditTraits<UStateTree>
 {
 	static const TCHAR* TypeName() { return TEXT("StateTree"); }
 
+	static UStateTree* Load(const FString& AssetPath, TSharedPtr<FJsonValue>& OutError)
+	{
+		UStateTree* Tree = LoadAssetByPath<UStateTree>(AssetPath);
+		if (!Tree) OutError = MCPAssetLoadError(AssetPath, TypeName());
+		return Tree;
+	}
+
 	static TSharedPtr<FJsonValue> CheckOpen(UStateTree* Tree, const FString& AssetPath)
 	{
 		return MCPStateTree::NeedEditorData(Tree, AssetPath);
 	}
 
-	/** The editor's own fixups after a structural change. */
-	static void Settle(UStateTree* Tree)
+	/** The editor's own fixups after a structural change; a value write needs none. */
+	static void Settle(UStateTree* Tree, EMCPSettle Kind)
 	{
-		UStateTreeEditingSubsystem::ValidateStateTree(Tree);
+		if (Kind == EMCPSettle::Structure) UStateTreeEditingSubsystem::ValidateStateTree(Tree);
 	}
 
 	static bool Compile(UStateTree* Tree, const TSharedPtr<FJsonObject>& Out)

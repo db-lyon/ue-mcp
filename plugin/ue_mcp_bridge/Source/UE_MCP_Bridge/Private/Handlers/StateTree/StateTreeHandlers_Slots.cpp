@@ -327,7 +327,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddSlotNode(const TSharedPtr<FJsonObj
 	UObject* Owner = State ? static_cast<UObject*>(State) : static_cast<UObject*>(EditorData);
 	TMCPSlotList<FStateTreeEditorNode> List(Owner, Slot.Member, Slot.List(*EditorData, State, Request.Transition), Slot.Kind,
 		Slot.IndexParam ? Slot.IndexParam : TEXT("nodeId"));
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	FString Error;
 	FStateTreeEditorNode* NewNode = List.Add([&](FStateTreeEditorNode& Node, FString& OutError)
 	{
@@ -342,7 +342,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddSlotNode(const TSharedPtr<FJsonObj
 		return true;
 	}, Error);
 	if (!NewNode) return MCPError(Error);
-	Txn.Commit();
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -386,9 +386,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveSlotNode(const TSharedPtr<FJson
 	int32 Index = INDEX_NONE;
 	if (auto Err = FindSlotNode(List, Slot, Request, Index)) return Err;
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	const FStateTreeEditorNode Removed = List.Remove(Index);
-	Txn.Commit();
+	Edit.Commit();
 
 	const UScriptStruct* RemovedStruct = Removed.Node.IsValid() ? Removed.Node.GetScriptStruct() : nullptr;
 	const FString StructName = RemovedStruct ? RemovedStruct->GetName() : FString();
@@ -471,11 +471,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetSlotNodeProperty(const TSharedPtr<
 				Slot.Kind, *Struct->GetName(), *PropName));
 	}
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	MCPPropertyWrite::FTarget Target{ Owner, List.MemberProperty(), Prop, Prop->ContainerPtrToValuePtr<void>(Memory) };
 	const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::SetText(Target, Value);
 	if (!Outcome.bWritten) return MCPError(Outcome.Error);
-	if (Outcome.bChanged) Txn.Commit();
+	if (Outcome.bChanged) Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);

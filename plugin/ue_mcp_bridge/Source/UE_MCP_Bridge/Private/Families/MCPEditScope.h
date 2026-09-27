@@ -1,21 +1,22 @@
 #pragma once
 
 // F1 AssetEdit (plans/domain-design.md 3.2). A handler opens a scope on the
-// asset(s) it edits, does its one mutation inside a per-target transaction,
+// asset(s) it edits, begins an edit on a target right before it mutates it,
 // and Finish() runs what the asset type declares: settle, compile, the
 // compile-failure policy, the save set and the result dialect.
 //
 //   FMCPEditScope Edit(Params, TEXT("add_state_tree_task"), TEXT("assetPath"), Policy);
 //   if (auto Err = Edit.Open<UStateTree>()) return Err;
-//   FMCPEditTransaction Txn(Edit);
-//   ...mutate... ; Txn.Commit();
+//   ...refusals and no-op returns...
+//   if (auto Err = Edit.Begin()) return Err;   // #932 guard, then the undo record
+//   ...mutate... ; Edit.Commit();
 //   return Edit.Finish(Result);
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
-#include "Misc/Optional.h"
 #include "ScopedTransaction.h"
+#include "Templates/UniquePtr.h"
 #include "HandlerUtils.h"
 
 /** What Finish does when the type's compile op reports failure. */
@@ -38,23 +39,33 @@ enum class EMCPResultDialect : uint8
 	Persisted,
 };
 
+/** The type's post-edit fixups an action asks for, run inside its undo record. */
+enum class EMCPSettle : uint8
+{
+	None,
+	/** A value changed; the type's light notification. */
+	Value,
+	/** Structure changed; the type's full validation or rebuild. */
+	Structure,
+};
+
 /** How one action commits. It belongs to the action, not the asset type. */
 struct FMCPCommitPolicy
 {
-	/** Run the type's settle op on each changed target, inside its transaction. */
-	bool bSettle = false;
+	EMCPSettle Settle = EMCPSettle::None;
 	bool bCompile = false;
 	bool bSave = false;
-	/** Compile and save even when no transaction committed a change. */
+	/** Compile and save even when no edit committed a change. */
 	bool bEvenIfUnchanged = false;
 	EMCPCompileFailure OnCompileFailure = EMCPCompileFailure::SkipSave;
 
 	static FMCPCommitPolicy Read() { return FMCPCommitPolicy(); }
 
-	static FMCPCommitPolicy Edit(bool bInSettle)
+	/** An in-memory edit: settle, never compile or save. */
+	static FMCPCommitPolicy Edit(EMCPSettle InSettle)
 	{
 		FMCPCommitPolicy Policy;
-		Policy.bSettle = bInSettle;
+		Policy.Settle = InSettle;
 		return Policy;
 	}
 
@@ -67,21 +78,53 @@ struct FMCPCommitPolicy
 		Policy.bEvenIfUnchanged = bInEvenIfUnchanged;
 		return Policy;
 	}
+
+	/** An edit that settles, compiles and saves once it changed something. */
+	static FMCPCommitPolicy EditCompileSave(EMCPSettle InSettle, EMCPCompileFailure OnFailure)
+	{
+		FMCPCommitPolicy Policy = CompileSave(OnFailure, /*bInEvenIfUnchanged=*/false);
+		Policy.Settle = InSettle;
+		return Policy;
+	}
+
+	/** An edit that settles and saves, with no compile step. */
+	static FMCPCommitPolicy EditSave(EMCPSettle InSettle)
+	{
+		FMCPCommitPolicy Policy;
+		Policy.Settle = InSettle;
+		Policy.bSave = true;
+		return Policy;
+	}
+
+	/** Commit even when no edit changed anything (compile and lifecycle actions). */
+	FMCPCommitPolicy EvenIfUnchanged() const
+	{
+		FMCPCommitPolicy Policy = *this;
+		Policy.bEvenIfUnchanged = true;
+		return Policy;
+	}
+
+	/** The public save param: false keeps compile and settle but drops the write and its guard. */
+	FMCPCommitPolicy SaveIf(bool bInSave) const
+	{
+		FMCPCommitPolicy Policy = *this;
+		Policy.bSave = Policy.bSave && bInSave;
+		return Policy;
+	}
 };
 
 /**
  * What one asset type declares. Specialise per type with these members:
  *   static const TCHAR* TypeName();
+ *   static T* Load(const FString& Path, TSharedPtr<FJsonValue>& OutError);   // the type's resolver and its not-found error
  *   static TSharedPtr<FJsonValue> CheckOpen(T* Asset, const FString& Path);  // the default precondition
- *   static void Settle(T* Asset);
+ *   static void Settle(T* Asset, EMCPSettle Kind);
  *   static bool Compile(T* Asset, const TSharedPtr<FJsonObject>& Out);       // writes the type's compile keys
  *   static void SaveSet(T* Asset, TArray<UObject*>& Out);
  *   static constexpr EMCPResultDialect Dialect = ...;
  */
 template <typename T>
 struct TMCPEditTraits;
-
-class FMCPEditTransaction;
 
 class FMCPEditScope
 {
@@ -93,22 +136,22 @@ public:
 	FMCPEditScope& operator=(const FMCPEditScope&) = delete;
 
 	/**
-	 * Read the target param (one path, or an array of paths), load each as T,
-	 * run Check on it, and refuse a package that cannot be written when this
-	 * action saves (#932). Returns the error to hand back, or nullptr. Pass
-	 * nullptr as Check to skip the type's default precondition.
+	 * Read the target param (one path, or an array of paths), load each as T
+	 * and run Check on it. Returns the error to hand back, or nullptr. Pass
+	 * nullptr as Check to skip the type's default precondition. When the save
+	 * is certain (bEvenIfUnchanged), the #932 guard runs here too.
 	 */
 	template <typename T>
 	TSharedPtr<FJsonValue> Open(TSharedPtr<FJsonValue> (*Check)(T*, const FString&) = &TMCPEditTraits<T>::CheckOpen)
 	{
 		FOps Declared;
 		Declared.TypeName = TMCPEditTraits<T>::TypeName();
-		Declared.Load = [](const FString& Path) -> UObject* { return LoadAssetByPath<T>(Path); };
+		Declared.Load = [](const FString& Path, TSharedPtr<FJsonValue>& OutError) -> UObject* { return TMCPEditTraits<T>::Load(Path, OutError); };
 		if (Check)
 		{
 			Declared.Check = [Check](UObject* Asset, const FString& Path) { return Check(CastChecked<T>(Asset), Path); };
 		}
-		Declared.Settle = [](UObject* Asset) { TMCPEditTraits<T>::Settle(CastChecked<T>(Asset)); };
+		Declared.Settle = [](UObject* Asset, EMCPSettle Kind) { TMCPEditTraits<T>::Settle(CastChecked<T>(Asset), Kind); };
 		Declared.Compile = [](UObject* Asset, const TSharedPtr<FJsonObject>& Out) { return TMCPEditTraits<T>::Compile(CastChecked<T>(Asset), Out); };
 		Declared.SaveSet = [](UObject* Asset, TArray<UObject*>& Out) { TMCPEditTraits<T>::SaveSet(CastChecked<T>(Asset), Out); };
 		Declared.Dialect = TMCPEditTraits<T>::Dialect;
@@ -132,24 +175,36 @@ public:
 		return Out;
 	}
 
-	/** Whether a transaction on target Index committed a change. */
+	/**
+	 * Start editing target Index: refuse an unwritable package when this action
+	 * saves (#932), then open the target's undo record. The record belongs to
+	 * the scope, so it stays open until Finish settles inside it, whatever
+	 * block the handler called this from. Calling it again is a no-op.
+	 */
+	TSharedPtr<FJsonValue> Begin(int32 Index = 0);
+
+	/** Keep target Index's undo record and mark it changed. */
+	void Commit(int32 Index = 0);
+
+	/** Drop target Index's undo record; the target stays unchanged. Callers restore memory (F3 and F5 do). */
+	void Cancel(int32 Index = 0);
+
+	/** Whether an edit on target Index committed a change. */
 	bool Changed(int32 Index = 0) const { return Targets.IsValidIndex(Index) && Targets[Index].bChanged; }
 
 	/** After Finish: whether every compiled target compiled. True when nothing compiled. */
 	bool Compiled() const { return bCompiled; }
 
-	/** Close every transaction, then settle, compile and save as the policy says, and write the dialect onto Result. */
+	/** Settle inside the open records, close them, then compile and save as the policy says and write the dialect onto Result. */
 	TSharedPtr<FJsonValue> Finish(const TSharedPtr<FJsonObject>& Result);
 
 private:
-	friend class FMCPEditTransaction;
-
 	struct FOps
 	{
 		const TCHAR* TypeName = TEXT("asset");
-		TFunction<UObject*(const FString&)> Load;
+		TFunction<UObject*(const FString&, TSharedPtr<FJsonValue>&)> Load;
 		TFunction<TSharedPtr<FJsonValue>(UObject*, const FString&)> Check;
-		TFunction<void(UObject*)> Settle;
+		TFunction<void(UObject*, EMCPSettle)> Settle;
 		TFunction<bool(UObject*, const TSharedPtr<FJsonObject>&)> Compile;
 		TFunction<void(UObject*, TArray<UObject*>&)> SaveSet;
 		EMCPResultDialect Dialect = EMCPResultDialect::SavedSaveError;
@@ -160,9 +215,12 @@ private:
 		FString Path;
 		UObject* Asset = nullptr;
 		bool bChanged = false;
+		bool bGuarded = false;
+		TUniquePtr<FScopedTransaction> Transaction;
 	};
 
 	TSharedPtr<FJsonValue> OpenTargets(FOps&& InOps);
+	TSharedPtr<FJsonValue> Guard(FTarget& Entry);
 	/** Compile and save one target, writing the type's keys and the dialect onto Out. */
 	bool CommitTarget(FTarget& Entry, const TSharedPtr<FJsonObject>& Out);
 	void CloseTransactions();
@@ -173,35 +231,5 @@ private:
 	FMCPCommitPolicy Policy;
 	FOps Ops;
 	TArray<FTarget> Targets;
-	TArray<FMCPEditTransaction*> OpenTransactions;
 	bool bCompiled = true;
-};
-
-/**
- * One undo record for one target. It is cancelled unless Commit() marked a
- * change, so a refusal and a no-op leave the undo history untouched, and the
- * scope closes it before anything compiles or saves.
- */
-class FMCPEditTransaction
-{
-public:
-	explicit FMCPEditTransaction(FMCPEditScope& InScope, int32 InTargetIndex = 0);
-	~FMCPEditTransaction();
-
-	FMCPEditTransaction(const FMCPEditTransaction&) = delete;
-	FMCPEditTransaction& operator=(const FMCPEditTransaction&) = delete;
-
-	/** Keep the record and mark the target changed. */
-	void Commit();
-	/** Drop the record; the target stays unchanged. */
-	void Cancel();
-
-private:
-	friend class FMCPEditScope;
-	void Close();
-
-	FMCPEditScope* Scope;
-	int32 TargetIndex;
-	TOptional<FScopedTransaction> Transaction;
-	bool bCommitted = false;
 };

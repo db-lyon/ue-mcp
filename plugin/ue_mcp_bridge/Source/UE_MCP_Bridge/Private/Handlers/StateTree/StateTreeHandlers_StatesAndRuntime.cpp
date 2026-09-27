@@ -859,7 +859,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("statePath"), State->GetPath());
 	Result->SetStringField(TEXT("linkType"), LinkType);
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	if (bSubtree)
 	{
 		UStateTreeState* Target = nullptr;
@@ -941,7 +941,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 		|| (PrevAssetPath != (State->LinkedAsset ? State->LinkedAsset->GetPathName() : FString()));
 	if (bChanged)
 	{
-		Txn.Commit();
+		Edit.Commit();
 		MCPSetUpdated(Result);
 	}
 	else
@@ -1074,7 +1074,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("previousParentStateId"), OldParent ? MCPStateTree::Guid(OldParent->ID) : FString());
 	Result->SetNumberField(TEXT("previousIndex"), OldIndex);
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	if (bChanged)
 	{
 		EditorData->Modify();
@@ -1089,7 +1089,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 		const int32 EffectiveIndex = FMath::Clamp(InsertIndex, 0, NewArray.Num());
 		NewArray.Insert(State, EffectiveIndex);
 		State->Parent = NewParent;
-		Txn.Commit();
+		Edit.Commit();
 
 		MCPSetUpdated(Result);
 		Result->SetNumberField(TEXT("index"), EffectiveIndex);
@@ -1208,7 +1208,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetNodeClass(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("previousClass"), PreviousPath);
 	Result->SetStringField(TEXT("nodeClass"), Resolved->GetPathName());
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	if (bChanged)
 	{
 		UObject* Owner = OwningState ? static_cast<UObject*>(OwningState) : static_cast<UObject*>(EditorData);
@@ -1223,7 +1223,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetNodeClass(const TSharedPtr<FJsonOb
 				return true;
 			});
 		MCPPropertyWrite::NotePrevious(Result, Outcome);
-		Txn.Commit();
+		Edit.Commit();
 		MCPSetUpdated(Result);
 	}
 	else

@@ -1,7 +1,8 @@
 // The F1 edit scope, driven through StateTree as its first asset type: undo
-// and redo of a committed edit, no undo record for a refusal or a no-op, the
-// compile-failure policies, the #932 guard and a save that fails after the
-// guard passed, and several targets in one scope. Trees live in a private mount.
+// and redo of a committed edit, no undo record for a refusal or a no-op, a
+// record that lives until Finish, the compile-failure policies, the #932 guard
+// at open and at begin, a save that fails after the guard passed, and several
+// targets in one scope. Trees live in a private mount.
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
@@ -133,6 +134,23 @@ bool FMCPEditScopeUndoRedoTest::RunTest(const FString& Parameters)
 		GEditor->UndoTransaction();
 		TestEqual(TEXT("undo restores the previous weight"), FString::SanitizeFloat(Child->Weight), Previous);
 	}
+	{
+		// The record belongs to the scope: begun in an inner block, it is still open when Finish settles.
+		FMCPEditScope Edit(Args(Tree), TEXT("test_scope_record"), TEXT("assetPath"), MCPStateTree::StructureEdit());
+		if (!TestFalse(TEXT("opens"), Edit.Open<UStateTree>().IsValid())) return false;
+		const float Before = Child->Weight;
+		const int32 Depth = UndoDepth();
+		{
+			TestFalse(TEXT("an edit that does not save begins without a guard"), Edit.Begin().IsValid());
+			Child->Modify();
+			Child->Weight = Before + 4.f;
+			Edit.Commit();
+		}
+		Edit.Finish(MCPSuccess());
+		TestEqual(TEXT("one undo record for the whole edit"), UndoDepth(), Depth + 1);
+		GEditor->UndoTransaction();
+		TestEqual(TEXT("undo takes the inner-block write back"), Child->Weight, Before);
+	}
 	return true;
 }
 
@@ -225,6 +243,19 @@ bool FMCPEditScopeSaveFailureTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("compile on a read-only package is refused"), Succeeded(Refused));
 		TestTrue(TEXT("the refusal names the cause"), Refused->TryGetStringField(TEXT("reason"), Reason) && Reason == TEXT("package_not_writable"));
 		TestFalse(TEXT("nothing was compiled"), Refused->HasField(TEXT("compiled")));
+	}
+	// The guard belongs to the save: an edit that saves only when it changes something
+	// opens a read-only package (its no-op paths still answer) and is refused when it begins.
+	{
+		FMCPEditScope Edit(Args(Tree), TEXT("test_guard_at_begin"), TEXT("assetPath"), FMCPCommitPolicy::EditSave(EMCPSettle::None));
+		TestFalse(TEXT("a conditional save opens a read-only package"), Edit.Open<UStateTree>().IsValid());
+		const TSharedPtr<FJsonValue> Blocked = Edit.Begin();
+		FString Reason;
+		TestTrue(TEXT("and refuses when the edit begins"), Blocked.IsValid() && Blocked->AsObject()->TryGetStringField(TEXT("reason"), Reason)
+			&& Reason == TEXT("package_not_writable"));
+		const TSharedPtr<FJsonObject> Result = MCPSuccess();
+		Edit.Finish(Result);
+		TestFalse(TEXT("an unchanged target is not written"), Result->HasField(TEXT("saved")));
 	}
 	Platform.SetReadOnly(*File, false);
 	return true;

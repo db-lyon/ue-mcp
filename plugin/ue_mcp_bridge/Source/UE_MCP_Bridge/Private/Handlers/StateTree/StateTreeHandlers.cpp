@@ -985,7 +985,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 	UStateTreeState* ParentState = ResolveState(EditorData, ParentRef);
 
 	UStateTreeState* NewState = nullptr;
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 
 	if (ParentState)
 	{
@@ -1023,7 +1023,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 			NewState->LinkedAsset = LinkedST;
 		}
 	}
-	Txn.Commit();
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -1063,13 +1063,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveState(const TSharedPtr<FJsonObj
 		? Parent->Children.IndexOfByKey(State)
 		: EditorData->SubTrees.IndexOfByKey(State);
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	TMCPSlotList<TObjectPtr<UStateTreeState>> Siblings(
 		Parent ? static_cast<UObject*>(Parent) : static_cast<UObject*>(EditorData),
 		Parent ? TEXT("Children") : TEXT("SubTrees"),
 		Parent ? Parent->Children : EditorData->SubTrees, TEXT("state"), TEXT("index"));
 	if (PriorIndex != INDEX_NONE) Siblings.Remove(PriorIndex);
-	Txn.Commit();
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1279,12 +1279,12 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 
 	FProperty* Prop = MCPPropertyWrite::MemberOf(State, Member);
 	if (!Prop) return MCPError(FString::Printf(TEXT("State property %s is not available in this UE version"), *PropName));
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::Write(
 		{ State, nullptr, Prop, Prop->ContainerPtrToValuePtr<void>(State) },
 		[&Assign](FString&) { Assign(); return true; });
 	// customTickRate writes two fields, so a written value always commits.
-	Txn.Commit();
+	Edit.Commit();
 	if (bHasPriorValue) Outcome.Previous = PriorValue;
 
 	auto Result = MCPSuccess();
@@ -1337,7 +1337,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ClearStateNodes(const TSharedPtr<FJso
 	// package, which would make the unchanged report below untrue.
 	const bool bAnythingToClear =
 		(ClearedTasks + ClearedEnterConditions + ClearedTransitions) > 0 || bHadSingleTask;
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	if (bAnythingToClear)
 	{
 		State->Modify();
@@ -1345,7 +1345,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ClearStateNodes(const TSharedPtr<FJso
 		State->EnterConditions.Empty();
 		State->Transitions.Empty();
 		State->SingleTask.Reset();
-		Txn.Commit();
+		Edit.Commit();
 	}
 
 	auto Result = MCPSuccess();
@@ -1404,7 +1404,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 	const EStateTreeTransitionType TransType = ParseTransitionType(TypeStr);
 
 	TMCPSlotList<FStateTreeTransition> Transitions(State, TEXT("Transitions"), State->Transitions, TEXT("transition"), TEXT("transitionIndex"));
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	FString Error;
 	FStateTreeTransition* Trans = Transitions.Add(
 		[&](TArray<FStateTreeTransition>&) -> FStateTreeTransition&
@@ -1430,7 +1430,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 			if (bHasDelayDuration) Added.DelayDuration = static_cast<float>(DelayDuration);
 			return true;
 		}, Error);
-	Txn.Commit();
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -1488,9 +1488,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTransition(const TSharedPtr<FJs
 	const float DoomedDelayDuration = Doomed.DelayDuration;
 	const int32 DoomedConditionCount = Doomed.Conditions.Num();
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	Transitions.Remove(TransIndex);
-	Txn.Commit();
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1591,10 +1591,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 		}
 	}
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	EditorData->Modify();
 	EditorData->AddPropertyBinding(SourcePath, TargetPath);
-	Txn.Commit();
+	Edit.Commit();
 
 	// #681: notify the target node its binding changed so nodes that adapt their
 	// instance data to the source (e.g. FStateTreeCompareEnumCondition's
@@ -1761,14 +1761,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 		RemovedBindings.Add(MakeShared<FJsonValueObject>(BObj));
 	}
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	EditorData->Modify();
 #if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
 	Bindings->RemoveBindings(TargetPath);
 #else
 	Bindings->RemovePropertyBindings(TargetPath);
 #endif
-	if (RemovedBindings.Num() > 0) Txn.Commit();
+	if (RemovedBindings.Num() > 0) Edit.Commit();
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("removed"), true);
@@ -1901,10 +1901,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddColor(const TSharedPtr<FJsonObject
 		NewColor.Color.InitFromString(ColorStr);
 	}
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	EditorData->Modify();
 	EditorData->Colors.Add(NewColor);
-	Txn.Commit();
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -2018,7 +2018,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 		return MCPError(FString::Printf(TEXT("Unsupported parameter type: %s. Supported: Bool, Int32, Int64, Float, Double, Name, String, Text"), *ParamType));
 	}
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	State->Modify();
 	TArray<FPropertyBagPropertyDesc> NewDescs;
 	NewDescs.Add(FPropertyBagPropertyDesc(FName(*ParamName), BagType));
@@ -2027,7 +2027,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 #else
 	State->Parameters.Parameters.AddProperties(NewDescs);
 #endif
-	Txn.Commit();
+	Edit.Commit();
 
 
 	auto Result = MCPSuccess();
@@ -2103,12 +2103,12 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveStateParameter(const TSharedPtr
 		}
 	}
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	if (bParamExisted)
 	{
 		State->Modify();
 		State->Parameters.Parameters.RemovePropertyByName(FName(*ParamName));
-		Txn.Commit();
+		Edit.Commit();
 	}
 
 	auto Result = MCPSuccess();
@@ -2180,7 +2180,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJ
 		return MCPError(FString::Printf(TEXT("Parameter not found: %s"), *ParamName));
 	}
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::SetText(
 		{ State, MCPPropertyWrite::MemberOf(State, TEXT("Parameters")), Prop, Prop->ContainerPtrToValuePtr<void>(Bag.GetMutableValue().GetMemory()) },
 		Value);
@@ -2197,7 +2197,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJ
 			State->SetParametersPropertyOverridden(Desc->ID, true);
 		}
 	}
-	if (Outcome.bChanged || bFixedLayout) Txn.Commit();
+	if (Outcome.bChanged || bFixedLayout) Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2258,14 +2258,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJ
 		Desc.PropertyDesc = FPropertyBagPropertyDesc(FName(*PropName), BagType);
 	}
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	EditorData->Modify();
 #if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
 	EditorData->CreateRootProperties(Descs);
 #else
 	EditorData->CreateParameters(EditorData->RootParameters.ID, Descs);
 #endif
-	Txn.Commit();
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2340,11 +2340,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetSchema(const TSharedPtr<FJsonObjec
 		return MCPStateTreeSchema::UnresolvedError(Schema);
 	}
 
-	FMCPEditTransaction Txn(Edit);
+	if (auto BeginErr = Edit.Begin()) return BeginErr;
 	ST->Modify();
 	const MCPStateTreeSchema::FAttachOutcome Attach =
 		MCPStateTreeSchema::AttachSchema(ST, Schema.SchemaClass);
-	if (Attach.bSchemaChanged || Attach.bCreatedEditorData) Txn.Commit();
+	if (Attach.bSchemaChanged || Attach.bCreatedEditorData) Edit.Commit();
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), ST->GetPathName());
