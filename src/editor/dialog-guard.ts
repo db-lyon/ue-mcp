@@ -651,11 +651,22 @@ export class DialogGuard {
    * deciding nothing: no form is raised and nothing is pressed. For a plan.
    */
   async wouldRefuse(subject: string, kind: "bridge" | "action"): Promise<boolean> {
+    return (await this.refusalsNow())(subject, kind);
+  }
+
+  /**
+   * `wouldRefuse` for every subject against ONE reading of the screen. A plan
+   * asks it per step, and a reading per step made a long flow's plan outlast
+   * the client's timeout.
+   */
+  async refusalsNow(): Promise<(subject: string, kind: "bridge" | "action") => boolean> {
     const dialog = await this.currentDialog();
-    if (!dialog) return false;
-    const allowed = kind === "bridge" ? DialogGuard.bridgeAllowed(subject) : DialogGuard.actionAllowed(subject);
-    return !allowed || (kind === "action" && PRESS_ACTIONS.has(subject)
-      && !DialogGuard.handsOverPressCalls(this.deps.mode(), this.canAsk({})));
+    if (!dialog) return () => false;
+    return (subject, kind) => {
+      const allowed = kind === "bridge" ? DialogGuard.bridgeAllowed(subject) : DialogGuard.actionAllowed(subject);
+      return !allowed || (kind === "action" && PRESS_ACTIONS.has(subject)
+        && !DialogGuard.handsOverPressCalls(this.deps.mode(), this.canAsk({})));
+    };
   }
 
   /**

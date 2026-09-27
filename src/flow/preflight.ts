@@ -34,10 +34,15 @@ import { stepAvailability } from "./flow-describe.js";
  * `step.*` and `gate.*`, read for the step being gated. A flow-level check
  * sees no step, and only `gate.untargeted` applies there.
  */
-export function gateScope(ctx: ToolContext, graph: readonly ToolDef[]): StepScope {
+export function gateScope(ctx: ToolContext, graph: readonly ToolDef[], oneReading = false): StepScope {
   let dialogProbe: Promise<((subject: string, kind: "bridge" | "action") => Promise<boolean>) | undefined> | undefined;
+  // A plan reads the screen once for all its steps; a run reads it per step.
   const dialog = () => (dialogProbe ??= ctx.session
-    ? ensureGuard(ctx.session).then((g) => (s: string, k: "bridge" | "action") => g.wouldRefuse(s, k), () => undefined)
+    ? ensureGuard(ctx.session).then(async (g) => {
+      if (!oneReading) return (s: string, k: "bridge" | "action") => g.wouldRefuse(s, k);
+      const now = await g.refusalsNow();
+      return async (s: string, k: "bridge" | "action") => now(s, k);
+    }, () => undefined)
     : Promise.resolve(undefined));
 
   return {
@@ -171,7 +176,7 @@ export async function planPreflight(
     registry,
     context: { ...ctx } as never,
     references: hostNamespaces(ctx),
-    conditionEvaluator: makeConditionEvaluator(hostNamespaces(ctx), gateScope(ctx, graph)),
+    conditionEvaluator: makeConditionEvaluator(hostNamespaces(ctx), gateScope(ctx, graph, true)),
   });
   const result = await runner.preflight(flowName, params, { skip });
   const refused: PlanRefusal[] = [];
