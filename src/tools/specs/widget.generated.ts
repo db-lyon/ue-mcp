@@ -1667,61 +1667,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_to_viewport: "Params: assetPath (or path, or widgetBlueprintPath), zOrder?",
-  add_widget: "Params: assetPath (or path, or widgetBlueprintPath), widgetClass (or typeName), widgetName? (or name, or widgetDisplayName), parentWidgetName? (or parentWidget)",
-  add_widget_animation_event_key: "Params: assetPath (or path, or widgetBlueprintPath), animationName, functionName, time?, trackName?",
-  add_widget_animation_key: "Params: assetPath (or path, or widgetBlueprintPath), animationName, widgetName (or widgetDisplayName), propertyName, time, value, channel?, channelIndex?, interpolation?",
-  add_widget_animation_track: "Params: assetPath (or path, or widgetBlueprintPath), animationName, widgetName (or widgetDisplayName), propertyName",
-  audit_commonui: "Params: assetPath? (or path, or widgetBlueprintPath)",
-  audit_widget_accessibility: "Params: assetPath (or path, or widgetBlueprintPath), minFontSize?, minHitSize?",
-  audit_widget_focus_chain: "Params: assetPath (or path, or widgetBlueprintPath)",
-  bind_widget_animation_event: "Params: assetPath (or path, or widgetBlueprintPath), animationName, event?, userTag?",
-  bulk_set_widget_properties: "Params: assetPath (or path, or widgetBlueprintPath), properties",
-  clear_widget_binding: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), propertyName?",
-  clear_widget_navigation: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), direction?",
-  create_editor_utility_blueprint: "Params: at least one of assetPath (or path, or widgetBlueprintPath)/name, packagePath?, onConflict?",
-  create_editor_utility_widget: "Params: at least one of assetPath (or path, or widgetBlueprintPath)/name, packagePath?, onConflict?",
-  create_widget_animation: "Params: assetPath (or path, or widgetBlueprintPath), animationName, durationSeconds?, displayRate?, displayLabel?",
-  create_widget_blueprint: "Params: at least one of assetPath (or path, or widgetBlueprintPath)/name, packagePath?, parentClass?, onConflict?",
-  delete_widget_animation: "Params: assetPath (or path, or widgetBlueprintPath), animationName",
-  extract_widget_subtree: "Params: sourceAssetPath (or sourcePath), sourceWidgetName (or widgetName, or widgetDisplayName), destinationAssetPath (or destinationPath), destinationParentClass?, destinationRootName?, dryRun?",
-  get_bind_widget_contract: "Params: at least one of className/assetPath (or path, or widgetBlueprintPath)",
-  get_runtime_delegates: "Params: widgetName? (or widgetDisplayName), className?",
-  get_runtime_focus_path: "Params: userIndex?",
-  get_runtime_widget: "Params: at least one of widgetName (or widgetDisplayName)/className, childName?, maxDepth?, includeLayout?",
-  get_widget_animation: "Params: assetPath (or path, or widgetBlueprintPath), animationName",
-  get_widget_details: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName)",
-  get_widget_properties: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), includeSubtree?",
-  inspect_runtime_instances: "Params: widgetName? (or widgetDisplayName), classFilter?, propertyNames?, includeSubtree?, childName?, childClassFilter?, viewportOnly?, world?, pieInstance?, maxInstances?, maxNodesPerInstance?",
-  invoke_runtime_function: "Params: at least one of widgetName (or widgetDisplayName)/className, functionName?, childName?, value?, commitMethod?",
-  list_runtime_widgets: "Params: classFilter?, namePrefix?, viewportOnly?, cursor?, limit?",
-  list_widget_bindings: "Params: assetPath (or path, or widgetBlueprintPath), filterWidgetName?, filterProperty?",
-  list_widget_blueprints: "Params: recursive?, cursor?, limit?",
-  list_widget_classes: "Params: filter?, module?, includeAbstract?, includeBlueprint?, cursor?, limit?",
-  move_widget: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), newParentWidgetName (or parentWidgetName, or parentWidget)",
-  read_widget_animations: "Params: assetPath (or path, or widgetBlueprintPath)",
-  read_widget_tree: "Params: assetPath (or path, or widgetBlueprintPath)",
-  remove_widget: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName)",
-  remove_widget_animation_event_key: "Params: assetPath (or path, or widgetBlueprintPath), animationName, time?, trackName?",
-  remove_widget_animation_key: "Params: assetPath (or path, or widgetBlueprintPath), animationName, widgetName (or widgetDisplayName), propertyName, time, channel?, channelIndex?",
-  remove_widget_animation_track: "Params: assetPath (or path, or widgetBlueprintPath), animationName, widgetName (or widgetDisplayName), propertyName",
-  reorder_child: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), index",
-  restore_widget_navigation: "Params: assetPath (or path, or widgetBlueprintPath), previous",
-  run_editor_utility_blueprint: "Params: assetPath (or path, or widgetBlueprintPath)",
-  run_editor_utility_widget: "Params: assetPath (or path, or widgetBlueprintPath)",
-  set_root_widget: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName)",
-  set_runtime_focus: "Params: widgetName (or widgetDisplayName), userIndex?, className?",
-  set_widget_navigation: "Params: assetPath (or path, or widgetBlueprintPath), rules OR widgetName (or widgetDisplayName), direction?, rule?, widgetToFocus?",
-  set_widget_property: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), propertyName, value (or propertyValue)",
-  set_widget_style: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), propertyName, value",
-  unbind_widget_animation_event: "Params: assetPath (or path, or widgetBlueprintPath), animationName, event?, userTag?",
-  wrap_root_widget: "Params: assetPath (or path, or widgetBlueprintPath), wrapperClass (or widgetClass), wrapperName?",
-};
-
 /** Every key the spec'd widget handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

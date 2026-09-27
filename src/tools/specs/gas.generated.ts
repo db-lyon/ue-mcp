@@ -1202,47 +1202,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_ability_system_component: "Params: blueprintPath, componentName?",
-  add_attribute: "Params: attributeSetPath, attributeName",
-  add_effect_cue: "Params: effectPath (or effectClass), cueTag, minLevel?, maxLevel?, magnitudeAttribute?",
-  add_loose_gameplay_tag: "Params: actorLabel?, actorPath?, tag, count?, world?, pieInstance?",
-  apply_effect: "Params: actorLabel?, actorPath?, effectClass (or effectPath), level?, setByCaller?, world?, pieInstance?",
-  audit_attributes: "Params: attributeSet?, actorLabel?, actorPath?, probeClamping?, world?, pieInstance?",
-  bind_ability_input: "Params: actorLabel?, actorPath?, abilityClass, inputId, world?, pieInstance?",
-  capture_gas_state: "Params: actorLabel?, actorPath?, snapshotId?, compareWith?, registerOwnerSets?, world?, pieInstance?",
-  clear_ability_input: "Params: actorLabel?, actorPath?, abilityClass, world?, pieInstance?",
-  compare_gas_states: "Params: beforeId?, beforeSnapshot?, afterId?, afterSnapshot?",
-  create_attribute_set: "Params: name, packagePath?, onConflict?",
-  create_gameplay_ability: "Params: name, packagePath?, onConflict?",
-  create_gameplay_cue: "Params: name, packagePath?, onConflict?, cueType?",
-  create_gameplay_effect: "Params: name, packagePath?, onConflict?, durationPolicy?",
-  delete_gas_snapshot: "Params: snapshotId",
-  get_active_effects: "Params: actorLabel?, actorPath?, world?, pieInstance?",
-  get_asc_state: "Params: actorLabel?, actorPath?, world?, pieInstance?",
-  get_attribute: "Params: actorLabel?, actorPath?, attribute?, world?, pieInstance?",
-  get_gas_info: "Params: blueprintPath",
-  get_live_attribute_value: "Params: actorLabel?, actorPath?, attributeSet, attribute, registerOwnerSets?, world?, pieInstance?",
-  grant_ability: "Params: actorLabel?, actorPath?, abilityClass, level?, inputId?, world?, pieInstance?",
-  init_asc: "Params: actorLabel?, actorPath?, attributeSet?, world?, pieInstance?",
-  list_gas_snapshots: "Params: actorPath?, includeSnapshots?",
-  remove_effect: "Params: actorLabel?, actorPath?, effectHandle?, effectClass? (or effectPath), stacksToRemove?, world?, pieInstance?",
-  remove_effect_cue: "Params: effectPath (or effectClass), cueTag",
-  remove_loose_gameplay_tag: "Params: actorLabel?, actorPath?, tag, count?, world?, pieInstance?",
-  revoke_ability: "Params: actorLabel?, actorPath?, abilityClass, world?, pieInstance?",
-  send_ability_input: "Params: actorLabel?, actorPath?, inputEvent?, inputId?, abilityClass?, world?, pieInstance?",
-  set_ability_tags: "Params: abilityPath, ability_tags?, cancel_abilities_with_tag?, block_abilities_with_tag?, activation_required_tags?, activation_blocked_tags?",
-  set_asc_defaults: "Params: blueprintPath, attributeSet (or attributeSetPath), componentName?, initDataTable?",
-  set_attribute: "Params: actorLabel?, actorPath?, attribute, value, world?, pieInstance?",
-  set_effect_modifier: "Params: effectPath, attribute, operation?, magnitude?",
-  set_live_attribute_value: "Params: actorLabel?, actorPath?, attributeSet, attribute, value, valueType?, registerOwnerSets?, world?, pieInstance?",
-  trace_ability_activation: "Params: actorLabel?, actorPath?, abilityClass, activate?, world?, pieInstance?",
-  validate_cue_coverage: "Params: directory?, effectPath? (or effectClass), maxEffects?",
-};
-
 /** Every key the spec'd gas handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

@@ -26,7 +26,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { maskLiterals, readCategory, readCategories } from "../../scripts/lib/tool-source.mjs";
-import { PAGINATION_PARAM_NAMES } from "../../src/surface/pagination.js";
+import { paramsClause } from "../../src/surface/handler-spec.js";
+import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 import { auditParams } from "../../scripts/audit-params.mjs";
 import { auditDocs } from "../../scripts/audit-docs.mjs";
 
@@ -206,11 +207,35 @@ describe("the audits over the real tree", () => {
       drifts.map((d: { category: string; action: string }) => `${d.category}.${d.action}`).join("\n"),
     ).toBe("");
   });
+});
 
-  it("keeps the audit's pagination parameter names in step with pagination.ts", () => {
-    // audit-params.mjs is plain node and cannot import the TS module, so it
-    // carries a copy. This is the assertion that makes the copy safe.
-    expect([...PAGINATION_PARAM_NAMES]).toEqual(["cursor", "limit"]);
+describe("a spec'd action's Params clause", () => {
+  // The clause is no longer text in the generated module; the reader derives it
+  // from the loaded specs, and the audit must still see drift against the docs.
+  const file = fixture(
+    'import { specBp } from "./specs/animation.generated.js";\n'
+    + 'export const t = categoryTool("animation", "Anim.", {\n'
+    + '  add_notify: specBp("mutate", "Add a notify.", "add_anim_notify"),\n'
+    + "});\n",
+  );
+  const clause = paramsClause(RECORDED_HANDLER_SPECS.add_anim_notify);
+  const read = () => ({ categories: [readCategory(file)!], blind: [] });
+  const doc = (params: string) => `# Tools\n\n## animation\n\n| \`add_notify\` | Add a notify. ${params} |\n`;
+
+  it("is read from the loaded specs", () => {
+    expect(readCategory(file)?.actions[0].description).toBe(`Add a notify. ${clause}`);
+  });
+
+  it("passes the audit when the docs agree", () => {
+    expect(auditParams({ read: read(), doc: doc(clause) }).drifts).toEqual([]);
+  });
+
+  it("fails the audit when the docs drift", () => {
+    const { drifts, compared } = auditParams({ read: read(), doc: doc("Params: assetPath, notifyName, bogus") });
+    expect(compared).toBe(1);
+    expect(drifts).toHaveLength(1);
+    expect(drifts[0].missing).toContain("triggerTime");
+    expect(drifts[0].extra).toEqual(["bogus"]);
   });
 });
 

@@ -7,12 +7,13 @@
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { paramsClause, renderAll } from "../../scripts/lib/handler-spec-gen.mjs";
+import { renderAll } from "../../scripts/lib/handler-spec-gen.mjs";
 import {
   categorySchema,
   choiceViolation,
   compareHandlerSpecs,
   makeSpecBp,
+  paramsClause,
   paramZod,
   renderChoice,
   specProblems,
@@ -165,7 +166,7 @@ describe("value shapes", () => {
 
   it("describe as their types, with a union's alternatives and null", () => {
     const tool = categoryTool("probe", "Probe.", {
-      set: makeSpecBp({ probe_set: paramsClause({ params: shapes }) }, { probe_set: { category: "probe", params: shapes } })(
+      set: makeSpecBp({ probe_set: { category: "probe", params: shapes } })(
         "mutate", "Set it.", "probe_set",
       ),
     }, Object.fromEntries(shapes.map((s) => [s.name, paramZod(s).optional()])));
@@ -246,7 +247,7 @@ describe("choices", () => {
   });
 
   it("travel on the action specBp declares, and describe_action reports them as choice groups", () => {
-    const specBp = makeSpecBp({ probe_settings: paramsClause(SETTINGS) }, { probe_settings: SETTINGS });
+    const specBp = makeSpecBp({ probe_settings: SETTINGS });
     const action = specBp("mutate", "Set node settings.", "probe_settings");
     expect(action.kind === "bridge" && action.paramChoices).toEqual(SETTINGS.choices);
     const tool = categoryTool("probe", "Probe.", { set_node_settings: action },
@@ -263,7 +264,7 @@ describe("choices", () => {
 });
 
 describe("the choice check at the TS boundary", () => {
-  const specBp = makeSpecBp({ probe_settings: paramsClause(SETTINGS) }, { probe_settings: SETTINGS });
+  const specBp = makeSpecBp({ probe_settings: SETTINGS });
   function fakeCtx(seen: Array<Record<string, unknown>>) {
     return {
       bridge: {
@@ -334,7 +335,8 @@ describe("the recording format", () => {
     const files = renderAll({ handlers: { probe_exempt: ANY_OF } });
     const module = files.get("src/tools/specs/level.generated.ts")!;
     expect(module).toContain('"contractExempt": "Selector-driven batch write"');
-    expect(module).toContain('probe_exempt: "Params: hlodLayer, at least one of actorLabels/labelPrefix/tag, dryRun?"');
+    expect(makeSpecBp({ probe_exempt: ANY_OF })("mutate", "Do it.", "probe_exempt").description)
+      .toBe("Do it. Params: hlodLayer, at least one of actorLabels/labelPrefix/tag, dryRun?");
     const schema = categorySchema({ probe_exempt: ANY_OF });
     expect(schema.hlodLayer.safeParse(null).success).toBe(true);
     expect(schema.hlodLayer.safeParse(undefined).success).toBe(true);

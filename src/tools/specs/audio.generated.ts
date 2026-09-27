@@ -1660,63 +1660,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_sound_submix_send: "Params: soundPath (or assetPath), submixPath, sendLevel?",
-  add_submix_effect: "Params: submixPath, effectType, name?, packagePath?, settings?",
-  create_attenuation: "Params: name, packagePath?, onConflict?, settings?, falloffDistance?, spatialize?, enableOcclusion?",
-  create_concurrency: "Params: name, packagePath?, onConflict?, maxCount?, limitToOwner?, volumeScale?, resolutionRule?",
-  create_metasound_source: "Params: name, packagePath?, onConflict?, format?, oneShot?",
-  create_sound_class: "Params: name, packagePath?, onConflict?, properties?, parentPath?",
-  create_sound_cue: "Params: name, packagePath?, onConflict?",
-  create_sound_mix: "Params: name, packagePath?, onConflict?, fadeInTime?, fadeOutTime?, adjusters?",
-  create_submix: "Params: name, packagePath?, onConflict?, parentPath?, outputVolume?, wetLevel?, dryLevel?",
-  extract_sound_wave_pcm: "Params: soundPath (or assetPath), maxSeconds?, downmixMono?",
-  import_audio: "Params: filePath (or filename), name? (or assetName), packagePath? (or destinationPath), looping?, replaceExisting?",
-  list_sound_assets: "Params: directory?, recursive?, offset?, cursor?, limit? (or maxResults)",
-  metasound_add_graph_input: "Params: assetPath (or metasoundPath), name, dataType, defaultValue?",
-  metasound_add_graph_output: "Params: assetPath (or metasoundPath), name, dataType",
-  metasound_add_node: "Params: assetPath (or metasoundPath), nodeClassName, nodeNamespace?, nodeVariant?, majorVersion?",
-  metasound_author: "Params: name, packagePath?, onConflict?, format?, oneShot?, inputs?, outputs?, nodes?, connections?",
-  metasound_build: "Params: assetPath (or metasoundPath)",
-  metasound_connect: "Params: assetPath (or metasoundPath), fromNodeId, fromOutput, toNodeId, toInput",
-  metasound_connect_audio_out: "Params: assetPath (or metasoundPath), fromNodeId, fromOutput, channel?",
-  metasound_connect_graph_input: "Params: assetPath (or metasoundPath), graphInput, toNodeId, toInput",
-  metasound_connect_graph_output: "Params: assetPath (or metasoundPath), fromNodeId, fromOutput, graphOutput",
-  metasound_disconnect: "Params: assetPath (or metasoundPath), fromNodeId?, fromOutput?, toNodeId?, toInput?, graphOutput?",
-  metasound_get_graph: "Params: assetPath (or metasoundPath)",
-  metasound_inspect_node: "Params: assetPath (or metasoundPath), nodeId, pageId?",
-  metasound_list_connections: "Params: assetPath (or metasoundPath), pageId?, nodeId?, direction?, dataType?",
-  metasound_list_node_classes: "Params: filter?",
-  metasound_list_node_pins: "Params: assetPath (or metasoundPath), nodeId, pageId?, direction?, dataType?",
-  metasound_list_variables: "Params: assetPath (or metasoundPath), pageId?, filter?",
-  metasound_read_document: "Params: assetPath (or metasoundPath), pageId?, includeNodes?, includeConnections?",
-  metasound_remove_member: "Params: assetPath (or metasoundPath), memberKind, name",
-  metasound_remove_node: "Params: assetPath (or metasoundPath), nodeId, removeUnusedDependencies?",
-  metasound_rename_member: "Params: assetPath (or metasoundPath), memberKind, name, newName",
-  metasound_search_nodes: "Params: assetPath (or metasoundPath), pageId?, query?, dataType?, classType?, limit?",
-  metasound_set_input_default: "Params: assetPath (or metasoundPath), value, dataType?, nodeId?, inputName?, graphInput?",
-  metasound_validate: "Params: assetPath (or metasoundPath), pageId?",
-  play_sound_at_location: "Params: soundPath (or assetPath, or path), location?, volumeMultiplier? (or volume), pitchMultiplier? (or pitch)",
-  read_sound_routing: "Params: soundPath (or assetPath)",
-  set_audio_property: "Params: assetPath, propertyName, value",
-  set_sound_attenuation: "Params: soundPath (or assetPath), attenuationPath?",
-  set_sound_class: "Params: soundPath (or assetPath), soundClassPath",
-  set_sound_class_parent: "Params: soundClassPath (or assetPath), parentPath?",
-  set_sound_concurrency: "Params: soundPath (or assetPath), concurrencyPath?",
-  set_sound_submix: "Params: soundPath (or assetPath), submixPath?",
-  set_submix_parent: "Params: submixPath, parentPath?",
-  soundcue_add_node: "Params: cuePath (or assetPath), nodeType, soundWavePath?, properties?",
-  soundcue_author: "Params: name, packagePath?, onConflict?, nodes?, connections?, root?",
-  soundcue_connect: "Params: cuePath (or assetPath), childNodeId, parentNodeId?, childIndex?",
-  soundcue_disconnect: "Params: cuePath (or assetPath), childNodeId?, parentNodeId?, clearRoot?",
-  soundcue_get_graph: "Params: cuePath (or assetPath)",
-  soundcue_remove_node: "Params: cuePath (or assetPath), nodeId",
-  spawn_ambient_sound: "Params: soundPath (or assetPath, or path), location?, label?, onConflict?, volumeMultiplier? (or volume)",
-};
-
 /** Every key the spec'd audio handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

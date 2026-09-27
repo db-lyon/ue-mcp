@@ -488,27 +488,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_foliage_instances: "Params: foliageTypePath, transforms?, center?, radius?, count?, seed?, projectToGround?, traceUp?, traceDown?, applyTypeRules?, skipCollision?",
-  add_foliage_type_to_level: "Params: foliageTypePath",
-  batch_set_foliage_settings_where: "Params: settings, where, whereMode?, foliageTypePaths?, directory?, recursive?, fromLevel?, propertyNames?, dryRun?, save?, maxTypes?",
-  clear_procedural_foliage: "Params: actorLabel?, actorPath?, spawnerPath?",
-  create_foliage_type: "Params: meshPath, name?, packagePath?, onConflict?, settings?",
-  get_foliage_instances: "Params: foliageTypePath?, center?, radius?, limit?, startIndex?, includeTransforms?",
-  get_foliage_type_settings: "Params: foliageTypePath (or foliageTypeName)",
-  list_foliage_types: "Params: cursor?, limit?",
-  read_procedural_foliage_spawner: "Params: spawnerPath",
-  remove_foliage_instances: "Params: foliageTypePath, instanceIndices?, transforms?, center?, radius?, all?, matchTolerance?, actorPath?, dryRun?",
-  remove_foliage_type_from_level: "Params: foliageTypePath, force?",
-  sample_foliage: "Params: center, radius?",
-  set_foliage_type_settings: "Params: foliageTypePath (or foliageTypeName), settings",
-  set_procedural_foliage_spawner_types: "Params: spawnerPath, foliageTypePaths, mode?, save?",
-  simulate_procedural_foliage: "Params: actorLabel?, actorPath?, spawnerPath?, clearExisting?, skipCollision?",
-};
-
 /** Every key the spec'd foliage handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

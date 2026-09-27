@@ -218,23 +218,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  configure_net_cull_distance: "Params: blueprintPath, netCullDistanceSquared?",
-  configure_net_update_frequency: "Params: blueprintPath, netUpdateFrequency?, minNetUpdateFrequency?",
-  get_networking_info: "Params: blueprintPath",
-  set_always_relevant: "Params: blueprintPath, alwaysRelevant?",
-  set_net_dormancy: "Params: blueprintPath, dormancy",
-  set_net_load_on_client: "Params: blueprintPath, loadOnClient?",
-  set_net_priority: "Params: blueprintPath, netPriority?",
-  set_only_relevant_to_owner: "Params: blueprintPath, onlyRelevantToOwner?",
-  set_property_replicated: "Params: blueprintPath, variableName (or propertyName), replicationType?, replicated?, repNotify?",
-  set_replicate_movement: "Params: blueprintPath, replicateMovement?",
-  set_replicates: "Params: blueprintPath, replicates?",
-};
-
 /** Every key the spec'd networking handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

@@ -341,18 +341,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_impulse: "Params: actorLabel OR actorPath, impulse (or force, or vector), mode?, componentName?, boneName?, location?, velChange?, accelChange?, world?, pieInstance?",
-  set_collision: "Params: actorLabel OR actorPath OR assetPath, componentName?, collisionProfile?, collisionEnabled?, objectType?, responseToAllChannels?, responses?",
-  set_collision_enabled: "Params: actorLabel OR actorPath, collisionEnabled (or collisionType)",
-  set_collision_profile: "Params: actorLabel OR actorPath, profileName",
-  set_physics_properties: "Params: actorLabel OR actorPath, mass?, linearDamping?, angularDamping?, enableGravity?",
-  set_simulate_physics: "Params: actorLabel OR actorPath, simulate (or enabled)",
-};
-
 /** Every key the spec'd physics handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

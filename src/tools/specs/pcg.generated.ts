@@ -618,32 +618,8 @@ export const handlerSpecs: HandlerSpecs = {
   }
 };
 
-/** The Params: clause of each spec'd bridge method. */
-export const paramsClauses: Readonly<Record<string, string>> = {
-  add_pcg_node: "Params: assetPath (or path), nodeType, posX?, posY?",
-  add_pcg_volume: "Params: graphPath?, location?, extent?, label?, onConflict?",
-  cleanup_pcg: "Params: actorLabel OR actorPath, removeComponents?",
-  connect_pcg_nodes: "Params: assetPath (or path), sourceNode (or sourceNodeName), sourcePin? (or sourcePinLabel), targetNode (or targetNodeName), targetPin? (or targetPinLabel)",
-  create_pcg_graph: "Params: name, packagePath?, onConflict?",
-  disconnect_pcg_nodes: "Params: assetPath (or path), sourceNode (or sourceNodeName), targetNode (or targetNodeName), sourcePin? (or sourcePinLabel), targetPin? (or targetPinLabel)",
-  execute_pcg_graph: "Params: actorLabel OR actorPath, seed?",
-  export_pcg_graph: "Params: assetPath (or path), includeSettings?",
-  force_regenerate_pcg: "Params: actorLabel OR actorPath",
-  get_pcg_component_details: "Params: actorLabel OR actorPath",
-  get_pcg_components: "Params: none",
-  import_pcg_graph: "Params: assetPath (or path), nodes, connections?, replace?",
-  list_pcg_graphs: "Params: cursor?, limit?",
-  read_pcg_graph: "Params: assetPath (or path)",
-  read_pcg_node_settings: "Params: assetPath (or path), nodeName",
-  remove_pcg_node: "Params: assetPath (or path), nodeName",
-  set_pcg_node_settings: "Params: assetPath (or path), nodeName, settings OR propertyName + propertyValue",
-  set_static_mesh_spawner_meshes: "Params: assetPath (or path), nodeName, entries, replace?",
-  toggle_pcg_graph: "Params: actorLabel OR actorPath, graphPath?",
-  unwrap_pcg_instance_nodes: "Params: assetPath (or path), nodeName?",
-};
-
 /** Every key the spec'd pcg handlers declare, aliases included. */
 export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
-export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
+export const specBp = makeSpecBp(handlerSpecs);

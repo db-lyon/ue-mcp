@@ -19,12 +19,13 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
-import { renderAll, paramsClause } from "../../scripts/lib/handler-spec-gen.mjs";
+import { renderAll } from "../../scripts/lib/handler-spec-gen.mjs";
 import { readCategory } from "../../scripts/lib/tool-source.mjs";
 import { readRegistrations } from "../../scripts/audit-handler-conventions.mjs";
 import {
   compareHandlerSpecs,
   makeSpecBp,
+  paramsClause,
   paramZod,
   specProblems,
   zodSignature,
@@ -218,7 +219,7 @@ describe("the generated modules", () => {
   });
 
   it("refuses to declare an action for a method with no recorded spec", () => {
-    const specBp = makeSpecBp({ known_method: "Params: none" });
+    const specBp = makeSpecBp({ known_method: { category: "probe", params: [] } });
     expect(specBp("read", "Read it.", "known_method").description).toBe("Read it. Params: none");
     expect(() => specBp("read", "Read it.", "unrecorded_method")).toThrow(/No recorded parameter spec/);
   });
