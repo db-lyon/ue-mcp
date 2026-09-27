@@ -44,8 +44,6 @@ struct FStateTreeHandlers::FNodeSlot
 	/** A node must derive from this; null accepts any node struct. */
 	UScriptStruct* (*Base)();
 	bool bOperand;
-	/** A removal payload carries a Blueprint node's instance-object values. */
-	bool bCaptureInstanceObject;
 	/** A removal always emits its inverse and says what is lost inside the payload. */
 	bool bLossyInPayload;
 	const TCHAR* AddNote;
@@ -74,10 +72,10 @@ namespace
 		.IndexParam = TEXT("taskIndex"), .CountKey = TEXT("taskCount"),
 		.AddMethod = TEXT("add_state_tree_task"), .RemoveMethod = TEXT("remove_state_tree_task"),
 		.SetInstanceMethod = TEXT("set_state_tree_task_instance_property"), .SetNodeMethod = TEXT("set_state_tree_task_property"),
-		.Base = nullptr, .bOperand = false, .bCaptureInstanceObject = true, .bLossyInPayload = false,
+		.Base = nullptr, .bOperand = false, .bLossyInPayload = false,
 		.AddNote = TEXT("The inverse names this task by INDEX into the state's task list. A later step that removes a task BELOW it shifts it down, and statetree(remove_task)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different task and remove the wrong one. There is no remove-task-by-nodeId action to address it by identity instead."),
 		.NativeLossy = TEXT("Replaying this appends the task at the END of the list with a NEW nodeId, so its taskIndex and any property binding that named the old id are not restored. Node-struct flags written with statetree(set_task_property) are not part of the payload either."),
-		.BlueprintLossy = TEXT("The removed task was Blueprint-backed. Its instance values ARE captured in the payload, but replaying adds the wrapper without its class, and statetree(set_node_class) reallocates the instance data when you set the class, discarding them. Set the class first, then write the values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the task list with a NEW nodeId, so its taskIndex and any property binding that named the old id are not restored."),
+		.BlueprintLossy = TEXT("The removed task was Blueprint-backed. Replaying adds the wrapper without its class, so the payload carries none of its instance values (statetree(set_node_class) would reallocate them anyway); they are reported beside it in removedInstanceObjectProperties. Set the class first, then write those values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the task list with a NEW nodeId, so its taskIndex and any property binding that named the old id are not restored."),
 		.Gate = nullptr, .OnAdded = nullptr,
 	};
 
@@ -87,10 +85,10 @@ namespace
 		.IndexParam = TEXT("conditionIndex"), .CountKey = TEXT("conditionCount"),
 		.AddMethod = TEXT("add_state_tree_enter_condition"), .RemoveMethod = TEXT("remove_state_tree_enter_condition"),
 		.SetInstanceMethod = nullptr, .SetNodeMethod = nullptr,
-		.Base = nullptr, .bOperand = true, .bCaptureInstanceObject = true, .bLossyInPayload = false,
+		.Base = nullptr, .bOperand = true, .bLossyInPayload = false,
 		.AddNote = TEXT("The inverse names this condition by INDEX into the state's enter-condition list. A later step that removes an enter condition BELOW it shifts it down, and statetree(remove_enter_condition)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different condition and remove the wrong one. There is no remove-enter-condition-by-nodeId action to address it by identity instead."),
 		.NativeLossy = TEXT("Replaying this appends the condition at the END of the list with a NEW nodeId, so its position in the And/Or expression and any property binding that named the old id are not restored."),
-		.BlueprintLossy = TEXT("The removed condition was Blueprint-backed. Its instance values ARE captured in the payload, but replaying adds the wrapper without its class, and statetree(set_node_class) reallocates the instance data when you set the class, discarding them. Set the class first, then write the values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the list with a NEW nodeId, so its position in the And/Or expression and any binding that named the old id are not restored."),
+		.BlueprintLossy = TEXT("The removed condition was Blueprint-backed. Replaying adds the wrapper without its class, so the payload carries none of its instance values (statetree(set_node_class) would reallocate them anyway); they are reported beside it in removedInstanceObjectProperties. Set the class first, then write those values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the list with a NEW nodeId, so its position in the And/Or expression and any binding that named the old id are not restored."),
 		.Gate = nullptr, .OnAdded = nullptr,
 	};
 
@@ -100,7 +98,7 @@ namespace
 		.IndexParam = TEXT("conditionIndex"), .CountKey = TEXT("conditionCount"),
 		.AddMethod = TEXT("add_state_tree_transition_condition"), .RemoveMethod = TEXT("remove_state_tree_transition_condition"),
 		.SetInstanceMethod = nullptr, .SetNodeMethod = nullptr,
-		.Base = nullptr, .bOperand = true, .bCaptureInstanceObject = false, .bLossyInPayload = true,
+		.Base = nullptr, .bOperand = true, .bLossyInPayload = true,
 		.AddNote = TEXT("The inverse names this condition by TWO indices: the transition's position in the state, and the condition's position in that transition. A later step that removes a transition BELOW this one, or a condition BELOW this one inside the same transition, shifts it down, and the rollbacks of statetree(remove_transition) and statetree(remove_transition_condition) re-add by APPENDING rather than reinserting, so in a flow mixing the two this pair can end up naming a different condition and remove the wrong one. There is no remove-transition-condition-by-nodeId action to address it by identity instead."),
 		.NativeLossy = TEXT("Replaying this appends the condition at the END of the transition's list with a NEW nodeId, so its position in an And/Or expression and any property binding that named the old id are not restored."),
 		.BlueprintLossy = TEXT("Replaying this appends the condition at the END of the transition's list with a NEW nodeId, so its position in an And/Or expression and any property binding that named the old id are not restored."),
@@ -113,7 +111,7 @@ namespace
 		.IndexParam = TEXT("considerationIndex"), .CountKey = TEXT("considerationCount"),
 		.AddMethod = TEXT("add_state_tree_consideration"), .RemoveMethod = TEXT("remove_state_tree_consideration"),
 		.SetInstanceMethod = nullptr, .SetNodeMethod = nullptr,
-		.Base = &FStateTreeConsiderationBase::StaticStruct, .bOperand = true, .bCaptureInstanceObject = false, .bLossyInPayload = true,
+		.Base = &FStateTreeConsiderationBase::StaticStruct, .bOperand = true, .bLossyInPayload = true,
 		.AddNote = nullptr,
 		.NativeLossy = TEXT("Replaying this appends the consideration at the END of the list with a NEW nodeId, so its position in an And/Or expression and any property binding that named the old id are not restored."),
 		.BlueprintLossy = TEXT("The removed consideration was Blueprint-backed, so replaying this adds the wrapper without its class; follow it with statetree(set_node_class). The node also gets a NEW nodeId, so any binding that named the old one is gone."),
@@ -143,10 +141,10 @@ namespace
 		.IndexParam = nullptr, .CountKey = TEXT("evaluatorCount"),
 		.AddMethod = TEXT("add_state_tree_evaluator"), .RemoveMethod = TEXT("remove_state_tree_evaluator"),
 		.SetInstanceMethod = TEXT("set_state_tree_evaluator_instance_property"), .SetNodeMethod = TEXT("set_state_tree_evaluator_property"),
-		.Base = &FStateTreeEvaluatorBase::StaticStruct, .bOperand = false, .bCaptureInstanceObject = true, .bLossyInPayload = false,
+		.Base = &FStateTreeEvaluatorBase::StaticStruct, .bOperand = false, .bLossyInPayload = false,
 		.AddNote = nullptr,
 		.NativeLossy = TEXT("Replaying this appends the evaluator at the END of the list with a NEW nodeId, so its evaluation order and any property binding that named the old id are not restored. Node-struct fields written with statetree(set_evaluator_property) are not part of the payload either."),
-		.BlueprintLossy = TEXT("The removed evaluator was Blueprint-backed. Its instance values ARE captured in the payload, but replaying adds the wrapper without its class, and statetree(set_node_class) reallocates the instance data when you set the class, discarding them. Set the class first, then write the values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the evaluator list with a NEW nodeId, so its evaluation order and any property binding that named the old id are not restored."),
+		.BlueprintLossy = TEXT("The removed evaluator was Blueprint-backed. Replaying adds the wrapper without its class, so the payload carries none of its instance values (statetree(set_node_class) would reallocate them anyway); they are reported beside it in removedInstanceObjectProperties. Set the class first, then write those values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the evaluator list with a NEW nodeId, so its evaluation order and any property binding that named the old id are not restored."),
 		.Gate = nullptr, .OnAdded = nullptr,
 	};
 
@@ -156,30 +154,17 @@ namespace
 		.IndexParam = nullptr, .CountKey = TEXT("globalTaskCount"),
 		.AddMethod = TEXT("add_state_tree_global_task"), .RemoveMethod = TEXT("remove_state_tree_global_task"),
 		.SetInstanceMethod = TEXT("set_state_tree_global_task_instance_property"), .SetNodeMethod = TEXT("set_state_tree_global_task_property"),
-		.Base = &FStateTreeTaskBase::StaticStruct, .bOperand = false, .bCaptureInstanceObject = true, .bLossyInPayload = false,
+		.Base = &FStateTreeTaskBase::StaticStruct, .bOperand = false, .bLossyInPayload = false,
 		.AddNote = nullptr,
 		.NativeLossy = TEXT("Replaying this appends the global task at the END of the list with a NEW nodeId, so its order and any property binding that named the old id are not restored. Node-struct fields written with statetree(set_global_task_property) are not part of the payload either."),
-		.BlueprintLossy = TEXT("The removed global task was Blueprint-backed. Its instance values ARE captured in the payload, but replaying adds the wrapper without its class, and statetree(set_node_class) reallocates the instance data when you set the class, discarding them. Set the class first, then write the values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the global task list with a NEW nodeId, so its order and any property binding that named the old id are not restored."),
+		.BlueprintLossy = TEXT("The removed global task was Blueprint-backed. Replaying adds the wrapper without its class, so the payload carries none of its instance values (statetree(set_node_class) would reallocate them anyway); they are reported beside it in removedInstanceObjectProperties. Set the class first, then write those values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the global task list with a NEW nodeId, so its order and any property binding that named the old id are not restored."),
 		.Gate = nullptr, .OnAdded = nullptr,
 	};
 
-	/** Every UPROPERTY of the node's instance data as export text. With
-	 *  bObject, a Blueprint node's instance object is read instead. */
-	TSharedPtr<FJsonObject> StateTreeSlotCaptureInstance(const FStateTreeEditorNode& Node, bool bObject)
+	/** Every UPROPERTY of Struct at Memory as export text. */
+	TSharedPtr<FJsonObject> StateTreeSlotCapture(const UStruct* Struct, const void* Memory)
 	{
 		auto Props = MakeShared<FJsonObject>();
-		const UStruct* Struct = nullptr;
-		const void* Memory = nullptr;
-		if (bObject && Node.InstanceObject)
-		{
-			Struct = Node.InstanceObject->GetClass();
-			Memory = Node.InstanceObject.Get();
-		}
-		else if (Node.Instance.IsValid())
-		{
-			Struct = Node.Instance.GetScriptStruct();
-			Memory = Node.Instance.GetMemory();
-		}
 		if (!Struct || !Memory) return Props;
 		for (TFieldIterator<FProperty> It(Struct); It; ++It)
 		{
@@ -420,7 +405,17 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveSlotNode(const TSharedPtr<FJson
 	{
 		Payload->SetStringField(TEXT("operand"), Removed.ExpressionOperand == EStateTreeExpressionOperand::Or ? TEXT("Or") : TEXT("And"));
 	}
-	Payload->SetObjectField(TEXT("instanceProperties"), StateTreeSlotCaptureInstance(Removed, Slot.bCaptureInstanceObject));
+	// The payload holds only what the add can apply: the Instance struct. A
+	// Blueprint node's values live on its instance object, which a replayed
+	// add never has, so they are reported beside the payload instead.
+	Payload->SetObjectField(TEXT("instanceProperties"), Removed.Instance.IsValid()
+		? StateTreeSlotCapture(Removed.Instance.GetScriptStruct(), Removed.Instance.GetMemory())
+		: MakeShared<FJsonObject>());
+	if (bBlueprint)
+	{
+		Result->SetObjectField(TEXT("removedInstanceObjectProperties"),
+			StateTreeSlotCapture(Removed.InstanceObject->GetClass(), Removed.InstanceObject.Get()));
+	}
 	if (Slot.bLossyInPayload) Payload->SetStringField(TEXT("lossy"), Lossy);
 	MCPSetRollback(Result, Slot.AddMethod, Payload);
 	if (!Slot.bLossyInPayload)
