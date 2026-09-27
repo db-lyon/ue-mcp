@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1078,
+  "handlerCount": 1077,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -12049,20 +12049,6 @@
       "category": "demo",
       "params": [],
       "contractExempt": "Takes no parameters and acts unconditionally: creates the home level if missing and opens it"
-    },
-    "demo_step": {
-      "category": "demo",
-      "params": [
-        {
-          "name": "step",
-          "type": "integer",
-          "required": false,
-          "description": "Step index to execute, 1 to 19. Omit for the step list",
-          "aliases": [
-            "stepIndex"
-          ]
-        }
-      ]
     },
     "describe_object": {
       "category": "editor",

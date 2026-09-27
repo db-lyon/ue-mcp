@@ -72,7 +72,16 @@ This wipes `/Game/Demo/` and removes the demo actors from the level.
 - **Showcase.** It's a single command that produces something visible.
 - **Reference.** Each step is a flow you can read and imitate: `flow(action="plan", flowName="demo_step_N")` shows what step `N` runs.
 
-Every step is the `demo_step_N` flow, declared in `src/tools/demo-steps.ts`. Steps 1 and 19 are built from level actions. The others call the bridge's `demo_step` primitive in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/Demo/DemoHandlers.cpp`, because each needs something no action does: spawning under a label that is already taken, the demo's own material graphs, an editor utility widget parented to `EditorUtilityWidget`, a sequence binding.
+Every step is the `demo_step_N` flow, declared in `src/tools/demo-steps.ts`, and built from public actions (`level`, `asset`, `niagara`, `pcg`, `editor`, `widget`) plus two internal tasks that no action exposes:
+
+- `internal.spawn_actor` spawns under a label even when another actor already carries it, and answers with the new actor's path. The actions that configure it afterwards address that path, so a replay configures the actor it just made.
+- `internal.create_constant_material` builds a demo material from linear constants, with a coloured emissive, and saves it once.
+
+Internal tasks are callable from flows only. They are not category actions, so they do not appear in the tool list, in `describe_action` or in `search`.
+
+### Replaying a step
+
+Steps are not idempotent. Running one again without `demo(action="cleanup")` in between spawns a second set of `Demo_` actors under the same labels. The assets are handled per step: the materials, the Niagara system and the level sequence are deleted and rebuilt, the PCG graph and the tuning panel are kept. With two hero spheres in the level, step 17 builds the sequence without binding either one.
 
 ## See Also
 

@@ -7,13 +7,10 @@
 class FMCPHandlerRegistry;
 
 /**
- * Demo scene builder handlers - Neon Shrine demo.
- * Ports the Python demo.py scene builder to C++ for the UE MCP Bridge.
+ * Neon Shrine demo handlers. The nineteen steps are the server's demo_step_N
+ * flows (src/tools/demo-steps.ts); these are what the flows cannot be.
  *
- * Registers 4 handlers:
- *   demo_step       - Build one of steps 2 to 18 by index (param: step). If omitted, returns step list.
- *                     The server runs every step as its demo_step_N flow; steps 1 and 19 are level
- *                     actions there, and the server adds the fields every step answers with.
+ * Registers 3 handlers:
  *   demo_get_steps  - Return ordered step list.
  *   demo_cleanup    - Remove all demo actors and assets.
  *   demo_go_home    - Open /Game/MCP_Home, creating it on first use.
@@ -25,7 +22,6 @@ public:
 
 private:
 	// Top-level handlers
-	static TSharedPtr<FJsonValue> DemoStep(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DemoGetSteps(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DemoCleanup(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DemoGoHome(const TSharedPtr<FJsonObject>& Params);
@@ -34,38 +30,6 @@ private:
 	// go_home to keep the editor anchored to a saved level instead of an
 	// auto-generated Untitled (which traps the editor in a save dialog).
 	static bool EnsureHomeLevelLoaded(FString& OutError);
-
-	// ---- The steps no existing action can build (2 to 18) ----
-	static TSharedPtr<FJsonObject> StepMaterials();
-	static TSharedPtr<FJsonObject> StepFloor();
-	static TSharedPtr<FJsonObject> StepPedestal();
-	static TSharedPtr<FJsonObject> StepHeroSphere();
-	static TSharedPtr<FJsonObject> StepPillars();
-	static TSharedPtr<FJsonObject> StepOrbs();
-	static TSharedPtr<FJsonObject> StepNeonLights();
-	static TSharedPtr<FJsonObject> StepHeroLight();
-	static TSharedPtr<FJsonObject> StepMoonlight();
-	static TSharedPtr<FJsonObject> StepSkyLight();
-	static TSharedPtr<FJsonObject> StepFog();
-	static TSharedPtr<FJsonObject> StepPostProcess();
-	static TSharedPtr<FJsonObject> StepNiagaraVfx();
-	static TSharedPtr<FJsonObject> StepPcgScatter();
-	static TSharedPtr<FJsonObject> StepOrbitRings();
-	static TSharedPtr<FJsonObject> StepLevelSequence();
-	static TSharedPtr<FJsonObject> StepTuningPanel();
-
-	// ---- Utility helpers ----
-	static AActor* SpawnMesh(const FString& Label, const FString& MeshPath,
-		FVector Location,
-		FRotator Rotation = FRotator::ZeroRotator,
-		FVector Scale = FVector(1, 1, 1));
-
-	static AActor* SpawnPointLight(const FString& Label, FVector Location,
-		FColor Color, float Intensity);
-
-	static UMaterialInterface* LoadDemoMat(const FString& Name);
-
-	static void ApplyMat(AActor* Actor, UMaterialInterface* Mat);
 
 	// Build the ordered step list (id, name, description)
 	struct FDemoStep

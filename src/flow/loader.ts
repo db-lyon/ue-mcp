@@ -237,9 +237,8 @@ function defaultFlows(): Record<string, unknown> {
     rotation: { pitch: -15, yaw: 30 },
   });
 
-  // Neon Shrine - a flow of the demo_step_N flows, one per demo step. Each
-  // is built from level actions or, where no action can build it, from the
-  // bridge's demo_step primitive (src/tools/demo-steps.ts).
+  // Neon Shrine - a flow of the demo_step_N flows, one per demo step, each
+  // built from actions and internal primitives (src/tools/demo-steps.ts).
   const neonShrineSteps: Record<string, unknown> = {};
   for (const demoStep of DEMO_STEPS) {
     neonShrineSteps[String(demoStep.index)] = { flow: demoFlowName(demoStep.index) };

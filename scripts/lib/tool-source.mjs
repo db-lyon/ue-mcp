@@ -29,6 +29,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { paramsClause } from "../../src/surface/handler-spec.js";
 import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
+import { FLOW_ACTION_SPECS } from "../../src/surface/flow-specs.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const TOOLS_DIR = path.join(ROOT, "src", "tools");
@@ -297,6 +298,10 @@ function readSpecBuilders(categoryFile, src) {
   for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"((?:\.|\.\.)\/specs)\/([a-z_]+)\.generated\.js"/g)) {
     const binding = m[1].match(/(?:^|,)\s*specBp(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*(?:,|$)/);
     if (binding) builders.set(binding[1] ?? "specBp", readSpecClauses(m[3]));
+  }
+  // A flow action's spec, declared in TS because no bridge method records it.
+  if (/import\s*\{[^}]*flowSpecBp[^}]*\}\s*from\s*"(?:\.|\.\.)\/(?:\.\.\/)?surface\/flow-specs\.js"/.test(src)) {
+    builders.set("flowSpecBp", new Map(Object.entries(FLOW_ACTION_SPECS).map(([key, spec]) => [key, paramsClause(spec)])));
   }
   return builders;
 }
