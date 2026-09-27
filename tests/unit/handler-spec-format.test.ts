@@ -23,7 +23,8 @@ import {
   type HandlerSpecs,
   type ParamSpec,
 } from "../../src/surface/handler-spec.js";
-import { actionSchema, parseParams } from "../../src/surface/action-schema.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
+import { parseParams } from "../helpers/params-clause.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
 import { prepareCall } from "../../src/dispatch/call-pipeline.js";
 import { bridgeTaskClass } from "../../src/flow/task-factory.js";

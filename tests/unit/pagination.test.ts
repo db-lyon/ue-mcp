@@ -15,7 +15,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { CURSOR_PARAM, PAGINATION_PARAM_NAMES, paged } from "../../src/surface/pagination.js";
-import { parseParams } from "../../src/surface/action-schema.js";
+import { parseParams } from "../helpers/params-clause.js";
 import { reflectionTool } from "../../src/tools/reflection.js";
 import { paramMapperOf } from "../../src/surface/epic-input.js";
 

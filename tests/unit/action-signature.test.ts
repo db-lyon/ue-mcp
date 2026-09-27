@@ -125,9 +125,9 @@ describe("signatures from an Epic input schema, continued", () => {
 });
 
 describe("signatures from the declared shape", () => {
-  it("covers an in-process action with no spec from describe_action's reading", () => {
+  it("covers an in-process action with no spec from its declared options", () => {
     const tool = categoryTool("demo", "Demo.", {
-      run: { kind: "handler", effect: "read", description: "Run. Params: name, limit?", handler: async () => ({}) },
+      run: { kind: "handler", effect: "read", options: { params: ["name", "limit?"] }, description: "Run.", handler: async () => ({}) },
     }, { name: z.string().optional(), limit: z.number().optional() });
     expect(actionSignature(tool, "run")).toBe("run(name, limit?:n)");
   });

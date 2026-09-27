@@ -33,7 +33,8 @@ import {
   type ParamSpec,
 } from "../../src/surface/handler-spec.js";
 import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
-import { parseParams, actionSchema } from "../../src/surface/action-schema.js";
+import { actionSchema } from "../../src/surface/action-schema.js";
+import { parseParams } from "../helpers/params-clause.js";
 import { animationTool } from "../../src/tools/animation.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import type { ActionSpec, ToolDef } from "../../src/core/types.js";

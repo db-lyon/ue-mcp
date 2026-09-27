@@ -94,7 +94,7 @@ export function zodExpression(param) {
 }
 
 /**
- * The `Params:` clause for one handler, in the grammar parseParams reads:
+ * The `Params:` clause for one handler, in the grammar tests/helpers/params-clause.ts reads:
  * required names bare, optional ones with `?`, aliases as `(or alias)`, and a
  * choice where its first member is declared, written as renderChoice writes it
  * (`actorLabel OR actorPath`, `at least one of labelPrefix/tag`).
