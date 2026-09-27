@@ -1660,8 +1660,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialShadingModel(const TSharedP
 	Material->SetShadingModel(NewShadingModel);
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Material->GetPathName(), bSaved, SaveError);
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), Material->GetPathName());
 	Payload->SetStringField(TEXT("shadingModel"), ShadingModelToString(PrevShadingModel));
@@ -1735,8 +1738,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialDomain(const TSharedPtr<FJs
 	Material->MaterialDomain = NewDomain;
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Material->GetPathName(), bSaved, SaveError);
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), Material->GetPathName());
 	Payload->SetStringField(TEXT("materialDomain"), DomainName(PrevDomain));
@@ -1801,8 +1807,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBlendMode(const TSharedPtr<
 	Material->BlendMode = NewBlendMode;
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Material, SaveError);
 
 	MCPSetUpdated(Result);
+	MCPNoteSaveOutcome(Result, Material->GetPathName(), bSaved, SaveError);
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), Material->GetPathName());
 	Payload->SetStringField(TEXT("blendMode"), PrevBlendModeStr);
