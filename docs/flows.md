@@ -61,6 +61,12 @@ The fields:
 
 You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->1966+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
 
+#### Task options
+
+Every built-in task describes its options, from the same source `project(describe_action)` reads: an in-process action's declared options, a bridge action's recorded C++ spec, an Epic action's input schema, a plugin action's manifest `schema`. flowkit's `registry.describe(name)` and `FlowRunner.describeTask(name)` return them as `options_schema`, and a task definition can refine them with its own `options_schema`.
+
+An in-process action's task checks option types and allowed values on every flow step, so a step passing `limit: "ten"` fails before the handler runs, naming the task and the option. Required options are left to the action itself, which says what is missing in its own words. Bridge actions are not checked by the runner; the editor validates them.
+
 ### Flows
 
 A flow is an ordered sequence of steps. Each step runs a task or a nested flow:
@@ -278,6 +284,37 @@ A condition is a small expression language, interpreted rather than run as code:
 
 A condition that is not an expression keeps its original meaning: its references are resolved and the result is tested for truthiness, where `false`, `0`, `null`, `undefined` and the empty string are false. `when: "${steps.1.ok}"` works as it always did. A string that contains an operator but does not parse fails the step with the grammar in the error, rather than being read as a non-empty string. A reference to a step that has not run fails the step too.
 
+## Preflight Checks (`checks`)
+
+A flow or a step can declare `checks`: conditions that gate it, written in the same expression language as `when:`. A check whose `when` holds applies its `action`: `error` fails the step (or the whole flow) before it starts, `skip` skips it, and `warn` records a warning and runs it.
+
+```yaml
+flows:
+  import_props:
+    checks:
+      - when: "not editor.connected"
+        action: error
+        message: Start the editor first.
+    steps:
+      1:
+        task: asset.import_static_mesh
+        options: { filePath: "D:/Props/Crate.fbx", packagePath: /Game/Props }
+        checks:
+          - { when: "gate.dialog", action: error, message: Answer the open dialog first. }
+```
+
+Besides `steps`, `params`, `project`, `editor` and `session`, a check (or a `when:`) can read two namespaces about the step being gated:
+
+| Name | Meaning |
+|------|---------|
+| `step.name`, `step.effect`, `step.availability`, `step.bridge` | The step's task, whether it reads or changes the editor, whether it needs an editor (`always`, `editor`, `unknown`), and the bridge method it dispatches to |
+| `gate.untargeted` | This server drives more than one editor and the call named none, so a run would be refused |
+| `gate.editor` | No editor is connected and the step dispatches to one |
+| `gate.dialog` | A modal dialog is open and would refuse this step |
+| `gate.python` | The step is `editor.execute_python` and its gate would refuse it: the `taskSummary` matches actions its `ruledOut` does not cover |
+
+The server's own gates are declared as exactly these checks when a flow is planned, so `flow(plan)` reports what a run would be refused for (see [Execution Plan](#execution-plan)). They are not added to a run: dispatch, the bridge and `execute_python` enforce them there as they always have.
+
 ## Flow-level Hooks
 
 A flow can attach steps that run around the main sequence, keyed by outcome:
@@ -477,7 +514,30 @@ Preview what a flow will do without running it:
 flow(action="plan", flowName="setup_scene")
 ```
 
-Returns each step with its task name, type, and skip status.
+Returns each step with its task name, type, and skip status, and a `preflight` field saying what a run would be refused for. Nothing runs, no dialog is answered and no `execute_python` ruling is remembered.
+
+```json
+{
+  "success": true,
+  "steps": [ ... ],
+  "preflight": {
+    "ok": false,
+    "refused": [
+      { "path": "2", "name": "asset.import_static_mesh", "message": "No editor is connected, and this step dispatches to one." }
+    ],
+    "steps": [
+      { "path": "1", "name": "project.read_config", "type": "task", "status": "run" },
+      { "path": "2", "name": "asset.import_static_mesh", "type": "task", "status": "error", "checks": [ ... ] }
+    ]
+  }
+}
+```
+
+`preflight` evaluates the flow's own `checks` and the server's gates (`gate.untargeted`, `gate.editor`, `gate.dialog`, `gate.python`) for every step, nested flows and hooks included. A refusal with no `path` is one for the whole run, such as an untargeted run while more than one editor is registered; its message is the one the run itself would be refused with. `params` and `skip` are read as `run` reads them.
+
+### Describing a flow
+
+`project(action="describe_action", name="<flow>")` answers with the flow's resolved plan when the name is not an action (`flow.<name>` works too): every step with nested flows flattened under paths such as `3/1`, each step's `options`, `when`, `ignore_failure` and `checks`, deprecation from the flow and from each task, and `source`, the config layer that last set the flow and each step (`built-in`, `plugin:<name>`, `ue-mcp.yml`, an env overlay, `ue-mcp.local.yml`, or the user-global file). `project(search_tools)` lists matching flows under a separate `flows` key, and `project(list_available_actions)` counts which flows can run with no editor.
 
 ## Built-in Flows
 
