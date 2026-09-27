@@ -35,6 +35,7 @@ import { gateGraph, gateScope, planPreflight } from "./preflight.js";
 import { keepNestedSteps } from "./composite.js";
 import { envelopeOfError, type ErrorEnvelope } from "../dispatch/error-envelope.js";
 import { BridgeFacts } from "./probes.js";
+import { planValidationError, validatePlan } from "./validate-plan.js";
 import { taskEffect } from "../surface/action-effects.js";
 
 /**
@@ -173,7 +174,14 @@ async function planFlow(
 
   // Plan mode short-circuits inside the runner before any hooks fire,
   // so the runId placeholder we pass here is never observed.
-  const runner = makeRunner(registry, config, ctx, nextRunId(), flowName, params.params as Record<string, unknown> | undefined);
+  const flowParams = params.params as Record<string, unknown> | undefined;
+  const skip = params.skip as string[] | undefined;
+  // Everything a run would be refused for before step 1, listed together.
+  const validation = await validatePlan({ config, registry, graph: gateGraph(ctx), flowName, params: flowParams, skip });
+  if (validation.problems.some((p) => p.kind === "flow" && p.path === undefined)) {
+    throw planValidationError(flowName, validation);
+  }
+  const runner = makeRunner(registry, config, ctx, nextRunId(), flowName, flowParams);
   const plan = await runner.run({ flowName, plan: true });
   // What a run would be refused for, by the same gates that refuse it.
   const preflight = await planPreflight(
@@ -182,10 +190,10 @@ async function planFlow(
     ctx,
     gateGraph(ctx),
     flowName,
-    params.params as Record<string, unknown> | undefined,
-    params.skip as string[] | undefined,
+    flowParams,
+    skip,
   );
-  return { ...plan, preflight };
+  return { ...plan, preflight, validation };
 }
 
 async function runFlow(
@@ -199,6 +207,10 @@ async function runFlow(
   const skip = (params.skip as string[] | undefined) ?? [];
   const flowParams = params.params as Record<string, unknown> | undefined;
   const rollback_on_failure = params.rollback_on_failure as boolean | undefined;
+
+  // Validate the whole plan before step 1, and refuse with every problem at once.
+  const validation = await validatePlan({ config, registry, graph: gateGraph(ctx), flowName, params: flowParams, skip });
+  if (!validation.ok) throw planValidationError(flowName, validation);
 
   // One runId per top-level call. Every per-step / per-run event we
   // emit carries this id so SSE subscribers can filter to a specific
