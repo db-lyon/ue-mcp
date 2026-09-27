@@ -6,8 +6,9 @@
  *
  * Reads tests/golden/handler-specs.json, the recording of the parameter specs
  * the C++ handlers register with (npm run specs:record), and writes
- * src/tools/specs/<category>.generated.ts plus its index: the zod entries every
- * spec'd handler declares and the `Params:` clause of each one. A category
+ * src/tools/specs/<category>.generated.ts plus its index: the recorded specs
+ * and the `Params:` clause of each one. The zod entries are built from the
+ * specs at load (categorySchema in src/surface/handler-spec.ts). A category
  * module declares an action for a spec'd method with `specBp(effect, summary,
  * method)`, and never writes that method's parameters by hand.
  *

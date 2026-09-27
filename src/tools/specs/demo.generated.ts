@@ -4,8 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
+import { categorySchema, makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd demo handler. */
 export const handlerSpecs: HandlerSpecs = {
@@ -48,10 +47,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 };
 
 /** Every key the spec'd demo handlers declare, aliases included. */
-export const schema: Record<string, z.ZodType> = {
-  step: z.number().int().optional().describe("Step index to execute, 1 to 19. Omit for the step list"),
-  stepIndex: z.number().int().optional().describe("Alias for step"),
-};
+export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
 export const specBp = makeSpecBp(paramsClauses, handlerSpecs);

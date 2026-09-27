@@ -4,8 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
+import { categorySchema, makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd physics handler. */
 export const handlerSpecs: HandlerSpecs = {
@@ -353,35 +352,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 };
 
 /** Every key the spec'd physics handlers declare, aliases included. */
-export const schema: Record<string, z.ZodType> = {
-  accelChange: z.boolean().optional().describe("Treat the force as an acceleration change"),
-  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector"),
-  angularDamping: z.number().optional().describe("Angular damping"),
-  assetPath: z.string().optional().describe("Blueprint whose component template to edit; needs componentName"),
-  boneName: z.string().optional().describe("Physics bone to push"),
-  collisionEnabled: z.string().optional().describe("NoCollision | QueryOnly | PhysicsOnly | QueryAndPhysics"),
-  collisionProfile: z.string().optional().describe("Collision profile (preset) name, applied before the overrides"),
-  collisionType: z.string().optional().describe("Alias for collisionEnabled"),
-  componentName: z.string().optional().describe("Primitive component to push (default: the root, else the first primitive) (add_impulse). Primitive component name (prefix match on an actor, default every one); required with assetPath (set_collision)"),
-  enabled: z.boolean().optional().describe("Alias for simulate"),
-  enableGravity: z.boolean().optional().describe("Whether gravity applies to the body"),
-  force: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Alias for impulse"),
-  impulse: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Impulse or force vector {x,y,z}"),
-  linearDamping: z.number().optional().describe("Linear damping"),
-  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World point to apply the impulse at; ignores mode"),
-  mass: z.number().optional().describe("Mass override in kg"),
-  mode: z.string().optional().describe("impulse (default) | force"),
-  objectType: z.string().optional().describe("Object-type channel name, e.g. WorldStatic, Pawn, ECC_GameTraceChannel1"),
-  pieInstance: z.number().optional().describe("PIE world instance (0 = server/primary); omit for the primary world"),
-  profileName: z.string().optional().describe("Collision profile (preset) name"),
-  responses: z.record(z.unknown()).optional().describe("Per-channel responses, {channelName: Block | Overlap | Ignore}"),
-  responseToAllChannels: z.string().optional().describe("Block | Overlap | Ignore, applied to every channel before the per-channel responses"),
-  simulate: z.boolean().optional().describe("Turn physics simulation on or off"),
-  vector: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Alias for impulse"),
-  velChange: z.boolean().optional().describe("Treat the impulse as a velocity change"),
-  world: z.string().optional().describe("World scope: auto (default) | pie | editor"),
-};
+export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
 export const specBp = makeSpecBp(paramsClauses, handlerSpecs);

@@ -18,8 +18,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { z as zodRuntime, type z } from "zod";
-import { renderAll, paramsClause, zodExpression } from "../../scripts/lib/handler-spec-gen.mjs";
+import type { z } from "zod";
+import { renderAll, paramsClause } from "../../scripts/lib/handler-spec-gen.mjs";
 import { readCategory } from "../../scripts/lib/tool-source.mjs";
 import { readRegistrations } from "../../scripts/audit-handler-conventions.mjs";
 import {
@@ -158,7 +158,7 @@ describe("the recording", () => {
     })).toContain("named after its tag");
   });
 
-  it("generates the same schema for a value form or tagged union as it builds at runtime", () => {
+  it("builds a value form or tagged union that accepts what it declares", () => {
     const variants = [
       { tag: "set", description: "Set it", fields: [
         { name: "frame", type: "integer" as const, required: true, description: "" },
@@ -172,11 +172,6 @@ describe("the recording", () => {
       { name: "operations", type: "array", items: "object", required: false, description: "", oneOf: { key: "op", variants } },
       { name: "operation", type: "object", required: false, description: "", oneOf: { key: "op", variants } },
     ];
-    for (const param of params) {
-      const generated = new Function("z", `return ${zodExpression(param)}`)(zodRuntime) as z.ZodTypeAny;
-      expect(zodSignature(generated), param.name).toBe(zodSignature(paramZod(param)));
-    }
-
     const args = paramZod(params[0]);
     for (const accepted of [{ bEnabled: true }, { Loc: { x: 1 } }, { Rows: [[1, 2]] }, ["one"], [{ name: "bEnabled", value: 1 }], '{"a":1}']) {
       expect(args.safeParse(accepted).success, JSON.stringify(accepted)).toBe(true);

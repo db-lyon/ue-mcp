@@ -4,8 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
+import { categorySchema, makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd pcg handler. */
 export const handlerSpecs: HandlerSpecs = {
@@ -644,43 +643,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 };
 
 /** Every key the spec'd pcg handlers declare, aliases included. */
-export const schema: Record<string, z.ZodType> = {
-  actorLabel: z.string().optional().describe("Editor label of the actor holding the PCG component; a label naming several actors is refused"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector"),
-  assetPath: z.string().optional().describe("PCGGraph asset path"),
-  connections: z.array(z.record(z.unknown())).optional().describe("[{from, fromPin?, to, toPin?}]"),
-  cursor: z.string().optional().describe("Resume a paged read: pass back the 'nextCursor' from the previous page, unmodified"),
-  entries: z.array(z.object({ mesh: z.string().describe("StaticMesh asset path; an entry without one is skipped"), weight: z.number().optional().describe("Relative pick weight (default 1), truncated to a whole number") })).optional().describe("Weighted mesh entries"),
-  extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Half-size of the volume box {x,y,z} (default 500 on each axis)"),
-  graphPath: z.string().optional().describe("PCGGraph to assign to the volume's component (add_pcg_volume). PCGGraph to assign (default: re-apply the component's current graph) (toggle_pcg_graph)"),
-  includeSettings: z.boolean().optional().describe("Include per-node editable settings in the response (default true)"),
-  label: z.string().optional().describe("Editor label. Also the idempotency key: an existing actor with this label is reported rather than duplicated"),
-  limit: z.number().int().optional().describe("Rows to return on this page (default 200, max 2000)"),
-  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location {x,y,z} (default origin)"),
-  name: z.string().optional().describe("Graph asset name"),
-  nodeName: z.string().optional().describe("Engine name of the node, as read_graph reports it (read_pcg_node_settings, remove_pcg_node, set_pcg_node_settings, set_static_mesh_spawner_meshes). Only this node (default: every node in the graph) (unwrap_pcg_instance_nodes)"),
-  nodes: z.array(z.record(z.unknown())).optional().describe("[{name, class, posX?, posY?, settings?}]"),
-  nodeType: z.string().optional().describe("PCG settings class of the node to add"),
-  onConflict: z.string().optional().describe("When the label exists: skip (default, report it) | error (add_pcg_volume). When the graph exists: skip (default, report it) | error (create_pcg_graph)"),
-  packagePath: z.string().optional().describe("Folder for the new graph (default /Game/PCG)"),
-  path: z.string().optional().describe("Alias for assetPath"),
-  posX: z.number().optional().describe("Graph editor X position for the new node"),
-  posY: z.number().optional().describe("Graph editor Y position for the new node"),
-  propertyName: z.string().optional().describe("One property to write instead of a settings object"),
-  propertyValue: z.string().optional().describe("The value for propertyName, as UE export text"),
-  removeComponents: z.boolean().optional().describe("Remove the managed spawned components too (default true)"),
-  replace: z.boolean().optional().describe("Wipe existing user nodes first (default false) (import_pcg_graph). Overwrite existing MeshEntries (default true) (set_static_mesh_spawner_meshes)"),
-  seed: z.number().int().optional().describe("Write the component's Seed before generating; the old one is reported as previousSeed"),
-  settings: z.record(z.unknown()).optional().describe("{propertyPath: value}; dotted paths and nested structs supported"),
-  sourceNode: z.string().optional().describe("Node the edge leaves"),
-  sourceNodeName: z.string().optional().describe("Alias for sourceNode"),
-  sourcePin: z.string().optional().describe("Output pin label. connect_nodes defaults to the first output pin, disconnect_nodes to any"),
-  sourcePinLabel: z.string().optional().describe("Alias for sourcePin"),
-  targetNode: z.string().optional().describe("Node the edge enters"),
-  targetNodeName: z.string().optional().describe("Alias for targetNode"),
-  targetPin: z.string().optional().describe("Input pin label. connect_nodes defaults to the first input pin, disconnect_nodes to any"),
-  targetPinLabel: z.string().optional().describe("Alias for targetPin"),
-};
+export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
 export const specBp = makeSpecBp(paramsClauses, handlerSpecs);

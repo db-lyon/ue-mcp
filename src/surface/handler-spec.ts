@@ -5,8 +5,9 @@
  * `RegisterHandler` call. The bridge publishes every spec in
  * `get_bridge_capabilities.handlerSpecs`; `npm run specs:record` writes that to
  * `tests/golden/handler-specs.json`, and `npm run specs:generate` turns the
- * recording into `src/tools/specs/<category>.generated.ts`: the zod entries and
- * the `Params:` clause of every spec'd action.
+ * recording into `src/tools/specs/<category>.generated.ts`: the specs and the
+ * `Params:` clause of every spec'd action. The zod entries are built from the
+ * specs at load, by categorySchema.
  *
  * The advertised surface always comes from the recording, whether or not an
  * editor is connected, so the startup contract never depends on which editor
@@ -499,9 +500,7 @@ function oneOfZod(oneOf: ParamOneOf): z.ZodTypeAny {
 
 /**
  * The zod schema one declared parameter accepts, without optionality or its
- * description. The runtime twin of the expression scripts/lib/handler-spec-gen.mjs
- * writes into a generated module; tests/unit/handler-specs.test.ts holds the two
- * to one signature.
+ * description. Every spec'd key's schema is built by this, at load.
  */
 export function paramZod(param: ParamSpec): z.ZodTypeAny {
   let base: z.ZodTypeAny;
@@ -516,6 +515,52 @@ export function paramZod(param: ParamSpec): z.ZodTypeAny {
     base = z.union([base, ...param.orTypes.map((t) => ZOD_BASE[t]())] as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
   }
   return param.nullable ? base.nullable() : base;
+}
+
+/** What one declared parameter accepts, for telling two declarations of a key apart. */
+function acceptedShape(param: ParamSpec): string {
+  const { name, description: _description, required: _required, aliases: _aliases, ...shape } = param;
+  // A forms refusal names the parameter, so the name is part of what it accepts.
+  return JSON.stringify(shape.forms?.length ? { ...shape, formsOf: name } : shape);
+}
+
+/**
+ * One zod entry per key across a category's specs, aliases included, sorted by
+ * key. A key several handlers declare must accept the same thing in every one
+ * of them, because the category's shape is shared; the descriptions are
+ * merged, naming which handlers each belongs to when they differ.
+ */
+export function categorySchema(specs: HandlerSpecs): Record<string, z.ZodType> {
+  const keys = new Map<string, { param: ParamSpec; shape: string; descriptions: Map<string, string[]> }>();
+  const claim = (key: string, param: ParamSpec, description: string, method: string): void => {
+    const shape = acceptedShape(param);
+    const entry = keys.get(key);
+    if (!entry) {
+      keys.set(key, { param, shape, descriptions: new Map([[description, [method]]]) });
+      return;
+    }
+    if (entry.shape !== shape) {
+      throw new Error(`'${key}' is declared as ${entry.shape} and as ${shape} (${method}); one category key has one type`);
+    }
+    const owners = entry.descriptions.get(description);
+    if (owners) owners.push(method);
+    else entry.descriptions.set(description, [method]);
+  };
+  for (const [method, spec] of Object.entries(specs)) {
+    for (const param of spec.params) {
+      claim(param.name, param, param.description, method);
+      for (const alias of param.aliases ?? []) claim(alias, param, `Alias for ${param.name}`, method);
+    }
+  }
+  const out: Record<string, z.ZodType> = {};
+  for (const [key, entry] of [...keys.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const described = [...entry.descriptions.entries()];
+    const description = described.length === 1
+      ? described[0][0]
+      : described.map(([text, owners]) => `${text} (${owners.join(", ")})`).join(". ");
+    out[key] = paramZod(entry.param).optional().describe(description);
+  }
+  return out;
 }
 
 /**

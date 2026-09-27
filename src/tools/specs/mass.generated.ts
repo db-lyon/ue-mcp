@@ -4,8 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
+import { categorySchema, makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd mass handler. */
 export const handlerSpecs: HandlerSpecs = {
@@ -98,13 +97,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 };
 
 /** Every key the spec'd mass handlers declare, aliases included. */
-export const schema: Record<string, z.ZodType> = {
-  assetPath: z.string().optional().describe("MassEntityConfigAsset path, /Game/Folder/Name[.Name] (ensure_mass_entity_config). MassEntityConfigAsset path (read_mass_entity_config)"),
-  name: z.string().optional().describe("Asset name, when assetPath is not given"),
-  onConflict: z.string().optional().describe("skip | error | update (default): what an existing asset gets"),
-  packagePath: z.string().optional().describe("Content folder for name (default /Game)"),
-  traits: z.array(z.object({ class: z.string().optional().describe("Concrete UMassEntityTraitBase subclass, short name or /Script path; this or traitClass"), traitClass: z.string().optional().describe("Same as class"), properties: z.record(z.unknown()).optional().describe("Fields written onto the trait instance; dotted paths allowed") })).optional().describe("Ordered trait list; the order is the asset's order and a class may appear once"),
-};
+export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
 export const specBp = makeSpecBp(paramsClauses, handlerSpecs);

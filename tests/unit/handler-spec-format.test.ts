@@ -5,20 +5,17 @@
  * here from the recording's format, through the generated zod and Params
  * clause, to describe_action and the check every dispatch route runs.
  */
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { paramsClause, renderAll, zodExpression } from "../../scripts/lib/handler-spec-gen.mjs";
+import { paramsClause, renderAll } from "../../scripts/lib/handler-spec-gen.mjs";
 import {
+  categorySchema,
   choiceViolation,
   compareHandlerSpecs,
   makeSpecBp,
   paramZod,
   renderChoice,
   specProblems,
-  zodSignature,
   type HandlerSpec,
   type HandlerSpecs,
   type ParamSpec,
@@ -28,11 +25,6 @@ import { parseParams } from "../helpers/params-clause.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
 import { prepareCall } from "../../src/dispatch/call-pipeline.js";
 import { bridgeTaskClass } from "../../src/flow/task-factory.js";
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {
-  handlers: HandlerSpecs;
-};
 
 const p = (name: string, type: ParamSpec["type"], extra: Partial<ParamSpec> = {}): ParamSpec =>
   ({ name, type, required: false, description: `${name} probe`, ...extra });
@@ -71,11 +63,6 @@ const ANY_OF: HandlerSpec = {
   contractExempt: "Selector-driven batch write",
 };
 
-/** Evaluate a generated zod expression the way the generated module will. */
-function evalZod(expr: string): z.ZodTypeAny {
-  return new Function("z", `return ${expr};`)(z) as z.ZodTypeAny;
-}
-
 describe("value shapes", () => {
   const shapes: ParamSpec[] = [
     p("tint", "color"),
@@ -104,13 +91,6 @@ describe("value shapes", () => {
 
   it("are well formed", () => {
     expect(specProblems({ probe: { category: "level", params: shapes } })).toEqual([]);
-  });
-
-  it("render to the zod the runtime builds, for every shape and every recorded parameter", () => {
-    const recorded = Object.values(SNAPSHOT.handlers).flatMap((s) => s.params);
-    for (const param of [...shapes, ...recorded]) {
-      expect(zodSignature(evalZod(zodExpression(param))), param.name).toBe(zodSignature(paramZod(param)));
-    }
   });
 
   it("accept exactly what they declare", () => {
@@ -324,7 +304,9 @@ describe("the recording format", () => {
     const module = files.get("src/tools/specs/level.generated.ts")!;
     expect(module).toContain('"contractExempt": "Selector-driven batch write"');
     expect(module).toContain('probe_exempt: "Params: hlodLayer, at least one of actorLabels/labelPrefix/tag, dryRun?"');
-    expect(module).toContain("hlodLayer: z.string().nullable().optional()");
+    const schema = categorySchema({ probe_exempt: ANY_OF });
+    expect(schema.hlodLayer.safeParse(null).success).toBe(true);
+    expect(schema.hlodLayer.safeParse(undefined).success).toBe(true);
   });
 
   it("reports drift in a choice, a shape or an exemption", () => {

@@ -4,8 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
+import { categorySchema, makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd networking handler. */
 export const handlerSpecs: HandlerSpecs = {
@@ -235,24 +234,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 };
 
 /** Every key the spec'd networking handlers declare, aliases included. */
-export const schema: Record<string, z.ZodType> = {
-  alwaysRelevant: z.boolean().optional().describe("bAlwaysRelevant (default false)"),
-  blueprintPath: z.string().optional().describe("Actor Blueprint asset path"),
-  dormancy: z.string().optional().describe("DORM_Never | DORM_Awake | DORM_DormantAll | DORM_DormantPartial | DORM_Initial"),
-  loadOnClient: z.boolean().optional().describe("bNetLoadOnClient (default true)"),
-  minNetUpdateFrequency: z.number().optional().describe("MinNetUpdateFrequency in updates per second (omit to leave it)"),
-  netCullDistanceSquared: z.number().optional().describe("NetCullDistanceSquared (default 225000000)"),
-  netPriority: z.number().optional().describe("NetPriority (default 1.0)"),
-  netUpdateFrequency: z.number().optional().describe("NetUpdateFrequency in updates per second (omit to leave it)"),
-  onlyRelevantToOwner: z.boolean().optional().describe("bOnlyRelevantToOwner (default false)"),
-  propertyName: z.string().optional().describe("Alias for variableName"),
-  replicated: z.boolean().optional().describe("Shorthand: true is Replicated, false is None"),
-  replicateMovement: z.boolean().optional().describe("Replicate movement (default false)"),
-  replicates: z.boolean().optional().describe("Replicate the actor (default false)"),
-  replicationType: z.string().optional().describe("None | Replicated | RepNotify (default None). Wins over replicated and repNotify"),
-  repNotify: z.boolean().optional().describe("Shorthand: true is RepNotify, and wins over replicated"),
-  variableName: z.string().optional().describe("Blueprint variable name"),
-};
+export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
 export const specBp = makeSpecBp(paramsClauses, handlerSpecs);

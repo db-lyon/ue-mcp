@@ -4,8 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
+import { categorySchema, makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd foliage handler. */
 export const handlerSpecs: HandlerSpecs = {
@@ -509,48 +508,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 };
 
 /** Every key the spec'd foliage handlers declare, aliases included. */
-export const schema: Record<string, z.ZodType> = {
-  actorLabel: z.string().optional().describe("Label of a ProceduralFoliageVolume, or of any actor with a ProceduralFoliageComponent"),
-  actorPath: z.string().optional().describe("Object path of that actor (clear_procedural_foliage, simulate_procedural_foliage). Only this InstancedFoliageActor (remove_foliage_instances)"),
-  all: z.boolean().optional().describe("Remove every instance of the type"),
-  applyTypeRules: z.boolean().optional().describe("Apply the FoliageType's own scale, rotation, align, slope, height and collision rules (default true)"),
-  center: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Centre of the scatter disc (add_foliage_instances). Centre of the filter sphere (get_foliage_instances). Centre of the removal sphere (remove_foliage_instances). Centre of the sample sphere (sample_foliage)"),
-  clearExisting: z.boolean().optional().describe("Remove what the component spawned before simulating again (default true)"),
-  count: z.number().int().optional().describe("Instances to scatter over the disc"),
-  cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
-  directory: z.string().optional().describe("Content directory to scan for FoliageType assets"),
-  dryRun: z.boolean().optional().describe("Preview without writing (default TRUE) (batch_set_foliage_settings_where). Report what would be removed without removing it (remove_foliage_instances)"),
-  foliageTypeName: z.string().optional().describe("Alias for foliageTypePath"),
-  foliageTypePath: z.string().optional().describe("FoliageType asset path, or the name of a type already placed in the open level (add_foliage_instances, get_foliage_instances, remove_foliage_instances, remove_foliage_type_from_level, set_foliage_type_settings). FoliageType asset path (add_foliage_type_to_level, get_foliage_type_settings)"),
-  foliageTypePaths: z.array(z.string()).optional().describe("Explicit FoliageType asset paths (batch_set_foliage_settings_where). FoliageType assets, or Blueprints whose class derives from FoliageType (set_procedural_foliage_spawner_types)"),
-  force: z.boolean().optional().describe("Remove the type even though that destroys its instances"),
-  fromLevel: z.boolean().optional().describe("Take the foliage types placed in the open level"),
-  includeTransforms: z.boolean().optional().describe("Return each instance's location, rotation and scale (default true)"),
-  instanceIndices: z.array(z.number().int()).optional().describe("Instance indices from get_foliage_instances"),
-  limit: z.number().int().optional().describe("Maximum instances to return (default 200, max 20000) (get_foliage_instances). Rows on this page (default 200, max 2000) (list_foliage_types)"),
-  matchTolerance: z.number().optional().describe("How close an instance must be to a transforms location, in centimetres (default 1)"),
-  maxTypes: z.number().int().optional().describe("Refuse to scan more than this many types (default 2000)"),
-  meshPath: z.string().optional().describe("StaticMesh the foliage type places"),
-  mode: z.string().optional().describe("replace (default) | add | remove"),
-  name: z.string().optional().describe("Asset name (default FT_<mesh name>)"),
-  onConflict: z.string().optional().describe("When the asset already exists: skip (default) | error"),
-  packagePath: z.string().optional().describe("Content folder for the asset (default /Game/Foliage)"),
-  projectToGround: z.boolean().optional().describe("Trace each candidate onto the geometry beneath it (default true)"),
-  propertyNames: z.array(z.string()).optional().describe("Extra properties to report on each row without filtering on them"),
-  radius: z.number().optional().describe("Scatter disc radius in centimetres (add_foliage_instances). Filter sphere radius in centimetres (get_foliage_instances). Removal sphere radius in centimetres (remove_foliage_instances). Sphere radius in centimetres (default 1000) (sample_foliage)"),
-  recursive: z.boolean().optional().describe("Scan directory recursively (default true)"),
-  save: z.boolean().optional().describe("Save each changed FoliageType package (default true) (batch_set_foliage_settings_where). Save the spawner package after a change (default true) (set_procedural_foliage_spawner_types)"),
-  seed: z.number().int().optional().describe("Random seed for scatter placement (default 0)"),
-  settings: z.record(z.unknown()).optional().describe("Property name to value, dotted paths supported (batch_set_foliage_settings_where). Property name to value, applied to the new FoliageType (create_foliage_type). Property name to value; each is imported as text onto the FoliageType (set_foliage_type_settings)"),
-  skipCollision: z.boolean().optional().describe("Skip the type's CollisionWithWorld test (default false)"),
-  spawnerPath: z.string().optional().describe("Clear every volume in the open level bound to this ProceduralFoliageSpawner (clear_procedural_foliage). ProceduralFoliageSpawner asset path (read_procedural_foliage_spawner, set_procedural_foliage_spawner_types). Run every volume in the open level bound to this ProceduralFoliageSpawner (simulate_procedural_foliage)"),
-  startIndex: z.number().int().optional().describe("Skip this many matching instances first"),
-  traceDown: z.number().optional().describe("How far below each candidate the ground trace ends, in centimetres (default 100000)"),
-  traceUp: z.number().optional().describe("How far above each candidate the ground trace starts, in centimetres (default 10000)"),
-  transforms: z.array(z.record(z.unknown())).optional().describe("Place one instance per entry at exactly {location, rotation?, scale?} (add_foliage_instances). Remove the instance nearest each location, within matchTolerance (remove_foliage_instances)"),
-  where: z.array(z.record(z.unknown())).optional().describe("Predicate over each type's current values: [{field, op, value}]"),
-  whereMode: z.string().optional().describe("all (default) | any"),
-};
+export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
 export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
