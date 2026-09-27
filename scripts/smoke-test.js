@@ -209,6 +209,8 @@ async function assertConnectedToTestProject(ws, idGen) {
   console.log(`${DIM}  target confirmed: ${reported}${RESET}`);
 }
 
+// preFlight and teardown are mirrored as smoke_scene_prepare and
+// smoke_scene_teardown in tests/ue_mcp/ue-mcp.yml; change both together.
 const SCRATCH_LEVEL = "/Game/MCP_SmokeScratch";
 const HOME_LEVEL = "/Game/MCP_Home";
 
