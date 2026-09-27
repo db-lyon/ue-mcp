@@ -12,6 +12,7 @@
 #include "Dom/JsonValue.h"
 #include "HandlerRegistry.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/PackageName.h"
 #include "StateTree.h"
 #include "UObject/Package.h"
 
