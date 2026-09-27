@@ -36,6 +36,7 @@ import { keepNestedSteps } from "./composite.js";
 import { envelopeOfError, type ErrorEnvelope } from "../dispatch/error-envelope.js";
 import { BridgeFacts } from "./probes.js";
 import { planValidationError, validatePlan } from "./validate-plan.js";
+import { freezeFlow } from "./freeze.js";
 import { taskEffect } from "../surface/action-effects.js";
 
 /**
@@ -193,7 +194,11 @@ async function planFlow(
     flowParams,
     skip,
   );
-  return { ...plan, preflight, validation };
+  // The resolved plan as a flow definition: review it, save it under flows:, run it.
+  const frozen = validation.ok
+    ? freezeFlow({ config, flowName, params: flowParams, skip, namespaces: hostNamespaces(ctx) })
+    : { from: flowName, refused: ["The plan has problems; see validation."] };
+  return { ...plan, preflight, validation, frozen };
 }
 
 async function runFlow(
