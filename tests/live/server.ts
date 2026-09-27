@@ -116,8 +116,13 @@ export class LiveServer {
   }
 
   /** One `tools/call`, flattened to the text blocks and the error flag. */
-  async call(name: string, args: Record<string, unknown>): Promise<LiveCallResult> {
-    const raw = await this.client.callTool({ name, arguments: args });
+  async call(name: string, args: Record<string, unknown>, timeoutMs?: number): Promise<LiveCallResult> {
+    // The SDK's 60s default is shorter than a long flow run.
+    const raw = await this.client.callTool(
+      { name, arguments: args },
+      undefined,
+      timeoutMs === undefined ? undefined : { timeout: timeoutMs },
+    );
     const blocks = (raw.content ?? []) as Array<{ type: string; text?: string }>;
     const texts = blocks.filter((b) => b.type === "text").map((b) => b.text ?? "");
     return {

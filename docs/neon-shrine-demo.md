@@ -70,9 +70,9 @@ This wipes `/Game/Demo/` and removes the demo actors from the level.
 
 - **Verification.** Running through all 19 steps confirms the bridge, asset registry, materials, lighting, Niagara, PCG, sequencer, and UMG editor utility paths all work.
 - **Showcase.** It's a single command that produces something visible.
-- **Reference.** Each step is a real handler call you can imitate. If you want to know how to spawn a colored point light or set up a PCG volume, look at how the corresponding step does it.
+- **Reference.** Each step is a flow you can read and imitate: `flow(action="plan", flowName="demo_step_N")` shows what step `N` runs.
 
-The implementation lives in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/Demo/DemoHandlers.cpp`.
+Every step is the `demo_step_N` flow, declared in `src/tools/demo-steps.ts`. Steps 1 and 19 are built from level actions. The others call the bridge's `demo_step` primitive in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/Demo/DemoHandlers.cpp`, because each needs something no action does: spawning under a label that is already taken, the demo's own material graphs, an editor utility widget parented to `EditorUtilityWidget`, a sequence binding.
 
 ## See Also
 

@@ -39,7 +39,11 @@ export class BridgeTask extends UeMcpTask {
     if (!method || typeof method !== "string") {
       throw new Error('BridgeTask requires a "method" option');
     }
-    const raw = await this.bridge.call(method as string, params);
+    // The caller's budget, as a handler's own bridge call carries it.
+    const budget = this.ctx.callTimeoutMs;
+    const raw = budget === undefined
+      ? await this.bridge.call(method as string, params)
+      : await this.bridge.call(method as string, params, budget);
 
     if (typeof raw !== "object" || raw === null) {
       return { success: true, data: { result: raw } };

@@ -20,10 +20,10 @@ describe("dist/ue-mcp.default.yml", () => {
     }
   });
 
-  it("uses the per-action class path, not the generic bridge task with a method option", () => {
+  it("points every action at its base alias, not the generic bridge task with a method option", () => {
     for (const [name, task] of Object.entries(doc.tasks)) {
       if (name === "shell") continue;
-      expect(task.class_path, name).toBe(name);
+      expect(task.class_path, name).toBe(`ue-mcp.builtin/${name}`);
       expect(task.options, name).toBeUndefined();
     }
   });

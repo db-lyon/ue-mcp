@@ -3,6 +3,7 @@ import type { ToolDef, ActionSpec } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import {
   compileSchemaFields,
+  manifestOptionSpecs,
   type ManifestProvidedCategory,
 } from "./manifest.js";
 import { inferActionEffect } from "../surface/action-class.js";
@@ -44,6 +45,7 @@ export function buildProvidedTool(plan: ProvisionPlan): ToolDef {
       effectSource: actionSpec.effect ? "declared" : "inferred",
       description:
         actionSpec.description ?? `Plugin action from ${plan.pluginName}`,
+      optionsSchema: manifestOptionSpecs(actionSpec.schema),
     };
     docLines.push(
       actionSpec.description

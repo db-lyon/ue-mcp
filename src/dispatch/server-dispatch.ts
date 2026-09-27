@@ -30,10 +30,13 @@ import {
 import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
-import { withAssetLocks, type LockingConfig } from "./locking.js";
+import { lockScopeOpener, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "../surface/action-schema.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
+import { createLiveTask } from "../flow/live-task.js";
+import { hostNamespaces } from "../flow/condition.js";
+import type { FlowDefinition, TaskDefinition } from "@db-lyon/flowkit";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 
 type TextBlock = { type: "text"; text: string };
@@ -179,6 +182,28 @@ export function attribution(sessions: SessionRegistry, session: EditorSession): 
 }
 
 /**
+ * The addressed session's task and flow definitions for a live call. A config
+ * that does not parse leaves every name resolving to its built-in, so a bad
+ * ue-mcp.yml cannot take the category tools down with it; flow calls still
+ * report it.
+ */
+function liveDefinitions(
+  loads: SessionLoads,
+  ctx: FlowContext,
+): { definitions?: Record<string, TaskDefinition>; flows?: Record<string, FlowDefinition> } {
+  try {
+    const config = loads.reloadConfigFor(ctx);
+    return {
+      definitions: config.tasks as Record<string, TaskDefinition>,
+      flows: config.flows as Record<string, FlowDefinition>,
+    };
+  } catch (e) {
+    debug("flow", "flow config unreadable; live call runs the built-in task", e);
+    return {};
+  }
+}
+
+/**
  * One call to a category tool (or the micro gateway). `envelope` says the
  * tool is advertised as `action` + `args`, so the flat shape is validated here
  * rather than by the SDK.
@@ -235,7 +260,11 @@ export async function dispatchCategoryCall(
     elicit: deps.elicit(),
     onProgress: makeProgressReporter(extra),
     client: deps.client(),
+    openAssetLocks: lockScopeOpener(deps.lockingCfg, () => loads.dispatchUnion.tools),
   };
+  // One lock scope per call: every action it runs, the action's own children
+  // included, locks into it, and it is released when the call returns.
+  flowCtx.assetLocks = flowCtx.openAssetLocks?.(flowCtx);
 
   // The addressed session's own registry, built on demand rather than falling
   // back to the first project's (D1). A call for an action this session does
@@ -272,18 +301,17 @@ export async function dispatchCategoryCall(
 
   const served = attribution(sessions, session);
   try {
-    const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
-    // Locks are taken in the editor the call runs in, through the GUARDED
-    // bridge, so a lock request made while a modal is up is refused as a dialog.
-    const result = await withAssetLocks(
-      session.guarded,
-      deps.lockingCfg,
-      effectiveTask,
-      subject.params,
-      () => task.run(),
-      session.lockOwnerId,
-      loads.dispatchUnion.tools,
+    // Resolved through the session's `tasks:` definitions, as a flow step is.
+    const task = await createLiveTask(
+      { registry: sessionRegistry, ...liveDefinitions(loads, flowCtx), namespaces: hostNamespaces(flowCtx) },
+      flowCtx,
+      taskName,
+      taskParams,
     );
+    // Locks are taken inside the run, in the editor the call runs in, through
+    // the GUARDED bridge, so a lock request made while a modal is up is refused
+    // as a dialog.
+    const result = await task.run();
 
     // A task that failed for its own reasons reports that, not a dialog. A
     // failure DURING a modal is usually caused by it, and the runner returns
@@ -296,7 +324,11 @@ export async function dispatchCategoryCall(
       && (postRunDecision = await guard.check(effectiveTask, "action")).allow === false;
     if (!result.success && !isDialogRefusal(result.data) && !failedUnderDialog) {
       const msg = result.error?.message ?? `Task ${taskName} failed`;
-      return errorResult("TASK_FAILED", msg, [...machineErrorBlock(result.error), ...served]);
+      // A busy asset keeps its own retryable code.
+      const code = result.error instanceof McpError && result.error.code === ErrorCode.ASSET_LOCKED
+        ? ErrorCode.ASSET_LOCKED
+        : "TASK_FAILED";
+      return errorResult(code, msg, [...machineErrorBlock(result.error), ...served]);
     }
 
     // An allow-listed read still SAYS a dialog is up: get_status must never
@@ -373,8 +405,8 @@ export async function dispatchCategoryCall(
       ]),
     };
   } catch (e) {
-    // A refusal can arrive as a throw (taking an asset lock is a bridge call),
-    // and is shaped through the guard so the payload matches the result route.
+    // A refusal can arrive as a throw, and is shaped through the guard so the
+    // payload matches the result route.
     const thrownRefusal = e instanceof McpError && isDialogRefusal(e.details)
       ? (e.details as unknown as Record<string, unknown>)
       : null;
@@ -386,6 +418,8 @@ export async function dispatchCategoryCall(
     const msg = e instanceof Error ? e.message : String(e);
     const code = e instanceof McpError ? e.code : "UNKNOWN";
     return errorResult(code, msg, [...machineErrorBlock(e), ...served]);
+  } finally {
+    await flowCtx.assetLocks?.releaseAll();
   }
 }
 
@@ -399,6 +433,7 @@ export async function dispatchFlowCall(
   flowTool: ToolDef,
   baseCtx: ToolContext,
   rawParams: Record<string, unknown>,
+  extra: CallExtra = {},
 ): Promise<ToolResult> {
   const { sessions } = deps;
   try {
@@ -431,7 +466,17 @@ export async function dispatchFlowCall(
       "action",
     );
     if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
-    const result = await flowTool.handler(sessionContext(baseCtx, session), params);
+    // The request's own progress token and elicitation, so every step can
+    // stream progress and ask the user exactly as the same action called live.
+    const flowCtx: ToolContext = {
+      ...sessionContext(baseCtx, session),
+      callTargeted: typeof target === "string" && target.trim() !== "",
+      elicit: deps.elicit(),
+      onProgress: makeProgressReporter(extra),
+      client: deps.client(),
+      openAssetLocks: lockScopeOpener(deps.lockingCfg, () => deps.loads.dispatchUnion.tools),
+    };
+    const result = await flowTool.handler(flowCtx, params);
     const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
     return { content: withUpgradeNotice([{ type: "text" as const, text }, ...attribution(sessions, session)]) };
   } catch (e) {

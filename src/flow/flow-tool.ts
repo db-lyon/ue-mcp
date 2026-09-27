@@ -30,6 +30,9 @@ import {
   trimError,
 } from "./events.js";
 import { unappliedRollbackCall } from "./handler-outcome.js";
+import { hostNamespaces, makeConditionEvaluator } from "./condition.js";
+import { gateGraph, gateScope, planPreflight } from "./preflight.js";
+import { keepNestedSteps } from "./composite.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -64,6 +67,7 @@ export function createFlowTool(
     run: {
       kind: "handler",
       effect: "mutate",
+      options: { params: ["flowName", "skip?", "params?", "rollback_on_failure?"] },
       description:
         "Execute a named flow from ue-mcp.yml. Params: flowName, "
         + "skip? (step names or numbers), params? (runtime options merged into every step's options, "
@@ -85,6 +89,7 @@ export function createFlowTool(
     plan: {
       kind: "handler",
       effect: "read",
+      options: { params: ["flowName"] },
       description:
         "Show a flow's execution plan without running a step of it. Params: flowName. Returns the ordered plan.",
       handler: async (ctx, params) => planFlow(registryFor(ctx), configFor(ctx), ctx, params),
@@ -92,6 +97,7 @@ export function createFlowTool(
     list: {
       kind: "handler",
       effect: "read",
+      options: { params: [] },
       description:
         "List the flows available to this project, merged from ue-mcp.yml, the user-global config "
         + "and any loaded plugin. Params: none",
@@ -165,7 +171,18 @@ async function planFlow(
   // Plan mode short-circuits inside the runner before any hooks fire,
   // so the runId placeholder we pass here is never observed.
   const runner = makeRunner(registry, config, ctx, nextRunId(), flowName);
-  return runner.run({ flowName, plan: true });
+  const plan = await runner.run({ flowName, plan: true });
+  // What a run would be refused for, by the same gates that refuse it.
+  const preflight = await planPreflight(
+    registry,
+    config,
+    ctx,
+    gateGraph(ctx),
+    flowName,
+    params.params as Record<string, unknown> | undefined,
+    params.skip as string[] | undefined,
+  );
+  return { ...plan, preflight };
 }
 
 async function runFlow(
@@ -184,8 +201,18 @@ async function runFlow(
   // emit carries this id so SSE subscribers can filter to a specific
   // run; the response includes it so callers can correlate.
   const runId = nextRunId();
-  const runner = makeRunner(registry, config, ctx, runId, flowName);
-  const result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure });
+  // The lock scope is the whole run: each step locks what it writes as it
+  // starts, and nothing is released until the run (rollback included) ends,
+  // so no other agent writes between two steps of it.
+  const locks = ctx.assetLocks ? undefined : ctx.openAssetLocks?.(ctx);
+  const runCtx: ToolContext = locks ? { ...ctx, assetLocks: locks } : ctx;
+  const runner = makeRunner(registry, config, runCtx, runId, flowName);
+  let result: FlowRunResult;
+  try {
+    result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure });
+  } finally {
+    await locks?.releaseAll();
+  }
 
   const formatted = formatFlowResult(result);
   return { ...formatted, runId };
@@ -254,6 +281,7 @@ function makeRunner(
       });
     },
     afterStep: async (step: PlanStep, result: FlowStepResult) => {
+      keepNestedSteps(result);
       emitFlowEvent({
         type: "step_completed",
         runId,
@@ -309,12 +337,18 @@ function makeRunner(
     },
   };
 
+  // `${project.*}`, `${editor.*}` and `${session.*}` in options and in
+  // `when:`, read from this run's own editor.
+  const namespaces = hostNamespaces(ctx);
   return new FlowRunner({
     tasks: config.tasks as Record<string, TaskDefinition>,
     flows: config.flows as Record<string, FlowDefinition>,
     registry,
     context: flowCtx,
     hooks,
+    references: namespaces,
+    // A project's own checks can read `step.*` and `gate.*` as a plan does.
+    conditionEvaluator: makeConditionEvaluator(namespaces, gateScope(ctx, gateGraph(ctx))),
   });
 }
 

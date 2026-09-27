@@ -1,12 +1,12 @@
 ue-mcp:
   version: 1
 
-# Fixture for the live tests (npm run test:live), which is the only thing
-# that runs this flow. tests/ue_mcp is the one project that suite is allowed to
-# drive, so its fixtures live here.
+# Fixtures and repo flows for the live tests (npm run test:live).
+# tests/ue_mcp is the one project that suite is allowed to drive, so they
+# live here.
 #
-# Every step is a read: the suite attaches to an editor somebody else started
-# and has to leave it exactly as it found it.
+# live_tier_leak_probe is read-only: the suite attaches to an editor somebody
+# else started and has to leave it exactly as it found it.
 #
 # The `editor:` key inside each step's options is deliberate, and is the point
 # of the fixture. It addresses a session and must be consumed by the client; a
@@ -43,3 +43,44 @@ flows:
           directory: /Game
           recursive: false
           editor: ue_mcp
+
+  # The smoke harness's scratch-level routine, as flows (plan 3.9). The live
+  # gate for the universal flows runs both. scripts/smoke-test.js keeps its own
+  # copy because it talks to the bridge with no server in between.
+  smoke_scene_prepare:
+    description: Anchor on /Game/MCP_Home, then park the editor on a blank /Game/MCP_SmokeScratch.
+    steps:
+      "1":
+        task: demo.go_home
+      "2":
+        task: asset.delete
+        options:
+          assetPath: /Game/MCP_SmokeScratch
+          force: true
+        ignore_failure: true
+      "3":
+        task: level.create
+        options:
+          levelPath: /Game/MCP_SmokeScratch
+
+  smoke_scene_teardown:
+    description: Leave the editor on a fresh, saved /Game/MCP_Home and delete /Game/MCP_SmokeScratch.
+    steps:
+      "1":
+        task: asset.delete
+        options:
+          assetPath: /Game/MCP_Home
+          force: true
+        ignore_failure: true
+      "2":
+        task: level.create
+        options:
+          levelPath: /Game/MCP_Home
+      "3":
+        task: level.save
+      "4":
+        task: asset.delete
+        options:
+          assetPath: /Game/MCP_SmokeScratch
+          force: true
+        ignore_failure: true

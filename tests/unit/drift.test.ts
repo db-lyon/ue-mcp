@@ -35,6 +35,9 @@ const CPP_ONLY: ReadonlySet<string> = new Set<string>([
   // Inverse of bulk_upsert_data_assets. Reached only through the rollback
   // descriptor that call emits, never authored by a caller by hand.
   "bulk_restore_data_assets",
+  // The demo steps no action can build. demo(step) reaches it through the
+  // demo_step_N flows rather than as its own bridge mapping.
+  "demo_step",
   // Reached through asset(migrate), which is a TS handler rather than a bare
   // bridge mapping: it resolves the destination editor's Content directory and
   // rescans that editor's asset registry afterwards (#817), so the call to this

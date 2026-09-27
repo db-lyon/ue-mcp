@@ -28,6 +28,7 @@ import { BaseTask } from "@db-lyon/flowkit";
 import type { TaskResult, RollbackRecord, TaskContext } from "@db-lyon/flowkit";
 import type { IBridge } from "./bridge/bridge.js";
 import type { FlowContext } from "./flow/context.js";
+import { createConfiguredTask } from "./flow/task-call.js";
 
 /**
  * Base class for ue-mcp tasks. Extends flowkit's `BaseTask` and narrows the
@@ -52,6 +53,24 @@ export abstract class UeMcpTask<
   /** The editor bridge for this run. Shortcut for `this.ctx.bridge`. */
   protected get bridge(): IBridge {
     return this.ctx.bridge;
+  }
+
+  /**
+   * Resolve another task through the configured definitions, as flowkit does,
+   * and refuse a call that would re-enter a class already on the call path.
+   * An override of a built-in reaches the built-in through its base alias,
+   * `ue-mcp.builtin/<category>.<action>`.
+   */
+  protected override async resolve<T extends BaseTask = BaseTask>(
+    taskName: string,
+    options?: Record<string, unknown>,
+  ): Promise<T> {
+    return createConfiguredTask(
+      this.ctx,
+      taskName,
+      options,
+      this.constructor as abstract new (...args: never[]) => BaseTask<unknown>,
+    ) as Promise<T>;
   }
 }
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDef, ToolContext } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
-import { toolGraphOf } from "../surface/target-params.js";
+import { callOwnBridgeMethod } from "../flow/action-call.js";
 import { directive } from "../core/directive.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
 import { buildProjectAction } from "./project/install.js";
@@ -10,27 +10,10 @@ import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
 import { progressRenderingNote } from "../dispatch/client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../dispatch/workaround-tracker.js";
-import { searchToolGraph } from "../surface/context/tool-search.js";
-import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../dispatch/python-gate.js";
-import { checkBridgeParity } from "../bridge/bridge-parity.js";
+import { evaluateGate, gateCandidates, gateRefusalMessage, notInRunningPlugin } from "../dispatch/python-gate.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
-
-/**
- * Which gate candidates dispatch to a bridge method the connected plugin does
- * not register, read from the parity check. Nothing is excluded when the
- * plugin published no action list, since then nothing is known.
- */
-async function notInRunningPlugin(ctx: ToolContext): Promise<(c: GateCandidate) => boolean> {
-  const graph = toolGraphOf(ctx);
-  const missing = new Set(checkBridgeParity(graph, ctx.bridge.capabilities).missing);
-  if (missing.size === 0) return () => false;
-  return (c) => {
-    const spec = graph.find((t) => t.name === c.tool)?.actions[c.action];
-    return spec?.kind === "bridge" && missing.has(spec.bridge);
-  };
-}
 
 /** Where a caller declares a standing opt-in to the Blueprint-error bypass.
  *  Rides the normal global < project < env < local config cascade, so a
@@ -45,6 +28,7 @@ export const editorTool: ToolDef = categoryTool(
     start_editor: {
       kind: "handler",
       effect: "mutate",
+      options: { params: ["timeout?", "dialogPolicy?"] },
       description: "Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. An editor already running for this project is reported as a failure, because this call launched nothing, with alreadyRunning=true, bridgeReady, and the port it published, so a caller can tell \"there was nothing to do\" from \"the launch broke\" without parsing the sentence. A flow step that expects that outcome sets ignore_failure: true on itself rather than asking this action to call a non-launch a launch. dialogPolicy answers startup prompts before they can wedge the game thread, which is how the post-crash \"Restore Packages\" modal used to stall a launch (#968). Params: timeout? (seconds, default 300), dialogPolicy? (\"pattern=response;pattern=response\", responses as set_dialog_policy takes them)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const timeout = typeof p?.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
@@ -82,6 +66,7 @@ export const editorTool: ToolDef = categoryTool(
     get_engine_state: {
       kind: "handler",
       effect: "read",
+      options: { params: ["probeWindows?"] },
       description: "What the engine is REALLY doing, read from outside the game thread: startup phase from the editor's own log, every process holding this project's .uproject open (PID, command line, responding), the plugin's status snapshot (slow-task name and percent, active modal dialog, game-thread stall), and native dialog windows. `running` follows the strongest evidence: an editor that answered over the bridge is running whatever the process table saw, and a probe that could not run is reported as processProbeFailed rather than as an absent editor (#965). Call this ONCE when something is already wrong (handlers timing out, an editor that will not come up). Never call it in a wait loop: start_editor blocks until ready on its own, and polling this during startup burns tokens re-reading state that is already tracked. Params: probeWindows? (default true; scans native windows, costs ~2s)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const probeWindows = p?.probeWindows !== false;
@@ -94,7 +79,8 @@ export const editorTool: ToolDef = categoryTool(
         let live: EngineSnapshot | null = null;
         if (ctx.bridge.isConnected) {
           try {
-            const answered = await ctx.bridge.call("get_engine_state", {});
+            // This handler's own primitive, answered off the game thread; no other action wraps it.
+            const answered = await callOwnBridgeMethod(ctx, "get_engine_state", {});
             live = answered && typeof answered === "object" ? (answered as EngineSnapshot) : null;
           } catch {
             live = null;
@@ -108,6 +94,7 @@ export const editorTool: ToolDef = categoryTool(
     stop_editor: {
       kind: "handler",
       effect: "mutate",
+      options: { params: [] },
       description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill). Acts only on the editor for the loaded project, resolved from the port lockfile that editor published at <project>/Saved/UE_MCP_Bridge/port.json. With no lockfile there is no port to aim at and the call refuses, naming the file it checked, rather than probing a default port that another project's editor could answer on (#819). With no editor of this project running there is nothing to quit, and the call fails saying so, with alreadyStopped=true marking that reason apart from a running editor that cannot be reached or refuses on unsaved work. A flow that stops the editor before building sets ignore_failure: true on the stop step. With more than one editor of this project open it closes the one the lockfile names and reports the rest under remainingInstances, so plain success never has to be read as 'no editor of this project is running' (#1072). Unsaved work: the quit is sent and the EDITOR decides. It refuses inside the engine and names every dirty package without scheduling a close, so nothing is lost and no quit is left pending; save them with editor(save_dirty), or close the editor yourself and answer its save prompt by hand. There is deliberately no flag that discards. This action has no dialog behaviour of its own: a modal blocks it exactly as it blocks every other action, refused by the same gate with the same fields. Read the dialog with editor(list_dialogs) and answer it with editor(respond_to_dialog). Params: none",
       handler: async (ctx: ToolContext) => {
         return stopEditor(ctx.project.projectDir ?? undefined, { connected: connectedEditorOf(ctx.bridge) });
@@ -116,6 +103,7 @@ export const editorTool: ToolDef = categoryTool(
     restart_editor: {
       kind: "handler",
       effect: "mutate",
+      options: { params: [] },
       description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action. Params: none",
       handler: async (ctx: ToolContext) => {
         return restartEditor(ctx.project, ctx.bridge, startProgress);
@@ -126,6 +114,7 @@ export const editorTool: ToolDef = categoryTool(
     execute_python: {
       kind: "handler",
       effect: "unknown",
+      options: { params: ["code", "taskSummary", "ruledOut?", "resultVariable?"] },
       description: "GATED LAST RESORT. execute_python is unreachable until a semantic tool search over your taskSummary has been run AND every candidate it returns is EXPLICITLY ruled out with a stated reason. Flow: (1) call with taskSummary (+code) - it returns the candidate actions AND the exact ruledOut array to send back; (2) re-call with the same taskSummary/code PLUS that ruledOut=[{action, reason}], each reason at least 12 characters saying why that candidate does not fit. The action field accepts the bare name, tool(action) or tool.action, and rulings are remembered for the session so rewording the taskSummary never asks you to justify the same action twice. A candidate the running plugin does not register cannot do the task, so it needs no ruling: it is listed under notInRunningPlugin with the upgrade command instead. Python runs only once every candidate is ruled out. Params: code, taskSummary (required), ruledOut?, resultVariable? (name of a top-level variable to return as `result`, separate from print()/log; #732) (#704, #938, #960, #1167)",
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
         const code = (params.code as string) ?? "";
@@ -143,7 +132,7 @@ export const editorTool: ToolDef = categoryTool(
         }
 
         // Candidates = meaningful matches (a name/phrase hit), capped at 5.
-        const candidates = searchToolGraph(toolGraphOf(ctx), taskSummary, 5).filter((h) => h.score >= 4);
+        const candidates = gateCandidates(ctx, taskSummary);
         if (candidates.length > 0) {
           // #938 / #960: matching is spelling-insensitive and rulings persist
           // for the session, so the strings this refusal prints are exactly the
@@ -179,7 +168,8 @@ export const editorTool: ToolDef = categoryTool(
         // Gate passed (no candidates, or every candidate ruled out) - run Python.
         // #732: forward an optional resultVariable so scripts can return a value
         // through a first-class `result` channel instead of print()/log.
-        const result = await ctx.bridge.call("execute_python", {
+        // This handler's own primitive: the gate above is the only way in.
+        const result = await callOwnBridgeMethod(ctx, "execute_python", {
           code,
           resultVariable: params.resultVariable,
           captureLog: params.captureLog,
@@ -254,6 +244,7 @@ export const editorTool: ToolDef = categoryTool(
     play_in_editor_ignore_blueprint_errors: {
       kind: "handler",
       effect: "mutate",
+      options: { params: ["waitForAssetRegistry?", "assetRegistryTimeoutSeconds?"] },
       description: `Start PIE for one launch with the editor's unresolved-Blueprint-error prompt suppressed. PIE then runs whatever bytecode those Blueprints last compiled to, so the launch is authorized per call: set ${IGNORE_BLUEPRINT_ERRORS_CONFIG_KEY} to true in your ue-mcp config to pre-authorize it, otherwise the user answers an MCP approval prompt. The bridge refuses the launch when a Blueprint would have to be recompiled first (dirty non-data Blueprints, errored Level Blueprints) and lists every errored Blueprint it suppressed in loadedErroredBlueprints. Params: waitForAssetRegistry? (default true), assetRegistryTimeoutSeconds? (default 180).`,
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const preauthorized = ctx.project.config.pie?.allowIgnoreBlueprintErrors === true;
@@ -313,7 +304,7 @@ export const editorTool: ToolDef = categoryTool(
 
         // A method of its own: play_in_editor's pie_control never reads an
         // authorization, so the bypass is reachable only through this gate.
-        return ctx.bridge.call("pie_start_ignoring_blueprint_errors", {
+        return callOwnBridgeMethod(ctx, "pie_start_ignoring_blueprint_errors", {
           authorizationSource,
           waitForAssetRegistry: p.waitForAssetRegistry,
           assetRegistryTimeoutSeconds: p.assetRegistryTimeoutSeconds,
@@ -427,6 +418,7 @@ export const editorTool: ToolDef = categoryTool(
     request_editor_shutdown: {
       kind: "handler",
       effect: "mutate",
+      options: { params: ["requireClean?", "endPIE?"] },
       description: "Ask the editor to close itself from inside the engine, after it has checked that closing is safe. Refuses by default when any content or map package is dirty (including an unsaved /Temp world) and reports which ones, so nothing is lost to a silent discard. Ends an active PIE/SIE session first and closes only once play has actually stopped. The response is returned before the process exits. Aimed at the same editor stop_editor aims at, through the same ownership check, so the two can never disagree about which editor belongs to the loaded project (#967), including what happens when none is running: both fail with alreadyStopped=true rather than one succeeding and the other refusing. This IS what stop_editor sends: stop_editor calls it with requireClean=false, so the editor schedules its own close and raises its own save prompt for anything dirty rather than the server refusing in its place. Called directly it defaults to requireClean=true, which refuses and names the dirty packages without scheduling anything. Use editor(stop_editor) for the full stop-and-confirm flow; this action is the in-engine half of it. Params: requireClean? (default true), endPIE? (default true)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         // #967/#970: stop_editor refused on an ownership check this action did
@@ -450,7 +442,8 @@ export const editorTool: ToolDef = categoryTool(
             error: ownership.message,
           };
         }
-        const result = await ctx.bridge.call("request_editor_shutdown", {
+        // This handler's own primitive, reached only after the ownership check above.
+        const result = await callOwnBridgeMethod(ctx, "request_editor_shutdown", {
           requireClean: p.requireClean,
           endPIE: p.endPIE,
         });

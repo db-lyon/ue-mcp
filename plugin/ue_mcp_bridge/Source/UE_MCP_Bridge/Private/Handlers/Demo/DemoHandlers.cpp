@@ -275,6 +275,9 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoGetSteps(const TSharedPtr<FJsonObject>
 // ---------------------------------------------------------------------------
 // Handler: demo_step
 // ---------------------------------------------------------------------------
+// The server runs each step as its demo_step_N flow and adds the fields every
+// step answers with (step, stepId, created, replayNote, rollbackNote). This is
+// the primitive those flows call for the steps no existing action can build.
 TSharedPtr<FJsonValue> FDemoHandlers::DemoStep(const TSharedPtr<FJsonObject>& Params)
 {
 	// If no step param, return step list
@@ -284,13 +287,16 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoStep(const TSharedPtr<FJsonObject>& Pa
 		return DemoGetSteps(Params);
 	}
 
-	int32 StepIndex = static_cast<int32>(StepNum);
+	const int32 StepIndex = static_cast<int32>(StepNum);
 
-	// Dispatch to step implementation
 	TSharedPtr<FJsonObject> StepResult;
 	switch (StepIndex)
 	{
-	case 1:  StepResult = StepCreateLevel(); break;
+	case 1:
+	case 19:
+		return MCPError(FString::Printf(
+			TEXT("Step %d is built from level actions by the server's demo_step_%d flow, not by this primitive. Call demo(step) with stepIndex=%d."),
+			StepIndex, StepIndex, StepIndex));
 	case 2:  StepResult = StepMaterials(); break;
 	case 3:  StepResult = StepFloor(); break;
 	case 4:  StepResult = StepPedestal(); break;
@@ -308,60 +314,8 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoStep(const TSharedPtr<FJsonObject>& Pa
 	case 16: StepResult = StepOrbitRings(); break;
 	case 17: StepResult = StepLevelSequence(); break;
 	case 18: StepResult = StepTuningPanel(); break;
-	case 19: StepResult = StepSave(); break;
 	default:
-	{
 		return MCPError(FString::Printf(TEXT("Invalid step index %d. Valid range: 1-19"), StepIndex));
-	}
-	}
-
-	// Tag the result with step metadata
-	if (StepResult.IsValid())
-	{
-		StepResult->SetNumberField(TEXT("step"), StepIndex);
-		TArray<FDemoStep> Defs = GetStepDefinitions();
-		if (StepIndex >= 1 && StepIndex <= Defs.Num())
-		{
-			StepResult->SetStringField(TEXT("stepId"), Defs[StepIndex - 1].Id);
-		}
-
-		// Demo steps always CREATE. Nothing looks for an existing Demo_ actor
-		// before spawning one, so a replayed step leaves two of everything;
-		// saying created rather than a bare success is what makes that visible
-		// instead of leaving a rerun to look like it did nothing new.
-		bool bStepOk = true;
-		StepResult->TryGetBoolField(TEXT("success"), bStepOk);
-		if (bStepOk)
-		{
-			MCPSetCreated(StepResult);
-			StepResult->SetStringField(TEXT("replayNote"),
-				TEXT("Demo steps are not idempotent: running this step again spawns a second set of Demo_ actors. "
-					 "Run demo(cleanup) before replaying."));
-		}
-		else
-		{
-			StepResult->SetBoolField(TEXT("created"), false);
-			StepResult->SetBoolField(TEXT("existed"), false);
-		}
-
-		// No executable inverse. demo(cleanup) is what an operator runs to undo
-		// a demo, and it is named here as guidance, but it is NOT emitted as a
-		// rollback record: the flow runner invokes a record without reading any
-		// note first, and cleanup does three things this step did not. It
-		// removes the ENTIRE demo scene rather than this step's share, because
-		// no step tracks what it alone created. It calls EnsureHomeLevelLoaded,
-		// which CREATES /Game/MCP_Home when absent and SWITCHES the editor's
-		// open level. And it then deletes by "Demo_" label prefix in whatever
-		// level is open by that point, which is not confined to what this step
-		// made. Handing that to a runner as an undo would do more damage than
-		// leaving the step in place.
-		StepResult->SetBoolField(TEXT("rollbackPossible"), false);
-		StepResult->SetStringField(TEXT("rollbackNote"),
-			TEXT("No inverse is emitted. Demo steps all write into the same /Game/Demo folder and the same Demo_ "
-				 "actors and none records what it alone created, so nothing can undo one step. demo(cleanup) removes "
-				 "the whole demo scene and, on the way, creates /Game/MCP_Home if it is missing and switches the "
-				 "editor to it, then deletes by label prefix in whatever level is then open - run it deliberately "
-				 "when you mean to discard the entire demo, not as a rollback for one step."));
 	}
 
 	return MCPResult(StepResult);
@@ -650,43 +604,6 @@ namespace
 		Result->SetBoolField(TEXT("success"), false);
 		return Result;
 	}
-}
-
-// Step 1: Create level
-TSharedPtr<FJsonObject> FDemoHandlers::StepCreateLevel()
-{
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	// Ensure /Game/Demo directory exists by creating the level there
-	ULevelEditorSubsystem* LevelSub = GEditor ? GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
-	if (!LevelSub)
-	{
-		return DemoStepFailed(Result, TEXT("LevelEditorSubsystem not available"));
-	}
-
-	UEditorAssetLibrary::MakeDirectory(DemoConstants::MAT_DIR);
-
-	// Idempotent: load the existing demo level on re-runs instead of
-	// calling NewLevel (which on an existing path lands the editor on an
-	// Untitled map and triggers a save-prompt loop).
-	bool bCreated = false;
-	if (UEditorAssetLibrary::DoesAssetExist(DemoConstants::DEMO_LEVEL))
-	{
-		LevelSub->LoadLevel(DemoConstants::DEMO_LEVEL);
-	}
-	else
-	{
-		bCreated = LevelSub->NewLevel(DemoConstants::DEMO_LEVEL);
-		if (bCreated && !LevelSub->SaveCurrentLevel())
-		{
-			return DemoStepFailed(Result, FString::Printf(TEXT("%s was created but could not be saved"), *DemoConstants::DEMO_LEVEL));
-		}
-	}
-
-	Result->SetStringField(TEXT("levelPath"), DemoConstants::DEMO_LEVEL);
-	Result->SetBoolField(TEXT("created"), bCreated);
-	Result->SetBoolField(TEXT("success"), true);
-	return Result;
 }
 
 // Step 2: Materials
@@ -1448,31 +1365,5 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepTuningPanel()
 	Result->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("status"), TEXT("created"));
 	Result->SetBoolField(TEXT("success"), true);
-	return Result;
-}
-
-// Step 19: Save
-TSharedPtr<FJsonObject> FDemoHandlers::StepSave()
-{
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	ULevelEditorSubsystem* LevelSub = GEditor ?
-		GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
-	if (!LevelSub)
-	{
-		return DemoStepFailed(Result, TEXT("LevelEditorSubsystem not available"));
-	}
-
-	bool bSaved = LevelSub->SaveCurrentLevel();
-
-	UWorld* World = GetEditorWorld();
-	if (World)
-	{
-		Result->SetStringField(TEXT("levelName"), World->GetName());
-		Result->SetStringField(TEXT("levelPath"), World->GetPathName());
-	}
-
-	Result->SetBoolField(TEXT("saved"), bSaved);
-	Result->SetBoolField(TEXT("success"), bSaved);
 	return Result;
 }

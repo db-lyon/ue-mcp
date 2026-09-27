@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
+import { authorAction, AUTHOR_INPUTS } from "./blueprint-author.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/blueprint.generated.js";
 import { specBp, schema as specSchema } from "./specs/blueprint.generated.js";
 
@@ -76,42 +77,7 @@ export const blueprintTool: ToolDef = categoryTool(
     get_cdo_properties: specBp("read", "Read UPROPERTY values from any C++ class CDO (#183).", "get_cdo_properties"),
     run_construction_script: specBp("mutate", "Spawn temp actor, run construction script, return generated components and transforms (#195).", "run_construction_script"),
     compile_all: specBp("mutate", "Batch compile + save Blueprints. Returns per-path status (compiled/failed/not_found) (#284)", "compile_blueprints"),
-    author: {
-      kind: "handler",
-      effect: "mutate",
-      description: "Author a whole Blueprint in one call: optionally create it (parentClass), then add components, variables and function stubs, then compile - one agent-facing action instead of a dozen add_* round-trips. Params: assetPath, parentClass? (create/ensure the BP if given), components? [{componentClass, componentName?, parentComponent?, childActorClass?}], variables? [{name, varType}], functions? [{functionName}], compile? (default true). Returns per-step results + created flag. (#607)",
-      handler: async (ctx, p) => {
-        const assetPath = p.assetPath as string;
-        if (!assetPath) throw new Error("Missing 'assetPath'");
-        const steps: Array<{ step: string; target: string; ok: boolean; result?: unknown; error?: string }> = [];
-        const run = async (step: string, target: string, method: string, params: Record<string, unknown>) => {
-          try { const result = await ctx.bridge.call(method, params); steps.push({ step, target, ok: true, result }); }
-          catch (e) { steps.push({ step, target, ok: false, error: e instanceof Error ? e.message : String(e) }); }
-        };
-        let created = false;
-        if (p.parentClass) {
-          try {
-            const r = await ctx.bridge.call("create_blueprint", { path: assetPath, parentClass: p.parentClass }) as Record<string, unknown>;
-            created = r?.created !== false;
-            steps.push({ step: "create", target: assetPath, ok: true, result: r });
-          } catch (e) { steps.push({ step: "create", target: assetPath, ok: false, error: e instanceof Error ? e.message : String(e) }); }
-        }
-        for (const c of (p.components as Array<Record<string, unknown>> ?? [])) {
-          await run("add_component", String(c.componentClass ?? ""), "add_component", { path: assetPath, componentClass: c.componentClass, componentName: c.componentName ?? c.componentClass, parentComponent: c.parentComponent, childActorClass: c.childActorClass });
-        }
-        for (const v of (p.variables as Array<Record<string, unknown>> ?? [])) {
-          await run("add_variable", String(v.name ?? ""), "add_variable", { path: assetPath, name: v.name, type: v.varType ?? v.type });
-        }
-        for (const f of (p.functions as Array<Record<string, unknown>> ?? [])) {
-          await run("create_function", String(f.functionName ?? ""), "create_function", { path: assetPath, functionName: f.functionName });
-        }
-        if ((p.compile ?? true) !== false) {
-          await run("compile", assetPath, "compile_blueprint", { path: assetPath });
-        }
-        const failed = steps.filter(s => !s.ok);
-        return { assetPath, created, stepCount: steps.length, failedCount: failed.length, ok: failed.length === 0, steps };
-      },
-    },
+    author: authorAction,
     cleanup_graph: specBp("mutate", "Remove orphan/corrupted nodes (no class, blank title+no pins, missing target UFunction) (#285).", "cleanup_graph"),
     connect_pins_batch: specBp("mutate", "Apply many pin connections in one call (single compile + save) (#267).", "connect_pins_batch"),
     set_node_position: specBp("mutate", "Move a graph node to (posX, posY) (#277).", "set_node_position"),
@@ -156,12 +122,12 @@ export const blueprintTool: ToolDef = categoryTool(
     // author action, and tests/unit/handler-specs.test.ts holds the two to one
     // type.
     ...specSchema,
-    assetPath: z.string().optional().describe("Blueprint asset path. Read/graph actions also accept a World/umap path (e.g. /Game/Maps/SomeLevel), resolved to that map's level script Blueprint (#942)"),
-    parentClass: z.string().optional().describe("create / author / reparent: the parent class. export_batch: only Blueprints deriving from this class (#1166)"),
-    components: z.array(z.record(z.unknown())).optional().describe("author: [{componentClass, componentName?, parentComponent?, childActorClass?}] (#607)"),
-    variables: z.array(z.record(z.unknown())).optional().describe("author: [{name, varType}] (#607)"),
-    functions: z.array(z.record(z.unknown())).optional().describe("author: [{functionName}] (#607)"),
-    compile: z.boolean().optional().describe("author: compile after authoring (default true) (#607)"),
+    assetPath: AUTHOR_INPUTS.assetPath,
+    parentClass: AUTHOR_INPUTS.parentClass,
+    components: AUTHOR_INPUTS.components,
+    variables: AUTHOR_INPUTS.variables,
+    functions: AUTHOR_INPUTS.functions,
+    compile: AUTHOR_INPUTS.compile,
     // Spec'd keys declared again only to keep the bounds a spec cannot state.
     // The spec's type is the same, which the handler-specs unit test holds.
     maxAssets: z.number().int().positive().optional().describe("export_batch: cap on Blueprints exported, default 200, max 5000 (#1166)"),

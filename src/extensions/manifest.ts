@@ -3,6 +3,7 @@ import { GuardsSchema } from "../flow/guard-schema.js";
 import * as path from "node:path";
 import { z } from "zod";
 import yaml from "js-yaml";
+import type { OptionSpec, OptionSpecs } from "@db-lyon/flowkit";
 
 /**
  * Schema for ue-mcp.plugin.yml, the author-side declaration shipped inside
@@ -264,6 +265,22 @@ export function loadManifest(pkgDir: string): ManifestParseResult {
   const raw = yaml.load(fs.readFileSync(manifestPath, "utf-8")) as unknown;
   const { manifest, dropped } = parseManifest(raw);
   return { manifest, manifestPath, dropped };
+}
+
+/** A manifest schema field map as flowkit option specs, for describing the plugin's task. */
+export function manifestOptionSpecs(
+  fields: Record<string, ManifestSchemaField> | undefined,
+): OptionSpecs | undefined {
+  if (!fields || Object.keys(fields).length === 0) return undefined;
+  const out: OptionSpecs = {};
+  for (const [key, def] of Object.entries(fields)) {
+    const spec: OptionSpec = {};
+    if (def.type !== undefined) spec.type = Array.isArray(def.type) ? [...def.type] : def.type;
+    if (def.description) spec.description = def.description;
+    if (def.required) spec.required = true;
+    out[key] = spec;
+  }
+  return out;
 }
 
 /**

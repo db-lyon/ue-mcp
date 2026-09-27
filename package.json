@@ -89,7 +89,7 @@
     "specs:generate": "node --import tsx scripts/generate-handler-specs.mjs"
   },
   "dependencies": {
-    "@db-lyon/flowkit": "^0.17.3",
+    "@db-lyon/flowkit": "^0.18.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "js-yaml": "^4.1.0",
     "ws": "^8.18.0",

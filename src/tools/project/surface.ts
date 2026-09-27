@@ -4,22 +4,27 @@ import { availabilityReport } from "../../dispatch/offline.js";
 import { getWorkarounds } from "../../dispatch/workaround-tracker.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
 import { toolGraphOf } from "../../surface/target-params.js";
+import { describeFlow, flowAvailability, flowNameOf, searchFlows } from "../../flow/flow-describe.js";
 
 /** Surface introspection: search, describe and list what this server can serve. */
 export const surfaceActions: Record<string, ActionSpec> = {
   search_tools: {
     kind: "handler",
     effect: "read",
+    options: { params: ["query", "limit?"] },
     description: "Search every ue-mcp tool + action by keyword or task INTENT (a synonym layer maps 'screenshot'->capture_scene_png, 'tile a texture'->the texture-bomb flow, etc.) and return ranked matches (tool, action, description, score). The first step before editor(execute_python); most tasks already have a dedicated action. Params: query (space-separated keywords/intent), limit? (default 20) (#704)",
     handler: async (_ctx, p) => {
       const query = (p.query as string) ?? "";
       if (!query.trim()) throw new Error("Missing 'query'");
       const limit = (p.limit as number) ?? 20;
       const results = searchToolGraph(toolGraphOf(_ctx), query, limit);
+      // Flows are not actions, so they are listed beside the results, never in them.
+      const flows = searchFlows(_ctx.getFlows?.() ?? [], query, limit);
       return {
         query,
         resultCount: results.length,
         results,
+        flows: flows.length > 0 ? flows : undefined,
         hint: results.length === 0 ? "No dedicated action matched. Only then consider editor(execute_python)." : undefined,
       };
     },
@@ -27,6 +32,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
   describe_action: {
     kind: "handler",
     effect: "read",
+    options: { params: ["name", "category?"] },
     description:
       "Return the live parameter schema for one action: every parameter it accepts, "
       + "with type, required/optional, description, allowed values and default, plus the "
@@ -64,6 +70,10 @@ export const surfaceActions: Record<string, ActionSpec> = {
 
       const matches = resolveActionRef(name, graph);
       if (matches.length === 0) {
+        // Not an action: a flow of that name answers with its resolved plan.
+        const source = ctx.getFlowSource?.();
+        const flow = source ? await describeFlow(source, flowNameOf(name)) : undefined;
+        if (flow) return flow;
         const suggestions = suggestActions(name, graph);
         throw new Error(
           `Unknown action '${name}'.`
@@ -87,6 +97,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
   list_available_actions: {
     kind: "handler",
     effect: "read",
+    options: { params: ["category?", "includeNames?", "state?"] },
     description:
       "Report which actions this server can serve RIGHT NOW and why the rest cannot. With no editor "
       + "attached the surface is advertised in full but most of it cannot run, and this is the line "
@@ -123,8 +134,21 @@ export const surfaceActions: Record<string, ActionSpec> = {
         names: p.includeNames === true,
       });
       const target = ctx.bridge.getTarget();
+      // Flows run whatever their steps need; reported beside the actions, whole-surface only.
+      const source = category ? undefined : ctx.getFlowSource?.();
+      const flows = source ? await flowAvailability(source, graph, ctx.bridge.isConnected) : undefined;
       return {
         ...report,
+        flows: flows && flows.length > 0
+          ? {
+              total: flows.length,
+              availableNow: flows.filter((f) => f.availableNow).length,
+              blocked: flows.filter((f) => !f.availableNow).length,
+              flows: p.includeNames === true
+                ? flows.filter((f) => state === "all" || (state === "available") === f.availableNow)
+                : undefined,
+            }
+          : undefined,
         editorTarget: { projectPath: target.projectPath, port: target.port, portSource: target.portSource },
         hint: report.blocked > 0
           ? "editor(action='start_editor') launches the editor and blocks until its bridge answers."
@@ -135,6 +159,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
   execute_python_report: {
     kind: "handler",
     effect: "read",
+    options: { params: [] },
     description: "Measurement for #704: reads this session's execute_python calls and, for each, runs its taskSummary back through search_tools to flag calls that OVERLAPPED an existing dedicated action ('you used Python for X, but tool Y does X'). Returns totalCalls, overlapping[] and an overlapRate. Params: none (#704)",
     handler: async (ctx) => {
       const entries = getWorkarounds(ctx);

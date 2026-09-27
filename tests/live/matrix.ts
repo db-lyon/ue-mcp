@@ -441,3 +441,22 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
     ],
   },
 ];
+
+const LIVE_UNIVERSAL = "tests/live/universal-flows.test.ts";
+
+/**
+ * Release gates the live tests carry beyond 7.3
+ * (plans/task-flow-architecture.md 3.9 and 5, phase 6).
+ */
+export const RELEASE_GATES: MatrixCase[] = [
+  {
+    id: "universal-flows-release-gate",
+    text: "Universal flows as release gate: every default-layer flow plans clean and runs to completion on tests/ue_mcp.",
+    coverage: [
+      { kind: "live", file: LIVE_UNIVERSAL, title: "runs every universal flow, directly or nested in one that is run" },
+      { kind: "live", file: LIVE_UNIVERSAL, title: "plans every universal flow with nothing refused" },
+      { kind: "live", file: LIVE_UNIVERSAL, title: "runs ${run.flow} to completion, as planned" },
+      { kind: "live", file: LIVE_UNIVERSAL, title: "restores the scene with the repo's own flows" },
+    ],
+  },
+];

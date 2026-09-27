@@ -49,6 +49,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   read_cpp_header: {
     kind: "handler",
     effect: "read",
+    options: { params: ["headerPath"] },
     description: "Parse a .h file. Params: headerPath",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -66,6 +67,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   read_module: {
     kind: "handler",
     effect: "read",
+    options: { params: ["moduleName"] },
     description: "Read module source. Params: moduleName",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -84,6 +86,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   list_modules: {
     kind: "handler",
     effect: "read",
+    options: { params: [] },
     description: "List C++ modules. Params: none",
     handler: async (ctx) => {
       ctx.project.ensureLoaded();
@@ -103,6 +106,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   search_cpp: {
     kind: "handler",
     effect: "read",
+    options: { params: ["query", "directory?"] },
     description: "Search .h/.cpp files. Params: query, directory?",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -152,6 +156,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   list_content_assets: {
     kind: "handler",
     effect: "read",
+    options: { params: ["contentPath?", "recursive?", "namePattern?", "maxResults?"] },
     description:
       "List the project's assets from the package files on DISK, which is the one asset query that "
       + "works with no editor running. Takes a mount path (/Game, /Game/Characters, or a plugin's "
@@ -173,6 +178,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   list_files: {
     kind: "handler",
     effect: "read",
+    options: { params: ["directory", "extensions?", "recursive?", "maxResults?"] },
     description: "List files on disk under a directory, optionally filtered by extension(s). Runs in the MCP server process (no editor round-trip). Params: directory (absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), recursive? (default false), maxResults? (default 1000) (#608)",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -219,6 +225,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   write_cpp_file: {
     kind: "handler",
     effect: "mutate",
+    options: { params: ["path", "content"] },
     description:
       "Write a .h / .cpp / .inl file under the project's Source/ tree. Used to append UPROPERTYs/UFUNCTIONs or method bodies after create_cpp_class. Writes are scoped to Source/ for safety. Params: path (relative to Source/ or absolute within Source/), content (full file contents). After editing, call live_coding_compile (for existing classes) or build_project (for new classes).",
     handler: async (ctx, p) => {
@@ -254,6 +261,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   read_cpp_source: {
     kind: "handler",
     effect: "read",
+    options: { params: ["sourcePath"] },
     description: "Read a .cpp file from the project Source/ tree. Companion to read_cpp_header for round-trip edits. Params: sourcePath (relative to Source/ or absolute).",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
@@ -273,6 +281,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   write_source_file: {
     kind: "handler",
     effect: "mutate",
+    options: { params: ["module", "visibility", "fileName", "content"] },
     description:
       "Write a .h/.cpp/.inl into a named module's Public/Private folder (resolves the module dir for you, including plugin modules under Plugins/*/Source/ that write_cpp_file refuses). After a new file, build_project + restart; after a body edit, live_coding_compile. Params: module (module name, default the project's primary module), visibility (Public|Private, default Private), fileName, content.",
     handler: async (ctx, p) => {
@@ -308,6 +317,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   read_source_file: {
     kind: "handler",
     effect: "read",
+    options: { params: ["module", "visibility?", "fileName"] },
     description:
       "Read a .h/.cpp/.inl from a named module's folder (companion to write_source_file; resolves plugin modules too). With no visibility it tries Public then Private then the module root. Params: module, visibility?, fileName.",
     handler: async (ctx, p) => {
@@ -332,6 +342,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   add_module_dependency: {
     kind: "handler",
     effect: "mutate",
+    options: { params: ["moduleName", "dependency", "access?"] },
     description:
       "Add a module to a target module's Build.cs dependency array. Params: moduleName (the Build.cs to edit - must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'|'private', default 'private'). Creates the corresponding AddRange block if missing. Rebuild required afterward.",
     handler: async (ctx, p) => {
@@ -391,6 +402,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   add_cpp_member: {
     kind: "handler",
     effect: "mutate",
+    options: { params: ["headerPath", "declaration", "memberName", "access?"] },
     // #423: append a UPROPERTY / UFUNCTION declaration to an existing UCLASS
     // header in the right access-specifier block. The recurring trap is that
     // raw appending lands the declaration in whatever access section the

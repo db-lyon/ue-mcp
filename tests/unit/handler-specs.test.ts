@@ -299,6 +299,12 @@ for (const tool of ALL_TOOLS) {
   for (const [action, spec] of specdActions(tool)) {
     DISPATCHERS.set(spec.bridge, [...(DISPATCHERS.get(spec.bridge) ?? []), `${tool.name}.${action}`]);
   }
+  // A flow-backed action that takes a recorded spec's parameters dispatches that method through its flows.
+  for (const [action, spec] of Object.entries(tool.actions)) {
+    if (spec.kind === "flow" && spec.specMethod) {
+      DISPATCHERS.set(spec.specMethod, [...(DISPATCHERS.get(spec.specMethod) ?? []), `${tool.name}.${action}`]);
+    }
+  }
 }
 
 /** The C++ function each registered method runs, as FClass::Function. */

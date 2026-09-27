@@ -4,12 +4,12 @@ import { McpError, ErrorCode, type McpErrorDetails } from "../core/errors.js";
 import { debug } from "../core/log.js";
 import { taskEffect } from "../surface/action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
-import type { ToolDef } from "../core/types.js";
+import type { AssetLockScopeLike, ToolContext, ToolDef } from "../core/types.js";
 
-// Per-asset exclusive locking, orchestrated from the dispatch layer. The lock
-// registry itself lives in the C++ bridge (the one editor every agent shares);
-// this module just wraps each mutating dispatch with acquire/release calls
-// carrying a stable per-process session id. Two agents editing the same asset
+// Per-asset exclusive locking. The lock registry itself lives in the C++
+// bridge (the one editor every agent shares); runAction acquires what each
+// action writes into the run's scope, and the run releases it at the end,
+// carrying the addressed editor's owner id. Two agents editing the same asset
 // serialize; a single agent never blocks itself (same session re-acquires are
 // re-entrant); a crashed agent's locks expire on their TTL.
 //
@@ -131,10 +131,118 @@ async function releaseAll(bridge: IBridge, paths: string[], ownerId: string): Pr
 }
 
 /**
+ * The locks one run holds: a live call, or a whole flow run. Each action
+ * acquires what it writes as it starts, and everything is released once, when
+ * the run ends, so no other agent writes between two steps of the same run.
+ *
+ * The editor's lock registry is re-entrant but not counted: a nested release
+ * would free the outer holder's lock. Holding paths here and releasing only at
+ * the end of the run is what keeps a child action from doing that.
+ */
+export class AssetLockScope implements AssetLockScopeLike {
+  /** Held path to when its lease was last taken or refreshed. */
+  private readonly held = new Map<string, number>();
+  private unavailable = false;
+
+  constructor(
+    private readonly bridge: IBridge,
+    private readonly cfg: LockingConfig,
+    /** Who holds the locks. The addressed editor's id; omitted means this process. */
+    private readonly ownerId: string = SESSION_ID,
+    /** The graph whose declarations decide the effect. Omitted, the pristine one. */
+    private readonly graph?: readonly ToolDef[],
+  ) {}
+
+  /** The paths currently held, for tests and status reporting. */
+  get paths(): string[] {
+    return [...this.held.keys()];
+  }
+
+  /**
+   * Take the locks `taskName` needs before it runs. Throws a retryable
+   * ASSET_LOCKED error on a busy asset, or the dialog refusal when a modal
+   * refuses the request. An unreachable lock subsystem (older plugin, bridge
+   * down) fails open and the run continues unlocked.
+   */
+  async acquireFor(taskName: string, params: Record<string, unknown>): Promise<void> {
+    if (!this.cfg.enabled || this.unavailable) return;
+    const { mutates, paths } = classifyAction(taskName, params, this.graph);
+    if (!mutates || paths.length === 0) return;
+
+    // A path held for over half its lease is taken again, which refreshes it.
+    const now = Date.now();
+    const halfLease = this.cfg.ttlSeconds * 500;
+    const due = paths.filter((p) => {
+      const at = this.held.get(p);
+      return at === undefined || now - at > halfLease;
+    });
+
+    const taken: string[] = [];
+    const releaseTaken = () => releaseAll(this.bridge, taken.filter((p) => !this.held.has(p)), this.ownerId);
+    for (const p of due) {
+      let res: { acquired?: boolean; holder?: { sessionId?: string; ttlSecondsRemaining?: number } } | undefined;
+      try {
+        res = (await this.bridge.call("acquire_lock", { path: p, sessionId: this.ownerId, ttlSeconds: this.cfg.ttlSeconds })) as typeof res;
+      } catch (e) {
+        // Lock subsystem unavailable - release what this call took and run
+        // unlocked rather than failing a legitimate mutation.
+        debug("lock", `acquire_lock unavailable for ${p}; running unlocked`, e);
+        this.unavailable = true;
+        await releaseTaken();
+        return;
+      }
+      // A modal refuses the lock request itself. Reporting that as "another
+      // session holds this asset" is false and tells the caller to retry, which
+      // is the loop this whole mechanism exists to prevent. Hand the refusal up
+      // unchanged so the guard shapes it.
+      if (isDialogRefusal(res)) {
+        await releaseTaken();
+        // An McpError carrying the refusal as details, so the dispatcher can
+        // recognise it: dialogBlocking is the field a client branches on.
+        throw new McpError(
+          ErrorCode.NOT_FOUND,
+          String((res as Record<string, unknown>).error ?? "A modal dialog is blocking the editor."),
+          res as unknown as McpErrorDetails,
+        );
+      }
+      if (!res?.acquired) {
+        await releaseTaken();
+        const holder = res?.holder?.sessionId ?? "another session";
+        const wait = res?.holder?.ttlSecondsRemaining;
+        throw new McpError(
+          ErrorCode.ASSET_LOCKED,
+          `Asset '${p}' is locked by ${holder}${typeof wait === "number" ? ` (lease frees in ~${Math.ceil(wait)}s)` : ""}. Retry shortly or coordinate with the other session.`,
+        );
+      }
+      taken.push(p);
+    }
+    for (const p of taken) this.held.set(p, now);
+  }
+
+  /** Release everything this run holds. Safe to call more than once. */
+  async releaseAll(): Promise<void> {
+    const paths = [...this.held.keys()];
+    this.held.clear();
+    await releaseAll(this.bridge, paths, this.ownerId);
+  }
+}
+
+/**
+ * Opens a lock scope for a run against the context's own bridge and owner, or
+ * undefined when locking is off. Read at open time, so a context rebound to
+ * another editor locks in that editor.
+ */
+export function lockScopeOpener(
+  cfg: LockingConfig,
+  graph: () => readonly ToolDef[],
+): ((ctx: ToolContext) => AssetLockScope) | undefined {
+  if (!cfg.enabled) return undefined;
+  return (ctx) => new AssetLockScope(ctx.bridge, cfg, ctx.session?.lockOwnerId ?? SESSION_ID, graph());
+}
+
+/**
  * Run `run` while holding exclusive locks on every asset path the task would
- * mutate. On a busy asset, throws a retryable ASSET_LOCKED error. If the lock
- * subsystem is unreachable (older plugin without the handlers, bridge down),
- * fails open and runs unlocked.
+ * mutate: one scope, acquired, run, released.
  */
 export async function withAssetLocks<T>(
   bridge: IBridge,
@@ -148,55 +256,11 @@ export async function withAssetLocks<T>(
   graph?: readonly ToolDef[],
 ): Promise<T> {
   if (!cfg.enabled) return run();
-
-  const { mutates, paths } = classifyAction(taskName, params, graph);
-  if (!mutates || paths.length === 0) return run();
-
-  const held: string[] = [];
-  for (const p of paths) {
-    let res: { acquired?: boolean; holder?: { sessionId?: string; ttlSecondsRemaining?: number } } | undefined;
-    try {
-      res = (await bridge.call("acquire_lock", { path: p, sessionId: ownerId, ttlSeconds: cfg.ttlSeconds })) as typeof res;
-    } catch (e) {
-      // Lock subsystem unavailable - release what we took and run unlocked
-      // rather than failing a legitimate mutation.
-      debug("lock", `acquire_lock unavailable for ${p}; running unlocked`, e);
-      await releaseAll(bridge, held, ownerId);
-      return run();
-    }
-    // A modal refuses the lock request itself. Reporting that as "another
-    // session holds this asset" is false and tells the caller to retry, which
-    // is the loop this whole mechanism exists to prevent. Hand the refusal up
-    // unchanged so the guard shapes it.
-    if (isDialogRefusal(res)) {
-      // Release first: the sibling branch below does, and not doing it here
-      // stranded every lock already taken for this call until its TTL expired.
-      await releaseAll(bridge, held, ownerId);
-      // An McpError carrying the refusal as details, so the dispatcher can
-      // recognise it. A bare Error reached the caller with no dialogBlocking
-      // flag, which is the one field a client branches on, and machineErrorBlock
-      // dropped the payload entirely because it only reads McpError.
-      throw new McpError(
-        ErrorCode.NOT_FOUND,
-        String((res as Record<string, unknown>).error ?? "A modal dialog is blocking the editor."),
-        res as unknown as McpErrorDetails,
-      );
-    }
-    if (!res?.acquired) {
-      await releaseAll(bridge, held, ownerId);
-      const holder = res?.holder?.sessionId ?? "another session";
-      const wait = res?.holder?.ttlSecondsRemaining;
-      throw new McpError(
-        ErrorCode.ASSET_LOCKED,
-        `Asset '${p}' is locked by ${holder}${typeof wait === "number" ? ` (lease frees in ~${Math.ceil(wait)}s)` : ""}. Retry shortly or coordinate with the other session.`,
-      );
-    }
-    held.push(p);
-  }
-
+  const scope = new AssetLockScope(bridge, cfg, ownerId, graph);
+  await scope.acquireFor(taskName, params);
   try {
     return await run();
   } finally {
-    await releaseAll(bridge, held, ownerId);
+    await scope.releaseAll();
   }
 }

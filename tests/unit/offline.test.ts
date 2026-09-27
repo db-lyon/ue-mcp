@@ -38,7 +38,7 @@ function handlerBackedActions(): string[] {
   const out: string[] = [];
   for (const tool of ALL_TOOLS) {
     for (const [action, spec] of Object.entries(tool.actions)) {
-      if (!spec.bridge && spec.handler) out.push(`${tool.name}.${action}`);
+      if (!spec.bridge && (spec.handler || spec.kind === "flow")) out.push(`${tool.name}.${action}`);
     }
   }
   return out;

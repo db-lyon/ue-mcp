@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "../core/types.js";
 import { actionEnum } from "../surface/category-tool.js";
-import { compileSchemaFields, type ManifestInjectAction } from "./manifest.js";
+import { compileSchemaFields, manifestOptionSpecs, type ManifestInjectAction } from "./manifest.js";
 import { inferActionEffect } from "../surface/action-class.js";
 
 /**
@@ -71,6 +71,7 @@ export function mergeInjectionsIntoTool(
         effect: injectSpec.effect ?? inferActionEffect(orig.name, prefixed),
         effectSource: injectSpec.effect ? "declared" : "inferred",
         description: injectSpec.description ?? `Plugin action from ${plan.pluginName}`,
+        optionsSchema: manifestOptionSpecs(injectSpec.schema),
       };
       added.push(prefixed);
       docLines.push(

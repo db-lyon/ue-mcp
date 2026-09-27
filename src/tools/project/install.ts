@@ -10,6 +10,7 @@ import type { ToolContext, ActionSpec, HandlerActionSpec } from "../../core/type
 export const buildProjectAction: HandlerActionSpec = {
   kind: "handler",
   effect: "mutate",
+  options: { params: ["configuration?", "platform?", "clean?"] },
   // #958: dispatched in process, because UnrealBuildTool cannot link while an
   // editor holds the module DLLs, so the build that matters runs with it down.
   description:
@@ -32,6 +33,7 @@ export const installActions: Record<string, ActionSpec> = {
   check_install: {
     kind: "handler",
     effect: "read",
+    options: { params: ["projectPath?", "skipToolchain?"] },
     description:
       "Answer whether this project can run the bridge at all, from disk, with no editor running and "
       + "nothing compiled. Reports the project kind (a project declaring no native modules of its own "

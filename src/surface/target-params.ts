@@ -106,7 +106,7 @@ export function editorTargetSchema(sessionNames: string[]): z.ZodType {
  * another project's editor.
  */
 export function sessionContext(ctx: ToolContext, session: EditorSession): ToolContext {
-  const { getFlows, getPlugins, getToolGraph } = ctx;
+  const { getFlows, getFlowSource, getPlugins, getToolGraph } = ctx;
   return {
     ...ctx,
     bridge: session.guarded,
@@ -116,6 +116,7 @@ export function sessionContext(ctx: ToolContext, session: EditorSession): ToolCo
     // pointed at the context's previous session would report one editor's
     // flows and plugins under another editor's name.
     getFlows: getFlows ? () => getFlows(session) : undefined,
+    getFlowSource: getFlowSource ? () => getFlowSource(session) : undefined,
     getPlugins: getPlugins ? () => getPlugins(session) : undefined,
     getToolGraph: getToolGraph ? (forSession) => getToolGraph(forSession ?? session) : undefined,
   };

@@ -59,3 +59,49 @@ describe("flow tool errors", () => {
     );
   });
 });
+
+describe("flow calls carry the request's extra", () => {
+  it("hand every step the request's progress reporter, elicitation and client", async () => {
+    const { deps, sessions } = depsWithOneSession();
+    const elicit = Object.assign(async () => ({ action: "accept" as const }), {
+      clientAdvertisesElicitation: () => true,
+    });
+    const withClient = {
+      ...deps,
+      elicit: () => elicit,
+      client: () => ({ name: "test-client", version: "1" }),
+    } as unknown as DispatchDeps;
+    const sent: Array<{ method: string; params: Record<string, unknown> }> = [];
+    let seen: Record<string, unknown> | undefined;
+    const flowTool: ToolDef = {
+      name: "flow",
+      description: "",
+      schema: {},
+      actions: {},
+      handler: async (ctx) => {
+        seen = { elicit: ctx.elicit, client: ctx.client };
+        ctx.onProgress?.({ progress: 1, total: 2, message: "step 1" });
+        return { ok: true };
+      },
+    };
+    const result = await dispatchFlowCall(
+      withClient,
+      flowTool,
+      { bridge: sessions.active.guarded, project: sessions.active.project },
+      { action: "run", flowName: "x" },
+      {
+        _meta: { progressToken: "tok" },
+        sendNotification: (async (n: { method: string; params: Record<string, unknown> }) => {
+          sent.push(n);
+        }) as never,
+      },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(seen).toEqual({ elicit, client: { name: "test-client", version: "1" } });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sent).toEqual([{
+      method: "notifications/progress",
+      params: { progressToken: "tok", progress: 1, total: 2, message: "step 1" },
+    }]);
+  });
+});

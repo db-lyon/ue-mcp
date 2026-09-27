@@ -60,7 +60,21 @@ export const levelTool: ToolDef = categoryTool(
 **Two action types:**
 
 - **Bridge actions** (`bp()`) - forwarded to the C++ plugin over WebSocket. An action whose handler declares a [parameter spec](#parameter-specs) uses `specBp()` instead, and its parameters are generated rather than written here
-- **Local actions** - handled in Node.js (filesystem operations like INI parsing, C++ header reading)
+- **Local actions** - handled in Node.js (filesystem operations like INI parsing, C++ header reading). Each declares its parameters with `options: { params: ["name", "limit?"], choices? }`, naming keys of the category's zod shape, which owns their types. The declaration is what `describe_action`, the signature line and the task's option schema are built from. The description keeps its `Params:` clause for the reader, and `tests/unit/handler-options.test.ts` holds the clause and the declaration to the same names and optionality.
+
+### Parameters in one reading
+
+`surface/action-schema.ts` is the one reading of what an action takes: a local action's declared `options`, a spec'd bridge action's recorded C++ spec, an `epic_*` action's Epic input schema. Only a plugin action and a local action that declares nothing are read from the prose `Params:` clause. `describe_action` reports that reading, the signature renders it, and `surface/option-specs.ts` restates it as flowkit option specs, so `registry.describe` and `FlowRunner.describeTask` return an `options_schema` for every task (a plugin action's comes from its manifest `schema`).
+
+Describing is not enforcing. A local action's task carries the types and allowed values of its options as its static `optionsSchema`, so the flow runner refuses a step that passes the wrong type before the handler runs; required flags stay advisory there, because several handlers fall back to a default or answer a missing value with guidance. Bridge tasks are described only: the bridge coerces values and renames aliases after the point where the runner would check. Live calls do not go through the runner.
+
+### Flows in discovery
+
+A flow is never an action and never appears in `tools/list`. `project(describe_action)` answers a name that is no action with the flow of that name, as its resolved plan (`flow/flow-describe.ts`): nested flows flattened with paths, each step's options, `when`, `ignore_failure` and `checks`, deprecation, and the config layer that last set the flow and each step. `search_tools` lists matching flows under a separate `flows` key, and `list_available_actions` counts which flows can run with no editor.
+
+### Gates and preflight
+
+Four gates refuse a call: the untargeted-write gate in dispatch, the dialog gate in dispatch, `runAction` and the guarded bridge, the editor-connected gate at the bridge, and the Python gate in `execute_python`. They are enforced there, for live calls and flow steps alike. `flow/preflight.ts` also declares each as a flowkit check over the `gate` namespace (`gate.untargeted` on the flow; `gate.editor`, `gate.dialog` and `gate.python` on every step), added to the plan's copy of the config, so `flow(plan)` reports every step a run would be refused at in its `preflight` field without changing how a run is gated. The dialog and Python gates answer those questions without acting: no form is raised, no button pressed, no ruling remembered.
 
 ### Advertised surface and context strategy
 

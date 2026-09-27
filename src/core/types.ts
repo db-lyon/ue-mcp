@@ -1,9 +1,11 @@
 import type { z } from "zod";
+import type { OptionSpecs } from "@db-lyon/flowkit";
 import type { IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ParamChoice, ParamSpec } from "../surface/handler-spec.js";
 import type { EpicInputSchema, EpicToolRef } from "../surface/epic-input.js";
+import type { FlowSource } from "../flow/flow-describe.js";
 
 /**
  * Elicit a deterministic, user-mediated form response via the MCP client.
@@ -89,6 +91,8 @@ export interface ToolContext {
    *  Takes the session to read, because flows are declared in each project's
    *  own ue-mcp.yml; omitted means this context's session. */
   getFlows?: (forSession?: EditorSession) => Array<{ name: string; description?: string }>;
+  /** The session's flow config and task registry, for describing a flow without running it. */
+  getFlowSource?: (forSession?: EditorSession) => FlowSource | undefined;
   /** Lazy accessor for the loaded plugin set. Returns one PluginInfo per
    *  entry in the user's `plugins:` array, active or skipped. Used by the
    *  `plugins` introspection category. Session-scoped for the same reason
@@ -96,6 +100,8 @@ export interface ToolContext {
   getPlugins?: (forSession?: EditorSession) => PluginInfo[];
   /** Enabled source categories for the addressed editor, including injected actions. */
   getToolGraph?: (forSession?: EditorSession) => ToolDef[];
+  /** True when the call named its editor. Read by a plan to report the untargeted-write gate. */
+  callTargeted?: boolean;
   /** The per-call timeout budget the caller asked for, in milliseconds (#989).
    *  Set by the category dispatcher when a call carried `timeoutMs`. A handler
    *  that makes its own bridge calls should pass it through; one that does not
@@ -124,6 +130,21 @@ export interface ToolContext {
    * rather than leaving the user staring at a call that looks frozen.
    */
   client?: { name: string; version?: string };
+  /**
+   * Opens the asset-lock scope for a run in this context's editor. Present
+   * only while per-asset locking is enabled (`ue-mcp.locking`).
+   */
+  openAssetLocks?: (ctx: ToolContext) => AssetLockScopeLike;
+  /** The locks held by the run this call belongs to: one live call, or a whole flow run. */
+  assetLocks?: AssetLockScopeLike;
+}
+
+/** The asset locks one run holds. See dispatch/locking.ts. */
+export interface AssetLockScopeLike {
+  /** Take the locks an action needs before it runs; throws when an asset is busy. */
+  acquireFor(taskName: string, params: Record<string, unknown>): Promise<void>;
+  /** Release everything the run holds. */
+  releaseAll(): Promise<void>;
 }
 
 export interface ProgressUpdate {
@@ -318,10 +339,25 @@ export interface BridgeActionSpec extends ActionSpecBase {
   handler?: never;
 }
 
+/**
+ * The parameters an in-process action takes: the source of its describe
+ * schema, its signature and its task's option schema.
+ *
+ * `params` names keys of the category's zod shape, which owns their types and
+ * descriptions; a trailing `?` marks one optional. A `choices` entry is a set
+ * of branches of which the caller supplies one.
+ */
+export interface HandlerOptions {
+  params: readonly string[];
+  choices?: readonly { branches: readonly (readonly string[])[]; required: boolean }[];
+}
+
 /** Runs in this Node process. It may still call the bridge itself. */
 export interface HandlerActionSpec extends ActionSpecBase {
   kind: "handler";
   handler: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
+  /** Declared parameters. Every built-in handler has one; tests hold them to it. */
+  options?: HandlerOptions;
   bridge?: never;
   mapParams?: never;
 }
@@ -334,6 +370,47 @@ export interface HandlerActionSpec extends ActionSpecBase {
  */
 export interface RegistryActionSpec extends ActionSpecBase {
   kind: "registry";
+  /** The plugin manifest's parameter schema, which describes the plugin's task. */
+  optionsSchema?: OptionSpecs;
+  bridge?: never;
+  handler?: never;
+  mapParams?: never;
+}
+
+/** What a composite child runs: a configured task name, or a flow. */
+export type ChildTarget = string | { task: string } | { flow: string };
+
+/** One child's outcome. A flow child also carries its own step results. */
+export interface ChildOutcome {
+  success: boolean;
+  data?: Record<string, unknown>;
+  error?: Error;
+  /** A flow child's steps, in order, each with its result. */
+  steps?: Array<{ name: string; success: boolean; skipped: boolean; data?: Record<string, unknown>; error?: Error }>;
+}
+
+/** Runs one child through the runner and hands back its outcome. Never throws for a failed child. */
+export type ChildRun = (target: ChildTarget, options?: Record<string, unknown>) => Promise<ChildOutcome>;
+
+/**
+ * Backed by a flow or a composite task: its children run through the runner,
+ * each locked, guarded, recorded and rolled back like a flow step.
+ *
+ * `compose` runs the children and returns what `result` needs; `result` shapes
+ * that into the action's response. `expand` states the children up front when
+ * the input decides them, and returns null when they depend on results.
+ */
+export interface FlowActionSpec<C = unknown> extends ActionSpecBase {
+  kind: "flow";
+  /** Declared inputs. Rendered into the category schema under any key it does not already declare. */
+  inputs: Record<string, z.ZodType>;
+  compose: (run: ChildRun, input: Record<string, unknown>, ctx: ToolContext) => Promise<C>;
+  result: (collected: C, input: Record<string, unknown>) => unknown;
+  expand?: (input: Record<string, unknown>) => Array<{ task: string; options?: Record<string, unknown> } | { flow: string; options?: Record<string, unknown> }> | null;
+  /** A recorded C++ parameter spec the inputs follow, as on a bridge action, and the method it was recorded from. */
+  paramSpec?: readonly ParamSpec[];
+  specMethod?: string;
+  paramChoices?: readonly ParamChoice[];
   bridge?: never;
   handler?: never;
   mapParams?: never;
@@ -347,7 +424,8 @@ export interface RegistryActionSpec extends ActionSpecBase {
  * a bridge method and a handler, and an action with neither that does not say
  * it is a registry action. `{}` no longer type-checks either.
  */
-export type ActionSpec = BridgeActionSpec | HandlerActionSpec | RegistryActionSpec;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ActionSpec = BridgeActionSpec | HandlerActionSpec | RegistryActionSpec | FlowActionSpec<any>;
 
 export interface CategoryOptions {
   /**

@@ -43,23 +43,29 @@ Tasks are defined in the `tasks:` section of your config:
 ```yaml
 tasks:
   project.build:
-    class_path: ue-mcp.bridge
+    class_path: ue-mcp.builtin/project.build
     group: project
     description: "Build C++ project. Params: configuration?, platform?, clean?"
     options:
-      method: build_project
+      configuration: Development
 ```
 
 The fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `class_path` | Yes | How the task is resolved - a registered name, a built-in class path, or a path to your own `.js`/`.ts` file |
+| `class_path` | No | How the task is resolved - a registered name, a built-in class path such as `ue-mcp.builtin/asset.list`, or a path to your own `.js` file. Omitted, it stays whatever the layer below set |
 | `description` | No | Human-readable description |
 | `group` | No | Category for organization |
 | `options` | No | Default options passed to the task (can be overridden per-step) |
 
 You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->1966+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
+
+#### Task options
+
+Every built-in task describes its options, from the same source `project(describe_action)` reads: an in-process action's declared options, a bridge action's recorded C++ spec, an Epic action's input schema, a plugin action's manifest `schema`. flowkit's `registry.describe(name)` and `FlowRunner.describeTask(name)` return them as `options_schema`, and a task definition can refine them with its own `options_schema`.
+
+An in-process action's task checks option types and allowed values on every flow step, so a step passing `limit: "ten"` fails before the handler runs, naming the task and the option. Required options are left to the action itself, which says what is missing in its own words. Bridge actions are not checked by the runner; the editor validates them.
 
 ### Flows
 
@@ -119,7 +125,6 @@ Step options win:
 ```yaml
 tasks:
   asset.list:
-    class_path: asset.list
     options:
       recursive: true        # default
 
@@ -158,8 +163,10 @@ See the full list by running `flow(action="list")` (the bundled defaults live in
 
 Built-in tasks fall into two categories:
 
-- **Bridge tasks** - forwarded to the C++ plugin over WebSocket. Defined with `class_path: ue-mcp.bridge` and a `method` option.
+- **Bridge tasks** - forwarded to the C++ plugin over WebSocket, with the action's own parameter mapping.
 - **Handler tasks** - executed locally in Node.js (filesystem operations like config parsing, asset directory scanning).
+
+Every built-in is registered under its task name and under a base alias, `ue-mcp.builtin/<category>.<action>`. The default definition of each task points its `class_path` at the alias. `ue-mcp.bridge` stays available for a YAML task that names a raw bridge `method` option directly.
 
 The `shell` task is also built in - it runs a command via `child_process`:
 
@@ -230,6 +237,83 @@ taskDef.options  <  step.options  <  runtime params
 ```
 
 References in any of those layers resolve at step-execution time against already-completed steps in the same flow. Nested flows have their own scope - a nested step cannot reference a step in the enclosing flow.
+
+### Project, editor and session references
+
+Three more namespaces resolve in any option value, and in `when:`. They are read when the step runs, so a long flow sees the editor as it is at each step.
+
+| Reference | Value |
+|-----------|-------|
+| `${project.name}` | The project name (the `.uproject` file name) |
+| `${project.path}` | The `.uproject` path |
+| `${project.dir}` | The project directory |
+| `${project.contentDir}` | The project's `Content` directory |
+| `${project.engine}` | The project's `EngineAssociation` |
+| `${editor.connected}` | Whether the editor bridge is connected |
+| `${editor.name}` | The name of the editor session the flow runs in |
+| `${session.name}` | Same as `editor.name` |
+| `${session.count}` | How many editors this server drives |
+
+A missing value resolves to nothing: the whole value becomes `undefined`, an embedded one an empty string. Any other `${ns.x}` is left as written.
+
+## Conditional Steps (`when`)
+
+A step, or a hook step, with `when:` runs only when its condition holds. A skipped step is reported with `skipped: true`.
+
+```yaml
+steps:
+  1:
+    task: asset.search
+    options: { query: BP_Door }
+  2:
+    task: blueprint.create
+    when: "${steps.1.count} == 0 and editor.connected"
+    options: { assetPath: /Game/BP_Door, parentClass: Actor }
+  3:
+    task: editor.execute_command
+    when: "params.mode == 'verbose' || session.count > 1"
+    options: { command: stat unit }
+```
+
+A condition is a small expression language, interpreted rather than run as code:
+
+- Literals: numbers, `'text'` or `"text"`, `true`, `false`, `null`.
+- Names under `steps`, `params` (the run's `params`), `error` (in `on_failure` and `finally`), `project`, `editor` and `session`, written bare (`steps.1.count`) or as a reference (`${steps.1.count}`).
+- `==` `!=` `<` `<=` `>` `>=`, where a number and a numeric string compare as numbers.
+- `!` or `not`, `&&` or `and`, `||` or `or`, and parentheses.
+
+A condition that is not an expression keeps its original meaning: its references are resolved and the result is tested for truthiness, where `false`, `0`, `null`, `undefined` and the empty string are false. `when: "${steps.1.ok}"` works as it always did. A string that contains an operator but does not parse fails the step with the grammar in the error, rather than being read as a non-empty string. A reference to a step that has not run fails the step too.
+
+## Preflight Checks (`checks`)
+
+A flow or a step can declare `checks`: conditions that gate it, written in the same expression language as `when:`. A check whose `when` holds applies its `action`: `error` fails the step (or the whole flow) before it starts, `skip` skips it, and `warn` records a warning and runs it.
+
+```yaml
+flows:
+  import_props:
+    checks:
+      - when: "not editor.connected"
+        action: error
+        message: Start the editor first.
+    steps:
+      1:
+        task: asset.import_static_mesh
+        options: { filePath: "D:/Props/Crate.fbx", packagePath: /Game/Props }
+        checks:
+          - { when: "gate.dialog", action: error, message: Answer the open dialog first. }
+```
+
+Besides `steps`, `params`, `project`, `editor` and `session`, a check (or a `when:`) can read two namespaces about the step being gated:
+
+| Name | Meaning |
+|------|---------|
+| `step.name`, `step.effect`, `step.availability`, `step.bridge` | The step's task, whether it reads or changes the editor, whether it needs an editor (`always`, `editor`, `unknown`), and the bridge method it dispatches to |
+| `gate.untargeted` | This server drives more than one editor and the call named none, so a run would be refused |
+| `gate.editor` | No editor is connected and the step dispatches to one |
+| `gate.dialog` | A modal dialog is open and would refuse this step |
+| `gate.python` | The step is `editor.execute_python` and its gate would refuse it: the `taskSummary` matches actions its `ruledOut` does not cover |
+
+The server's own gates are declared as exactly these checks when a flow is planned, so `flow(plan)` reports what a run would be refused for (see [Execution Plan](#execution-plan)). They are not added to a run: dispatch, the bridge and `execute_python` enforce them there as they always have.
 
 ## Flow-level Hooks
 
@@ -370,6 +454,10 @@ git_snapshot:
 
 The shadow repo is completely separate from any project-level git - your real history isn't touched. Snapshot failure doesn't fail the flow; handler-level rollbacks still apply. Restore outcomes surface in `result.snapshotRestore`.
 
+## Asset Locks
+
+With per-asset locking enabled (`ue-mcp.locking.enabled` in `ue-mcp.yml`), each step locks the assets it writes as it starts, exactly as the same action called directly does. The locks belong to the run: nothing is released until the flow ends, rollback and hooks included, so another agent cannot write an asset between the step that created it and the step that configures it. A step whose asset another session holds fails with `ASSET_LOCKED`, and the run releases what it holds whether it succeeded or failed. A long flow holds its assets for its whole length.
+
 ## Live Observation (SSE)
 
 Every flow run emits per-step lifecycle events that observers can subscribe to over a loopback HTTP Server-Sent Events stream. Use this for editor plugins that want a live "what's running" panel, dashboards, CI log streaming, or `curl --no-buffer` debugging.
@@ -426,7 +514,30 @@ Preview what a flow will do without running it:
 flow(action="plan", flowName="setup_scene")
 ```
 
-Returns each step with its task name, type, and skip status.
+Returns each step with its task name, type, and skip status, and a `preflight` field saying what a run would be refused for. Nothing runs, no dialog is answered and no `execute_python` ruling is remembered.
+
+```json
+{
+  "success": true,
+  "steps": [ ... ],
+  "preflight": {
+    "ok": false,
+    "refused": [
+      { "path": "2", "name": "asset.import_static_mesh", "message": "No editor is connected, and this step dispatches to one." }
+    ],
+    "steps": [
+      { "path": "1", "name": "project.read_config", "type": "task", "status": "run" },
+      { "path": "2", "name": "asset.import_static_mesh", "type": "task", "status": "error", "checks": [ ... ] }
+    ]
+  }
+}
+```
+
+`preflight` evaluates the flow's own `checks` and the server's gates (`gate.untargeted`, `gate.editor`, `gate.dialog`, `gate.python`) for every step, nested flows and hooks included. A refusal with no `path` is one for the whole run, such as an untargeted run while more than one editor is registered; its message is the one the run itself would be refused with. `params` and `skip` are read as `run` reads them.
+
+### Describing a flow
+
+`project(action="describe_action", name="<flow>")` answers with the flow's resolved plan when the name is not an action (`flow.<name>` works too): every step with nested flows flattened under paths such as `3/1`, each step's `options`, `when`, `ignore_failure` and `checks`, deprecation from the flow and from each task, and `source`, the config layer that last set the flow and each step (`built-in`, `plugin:<name>`, `ue-mcp.yml`, an env overlay, `ue-mcp.local.yml`, or the user-global file). `project(search_tools)` lists matching flows under a separate `flows` key, and `project(list_available_actions)` counts which flows can run with no editor.
 
 ## Built-in Flows
 
@@ -435,7 +546,8 @@ UE-MCP ships with three built-in flows you can run out of the box.
 | Flow | Steps | What it does |
 |------|-------|--------------|
 | `beacon` | 56 | YAML-authored shrine scene built step by step via individual tool calls. Useful as a reference for how a multi-step flow looks. |
-| `neon_shrine` | 19 | The full Neon Shrine demo, driven through the bridge's `demo.step` handler. Leaves the editor on `/Game/Demo/DemoLevel`. |
+| `neon_shrine` | 19 | The full Neon Shrine demo, one `demo_step_N` flow per step. Leaves the editor on `/Game/Demo/DemoLevel`. |
+| `demo_step_1` .. `demo_step_19` | 1 to 3 | One Neon Shrine step each. `demo(action="step", stepIndex=N)` runs `demo_step_N`. |
 | `neon_shrine_cleanup` | 1 | Wipes the Neon Shrine demo content. Switches the editor to `/Game/MCP_Home` first so you don't get stranded on Untitled. |
 
 ```
@@ -495,7 +607,7 @@ The beacon flow is defined in `src/flow/loader.ts` (compiled into `dist/`). User
 
 ### Neon Shrine
 
-A 19-step procedural scene driven through the bridge's `demo.step` handler. Each step invokes `demo(action="step", stepIndex=N)` for `N` in `1..19`. Output lands at `/Game/Demo/DemoLevel`. The matching `neon_shrine_cleanup` flow wipes the demo content and parks the editor on `/Game/MCP_Home` so you're not stranded on Untitled.
+A 19-step procedural scene, run as a flow of flows: step `N` is the `demo_step_N` flow, which is also what `demo(action="step", stepIndex=N)` runs. Steps 1 and 19 are level actions (`level.create`, `level.load`, `level.save`); the others call the bridge's `demo_step` primitive, because each needs something no action does, such as spawning under a label that is already taken on a replay. Output lands at `/Game/Demo/DemoLevel`. The matching `neon_shrine_cleanup` flow wipes the demo content and parks the editor on `/Game/MCP_Home` so you're not stranded on Untitled.
 
 ```
 flow(action="run", flowName="neon_shrine")
@@ -515,18 +627,20 @@ To change how a built-in task behaves, redefine it in your `ue-mcp.yml`. Your de
 ```yaml
 tasks:
   asset.list:
-    class_path: ./tasks/FilteredAssetList.js
+    class_path: tasks/FilteredAssetList
     description: Asset list with custom filtering
+    options:
+      excludePrefix: /Game/Developers/
 ```
 
-The built-in `asset.list` is now replaced by your class. The dynamic loader will import `./tasks/FilteredAssetList.js` from your project root.
+The built-in `asset.list` is now replaced by your class, wherever `asset.list` is called: a flow step, another task's `this.call('asset.list')`, and a live `asset(action="list")` call from an MCP client, including one made through the micro gateway. A config that fails to parse leaves live calls on the built-ins while flow calls report the error. The definition's `options` are defaults under the caller's own options. The loader imports `tasks/FilteredAssetList.js` (see [Dynamic Class Loading](#dynamic-class-loading)).
 
 ### Writing a Custom Task
 
 Create a file that exports a class extending `UeMcpTask`:
 
 ```typescript
-// tasks/FilteredAssetList.ts
+// tasks/FilteredAssetList.ts, compiled to tasks/FilteredAssetList.js
 import { UeMcpTask, type TaskResult } from 'ue-mcp/task';
 
 export default class FilteredAssetList extends UeMcpTask {
@@ -535,8 +649,8 @@ export default class FilteredAssetList extends UeMcpTask {
   }
 
   async execute(): Promise<TaskResult> {
-    // Call the original asset.list via the registry
-    const result = await this.call('asset.list', {
+    // The built-in this definition replaced, reached through its base alias
+    const result = await this.call('ue-mcp.builtin/asset.list', {
       directory: (this.options as any).directory ?? '/Game/',
       recursive: true,
     });
@@ -552,24 +666,14 @@ export default class FilteredAssetList extends UeMcpTask {
 }
 ```
 
-Register it in your config:
-
-```yaml
-tasks:
-  asset.list:
-    class_path: ./tasks/FilteredAssetList
-    description: Asset list that filters out developer content
-    options:
-      excludePrefix: /Game/Developers/
-```
-
 Key points:
 
 - **Export as default** - the loader looks for a default export, or a named export matching the filename.
 - **Must extend `UeMcpTask`** - the registry validates this at load time.
 - **`this.options`** - receives the merged options (task defaults + step overrides).
 - **`this.ctx`** - the shared context, typed for you as `FlowContext`: `bridge` (editor WebSocket) and `project` (path resolution). `UeMcpTask` also exposes a `this.bridge` shortcut.
-- **`this.call(name, opts)`** - resolve and execute another task by name. The original built-in task is still in the registry even when you override it via YAML `class_path`.
+- **`this.call(name, opts)`** - resolve and execute another task by name, through the same `tasks:` definitions a flow step uses.
+- **Call the built-in you replaced by its alias.** `this.call('asset.list')` inside the class that replaces `asset.list` resolves back to that class. The call is refused with a `TaskCycleError` naming the alias instead of recursing. The same refusal covers two overrides that call each other, and a task calling its own class, so a recursive walk is written as a loop inside one task.
 - **`this.resolve(name, opts)`** - like `call()` but returns the task instance without running it, in case you need to inspect or configure it first.
 
 ### Extending a Bridge Task
@@ -606,7 +710,7 @@ export default class SafeBuild extends UeMcpTask {
 ```yaml
 tasks:
   safe_build:
-    class_path: ./tasks/SafeBuild
+    class_path: tasks/SafeBuild
     description: Build with connection check
 
 flows:
@@ -727,16 +831,18 @@ This loads `ue-mcp.ci.yml` on top of `ue-mcp.yml`.
 
 ## Hot Reload
 
-The config is **reloaded from disk on every flow call**. Edit `ue-mcp.yml`, save, and run the flow again - no server restart needed. This makes it easy to iterate on flow definitions.
+The config files are checked on every call and reread when one of them changes. Edit `ue-mcp.yml`, save, and run the flow again - no server restart needed. A change is detected from each layer file's modification time, size and existence, so adding or deleting `ue-mcp.local.yml` counts as a change too.
 
 ## Dynamic Class Loading
 
-When you set `class_path` to a file path (e.g., `./tasks/MyTask`), the registry resolves it relative to the current working directory. It tries these candidates in order:
+When you set `class_path` to a path of your own (e.g., `tasks/MyTask` or `tasks.MyTask`), dots become path separators and the registry resolves it relative to the **working directory of the ue-mcp process**, which is not necessarily the project root. It tries these candidates in order:
 
 1. `{cwd}/tasks/MyTask.ts`
 2. `{cwd}/tasks/MyTask.js`
 3. `{cwd}/tasks/MyTask/index.ts`
 4. `{cwd}/tasks/MyTask/index.js`
+
+Write the path without a leading `./` and without an extension. A `.ts` candidate only loads when Node can import TypeScript, so ship compiled `.js`.
 
 The loaded module must export a class that extends `UeMcpTask`, either as the default export or as a named export matching the filename.
 
@@ -788,4 +894,5 @@ In ue-mcp, the context includes:
 | `bridge` | `IBridge` | WebSocket connection to the Unreal Editor |
 | `project` | `ProjectContext` | Path resolution, project info |
 | `registry` | `TaskRegistry` | Task registry for resolving other tasks |
+| `taskDefinitions` | `Record<string, TaskDefinition>` | The merged `tasks:` definitions `call` and `resolve` go through |
 | `logger` | `Logger` | Structured logger |
