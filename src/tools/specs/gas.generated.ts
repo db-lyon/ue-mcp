@@ -4,8 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
+import { categorySchema, makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd gas handler. */
 export const handlerSpecs: HandlerSpecs = {
@@ -113,6 +112,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -157,6 +162,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -192,6 +203,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -227,6 +244,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -268,6 +291,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -297,6 +326,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -468,6 +503,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -491,6 +532,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -520,6 +567,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -572,6 +625,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -613,6 +672,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -642,6 +707,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -703,6 +774,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -758,6 +835,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -787,6 +870,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -828,6 +917,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -941,6 +1036,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -1023,6 +1124,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -1058,6 +1165,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Runtime world scope: auto (default) | pie | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance (0 = server/primary); omit for the primary world"
       }
     ]
   },
@@ -1094,95 +1207,42 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_ability_system_component: "Params: blueprintPath, componentName?",
   add_attribute: "Params: attributeSetPath, attributeName",
   add_effect_cue: "Params: effectPath (or effectClass), cueTag, minLevel?, maxLevel?, magnitudeAttribute?",
-  add_loose_gameplay_tag: "Params: actorLabel?, actorPath?, tag, count?, world?",
-  apply_effect: "Params: actorLabel?, actorPath?, effectClass (or effectPath), level?, setByCaller?, world?",
-  audit_attributes: "Params: attributeSet?, actorLabel?, actorPath?, probeClamping?, world?",
-  bind_ability_input: "Params: actorLabel?, actorPath?, abilityClass, inputId, world?",
-  capture_gas_state: "Params: actorLabel?, actorPath?, snapshotId?, compareWith?, registerOwnerSets?, world?",
-  clear_ability_input: "Params: actorLabel?, actorPath?, abilityClass, world?",
+  add_loose_gameplay_tag: "Params: actorLabel?, actorPath?, tag, count?, world?, pieInstance?",
+  apply_effect: "Params: actorLabel?, actorPath?, effectClass (or effectPath), level?, setByCaller?, world?, pieInstance?",
+  audit_attributes: "Params: attributeSet?, actorLabel?, actorPath?, probeClamping?, world?, pieInstance?",
+  bind_ability_input: "Params: actorLabel?, actorPath?, abilityClass, inputId, world?, pieInstance?",
+  capture_gas_state: "Params: actorLabel?, actorPath?, snapshotId?, compareWith?, registerOwnerSets?, world?, pieInstance?",
+  clear_ability_input: "Params: actorLabel?, actorPath?, abilityClass, world?, pieInstance?",
   compare_gas_states: "Params: beforeId?, beforeSnapshot?, afterId?, afterSnapshot?",
   create_attribute_set: "Params: name, packagePath?, onConflict?",
   create_gameplay_ability: "Params: name, packagePath?, onConflict?",
   create_gameplay_cue: "Params: name, packagePath?, onConflict?, cueType?",
   create_gameplay_effect: "Params: name, packagePath?, onConflict?, durationPolicy?",
   delete_gas_snapshot: "Params: snapshotId",
-  get_active_effects: "Params: actorLabel?, actorPath?, world?",
-  get_asc_state: "Params: actorLabel?, actorPath?, world?",
-  get_attribute: "Params: actorLabel?, actorPath?, attribute?, world?",
+  get_active_effects: "Params: actorLabel?, actorPath?, world?, pieInstance?",
+  get_asc_state: "Params: actorLabel?, actorPath?, world?, pieInstance?",
+  get_attribute: "Params: actorLabel?, actorPath?, attribute?, world?, pieInstance?",
   get_gas_info: "Params: blueprintPath",
-  get_live_attribute_value: "Params: actorLabel?, actorPath?, attributeSet, attribute, registerOwnerSets?, world?",
-  grant_ability: "Params: actorLabel?, actorPath?, abilityClass, level?, inputId?, world?",
-  init_asc: "Params: actorLabel?, actorPath?, attributeSet?, world?",
+  get_live_attribute_value: "Params: actorLabel?, actorPath?, attributeSet, attribute, registerOwnerSets?, world?, pieInstance?",
+  grant_ability: "Params: actorLabel?, actorPath?, abilityClass, level?, inputId?, world?, pieInstance?",
+  init_asc: "Params: actorLabel?, actorPath?, attributeSet?, world?, pieInstance?",
   list_gas_snapshots: "Params: actorPath?, includeSnapshots?",
-  remove_effect: "Params: actorLabel?, actorPath?, effectHandle?, effectClass? (or effectPath), stacksToRemove?, world?",
+  remove_effect: "Params: actorLabel?, actorPath?, effectHandle?, effectClass? (or effectPath), stacksToRemove?, world?, pieInstance?",
   remove_effect_cue: "Params: effectPath (or effectClass), cueTag",
-  remove_loose_gameplay_tag: "Params: actorLabel?, actorPath?, tag, count?, world?",
-  revoke_ability: "Params: actorLabel?, actorPath?, abilityClass, world?",
-  send_ability_input: "Params: actorLabel?, actorPath?, inputEvent?, inputId?, abilityClass?, world?",
+  remove_loose_gameplay_tag: "Params: actorLabel?, actorPath?, tag, count?, world?, pieInstance?",
+  revoke_ability: "Params: actorLabel?, actorPath?, abilityClass, world?, pieInstance?",
+  send_ability_input: "Params: actorLabel?, actorPath?, inputEvent?, inputId?, abilityClass?, world?, pieInstance?",
   set_ability_tags: "Params: abilityPath, ability_tags?, cancel_abilities_with_tag?, block_abilities_with_tag?, activation_required_tags?, activation_blocked_tags?",
   set_asc_defaults: "Params: blueprintPath, attributeSet (or attributeSetPath), componentName?, initDataTable?",
-  set_attribute: "Params: actorLabel?, actorPath?, attribute, value, world?",
+  set_attribute: "Params: actorLabel?, actorPath?, attribute, value, world?, pieInstance?",
   set_effect_modifier: "Params: effectPath, attribute, operation?, magnitude?",
-  set_live_attribute_value: "Params: actorLabel?, actorPath?, attributeSet, attribute, value, valueType?, registerOwnerSets?, world?",
-  trace_ability_activation: "Params: actorLabel?, actorPath?, abilityClass, activate?, world?",
+  set_live_attribute_value: "Params: actorLabel?, actorPath?, attributeSet, attribute, value, valueType?, registerOwnerSets?, world?, pieInstance?",
+  trace_ability_activation: "Params: actorLabel?, actorPath?, abilityClass, activate?, world?, pieInstance?",
   validate_cue_coverage: "Params: directory?, effectPath? (or effectClass), maxEffects?",
 };
 
 /** Every key the spec'd gas handlers declare, aliases included. */
-export const schema: Record<string, z.ZodType> = {
-  ability_tags: z.array(z.string()).optional().describe("AbilityTags container, written whole"),
-  abilityClass: z.string().optional().describe("Granted GameplayAbility class to bind (bind_ability_input). Granted GameplayAbility class to unbind (clear_ability_input). GameplayAbility Blueprint path, generated class path, or native class name (grant_ability). GameplayAbility class to revoke (revoke_ability). Granted ability whose bound input id to use instead of inputId (send_ability_input). GameplayAbility class to trace (trace_ability_activation)"),
-  abilityPath: z.string().optional().describe("GameplayAbility Blueprint asset path"),
-  activate: z.boolean().optional().describe("Also call TryActivateAbility, to prove the verdict (default false)"),
-  activation_blocked_tags: z.array(z.string()).optional().describe("ActivationBlockedTags container, written whole"),
-  activation_required_tags: z.array(z.string()).optional().describe("ActivationRequiredTags container, written whole"),
-  actorLabel: z.string().optional().describe("Live actor label, internal name or object path. Pass this or actorPath"),
-  actorPath: z.string().optional().describe("Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given (add_loose_gameplay_tag, apply_effect, audit_attributes, bind_ability_input, capture_gas_state, clear_ability_input, get_active_effects, get_asc_state, get_attribute, get_live_attribute_value, grant_ability, init_asc, remove_effect, remove_loose_gameplay_tag, revoke_ability, send_ability_input, set_attribute, set_live_attribute_value, trace_ability_activation). Only snapshots of this actor object path (list_gas_snapshots)"),
-  afterId: z.string().optional().describe("Snapshot id of the later reading. Pass this or afterSnapshot"),
-  afterSnapshot: z.record(z.unknown()).optional().describe("The later snapshot object itself"),
-  attribute: z.string().optional().describe("Attribute to read. Omit to list every attribute (get_attribute). Attribute property name, or Set.Property (get_live_attribute_value, set_live_attribute_value). Attribute name: Health or SetName.Health (set_attribute). Attribute to modify: SetName.Attribute, or a unique attribute name (set_effect_modifier)"),
-  attributeName: z.string().optional().describe("FGameplayAttributeData variable to add"),
-  attributeSet: z.string().optional().describe("AttributeSet content path or class name. Pass this, a live actor, or both (audit_attributes). AttributeSet content path or class name (get_live_attribute_value, set_asc_defaults, set_live_attribute_value). AttributeSet content path or class name to make sure is registered (init_asc)"),
-  attributeSetPath: z.string().optional().describe("AttributeSet Blueprint asset path (add_attribute). Alias for attributeSet (set_asc_defaults)"),
-  beforeId: z.string().optional().describe("Snapshot id of the earlier reading. Pass this or beforeSnapshot"),
-  beforeSnapshot: z.record(z.unknown()).optional().describe("The earlier snapshot object itself"),
-  block_abilities_with_tag: z.array(z.string()).optional().describe("BlockAbilitiesWithTag container, written whole"),
-  blueprintPath: z.string().optional().describe("Blueprint asset path (add_ability_system_component). Blueprint asset path to inspect (get_gas_info). Blueprint asset path carrying the AbilitySystemComponent (set_asc_defaults)"),
-  cancel_abilities_with_tag: z.array(z.string()).optional().describe("CancelAbilitiesWithTag container, written whole"),
-  compareWith: z.string().optional().describe("Earlier snapshot id to diff this capture against"),
-  componentName: z.string().optional().describe("Name of the AbilitySystemComponent (default AbilitySystemComp) (add_ability_system_component). AbilitySystemComponent to wire (default: the first one) (set_asc_defaults)"),
-  count: z.number().int().optional().describe("References to add, at least 1 (default 1) (add_loose_gameplay_tag). References to remove, at least 1 (default 1) (remove_loose_gameplay_tag)"),
-  cueTag: z.string().optional().describe("Registered GameplayCue tag, under the GameplayCue root (add_effect_cue). GameplayCue tag to unlink. May be one that is no longer registered (remove_effect_cue)"),
-  cueType: z.string().optional().describe("Static (default, GameplayCueNotify_Static) | Actor (GameplayCueNotify_Actor)"),
-  directory: z.string().optional().describe("Content path to scan (default /Game)"),
-  durationPolicy: z.string().optional().describe("Echoed back as durationPolicy (default Instant); it is not written onto the effect"),
-  effectClass: z.string().optional().describe("Alias for effectPath (add_effect_cue, remove_effect_cue, validate_cue_coverage). GameplayEffect content path or class name (apply_effect). GameplayEffect content path or class name. Removes every active effect of that class (remove_effect)"),
-  effectHandle: z.string().optional().describe("Active-effect handle apply_effect reported. Removes exactly that effect"),
-  effectPath: z.string().optional().describe("GameplayEffect Blueprint asset path (add_effect_cue, remove_effect_cue, set_effect_modifier). Alias for effectClass (apply_effect, remove_effect). Audit this one GameplayEffect instead of scanning (validate_cue_coverage)"),
-  includeSnapshots: z.boolean().optional().describe("Return the full snapshot bodies rather than a summary row each"),
-  initDataTable: z.string().optional().describe("DataTable of starting attribute values"),
-  inputEvent: z.string().optional().describe("pressed (default) | released | confirm | cancel. pressed and released address an inputId; confirm and cancel take none"),
-  inputId: z.number().int().optional().describe("Input id to bind; -1 leaves the ability unbound (bind_ability_input). InputID for the spec (default -1, unbound) (grant_ability). Input id to send pressed or released to (send_ability_input)"),
-  level: z.number().optional().describe("Effect level (default 1) (apply_effect). Ability level (default 1) (grant_ability)"),
-  magnitude: z.number().optional().describe("Static magnitude (default 0)"),
-  magnitudeAttribute: z.string().optional().describe("Attribute the cue takes its magnitude from (SetName.Attribute), instead of the effect level"),
-  maxEffects: z.number().int().optional().describe("Cap on effect classes scanned (default 500, max 5000)"),
-  maxLevel: z.number().optional().describe("Highest effect level this cue covers"),
-  minLevel: z.number().optional().describe("Lowest effect level this cue covers, used to normalise the magnitude"),
-  name: z.string().optional().describe("Blueprint name"),
-  onConflict: z.string().optional().describe("skip (default, returns the existing asset) or error when the asset already exists"),
-  operation: z.string().optional().describe("Additive (default) | Multiplicative | Division | Override"),
-  packagePath: z.string().optional().describe("Content folder (default /Game/GAS/Attributes) (create_attribute_set). Content folder (default /Game/GAS/Abilities) (create_gameplay_ability). Content folder (default /Game/GAS/Cues) (create_gameplay_cue). Content folder (default /Game/GAS/Effects) (create_gameplay_effect)"),
-  probeClamping: z.boolean().optional().describe("Measure an existing clamp by driving the set's own PreAttributeChange. Needs a live registered set (default false)"),
-  registerOwnerSets: z.boolean().optional().describe("Register the actor's own attribute sets on its ASC when it has none, the way BeginPlay would (default true)"),
-  setByCaller: z.record(z.unknown()).optional().describe("SetByCaller magnitudes keyed by gameplay tag or name"),
-  snapshotId: z.string().optional().describe("Id to store the snapshot under (generated when omitted) (capture_gas_state). Snapshot id to drop (delete_gas_snapshot)"),
-  stacksToRemove: z.number().int().optional().describe("Stacks to take off (default -1, the whole effect)"),
-  tag: z.string().optional().describe("A registered gameplay tag"),
-  value: z.number().optional().describe("New base value (set_attribute). Value to write (set_live_attribute_value)"),
-  valueType: z.string().optional().describe("current (default, writes the attribute data in place) | base (writes through the ASC aggregator)"),
-  world: z.string().optional().describe("Runtime world scope: auto (default) | pie | editor"),
-};
+export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
 export const specBp = makeSpecBp(paramsClauses, handlerSpecs);

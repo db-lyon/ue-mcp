@@ -4,41 +4,26 @@ import { coerceAssetPathValue, normalizeUnrealAssetPath, splitAssetPath, PATH_FO
 /**
  * One parameter contract for the whole `widget` category (#798).
  *
- * Before this module every action invented its own spelling: some took
- * `assetPath`, some took `path`, the create actions took `name` +
- * `packagePath`, the injected `epic_*` actions wanted `widgetBlueprint`
- * nested inside `input`, and anything the shared schema did not declare was
- * stripped before dispatch. A caller could not tell from the schema which
- * spelling an action wanted, so agents probed the API until something stuck.
+ * The canonical names are `assetPath` (a Widget Blueprint or Editor Utility
+ * package path), `widgetName` and `parentWidgetName`, and `input` for the
+ * arguments of an `epic_*` action. The older spellings (`path`,
+ * `widgetBlueprintPath`, `widgetDisplayName`, `parentWidget`) are aliases in
+ * each handler's C++ spec, which the registry renames before the handler runs.
  *
- * The rule now, for every action in the category without exception:
- *
- *   - `assetPath` is the canonical name for a Widget Blueprint (or Editor
- *     Utility asset). It is an Unreal package path: `/Game/UI/WBP_Example`.
- *   - `widgetName` is the canonical name for a widget inside the tree.
- *   - `parentWidgetName` is the canonical name for its parent panel.
- *   - `input` is the canonical envelope for `epic_*` tool arguments, and the
- *     canonical names above are folded into it when a wrapped tool needs them.
- *
- * Legacy and engine-side spellings keep working. They are declared in the
- * tool schema (so the transport cannot strip them) and folded into the
- * canonical name here, in one place, before any per-action mapping runs.
+ * What stays here is what an alias cannot say: the asset path's value repair,
+ * the create actions' `name` + `packagePath` spelling, and `widgetBlueprint`,
+ * the engine tools' own name for the asset, which also takes a `{refPath}`
+ * object a string alias cannot accept.
  */
 
-/** Legacy or engine-side spellings of the canonical `assetPath`, in priority order. */
-const ASSET_PATH_ALIASES = ["assetPath", "path", "widgetBlueprintPath", "widgetBlueprint"] as const;
+/** Spellings of `assetPath` the C++ specs declare, in priority order. */
+const ASSET_PATH_KEYS = ["assetPath", "path", "widgetBlueprintPath"] as const;
 
-/** Legacy or engine-side spellings of the canonical `widgetName`. */
-const WIDGET_NAME_ALIASES = ["widgetName", "widgetDisplayName"] as const;
-
-/** Legacy or engine-side spellings of the canonical `parentWidgetName`. */
-const PARENT_WIDGET_ALIASES = ["parentWidgetName", "parentWidget"] as const;
-
-/** Each group is one parameter after normalization, so the editor reading any member is enough. */
+/** Each group is one parameter, so the editor reading any member is enough. */
 export const WIDGET_PARAM_GROUPS: readonly (readonly string[])[] = [
-  [...ASSET_PATH_ALIASES, "name", "packagePath"],
-  WIDGET_NAME_ALIASES,
-  PARENT_WIDGET_ALIASES,
+  [...ASSET_PATH_KEYS, "widgetBlueprint", "name", "packagePath"],
+  ["widgetName", "widgetDisplayName"],
+  ["parentWidgetName", "parentWidget"],
 ];
 
 /**
@@ -68,6 +53,14 @@ function firstDefined(
   return undefined;
 }
 
+function repairedAssetPath(key: string, value: unknown): string {
+  const raw = coerceAssetPathValue(value);
+  if (raw === undefined) {
+    throw invalid(`${key} could not be read as an asset path. ${PATH_FORMAT_HELP}`);
+  }
+  return normalizeUnrealAssetPath(raw, key);
+}
+
 /**
  * Normalize one `widget` call. Runs for every action in the category, native
  * and injected alike, before the action's own parameter mapping.
@@ -76,47 +69,46 @@ export function normalizeWidgetParams(params: Record<string, unknown>): Record<s
   const out = { ...params };
   const action = typeof params.action === "string" ? params.action : "";
   const splitsAssetPath = NAME_AND_PACKAGE_ACTIONS.has(action);
+  const wrapsEngineTool = action.startsWith("epic_");
 
   // ── Asset path ──────────────────────────────────────────────────────────
-  const alias = firstDefined(out, ASSET_PATH_ALIASES);
+  // Repaired under the name it was sent as; the registry resolves the alias.
   let assetPath: string | undefined;
-  if (alias) {
-    const raw = coerceAssetPathValue(alias.value);
-    if (raw === undefined) {
-      throw invalid(`${alias.key} could not be read as an asset path. ${PATH_FORMAT_HELP}`);
-    }
-    assetPath = normalizeUnrealAssetPath(raw, alias.key);
+  const given = firstDefined(out, ASSET_PATH_KEYS);
+  if (given) {
+    assetPath = repairedAssetPath(given.key, given.value);
+    out[given.key] = assetPath;
+  } else if (!wrapsEngineTool && firstDefined(out, ["widgetBlueprint"])) {
+    // An engine tool reads widgetBlueprint itself; a native handler reads assetPath.
+    assetPath = repairedAssetPath("widgetBlueprint", out.widgetBlueprint);
+    delete out.widgetBlueprint;
+    out.assetPath = assetPath;
   } else if (splitsAssetPath
     && typeof out.name === "string" && out.name.trim() !== ""
     && typeof out.packagePath === "string" && out.packagePath.trim() !== "") {
-    // The pre-#798 create spelling. Compose it into the canonical form so the
-    // create actions answer to `assetPath` like the rest of the category.
+    // The pre-#798 create spelling, composed so the create actions answer
+    // to `assetPath` like the rest of the category.
     assetPath = normalizeUnrealAssetPath(
       `${(out.packagePath as string).trim()}/${(out.name as string).trim()}`,
       "packagePath + name",
     );
-  }
-
-  if (assetPath !== undefined) {
     out.assetPath = assetPath;
-    // Mirrored for bridge handlers (and plugin-injected actions) that read the
-    // older `path` spelling. A request carries both; `assetPath` is the
-    // documented one. A `path` field in a widget response is a separate,
-    // handler-defined thing and is unaffected by this alias.
-    out.path = assetPath;
+  }
+  // An engine tool fills its asset reference from assetPath, and no registry
+  // alias runs for it.
+  if (wrapsEngineTool && assetPath !== undefined) out.assetPath = assetPath;
 
-    if (splitsAssetPath) {
-      const split = splitAssetPath(assetPath);
-      const givenName = typeof out.name === "string" ? out.name.trim() : "";
-      if (givenName !== "" && givenName !== split.name) {
-        throw invalid(
-          `Conflicting parameters: assetPath '${assetPath}' names the asset '${split.name}', but name is '${givenName}'. ` +
-          "assetPath already carries the asset name. Pass assetPath alone, or pass name together with packagePath.",
-        );
-      }
-      out.name = split.name;
-      out.packagePath = split.packagePath;
+  if (assetPath !== undefined && splitsAssetPath) {
+    const split = splitAssetPath(assetPath);
+    const givenName = typeof out.name === "string" ? out.name.trim() : "";
+    if (givenName !== "" && givenName !== split.name) {
+      throw invalid(
+        `Conflicting parameters: assetPath '${assetPath}' names the asset '${split.name}', but name is '${givenName}'. ` +
+        "assetPath already carries the asset name. Pass assetPath alone, or pass name together with packagePath.",
+      );
     }
+    out.name = split.name;
+    out.packagePath = split.packagePath;
   } else if (splitsAssetPath && typeof out.name === "string" && out.name.trim() !== "") {
     // A bare name with no packagePath is still valid: the bridge supplies the
     // default package. Only reject a name that cannot be an asset name at all,
@@ -130,13 +122,6 @@ export function normalizeWidgetParams(params: Record<string, unknown>): Record<s
     }
     out.name = name;
   }
-
-  // ── Widget identity ─────────────────────────────────────────────────────
-  const widget = firstDefined(out, WIDGET_NAME_ALIASES);
-  if (widget && typeof widget.value === "string") out.widgetName = widget.value;
-
-  const parent = firstDefined(out, PARENT_WIDGET_ALIASES);
-  if (parent && typeof parent.value === "string") out.parentWidgetName = parent.value;
 
   return out;
 }

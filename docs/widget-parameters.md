@@ -65,9 +65,12 @@ honoured:
 
 ## Accepted aliases
 
-Older and engine-side spellings keep working. They are declared in the tool
-schema, so a client cannot strip them, and they are folded into the canonical
-name before the call is dispatched. Prefer the canonical name in new code.
+Older and engine-side spellings keep working. Each is declared as an alias in
+the action's parameter spec, so it is in the tool schema and the `Params:`
+clause, and the bridge renames it to the canonical name before the handler
+runs. `widgetBlueprint`, which also takes the engine's `{ "refPath": "..." }`
+object, and `name` + `packagePath` are composed by the server instead. Prefer
+the canonical name in new code.
 
 | Alias | Canonical |
 | --- | --- |

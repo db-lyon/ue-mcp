@@ -169,7 +169,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecActorLabel = MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of the actor whose component material to read; a label naming several actors is refused"));
 	const FMCPParamSpec SpecActorPath = MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full object path of that actor; the unambiguous selector"));
 	const FMCPParamSpec SpecComponentName = MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Primitive component whose material slot to read (default: the first with material slots)"));
-	const FMCPParamSpec SpecSlotIndex = MCPParam::Optional(TEXT("slotIndex"), EType::Integer, TEXT("Material slot index on the component (default 0)"));
+	const FMCPParamSpec SpecSlotIndex = MCPParam::Optional(TEXT("slotIndex"), EType::Integer, TEXT("Material slot index on the component (default 0)")).Min(0);
 	const FMCPParamSpec SpecSlotName = MCPParam::Optional(TEXT("slotName"), EType::String, TEXT("Material slot name, instead of slotIndex"));
 	const FMCPParamSpec SpecPieInstance = MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"));
 	auto SpecWorld = [](const TCHAR* Description)
@@ -181,7 +181,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #1131 Material Designer selectors.
 	const FMCPParamSpec SpecDesignerAssetPath = MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("A DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one"));
 	const FMCPParamSpec SpecDesignerSlot = MCPParam::Optional(TEXT("designerSlot"), EType::Number, TEXT("Material Designer slot: index, or the material property it serves (BaseColor, or its short name Base)")).Or(EType::String);
-	const FMCPParamSpec SpecLayerIndex = MCPParam::Optional(TEXT("layerIndex"), EType::Integer, TEXT("Material Designer layer index within the slot"));
+	const FMCPParamSpec SpecLayerIndex = MCPParam::Optional(TEXT("layerIndex"), EType::Integer, TEXT("Material Designer layer index within the slot")).Min(0);
 	const FMCPParamSpec SpecLayerName = MCPParam::Optional(TEXT("layerName"), EType::String, TEXT("Material Designer layer name"));
 
 	Registry.RegisterHandler(TEXT("list_expression_types"), &ListExpressionTypes, {
@@ -508,8 +508,8 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecWorld(TEXT("World holding the actor: editor (default) | pie | auto")),
 		SpecPieInstance,
 		SpecDesignerSlot,
-		MCPParam::Optional(TEXT("layerIndex"), EType::Integer, TEXT("Only this layer of the slot")),
-		MCPParam::Optional(TEXT("maxDepth"), EType::Integer, TEXT("How deep to describe nested stages and values (default 10)")),
+		MCPParam::Optional(TEXT("layerIndex"), EType::Integer, TEXT("Only this layer of the slot")).Min(0),
+		MCPParam::Optional(TEXT("maxDepth"), EType::Integer, TEXT("How deep to describe nested stages and values (default 10)")).Min(1),
 	}, AssetOrActorChoice);
 	// The component by objectPath or componentPath, or a layer (+ stage) of a
 	// target's slot. componentPath and the layer forms also need the target.

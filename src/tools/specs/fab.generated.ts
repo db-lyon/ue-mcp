@@ -4,8 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
+import { categorySchema, makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd fab handler. */
 export const handlerSpecs: HandlerSpecs = {
@@ -86,13 +85,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 };
 
 /** Every key the spec'd fab handlers declare, aliases included. */
-export const schema: Record<string, z.ZodType> = {
-  batchSize: z.number().int().optional().describe("Library items to pull per sync request (default the plugin's own)"),
-  destination: z.string().optional().describe("Destination content path, e.g. /Game/Fab/Imported"),
-  destPath: z.string().optional().describe("Alias for destination"),
-  source: z.string().optional().describe("Absolute path of the source file on disk"),
-  sourceFile: z.string().optional().describe("Alias for source"),
-};
+export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
 export const specBp = makeSpecBp(paramsClauses, handlerSpecs);

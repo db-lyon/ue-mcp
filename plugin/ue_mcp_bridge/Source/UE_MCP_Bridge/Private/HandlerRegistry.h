@@ -45,8 +45,55 @@ enum class EMCPValueForm : uint8
 	String,
 };
 
+/**
+ * Bounds on a value. Min and Max bound a number, MinLength and MaxLength a
+ * string, and on an array each applies to every element; MinItems and
+ * MaxItems bound the array itself. Unset means unbounded.
+ */
+struct FMCPValueBounds
+{
+	TOptional<double> Min;
+	TOptional<double> Max;
+	TOptional<int32> MinLength;
+	TOptional<int32> MaxLength;
+	TOptional<int32> MinItems;
+	TOptional<int32> MaxItems;
+
+	bool IsSet() const
+	{
+		return Min.IsSet() || Max.IsSet() || MinLength.IsSet() || MaxLength.IsSet() || MinItems.IsSet() || MaxItems.IsSet();
+	}
+};
+
+/** The bound builders a parameter and a field share: `.Range(1, 8192)`, `.NonEmpty()`. */
+template <typename TDerived>
+struct TMCPBoundedValue
+{
+	FMCPValueBounds Bounds;
+
+	TDerived Min(double Value) const { TDerived Copy = Self(); Copy.Bounds.Min = Value; return Copy; }
+	TDerived Max(double Value) const { TDerived Copy = Self(); Copy.Bounds.Max = Value; return Copy; }
+	TDerived Range(double InMin, double InMax) const { return Min(InMin).Max(InMax); }
+	TDerived MinLength(int32 Value) const { TDerived Copy = Self(); Copy.Bounds.MinLength = Value; return Copy; }
+	TDerived MaxLength(int32 Value) const { TDerived Copy = Self(); Copy.Bounds.MaxLength = Value; return Copy; }
+	TDerived MinItems(int32 Value) const { TDerived Copy = Self(); Copy.Bounds.MinItems = Value; return Copy; }
+	TDerived MaxItems(int32 Value) const { TDerived Copy = Self(); Copy.Bounds.MaxItems = Value; return Copy; }
+
+	/** At least one element on an array, at least one character on a string. */
+	TDerived NonEmpty() const
+	{
+		TDerived Copy = Self();
+		if (Copy.Type == EMCPParamType::Array) Copy.Bounds.MinItems = 1;
+		else Copy.Bounds.MinLength = 1;
+		return Copy;
+	}
+
+private:
+	const TDerived& Self() const { return static_cast<const TDerived&>(*this); }
+};
+
 /** One field of an object parameter, or of each element of an array of objects. */
-struct FMCPParamField
+struct FMCPParamField : TMCPBoundedValue<FMCPParamField>
 {
 	FString Name;
 	EMCPParamType Type = EMCPParamType::String;
@@ -81,7 +128,7 @@ struct FMCPParamVariant
 };
 
 /** One declared parameter of a handler. */
-struct FMCPParamSpec
+struct FMCPParamSpec : TMCPBoundedValue<FMCPParamSpec>
 {
 	FString Name;
 	EMCPParamType Type = EMCPParamType::String;
@@ -370,6 +417,11 @@ public:
 	// Why one object field does not fit its declared type, or empty when it
 	// does. Owner names what holds it, for the message.
 	static FString ValidateField(const FString& Owner, const FMCPParamField& Field);
+
+	// Why a value's bounds do not fit its type, or empty when they do: a
+	// number bound off a number, a length off a string, an item count off an
+	// array, a minimum above its maximum, a fraction on an integer.
+	static FString ValidateBounds(const FString& Owner, EMCPParamType Type, EMCPParamType ItemType, const FMCPValueBounds& Bounds);
 
 	// True for a name a spec may declare: letters, digits and underscores, not
 	// starting with a digit.

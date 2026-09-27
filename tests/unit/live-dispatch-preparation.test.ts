@@ -65,18 +65,16 @@ async function callLive(
 // ── D1: the category's parameter folding ────────────────────────────────────
 
 describe("normalizeParams on the live dispatch route", () => {
-  it("folds the widget aliases the tool advertises, instead of dropping them", async () => {
-    // widget(read_tree) reaches a C++ handler doing
-    // RequireStringAlt(Params, "assetPath", "path"). Sending neither is a
-    // missing-parameter refusal for a spelling the tool itself accepts.
+  it("forwards the widget aliases the tool advertises, for the registry to rename", async () => {
+    // widgetBlueprintPath is an alias in read_widget_tree's C++ spec, so it
+    // has to reach the registry rather than be stripped on the way.
     const bridge = recordingBridge();
     await callLive([widgetTool], "widget.read_tree", bridge, {
       action: "read_tree",
       widgetBlueprintPath: "/Game/UI/WBP_Menu",
     });
     expect(bridge.calls[0].method).toBe("read_widget_tree");
-    expect(bridge.calls[0].params.assetPath).toBe("/Game/UI/WBP_Menu");
-    expect(bridge.calls[0].params.path).toBe("/Game/UI/WBP_Menu");
+    expect(bridge.calls[0].params).toEqual({ widgetBlueprintPath: "/Game/UI/WBP_Menu" });
   });
 
   it("normalizes the object-suffix spelling of an asset path", async () => {
@@ -105,7 +103,6 @@ describe("normalizeParams on the live dispatch route", () => {
       name: "WBP_X",
       packagePath: "/Game/UI",
       assetPath: "/Game/UI/WBP_X",
-      path: "/Game/UI/WBP_X",
     });
   });
 
@@ -171,7 +168,7 @@ describe("normalizeParams on the live dispatch route", () => {
       action: "read_tree",
       widgetBlueprintPath: "\\Game\\UI\\WBP_Menu",
     });
-    expect(bridge.calls[0].params.assetPath).toBe("/Game/UI/WBP_Menu");
+    expect(bridge.calls[0].params.widgetBlueprintPath).toBe("/Game/UI/WBP_Menu");
   });
 });
 
@@ -359,9 +356,9 @@ describe("the micro gateway on the live dispatch route", () => {
       action: "call",
       category: "widget",
       method: "read_tree",
-      args: { widgetBlueprintPath: "\\Game\\UI\\WBP_Menu" },
+      args: { widgetBlueprintPath: "\\Game\\UI\\WBP_Menu.WBP_Menu" },
     });
-    expect(bridge.calls[0].params.assetPath).toBe("/Game/UI/WBP_Menu");
+    expect(bridge.calls[0].params.widgetBlueprintPath).toBe("/Game/UI/WBP_Menu");
     expect(bridge.calls[0].params).not.toHaveProperty("action");
   });
 

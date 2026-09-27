@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { authorAction, AUTHOR_INPUTS } from "./blueprint-author.js";
@@ -128,11 +127,5 @@ export const blueprintTool: ToolDef = categoryTool(
     variables: AUTHOR_INPUTS.variables,
     functions: AUTHOR_INPUTS.functions,
     compile: AUTHOR_INPUTS.compile,
-    // Spec'd keys declared again only to keep the bounds a spec cannot state.
-    // The spec's type is the same, which the handler-specs unit test holds.
-    maxAssets: z.number().int().positive().optional().describe("export_batch: cap on Blueprints exported, default 200, max 5000 (#1166)"),
-    maxSamples: z.number().int().nonnegative().optional().describe("audit_dead_code: samples listed per finding kind per Blueprint, default 20, max 500; counts stay complete (#1166)"),
-    maxBlueprints: z.number().int().positive().optional().describe("search_call_sites / audit_dead_code: cap on Blueprints loaded, default 2000 (#945/#1166)"),
-    offset: z.number().int().nonnegative().optional().describe("Row offset for read_graph, and the older non-resumable form of search_call_sites paging"),
   },
 );

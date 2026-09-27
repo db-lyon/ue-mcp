@@ -5,20 +5,17 @@
  * here from the recording's format, through the generated zod and Params
  * clause, to describe_action and the check every dispatch route runs.
  */
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { paramsClause, renderAll, zodExpression } from "../../scripts/lib/handler-spec-gen.mjs";
+import { paramsClause, renderAll } from "../../scripts/lib/handler-spec-gen.mjs";
 import {
+  categorySchema,
   choiceViolation,
   compareHandlerSpecs,
   makeSpecBp,
   paramZod,
   renderChoice,
   specProblems,
-  zodSignature,
   type HandlerSpec,
   type HandlerSpecs,
   type ParamSpec,
@@ -28,11 +25,6 @@ import { parseParams } from "../helpers/params-clause.js";
 import { categoryTool } from "../../src/surface/category-tool.js";
 import { prepareCall } from "../../src/dispatch/call-pipeline.js";
 import { bridgeTaskClass } from "../../src/flow/task-factory.js";
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {
-  handlers: HandlerSpecs;
-};
 
 const p = (name: string, type: ParamSpec["type"], extra: Partial<ParamSpec> = {}): ParamSpec =>
   ({ name, type, required: false, description: `${name} probe`, ...extra });
@@ -71,11 +63,6 @@ const ANY_OF: HandlerSpec = {
   contractExempt: "Selector-driven batch write",
 };
 
-/** Evaluate a generated zod expression the way the generated module will. */
-function evalZod(expr: string): z.ZodTypeAny {
-  return new Function("z", `return ${expr};`)(z) as z.ZodTypeAny;
-}
-
 describe("value shapes", () => {
   const shapes: ParamSpec[] = [
     p("tint", "color"),
@@ -106,13 +93,6 @@ describe("value shapes", () => {
     expect(specProblems({ probe: { category: "level", params: shapes } })).toEqual([]);
   });
 
-  it("render to the zod the runtime builds, for every shape and every recorded parameter", () => {
-    const recorded = Object.values(SNAPSHOT.handlers).flatMap((s) => s.params);
-    for (const param of [...shapes, ...recorded]) {
-      expect(zodSignature(evalZod(zodExpression(param))), param.name).toBe(zodSignature(paramZod(param)));
-    }
-  });
-
   it("accept exactly what they declare", () => {
     const zodOf = (name: string) => paramZod(shapes.find((s) => s.name === name)!);
     expect(zodOf("tint").safeParse({ r: 1, g: 0.5, b: 0 }).success).toBe(true);
@@ -131,6 +111,37 @@ describe("value shapes", () => {
     expect(zodOf("entries").safeParse([{ mesh: "/Game/M", weight: 2 }]).success).toBe(true);
     expect(zodOf("entries").safeParse([{ weight: 2 }]).success).toBe(false);
     expect(zodOf("bounds").safeParse({ min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }).success).toBe(true);
+  });
+
+  it("carry the bounds the C++ spec declares", () => {
+    const bounded: ParamSpec[] = [
+      p("width", "integer", { min: 1, max: 8192 }),
+      p("slotName", "string", { minLength: 1, maxLength: 128 }),
+      p("vertexIndices", "array", { items: "integer", min: 0, minItems: 1, maxItems: 256 }),
+      p("edits", "array", {
+        items: "object",
+        minItems: 1,
+        fields: [
+          { name: "vertexIndex", type: "integer", required: true, description: "", min: 0 },
+          { name: "influences", type: "array", items: "object", required: true, description: "", minItems: 1, maxItems: 2 },
+        ],
+      }),
+    ];
+    expect(specProblems({ probe: { category: "asset", params: bounded } })).toEqual([]);
+    const accepts = (i: number, v: unknown) => paramZod(bounded[i]).safeParse(v).success;
+    expect([accepts(0, 1), accepts(0, 8192), accepts(0, 0), accepts(0, 8193)]).toEqual([true, true, false, false]);
+    expect([accepts(1, "a"), accepts(1, ""), accepts(1, "x".repeat(129))]).toEqual([true, false, false]);
+    expect([accepts(2, [0, 3]), accepts(2, []), accepts(2, [-1])]).toEqual([true, false, false]);
+    expect(accepts(3, [{ vertexIndex: 0, influences: [{}] }])).toBe(true);
+    expect(accepts(3, [{ vertexIndex: -1, influences: [{}] }]), "a field's minimum").toBe(false);
+    expect(accepts(3, [{ vertexIndex: 0, influences: [{}, {}, {}] }]), "a field's item count").toBe(false);
+
+    const refused = (param: ParamSpec) => specProblems({ probe: { params: [param] } }).join("\n");
+    expect(refused(p("a", "string", { min: 1 }))).toContain("not a number");
+    expect(refused(p("a", "integer", { minItems: 1 }))).toContain("not an array");
+    expect(refused(p("a", "integer", { min: 0.5 }))).toContain("fractional");
+    expect(refused(p("a", "number", { min: 2, max: 1 }))).toContain("lower bound above");
+    expect(refused(p("a", "string", { literal: "v1", minLength: 1 }))).toContain("bounded literal");
   });
 
   it("are refused when they do not fit their type", () => {
@@ -324,7 +335,9 @@ describe("the recording format", () => {
     const module = files.get("src/tools/specs/level.generated.ts")!;
     expect(module).toContain('"contractExempt": "Selector-driven batch write"');
     expect(module).toContain('probe_exempt: "Params: hlodLayer, at least one of actorLabels/labelPrefix/tag, dryRun?"');
-    expect(module).toContain("hlodLayer: z.string().nullable().optional()");
+    const schema = categorySchema({ probe_exempt: ANY_OF });
+    expect(schema.hlodLayer.safeParse(null).success).toBe(true);
+    expect(schema.hlodLayer.safeParse(undefined).success).toBe(true);
   });
 
   it("reports drift in a choice, a shape or an exemption", () => {

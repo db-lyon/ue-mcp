@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/reflection.generated.js";
@@ -29,9 +28,5 @@ export const reflectionTool: ToolDef = categoryTool(
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration.
     ...specSchema,
-    // Spec'd keys declared again only to keep the bounds a spec cannot state.
-    // The spec's type is the same, which the handler-specs unit test holds.
-    slotName: z.string().min(1).max(128).optional().describe("inspect_save_game: logical save slot name without a path"),
-    userIndex: z.number().int().nonnegative().optional().describe("inspect_save_game: platform user index (default 0)"),
   },
 );

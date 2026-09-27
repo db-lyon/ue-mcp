@@ -446,17 +446,17 @@ void FAssetGeometryHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	using EType = EMCPParamType;
 	Registry.RegisterHandler(TEXT("get_mesh_geometry"), &GetMeshGeometry, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to read (default 0)")),
-		MCPParam::Optional(TEXT("sectionIndex"), EType::Integer, TEXT("One render section (omit for every section)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to read (default 0)")).Min(0),
+		MCPParam::Optional(TEXT("sectionIndex"), EType::Integer, TEXT("One render section (omit for every section)")).Min(0),
 		MCPParam::Optional(TEXT("include"), EType::Array, TEXT("positions | uvs | normals | triangles (omit for all four)")).Items(EType::String),
-		MCPParam::Optional(TEXT("uvChannel"), EType::Integer, TEXT("UV channel to return (default 0)")),
+		MCPParam::Optional(TEXT("uvChannel"), EType::Integer, TEXT("UV channel to return (default 0)")).Min(0),
 		MCPParam::Optional(TEXT("dumpToFile"), EType::Boolean, TEXT("Write the geometry JSON to a file instead of returning it")),
 		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("File for dumpToFile; relative paths resolve under Saved/")),
 	});
 	Registry.RegisterHandler(TEXT("measure_mesh_geometry"), &MeasureMeshGeometry, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to measure (default 0)")),
-		MCPParam::Optional(TEXT("sectionIndex"), EType::Integer, TEXT("One render section (omit to measure the whole LOD)")),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to measure (default 0)")).Min(0),
+		MCPParam::Optional(TEXT("sectionIndex"), EType::Integer, TEXT("One render section (omit to measure the whole LOD)")).Min(0),
 	});
 }
 

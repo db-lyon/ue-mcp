@@ -314,7 +314,12 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("execute_command"), &ExecuteCommand, {
 		MCPParam::Required(TEXT("command"), EType::String, TEXT("Console command to run in the editor world")),
 	}, MCPSpec::ContractExempt(TEXT("runs a console command")));
-	Registry.RegisterHandler(TEXT("execute_python"), &ExecutePython);
+	Registry.RegisterHandler(TEXT("execute_python"), &ExecutePython, {
+		MCPParam::Required(TEXT("code"), EType::String, TEXT("Python source to run in the editor")),
+		MCPParam::Optional(TEXT("resultVariable"), EType::String, TEXT("Top-level variable to return as result, separate from printed output")),
+		MCPParam::Optional(TEXT("captureLog"), EType::Boolean, TEXT("false keeps only the logged errors (default true)")),
+		MCPParam::Optional(TEXT("maxLogChars"), EType::Number, TEXT("Keep only the last N characters of logged output")),
+	}, MCPSpec::ContractExempt(TEXT("runs Python")));
 	// `args` on run_python_file and the invoke_* handlers takes one of four
 	// forms. One category key has one type, so all five declare the same forms;
 	// MCPReadPythonArgs and MCPReadFunctionArgs accept the ones each handler
@@ -406,7 +411,11 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("starts and stops Play In Editor")));
 	// The Blueprint-error bypass start, called only by the approval-gated
 	// editor(play_in_editor_ignore_blueprint_errors) handler.
-	Registry.RegisterHandler(TEXT("pie_start_ignoring_blueprint_errors"), &PieStartIgnoringBlueprintErrors);
+	Registry.RegisterHandler(TEXT("pie_start_ignoring_blueprint_errors"), &PieStartIgnoringBlueprintErrors, {
+		MCPParam::Required(TEXT("authorizationSource"), EType::String, TEXT("Which approval let the bypass through; set by the gate, never by a caller")),
+		MCPParam::Optional(TEXT("waitForAssetRegistry"), EType::Boolean, TEXT("Block until the AssetRegistry initial scan completes (default true)")),
+		MCPParam::Optional(TEXT("assetRegistryTimeoutSeconds"), EType::Number, TEXT("How long to wait for that scan (default 180)")),
+	}, MCPSpec::ContractExempt(TEXT("starts Play In Editor")));
 	Registry.RegisterHandler(TEXT("capture_screenshot"), &CaptureScreenshot, {
 		MCPParam::Required(TEXT("filename"), EType::String, TEXT("Image path to write; .png is appended without an image extension")).Alias(TEXT("outputPath")),
 		MCPParam::Optional(TEXT("target"), EType::String, TEXT("auto (default) | pie | editor | window")),
@@ -535,7 +544,10 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("saves every dirty package")));
 	Registry.RegisterHandler(TEXT("list_dirty_packages"), &ListDirtyPackages, NoParams);
 	Registry.RegisterHandler(TEXT("get_world_state"), &GetWorldState, NoParams);
-	Registry.RegisterHandler(TEXT("request_editor_shutdown"), &RequestEditorShutdown);
+	Registry.RegisterHandler(TEXT("request_editor_shutdown"), &RequestEditorShutdown, {
+		MCPParam::Optional(TEXT("requireClean"), EType::Boolean, TEXT("Refuse while any content or map package is dirty (default true)")),
+		MCPParam::Optional(TEXT("endPIE"), EType::Boolean, TEXT("End an active PIE or SIE session first (default true); false refuses while play runs")),
+	}, MCPSpec::ContractExempt(TEXT("shuts the editor down")));
 	Registry.RegisterHandler(TEXT("list_pie_instances"), &ListPIEInstances, NoParams);
 	{
 		TArray<FMCPParamSpec> Spec = {

@@ -15,6 +15,7 @@
 
 #include "AssetHandlers.h"
 #include "HandlerUtils.h"
+#include "HandlerPinType.h"
 
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
@@ -61,22 +62,6 @@ namespace
 		}
 	}
 
-	/** The readable type of a pin, in the shape the editor shows it. */
-	FString PinTypeText(const UEdGraphPin& Pin)
-	{
-		FString Text = Pin.PinType.PinCategory.ToString();
-		if (!Pin.PinType.PinSubCategory.IsNone())
-		{
-			Text += TEXT(".") + Pin.PinType.PinSubCategory.ToString();
-		}
-		if (const UObject* SubObject = Pin.PinType.PinSubCategoryObject.Get())
-		{
-			Text += FString::Printf(TEXT("(%s)"), *SubObject->GetName());
-		}
-		if (Pin.PinType.IsArray()) Text += TEXT("[]");
-		return Text;
-	}
-
 	/** A wire, keyed by its two pin ids in a fixed order so both ends agree. */
 	using FWireKey = TPair<FGuid, FGuid>;
 
@@ -108,7 +93,7 @@ namespace
 		Json->SetStringField(TEXT("name"), Pin.PinName.ToString());
 		Json->SetStringField(TEXT("pinId"), Pin.PinId.ToString());
 		Json->SetStringField(TEXT("direction"), Pin.Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
-		Json->SetStringField(TEXT("type"), PinTypeText(Pin));
+		Json->SetStringField(TEXT("type"), MCPPinTypeSpec(Pin.PinType));
 		// The literal a pin carries when nothing is connected to it. This is
 		// what an unconnected input actually contributes, so a graph read that
 		// omitted it would describe the wiring and not the values.

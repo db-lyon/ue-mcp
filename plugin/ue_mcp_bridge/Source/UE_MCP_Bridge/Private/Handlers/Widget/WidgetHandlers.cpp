@@ -267,11 +267,11 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	using EType = EMCPParamType;
 	auto AssetPath = []()
 	{
-		return MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)")).Alias(TEXT("path"));
+		return MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)")).Alias(TEXT("path")).Alias(TEXT("widgetBlueprintPath"));
 	};
 	auto WidgetName = []()
 	{
-		return MCPParam::Required(TEXT("widgetName"), EType::String, TEXT("Name of a widget inside the tree (#798)"));
+		return MCPParam::Required(TEXT("widgetName"), EType::String, TEXT("Name of a widget inside the tree (#798)")).Alias(TEXT("widgetDisplayName"));
 	};
 	auto AnimationName = []()
 	{
@@ -324,7 +324,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// Where a create action puts its asset: assetPath, or name in packagePath.
 	auto CreateAssetPath = []()
 	{
-		return MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath")).Alias(TEXT("path"));
+		return MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath")).Alias(TEXT("path")).Alias(TEXT("widgetBlueprintPath"));
 	};
 	auto CreateName = []()
 	{
@@ -356,7 +356,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("extract_widget_subtree"), &ExtractWidgetSubtree, {
 		MCPParam::Required(TEXT("sourceAssetPath"), EType::String, TEXT("WidgetBlueprint the subtree is read from")).Alias(TEXT("sourcePath")),
-		MCPParam::Required(TEXT("sourceWidgetName"), EType::String, TEXT("Widget in the source that becomes the extracted root")).Alias(TEXT("widgetName")),
+		MCPParam::Required(TEXT("sourceWidgetName"), EType::String, TEXT("Widget in the source that becomes the extracted root")).Alias(TEXT("widgetName")).Alias(TEXT("widgetDisplayName")),
 		MCPParam::Required(TEXT("destinationAssetPath"), EType::String, TEXT("Destination package path, including the new asset name")).Alias(TEXT("destinationPath")),
 		MCPParam::Optional(TEXT("destinationParentClass"), EType::String, TEXT("UUserWidget subclass for the destination (default UserWidget)")),
 		MCPParam::Optional(TEXT("destinationRootName"), EType::String, TEXT("Name override for the extracted root; descendants keep their names")),
@@ -426,8 +426,8 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_widget"), &AddWidget, {
 		AssetPath(),
 		MCPParam::Required(TEXT("widgetClass"), EType::String, TEXT("Widget class: a short name (TextBlock, CanvasPanel), a full path, or a Widget Blueprint path")).Alias(TEXT("typeName")),
-		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Name of a widget inside the tree (#798)")).Alias(TEXT("name")),
-		MCPParam::Optional(TEXT("parentWidgetName"), EType::String, TEXT("Name of the parent panel widget (#798)")),
+		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Name of a widget inside the tree (#798)")).Alias(TEXT("name")).Alias(TEXT("widgetDisplayName")),
+		MCPParam::Optional(TEXT("parentWidgetName"), EType::String, TEXT("Name of the parent panel widget (#798)")).Alias(TEXT("parentWidget")),
 	});
 	Registry.RegisterHandler(TEXT("remove_widget"), &RemoveWidget, {
 		AssetPath(),
@@ -436,7 +436,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("move_widget"), &MoveWidget, {
 		AssetPath(),
 		WidgetName(),
-		MCPParam::Required(TEXT("newParentWidgetName"), EType::String, TEXT("Panel widget to reparent into")).Alias(TEXT("parentWidgetName")),
+		MCPParam::Required(TEXT("newParentWidgetName"), EType::String, TEXT("Panel widget to reparent into")).Alias(TEXT("parentWidgetName")).Alias(TEXT("parentWidget")),
 	});
 	Registry.RegisterHandler(TEXT("set_root_widget"), &SetRoot, {
 		AssetPath(),
@@ -464,14 +464,14 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	// Both selectors filter together: a given widgetName and className must both match.
 	Registry.RegisterHandler(TEXT("get_runtime_widget"), &GetRuntimeWidget, {
-		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Exact live instance name")),
+		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Exact live instance name")).Alias(TEXT("widgetDisplayName")),
 		ClassName(),
 		MCPParam::Optional(TEXT("childName"), EType::String, TEXT("Named child inside the UserWidget (#559)")),
 		MCPParam::Optional(TEXT("maxDepth"), EType::Integer, TEXT("Max widget-tree depth to walk (default 6)")),
 		MCPParam::Optional(TEXT("includeLayout"), EType::Boolean, TEXT("Add read-only layout diagnostics (geometry, slot, clipping, viewport, per-node deltas) to every node and report the host UserWidget under host (#775)")),
 	}, MCPSpec::AtLeastOne({ { TEXT("widgetName") }, { TEXT("className") } }));
 	Registry.RegisterHandler(TEXT("inspect_runtime_instances"), &InspectRuntimeInstances, {
-		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Exact live instance name. Provide this or classFilter")),
+		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Exact live instance name. Provide this or classFilter")).Alias(TEXT("widgetDisplayName")),
 		MCPParam::Optional(TEXT("classFilter"), EType::String, TEXT("Class name substring filter")),
 		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Exact reflected property names to serialize")).Items(EType::String),
 		MCPParam::Optional(TEXT("includeSubtree"), EType::Boolean, TEXT("Also dump descendant widgets (#547)")),
@@ -480,12 +480,12 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("viewportOnly"), EType::Boolean, TEXT("Only widgets currently added to the viewport")),
 		MCPParam::Optional(TEXT("world"), EType::String, TEXT("Runtime world scope: pie (default) | game | auto. The editor world is never a valid target")),
 		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("PIE instance id for multi-client sessions")),
-		MCPParam::Optional(TEXT("maxInstances"), EType::Integer, TEXT("Maximum matching widget instances returned (1 to 500, default 100)")),
-		MCPParam::Optional(TEXT("maxNodesPerInstance"), EType::Integer, TEXT("Maximum root/subtree nodes per instance (1 to 2000, default 250)")),
+		MCPParam::Optional(TEXT("maxInstances"), EType::Integer, TEXT("Maximum matching widget instances returned (1 to 500, default 100)")).Range(1, 500),
+		MCPParam::Optional(TEXT("maxNodesPerInstance"), EType::Integer, TEXT("Maximum root/subtree nodes per instance (1 to 2000, default 250)")).Range(1, 2000),
 	});
 	// #161: Runtime delegate inspection
 	Registry.RegisterHandler(TEXT("get_runtime_delegates"), &GetRuntimeDelegates, {
-		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Exact live instance name. Provide this or className")),
+		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Exact live instance name. Provide this or className")).Alias(TEXT("widgetDisplayName")),
 		ClassName(),
 	});
 	Registry.RegisterHandler(TEXT("add_to_viewport"), &AddWidgetToViewport, {
@@ -494,7 +494,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	// Needs a PIE world, and a widget the contract values name nothing of.
 	Registry.RegisterHandler(TEXT("invoke_runtime_function"), &InvokeRuntimeWidgetFunction, {
-		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Exact live instance name")),
+		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Exact live instance name")).Alias(TEXT("widgetDisplayName")),
 		ClassName(),
 		MCPParam::Optional(TEXT("functionName"), EType::String, TEXT("Parameterless UFUNCTION to call on the live widget (#559), or with childName the child delegate to fire (#812)")),
 		MCPParam::Optional(TEXT("childName"), EType::String, TEXT("Named child inside the UserWidget (#559)")),
@@ -586,7 +586,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("rule"), EType::String, TEXT("Escape, Explicit (default), Wrap, Stop, Custom or CustomBoundary")),
 			MCPParam::OptionalField(TEXT("widgetToFocus"), EType::String, TEXT("Target widget name; required for Explicit")),
 		}),
-		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Widget whose navigation a single write sets")),
+		MCPParam::Optional(TEXT("widgetName"), EType::String, TEXT("Widget whose navigation a single write sets")).Alias(TEXT("widgetDisplayName")),
 		MCPParam::Optional(TEXT("direction"), EType::String, TEXT("Direction of a single write, which it needs: Up, Down, Left, Right, Next or Previous")),
 		MCPParam::Optional(TEXT("rule"), EType::String, TEXT("Rule of a single write: Escape, Explicit (default), Wrap, Stop, Custom or CustomBoundary")),
 		MCPParam::Optional(TEXT("widgetToFocus"), EType::String, TEXT("Target widget of a single Explicit write")),
@@ -612,7 +612,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		UserIndex(),
 	});
 	Registry.RegisterHandler(TEXT("set_runtime_focus"), &SetRuntimeFocus, {
-		MCPParam::Required(TEXT("widgetName"), EType::String, TEXT("Named child of a live PIE widget, or the live UserWidget's own name")),
+		MCPParam::Required(TEXT("widgetName"), EType::String, TEXT("Named child of a live PIE widget, or the live UserWidget's own name")).Alias(TEXT("widgetDisplayName")),
 		UserIndex(),
 		ClassName(),
 	});
@@ -621,10 +621,10 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// className names the contract; assetPath also checks that blueprint's tree against it.
 	Registry.RegisterHandler(TEXT("get_bind_widget_contract"), &GetBindWidgetContract, {
 		MCPParam::Optional(TEXT("className"), EType::String, TEXT("Native UserWidget parent whose contract to read: a short name, a class path, or a Widget Blueprint path")),
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Widget Blueprint whose parent's contract to read and whose tree to check against it")).Alias(TEXT("path")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Widget Blueprint whose parent's contract to read and whose tree to check against it")).Alias(TEXT("path")).Alias(TEXT("widgetBlueprintPath")),
 	}, MCPSpec::AtLeastOne({ { TEXT("className") }, { TEXT("assetPath") } }));
 	Registry.RegisterHandler(TEXT("audit_commonui"), &AuditCommonUI, {
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Widget Blueprint whose CommonUI wiring to check as well")).Alias(TEXT("path")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Widget Blueprint whose CommonUI wiring to check as well")).Alias(TEXT("path")).Alias(TEXT("widgetBlueprintPath")),
 	});
 }
 

@@ -2876,7 +2876,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 	// spec declares too (#1057).
 	MCPReadParamsAhead(Params, {
 		TEXT("retargeterPath"), TEXT("sourceMesh"), TEXT("targetMesh"), TEXT("animPaths"), TEXT("outputPath"),
-		TEXT("prefix"), TEXT("suffix"), TEXT("overwrite"), TEXT("requireCompleteMapping"),
+		TEXT("prefix"), TEXT("suffix"), TEXT("requireCompleteMapping"),
 	});
 #if !UE_MCP_HAS_5_8_API
 	return MCPUnsupportedEngineError(TEXT("batch_retarget_animations"), TEXT("5.8"));
@@ -2894,10 +2894,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 	USkeletalMesh* TargetMesh = LoadAssetByPath<USkeletalMesh>(TargetMeshPath);
 	if (!TargetMesh) return MCPError(FString::Printf(TEXT("Target mesh not found: %s"), *TargetMeshPath));
 	if (SourceMesh == TargetMesh) return MCPError(TEXT("sourceMesh and targetMesh must be different"));
-	if (OptionalBool(Params, TEXT("overwrite"), false))
-	{
-		return MCPError(TEXT("overwrite=true is not supported; choose a new output name/path so existing assets are never replaced"));
-	}
 
 	bool bMappingInspectionAvailable = false;
 	int32 TargetChainCount = 0;

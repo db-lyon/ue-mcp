@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1070,
+  "handlerCount": 1076,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -1256,6 +1256,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -1290,7 +1296,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -1538,13 +1545,15 @@
           "name": "loopCount",
           "type": "integer",
           "required": false,
-          "description": "How many times the segment repeats (default 1)"
+          "description": "How many times the segment repeats (default 1)",
+          "min": 1
         },
         {
           "name": "insertIndex",
           "type": "integer",
           "required": false,
-          "description": "Position in the slot's segment list (default appends)"
+          "description": "Position in the slot's segment list (default appends)",
+          "min": 0
         }
       ]
     },
@@ -3210,7 +3219,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -3228,14 +3238,18 @@
           "required": false,
           "description": "Name of a widget inside the tree (#798)",
           "aliases": [
-            "name"
+            "name",
+            "widgetDisplayName"
           ]
         },
         {
           "name": "parentWidgetName",
           "type": "string",
           "required": false,
-          "description": "Name of the parent panel widget (#798)"
+          "description": "Name of the parent panel widget (#798)",
+          "aliases": [
+            "parentWidget"
+          ]
         }
       ]
     },
@@ -3248,7 +3262,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -3286,7 +3301,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -3299,7 +3315,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -3348,7 +3367,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -3361,7 +3381,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -3564,7 +3587,8 @@
           "name": "elements",
           "type": "array",
           "required": true,
-          "description": "Values to append, validated before any is written"
+          "description": "Values to append, validated before any is written",
+          "minItems": 1
         },
         {
           "name": "save",
@@ -3616,7 +3640,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": true,
-          "description": "Edit-session natural key from begin_control_rig_edit"
+          "description": "Edit-session natural key from begin_control_rig_edit",
+          "minLength": 1
         },
         {
           "name": "operations",
@@ -3986,6 +4011,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -4273,7 +4304,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "save",
@@ -4359,7 +4391,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -4493,7 +4526,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -4657,7 +4691,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -4815,7 +4850,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -5183,6 +5219,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -5224,13 +5266,15 @@
           "name": "maxBlueprints",
           "type": "integer",
           "required": false,
-          "description": "Cap on Blueprints loaded (default 2000)"
+          "description": "Cap on Blueprints loaded (default 2000)",
+          "min": 1
         },
         {
           "name": "maxSamples",
           "type": "integer",
           "required": false,
-          "description": "Samples listed per finding kind per Blueprint (default 20, max 500); counts stay complete"
+          "description": "Samples listed per finding kind per Blueprint (default 20, max 500); counts stay complete",
+          "min": 0
         },
         {
           "name": "limit",
@@ -5261,7 +5305,8 @@
           "required": false,
           "description": "Widget Blueprint whose CommonUI wiring to check as well",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -5275,7 +5320,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -5301,7 +5347,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -5520,7 +5567,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": true,
-          "description": "Edit-session natural key from begin_control_rig_edit"
+          "description": "Edit-session natural key from begin_control_rig_edit",
+          "minLength": 1
         },
         {
           "name": "outputAssetPath",
@@ -5535,24 +5583,10 @@
           "description": "Frames per second of the bake (default the sequence's display rate)"
         },
         {
-          "name": "reduceKeys",
-          "type": "boolean",
-          "required": false,
-          "description": "Key reduction is not supported yet; omit or pass false",
-          "literal": false
-        },
-        {
-          "name": "tolerance",
-          "type": "number",
-          "required": false,
-          "description": "Key-reduction tolerance (default 0.001)"
-        },
-        {
           "name": "createLink",
           "type": "boolean",
           "required": false,
-          "description": "Sequencer links are not supported yet; omit or pass false",
-          "literal": false
+          "description": "Link the AnimSequence and the LevelSequence, which saves the LevelSequence too (default false)"
         },
         {
           "name": "onConflict",
@@ -5692,13 +5726,6 @@
           "type": "string",
           "required": false,
           "description": "Output name suffix (default _Retargeted)"
-        },
-        {
-          "name": "overwrite",
-          "type": "boolean",
-          "required": false,
-          "description": "Overwriting is not supported; omit or pass false",
-          "literal": false
         },
         {
           "name": "requireCompleteMapping",
@@ -5980,7 +6007,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": false,
-          "description": "Stable natural key the later calls address (default derived from the mesh name)"
+          "description": "Stable natural key the later calls address (default derived from the mesh name)",
+          "minLength": 1
         },
         {
           "name": "onConflict",
@@ -6085,6 +6113,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -6148,13 +6182,15 @@
           "name": "lodIndex",
           "type": "integer",
           "required": true,
-          "description": "Mesh LOD"
+          "description": "Mesh LOD",
+          "min": 0
         },
         {
           "name": "sectionIndex",
           "type": "integer",
           "required": true,
-          "description": "Render section to bind"
+          "description": "Render section to bind",
+          "min": 0
         },
         {
           "name": "clothingAsset",
@@ -6166,7 +6202,8 @@
           "name": "assetLodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD inside the clothing asset (default: lodIndex, clamped)"
+          "description": "LOD inside the clothing asset (default: lodIndex, clamped)",
+          "min": 0
         }
       ]
     },
@@ -6179,7 +6216,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -6575,6 +6613,32 @@
         }
       ]
     },
+    "bulk_restore_data_assets": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "updatedItems",
+          "type": "array",
+          "required": false,
+          "description": "{assetPath, properties} snapshots to write back",
+          "items": "object"
+        },
+        {
+          "name": "createdAssetPaths",
+          "type": "array",
+          "required": false,
+          "description": "Assets the upsert created, to delete",
+          "items": "string"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save what was restored (default true)"
+        }
+      ],
+      "contractExempt": "deletes and rewrites the assets its payload names"
+    },
     "bulk_set_asset_properties": {
       "category": "asset",
       "params": [
@@ -6583,7 +6647,9 @@
           "type": "array",
           "required": true,
           "description": "Asset updates: [{assetPath, properties}], max 500",
-          "items": "object"
+          "items": "object",
+          "minItems": 1,
+          "maxItems": 500
         },
         {
           "name": "save",
@@ -6726,7 +6792,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -6746,7 +6813,9 @@
           "type": "array",
           "required": true,
           "description": "DataAsset descriptors: [{name, packagePath, className, properties?}], max 500",
-          "items": "object"
+          "items": "object",
+          "minItems": 1,
+          "maxItems": 500
         },
         {
           "name": "onConflict",
@@ -6810,7 +6879,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": true,
-          "description": "Edit-session natural key from begin_control_rig_edit"
+          "description": "Edit-session natural key from begin_control_rig_edit",
+          "minLength": 1
         },
         {
           "name": "controlNames",
@@ -6859,6 +6929,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -7043,7 +7119,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "requireLightmapChannel",
@@ -7421,6 +7498,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -7523,14 +7606,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -7549,14 +7636,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "direction",
@@ -9352,7 +9443,8 @@
           "required": false,
           "description": "Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -9398,7 +9490,8 @@
           "required": false,
           "description": "Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -10799,13 +10892,17 @@
           "name": "width",
           "type": "integer",
           "required": false,
-          "description": "Pixel width, 1-8192 (default 512)"
+          "description": "Pixel width, 1-8192 (default 512)",
+          "min": 1,
+          "max": 8192
         },
         {
           "name": "height",
           "type": "integer",
           "required": false,
-          "description": "Pixel height, 1-8192 (default 512)"
+          "description": "Pixel height, 1-8192 (default 512)",
+          "min": 1,
+          "max": 8192
         },
         {
           "name": "format",
@@ -10829,7 +10926,8 @@
           "name": "targetGamma",
           "type": "number",
           "required": false,
-          "description": "Target gamma (default 0, the engine behavior)"
+          "description": "Target gamma (default 0, the engine behavior)",
+          "min": 0
         },
         {
           "name": "onConflict",
@@ -11438,7 +11536,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -11476,7 +11575,8 @@
           "required": false,
           "description": "Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -11924,7 +12024,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -12991,6 +13092,36 @@
         }
       ]
     },
+    "execute_python": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "code",
+          "type": "string",
+          "required": true,
+          "description": "Python source to run in the editor"
+        },
+        {
+          "name": "resultVariable",
+          "type": "string",
+          "required": false,
+          "description": "Top-level variable to return as result, separate from printed output"
+        },
+        {
+          "name": "captureLog",
+          "type": "boolean",
+          "required": false,
+          "description": "false keeps only the logged errors (default true)"
+        },
+        {
+          "name": "maxLogChars",
+          "type": "number",
+          "required": false,
+          "description": "Keep only the last N characters of logged output"
+        }
+      ],
+      "contractExempt": "runs Python"
+    },
     "export_actor_fbx": {
       "category": "level",
       "params": [
@@ -13081,7 +13212,8 @@
           "name": "maxAssets",
           "type": "integer",
           "required": false,
-          "description": "Cap on Blueprints exported (default 200, max 5000)"
+          "description": "Cap on Blueprints exported (default 200, max 5000)",
+          "min": 1
         },
         {
           "name": "includeT3D",
@@ -13271,7 +13403,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "channel",
@@ -13355,7 +13488,8 @@
           "required": true,
           "description": "Widget in the source that becomes the extracted root",
           "aliases": [
-            "widgetName"
+            "widgetName",
+            "widgetDisplayName"
           ]
         },
         {
@@ -13882,7 +14016,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "enable",
@@ -14058,7 +14193,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read when lodType names one (default 0)"
+          "description": "LOD to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "save",
@@ -14122,6 +14258,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -14288,6 +14430,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -14355,7 +14503,9 @@
           "name": "expandDepth",
           "type": "integer",
           "required": false,
-          "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)"
+          "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)",
+          "min": 0,
+          "max": 5
         },
         {
           "name": "expandExternal",
@@ -14367,7 +14517,8 @@
           "name": "maxExpandedObjects",
           "type": "integer",
           "required": false,
-          "description": "Cap on expanded objects (default 64)"
+          "description": "Cap on expanded objects (default 64)",
+          "min": 1
         }
       ]
     },
@@ -14415,6 +14566,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -14447,7 +14604,8 @@
           "required": false,
           "description": "Widget Blueprint whose parent's contract to read and whose tree to check against it",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ],
@@ -15667,6 +15825,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -15819,13 +15983,15 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to read (default 0)"
+          "description": "LOD to read (default 0)",
+          "min": 0
         },
         {
           "name": "sectionIndex",
           "type": "integer",
           "required": false,
-          "description": "One render section (omit for every section)"
+          "description": "One render section (omit for every section)",
+          "min": 0
         },
         {
           "name": "include",
@@ -15838,7 +16004,8 @@
           "name": "uvChannel",
           "type": "integer",
           "required": false,
-          "description": "UV channel to return (default 0)"
+          "description": "UV channel to return (default 0)",
+          "min": 0
         },
         {
           "name": "dumpToFile",
@@ -16349,7 +16516,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Exact live instance name. Provide this or className"
+          "description": "Exact live instance name. Provide this or className",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "className",
@@ -16465,7 +16635,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Exact live instance name"
+          "description": "Exact live instance name",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "className",
@@ -16727,7 +16900,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -16747,14 +16921,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         }
       ]
     },
@@ -16767,14 +16945,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "includeSubtree",
@@ -16905,6 +17087,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -17662,7 +17850,9 @@
           "type": "array",
           "required": true,
           "description": "Textures to import: [{filePath, packagePath?, name?, replaceExisting?}]",
-          "items": "object"
+          "items": "object",
+          "minItems": 1,
+          "maxItems": 500
         },
         {
           "name": "packagePath",
@@ -17711,6 +17901,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -17758,7 +17954,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Exact live instance name. Provide this or classFilter"
+          "description": "Exact live instance name. Provide this or classFilter",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "classFilter",
@@ -17813,13 +18012,17 @@
           "name": "maxInstances",
           "type": "integer",
           "required": false,
-          "description": "Maximum matching widget instances returned (1 to 500, default 100)"
+          "description": "Maximum matching widget instances returned (1 to 500, default 100)",
+          "min": 1,
+          "max": 500
         },
         {
           "name": "maxNodesPerInstance",
           "type": "integer",
           "required": false,
-          "description": "Maximum root/subtree nodes per instance (1 to 2000, default 250)"
+          "description": "Maximum root/subtree nodes per instance (1 to 2000, default 250)",
+          "min": 1,
+          "max": 2000
         }
       ]
     },
@@ -17830,13 +18033,16 @@
           "name": "slotName",
           "type": "string",
           "required": true,
-          "description": "Logical save slot name, a plain filename without a path"
+          "description": "Logical save slot name, a plain filename without a path",
+          "minLength": 1,
+          "maxLength": 128
         },
         {
           "name": "userIndex",
           "type": "integer",
           "required": false,
-          "description": "Platform user index (default 0)"
+          "description": "Platform user index (default 0)",
+          "min": 0
         }
       ]
     },
@@ -18061,7 +18267,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Exact live instance name"
+          "description": "Exact live instance name",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "className",
@@ -20104,7 +20313,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -20289,13 +20499,15 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to measure (default 0)"
+          "description": "LOD to measure (default 0)",
+          "min": 0
         },
         {
           "name": "sectionIndex",
           "type": "integer",
           "required": false,
-          "description": "One render section (omit to measure the whole LOD)"
+          "description": "One render section (omit to measure the whole LOD)",
+          "min": 0
         }
       ]
     },
@@ -20490,7 +20702,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD of each input to read when lodType names one (default 0)"
+          "description": "LOD of each input to read when lodType names one (default 0)",
+          "min": 0
         },
         {
           "name": "fillHoles",
@@ -21335,6 +21548,67 @@
         }
       ]
     },
+    "migrate": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "destinationContentDir",
+          "type": "string",
+          "required": true,
+          "description": "The Content folder of the TARGET project, not this one"
+        },
+        {
+          "name": "assetPaths",
+          "type": "array",
+          "required": false,
+          "description": "Assets to migrate",
+          "items": "string"
+        },
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": false,
+          "description": "One asset to migrate"
+        },
+        {
+          "name": "allowDirty",
+          "type": "boolean",
+          "required": false,
+          "description": "Migrate the on-disk version of an asset with unsaved edits (default false)"
+        },
+        {
+          "name": "includeDependencies",
+          "type": "boolean",
+          "required": false,
+          "description": "Also copy the assets they reference (default true)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip (default) | overwrite, for a file already at the destination"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would be copied without copying (default false)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "assetPaths"
+            ],
+            [
+              "assetPath"
+            ]
+          ]
+        }
+      ]
+    },
     "move_actor": {
       "category": "level",
       "params": [
@@ -21525,14 +21799,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "newParentWidgetName",
@@ -21540,7 +21818,8 @@
           "required": true,
           "description": "Panel widget to reparent into",
           "aliases": [
-            "parentWidgetName"
+            "parentWidgetName",
+            "parentWidget"
           ]
         }
       ]
@@ -21930,6 +22209,30 @@
         }
       ],
       "contractExempt": "rotates the running PIE player's view"
+    },
+    "pie_start_ignoring_blueprint_errors": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "authorizationSource",
+          "type": "string",
+          "required": true,
+          "description": "Which approval let the bypass through; set by the gate, never by a caller"
+        },
+        {
+          "name": "waitForAssetRegistry",
+          "type": "boolean",
+          "required": false,
+          "description": "Block until the AssetRegistry initial scan completes (default true)"
+        },
+        {
+          "name": "assetRegistryTimeoutSeconds",
+          "type": "number",
+          "required": false,
+          "description": "How long to wait for that scan (default 180)"
+        }
+      ],
+      "contractExempt": "starts Play In Editor"
     },
     "place_actor": {
       "category": "level",
@@ -22918,7 +23221,9 @@
           "name": "expandDepth",
           "type": "integer",
           "required": false,
-          "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)"
+          "description": "Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)",
+          "min": 0,
+          "max": 5
         },
         {
           "name": "expandExternal",
@@ -22930,7 +23235,8 @@
           "name": "maxExpandedObjects",
           "type": "integer",
           "required": false,
-          "description": "Cap on expanded objects (default 64)"
+          "description": "Cap on expanded objects (default 64)",
+          "min": 1
         }
       ]
     },
@@ -23037,7 +23343,8 @@
           "name": "offset",
           "type": "integer",
           "required": false,
-          "description": "Row offset into the (filtered) node list"
+          "description": "Row offset into the (filtered) node list",
+          "min": 0
         },
         {
           "name": "limit",
@@ -23303,7 +23610,8 @@
           "name": "bindingTag",
           "type": "string",
           "required": true,
-          "description": "Edit-session natural key from begin_control_rig_edit"
+          "description": "Edit-session natural key from begin_control_rig_edit",
+          "minLength": 1
         },
         {
           "name": "controlNames",
@@ -23573,7 +23881,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -23606,13 +23915,15 @@
           "name": "layerIndex",
           "type": "integer",
           "required": false,
-          "description": "Only this layer of the slot"
+          "description": "Only this layer of the slot",
+          "min": 0
         },
         {
           "name": "maxDepth",
           "type": "integer",
           "required": false,
-          "description": "How deep to describe nested stages and values (default 10)"
+          "description": "How deep to describe nested stages and values (default 10)",
+          "min": 1
         }
       ],
       "choices": [
@@ -23700,7 +24011,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -23957,7 +24269,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to target (default 0); not with allLods"
+          "description": "LOD to target (default 0); not with allLods",
+          "min": 0
         },
         {
           "name": "allLods",
@@ -23981,19 +24294,24 @@
           "type": "array",
           "required": true,
           "description": "Source MeshDescription vertex IDs to read (1-256)",
-          "items": "integer"
+          "items": "integer",
+          "min": 0,
+          "minItems": 1,
+          "maxItems": 256
         },
         {
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+          "description": "Source LOD (default 0); generated LODs without source geometry are refused",
+          "min": 0
         },
         {
           "name": "profileName",
           "type": "string",
           "required": false,
-          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
+          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile",
+          "minLength": 1
         }
       ]
     },
@@ -24170,7 +24488,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "channels",
@@ -24208,7 +24527,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -24222,7 +24542,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -25159,6 +25480,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -25530,6 +25857,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -25616,7 +25949,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -25649,7 +25983,8 @@
           "name": "layerIndex",
           "type": "integer",
           "required": false,
-          "description": "Material Designer layer index within the slot"
+          "description": "Material Designer layer index within the slot",
+          "min": 0
         },
         {
           "name": "layerName",
@@ -26351,14 +26686,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         }
       ]
     },
@@ -26371,7 +26710,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -26403,7 +26743,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -26416,7 +26757,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -26453,7 +26797,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -26466,7 +26811,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -26819,14 +27167,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "index",
@@ -27046,6 +27398,24 @@
           "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
+    },
+    "request_editor_shutdown": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "requireClean",
+          "type": "boolean",
+          "required": false,
+          "description": "Refuse while any content or map package is dirty (default true)"
+        },
+        {
+          "name": "endPIE",
+          "type": "boolean",
+          "required": false,
+          "description": "End an active PIE or SIE session first (default true); false refuses while play runs"
+        }
+      ],
+      "contractExempt": "shuts the editor down"
     },
     "request_state_tree_transition": {
       "category": "statetree",
@@ -27402,7 +27772,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -27493,6 +27864,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -27599,7 +27976,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -27613,7 +27991,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -28269,6 +28648,44 @@
         }
       ]
     },
+    "search_assets": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "description": "Case-insensitive substring of the asset name or object path, or a wildcard pattern with * (default: every asset)"
+        },
+        {
+          "name": "directory",
+          "type": "string",
+          "required": false,
+          "description": "Content path to search under (default /Game/)"
+        },
+        {
+          "name": "searchAll",
+          "type": "boolean",
+          "required": false,
+          "description": "Search every mounted content root, plugins and engine included; with directory, only under it"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Rows per page, 1 to 2000 (default 50)",
+          "aliases": [
+            "maxResults"
+          ]
+        }
+      ]
+    },
     "search_assets_fts": {
       "category": "asset",
       "params": [
@@ -28351,7 +28768,8 @@
           "name": "offset",
           "type": "integer",
           "required": false,
-          "description": "Row offset, the older non-resumable form of paging"
+          "description": "Row offset, the older non-resumable form of paging",
+          "min": 0
         },
         {
           "name": "cursor",
@@ -28369,7 +28787,8 @@
           "name": "maxBlueprints",
           "type": "integer",
           "required": false,
-          "description": "Cap on Blueprints loaded (default 2000)"
+          "description": "Cap on Blueprints loaded (default 2000)",
+          "min": 1
         },
         {
           "name": "dumpToFile",
@@ -28587,6 +29006,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -29227,6 +29652,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -31528,6 +31959,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -31727,7 +32164,8 @@
           "name": "layerIndex",
           "type": "integer",
           "required": false,
-          "description": "Material Designer layer index within the slot"
+          "description": "Material Designer layer index within the slot",
+          "min": 0
         },
         {
           "name": "layerName",
@@ -31769,7 +32207,8 @@
           "name": "slotIndex",
           "type": "integer",
           "required": false,
-          "description": "Material slot index on the component (default 0)"
+          "description": "Material slot index on the component (default 0)",
+          "min": 0
         },
         {
           "name": "slotName",
@@ -32081,13 +32520,15 @@
               "name": "assetPath",
               "type": "string",
               "required": true,
-              "description": "StaticMesh or SkeletalMesh asset path"
+              "description": "StaticMesh or SkeletalMesh asset path",
+              "minLength": 1
             },
             {
               "name": "materialPath",
               "type": "string",
               "required": true,
-              "description": "Material to assign"
+              "description": "Material to assign",
+              "minLength": 1
             },
             {
               "name": "slotName",
@@ -32101,7 +32542,9 @@
               "required": false,
               "description": "Slot by index (default 0); refused when it disagrees with slotName"
             }
-          ]
+          ],
+          "minItems": 1,
+          "maxItems": 500
         },
         {
           "name": "save",
@@ -33416,14 +33859,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         }
       ]
     },
@@ -33434,7 +33881,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Named child of a live PIE widget, or the live UserWidget's own name"
+          "description": "Named child of a live PIE widget, or the live UserWidget's own name",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "userIndex",
@@ -33813,7 +34263,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "LOD to target (default 0); not with allLods"
+          "description": "LOD to target (default 0); not with allLods",
+          "min": 0
         },
         {
           "name": "allLods",
@@ -33843,28 +34294,35 @@
               "name": "vertexIndex",
               "type": "integer",
               "required": true,
-              "description": "Source MeshDescription vertex ID"
+              "description": "Source MeshDescription vertex ID",
+              "min": 0
             },
             {
               "name": "influences",
               "type": "array",
               "required": true,
               "description": "1-64 entries of {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}",
-              "items": "object"
+              "items": "object",
+              "minItems": 1,
+              "maxItems": 64
             }
-          ]
+          ],
+          "minItems": 1,
+          "maxItems": 256
         },
         {
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+          "description": "Source LOD (default 0); generated LODs without source geometry are refused",
+          "min": 0
         },
         {
           "name": "profileName",
           "type": "string",
           "required": false,
-          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
+          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile",
+          "minLength": 1
         },
         {
           "name": "restoreRawWeights",
@@ -35034,7 +35492,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "op",
@@ -35351,7 +35810,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -35391,7 +35851,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Widget whose navigation a single write sets"
+          "description": "Widget whose navigation a single write sets",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "direction",
@@ -35435,14 +35898,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -35470,14 +35937,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -37010,6 +37481,12 @@
           "type": "string",
           "required": false,
           "description": "Runtime world scope: auto (default) | pie | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance (0 = server/primary); omit for the primary world"
         }
       ]
     },
@@ -37029,7 +37506,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "channel",
@@ -37133,13 +37611,15 @@
           "name": "lodIndex",
           "type": "integer",
           "required": true,
-          "description": "Mesh LOD"
+          "description": "Mesh LOD",
+          "min": 0
         },
         {
           "name": "sectionIndex",
           "type": "integer",
           "required": true,
-          "description": "Render section to unbind"
+          "description": "Render section to unbind",
+          "min": 0
         },
         {
           "name": "clothingAsset",
@@ -37158,7 +37638,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -37239,7 +37720,8 @@
           "name": "lodIndex",
           "type": "integer",
           "required": false,
-          "description": "Source LOD to act on (default 0)"
+          "description": "Source LOD to act on (default 0)",
+          "min": 0
         },
         {
           "name": "channel",
@@ -37553,7 +38035,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {

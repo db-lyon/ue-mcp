@@ -1,6 +1,7 @@
 #include "DiffHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPinType.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
@@ -14,29 +15,6 @@
 // ── Structural extraction helpers ────────────────────────────────────────────
 namespace
 {
-	/** Compact, stable string for a pin type, e.g. "int", "object(Actor)",
-	 *  "struct(Vector)[]". Used to detect variable type changes. */
-	FString PinTypeToShortString(const FEdGraphPinType& T)
-	{
-		FString S = T.PinCategory.ToString();
-		if (const UObject* Sub = T.PinSubCategoryObject.Get())
-		{
-			S += TEXT("(") + Sub->GetName() + TEXT(")");
-		}
-		else if (!T.PinSubCategory.IsNone())
-		{
-			S += TEXT("(") + T.PinSubCategory.ToString() + TEXT(")");
-		}
-		switch (T.ContainerType)
-		{
-			case EPinContainerType::Array: S += TEXT("[]"); break;
-			case EPinContainerType::Set:   S += TEXT("{}"); break;
-			case EPinContainerType::Map:   S += TEXT("{:}"); break;
-			default: break;
-		}
-		return S;
-	}
-
 	/** All named graphs of a Blueprint keyed by graph name (event graphs +
 	 *  function graphs + macro graphs). */
 	TMap<FString, UEdGraph*> CollectGraphs(UBlueprint* BP)
@@ -223,7 +201,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprint(const TSharedPtr<FJsonObject
 		TMap<FString, TPair<FString, FString>> M; // name -> (type, default)
 		for (const FBPVariableDescription& V : BP->NewVariables)
 		{
-			M.Add(V.VarName.ToString(), TPair<FString, FString>(PinTypeToShortString(V.VarType), V.DefaultValue));
+			M.Add(V.VarName.ToString(), TPair<FString, FString>(MCPPinTypeSpec(V.VarType), V.DefaultValue));
 		}
 		return M;
 	};

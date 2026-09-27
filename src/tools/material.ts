@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/material.generated.js";
@@ -79,9 +78,5 @@ export const materialTool: ToolDef = categoryTool(
     // registration. A key listed again below is shared with hand-written
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
-    // The spec cannot carry bounds; these keep them, with the type the spec declares.
-    slotIndex: z.number().int().min(0).optional().describe("read_instance / *_designer*: material slot index on the mesh component (default 0) (#1114/#1131)"),
-    layerIndex: z.number().int().min(0).optional().describe("Material Designer layer index within the slot (#1131)"),
-    maxDepth: z.number().int().min(1).optional().describe("read_designer: how deep to describe nested stages and values (default 10) (#1131)"),
   },
 );

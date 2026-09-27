@@ -15,16 +15,12 @@ public:
 	// of "bool"/"int"/"Vector"/"Actor*"/etc. serves every authoring surface.
 	static struct FEdGraphPinType MakePinType(const FString& TypeStr);
 
-	// The container layer over MakePinType, and its inverse. ParsePinTypeSpec
-	// accepts everything MakePinType does plus "int[]", "array<int>",
-	// "set<Name>" and "map<Name,int>"; PinTypeSpec reports a pin type in
+	// The container layer over MakePinType. ParsePinTypeSpec accepts
+	// everything MakePinType does plus "int[]", "array<int>", "set<Name>" and
+	// "map<Name,int>"; MCPPinTypeSpec (HandlerPinType.h) reports a pin type in
 	// exactly that vocabulary, so a read can be handed straight back as a
-	// write. Both live here rather than in a file-local helper because the
-	// user-type and depth handlers need the identical spelling, and the module
-	// is a unity build where a copied helper is a redefinition (C2084).
-	// Defined in BlueprintHandlers_UserTypes.cpp.
+	// write. Defined in BlueprintHandlers_UserTypes.cpp.
 	static bool ParsePinTypeSpec(const FString& TypeStr, struct FEdGraphPinType& OutType, FString& OutError);
-	static FString PinTypeSpec(const struct FEdGraphPinType& PinType, bool& bOutRoundTrips);
 
 private:
 	// Handler implementations

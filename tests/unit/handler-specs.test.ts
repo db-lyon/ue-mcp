@@ -18,8 +18,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { z as zodRuntime, type z } from "zod";
-import { renderAll, paramsClause, zodExpression } from "../../scripts/lib/handler-spec-gen.mjs";
+import type { z } from "zod";
+import { renderAll, paramsClause } from "../../scripts/lib/handler-spec-gen.mjs";
 import { readCategory } from "../../scripts/lib/tool-source.mjs";
 import { readRegistrations } from "../../scripts/audit-handler-conventions.mjs";
 import {
@@ -158,7 +158,7 @@ describe("the recording", () => {
     })).toContain("named after its tag");
   });
 
-  it("generates the same schema for a value form or tagged union as it builds at runtime", () => {
+  it("builds a value form or tagged union that accepts what it declares", () => {
     const variants = [
       { tag: "set", description: "Set it", fields: [
         { name: "frame", type: "integer" as const, required: true, description: "" },
@@ -172,11 +172,6 @@ describe("the recording", () => {
       { name: "operations", type: "array", items: "object", required: false, description: "", oneOf: { key: "op", variants } },
       { name: "operation", type: "object", required: false, description: "", oneOf: { key: "op", variants } },
     ];
-    for (const param of params) {
-      const generated = new Function("z", `return ${zodExpression(param)}`)(zodRuntime) as z.ZodTypeAny;
-      expect(zodSignature(generated), param.name).toBe(zodSignature(paramZod(param)));
-    }
-
     const args = paramZod(params[0]);
     for (const accepted of [{ bEnabled: true }, { Loc: { x: 1 } }, { Rows: [[1, 2]] }, ["one"], [{ name: "bEnabled", value: 1 }], '{"a":1}']) {
       expect(args.safeParse(accepted).success, JSON.stringify(accepted)).toBe(true);
@@ -338,6 +333,32 @@ function aliasOf(method: string): string | undefined {
  */
 const HAND_WRITTEN_CROSS_TOOL: ReadonlyMap<string, string> = new Map([]);
 
+/**
+ * Spec'd methods no bridge action dispatches: a handler action builds the call
+ * itself (the multi-root search, the migrate destination, the python gate, the
+ * approval-gated PIE start, the shutdown), or it is the rollback another
+ * handler emits. The handler action's module must still call the method.
+ */
+const DIRECT_DISPATCH: ReadonlyMap<string, string> = new Map([
+  ["search_assets", "asset.search"],
+  ["migrate", "asset.migrate"],
+  ["execute_python", "editor.execute_python"],
+  ["pie_start_ignoring_blueprint_errors", "editor.play_in_editor_ignore_blueprint_errors"],
+  ["request_editor_shutdown", "editor.request_editor_shutdown"],
+  ["bulk_restore_data_assets", "rollback"],
+]);
+
+function directlyDispatched(method: string): boolean {
+  const by = DIRECT_DISPATCH.get(method);
+  if (by === undefined) return false;
+  if (by === "rollback") return true;
+  const [toolName, action] = by.split(".");
+  const spec = ALL_TOOLS.find((t) => t.name === toolName)?.actions[action];
+  const source = fs.readFileSync(path.join(ROOT, "src", "tools", `${toolName}.ts`), "utf8");
+  const calls = [`bridge.call("${method}"`, `callOwnBridgeMethod(ctx, "${method}"`, `method: "${method}"`];
+  return spec !== undefined && spec.kind !== "bridge" && calls.some((c) => source.includes(c));
+}
+
 // Every other recorded category is held to the same surface rules as the pilot.
 const OTHER_CATEGORIES = [...new Set(Object.values(SNAPSHOT.handlers).map((s) => s.category as string))]
   .filter((c) => c !== "animation")
@@ -362,7 +383,7 @@ describe.each(OTHER_CATEGORIES)("the %s category", (category) => {
   it("is a tool, and every spec'd method is dispatched by an action or is a C++ alias of one that is", () => {
     expect(tool, category).toBeDefined();
     for (const [method] of methods) {
-      expect(DISPATCHERS.has(method) || aliasOf(method) !== undefined, `${method}: no action dispatches it`).toBe(true);
+      expect(DISPATCHERS.has(method) || aliasOf(method) !== undefined || directlyDispatched(method), `${method}: no action dispatches it`).toBe(true);
     }
   });
 

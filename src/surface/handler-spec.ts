@@ -5,8 +5,9 @@
  * `RegisterHandler` call. The bridge publishes every spec in
  * `get_bridge_capabilities.handlerSpecs`; `npm run specs:record` writes that to
  * `tests/golden/handler-specs.json`, and `npm run specs:generate` turns the
- * recording into `src/tools/specs/<category>.generated.ts`: the zod entries and
- * the `Params:` clause of every spec'd action.
+ * recording into `src/tools/specs/<category>.generated.ts`: the specs and the
+ * `Params:` clause of every spec'd action. The zod entries are built from the
+ * specs at load, by categorySchema.
  *
  * The advertised surface always comes from the recording, whether or not an
  * editor is connected, so the startup contract never depends on which editor
@@ -30,8 +31,22 @@ export type ParamType = (typeof PARAM_TYPES)[number];
 export const VALUE_FORMS = ["argMap", "argEntryList", "stringList", "string"] as const;
 export type ValueForm = (typeof VALUE_FORMS)[number];
 
+/**
+ * Bounds on a value. Mirrors FMCPValueBounds: min and max bound a number,
+ * minLength and maxLength a string, and on an array each applies to every
+ * element; minItems and maxItems bound the array itself.
+ */
+export interface ValueBounds {
+  min?: number;
+  max?: number;
+  minLength?: number;
+  maxLength?: number;
+  minItems?: number;
+  maxItems?: number;
+}
+
 /** One field of an object parameter, or of each element of an array of objects. */
-export interface ParamField {
+export interface ParamField extends ValueBounds {
   name: string;
   type: ParamType;
   required: boolean;
@@ -56,7 +71,7 @@ export interface ParamOneOf {
 }
 
 /** One declared parameter, as the bridge publishes it. */
-export interface ParamSpec {
+export interface ParamSpec extends ValueBounds {
   name: string;
   type: ParamType;
   required: boolean;
@@ -217,6 +232,9 @@ function shapeProblems(method: string, param: ParamSpec): string[] {
       }
     }
   }
+  const bounded = BOUND_KEYS.some((k) => param[k] !== undefined);
+  if (bounded && param.literal !== undefined) problems.push(`${at}: a bounded literal, which already takes one value`);
+  problems.push(...boundProblems(at, param.type, param.items, param));
   return problems;
 }
 
@@ -236,6 +254,27 @@ function fieldListProblems(at: string, fields: readonly ParamField[]): string[] 
       if (field.type !== "any") problems.push(`${at}.${field.name}: forms on a field that is not of type any`);
       problems.push(...formProblems(`${at}.${field.name}`, field.forms));
     }
+    problems.push(...boundProblems(`${at}.${field.name}`, field.type, field.items, field));
+  }
+  return problems;
+}
+
+/** Mirrors FMCPHandlerRegistry::ValidateBounds. */
+function boundProblems(at: string, type: ParamType, items: ParamType | undefined, bounds: ValueBounds): string[] {
+  const problems: string[] = [];
+  const valueType = type === "array" ? items ?? "any" : type;
+  const numeric = valueType === "number" || valueType === "integer";
+  const set = (v: number | undefined): v is number => v !== undefined;
+  if ((set(bounds.min) || set(bounds.max)) && !numeric) problems.push(`${at}: a minimum or maximum on something that is not a number or an array of numbers`);
+  if (valueType === "integer" && [bounds.min, bounds.max].some((v) => set(v) && !Number.isInteger(v))) problems.push(`${at}: an integer with a fractional bound`);
+  if ((set(bounds.minLength) || set(bounds.maxLength)) && valueType !== "string") problems.push(`${at}: a length bound on something that is not a string or an array of strings`);
+  if ((set(bounds.minItems) || set(bounds.maxItems)) && type !== "array") problems.push(`${at}: an item count bound on something that is not an array`);
+  if ([bounds.minLength, bounds.maxLength, bounds.minItems, bounds.maxItems].some((v) => set(v) && (!Number.isInteger(v) || v < 0))) {
+    problems.push(`${at}: a length or item count bound that is not a whole number of zero or more`);
+  }
+  const inverted = (lo: number | undefined, hi: number | undefined) => set(lo) && set(hi) && lo > hi;
+  if (inverted(bounds.min, bounds.max) || inverted(bounds.minLength, bounds.maxLength) || inverted(bounds.minItems, bounds.maxItems)) {
+    problems.push(`${at}: a lower bound above its upper bound`);
   }
   return problems;
 }
@@ -466,9 +505,36 @@ function formsZod(name: string, forms: readonly ValueForm[]): z.ZodTypeAny {
   });
 }
 
+const BOUND_KEYS = ["min", "max", "minLength", "maxLength", "minItems", "maxItems"] as const;
+
+/** A number or string schema with its min/max or length bounds. Anything else passes through. */
+function boundedValue(schema: z.ZodTypeAny, bounds: ValueBounds): z.ZodTypeAny {
+  if (schema instanceof z.ZodNumber) {
+    let bounded = schema;
+    if (bounds.min !== undefined) bounded = bounded.min(bounds.min);
+    if (bounds.max !== undefined) bounded = bounded.max(bounds.max);
+    return bounded;
+  }
+  if (schema instanceof z.ZodString) {
+    let bounded = schema;
+    if (bounds.minLength !== undefined) bounded = bounded.min(bounds.minLength);
+    if (bounds.maxLength !== undefined) bounded = bounded.max(bounds.maxLength);
+    return bounded;
+  }
+  return schema;
+}
+
+/** An array of element, with its item count bounds. */
+function boundedArray(element: z.ZodTypeAny, bounds: ValueBounds): z.ZodTypeAny {
+  let array = z.array(boundedValue(element, bounds));
+  if (bounds.minItems !== undefined) array = array.min(bounds.minItems);
+  if (bounds.maxItems !== undefined) array = array.max(bounds.maxItems);
+  return array;
+}
+
 function fieldZod(f: ParamField): z.ZodTypeAny {
   if (f.forms?.length) return formsZod(f.name, f.forms);
-  return f.type === "array" ? z.array(ZOD_BASE[f.items ?? "any"]()) : ZOD_BASE[f.type]();
+  return f.type === "array" ? boundedArray(ZOD_BASE[f.items ?? "any"](), f) : boundedValue(ZOD_BASE[f.type](), f);
 }
 
 function fieldEntries(fields: readonly ParamField[]): Record<string, z.ZodTypeAny> {
@@ -499,9 +565,7 @@ function oneOfZod(oneOf: ParamOneOf): z.ZodTypeAny {
 
 /**
  * The zod schema one declared parameter accepts, without optionality or its
- * description. The runtime twin of the expression scripts/lib/handler-spec-gen.mjs
- * writes into a generated module; tests/unit/handler-specs.test.ts holds the two
- * to one signature.
+ * description. Every spec'd key's schema is built by this, at load.
  */
 export function paramZod(param: ParamSpec): z.ZodTypeAny {
   let base: z.ZodTypeAny;
@@ -509,13 +573,59 @@ export function paramZod(param: ParamSpec): z.ZodTypeAny {
     param.oneOf ? oneOfZod(param.oneOf) : param.fields ? fieldsZod(param.fields) : ZOD_BASE[param.items ?? "any"]();
   if (param.literal !== undefined) base = z.literal(param.literal);
   else if (param.forms?.length) base = formsZod(param.name, param.forms);
-  else if (param.type === "array") base = z.array(element());
+  else if (param.type === "array") base = boundedArray(element(), param);
   else if (param.type === "object" && (param.fields || param.oneOf)) base = element();
-  else base = ZOD_BASE[param.type]();
+  else base = boundedValue(ZOD_BASE[param.type](), param);
   if (param.orTypes?.length) {
     base = z.union([base, ...param.orTypes.map((t) => ZOD_BASE[t]())] as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
   }
   return param.nullable ? base.nullable() : base;
+}
+
+/** What one declared parameter accepts, for telling two declarations of a key apart. */
+function acceptedShape(param: ParamSpec): string {
+  const { name, description: _description, required: _required, aliases: _aliases, ...shape } = param;
+  // A forms refusal names the parameter, so the name is part of what it accepts.
+  return JSON.stringify(shape.forms?.length ? { ...shape, formsOf: name } : shape);
+}
+
+/**
+ * One zod entry per key across a category's specs, aliases included, sorted by
+ * key. A key several handlers declare must accept the same thing in every one
+ * of them, because the category's shape is shared; the descriptions are
+ * merged, naming which handlers each belongs to when they differ.
+ */
+export function categorySchema(specs: HandlerSpecs): Record<string, z.ZodType> {
+  const keys = new Map<string, { param: ParamSpec; shape: string; descriptions: Map<string, string[]> }>();
+  const claim = (key: string, param: ParamSpec, description: string, method: string): void => {
+    const shape = acceptedShape(param);
+    const entry = keys.get(key);
+    if (!entry) {
+      keys.set(key, { param, shape, descriptions: new Map([[description, [method]]]) });
+      return;
+    }
+    if (entry.shape !== shape) {
+      throw new Error(`'${key}' is declared as ${entry.shape} and as ${shape} (${method}); one category key has one type`);
+    }
+    const owners = entry.descriptions.get(description);
+    if (owners) owners.push(method);
+    else entry.descriptions.set(description, [method]);
+  };
+  for (const [method, spec] of Object.entries(specs)) {
+    for (const param of spec.params) {
+      claim(param.name, param, param.description, method);
+      for (const alias of param.aliases ?? []) claim(alias, param, `Alias for ${param.name}`, method);
+    }
+  }
+  const out: Record<string, z.ZodType> = {};
+  for (const [key, entry] of [...keys.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const described = [...entry.descriptions.entries()];
+    const description = described.length === 1
+      ? described[0][0]
+      : described.map(([text, owners]) => `${text} (${owners.join(", ")})`).join(". ");
+    out[key] = paramZod(entry.param).optional().describe(description);
+  }
+  return out;
 }
 
 /**
@@ -569,8 +679,12 @@ export interface HandlerSpecDrift {
   drifted: string[];
 }
 
+function canonicalBounds(b: ValueBounds): unknown[] {
+  return BOUND_KEYS.map((k) => b[k] ?? null);
+}
+
 function canonicalField(f: ParamField): unknown[] {
-  return [f.name, f.type, f.required, f.description, f.items ?? null, [...(f.forms ?? [])]];
+  return [f.name, f.type, f.required, f.description, f.items ?? null, [...(f.forms ?? [])], canonicalBounds(f)];
 }
 
 function canonical(spec: HandlerSpec | undefined): string {
@@ -582,6 +696,7 @@ function canonical(spec: HandlerSpec | undefined): string {
       (p.fields ?? []).map(canonicalField),
       [...(p.forms ?? [])],
       p.oneOf ? [p.oneOf.key, p.oneOf.variants.map((v) => [v.tag, v.description, v.fields.map(canonicalField)])] : null,
+      canonicalBounds(p),
     ]),
     (spec.choices ?? []).map((c) => [c.mode, c.branches]),
     spec.contractExempt ?? null,

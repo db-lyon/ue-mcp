@@ -510,8 +510,8 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("startPos"), EType::Number, TEXT("Trim start inside the source, in seconds (default 0)")),
 		MCPParam::Optional(TEXT("endPos"), EType::Number, TEXT("Trim end inside the source, in seconds (default the source play length)")),
 		MCPParam::Optional(TEXT("playRate"), EType::Number, TEXT("Segment play rate; negative plays in reverse (default 1)")),
-		MCPParam::Optional(TEXT("loopCount"), EType::Integer, TEXT("How many times the segment repeats (default 1)")),
-		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Position in the slot's segment list (default appends)")),
+		MCPParam::Optional(TEXT("loopCount"), EType::Integer, TEXT("How many times the segment repeats (default 1)")).Min(1),
+		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Position in the slot's segment list (default appends)")).Min(0),
 	});
 	Registry.RegisterHandler(TEXT("remove_montage_segment"), &RemoveMontageSegment, {
 		AssetPath(TEXT("AnimMontage asset path")),
@@ -600,7 +600,6 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Destination folder (default beside each source)")),
 		MCPParam::Optional(TEXT("prefix"), EType::String, TEXT("Output name prefix")),
 		MCPParam::Optional(TEXT("suffix"), EType::String, TEXT("Output name suffix (default _Retargeted)")),
-		MCPParam::Optional(TEXT("overwrite"), EType::Boolean, TEXT("Overwriting is not supported; omit or pass false")).Literal(false),
 		MCPParam::Optional(TEXT("requireCompleteMapping"), EType::Boolean, TEXT("Refuse when any target chain is unmapped (default false)")),
 	});
 
@@ -634,7 +633,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	};
 	auto EditBindingTag = []()
 	{
-		return MCPParam::Required(TEXT("bindingTag"), EType::String, TEXT("Edit-session natural key from begin_control_rig_edit"));
+		return MCPParam::Required(TEXT("bindingTag"), EType::String, TEXT("Edit-session natural key from begin_control_rig_edit")).NonEmpty();
 	};
 	Registry.RegisterHandler(TEXT("begin_control_rig_edit"), &BeginControlRigEdit, {
 		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence to create, or to reuse with onConflict=skip")),
@@ -646,7 +645,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("startFrame"), EType::Integer, TEXT("Inclusive edit range start frame (default 0)")),
 		MCPParam::Optional(TEXT("endFrame"), EType::Integer, TEXT("Exclusive edit range end frame (default the source length)")),
 		MCPParam::Optional(TEXT("displayRate"), EType::Number, TEXT("LevelSequence display rate in frames per second (default the source rate)")),
-		MCPParam::Optional(TEXT("bindingTag"), EType::String, TEXT("Stable natural key the later calls address (default derived from the mesh name)")),
+		MCPParam::Optional(TEXT("bindingTag"), EType::String, TEXT("Stable natural key the later calls address (default derived from the mesh name)")).NonEmpty(),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns the existing session, error (default) refuses; an existing session is never modified")),
 	}, MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it creates and saves a LevelSequence")));
 	Registry.RegisterHandler(TEXT("read_control_rig_edit"), &ReadControlRigEdit, {
@@ -759,12 +758,10 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}
 	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit, {
 		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence holding the Control Rig edit session")),
-		MCPParam::Required(TEXT("bindingTag"), EType::String, TEXT("Edit-session natural key from begin_control_rig_edit")),
+		MCPParam::Required(TEXT("bindingTag"), EType::String, TEXT("Edit-session natural key from begin_control_rig_edit")).NonEmpty(),
 		MCPParam::Required(TEXT("outputAssetPath"), EType::String, TEXT("Destination AnimSequence asset path")),
 		MCPParam::Optional(TEXT("frameRate"), EType::Number, TEXT("Frames per second of the bake (default the sequence's display rate)")),
-		MCPParam::Optional(TEXT("reduceKeys"), EType::Boolean, TEXT("Key reduction is not supported yet; omit or pass false")).Literal(false),
-		MCPParam::Optional(TEXT("tolerance"), EType::Number, TEXT("Key-reduction tolerance (default 0.001)")),
-		MCPParam::Optional(TEXT("createLink"), EType::Boolean, TEXT("Sequencer links are not supported yet; omit or pass false")).Literal(false),
+		MCPParam::Optional(TEXT("createLink"), EType::Boolean, TEXT("Link the AnimSequence and the LevelSequence, which saves the LevelSequence too (default false)")),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")),
 	}, MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
 	Registry.RegisterHandler(TEXT("analyze_animation"), &AnalyzeAnimation, {

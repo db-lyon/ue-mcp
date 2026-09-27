@@ -4,8 +4,7 @@
 // which is recorded from the parameter specs the C++ handlers register with
 // (npm run specs:record). To change a parameter, change its RegisterHandler
 // spec, re-record, and regenerate (#1057).
-import { z } from "zod";
-import { makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
+import { categorySchema, makeSpecBp, type HandlerSpecs } from "../../surface/handler-spec.js";
 
 /** The recorded contract of every spec'd project handler. */
 export const handlerSpecs: HandlerSpecs = {
@@ -194,26 +193,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 };
 
 /** Every key the spec'd project handlers declare, aliases included. */
-export const schema: Record<string, z.ZodType> = {
-  classDomain: z.string().optional().describe("public | private | classes (default public)"),
-  className: z.string().optional().describe("Class name without its prefix; the parent decides A or U"),
-  configFile: z.string().optional().describe("Alias for configName"),
-  configName: z.string().optional().describe("Config to write: Engine, Game, Input... or a file name ending .ini (default DefaultEngine.ini)"),
-  cursor: z.string().optional().describe("Resume a paged read: the nextCursor from the previous page, unmodified"),
-  enabledOnly: z.boolean().optional().describe("Only plugins enabled in this editor session (default false)"),
-  filter: z.string().optional().describe("Case-insensitive substring of the plugin name or friendly name"),
-  key: z.string().optional().describe("INI key"),
-  limit: z.number().optional().describe("Rows per page, a whole number (default 200, max 2000)"),
-  moduleName: z.string().optional().describe("Project module to add it to (default the first; list_project_modules names them)"),
-  parentClass: z.string().optional().describe("Parent class as a short name (Actor) or /Script/<Module>.<Class> path (default UObject)"),
-  pluginCategory: z.string().optional().describe("Case-insensitive substring of the plugin category"),
-  pluginName: z.string().optional().describe("Plugin name as its .uplugin spells it, any case"),
-  removeReference: z.boolean().optional().describe("Delete the .uproject entry instead of writing an explicit disable (default false)"),
-  section: z.string().optional().describe("INI section"),
-  subPath: z.string().optional().describe("Folder under the domain folder, e.g. Gameplay/Abilities (default its root)"),
-  value: z.string().optional().describe("INI value"),
-  wait: z.boolean().optional().describe("Block until the compile finishes (default false returns in_progress)"),
-};
+export const schema = categorySchema(handlerSpecs);
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */
 export const specBp = makeSpecBp(paramsClauses, handlerSpecs);
