@@ -87,29 +87,18 @@ export const widgetTool: ToolDef = categoryTool(
   {
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
-    // registration. A key listed again below is shared with hand-written
-    // actions or read by the normalizer, and tests/unit/handler-specs.test.ts
-    // holds the two to one type.
-    //
-    // The normalizer and the specs coexist: normalizeWidgetParams runs in
-    // prepareCall before any mapping, and a specBp action has none, so the
-    // folded bag reaches the registry whole. The handler reads assetPath,
-    // widgetName and parentWidgetName; the mirrored `path` and the legacy
-    // spellings left in the bag come back as paramsNotRead from C++ and are
-    // dropped by WIDGET_PARAM_GROUPS. The spec declares only the aliases the
-    // handler itself accepts (path, name, typeName, propertyValue,
-    // widgetBlueprintPath and so on), so a direct bridge caller keeps them.
+    // registration, including the aliases the registry renames (path,
+    // widgetBlueprintPath, widgetDisplayName, parentWidget). A key listed
+    // again below keeps a canonical description, and
+    // tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
     assetPath: z.string().optional().describe("Canonical Widget Blueprint / Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)"),
     widgetName: z.string().optional().describe("Canonical name of a widget inside the tree (#798)"),
     parentWidgetName: z.string().optional().describe("Canonical name of the parent panel widget (#798)"),
-    // Accepted spellings of the canonical names above. Declared so the
-    // transport does not strip them before the normalizer can fold them in.
-    path: z.string().optional().describe("Legacy alias for assetPath. Use assetPath (#798)"),
-    widgetBlueprintPath: z.string().optional().describe("Alias for assetPath. Use assetPath (#798)"),
+    // The engine tools' name for the asset. normalizeWidgetParams folds it
+    // into assetPath for a native action; the {refPath} form is why it is
+    // not a string alias in the spec.
     widgetBlueprint: z.union([z.string(), z.record(z.unknown())]).optional().describe("Alias for assetPath, also accepted as the engine's {refPath} object reference. Use assetPath (#798)"),
-    widgetDisplayName: z.string().optional().describe("Alias for widgetName. Use widgetName (#798)"),
-    parentWidget: z.string().optional().describe("Alias for parentWidgetName. Use parentWidgetName (#798)"),
   },
   { normalizeParams: normalizeWidgetParams, paramGroups: WIDGET_PARAM_GROUPS },
 );

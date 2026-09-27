@@ -11,12 +11,19 @@ import { describe, expect, it, vi } from "vitest";
 import { widgetTool } from "../../src/tools/widget.js";
 import { normalizeUnrealAssetPath } from "../../src/surface/asset-path.js";
 import type { ToolContext } from "../../src/core/types.js";
+import type { ParamSpec } from "../../src/surface/handler-spec.js";
 
 const ASSET = "/Game/_Project/UI/WBP_Example";
 
 function stubCtx(): { ctx: ToolContext; call: ReturnType<typeof vi.fn> } {
   const call = vi.fn().mockResolvedValue({ success: true });
   return { ctx: { bridge: { call } } as unknown as ToolContext, call };
+}
+
+/** The aliases the action's C++ spec declares for one parameter, which the registry renames. */
+function specAliases(action: string, name: string): string[] {
+  const spec = (widgetTool.actions[action] as { paramSpec?: ParamSpec[] }).paramSpec;
+  return spec?.find((p) => p.name === name)?.aliases ?? [];
 }
 
 async function sent(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -83,10 +90,11 @@ describe("widget category parameter contract", () => {
     }
   });
 
-  it("every asset action accepts the legacy path alias", async () => {
+  it("every asset action declares the legacy spellings as aliases the registry renames", async () => {
     for (const action of ASSET_ACTIONS) {
-      const params = await sent({ action, path: ASSET, widgetName: "Root" });
-      expect(params.assetPath, `${action} dropped the path alias`).toBe(ASSET);
+      expect(specAliases(action, "assetPath"), action).toEqual(expect.arrayContaining(["path", "widgetBlueprintPath"]));
+      const params = await sent({ action, path: `${ASSET}.uasset`, widgetName: "Root" });
+      expect(params.path, `${action} did not repair the path alias`).toBe(ASSET);
     }
   });
 
@@ -101,10 +109,10 @@ describe("widget category parameter contract", () => {
       { widgetBlueprint: ASSET },
       { widgetBlueprint: { refPath: ASSET } },
       { widgetBlueprint: JSON.stringify({ refPath: ASSET }) },
-      { widgetBlueprintPath: ASSET },
     ]) {
       const params = await sent({ action: "read_tree", ...value });
       expect(params.assetPath).toBe(ASSET);
+      expect(params.widgetBlueprint).toBeUndefined();
     }
   });
 
@@ -133,9 +141,9 @@ describe("widget category parameter contract", () => {
       .not.toThrow();
   });
 
-  it("mirrors the canonical asset path onto the legacy wire field", async () => {
+  it("sends one spelling of the asset path, not a mirrored legacy field", async () => {
     const params = await sent({ action: "read_tree", assetPath: ASSET });
-    expect(params.path).toBe(ASSET);
+    expect(params.path).toBeUndefined();
   });
 
   describe("create actions", () => {
@@ -181,23 +189,15 @@ describe("widget category parameter contract", () => {
   });
 
   describe("widget identity", () => {
-    it("folds widgetDisplayName into widgetName", async () => {
+    it("declares widgetDisplayName and parentWidget as spec aliases, forwarded for the registry to rename", async () => {
+      const widgetNamed = Object.keys(widgetTool.actions).filter((a) =>
+        (widgetTool.actions[a] as { paramSpec?: ParamSpec[] }).paramSpec?.some((p) => p.name === "widgetName"));
+      expect(widgetNamed.length).toBeGreaterThan(10);
+      for (const action of widgetNamed) expect(specAliases(action, "widgetName"), action).toContain("widgetDisplayName");
+      expect(specAliases("add_widget", "parentWidgetName")).toContain("parentWidget");
+
       const params = await sent({ action: "remove_widget", assetPath: ASSET, widgetDisplayName: "StartButton" });
-      expect(params.widgetName).toBe("StartButton");
-    });
-
-    it("folds parentWidget into parentWidgetName", async () => {
-      const params = await sent({
-        action: "add_widget", assetPath: ASSET, widgetClass: "/Script/UMG.Button", parentWidget: "HorizontalBox_59",
-      });
-      expect(params.parentWidgetName).toBe("HorizontalBox_59");
-    });
-
-    it("prefers the canonical name over the alias", async () => {
-      const params = await sent({
-        action: "remove_widget", assetPath: ASSET, widgetName: "Canonical", widgetDisplayName: "Alias",
-      });
-      expect(params.widgetName).toBe("Canonical");
+      expect(params.widgetDisplayName).toBe("StartButton");
     });
   });
 });

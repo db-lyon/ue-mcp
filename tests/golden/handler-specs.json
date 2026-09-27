@@ -3213,7 +3213,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -3231,14 +3232,18 @@
           "required": false,
           "description": "Name of a widget inside the tree (#798)",
           "aliases": [
-            "name"
+            "name",
+            "widgetDisplayName"
           ]
         },
         {
           "name": "parentWidgetName",
           "type": "string",
           "required": false,
-          "description": "Name of the parent panel widget (#798)"
+          "description": "Name of the parent panel widget (#798)",
+          "aliases": [
+            "parentWidget"
+          ]
         }
       ]
     },
@@ -3251,7 +3256,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -3289,7 +3295,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -3302,7 +3309,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -3351,7 +3361,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -3364,7 +3375,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -5273,7 +5287,8 @@
           "required": false,
           "description": "Widget Blueprint whose CommonUI wiring to check as well",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -5287,7 +5302,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -5313,7 +5329,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -6197,7 +6214,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -6746,7 +6764,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -7547,14 +7566,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -7573,14 +7596,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "direction",
@@ -9376,7 +9403,8 @@
           "required": false,
           "description": "Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -9422,7 +9450,8 @@
           "required": false,
           "description": "Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -11467,7 +11496,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -11505,7 +11535,8 @@
           "required": false,
           "description": "Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -11953,7 +11984,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -13386,7 +13418,8 @@
           "required": true,
           "description": "Widget in the source that becomes the extracted root",
           "aliases": [
-            "widgetName"
+            "widgetName",
+            "widgetDisplayName"
           ]
         },
         {
@@ -14483,7 +14516,8 @@
           "required": false,
           "description": "Widget Blueprint whose parent's contract to read and whose tree to check against it",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ],
@@ -16388,7 +16422,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Exact live instance name. Provide this or className"
+          "description": "Exact live instance name. Provide this or className",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "className",
@@ -16504,7 +16541,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Exact live instance name"
+          "description": "Exact live instance name",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "className",
@@ -16766,7 +16806,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -16786,14 +16827,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         }
       ]
     },
@@ -16806,14 +16851,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "includeSubtree",
@@ -17799,7 +17848,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Exact live instance name. Provide this or classFilter"
+          "description": "Exact live instance name. Provide this or classFilter",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "classFilter",
@@ -18109,7 +18161,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Exact live instance name"
+          "description": "Exact live instance name",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "className",
@@ -20152,7 +20207,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -21576,14 +21632,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "newParentWidgetName",
@@ -21591,7 +21651,8 @@
           "required": true,
           "description": "Panel widget to reparent into",
           "aliases": [
-            "parentWidgetName"
+            "parentWidgetName",
+            "parentWidget"
           ]
         }
       ]
@@ -24275,7 +24336,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -24289,7 +24351,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -26420,14 +26483,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         }
       ]
     },
@@ -26440,7 +26507,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -26472,7 +26540,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -26485,7 +26554,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -26522,7 +26594,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -26535,7 +26608,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -26888,14 +26964,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "index",
@@ -27471,7 +27551,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -27668,7 +27749,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -27682,7 +27764,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         }
       ]
@@ -33493,14 +33576,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         }
       ]
     },
@@ -33511,7 +33598,10 @@
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Named child of a live PIE widget, or the live UserWidget's own name"
+          "description": "Named child of a live PIE widget, or the live UserWidget's own name",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "userIndex",
@@ -35437,7 +35527,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -35477,7 +35568,10 @@
           "name": "widgetName",
           "type": "string",
           "required": false,
-          "description": "Widget whose navigation a single write sets"
+          "description": "Widget whose navigation a single write sets",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "direction",
@@ -35521,14 +35615,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -35556,14 +35654,18 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
           "name": "widgetName",
           "type": "string",
           "required": true,
-          "description": "Name of a widget inside the tree (#798)"
+          "description": "Name of a widget inside the tree (#798)",
+          "aliases": [
+            "widgetDisplayName"
+          ]
         },
         {
           "name": "propertyName",
@@ -37247,7 +37349,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {
@@ -37643,7 +37746,8 @@
           "required": true,
           "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
           "aliases": [
-            "path"
+            "path",
+            "widgetBlueprintPath"
           ]
         },
         {

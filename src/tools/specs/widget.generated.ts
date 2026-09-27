@@ -38,7 +38,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -56,14 +57,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Name of a widget inside the tree (#798)",
         "aliases": [
-          "name"
+          "name",
+          "widgetDisplayName"
         ]
       },
       {
         "name": "parentWidgetName",
         "type": "string",
         "required": false,
-        "description": "Name of the parent panel widget (#798)"
+        "description": "Name of the parent panel widget (#798)",
+        "aliases": [
+          "parentWidget"
+        ]
       }
     ]
   },
@@ -76,7 +81,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -114,7 +120,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -127,7 +134,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "propertyName",
@@ -176,7 +186,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -189,7 +200,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "propertyName",
@@ -208,7 +222,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Widget Blueprint whose CommonUI wiring to check as well",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       }
     ]
@@ -222,7 +237,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -248,7 +264,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       }
     ]
@@ -262,7 +279,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -294,7 +312,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -315,14 +334,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "propertyName",
@@ -341,14 +364,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "direction",
@@ -367,7 +394,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -413,7 +441,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -459,7 +488,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -497,7 +527,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -549,7 +580,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -578,7 +610,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget in the source that becomes the extracted root",
         "aliases": [
-          "widgetName"
+          "widgetName",
+          "widgetDisplayName"
         ]
       },
       {
@@ -625,7 +658,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Widget Blueprint whose parent's contract to read and whose tree to check against it",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       }
     ],
@@ -650,7 +684,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": false,
-        "description": "Exact live instance name. Provide this or className"
+        "description": "Exact live instance name. Provide this or className",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "className",
@@ -678,7 +715,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": false,
-        "description": "Exact live instance name"
+        "description": "Exact live instance name",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "className",
@@ -728,7 +768,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -748,14 +789,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       }
     ]
   },
@@ -768,14 +813,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "includeSubtree",
@@ -792,7 +841,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": false,
-        "description": "Exact live instance name. Provide this or classFilter"
+        "description": "Exact live instance name. Provide this or classFilter",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "classFilter",
@@ -868,7 +920,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": false,
-        "description": "Exact live instance name"
+        "description": "Exact live instance name",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "className",
@@ -959,7 +1014,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -1049,14 +1105,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "newParentWidgetName",
@@ -1064,7 +1124,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Panel widget to reparent into",
         "aliases": [
-          "parentWidgetName"
+          "parentWidgetName",
+          "parentWidget"
         ]
       }
     ]
@@ -1078,7 +1139,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       }
     ]
@@ -1092,7 +1154,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       }
     ]
@@ -1106,14 +1169,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       }
     ]
   },
@@ -1126,7 +1193,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -1158,7 +1226,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -1171,7 +1240,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "propertyName",
@@ -1208,7 +1280,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -1221,7 +1294,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "propertyName",
@@ -1240,14 +1316,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "index",
@@ -1266,7 +1346,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -1287,7 +1368,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       }
     ]
@@ -1301,7 +1383,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       }
     ]
@@ -1315,14 +1398,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       }
     ]
   },
@@ -1333,7 +1420,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Named child of a live PIE widget, or the live UserWidget's own name"
+        "description": "Named child of a live PIE widget, or the live UserWidget's own name",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "userIndex",
@@ -1358,7 +1448,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -1398,7 +1489,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "widgetName",
         "type": "string",
         "required": false,
-        "description": "Widget whose navigation a single write sets"
+        "description": "Widget whose navigation a single write sets",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "direction",
@@ -1442,14 +1536,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "propertyName",
@@ -1477,14 +1575,18 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
         "name": "widgetName",
         "type": "string",
         "required": true,
-        "description": "Name of a widget inside the tree (#798)"
+        "description": "Name of a widget inside the tree (#798)",
+        "aliases": [
+          "widgetDisplayName"
+        ]
       },
       {
         "name": "propertyName",
@@ -1509,7 +1611,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -1541,7 +1644,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
         "aliases": [
-          "path"
+          "path",
+          "widgetBlueprintPath"
         ]
       },
       {
@@ -1566,54 +1670,54 @@ export const handlerSpecs: HandlerSpecs = {
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
   add_to_viewport: "Params: assetPath (or path, or widgetBlueprintPath), zOrder?",
-  add_widget: "Params: assetPath (or path), widgetClass (or typeName), widgetName? (or name), parentWidgetName?",
-  add_widget_animation_event_key: "Params: assetPath (or path), animationName, functionName, time?, trackName?",
-  add_widget_animation_key: "Params: assetPath (or path), animationName, widgetName, propertyName, time, value, channel?, channelIndex?, interpolation?",
-  add_widget_animation_track: "Params: assetPath (or path), animationName, widgetName, propertyName",
-  audit_commonui: "Params: assetPath? (or path)",
-  audit_widget_accessibility: "Params: assetPath (or path), minFontSize?, minHitSize?",
-  audit_widget_focus_chain: "Params: assetPath (or path)",
-  bind_widget_animation_event: "Params: assetPath (or path), animationName, event?, userTag?",
-  bulk_set_widget_properties: "Params: assetPath (or path), properties",
-  clear_widget_binding: "Params: assetPath (or path), widgetName, propertyName?",
-  clear_widget_navigation: "Params: assetPath (or path), widgetName, direction?",
-  create_editor_utility_blueprint: "Params: at least one of assetPath (or path)/name, packagePath?, onConflict?",
-  create_editor_utility_widget: "Params: at least one of assetPath (or path)/name, packagePath?, onConflict?",
-  create_widget_animation: "Params: assetPath (or path), animationName, durationSeconds?, displayRate?, displayLabel?",
-  create_widget_blueprint: "Params: at least one of assetPath (or path)/name, packagePath?, parentClass?, onConflict?",
-  delete_widget_animation: "Params: assetPath (or path), animationName",
-  extract_widget_subtree: "Params: sourceAssetPath (or sourcePath), sourceWidgetName (or widgetName), destinationAssetPath (or destinationPath), destinationParentClass?, destinationRootName?, dryRun?",
-  get_bind_widget_contract: "Params: at least one of className/assetPath (or path)",
-  get_runtime_delegates: "Params: widgetName?, className?",
+  add_widget: "Params: assetPath (or path, or widgetBlueprintPath), widgetClass (or typeName), widgetName? (or name, or widgetDisplayName), parentWidgetName? (or parentWidget)",
+  add_widget_animation_event_key: "Params: assetPath (or path, or widgetBlueprintPath), animationName, functionName, time?, trackName?",
+  add_widget_animation_key: "Params: assetPath (or path, or widgetBlueprintPath), animationName, widgetName (or widgetDisplayName), propertyName, time, value, channel?, channelIndex?, interpolation?",
+  add_widget_animation_track: "Params: assetPath (or path, or widgetBlueprintPath), animationName, widgetName (or widgetDisplayName), propertyName",
+  audit_commonui: "Params: assetPath? (or path, or widgetBlueprintPath)",
+  audit_widget_accessibility: "Params: assetPath (or path, or widgetBlueprintPath), minFontSize?, minHitSize?",
+  audit_widget_focus_chain: "Params: assetPath (or path, or widgetBlueprintPath)",
+  bind_widget_animation_event: "Params: assetPath (or path, or widgetBlueprintPath), animationName, event?, userTag?",
+  bulk_set_widget_properties: "Params: assetPath (or path, or widgetBlueprintPath), properties",
+  clear_widget_binding: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), propertyName?",
+  clear_widget_navigation: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), direction?",
+  create_editor_utility_blueprint: "Params: at least one of assetPath (or path, or widgetBlueprintPath)/name, packagePath?, onConflict?",
+  create_editor_utility_widget: "Params: at least one of assetPath (or path, or widgetBlueprintPath)/name, packagePath?, onConflict?",
+  create_widget_animation: "Params: assetPath (or path, or widgetBlueprintPath), animationName, durationSeconds?, displayRate?, displayLabel?",
+  create_widget_blueprint: "Params: at least one of assetPath (or path, or widgetBlueprintPath)/name, packagePath?, parentClass?, onConflict?",
+  delete_widget_animation: "Params: assetPath (or path, or widgetBlueprintPath), animationName",
+  extract_widget_subtree: "Params: sourceAssetPath (or sourcePath), sourceWidgetName (or widgetName, or widgetDisplayName), destinationAssetPath (or destinationPath), destinationParentClass?, destinationRootName?, dryRun?",
+  get_bind_widget_contract: "Params: at least one of className/assetPath (or path, or widgetBlueprintPath)",
+  get_runtime_delegates: "Params: widgetName? (or widgetDisplayName), className?",
   get_runtime_focus_path: "Params: userIndex?",
-  get_runtime_widget: "Params: at least one of widgetName/className, childName?, maxDepth?, includeLayout?",
-  get_widget_animation: "Params: assetPath (or path), animationName",
-  get_widget_details: "Params: assetPath (or path), widgetName",
-  get_widget_properties: "Params: assetPath (or path), widgetName, includeSubtree?",
-  inspect_runtime_instances: "Params: widgetName?, classFilter?, propertyNames?, includeSubtree?, childName?, childClassFilter?, viewportOnly?, world?, pieInstance?, maxInstances?, maxNodesPerInstance?",
-  invoke_runtime_function: "Params: at least one of widgetName/className, functionName?, childName?, value?, commitMethod?",
+  get_runtime_widget: "Params: at least one of widgetName (or widgetDisplayName)/className, childName?, maxDepth?, includeLayout?",
+  get_widget_animation: "Params: assetPath (or path, or widgetBlueprintPath), animationName",
+  get_widget_details: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName)",
+  get_widget_properties: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), includeSubtree?",
+  inspect_runtime_instances: "Params: widgetName? (or widgetDisplayName), classFilter?, propertyNames?, includeSubtree?, childName?, childClassFilter?, viewportOnly?, world?, pieInstance?, maxInstances?, maxNodesPerInstance?",
+  invoke_runtime_function: "Params: at least one of widgetName (or widgetDisplayName)/className, functionName?, childName?, value?, commitMethod?",
   list_runtime_widgets: "Params: classFilter?, namePrefix?, viewportOnly?, cursor?, limit?",
-  list_widget_bindings: "Params: assetPath (or path), filterWidgetName?, filterProperty?",
+  list_widget_bindings: "Params: assetPath (or path, or widgetBlueprintPath), filterWidgetName?, filterProperty?",
   list_widget_blueprints: "Params: recursive?, cursor?, limit?",
   list_widget_classes: "Params: filter?, module?, includeAbstract?, includeBlueprint?, cursor?, limit?",
-  move_widget: "Params: assetPath (or path), widgetName, newParentWidgetName (or parentWidgetName)",
-  read_widget_animations: "Params: assetPath (or path)",
-  read_widget_tree: "Params: assetPath (or path)",
-  remove_widget: "Params: assetPath (or path), widgetName",
-  remove_widget_animation_event_key: "Params: assetPath (or path), animationName, time?, trackName?",
-  remove_widget_animation_key: "Params: assetPath (or path), animationName, widgetName, propertyName, time, channel?, channelIndex?",
-  remove_widget_animation_track: "Params: assetPath (or path), animationName, widgetName, propertyName",
-  reorder_child: "Params: assetPath (or path), widgetName, index",
-  restore_widget_navigation: "Params: assetPath (or path), previous",
-  run_editor_utility_blueprint: "Params: assetPath (or path)",
-  run_editor_utility_widget: "Params: assetPath (or path)",
-  set_root_widget: "Params: assetPath (or path), widgetName",
-  set_runtime_focus: "Params: widgetName, userIndex?, className?",
-  set_widget_navigation: "Params: assetPath (or path), rules OR widgetName, direction?, rule?, widgetToFocus?",
-  set_widget_property: "Params: assetPath (or path), widgetName, propertyName, value (or propertyValue)",
-  set_widget_style: "Params: assetPath (or path), widgetName, propertyName, value",
-  unbind_widget_animation_event: "Params: assetPath (or path), animationName, event?, userTag?",
-  wrap_root_widget: "Params: assetPath (or path), wrapperClass (or widgetClass), wrapperName?",
+  move_widget: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), newParentWidgetName (or parentWidgetName, or parentWidget)",
+  read_widget_animations: "Params: assetPath (or path, or widgetBlueprintPath)",
+  read_widget_tree: "Params: assetPath (or path, or widgetBlueprintPath)",
+  remove_widget: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName)",
+  remove_widget_animation_event_key: "Params: assetPath (or path, or widgetBlueprintPath), animationName, time?, trackName?",
+  remove_widget_animation_key: "Params: assetPath (or path, or widgetBlueprintPath), animationName, widgetName (or widgetDisplayName), propertyName, time, channel?, channelIndex?",
+  remove_widget_animation_track: "Params: assetPath (or path, or widgetBlueprintPath), animationName, widgetName (or widgetDisplayName), propertyName",
+  reorder_child: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), index",
+  restore_widget_navigation: "Params: assetPath (or path, or widgetBlueprintPath), previous",
+  run_editor_utility_blueprint: "Params: assetPath (or path, or widgetBlueprintPath)",
+  run_editor_utility_widget: "Params: assetPath (or path, or widgetBlueprintPath)",
+  set_root_widget: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName)",
+  set_runtime_focus: "Params: widgetName (or widgetDisplayName), userIndex?, className?",
+  set_widget_navigation: "Params: assetPath (or path, or widgetBlueprintPath), rules OR widgetName (or widgetDisplayName), direction?, rule?, widgetToFocus?",
+  set_widget_property: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), propertyName, value (or propertyValue)",
+  set_widget_style: "Params: assetPath (or path, or widgetBlueprintPath), widgetName (or widgetDisplayName), propertyName, value",
+  unbind_widget_animation_event: "Params: assetPath (or path, or widgetBlueprintPath), animationName, event?, userTag?",
+  wrap_root_widget: "Params: assetPath (or path, or widgetBlueprintPath), wrapperClass (or widgetClass), wrapperName?",
 };
 
 /** Every key the spec'd widget handlers declare, aliases included. */
