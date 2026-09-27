@@ -312,7 +312,7 @@ describe("the capability handshake against the running binary", () => {
     // one that does know it answers off the game thread. Neither costs the
     // caller a handler timeout, which is the property that makes connecting
     // to a legacy bridge indistinguishable in cost from connecting to a new
-    // one. The legacy half is emulated in tests/unit/bridge.test.ts.
+    // one. The legacy half is emulated in tests/unit/bridge/bridge.test.ts.
     const bridge = new EditorBridge(target.host, target.port);
     bridge.setProjectContext(target.uproject);
     const started = Date.now();

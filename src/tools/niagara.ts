@@ -144,7 +144,7 @@ export const niagaraTool: ToolDef = categoryTool(
     ...epicSchema,
     // #1057: every key a spec'd handler declares, generated from its C++
     // registration. A key listed again below is shared with hand-written
-    // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
+    // actions, and tests/unit/surface/handler-specs.test.ts holds the two to one type.
     ...specSchema,
     ops: OPS,
   },

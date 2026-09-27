@@ -1,6 +1,6 @@
 // Rendering the generated category modules from tests/golden/handler-specs.json
 // (#1057). Shared by scripts/generate-handler-specs.mjs, which writes them, and
-// tests/unit/handler-specs.test.ts, which asserts the checked-in files are what
+// tests/unit/surface/handler-specs.test.ts, which asserts the checked-in files are what
 // the recording renders to. Run under tsx, so the validation is the server's own.
 
 import { specProblems, categorySchema } from "../../src/surface/handler-spec.js";

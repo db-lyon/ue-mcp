@@ -118,7 +118,7 @@ export interface HandlerSpec {
   /**
    * Why the C++ contract test does not call this handler: its contract values
    * would reach a create, spawn, save or run. The surface is generated from it
-   * like any other; tests/unit/handler-spec-exempt.test.ts holds the handler
+   * like any other; tests/unit/plugin/handler-spec-exempt.test.ts holds the handler
    * source to it instead.
    */
   contractExempt?: string;

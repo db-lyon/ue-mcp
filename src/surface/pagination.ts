@@ -16,7 +16,7 @@ import { z } from "zod";
  * because the MCP layer strips an undeclared key and the call then succeeds on
  * a page that was never paged. `limit` is the category's own; `categoryTool`
  * bounds any optional numeric `limit` to at least one row.
- * `tests/unit/action-schema.test.ts` fails on documentation drift.
+ * `tests/unit/surface/action-schema.test.ts` fails on documentation drift.
  *
  * ── The cursor is opaque ──
  *

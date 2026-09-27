@@ -17,7 +17,7 @@
 //
 // A handler whose values would reach a create, spawn, save or run before
 // either failure is registered with MCPSpec::ContractExempt(reason). It is not
-// called here; tests/unit/handler-spec-exempt.test.ts holds its source to its
+// called here; tests/unit/plugin/handler-spec-exempt.test.ts holds its source to its
 // spec instead.
 
 #if WITH_DEV_AUTOMATION_TESTS

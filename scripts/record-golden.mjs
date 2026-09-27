@@ -38,7 +38,7 @@ const result = connected
     )
   : spawnSync(
       process.execPath,
-      [path.join(repoRoot, "node_modules", "vitest", "vitest.mjs"), "run", "tests/unit/golden-editor-down.test.ts"],
+      [path.join(repoRoot, "node_modules", "vitest", "vitest.mjs"), "run", "tests/unit/golden/golden-editor-down.test.ts"],
       {
         cwd: repoRoot,
         stdio: "inherit",

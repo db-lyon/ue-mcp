@@ -44,7 +44,7 @@ const OUT_DIR = path.join(ROOT, "src", "tools", "epic");
  * Which ue-mcp category an Epic toolset belongs in. Kept here rather than
  * imported from src/ because this script runs before the module it generates
  * exists, and a generator that cannot run on a broken tree is no use.
- * `tests/unit/epic-generated.test.ts` asserts these stay in step with the
+ * `tests/unit/tools/epic-generated.test.ts` asserts these stay in step with the
  * routes the server publishes.
  */
 const ROUTES = [

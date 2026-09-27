@@ -90,7 +90,7 @@ export const widgetTool: ToolDef = categoryTool(
     // registration, including the aliases the registry renames (path,
     // widgetBlueprintPath, widgetDisplayName, parentWidget). A key listed
     // again below keeps a canonical description, and
-    // tests/unit/handler-specs.test.ts holds the two to one type.
+    // tests/unit/surface/handler-specs.test.ts holds the two to one type.
     ...specSchema,
     assetPath: z.string().optional().describe("Canonical Widget Blueprint / Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)"),
     widgetName: z.string().optional().describe("Canonical name of a widget inside the tree (#798)"),

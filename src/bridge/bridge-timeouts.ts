@@ -22,7 +22,7 @@
  * not their timeouts, so there is no way to read this off the wire from a
  * plugin that is already built. Inventing a field would mean a protocol change
  * on the C++ side. The table below therefore mirrors the registrations by hand,
- * and tests/unit/bridge-timeout-parity.test.ts parses the plugin sources and
+ * and tests/unit/plugin/bridge-timeout-parity.test.ts parses the plugin sources and
  * fails when the two drift apart. A mirror nobody checks is worse than none.
  */
 import { ENV_VARS, readEnv } from "../core/env.js";

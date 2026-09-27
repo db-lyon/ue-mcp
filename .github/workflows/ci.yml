@@ -199,7 +199,7 @@ jobs:
         # `beta`, 1.3.0-rc.1 to `rc`).
         #
         # The rules live in scripts/release-version.mjs, under unit test in
-        # tests/unit/release-version.test.ts, because YAML cannot be tested and
+        # tests/unit/scripts/release-version.test.ts, because YAML cannot be tested and
         # the failure mode here is silent: a prerelease published without a tag
         # becomes the default install for everyone running `npx ue-mcp`.
         #

@@ -323,7 +323,7 @@ MCPSetNoRollback(Result,
 return MCPResult(Result);
 ```
 
-Saying nothing is the one option that is not available. "Delete is not reversible by default" used to be written here as a licence to emit neither, and it is now the exact shape the ratchet in `tests/unit/handler-conventions.test.ts` counts and pins.
+Saying nothing is the one option that is not available. "Delete is not reversible by default" used to be written here as a licence to emit neither, and it is now the exact shape the ratchet in `tests/unit/scripts/handler-conventions.test.ts` counts and pins.
 
 ### `rollbackPossible` - stating that there is no inverse
 
@@ -393,7 +393,7 @@ A handler can declare its parameters at registration instead of having them writ
 
 - **Read the declared names, and only those.** The registry renames each alias to its parameter before the handler runs, so a spec'd handler calls `RequireString(Params, TEXT("assetPath"), ...)`, never `RequireStringAlt` with the alias. A second spelling belongs in the spec as `.Alias(TEXT("path"))`.
 - **Read every parameter before anything can fail.** `UE.MCP.Bridge.HandlerSpec.Contract` calls each spec'd handler with every declared parameter pointing at an asset that does not exist, and asserts the read set equals the spec. A parameter read after the asset load is never reached, and fails the test as a declared parameter the handler does not read.
-- **Exempt a handler the contract call could let write.** Every string the contract test sends is the same missing asset path, so a create handler is only safe to call when something those values fail (an unresolvable class or struct, a name holding `/`, an invalid package name, a missing source file) refuses the call before anything is created. A handler that would create a folder, a package or a file from them, spawn an actor, save, or run something, registers with `MCPSpec::ContractExempt(TEXT("reason"))` as its last argument. It is still spec'd and generates its surface, and `tests/unit/handler-spec-exempt.test.ts` reads its source instead of calling it, so it has to read every parameter through a `HandlerUtils.h` helper with a literal key (or through a function it hands `Params` to that does), and read nothing else.
+- **Exempt a handler the contract call could let write.** Every string the contract test sends is the same missing asset path, so a create handler is only safe to call when something those values fail (an unresolvable class or struct, a name holding `/`, an invalid package name, a missing source file) refuses the call before anything is created. A handler that would create a folder, a package or a file from them, spawn an actor, save, or run something, registers with `MCPSpec::ContractExempt(TEXT("reason"))` as its last argument. It is still spec'd and generates its surface, and `tests/unit/plugin/handler-spec-exempt.test.ts` reads its source instead of calling it, so it has to read every parameter through a `HandlerUtils.h` helper with a literal key (or through a function it hands `Params` to that does), and read nothing else.
 - **A required choice is a choice, not two optionals.** `actorLabel OR actorPath` is `MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } })`, and `settings OR propertyName + propertyValue` puts the pair in one branch. Every name in a choice is declared optional; the choice is what is required. The contract test calls the handler once per branch, sending only that branch's names, so each branch has to be read on its own path. `MCPSpec::AtLeastOne` is for selector sets where several may combine; declare a required parameter before its first member, since the clause lists the group's names with slashes.
 - **Declare the value's real shape.** A colour is `EMCPParamType::Color`. A number that may also be a colour is `.Or(EMCPParamType::Color)`, a reference that null clears is `.Nullable()`, a flag with one legal value is `.Literal(false)`, a bounded number is `.Range(1, 8192)` or `.Min(0)`, a string or array that may not be empty is `.NonEmpty()`, and an array of objects declares its element with `.Items(EMCPParamType::Object).WithFields({ MCPParam::RequiredField(...), MCPParam::OptionalField(...) })`. Elements of several shapes picked by one field are `.Tagged(TEXT("op"), { MCPParam::Variant(...), ... })`, and an `Any` value that takes a map, an entry list, a string list or a string is `.OneOfForms({ ... })`, read through `MCPReadFunctionArgs` or `MCPReadPythonArgs`. The contract test sends a literal's own value and a union's first type.
 - **Declare what the handler reads, not what the old surface documented.** Migrating `add_curve` dropped `curveType?`, which the TS side advertised and the handler never read.
@@ -411,7 +411,7 @@ node scripts/audit-handler-conventions.mjs        # counts, plus the offenders b
 node scripts/audit-handler-conventions.mjs --json # every handler, one row each
 ```
 
-`tests/unit/handler-conventions.test.ts` pins those counts. Two of them are flat
+`tests/unit/scripts/handler-conventions.test.ts` pins those counts. Two of them are flat
 rules at zero: a mutation that answers neither question fails the suite outright.
 The rest are a ratchet, where a number that goes UP means a new handler skipped a
 convention, and a number that goes DOWN means somebody fixed one and the fix is

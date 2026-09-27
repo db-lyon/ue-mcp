@@ -2,7 +2,7 @@
 //
 // The contract test proves a spec'd handler reads exactly what it declares by
 // calling it. A handler registered with MCPSpec::ContractExempt cannot be
-// called under contract values, so tests/unit/handler-spec-exempt.test.ts holds
+// called under contract values, so tests/unit/plugin/handler-spec-exempt.test.ts holds
 // it to its spec from its source instead, with this reader.
 //
 // It reads the handler body the way the read tracking counts reads: a key is
