@@ -5,6 +5,8 @@ import { debug } from "../core/log.js";
 import { bridgeMethodEffect, taskEffect } from "../surface/action-effects.js";
 import { SESSION_ID } from "./lock-owner.js";
 import type { AssetLockScopeLike, ToolContext, ToolDef } from "../core/types.js";
+import { ALL_TOOLS } from "../tools.js";
+import { RECORDED_HANDLER_SPECS } from "../tools/specs/index.js";
 
 // Per-asset exclusive locking. The lock registry itself lives in the C++
 // bridge (the one editor every agent shares); runAction acquires what each
@@ -46,6 +48,53 @@ export interface ActionClassification {
 
 function looksLikeAssetPath(v: unknown): v is string {
   return typeof v === "string" && v.length > 0 && v.includes("/");
+}
+
+/**
+ * Spec'd path params that never name the asset an edit writes: files on disk
+ * and folders a new asset is created under.
+ */
+const NOT_ASSET_PATHS = new Set(["filePath", "csvPath", "jsonPath", "folderPath", "packagePath", "subPath"]);
+
+/** `/Mount/Asset`, not an in-asset address (`Root.Patrol`) or an actor (`...:PersistentLevel.A`). */
+function looksLikeContentPath(v: unknown): v is string {
+  return typeof v === "string" && /^\/[A-Za-z0-9_]+\/[^:]+$/.test(v);
+}
+
+const specPathKeyCache = new Map<string, string[]>();
+
+/** String params the method's recorded C++ spec names `*Path`, aliases included. */
+function specPathKeys(method: string): string[] {
+  let keys = specPathKeyCache.get(method);
+  if (!keys) {
+    keys = [];
+    for (const param of RECORDED_HANDLER_SPECS[method]?.params ?? []) {
+      if (param.type !== "string" || NOT_ASSET_PATHS.has(param.name)) continue;
+      for (const name of [param.name, ...(param.aliases ?? [])]) {
+        if (/(?:^p|P)ath$/.test(name)) keys.push(name);
+      }
+    }
+    specPathKeyCache.set(method, keys);
+  }
+  return keys;
+}
+
+const methodIndexes = new WeakMap<readonly ToolDef[], Map<string, string>>();
+
+/** The bridge method a task reaches: itself when bare, else its action's. */
+function bridgeMethodOf(taskName: string, graph: readonly ToolDef[] = ALL_TOOLS): string | undefined {
+  if (!taskName.includes(".")) return taskName;
+  let index = methodIndexes.get(graph);
+  if (!index) {
+    index = new Map();
+    for (const tool of graph) {
+      for (const [action, spec] of Object.entries(tool.actions)) {
+        if (spec.kind === "bridge") index.set(`${tool.name}.${action}`, spec.bridge);
+      }
+    }
+    methodIndexes.set(graph, index);
+  }
+  return index.get(taskName);
 }
 
 /**
@@ -93,6 +142,11 @@ export function classifyAction(
   const paths = new Set<string>();
   for (const key of PATH_KEYS) {
     if (looksLikeAssetPath(params[key])) paths.add(params[key] as string);
+  }
+  // Whatever else the C++ spec declares as a path to an asset.
+  const method = bridgeMethodOf(taskName, graph);
+  for (const key of method ? specPathKeys(method) : []) {
+    if (!PATH_KEYS.includes(key) && looksLikeContentPath(params[key])) paths.add(params[key] as string);
   }
   // Batch shapes.
   if (Array.isArray(params.assetPaths)) {
