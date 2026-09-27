@@ -36,6 +36,7 @@ import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
 import { createLiveTask } from "../flow/live-task.js";
 import { hostNamespaces } from "../flow/condition.js";
+import { dialogGate } from "../flow/gates.js";
 import type { FlowDefinition, TaskDefinition } from "@db-lyon/flowkit";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 
@@ -251,8 +252,8 @@ export async function dispatchCategoryCall(
 
   // Actions served in this process never reach the bridge, so the bridge
   // boundary cannot refuse them. Same guard, same decision.
-  const preflight = await guard.check(effectiveTask, "action");
-  if (!preflight.allow) return refusalResult(preflight.refusal);
+  const blocked = await dialogGate(guard, effectiveTask, "action");
+  if (blocked) return refusalResult(blocked);
 
   const taskParams = stripAction(params);
   const flowCtx: FlowContext = {
@@ -461,11 +462,8 @@ export async function dispatchFlowCall(
     // STARTED while a modal is up, and flow(list)/flow(plan), which never
     // touch the bridge at all.
     const flowGuard = deps.dialogGuardFor(session, clientAdvertisesElicitation(deps.elicit()));
-    const flowCheck = await flowGuard.check(
-      `${flowTool.name}.${String(params.action ?? "")}`,
-      "action",
-    );
-    if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
+    const flowBlocked = await dialogGate(flowGuard, `${flowTool.name}.${String(params.action ?? "")}`, "action");
+    if (flowBlocked) return refusalResult(flowBlocked, attribution(sessions, session));
     // The request's own progress token and elicitation, so every step can
     // stream progress and ask the user exactly as the same action called live.
     const flowCtx: ToolContext = {

@@ -303,17 +303,19 @@ flows:
           - { when: "gate.dialog", action: error, message: Answer the open dialog first. }
 ```
 
-Besides `steps`, `params`, `project`, `editor` and `session`, a check (or a `when:`) can read two namespaces about the step being gated:
+Besides `steps`, `params`, `project`, `editor` and `session`, a check (or a `when:`) can read three namespaces about the step and the run being gated:
 
 | Name | Meaning |
 |------|---------|
 | `step.name`, `step.effect`, `step.availability`, `step.bridge` | The step's task, whether it reads or changes the editor, whether it needs an editor (`always`, `editor`, `unknown`), and the bridge method it dispatches to |
+| `step.dialog_blocked`, `step.python_refused` | A modal would refuse this step; `execute_python`'s search gate would refuse it |
+| `call.targeted`, `call.needs_target` | The run named its editor; a run of this flow has to name one beyond one editor |
 | `gate.untargeted` | This server drives more than one editor and the call named none, so a run would be refused |
 | `gate.editor` | No editor is connected and the step dispatches to one |
 | `gate.dialog` | A modal dialog is open and would refuse this step |
 | `gate.python` | The step is `editor.execute_python` and its gate would refuse it: the `taskSummary` matches actions its `ruledOut` does not cover |
 
-The server's own gates are declared as exactly these checks when a flow is planned, so `flow(plan)` reports what a run would be refused for (see [Execution Plan](#execution-plan)). They are not added to a run: dispatch, the bridge and `execute_python` enforce them there as they always have.
+The server's own gates are declared once, each as a `when` over these facts, and `gate.<name>` is that declaration evaluated. A plan adds them as checks, so `flow(plan)` reports what a run would be refused for (see [Execution Plan](#execution-plan)). A run is refused by the same declarations, evaluated live where dispatch, the bridge and `execute_python` always refused.
 
 ## Flow-level Hooks
 

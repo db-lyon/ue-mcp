@@ -10,7 +10,8 @@ import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
 import { progressRenderingNote } from "../dispatch/client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../dispatch/workaround-tracker.js";
-import { evaluateGate, gateCandidates, gateRefusalMessage, notInRunningPlugin } from "../dispatch/python-gate.js";
+import { gateRefusalMessage, pythonGateOutcome } from "../dispatch/python-gate.js";
+import { gateFires } from "../flow/gates.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
@@ -120,28 +121,20 @@ export const editorTool: ToolDef = categoryTool(
         const code = (params.code as string) ?? "";
         const taskSummary = ((params.taskSummary as string) ?? "").trim();
 
-        // #704: hard gate. Require an intent statement, run the semantic search,
-        // and refuse to run Python until EVERY candidate action is explicitly
-        // ruled out with a stated reason.
-        if (!taskSummary) {
-          return {
-            blocked: true,
-            reason: "missing_task_summary",
-            message: "execute_python requires a 'taskSummary' (plain-words intent). It is searched against the tool registry and gated behind ruling out every candidate. Re-call with taskSummary.",
-          };
-        }
-
-        // Candidates = meaningful matches (a name/phrase hit), capped at 5.
-        const candidates = gateCandidates(ctx, taskSummary);
-        if (candidates.length > 0) {
-          // #938 / #960: matching is spelling-insensitive and rulings persist
-          // for the session, so the strings this refusal prints are exactly the
-          // strings that satisfy it, and a reworded summary cannot reset the
-          // work already done. See src/dispatch/python-gate.ts.
-          // #1167: a candidate whose bridge method the running plugin does not
-          // register cannot do the task, so it is owed no ruling.
-          const verdict = evaluateGate(candidates, params.ruledOut, ctx, await notInRunningPlugin(ctx));
-          if (verdict.unresolved.length > 0) {
+        // #704: the declared python gate (src/flow/gates.ts). Python runs only
+        // with a taskSummary whose every search candidate is ruled out; rulings
+        // are remembered for the session (#938, #960, #1167).
+        const gate = await pythonGateOutcome(ctx, taskSummary, params.ruledOut, true);
+        if (gateFires("python", { step: { name: "editor.execute_python", python_refused: gate.kind !== "clear" } })) {
+          if (gate.kind === "missing_task_summary") {
+            return {
+              blocked: true,
+              reason: "missing_task_summary",
+              message: "execute_python requires a 'taskSummary' (plain-words intent). It is searched against the tool registry and gated behind ruling out every candidate. Re-call with taskSummary.",
+            };
+          }
+          if (gate.kind === "candidates_not_ruled_out") {
+            const { candidates, verdict } = gate;
             pushWorkaround({ code, timestamp: new Date().toISOString(), taskSummary, suggestedTool: candidates.map((c) => `${c.tool}(${c.action})`).join(", ") }, ctx);
             return {
               blocked: true,
