@@ -31,7 +31,8 @@ bool FWidgetCompileOutcomeTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("compile failure is not compiled"), Error->GetBoolField(TEXT("compiled")));
 	TestEqual(TEXT("compiler error count survives"), Error->GetIntegerField(TEXT("errors")), 1);
 	TestTrue(TEXT("compiler diagnostic survives"), Error->GetStringField(TEXT("error")).Contains(Failed.CompileMessages[0]));
-	TestTrue(TEXT("failure explains unsaved in-memory edits"), Error->GetStringField(TEXT("error")).Contains(TEXT("In-memory edits remain")));
+	TestTrue(TEXT("failure explains compilation did not save"), Error->GetStringField(TEXT("error")).Contains(TEXT("Compilation did not save")));
+	TestTrue(TEXT("failure allows caller rollback"), Error->GetStringField(TEXT("error")).Contains(TEXT("retain or roll back")));
 	TestFalse(TEXT("failure does not claim compiler never ran"), Error->GetStringField(TEXT("error")).Contains(TEXT("Nothing was compiled")));
 
 	MCPWidgetGuidMap::FSyncReport Refused;

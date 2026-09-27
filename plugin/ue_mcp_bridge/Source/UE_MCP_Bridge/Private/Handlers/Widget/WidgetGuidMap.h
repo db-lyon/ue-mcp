@@ -330,7 +330,9 @@ namespace MCPWidgetGuidMap
 		FCompilerResultsLog CompileLog;
 		CompileLog.SetSourcePath(WidgetBP->GetPathName());
 		Report.bCompileAttempted = true;
-		FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::None, &CompileLog);
+		// Persistence belongs to the caller after checking this result. The
+		// editor's SaveOnCompile preference must not save a failed mutation.
+		FKismetEditorUtilities::CompileBlueprint(WidgetBP, EBlueprintCompileOptions::SkipSave, &CompileLog);
 		Report.CompileErrors = CompileLog.NumErrors;
 		for (const TSharedRef<FTokenizedMessage>& Message : CompileLog.Messages)
 		{
@@ -353,7 +355,7 @@ namespace MCPWidgetGuidMap
 		if (Report.bCompileAttempted)
 		{
 			TSharedPtr<FJsonValue> Error = MCPError(FString::Printf(
-				TEXT("Widget Blueprint '%s' failed to compile (%d errors). In-memory edits remain, but this operation did not save them. %s"),
+				TEXT("Widget Blueprint '%s' failed to compile (%d errors). Compilation did not save the asset; the caller may retain or roll back its in-memory edits. %s"),
 				*AssetPath, Report.CompileErrors, *FString::Join(Report.CompileMessages, TEXT("; "))));
 			Error->AsObject()->SetBoolField(TEXT("compiled"), false);
 			Error->AsObject()->SetNumberField(TEXT("errors"), Report.CompileErrors);
