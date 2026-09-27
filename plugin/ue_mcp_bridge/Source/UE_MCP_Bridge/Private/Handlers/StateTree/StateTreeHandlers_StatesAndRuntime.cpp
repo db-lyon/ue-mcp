@@ -53,9 +53,8 @@
 // writes any of them at a dotted path such as `Transitions[0].Priority`, which
 // is why read_state exists in this file and a set_transition_property does not.
 //
-// The 5.5 floor and the helpers on FStateTreeHandlers (LoadStateTree,
-// GetEditorData, ResolveState, FindStateByID, FindStateByPath) are shared with
-// StateTreeHandlers.cpp; the file-local helpers there are not, so the ones
+// The 5.5 floor and the helpers on FStateTreeHandlers (ResolveState,
+// FindStateByID, FindStateByPath) are shared with StateTreeHandlers.cpp; the file-local helpers there are not, so the ones
 // below carry a StateTreeDepth prefix. The module is a unity build, where two
 // translation units sharing a blob merge their anonymous namespaces and a
 // colliding helper name is a redefinition (C2084).
@@ -96,6 +95,8 @@
 #include "StateTreeState.h"
 #include "StateTreeTaskBase.h"
 #include "StateTreeTypes.h"
+#include "StateTreeEditTraits.h"
+#include "Families/MCPPropertyWrite.h"
 #include "Blueprint/StateTreeConditionBlueprintBase.h"
 #include "Blueprint/StateTreeConsiderationBlueprintBase.h"
 #include "Blueprint/StateTreeEvaluatorBlueprintBase.h"
@@ -103,18 +104,6 @@
 
 namespace
 {
-	FString StateTreeDepthGuid(const FGuid& Guid)
-	{
-		return Guid.ToString(EGuidFormats::DigitsWithHyphensLower);
-	}
-
-	FGuid StateTreeDepthParseGuid(const FString& Str)
-	{
-		FGuid G;
-		FGuid::Parse(Str, G);
-		return G;
-	}
-
 	/** The four node families a StateTree state or tree can hold, keyed by the
 	 *  spelling every action in this category uses. */
 	const UScriptStruct* StateTreeDepthBaseForKind(const FString& Kind)
@@ -208,7 +197,7 @@ namespace
 	{
 		auto Obj = MakeShared<FJsonObject>();
 		Obj->SetNumberField(TEXT("index"), Index);
-		Obj->SetStringField(TEXT("nodeId"), StateTreeDepthGuid(Node.ID));
+		Obj->SetStringField(TEXT("nodeId"), MCPStateTree::Guid(Node.ID));
 
 		const UScriptStruct* NodeStruct = Node.Node.IsValid() ? Node.Node.GetScriptStruct() : nullptr;
 		Obj->SetStringField(TEXT("structType"), NodeStruct ? NodeStruct->GetName() : TEXT("None"));
@@ -500,16 +489,15 @@ namespace
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::ListStateTreeNodeTypes(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
 	const FString NodeTypeParam = OptionalString(Params, TEXT("nodeType"), TEXT("all"));
 	const FString Filter = OptionalString(Params, TEXT("filter"));
 	const bool bIncludeInstanceProperties = OptionalBool(Params, TEXT("includeInstanceProperties"), true);
 	const bool bSchemaAllowedOnly = OptionalBool(Params, TEXT("schemaAllowedOnly"), true);
-	UStateTree* ST = nullptr;
-	UStateTreeEditorData* EditorData = nullptr;
-	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
+	FMCPEditScope Edit(Params, TEXT("list_state_tree_node_types"), TEXT("assetPath"), FMCPCommitPolicy::Read());
+	if (auto Err = Edit.Open<UStateTree>()) return Err;
+	UStateTree* ST = Edit.Target<UStateTree>();
+	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
 
 	static const TCHAR* AllKinds[] = { TEXT("task"), TEXT("condition"), TEXT("evaluator"), TEXT("consideration") };
 	TArray<FString> Kinds;
@@ -652,19 +640,18 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStateTreeNodeTypes(const TSharedP
 
 	Result->SetNumberField(TEXT("count"), Total);
 	Result->SetStringField(TEXT("usage"), TEXT("structType is what add_task, add_enter_condition, add_transition_condition, add_consideration, add_evaluator and add_global_task take. instanceProperties names the keys those actions' instanceProperties map accepts, and nodeProperties names the keys set_task_property / set_evaluator_property / set_global_task_property accept."));
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ── Whole-state read ─────────────────────────────────────────────────────────
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
-	UStateTree* ST = nullptr;
-	UStateTreeEditorData* EditorData = nullptr;
-	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
+	FMCPEditScope Edit(Params, TEXT("read_state_tree_state"), TEXT("assetPath"), FMCPCommitPolicy::Read());
+	if (auto Err = Edit.Open<UStateTree>()) return Err;
+	UStateTree* ST = Edit.Target<UStateTree>();
+	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State)
@@ -674,7 +661,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObjec
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), ST->GetPathName());
-	Result->SetStringField(TEXT("stateId"), StateTreeDepthGuid(State->ID));
+	Result->SetStringField(TEXT("stateId"), MCPStateTree::Guid(State->ID));
 	Result->SetStringField(TEXT("statePath"), State->GetPath());
 	Result->SetStringField(TEXT("name"), State->Name.ToString());
 	// The whole point of this action: every field below that has no typed
@@ -695,7 +682,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("weight"), State->Weight);
 	Result->SetStringField(TEXT("description"), State->Description);
 	Result->SetStringField(TEXT("tag"), State->Tag.IsValid() ? State->Tag.ToString() : FString());
-	Result->SetStringField(TEXT("parentStateId"), State->Parent ? StateTreeDepthGuid(State->Parent->ID) : FString());
+	Result->SetStringField(TEXT("parentStateId"), State->Parent ? MCPStateTree::Guid(State->Parent->ID) : FString());
 	Result->SetNumberField(TEXT("childCount"), State->Children.Num());
 
 	// Linking, both halves, because they are separate fields and one of them
@@ -703,7 +690,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObjec
 	{
 		auto LinkObj = MakeShared<FJsonObject>();
 		LinkObj->SetStringField(TEXT("linkedAsset"), State->LinkedAsset ? State->LinkedAsset->GetPathName() : FString());
-		LinkObj->SetStringField(TEXT("linkedSubtreeStateId"), State->LinkedSubtree.ID.IsValid() ? StateTreeDepthGuid(State->LinkedSubtree.ID) : FString());
+		LinkObj->SetStringField(TEXT("linkedSubtreeStateId"), State->LinkedSubtree.ID.IsValid() ? MCPStateTree::Guid(State->LinkedSubtree.ID) : FString());
 		LinkObj->SetStringField(TEXT("linkedSubtreeName"), State->LinkedSubtree.Name.ToString());
 		if (State->LinkedSubtree.ID.IsValid())
 		{
@@ -754,7 +741,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObjec
 		const FStateTreeTransition& T = State->Transitions[i];
 		auto TObj = MakeShared<FJsonObject>();
 		TObj->SetNumberField(TEXT("index"), i);
-		TObj->SetStringField(TEXT("transitionId"), StateTreeDepthGuid(T.ID));
+		TObj->SetStringField(TEXT("transitionId"), MCPStateTree::Guid(T.ID));
 		TObj->SetStringField(TEXT("trigger"), StaticEnum<EStateTreeTransitionTrigger>()
 			? StaticEnum<EStateTreeTransitionTrigger>()->GetNameStringByValue(static_cast<int64>(T.Trigger))
 			: FString());
@@ -771,7 +758,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObjec
 		TObj->SetStringField(TEXT("eventTag"), T.RequiredEvent.Tag.ToString());
 		TObj->SetStringField(TEXT("eventPayloadStruct"), T.RequiredEvent.PayloadStruct
 			? T.RequiredEvent.PayloadStruct->GetPathName() : FString());
-		TObj->SetStringField(TEXT("targetStateId"), T.State.ID.IsValid() ? StateTreeDepthGuid(T.State.ID) : FString());
+		TObj->SetStringField(TEXT("targetStateId"), T.State.ID.IsValid() ? MCPStateTree::Guid(T.State.ID) : FString());
 		if (T.State.ID.IsValid())
 		{
 			if (const UStateTreeState* Target = EditorData->GetStateByID(T.State.ID))
@@ -827,15 +814,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObjec
 	}
 	Result->SetArrayField(TEXT("problems"), Problems);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ── State linking ────────────────────────────────────────────────────────────
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
 	const FStateRef StateRef = ReadStateRef(Params);
 	FString LinkType;
@@ -845,9 +830,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 	const bool bHasTargetStatePath = HasParam(Params, TEXT("targetStatePath"));
 	const FString TargetStatePathStr = OptionalString(Params, TEXT("targetStatePath"));
 	const FString LinkedAssetPath = OptionalString(Params, TEXT("linkedAsset"));
-	UStateTree* ST = nullptr;
-	UStateTreeEditorData* EditorData = nullptr;
-	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
+	FMCPEditScope Edit(Params, TEXT("set_state_tree_state_link"), TEXT("assetPath"), MCPStateTree::StructureEdit());
+	if (auto Err = Edit.Open<UStateTree>()) return Err;
+	UStateTree* ST = Edit.Target<UStateTree>();
+	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found. Pass stateId or statePath."));
@@ -869,16 +855,17 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), ST->GetPathName());
-	Result->SetStringField(TEXT("stateId"), StateTreeDepthGuid(State->ID));
+	Result->SetStringField(TEXT("stateId"), MCPStateTree::Guid(State->ID));
 	Result->SetStringField(TEXT("statePath"), State->GetPath());
 	Result->SetStringField(TEXT("linkType"), LinkType);
 
+	FMCPEditTransaction Txn(Edit);
 	if (bSubtree)
 	{
 		UStateTreeState* Target = nullptr;
 		if (bHasTargetStateId)
 		{
-			Target = FindStateByID(EditorData, StateTreeDepthParseGuid(TargetStateIdStr));
+			Target = FindStateByID(EditorData, MCPStateTree::ParseGuid(TargetStateIdStr));
 		}
 		else if (bHasTargetStatePath)
 		{
@@ -918,7 +905,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 		// nothing to override.
 		State->SetLinkedState(Target->GetLinkToState());
 
-		Result->SetStringField(TEXT("targetStateId"), StateTreeDepthGuid(Target->ID));
+		Result->SetStringField(TEXT("targetStateId"), MCPStateTree::Guid(Target->ID));
 		Result->SetStringField(TEXT("targetStatePath"), Target->GetPath());
 	}
 	else if (bAsset)
@@ -951,13 +938,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 		State->Parameters.bFixedLayout = false;
 	}
 
-	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
 	const bool bChanged = (PrevType != State->Type)
 		|| (PrevSubtreeId != State->LinkedSubtree.ID)
 		|| (PrevAssetPath != (State->LinkedAsset ? State->LinkedAsset->GetPathName() : FString()));
 	if (bChanged)
 	{
+		Txn.Commit();
 		MCPSetUpdated(Result);
 	}
 	else
@@ -971,11 +958,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 	{
 		auto Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
-		Payload->SetStringField(TEXT("stateId"), StateTreeDepthGuid(State->ID));
+		Payload->SetStringField(TEXT("stateId"), MCPStateTree::Guid(State->ID));
 		if (PrevSubtreeId.IsValid())
 		{
 			Payload->SetStringField(TEXT("linkType"), TEXT("subtree"));
-			Payload->SetStringField(TEXT("targetStateId"), StateTreeDepthGuid(PrevSubtreeId));
+			Payload->SetStringField(TEXT("targetStateId"), MCPStateTree::Guid(PrevSubtreeId));
 		}
 		else if (!PrevAssetPath.IsEmpty())
 		{
@@ -993,15 +980,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 		}
 		MCPSetRollback(Result, TEXT("set_state_tree_state_link"), Payload);
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ── Moving a state ───────────────────────────────────────────────────────────
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const FStateRef StateRef = ReadStateRef(Params);
 	// Every parameter is read before the asset load (#1057).
 	const bool bToRoot = OptionalBool(Params, TEXT("toRoot"), false);
@@ -1011,9 +996,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 	const FString NewParentPathStr = OptionalString(Params, TEXT("newParentStatePath"));
 	const bool bHasInsertIndex = HasParam(Params, TEXT("insertIndex"));
 	const int32 RequestedInsertIndex = static_cast<int32>(OptionalNumber(Params, TEXT("insertIndex")));
-	UStateTree* ST = nullptr;
-	UStateTreeEditorData* EditorData = nullptr;
-	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
+	FMCPEditScope Edit(Params, TEXT("move_state_tree_state"), TEXT("assetPath"), MCPStateTree::StructureEdit());
+	if (auto Err = Edit.Open<UStateTree>()) return Err;
+	UStateTree* ST = Edit.Target<UStateTree>();
+	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
 
 	UStateTreeState* State = ResolveState(EditorData, StateRef);
 	if (!State) return MCPError(TEXT("State not found. Pass stateId or statePath."));
@@ -1045,7 +1031,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 	{
 		if (bHasNewParentId)
 		{
-			NewParent = FindStateByID(EditorData, StateTreeDepthParseGuid(NewParentIdStr));
+			NewParent = FindStateByID(EditorData, MCPStateTree::ParseGuid(NewParentIdStr));
 		}
 		else
 		{
@@ -1087,10 +1073,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), ST->GetPathName());
-	Result->SetStringField(TEXT("stateId"), StateTreeDepthGuid(State->ID));
-	Result->SetStringField(TEXT("previousParentStateId"), OldParent ? StateTreeDepthGuid(OldParent->ID) : FString());
+	Result->SetStringField(TEXT("stateId"), MCPStateTree::Guid(State->ID));
+	Result->SetStringField(TEXT("previousParentStateId"), OldParent ? MCPStateTree::Guid(OldParent->ID) : FString());
 	Result->SetNumberField(TEXT("previousIndex"), OldIndex);
 
+	FMCPEditTransaction Txn(Edit);
 	if (bChanged)
 	{
 		EditorData->Modify();
@@ -1105,6 +1092,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 		const int32 EffectiveIndex = FMath::Clamp(InsertIndex, 0, NewArray.Num());
 		NewArray.Insert(State, EffectiveIndex);
 		State->Parent = NewParent;
+		Txn.Commit();
 
 		MCPSetUpdated(Result);
 		Result->SetNumberField(TEXT("index"), EffectiveIndex);
@@ -1116,18 +1104,17 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 		Result->SetStringField(TEXT("note"), TEXT("The state is already this parent's child at this position, so nothing moved."));
 	}
 
-	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 	Result->SetStringField(TEXT("statePath"), State->GetPath());
-	Result->SetStringField(TEXT("parentStateId"), NewParent ? StateTreeDepthGuid(NewParent->ID) : FString());
+	Result->SetStringField(TEXT("parentStateId"), NewParent ? MCPStateTree::Guid(NewParent->ID) : FString());
 	Result->SetBoolField(TEXT("atRoot"), NewParent == nullptr);
 
 	{
 		auto Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
-		Payload->SetStringField(TEXT("stateId"), StateTreeDepthGuid(State->ID));
+		Payload->SetStringField(TEXT("stateId"), MCPStateTree::Guid(State->ID));
 		if (OldParent)
 		{
-			Payload->SetStringField(TEXT("newParentStateId"), StateTreeDepthGuid(OldParent->ID));
+			Payload->SetStringField(TEXT("newParentStateId"), MCPStateTree::Guid(OldParent->ID));
 		}
 		else
 		{
@@ -1136,23 +1123,22 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 		Payload->SetNumberField(TEXT("insertIndex"), OldIndex);
 		MCPSetRollback(Result, TEXT("move_state_tree_state"), Payload);
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ── Blueprint node classes ───────────────────────────────────────────────────
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetNodeClass(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	// Every parameter is read before the asset load (#1057).
 	FString NodeIdStr;
 	if (auto Err = RequireString(Params, TEXT("nodeId"), NodeIdStr)) return Err;
 	FString ClassSpec;
 	if (auto Err = RequireString(Params, TEXT("nodeClass"), ClassSpec)) return Err;
-	UStateTree* ST = nullptr;
-	UStateTreeEditorData* EditorData = nullptr;
-	if (auto LoadErr = LoadForEdit(AssetPath, ST, EditorData)) return LoadErr;
+	FMCPEditScope Edit(Params, TEXT("set_state_tree_node_class"), TEXT("assetPath"), MCPStateTree::StructureEdit());
+	if (auto Err = Edit.Open<UStateTree>()) return Err;
+	UStateTree* ST = Edit.Target<UStateTree>();
+	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
 
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
@@ -1225,15 +1211,22 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetNodeClass(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("previousClass"), PreviousPath);
 	Result->SetStringField(TEXT("nodeClass"), Resolved->GetPathName());
 
+	FMCPEditTransaction Txn(Edit);
 	if (bChanged)
 	{
-		if (OwningState) { OwningState->Modify(); } else { EditorData->Modify(); }
-		ClassProp->SetObjectPropertyValue(ValuePtr, Resolved);
-		// The wrapper reports the class AS its instance data type, so the
-		// instance has to be reallocated after the class changes. This is the
-		// step that has no property-write equivalent, and skipping it is what
-		// leaves a Blueprint node with no instance data at all.
-		StateTreeDepthReallocInstance(*Node, EditorData);
+		UObject* Owner = OwningState ? static_cast<UObject*>(OwningState) : static_cast<UObject*>(EditorData);
+		const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::Write({ Owner, nullptr, ClassProp, ValuePtr },
+			[&](FString&)
+			{
+				ClassProp->SetObjectPropertyValue(ValuePtr, Resolved);
+				// The wrapper reports the class AS its instance data type, so the
+				// instance is reallocated after the class changes; skipping it is
+				// what leaves a Blueprint node with no instance data at all.
+				StateTreeDepthReallocInstance(*Node, EditorData);
+				return true;
+			});
+		MCPPropertyWrite::NotePrevious(Result, Outcome);
+		Txn.Commit();
 		MCPSetUpdated(Result);
 	}
 	else
@@ -1246,7 +1239,6 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetNodeClass(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("instanceObjectPath"), Node->InstanceObject ? Node->InstanceObject->GetPathName() : FString());
 	Result->SetStringField(TEXT("instancePropertyNote"), TEXT("The Blueprint's own variables live on instanceObjectPath: write them with editor(set_property) there, which reaches nested structs and arrays that the flat instanceProperties map cannot."));
 
-	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
 	{
 		auto Payload = MakeShared<FJsonObject>();
@@ -1258,7 +1250,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetNodeClass(const TSharedPtr<FJsonOb
 			: TEXT("The inverse restores the previous class and reallocates instance data from scratch, so any value set on the current instance object is discarded."));
 		MCPSetRollback(Result, TEXT("set_state_tree_node_class"), Payload);
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ── Runtime ──────────────────────────────────────────────────────────────────
@@ -1447,7 +1439,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RequestTransition(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("component"), RT.Component->GetName());
 	Result->SetStringField(TEXT("stateTree"), RT.StateTree->GetPathName());
 	Result->SetStringField(TEXT("targetState"), Target.Describe());
-	Result->SetStringField(TEXT("targetStateId"), StateTreeDepthGuid(RT.StateTree->GetStateIdFromHandle(Target)));
+	Result->SetStringField(TEXT("targetStateId"), MCPStateTree::Guid(RT.StateTree->GetStateIdFromHandle(Target)));
 	Result->SetStringField(TEXT("priority"), PriorityStr);
 	Result->SetStringField(TEXT("fallback"), FallbackStr);
 

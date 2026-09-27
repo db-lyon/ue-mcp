@@ -21,8 +21,6 @@ public:
 
 private:
 	// Helpers
-	static UStateTree* LoadStateTree(const FString& AssetPath);
-	static UStateTreeEditorData* GetEditorData(UStateTree* StateTree);
 	static UStateTreeState* FindStateByID(UStateTreeEditorData* EditorData, const FGuid& StateID);
 	static UStateTreeState* FindStateByPath(UStateTreeEditorData* EditorData, const FString& Path);
 	static UStateTreeState* ResolveState(UStateTreeEditorData* EditorData, const TSharedPtr<FJsonObject>& Params);
@@ -38,13 +36,6 @@ private:
 	};
 	static FStateRef ReadStateRef(const TSharedPtr<FJsonObject>& Params);
 	static UStateTreeState* ResolveState(UStateTreeEditorData* EditorData, const FStateRef& Ref);
-	static bool CompileAndSave(UStateTree* StateTree, TSharedPtr<FJsonObject>& OutResult);
-	static FString MissingEditorDataMessage(const FString& AssetPath);
-	/** Load a tree and its editor data for authoring. Returns the error to hand
-	 *  back (asset load diagnostic, or the missing-editor-data repair hint), or
-	 *  nullptr with both outputs set. */
-	static TSharedPtr<FJsonValue> LoadForEdit(const FString& AssetPath, UStateTree*& OutTree, UStateTreeEditorData*& OutEditorData);
-	static TSharedPtr<FJsonValue> RequireSchema(UStateTree* StateTree, const FString& AssetPath);
 	static TSharedPtr<FJsonObject> SerializeStateHierarchy(const UStateTreeState* State);
 
 	// F3 slot operations every node-list handler goes through (StateTreeHandlers_Slots.cpp).
