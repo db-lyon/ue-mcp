@@ -22,7 +22,6 @@ import { finishCall, type CallPipeline } from "../dispatch/call-pipeline.js";
 import { applyHandlerOutcome, inFlowRun } from "./handler-outcome.js";
 import { builtinClassPath, LIVE_FLOWS_KEY, LIVE_REFERENCES_KEY } from "./task-call.js";
 import { factsScope, hostNamespaces, makeConditionEvaluator } from "./condition.js";
-import { buildFlowRegistry } from "./registry.js";
 import { builtinFlows } from "./loader.js";
 
 /** Context key for the composite a live runner was built to run. */
@@ -78,7 +77,7 @@ function runnerChildRun(step: ChildStepRunner): ChildRun {
  * A registry for a context that carries none (a handler invoked directly, as
  * tests and embedders do): the context's graph, plus the action's own tool.
  */
-function registryFor(ctx: FlowContext, home?: ToolDef): TaskRegistry {
+async function registryFor(ctx: FlowContext, home?: ToolDef): Promise<TaskRegistry> {
   if (ctx.registry) return ctx.registry as TaskRegistry;
   let graph: ToolDef[] = [];
   try {
@@ -87,6 +86,8 @@ function registryFor(ctx: FlowContext, home?: ToolDef): TaskRegistry {
     // A session with no surface still runs the action's own tool.
   }
   const tools = home && !graph.some((t) => t.name === home.name) ? [...graph, home] : graph;
+  // Imported here: the registry builds the task classes that run actions through this module.
+  const { buildFlowRegistry } = await import("./registry.js");
   return buildFlowRegistry(tools);
 }
 
@@ -164,5 +165,5 @@ export async function composeAction(
   };
   // The input rides on the held composite, not in the options, so runTask
   // never interpolates a caller's `${...}` data.
-  return liveRunner(ctx, registryFor(ctx, home), held, spec.flows).runTask(builtinClassPath(name), {});
+  return liveRunner(ctx, await registryFor(ctx, home), held, spec.flows).runTask(builtinClassPath(name), {});
 }
