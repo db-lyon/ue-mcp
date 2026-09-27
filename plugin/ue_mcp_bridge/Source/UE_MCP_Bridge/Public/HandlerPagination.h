@@ -236,7 +236,7 @@ namespace MCPPagination
 		if (LimitField)
 		{
 			double Raw = 0.0;
-			if (!Params->TryGetNumberField(LimitField, Raw) ||
+			if (!MCPTryReadNumberField(Params, LimitField, Raw) ||
 				!FMath::IsFinite(Raw) || FMath::TruncToDouble(Raw) != Raw ||
 				Raw < 1.0 || Raw > static_cast<double>(MaxLimit))
 			{

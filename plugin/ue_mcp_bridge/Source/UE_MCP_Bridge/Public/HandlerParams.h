@@ -178,6 +178,29 @@ inline TSharedPtr<FJsonValue> RequireStringAlt(
 	return MCPError(FString::Printf(TEXT("Missing required parameter '%s' (or '%s')"), Key1, Key2));
 }
 
+/** Read a number field. A JSON number or a numeric string reads; anything else
+ *  is absent. The engine's own TryGetNumberField reads any string as 0, which
+ *  turned a name like "Alpha" into index 0. */
+template <typename TNumber>
+inline bool MCPTryReadNumberField(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Key, TNumber& Out)
+{
+	if (!Obj.IsValid()) return false;
+	const TSharedPtr<FJsonValue> Value = Obj->TryGetField(Key);
+	if (!Value.IsValid()) return false;
+	if (Value->Type == EJson::String)
+	{
+		FString Text;
+		if (!Value->TryGetString(Text)) return false;
+		Text.TrimStartAndEndInline();
+		if (Text.IsEmpty() || !Text.IsNumeric()) return false;
+	}
+	else if (Value->Type != EJson::Number)
+	{
+		return false;
+	}
+	return Value->TryGetNumber(Out);
+}
+
 /** Extract a required number. Returns error JSON when absent or not a number, nullptr on success. */
 template <typename TNumber>
 inline TSharedPtr<FJsonValue> RequireNumber(
@@ -186,7 +209,7 @@ inline TSharedPtr<FJsonValue> RequireNumber(
 	TNumber& OutValue)
 {
 	MCPNoteParamRead(Params, Key);
-	if (Params.IsValid() && Params->TryGetNumberField(Key, OutValue)) return nullptr;
+	if (MCPTryReadNumberField(Params, Key, OutValue)) return nullptr;
 	return MCPError(FString::Printf(TEXT("Missing required parameter '%s'"), Key));
 }
 
@@ -233,7 +256,7 @@ inline int32 OptionalInt(
 {
 	MCPNoteParamRead(Params, Key);
 	int32 Value;
-	return (Params.IsValid() && Params->TryGetNumberField(Key, Value)) ? Value : DefaultValue;
+	return (MCPTryReadNumberField(Params, Key, Value)) ? Value : DefaultValue;
 }
 
 /** Extract an optional double, returning DefaultValue if absent. */
@@ -244,7 +267,7 @@ inline double OptionalNumber(
 {
 	MCPNoteParamRead(Params, Key);
 	double Value;
-	return (Params.IsValid() && Params->TryGetNumberField(Key, Value)) ? Value : DefaultValue;
+	return (MCPTryReadNumberField(Params, Key, Value)) ? Value : DefaultValue;
 }
 
 /** Extract an optional bool, returning DefaultValue if absent. */
@@ -286,7 +309,7 @@ template <typename TNumber>
 inline bool TryGetNumberParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, TNumber& Out)
 {
 	MCPNoteParamRead(Params, Key);
-	return Params.IsValid() && Params->TryGetNumberField(Key, Out);
+	return MCPTryReadNumberField(Params, Key, Out);
 }
 
 inline bool TryGetBoolParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, bool& Out)
@@ -338,9 +361,9 @@ inline bool ReadVec3Fields(const TSharedPtr<FJsonObject>& Obj, FVector& Out)
 	if (!Obj.IsValid()) return false;
 	double Tmp;
 	bool Any = false;
-	if (Obj->TryGetNumberField(TEXT("x"), Tmp)) { Out.X = Tmp; Any = true; }
-	if (Obj->TryGetNumberField(TEXT("y"), Tmp)) { Out.Y = Tmp; Any = true; }
-	if (Obj->TryGetNumberField(TEXT("z"), Tmp)) { Out.Z = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("x"), Tmp)) { Out.X = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("y"), Tmp)) { Out.Y = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("z"), Tmp)) { Out.Z = Tmp; Any = true; }
 	return Any;
 }
 
@@ -349,9 +372,9 @@ inline bool ReadRotatorFields(const TSharedPtr<FJsonObject>& Obj, FRotator& Out)
 	if (!Obj.IsValid()) return false;
 	double Tmp;
 	bool Any = false;
-	if (Obj->TryGetNumberField(TEXT("pitch"), Tmp)) { Out.Pitch = Tmp; Any = true; }
-	if (Obj->TryGetNumberField(TEXT("yaw"),   Tmp)) { Out.Yaw   = Tmp; Any = true; }
-	if (Obj->TryGetNumberField(TEXT("roll"),  Tmp)) { Out.Roll  = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("pitch"), Tmp)) { Out.Pitch = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("yaw"), Tmp)) { Out.Yaw   = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("roll"), Tmp)) { Out.Roll  = Tmp; Any = true; }
 	return Any;
 }
 
@@ -361,9 +384,9 @@ inline bool ReadVec3FieldsStrict(const TSharedPtr<FJsonObject>& Obj, FVector& Ou
 {
 	if (!Obj.IsValid()) return false;
 	double X, Y, Z;
-	if (!Obj->TryGetNumberField(TEXT("x"), X)
-		|| !Obj->TryGetNumberField(TEXT("y"), Y)
-		|| !Obj->TryGetNumberField(TEXT("z"), Z))
+	if (!MCPTryReadNumberField(Obj, TEXT("x"), X)
+		|| !MCPTryReadNumberField(Obj, TEXT("y"), Y)
+		|| !MCPTryReadNumberField(Obj, TEXT("z"), Z))
 	{
 		return false;
 	}
@@ -376,9 +399,9 @@ inline bool ReadRotatorFieldsStrict(const TSharedPtr<FJsonObject>& Obj, FRotator
 {
 	if (!Obj.IsValid()) return false;
 	double Pitch, Yaw, Roll;
-	if (!Obj->TryGetNumberField(TEXT("pitch"), Pitch)
-		|| !Obj->TryGetNumberField(TEXT("yaw"), Yaw)
-		|| !Obj->TryGetNumberField(TEXT("roll"), Roll))
+	if (!MCPTryReadNumberField(Obj, TEXT("pitch"), Pitch)
+		|| !MCPTryReadNumberField(Obj, TEXT("yaw"), Yaw)
+		|| !MCPTryReadNumberField(Obj, TEXT("roll"), Roll))
 	{
 		return false;
 	}
@@ -392,10 +415,10 @@ inline bool ReadLinearColorFields(const TSharedPtr<FJsonObject>& Obj, FLinearCol
 	if (!Obj.IsValid()) return false;
 	double Tmp;
 	bool Any = false;
-	if (Obj->TryGetNumberField(TEXT("r"), Tmp)) { Out.R = Tmp; Any = true; }
-	if (Obj->TryGetNumberField(TEXT("g"), Tmp)) { Out.G = Tmp; Any = true; }
-	if (Obj->TryGetNumberField(TEXT("b"), Tmp)) { Out.B = Tmp; Any = true; }
-	if (Obj->TryGetNumberField(TEXT("a"), Tmp)) { Out.A = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("r"), Tmp)) { Out.R = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("g"), Tmp)) { Out.G = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("b"), Tmp)) { Out.B = Tmp; Any = true; }
+	if (MCPTryReadNumberField(Obj, TEXT("a"), Tmp)) { Out.A = Tmp; Any = true; }
 	return Any;
 }
 

@@ -789,7 +789,7 @@
           "name": "name",
           "type": "string",
           "required": false,
-          "description": "Fallback for inputName on a FunctionInput and outputName on a FunctionOutput"
+          "description": "Node name: inputName on a FunctionInput, outputName on a FunctionOutput, the node description otherwise. connect_expressions_in_function accepts it as a reference"
         }
       ]
     },

@@ -434,7 +434,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("inputName"), EType::String, TEXT("FunctionInput name (#463)")),
 		MCPParam::Optional(TEXT("inputType"), EType::String, TEXT("FunctionInput type: Scalar|Vector2|Vector3|Vector4|Texture2D|TextureCube|StaticBool|MaterialAttributes (#463)")),
 		MCPParam::Optional(TEXT("outputName"), EType::String, TEXT("FunctionOutput name")),
-		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Fallback for inputName on a FunctionInput and outputName on a FunctionOutput")),
+		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Node name: inputName on a FunctionInput, outputName on a FunctionOutput, the node description otherwise. connect_expressions_in_function accepts it as a reference")),
 	});
 	Registry.RegisterHandler(TEXT("connect_expressions_in_function"), &ConnectMaterialFunctionExpressions, {
 		SpecFunctionPath(),

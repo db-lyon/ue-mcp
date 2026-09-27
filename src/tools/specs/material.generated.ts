@@ -61,7 +61,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "name",
         "type": "string",
         "required": false,
-        "description": "Fallback for inputName on a FunctionInput and outputName on a FunctionOutput"
+        "description": "Node name: inputName on a FunctionInput, outputName on a FunctionOutput, the node description otherwise. connect_expressions_in_function accepts it as a reference"
       }
     ]
   },
@@ -2283,7 +2283,7 @@ export const schema: Record<string, z.ZodType> = {
   meshSlots: z.array(z.unknown()).optional().describe("Mesh material slot names or indices to assign (default every slot) (#946)"),
   metallic: z.number().optional().describe("Metallic constant"),
   mirrorProperties: z.boolean().optional().describe("Mirror the material's own property connections into the RVT output node (default true)"),
-  name: z.string().optional().describe("Fallback for inputName on a FunctionInput and outputName on a FunctionOutput (add_expression_in_function). Node description (add_material_expression). Name of a new material to create and build (build_material). Material asset name (create_material, create_material_designer, create_material_simple). MaterialFunction asset name (create_material_function). Material instance asset name (create_material_instance). RuntimeVirtualTexture asset name, with no '/' or '.' (create_runtime_virtual_texture)"),
+  name: z.string().optional().describe("Node name: inputName on a FunctionInput, outputName on a FunctionOutput, the node description otherwise. connect_expressions_in_function accepts it as a reference (add_expression_in_function). Node description (add_material_expression). Name of a new material to create and build (build_material). Material asset name (create_material, create_material_designer, create_material_simple). MaterialFunction asset name (create_material_function). Material instance asset name (create_material_instance). RuntimeVirtualTexture asset name, with no '/' or '.' (create_runtime_virtual_texture)"),
   newParentPath: z.string().optional().describe("New parent material or material instance path"),
   nodes: z.array(z.record(z.unknown())).optional().describe("Graph spec: [{name,class,posX,posY,...}]"),
   objectPath: z.string().optional().describe("Full object path of the layer, as read_material_designer reports it (remove_material_designer_layer). Full object path of the component, as read_material_designer reports it (set_material_designer_value)"),

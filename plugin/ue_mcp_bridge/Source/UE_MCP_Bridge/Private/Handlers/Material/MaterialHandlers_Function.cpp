@@ -66,7 +66,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialFunctionExpression(const TS
 	if (auto Err = RequireString(Params, TEXT("expressionType"), ExpressionType)) return Err;
 
 	// Every parameter is read before anything can fail (#1057). `name` is the
-	// fallback for inputName on a FunctionInput and outputName on a FunctionOutput.
+	// fallback for inputName on a FunctionInput and outputName on a FunctionOutput,
+	// and the node's description on anything else, so connect can find it by name.
 	const int32 PosX = (int32)OptionalNumber(Params, TEXT("positionX"), 0.0);
 	const int32 PosY = (int32)OptionalNumber(Params, TEXT("positionY"), 0.0);
 	FString InputName;
@@ -117,6 +118,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialFunctionExpression(const TS
 		{
 			AsOutput->OutputName = FName(bHasOutputName ? *OutputName : *FallbackName);
 		}
+	}
+	else if (bHasFallbackName && !NewExpr->IsA<UMaterialExpressionFunctionInput>())
+	{
+		NewExpr->Desc = FallbackName;
 	}
 
 	UMaterialEditingLibrary::UpdateMaterialFunction(MF, nullptr);
