@@ -61,6 +61,21 @@ export function handlerTaskClass(
 }
 
 /**
+ * A task that reads one value off its context and answers it as `data.value`.
+ * The parts a read composite is reduced from; never an action of its own.
+ */
+export function readTaskClass(name: string, read: (ctx: FlowContext) => unknown): TaskConstructor {
+  class FactoryReadTask extends UeMcpTask {
+    get taskName() { return name; }
+    async execute(): Promise<TaskResult> {
+      return { success: true, data: { value: await read(this.ctx) } };
+    }
+  }
+  Object.defineProperty(FactoryReadTask, "name", { value: `ReadTask_${name}` });
+  return FactoryReadTask as unknown as TaskConstructor;
+}
+
+/**
  * Create a TaskConstructor for a flow-backed action. Its children run through
  * the runner via `ctx.step`; `expand` lists them for plans when the input
  * decides them.
