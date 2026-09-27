@@ -1783,9 +1783,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
 	const FString ObjectPath = NewBlueprint->GetPathName();
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(NewBlueprint, SaveError);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	MCPNoteSaveOutcome(Result, ObjectPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("objectPath"), ObjectPath);
 	Result->SetStringField(TEXT("className"), NewBlueprint->GetName());
