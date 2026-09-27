@@ -2,9 +2,10 @@
 
 // F3 Slots (plans/domain-design.md 3.3): add, remove, move and address the
 // ordered children an owning object keeps in one array property. The list
-// owns the index checks and the owner's PreEditChange / PostEditChangeProperty;
-// what an element is, and what its handler reports, stays with the type's
-// descriptor. Run it inside an FMCPEditTransaction.
+// owns the index checks and the owner's PreEditChange and chain notification
+// (naming the element touched); what an element is, and what its handler
+// reports, stays with the type's descriptor. Run it between FMCPEditScope's
+// Begin and Finish.
 
 #include "CoreMinimal.h"
 #include "Dom/JsonValue.h"
@@ -29,6 +30,14 @@ public:
 	TElem& operator[](int32 Index) { return Items[Index]; }
 	const TElem& operator[](int32 Index) const { return Items[Index]; }
 	FProperty* MemberProperty() const { return Member; }
+
+	/** The notification path for element Index, for a write below it. */
+	TArray<MCPPropertyWrite::FLink> At(int32 Index) const
+	{
+		TArray<MCPPropertyWrite::FLink> Path;
+		if (Member) Path.Add({ Member, Index });
+		return Path;
+	}
 
 	/** The refusal for an index this list does not have, or nullptr. */
 	TSharedPtr<FJsonValue> CheckIndex(int32 Index) const
@@ -62,7 +71,7 @@ public:
 			Items.RemoveAt(Before, Items.Num() - Before);
 			return nullptr;
 		}
-		MCPPropertyWrite::NotifyPost(Owner, Member, nullptr, EPropertyChangeType::ArrayAdd);
+		MCPPropertyWrite::NotifyPost(Owner, At(Items.Num() - 1), EPropertyChangeType::ArrayAdd);
 		return &Items.Last();
 	}
 
@@ -77,7 +86,7 @@ public:
 		MCPPropertyWrite::NotifyPre(Owner, Member);
 		TElem Removed = MoveTemp(Items[Index]);
 		Items.RemoveAt(Index);
-		MCPPropertyWrite::NotifyPost(Owner, Member, nullptr, EPropertyChangeType::ArrayRemove);
+		MCPPropertyWrite::NotifyPost(Owner, At(Index), EPropertyChangeType::ArrayRemove);
 		return Removed;
 	}
 
@@ -88,8 +97,9 @@ public:
 		MCPPropertyWrite::NotifyPre(Owner, Member);
 		TElem Moved = MoveTemp(Items[From]);
 		Items.RemoveAt(From);
-		Items.Insert(MoveTemp(Moved), FMath::Clamp(To, 0, Items.Num()));
-		MCPPropertyWrite::NotifyPost(Owner, Member, nullptr, EPropertyChangeType::ArrayMove);
+		const int32 Landed = FMath::Clamp(To, 0, Items.Num());
+		Items.Insert(MoveTemp(Moved), Landed);
+		MCPPropertyWrite::NotifyPost(Owner, At(Landed), EPropertyChangeType::ArrayMove);
 	}
 
 	/** Empty the list. Returns how many elements it held. */

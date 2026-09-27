@@ -472,7 +472,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetSlotNodeProperty(const TSharedPtr<
 	}
 
 	if (auto BeginErr = Edit.Begin()) return BeginErr;
-	MCPPropertyWrite::FTarget Target{ Owner, List.MemberProperty(), Prop, Prop->ContainerPtrToValuePtr<void>(Memory) };
+	// The chain the editor's own details panel sends, down to the field.
+	const FString NodePath = Slot.Owner == FNodeSlot::EOwner::Transition
+		? FString::Printf(TEXT("Transitions[%d].Conditions[%d]"), Request.Transition, Index)
+		: FString::Printf(TEXT("%s[%d]"), Slot.Member, Index);
+	TArray<MCPPropertyWrite::FLink> Chain = MCPPropertyWrite::ChainOf(Owner->GetClass(),
+		NodePath + (bInstance ? TEXT(".Instance") : TEXT(".Node")));
+	if (Chain.Num() > 0) Chain.Add({ Prop, INDEX_NONE });
+	MCPPropertyWrite::FTarget Target{ Owner, List.MemberProperty(), Prop, Prop->ContainerPtrToValuePtr<void>(Memory), Chain };
 	const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::SetText(Target, Value);
 	if (!Outcome.bWritten) return MCPError(Outcome.Error);
 	if (Outcome.bChanged) Edit.Commit();

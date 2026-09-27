@@ -1212,7 +1212,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetNodeClass(const TSharedPtr<FJsonOb
 	if (bChanged)
 	{
 		UObject* Owner = OwningState ? static_cast<UObject*>(OwningState) : static_cast<UObject*>(EditorData);
-		const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::Write({ Owner, nullptr, ClassProp, ValuePtr },
+		// Location is the node's own path on its owner ("tasks[2]"), which is the chain's head.
+		TArray<MCPPropertyWrite::FLink> Chain = MCPPropertyWrite::ChainOf(Owner->GetClass(), Location + TEXT(".Node"));
+		if (Chain.Num() > 0) Chain.Add({ ClassProp, INDEX_NONE });
+		FProperty* Member = Chain.Num() > 0 ? Chain[0].Property : nullptr;
+		const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::Write({ Owner, Member, ClassProp, ValuePtr, Chain },
 			[&](FString&)
 			{
 				ClassProp->SetObjectPropertyValue(ValuePtr, Resolved);
