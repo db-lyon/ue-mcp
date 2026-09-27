@@ -114,6 +114,7 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
+  "flow/internal-tasks.ts": "The internal primitives' task names, bridge methods and effects. A leaf with no imports and no state.",
   "surface/action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
   "surface/action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",
   "surface/routing-params.ts": "The dispatcher's parameter names and the helper that strips `action`. A leaf with no imports and no state.",

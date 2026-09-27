@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1076,
+  "handlerCount": 1077,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -18043,6 +18043,59 @@
           "required": false,
           "description": "Platform user index (default 0)",
           "min": 0
+        }
+      ]
+    },
+    "internal_spawn_actor": {
+      "category": "internal",
+      "params": [
+        {
+          "name": "actorClass",
+          "type": "string",
+          "required": true,
+          "description": "Actor class: short name, /Script path or Blueprint class path"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Actor label, applied even when another actor carries it"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "World location"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation"
+        },
+        {
+          "name": "scale",
+          "type": "vec3",
+          "required": false,
+          "description": "Actor scale"
+        },
+        {
+          "name": "staticMesh",
+          "type": "string",
+          "required": false,
+          "description": "Static mesh for a StaticMeshActor"
+        },
+        {
+          "name": "material",
+          "type": "string",
+          "required": false,
+          "description": "Material applied at slot 0"
+        },
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder"
         }
       ]
     },

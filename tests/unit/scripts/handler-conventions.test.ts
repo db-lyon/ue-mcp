@@ -36,6 +36,7 @@
 import { describe, it, expect } from "vitest";
 import { auditHandlers, stripComments } from "../../../scripts/audit-handler-conventions.mjs";
 import { ALL_TOOLS } from "../../../src/tools.js";
+import { internalMethod } from "../../../src/flow/internal-tasks.js";
 
 
 /**
@@ -155,7 +156,8 @@ function audit(): Row[] {
   const byBridge = bridgeToAction();
   const rows = auditHandlers((bridgeName: string) => {
     const hit = byBridge.get(bridgeName);
-    if (!hit) return "orphan";
+    // An internal flow primitive is reached as a task and audited as what it declares.
+    if (!hit) return internalMethod(bridgeName)?.effect ?? "orphan";
     return hit.effect;
   }) as Row[];
   // The audit keys on the bridge method name; the read-verb test has to read

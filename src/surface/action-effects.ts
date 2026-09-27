@@ -27,6 +27,7 @@ import { ALL_TOOLS } from "../tools.js";
 import { splitTaskName } from "./action-class.js";
 import { flowCategoryForCheck } from "../flow/flow-surface.js";
 import { EPIC_TOOL_EFFECTS } from "../tools/epic/effects.js";
+import { INTERNAL_BRIDGE_TASKS, INTERNAL_NAMESPACE, internalMethod } from "../flow/internal-tasks.js";
 import type { ActionEffect, ActionEffectSource, ToolDef } from "../core/types.js";
 
 export interface ResolvedEffect {
@@ -145,6 +146,8 @@ export function declaredActionEffect(
   action: string,
   graph?: readonly ToolDef[],
 ): ActionEffect | undefined {
+  // The internal primitives are tasks, not actions, and declare their own.
+  if (tool === INTERNAL_NAMESPACE) return INTERNAL_BRIDGE_TASKS[action]?.effect;
   return indexFor(graph).byAction.get(`${tool}.${action}`);
 }
 
@@ -197,8 +200,8 @@ const ARGUMENT_DECIDES: Readonly<Record<string, (p: Record<string, unknown>) => 
  *
  * Four sources, in order: an argument that decides it, the effects declared by
  * the actions that forward to the method, the hand-written table above for the
- * ones a handler calls directly, and `mutate` for a method this server does not
- * recognise at all.
+ * ones a handler calls directly (and the internal flow primitives), and
+ * `mutate` for a method this server does not recognise at all.
  *
  * Never undefined. The guard pipeline and the source-control classifier both
  * ask this on every call and neither should be re-deriving a default of its
@@ -219,7 +222,7 @@ export function bridgeMethodEffect(
   }
   const declared = indexFor(graph).byBridgeMethod.get(method);
   if (declared !== undefined) return { effect: declared, source: "declared" };
-  const raw = RAW_BRIDGE_METHODS[method];
+  const raw = RAW_BRIDGE_METHODS[method] ?? internalMethod(method)?.effect;
   if (raw !== undefined) return { effect: raw, source: "declared" };
   return { effect: UNDECLARED_EFFECT, source: "undeclared" };
 }

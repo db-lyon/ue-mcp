@@ -17,6 +17,7 @@ import { handlerSpecs as fab } from "./fab.generated.js";
 import { handlerSpecs as foliage } from "./foliage.generated.js";
 import { handlerSpecs as gameplay } from "./gameplay.generated.js";
 import { handlerSpecs as gas } from "./gas.generated.js";
+import { handlerSpecs as internal } from "./internal.generated.js";
 import { handlerSpecs as landscape } from "./landscape.generated.js";
 import { handlerSpecs as level } from "./level.generated.js";
 import { handlerSpecs as mass } from "./mass.generated.js";
@@ -44,6 +45,7 @@ export const RECORDED_HANDLER_SPECS: HandlerSpecs = {
   ...foliage,
   ...gameplay,
   ...gas,
+  ...internal,
   ...landscape,
   ...level,
   ...mass,

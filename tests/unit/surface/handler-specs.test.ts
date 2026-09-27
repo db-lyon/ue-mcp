@@ -44,6 +44,7 @@ import { deployedPlugin, checkBridgeParity } from "../../../src/bridge/bridge-pa
 import type { BridgeCapabilities } from "../../../src/bridge/bridge.js";
 import { paramMapperOf } from "../../../src/surface/epic-input.js";
 import { REPO_ROOT } from "../../helpers/repo-root.js";
+import { INTERNAL_CATEGORY, internalTasks } from "../../../src/flow/internal-tasks.js";
 
 const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {
   handlerCount: number;
@@ -360,9 +361,26 @@ function directlyDispatched(method: string): boolean {
 }
 
 // Every other recorded category is held to the same surface rules as the pilot.
+// The internal primitives are tasks and never a tool's actions, checked below.
 const OTHER_CATEGORIES = [...new Set(Object.values(SNAPSHOT.handlers).map((s) => s.category as string))]
-  .filter((c) => c !== "animation")
+  .filter((c) => c !== "animation" && c !== INTERNAL_CATEGORY)
   .sort();
+
+describe("the internal category", () => {
+  const recorded = Object.entries(SNAPSHOT.handlers).filter(([, s]) => s.category === INTERNAL_CATEGORY).map(([m]) => m).sort();
+
+  it("is exactly the methods the internal tasks call", () => {
+    expect(recorded).toEqual(internalTasks().map(([, task]) => task.method).sort());
+  });
+
+  it("is dispatched by no tool's action", () => {
+    for (const tool of ALL_TOOLS) {
+      for (const spec of Object.values(tool.actions)) {
+        if (spec.kind === "bridge") expect(recorded, `${tool.name} dispatches an internal method`).not.toContain(spec.bridge);
+      }
+    }
+  });
+});
 
 /**
  * The tool a category's spec'd methods are held to: the one named after it,

@@ -16,6 +16,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { ALL_TOOLS, enumerateBridgeActions } from "../../../src/tools.js";
 import { listHandlerFiles } from "../../../scripts/lib/cpp-registrations.mjs";
+import { internalTasks } from "../../../src/flow/internal-tasks.js";
 
 function cppHandlerNames(): Set<string> {
   const re = /Registry\.RegisterHandler(?:WithTimeout)?\(\s*TEXT\("([^"]+)"\)/g;
@@ -43,6 +44,8 @@ const CPP_ONLY: ReadonlySet<string> = new Set<string>([
   // rescans that editor's asset registry afterwards (#817), so the call to this
   // handler is made from code rather than declared as an action's `bridge`.
   "migrate",
+  // The universal flows' internal primitives, reached as internal.* tasks.
+  ...internalTasks().map(([, task]) => task.method),
 ]);
 
 describe("TS <-> C++ bridge name drift", () => {
@@ -60,6 +63,12 @@ describe("TS <-> C++ bridge name drift", () => {
           `Either the C++ handler was renamed/removed or the TS action points at the wrong method name.`,
       );
     }
+    expect(missing).toEqual([]);
+  });
+
+  it("every internal task names a real C++ handler", () => {
+    const cpp = cppHandlerNames();
+    const missing = internalTasks().filter(([, task]) => !cpp.has(task.method)).map(([name, task]) => `${name} -> ${task.method}`);
     expect(missing).toEqual([]);
   });
 
