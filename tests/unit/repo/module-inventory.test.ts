@@ -102,6 +102,7 @@ const PER_SESSION: Record<string, string> = {
   "flow/live-task.ts": "Resolves a live call through the addressed session's registry and task definitions.",
   "flow/flow-describe.ts": "Describes the flows in the session flow source it is handed: that project's config, registry and layers.",
   "flow/preflight.ts": "Evaluates the gates for the context it is handed: that call's editor, its session count and its target.",
+  "flow/probes.ts": "Reads editor facts through the context it is handed, memoized per run of that editor.",
   "flow/git-snapshot.ts": "Snapshots the repository holding one project, through its bridge.",
   "flow/http-server.ts": "Resolves an editor per request and refuses an untargeted run.",
 
@@ -136,6 +137,9 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "surface/param-forwarding.ts": "Pure read tracking over one mapper call; nothing per editor.",
   "surface/handler-spec.ts": "Validates and compares the recorded handler specs it is handed; holds nothing per editor.",
   "dispatch/call-pipeline.ts": "Composes those two over one call's parameters and result; holds nothing per editor.",
+  "dispatch/error-envelope.ts": "Pure classification of an error it is handed; holds nothing per editor.",
+  "flow/validate-plan.ts": "Checks the config, registry and graph it is handed; holds nothing per editor.",
+  "flow/freeze.ts": "Pure rewrite of the config and namespaces it is handed into a flat flow definition.",
   "surface/pagination.ts": "Declares the cursor/limit parameters; the editor holds the collection and the C++ half holds the cursor.",
   "codeintel/engine-index.ts": "Indexes an ENGINE tree, which projects share; keyed by engine root, not by editor.",
   "codeintel/cpp-correctness.ts": "Views over that index plus a Build.cs read; takes its paths as arguments.",
