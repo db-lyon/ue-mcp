@@ -5565,25 +5565,10 @@
           "description": "Frames per second of the bake (default the sequence's display rate)"
         },
         {
-          "name": "reduceKeys",
-          "type": "boolean",
-          "required": false,
-          "description": "Key reduction is not supported yet; omit or pass false",
-          "literal": false
-        },
-        {
-          "name": "tolerance",
-          "type": "number",
-          "required": false,
-          "description": "Key-reduction tolerance (default 0.001)",
-          "min": 0
-        },
-        {
           "name": "createLink",
           "type": "boolean",
           "required": false,
-          "description": "Sequencer links are not supported yet; omit or pass false",
-          "literal": false
+          "description": "Link the AnimSequence and the LevelSequence, which saves the LevelSequence too (default false)"
         },
         {
           "name": "onConflict",
@@ -5723,13 +5708,6 @@
           "type": "string",
           "required": false,
           "description": "Output name suffix (default _Retargeted)"
-        },
-        {
-          "name": "overwrite",
-          "type": "boolean",
-          "required": false,
-          "description": "Overwriting is not supported; omit or pass false",
-          "literal": false
         },
         {
           "name": "requireCompleteMapping",

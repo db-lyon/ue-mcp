@@ -112,7 +112,7 @@ alone. It does not infer bones, fit a mesh, or auto-rig a character.
    discontinuities, wrong forearm direction, wrong palm normal, or unexpected
    changes outside the edited chain before baking.
 11. Bake to a new versioned AnimSequence with `bake_control_rig_edit`,
-    `reduceKeys=false`, and `onConflict="error"`. Never overwrite source,
+    `onConflict="error"`. Never overwrite source,
     another iteration's session, or prior approved output assets.
 
 ## Validation and visual review

@@ -429,15 +429,14 @@ animation(
   bindingTag=<tag>,
   outputAssetPath="/Game/AnimationWork/A_<motion>_V001",
   frameRate=<fps>,
-  reduceKeys=false,
-  createLink=false,
   onConflict="error"
 )
 ```
 
-The source animation and LevelSequence are not overwritten. Key reduction and
-Sequencer/AnimSequence links are not supported by this workflow, so omit
-`reduceKeys` and `createLink` or pass `false`.
+The source animation and LevelSequence are not overwritten. `createLink=true`
+links the new AnimSequence and the LevelSequence the way Sequencer's own export
+does, and saves the LevelSequence with the link; the bake's rollback deletes the
+AnimSequence and leaves that link entry behind.
 
 ## Deterministic validation
 

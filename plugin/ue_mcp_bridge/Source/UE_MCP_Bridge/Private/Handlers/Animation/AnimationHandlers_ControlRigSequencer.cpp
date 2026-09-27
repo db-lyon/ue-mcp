@@ -4221,19 +4221,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 	FFrameRate FrameRate;
 	if (!ControlRigSequencerReadRate(Params, TEXT("frameRate"), Session.MovieScene->GetDisplayRate(), FrameRate, Error))
 		return MCPError(Error);
-	const bool bReduceKeys = OptionalBool(Params, TEXT("reduceKeys"), false);
-	const double Tolerance = OptionalNumber(Params, TEXT("tolerance"), 0.001);
-	if (!FMath::IsFinite(Tolerance) || Tolerance < 0.0)
-		return MCPError(TEXT("'tolerance' must be a finite non-negative number"));
-	if (bReduceKeys)
-	{
-		return MCPError(TEXT("'reduceKeys' is not supported by AnimSequence export in this vertical slice; bake with reduceKeys=false"));
-	}
 	const bool bCreateLink = OptionalBool(Params, TEXT("createLink"), false);
-	if (bCreateLink)
-	{
-		return MCPError(TEXT("'createLink' is not supported because Unreal mutates both linked assets; bake with createLink=false"));
-	}
 
 	auto Created = MCPCreateAssetIdempotentNewObject<UAnimSequence>(AssetName, PackagePath, TEXT("error"), TEXT("AnimSequence"));
 	if (Created.EarlyReturn) return Created.EarlyReturn;
@@ -4247,7 +4235,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 	ExportOptions->bExportMaterialCurves = true;
 
 	const bool bExported = UControlRigSequencerEditorLibrary::ExportAnimSequenceFromSequencer(
-		Output, ExportOptions, FMovieSceneBindingProxy(Session.BindingGuid, Session.Sequence), false);
+		Output, ExportOptions, FMovieSceneBindingProxy(Session.BindingGuid, Session.Sequence), bCreateLink);
 	if (!bExported)
 	{
 		UEditorAssetLibrary::DeleteAsset(PackagePath + TEXT("/") + AssetName);
@@ -4260,6 +4248,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 		UEditorAssetLibrary::DeleteAsset(PackagePath + TEXT("/") + AssetName);
 		return MCPError(TEXT("AnimSequence export completed in memory but the output asset could not be saved: ") + OutputSaveError);
 	}
+	// The link is asset user data on both sides, so the LevelSequence changes too.
+	FString SequenceSaveError;
+	if (bCreateLink && !SaveAssetPackageChecked(Session.Sequence, SequenceSaveError))
+	{
+		return MCPError(TEXT("AnimSequence was baked and linked, but the LevelSequence holding the link could not be saved: ") + SequenceSaveError);
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -4270,9 +4264,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 	Result->SetObjectField(TEXT("frameRate"), ControlRigSequencerRateJson(FrameRate));
 	Result->SetNumberField(TEXT("sampledKeyCount"), Output->GetNumberOfSampledKeys());
 	Result->SetNumberField(TEXT("durationSeconds"), Output->GetPlayLength());
-	Result->SetBoolField(TEXT("createdLink"), false);
+	Result->SetBoolField(TEXT("createdLink"), bCreateLink);
+	Result->SetBoolField(TEXT("sequenceModified"), bCreateLink);
 	Result->SetBoolField(TEXT("sourceAnimationModified"), false);
 	MCPSetDeleteAssetRollback(Result, Output->GetPathName());
+	if (bCreateLink)
+	{
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The rollback deletes the AnimSequence; the LevelSequence keeps its link entry, which then names a missing asset."));
+	}
 	return MCPResult(Result);
 #endif
 }

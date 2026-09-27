@@ -600,7 +600,6 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Destination folder (default beside each source)")),
 		MCPParam::Optional(TEXT("prefix"), EType::String, TEXT("Output name prefix")),
 		MCPParam::Optional(TEXT("suffix"), EType::String, TEXT("Output name suffix (default _Retargeted)")),
-		MCPParam::Optional(TEXT("overwrite"), EType::Boolean, TEXT("Overwriting is not supported; omit or pass false")).Literal(false),
 		MCPParam::Optional(TEXT("requireCompleteMapping"), EType::Boolean, TEXT("Refuse when any target chain is unmapped (default false)")),
 	});
 
@@ -762,9 +761,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("bindingTag"), EType::String, TEXT("Edit-session natural key from begin_control_rig_edit")).NonEmpty(),
 		MCPParam::Required(TEXT("outputAssetPath"), EType::String, TEXT("Destination AnimSequence asset path")),
 		MCPParam::Optional(TEXT("frameRate"), EType::Number, TEXT("Frames per second of the bake (default the sequence's display rate)")),
-		MCPParam::Optional(TEXT("reduceKeys"), EType::Boolean, TEXT("Key reduction is not supported yet; omit or pass false")).Literal(false),
-		MCPParam::Optional(TEXT("tolerance"), EType::Number, TEXT("Key-reduction tolerance (default 0.001)")).Min(0),
-		MCPParam::Optional(TEXT("createLink"), EType::Boolean, TEXT("Sequencer links are not supported yet; omit or pass false")).Literal(false),
+		MCPParam::Optional(TEXT("createLink"), EType::Boolean, TEXT("Link the AnimSequence and the LevelSequence, which saves the LevelSequence too (default false)")),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")),
 	}, MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
 	Registry.RegisterHandler(TEXT("analyze_animation"), &AnalyzeAnimation, {

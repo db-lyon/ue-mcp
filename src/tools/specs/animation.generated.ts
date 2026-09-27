@@ -1257,25 +1257,10 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Frames per second of the bake (default the sequence's display rate)"
       },
       {
-        "name": "reduceKeys",
-        "type": "boolean",
-        "required": false,
-        "description": "Key reduction is not supported yet; omit or pass false",
-        "literal": false
-      },
-      {
-        "name": "tolerance",
-        "type": "number",
-        "required": false,
-        "description": "Key-reduction tolerance (default 0.001)",
-        "min": 0
-      },
-      {
         "name": "createLink",
         "type": "boolean",
         "required": false,
-        "description": "Sequencer links are not supported yet; omit or pass false",
-        "literal": false
+        "description": "Link the AnimSequence and the LevelSequence, which saves the LevelSequence too (default false)"
       },
       {
         "name": "onConflict",
@@ -1415,13 +1400,6 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Output name suffix (default _Retargeted)"
-      },
-      {
-        "name": "overwrite",
-        "type": "boolean",
-        "required": false,
-        "description": "Overwriting is not supported; omit or pass false",
-        "literal": false
       },
       {
         "name": "requireCompleteMapping",
@@ -5026,10 +5004,10 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   author_blend_profile: "Params: skeletonPath, profileName, operation?, newProfileName?, mode?, entries?, removeEntries?",
   author_montages_batch: "Params: items",
   auto_align_retarget_pose: "Params: retargeterPath (or assetPath), side?",
-  bake_control_rig_edit: "Params: sequencePath, bindingTag, outputAssetPath, frameRate?, reduceKeys?, tolerance?, createLink?, onConflict?",
+  bake_control_rig_edit: "Params: sequencePath, bindingTag, outputAssetPath, frameRate?, createLink?, onConflict?",
   bake_keyframes_batch: "Params: assetPath (or path), tracks, save?",
   bake_root_motion_from_bone: "Params: assetPath (or path), sourceBone, rootBone?, axes?, interpolation?",
-  batch_retarget_animations: "Params: retargeterPath (or assetPath), sourceMesh, targetMesh, animPaths, outputPath?, prefix?, suffix?, overwrite?, requireCompleteMapping?",
+  batch_retarget_animations: "Params: retargeterPath (or assetPath), sourceMesh, targetMesh, animPaths, outputPath?, prefix?, suffix?, requireCompleteMapping?",
   begin_control_rig_edit: "Params: sequencePath, skeletalMeshPath, sourceAnimationPath, rigMode?, controlRigPath?, layered?, startFrame?, endFrame?, displayRate?, bindingTag?, onConflict?",
   begin_skeleton_edit: "Params: skeletalMeshPath, sessionTag?",
   bind_anim_node_function: "Params: assetPath (or path), nodeGuid (or nodeId), functionName (or function), graphName?, binding?",

@@ -331,7 +331,6 @@ describe("animation Control Rig edit workflow", () => {
     expect(operations.safeParse([{ op: "set_bool", control: "arm_r_fk_ik_switch", frame: 0, value: 1 }]).success).toBe(false);
     expect(operations.safeParse([{ op: "set_int", control: "space", frame: 0, value: 1.5 }]).success).toBe(false);
     expect(operations.safeParse([{ op: "propagate_pose", control: "finger_ctrl" }]).success).toBe(false);
-    expect(animationTool.schema.createLink.safeParse(true).success).toBe(false);
     expect(operations.safeParse([{ op: "contact_lock", control: "hand_l_ik", startFrame: 0, endFrame: 4, targetReference: "hand_r" }]).success).toBe(true);
     expect(operations.safeParse([{ op: "contact_lock", control: "hand_l_ik", startFrame: 0, endFrame: 4, targetReference: "hand_r", target: contactTarget }]).success).toBe(true);
 
@@ -513,18 +512,16 @@ describe("animation Control Rig edit workflow", () => {
     // Spec'd (#1057): the bag goes through as sent, and the spec is the contract.
     expect(animationTool.actions.bake_control_rig_edit.mapParams).toBeUndefined();
     expect(handlerSpecs.bake_control_rig_edit.params.map((p) => p.name)).toEqual([
-      "sequencePath", "bindingTag", "outputAssetPath", "frameRate", "reduceKeys", "tolerance", "createLink", "onConflict",
+      "sequencePath", "bindingTag", "outputAssetPath", "frameRate", "createLink", "onConflict",
     ]);
-    expect(animationTool.schema.reduceKeys.safeParse(true).success).toBe(false);
+    expect(animationTool.schema.createLink.safeParse(true).success).toBe(true);
     await animationTool.handler(ctx, {
       action: "bake_control_rig_edit",
       sequencePath: "/Game/MCP/LS_Wave_Edit",
       bindingTag: "mcp.manny.wave",
       outputAssetPath: "/Game/MCP/Animations/AN_Manny_Wave",
       frameRate: 30,
-      reduceKeys: false,
-      tolerance: 0.001,
-      createLink: false,
+      createLink: true,
       onConflict: "error",
     });
     expect(call).toHaveBeenLastCalledWith("bake_control_rig_edit", {
@@ -532,9 +529,7 @@ describe("animation Control Rig edit workflow", () => {
       bindingTag: "mcp.manny.wave",
       outputAssetPath: "/Game/MCP/Animations/AN_Manny_Wave",
       frameRate: 30,
-      reduceKeys: false,
-      tolerance: 0.001,
-      createLink: false,
+      createLink: true,
       onConflict: "error",
     }, undefined);
   });
