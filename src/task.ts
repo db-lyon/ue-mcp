@@ -29,6 +29,7 @@ import type { TaskResult, RollbackRecord, TaskContext } from "@db-lyon/flowkit";
 import type { IBridge } from "./bridge/bridge.js";
 import type { FlowContext } from "./flow/context.js";
 import { createConfiguredTask } from "./flow/task-call.js";
+import { taskEnvOf, unmetRequirement, type TaskEnv, type TaskRequirements } from "./flow/task-env.js";
 
 /**
  * Base class for ue-mcp tasks. Extends flowkit's `BaseTask` and narrows the
@@ -50,9 +51,33 @@ export abstract class UeMcpTask<
    */
   protected declare readonly ctx: FlowContext;
 
+  /**
+   * What this task cannot run without. Checked before `execute()`; a task
+   * whose requirement is not met fails with that reason instead of running.
+   */
+  static requires?: TaskRequirements;
+
+  private taskEnv?: TaskEnv;
+
+  /**
+   * The project, editor, facts, call and lock scope this task runs against,
+   * named once. `this.ctx` carries the same things under their older names.
+   */
+  protected get env(): TaskEnv {
+    return (this.taskEnv ??= taskEnvOf(this.ctx));
+  }
+
   /** The editor bridge for this run. Shortcut for `this.ctx.bridge`. */
   protected get bridge(): IBridge {
     return this.ctx.bridge;
+  }
+
+  /** Requirements first, then flowkit's validate and execute. */
+  override async run(): Promise<TaskResult> {
+    const requires = (this.constructor as { requires?: TaskRequirements }).requires;
+    const unmet = requires ? unmetRequirement(this.taskName, requires, this.env) : null;
+    if (unmet) return { success: false, error: unmet };
+    return super.run();
   }
 
   /**
@@ -80,4 +105,4 @@ export abstract class UeMcpTask<
 // implemented by a task and is not one, which is the distinction the separate
 // entry point exists to keep.
 
-export type { TaskResult, RollbackRecord, TaskContext, FlowContext };
+export type { TaskResult, RollbackRecord, TaskContext, FlowContext, TaskEnv, TaskRequirements };

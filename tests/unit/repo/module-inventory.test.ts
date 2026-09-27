@@ -87,6 +87,7 @@ const PER_SESSION: Record<string, string> = {
   "extensions/skills.ts": "Installs, removes and checks agent skills inside one project directory, recording which package owns each.",
 
   "flow/context.ts": "Carries the session a flow step runs in.",
+  "flow/task-env.ts": "The view of the editor, project and call one task runs against.",
   "flow/flow-tool.ts": "Resolves the registry and config of the addressed editor.",
   "flow/registry.ts": "One task registry per session, built from that project's graph.",
   "flow/task-factory.ts": "Builds tasks that dispatch on the context's session bridge.",
