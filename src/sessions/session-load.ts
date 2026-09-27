@@ -215,6 +215,22 @@ export class SessionLoads {
   }
 
   /**
+   * Rebuild a session's load after project(set_project) moved it. Nothing of
+   * the previous project survives: a failed build leaves no load, so the
+   * session is refused rather than served the old project's surface.
+   */
+  async rebuild(session: EditorSession): Promise<SessionLoad> {
+    await this.pending.get(session)?.catch(() => undefined);
+    const previous = this.perSession.get(session);
+    this.perSession.delete(session);
+    const at = previous ? this.surfaces.indexOf(previous.surface) : -1;
+    if (at >= 0) this.surfaces.splice(at, 1);
+    session.guards.clear();
+    this.dispatchUnion = unionSurface(this.all().map((l) => ({ ...l.surface, tools: l.registryTools })));
+    return this.ensure(session);
+  }
+
+  /**
    * Flows declared in the session's own ue-mcp.yml, current as of this call so
    * edits show without a restart. A session with no load has none.
    */

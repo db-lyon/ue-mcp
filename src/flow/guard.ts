@@ -53,7 +53,12 @@ export interface CallContext extends GuardContext {
 export type BridgeGuard = Guard<CallContext, unknown>;
 
 /** The bridge's guard set. Built-in guards register directly; plugin guards are discovered. */
-export class GuardRegistry extends FlowkitGuardRegistry<CallContext, unknown> {}
+export class GuardRegistry extends FlowkitGuardRegistry<CallContext, unknown> {
+  /** Drop every guard, for a session whose project moved. */
+  clear(): void {
+    (this as unknown as { guards: BridgeGuard[] }).guards.length = 0;
+  }
+}
 
 /**
  * The scope a `guard.<name>.<phase>Write` task binds to: the call resolves to

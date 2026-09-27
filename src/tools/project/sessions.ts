@@ -224,6 +224,18 @@ export const sessionActions: Record<string, ActionSpec> = {
       // project. Without this the session stays addressable only under the
       // project it just left.
       const editor = ctx.sessions && ctx.session ? ctx.sessions.rekey(ctx.session) : undefined;
+      // The flows, task overrides, plugins and guards belong to the project
+      // too, so they move with it.
+      if (ctx.sessions && ctx.session) {
+        try {
+          await ctx.sessions.reload(ctx.session);
+        } catch (e) {
+          throw new Error(
+            `Switched to ${ctx.project.projectName} but could not build its tool surface, so nothing is dispatched to it: ` +
+              `${e instanceof Error ? e.message : String(e)}. Fix that project's ue-mcp.yml and call set_project again.`,
+          );
+        }
+      }
       const result = deploy(ctx.project);
       return {
         success: true,
