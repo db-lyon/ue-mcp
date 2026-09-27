@@ -100,6 +100,8 @@ export interface ToolContext {
   getPlugins?: (forSession?: EditorSession) => PluginInfo[];
   /** Enabled source categories for the addressed editor, including injected actions. */
   getToolGraph?: (forSession?: EditorSession) => ToolDef[];
+  /** True when the call named its editor. Read by a plan to report the untargeted-write gate. */
+  callTargeted?: boolean;
   /** The per-call timeout budget the caller asked for, in milliseconds (#989).
    *  Set by the category dispatcher when a call carried `timeoutMs`. A handler
    *  that makes its own bridge calls should pass it through; one that does not

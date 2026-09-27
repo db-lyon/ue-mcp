@@ -31,6 +31,7 @@ import {
 } from "./events.js";
 import { unappliedRollbackCall } from "./handler-outcome.js";
 import { hostNamespaces, makeConditionEvaluator } from "./condition.js";
+import { gateGraph, gateScope, planPreflight } from "./preflight.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -169,7 +170,18 @@ async function planFlow(
   // Plan mode short-circuits inside the runner before any hooks fire,
   // so the runId placeholder we pass here is never observed.
   const runner = makeRunner(registry, config, ctx, nextRunId(), flowName);
-  return runner.run({ flowName, plan: true });
+  const plan = await runner.run({ flowName, plan: true });
+  // What a run would be refused for, by the same gates that refuse it.
+  const preflight = await planPreflight(
+    registry,
+    config,
+    ctx,
+    gateGraph(ctx),
+    flowName,
+    params.params as Record<string, unknown> | undefined,
+    params.skip as string[] | undefined,
+  );
+  return { ...plan, preflight };
 }
 
 async function runFlow(
@@ -333,7 +345,8 @@ function makeRunner(
     context: flowCtx,
     hooks,
     references: namespaces,
-    conditionEvaluator: makeConditionEvaluator(namespaces),
+    // A project's own checks can read `step.*` and `gate.*` as a plan does.
+    conditionEvaluator: makeConditionEvaluator(namespaces, gateScope(ctx, gateGraph(ctx))),
   });
 }
 

@@ -8,7 +8,7 @@
  * result tested for truthiness.
  */
 import { resolveReferences } from "@db-lyon/flowkit";
-import type { FlowRunnerConfig, FlowStepResult } from "@db-lyon/flowkit";
+import type { ConditionContext, FlowRunnerConfig, FlowStepResult } from "@db-lyon/flowkit";
 import type { ToolContext } from "../core/types.js";
 
 type ConditionEvaluator = NonNullable<FlowRunnerConfig["conditionEvaluator"]>;
@@ -208,17 +208,38 @@ function evaluate(tokens: Token[], scope: Scope): unknown {
 }
 
 /**
+ * Namespaces that depend on the step being gated (`step`, `gate`), read only
+ * when an expression names one of them.
+ */
+export interface StepScope {
+  names: readonly string[];
+  read(ctx: ConditionContext): Promise<Record<string, unknown>>;
+}
+
+/**
  * The flow runner's `conditionEvaluator`. `namespaces` are the host namespaces
  * the option references use, so `when:` and `options:` read the same names.
  */
-export function makeConditionEvaluator(namespaces: Record<string, unknown>): ConditionEvaluator {
-  const known = new Set(["steps", "params", "error", ...Object.keys(namespaces)]);
-  return (expression, ctx) => {
+export function makeConditionEvaluator(namespaces: Record<string, unknown>, stepScope?: StepScope): ConditionEvaluator {
+  const base = evaluatorOver(namespaces, stepScope?.names ?? []);
+  if (!stepScope) return (expression, ctx) => base(expression, ctx, {});
+  const mentions = new RegExp(`(^|[^\\w.])(${stepScope.names.join("|")})\\.`);
+  return (expression, ctx) => mentions.test(expression)
+    ? stepScope.read(ctx).then((extra) => base(expression, ctx, extra))
+    : base(expression, ctx, {});
+}
+
+function evaluatorOver(
+  namespaces: Record<string, unknown>,
+  stepNames: readonly string[],
+): (expression: string, ctx: ConditionContext, extra: Record<string, unknown>) => boolean {
+  const known = new Set(["steps", "params", "error", ...Object.keys(namespaces), ...stepNames]);
+  return (expression, ctx, extra) => {
     const scope: Scope = {
       steps: ctx.steps,
       params: ctx.params,
       error: ctx.error as Record<string, unknown> | undefined,
-      namespaces,
+      namespaces: { ...namespaces, ...extra },
     };
     let tokens: Token[];
     try {
@@ -234,6 +255,6 @@ export function makeConditionEvaluator(namespaces: Record<string, unknown>): Con
       }
     }
     // Not an expression: the runner's original meaning.
-    return truthy(resolveReferences(expression, { steps: ctx.steps, namespaces, error: ctx.error }));
+    return truthy(resolveReferences(expression, { steps: ctx.steps, namespaces: scope.namespaces, error: ctx.error }));
   };
 }

@@ -462,6 +462,7 @@ export async function dispatchFlowCall(
     // stream progress and ask the user exactly as the same action called live.
     const flowCtx: ToolContext = {
       ...sessionContext(baseCtx, session),
+      callTargeted: typeof target === "string" && target.trim() !== "",
       elicit: deps.elicit(),
       onProgress: makeProgressReporter(extra),
       client: deps.client(),
