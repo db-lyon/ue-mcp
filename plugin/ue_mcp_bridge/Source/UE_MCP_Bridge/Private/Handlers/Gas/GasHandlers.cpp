@@ -101,7 +101,7 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	Registry.RegisterHandler(TEXT("create_gameplay_effect"), &CreateGameplayEffect, {
 		BlueprintName(), BlueprintFolder(TEXT("Content folder (default /Game/GAS/Effects)")), BlueprintOnConflict(),
-		MCPParam::Optional(TEXT("durationPolicy"), EType::String, TEXT("Echoed back as durationPolicy (default Instant); it is not written onto the effect")),
+		MCPParam::Optional(TEXT("durationPolicy"), EType::String, TEXT("Instant, HasDuration or Infinite, written onto the effect's defaults (default Instant)")),
 	}, CreatesBlueprint);
 	Registry.RegisterHandler(TEXT("get_gas_info"), &GetGasInfo, {
 		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path to inspect")),
@@ -340,7 +340,8 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGasBlueprint(
 	const FString& DefaultPackagePath,
 	UClass* ParentClass,
 	const FString& FriendlyType,
-	TFunction<void(TSharedPtr<FJsonObject>&)> ExtraResultFields)
+	TFunction<void(TSharedPtr<FJsonObject>&)> ExtraResultFields,
+	TFunction<void(UBlueprint*)> ConfigureBeforeSave)
 {
 	FString Name;
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
@@ -362,6 +363,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGasBlueprint(
 
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
+	if (ConfigureBeforeSave) ConfigureBeforeSave(NewBlueprint);
 
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(NewBlueprint, SaveError);
@@ -382,6 +384,15 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJson
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] CreateGameplayEffect called"));
 
 	const FString DurationPolicy = OptionalString(Params, TEXT("durationPolicy"), TEXT("Instant"));
+	EGameplayEffectDurationType Policy = EGameplayEffectDurationType::Instant;
+	if (DurationPolicy.Equals(TEXT("Instant"), ESearchCase::IgnoreCase)) Policy = EGameplayEffectDurationType::Instant;
+	else if (DurationPolicy.Equals(TEXT("HasDuration"), ESearchCase::IgnoreCase)) Policy = EGameplayEffectDurationType::HasDuration;
+	else if (DurationPolicy.Equals(TEXT("Infinite"), ESearchCase::IgnoreCase)) Policy = EGameplayEffectDurationType::Infinite;
+	else
+	{
+		return MCPError(FString::Printf(
+			TEXT("Unknown durationPolicy '%s'. Use Instant, HasDuration or Infinite."), *DurationPolicy));
+	}
 	UClass* Cls = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayEffect"));
 
 	return CreateGasBlueprint(
@@ -389,6 +400,13 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJson
 		[&DurationPolicy](TSharedPtr<FJsonObject>& R)
 		{
 			R->SetStringField(TEXT("durationPolicy"), DurationPolicy);
+		},
+		[Policy](UBlueprint* Blueprint)
+		{
+			UGameplayEffect* Defaults = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject<UGameplayEffect>() : nullptr;
+			if (!Defaults) return;
+			Defaults->Modify();
+			Defaults->DurationPolicy = Policy;
 		});
 }
 

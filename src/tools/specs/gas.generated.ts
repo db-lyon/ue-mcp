@@ -467,7 +467,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "durationPolicy",
         "type": "string",
         "required": false,
-        "description": "Echoed back as durationPolicy (default Instant); it is not written onto the effect"
+        "description": "Instant, HasDuration or Infinite, written onto the effect's defaults (default Instant)"
       }
     ],
     "contractExempt": "Creates, compiles and saves a Blueprint under the contract values; nothing it reads fails first"
