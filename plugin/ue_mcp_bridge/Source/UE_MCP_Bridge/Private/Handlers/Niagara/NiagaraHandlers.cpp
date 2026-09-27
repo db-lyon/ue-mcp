@@ -2410,7 +2410,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 	}
 
 	Emitter->PostEditChange();
-	System->RequestCompile(false);
+	MCPNiagara::CompileAndWait(System);
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
@@ -2555,9 +2555,9 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddModule(const TSharedPtr<FJsonObject>
 	Graph->NotifyGraphChanged();
 	if (Emitter) Emitter->PostEditChange();
 	System->PostEditChange();
-	// Force a compile so the emitter is immediately usable (e.g. a verify step
-	// that spawns it and reads particle count).
-	System->RequestCompile(false);
+	// Compile before the save so the emitter is immediately usable (e.g. a
+	// verify step that spawns it and reads particle count).
+	MCPNiagara::CompileAndWait(System);
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
@@ -2620,8 +2620,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterFromSystem(const TSharedPt
 
 	System->Modify();
 	System->RemoveEmitterHandlesById({ RemovedId });
-	System->RequestCompile(false);
 	System->PostEditChange();
+	MCPNiagara::CompileAndWait(System);
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(System, SaveError);
 
