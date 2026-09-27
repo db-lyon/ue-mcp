@@ -175,7 +175,6 @@ private:
 	TArray<FTarget> Targets;
 	TArray<FMCPEditTransaction*> OpenTransactions;
 	bool bCompiled = true;
-	bool bFinished = false;
 };
 
 /**
