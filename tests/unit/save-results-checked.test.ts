@@ -6,8 +6,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
+import { repoPath } from "../helpers/repo-root.js";
 
-const SOURCE = path.resolve(import.meta.dirname, "../../plugin/ue_mcp_bridge/Source");
+const SOURCE = repoPath("plugin", "ue_mcp_bridge", "Source");
 const BARE_SAVE =
   /^\s*(?:SaveAssetPackage|SaveAssetPackageChecked|UEditorAssetLibrary::SaveAsset|UEditorAssetLibrary::SaveLoadedAsset)\s*\(/;
 

@@ -2,10 +2,9 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { findUnityCollisions } from "../../scripts/audit-unity-collisions.mjs";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PLUGIN_ROOT = path.join(REPO_ROOT, "plugin");
 
 /**

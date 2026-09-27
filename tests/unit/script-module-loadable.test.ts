@@ -19,9 +19,9 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const ROOT = join(import.meta.dirname, "..", "..");
-const SCRIPTS = join(ROOT, "scripts");
+const SCRIPTS = join(REPO_ROOT, "scripts");
 
 /** Every scripts/*.mjs named by an import in any test file. */
 function importedByTests(): string[] {
@@ -39,7 +39,7 @@ function importedByTests(): string[] {
       for (const m of source.matchAll(/from\s+"[^"]*\/scripts\/([\w.-]+\.mjs)"/g)) named.add(m[1]);
     }
   };
-  walk(join(ROOT, "tests"));
+  walk(join(REPO_ROOT, "tests"));
   return [...named].sort();
 }
 

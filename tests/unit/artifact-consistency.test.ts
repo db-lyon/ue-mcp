@@ -30,10 +30,10 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { ALL_TOOLS } from "../../src/tools.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const repo = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const repo = REPO_ROOT;
 const read = (rel: string): string => fs.readFileSync(path.join(repo, rel), "utf8");
 const readJson = (rel: string): any => JSON.parse(read(rel));
 

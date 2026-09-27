@@ -22,17 +22,15 @@
  *    JSON a client receives at startup.
  */
 import { readFileSync } from "node:fs";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { ALL_TOOLS } from "../../src/tools.js";
+import { repoPath } from "../helpers/repo-root.js";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const GOLDEN = path.join(HERE, "..", "golden", "editor-down.json");
+const GOLDEN = repoPath("tests", "golden", "editor-down.json");
 
 /** A JSON Schema node, walked structurally rather than by any known shape. */
 type SchemaNode = Record<string, unknown>;

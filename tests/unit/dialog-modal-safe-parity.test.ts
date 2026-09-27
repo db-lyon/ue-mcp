@@ -8,11 +8,10 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isModalSafeMethod } from "../../src/editor/dialog-guard.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BRIDGE = path.join(
   REPO_ROOT,
   "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/BridgeServer.cpp",

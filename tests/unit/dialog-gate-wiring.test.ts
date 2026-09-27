@@ -14,13 +14,12 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const DIALOG = {
   title: "Save Content",

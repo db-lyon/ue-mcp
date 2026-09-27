@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { CLIENT_PROTOCOL_VERSION } from "../../src/bridge/bridge.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
 /**
  * The wire protocol version is declared twice: once in the plugin header the
@@ -14,8 +14,6 @@ import { CLIENT_PROTOCOL_VERSION } from "../../src/bridge/bridge.js";
  * The two files cannot import from each other, so this test is the joint.
  */
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(HERE, "..", "..");
 
 const REGISTRATION_HEADER = path.join(
   REPO_ROOT,

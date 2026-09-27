@@ -29,6 +29,7 @@ import { classifyAction } from "../../src/dispatch/locking.js";
 import { classifyWrite } from "../../src/flow/write-methods.js";
 import { refuseUntargetedCall } from "../../src/dispatch/editor-gate.js";
 import type { ActionEffect } from "../../src/core/types.js";
+import { repoPath } from "../helpers/repo-root.js";
 
 const EFFECTS: ActionEffect[] = ["read", "mutate", "unknown"];
 
@@ -170,7 +171,7 @@ describe("bridge methods", () => {
     // `mutate` would put asset(search) and editor(get_engine_state) in front of
     // every guard scoped to mutations for no reason. So they are listed, and
     // this fails when the source grows one that is not.
-    const src = path.join(import.meta.dirname, "..", "..", "src");
+    const src = repoPath("src");
     const found = new Set<string>();
     const walk = (dir: string): void => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

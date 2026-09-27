@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { UeMcpConfigSchema } from "../../src/surface/schemas.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
 /**
  * `ue-mcp.bridge.port` is read twice.
@@ -18,8 +18,6 @@ import { UeMcpConfigSchema } from "../../src/surface/schemas.js";
  * Neither file can import the other, so this test is the joint.
  */
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(HERE, "..", "..");
 
 const BRIDGE_PORT_CONFIG_CPP = path.join(
   REPO_ROOT,

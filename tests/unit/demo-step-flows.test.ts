@@ -5,8 +5,6 @@
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { demoTool } from "../../src/tools/demo.js";
 import { DEMO_STEPS } from "../../src/tools/demo-steps.js";
@@ -18,9 +16,9 @@ import { createLiveTask } from "../../src/flow/live-task.js";
 import type { FlowContext } from "../../src/flow/context.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
 import type { ToolContext } from "../../src/core/types.js";
+import { repoPath } from "../helpers/repo-root.js";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const CPP = path.join(here, "..", "..", "plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Private", "Handlers", "Demo", "DemoHandlers.cpp");
+const CPP = repoPath("plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Private", "Handlers", "Demo", "DemoHandlers.cpp");
 
 const REPLAY = "Demo steps are not idempotent: running this step again spawns a second set of Demo_ actors. Run demo(cleanup) before replaying.";
 const NO_ROLLBACK = "No inverse is emitted. Demo steps all write into the same /Game/Demo folder and the same Demo_ actors and none records what it alone created, so nothing can undo one step. demo(cleanup) removes the whole demo scene and, on the way, creates /Game/MCP_Home if it is missing and switches the editor to it, then deletes by label prefix in whatever level is then open - run it deliberately when you mean to discard the entire demo, not as a rollback for one step.";

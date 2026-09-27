@@ -23,11 +23,10 @@
  */
 import { describe, it, expect } from "vitest";
 import { readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative, sep } from "node:path";
+import { repoPath } from "../helpers/repo-root.js";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const srcDir = join(here, "..", "..", "src");
+const srcDir = repoPath("src");
 
 /** Handed a session, a project or a bridge, or holding state keyed by one. */
 const PER_SESSION: Record<string, string> = {

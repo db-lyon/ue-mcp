@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { findLiveCodingPatches, findOrphanedSources, runHygiene } from "../../scripts/pre-build-hygiene.mjs";
 import { touchBuildRules } from "../../src/editor/deployer.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
 let root: string;
 beforeEach(() => {
@@ -157,7 +157,7 @@ describe("a new source file makes UnrealBuildTool look again", () => {
  * every test here green.
  */
 describe("the build actually runs the hygiene checks", () => {
-  const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const REPO = REPO_ROOT;
   const buildScript = fs.readFileSync(path.join(REPO, "scripts", "build.js"), "utf8");
 
   it("calls runHygiene", () => {

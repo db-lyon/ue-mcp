@@ -2,13 +2,13 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { FakeBridge } from "../fake-bridge.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const repo = REPO_ROOT;
 
 it("retries failed guard construction before publishing a runtime editor", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-guard-session-"));

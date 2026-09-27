@@ -4,6 +4,7 @@ import { declaredActionEffect } from "../../src/surface/action-effects.js";
 import { animationTool } from "../../src/tools/animation.js";
 import type { ToolContext } from "../../src/core/types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
+import { repoPath } from "../helpers/repo-root.js";
 
 describe("animation.set_live_post_process_anim_blueprint", () => {
   it("forwards the live-only selector, generated class path, and clear flag", async () => {
@@ -43,10 +44,7 @@ describe("animation.set_live_post_process_anim_blueprint", () => {
     const registry = readHandlerFile("AnimationHandlers.cpp");
     const header = readHandlerFile("AnimationHandlers.h");
     const live = readHandlerFile("AnimationHandlers_SkeletalLive.cpp");
-    const nativeTest = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LivePostProcessAnimBlueprintTests.cpp",
-      import.meta.url,
-    ), "utf8");
+    const nativeTest = readFileSync(repoPath("plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LivePostProcessAnimBlueprintTests.cpp"), "utf8");
 
     expect(registry).toContain('RegisterHandler(TEXT("set_live_post_process_anim_blueprint"), &SetLivePostProcessAnimBlueprint, {');
     expect(header).toContain("SetLivePostProcessAnimBlueprint");

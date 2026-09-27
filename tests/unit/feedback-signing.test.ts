@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
 /**
  * The anonymous feedback path posts to a hosted signing service that holds the
@@ -277,7 +277,7 @@ describe("which signing origin gets asked", () => {
 });
 
 describe("the package ships no signing credential", () => {
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const repoRoot = REPO_ROOT;
 
   it("has no credential blob under assets/", () => {
     expect(fs.existsSync(path.join(repoRoot, "assets", "installation.bin"))).toBe(false);

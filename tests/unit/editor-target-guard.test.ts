@@ -1,10 +1,9 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { assertLiveTestProjectDir, assertTestProjectDir } from "../../scripts/bridge-target.mjs";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /**
  * These tests create and delete assets and modify levels, so a run pointed at
@@ -35,13 +34,13 @@ describe("a foreign project is refused", () => {
   });
 
   it("allows this checkout's test project", () => {
-    const dir = path.join(REPO, "tests", "ue_mcp");
+    const dir = path.join(REPO_ROOT, "tests", "ue_mcp");
     expect(() => assertLiveTestProjectDir(dir)).not.toThrow();
     expect(() => assertTestProjectDir(dir)).not.toThrow();
   });
 
   it("refuses a path that merely looks similar", () => {
-    expect(() => assertTestProjectDir(path.join(REPO, "tests", "ue_mcp_backup"))).toThrow();
+    expect(() => assertTestProjectDir(path.join(REPO_ROOT, "tests", "ue_mcp_backup"))).toThrow();
   });
 });
 
@@ -59,7 +58,7 @@ describe("every route to an editor passes a guard", () => {
    * that actually invoke it.
    */
   const callSites = (rel: string, fn: string): number => {
-    const lines = fs.readFileSync(path.join(REPO, rel), "utf8").split("\n");
+    const lines = fs.readFileSync(path.join(REPO_ROOT, rel), "utf8").split("\n");
     return lines.filter((raw) => {
       const line = raw.replace("\r", "").trim();
       if (line.startsWith("import") || line.startsWith("*") || line.startsWith("//")) return false;

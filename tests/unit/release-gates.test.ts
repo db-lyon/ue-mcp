@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fsSync from "node:fs";
 import { parseVersion, versionDeltaProblem, docsFreshnessProblem, docsExemptionReason } from "../../scripts/check-release-gates.mjs";
+import { repoPath } from "../helpers/repo-root.js";
 
 const problem = (from: string, to: string): string | null =>
   versionDeltaProblem(from, to) as string | null;
@@ -115,7 +116,7 @@ describe("a surface change has to reach the docs", () => {
 describe("every gate is reachable from the entry point", () => {
   it("names all three, and refuses an unknown one", async () => {
     const src = await import("node:fs").then((fs) =>
-      fs.readFileSync(new URL("../../scripts/check-release-gates.mjs", import.meta.url), "utf8"),
+      fs.readFileSync(repoPath("scripts/check-release-gates.mjs"), "utf8"),
     );
     for (const gate of ["version-delta", "count-markers", "docs-freshness"]) {
       expect(src, gate).toContain(`"${gate}"`);
@@ -132,7 +133,7 @@ describe("every gate is reachable from the entry point", () => {
     // The gates used to report "skipped" and exit 0 when they could not find
     // a baseline, which is indistinguishable from passing.
     const src = fsSync.readFileSync(
-      new URL("../../scripts/check-release-gates.mjs", import.meta.url),
+      repoPath("scripts/check-release-gates.mjs"),
       "utf8",
     );
     expect(src).toContain("no baseline commit to compare against");

@@ -1,10 +1,10 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative, sep } from "node:path";
 import { ENV_VARS, readEnv } from "../../src/core/env.js";
+import { repoPath } from "../helpers/repo-root.js";
 
-const srcDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src");
+const srcDir = repoPath("src");
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

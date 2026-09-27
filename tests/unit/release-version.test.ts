@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   FALLBACK_TAG,
   STABLE_TAG,
@@ -12,14 +10,9 @@ import {
   outputsFor,
   parseVersion,
 } from "../../scripts/release-version.mjs";
+import { repoPath } from "../helpers/repo-root.js";
 
-const SCRIPT = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "scripts",
-  "release-version.mjs",
-);
+const SCRIPT = repoPath("scripts", "release-version.mjs");
 
 /** The versions the release pipeline has to get right. */
 const CASES: Array<{ version: string; tag: string; pre: boolean }> = [

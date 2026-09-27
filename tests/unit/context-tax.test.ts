@@ -18,8 +18,8 @@ import {
   parseStamp,
   staleStamps,
 } from "../../scripts/context-tax.mjs";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const REPO = path.resolve(__dirname, "..", "..");
 
 type Rows = Record<string, { what: string; tokens: number; chars: number }>;
 
@@ -70,7 +70,7 @@ describe("the shipped surface", () => {
 
   it("matches the numbers the docs print", () => {
     const stale = TAX_MARKER_FILES.flatMap((rel) => {
-      const file = path.join(REPO, rel);
+      const file = path.join(REPO_ROOT, rel);
       return fs.existsSync(file) ? staleStamps(fs.readFileSync(file, "utf8"), rows, rel) : [];
     });
     expect(stale, "run node scripts/context-tax.mjs --stamp").toEqual([]);

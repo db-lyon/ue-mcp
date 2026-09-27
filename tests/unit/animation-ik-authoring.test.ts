@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { animationTool } from "../../src/tools/animation.js";
 import type { ToolContext } from "../../src/core/types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
+import { repoPath } from "../helpers/repo-root.js";
 
 describe("animation IK and retarget authoring", () => {
   it("publishes the native UE 5.8 authoring boundary", () => {
@@ -115,10 +116,7 @@ describe("animation IK and retarget authoring", () => {
     const ik = readHandlerFile("AnimationHandlers_IKRigAuthoring.cpp");
     const retarget = readHandlerFile("AnimationHandlers_IKRetargeterAuthoring.cpp");
     const legacy = readHandlerFile("AnimationHandlers_StateMachine.cpp");
-    const assetResolve = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerAssetResolve.h",
-      import.meta.url,
-    ), "utf8");
+    const assetResolve = readFileSync(repoPath("plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerAssetResolve.h"), "utf8");
 
     expect(registry).toContain('TEXT("configure_ik_rig"), &ConfigureIKRig');
     expect(registry).toContain('TEXT("configure_ik_retargeter"), &ConfigureIKRetargeter');

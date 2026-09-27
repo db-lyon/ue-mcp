@@ -18,7 +18,6 @@
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_BRIDGE_TIMEOUT_MS,
@@ -30,9 +29,9 @@ import {
   registeredTimeoutMs,
   resolveBridgeTimeout,
 } from "../../src/bridge/bridge-timeouts.js";
+import { repoPath } from "../helpers/repo-root.js";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PLUGIN_SOURCE = path.join(HERE, "..", "..", "plugin");
+const PLUGIN_SOURCE = repoPath("plugin");
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {

@@ -23,6 +23,7 @@ import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
 import type { EditorProcess } from "../../src/editor/engine-observer.js";
 import type { ElicitFn, ElicitParams, ElicitResult } from "../../src/core/types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
+import { repoPath } from "../helpers/repo-root.js";
 
 vi.mock("../../src/editor/engine-observer.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/editor/engine-observer.js")>();
@@ -409,7 +410,7 @@ describe("stop_editor reports a blocking dialog in full", () => {
  */
 describe("the plugin arms no policy and invents no answer", () => {
   const read = (relative: string): string =>
-    fs.readFileSync(new URL(`../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/${relative}`, import.meta.url), "utf8");
+    fs.readFileSync(repoPath(`plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/${relative}`), "utf8");
 
   it("registers no built-in dialog policy at module startup", () => {
     const module = read("Private/UE_MCP_Bridge.cpp");

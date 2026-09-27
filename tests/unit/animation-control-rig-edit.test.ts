@@ -4,6 +4,7 @@ import { animationTool } from "../../src/tools/animation.js";
 import { handlerSpecs } from "../../src/tools/specs/animation.generated.js";
 import type { ToolContext } from "../../src/core/types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
+import { repoPath } from "../helpers/repo-root.js";
 
 const workflowActions = [
   "begin_control_rig_edit",
@@ -48,10 +49,7 @@ describe("animation Control Rig edit workflow", () => {
   it("cancels AnimSequence RateScale so a session maps the raw timeline once", () => {
     const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
     const nativeTest = readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AnimationControlRigTimelineTests.cpp",
-        import.meta.url,
-      ),
+      repoPath("plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AnimationControlRigTimelineTests.cpp"),
       "utf8",
     );
 
@@ -189,11 +187,11 @@ describe("animation Control Rig edit workflow", () => {
   it("makes the per-character Control Rig baseline a prerequisite", () => {
     const begin = animationTool.actions.begin_control_rig_edit.description;
     const skill = readFileSync(
-      new URL("../../skills/ue-mcp-animation/SKILL.md", import.meta.url),
+      repoPath("skills/ue-mcp-animation/SKILL.md"),
       "utf8",
     );
     const guide = readFileSync(
-      new URL("../../docs/control-rig-animation.md", import.meta.url),
+      repoPath("docs/control-rig-animation.md"),
       "utf8",
     );
 

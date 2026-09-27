@@ -1,10 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { lintText, RULES, EXCLUDED_PATHS, isExcluded, ALLOW_MARKER } from "../../scripts/lint-prose.mjs";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 type Finding = { rule: string; line: number; found: string };
 const rules = (text: string, rel: string): string[] =>
@@ -241,7 +239,7 @@ describe("the gate holds over the whole tree", () => {
     // The gate is only worth having if the tree it guards is clean, and a
     // linter nobody has run against reality is a linter with unknown rules.
     const out = execFileSync("node", ["scripts/lint-prose.mjs"], {
-      cwd: REPO,
+      cwd: REPO_ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });

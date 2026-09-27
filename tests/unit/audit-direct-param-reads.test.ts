@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   auditDirectParamReads,
   categoryOfFile,
@@ -9,8 +8,8 @@ import {
   reportingCategories,
 } from "../../scripts/audit-direct-param-reads.mjs";
 import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HANDLER_PARAMS = path.join(
   REPO_ROOT, "plugin", "ue_mcp_bridge", "Source", "UE_MCP_Bridge", "Public", "HandlerParams.h",
 );

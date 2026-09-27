@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { repoPath } from "../helpers/repo-root.js";
 
-const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "src");
+const SRC = repoPath("src");
 
 function tsFiles(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {

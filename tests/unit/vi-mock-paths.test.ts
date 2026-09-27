@@ -8,8 +8,9 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { repoPath } from "../helpers/repo-root.js";
 
-const TESTS = path.resolve(import.meta.dirname, "..");
+const TESTS = repoPath("tests");
 const MOCK = /\bvi\.(?:mock|doMock|unmock|importActual)\s*(?:<[^>]*>)?\(\s*(["'`])(\.{1,2}\/[^"'`]+)\1/g;
 
 function testFiles(dir: string): string[] {

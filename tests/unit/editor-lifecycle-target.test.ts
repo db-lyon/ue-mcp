@@ -11,6 +11,7 @@ import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EditorProcess } from "../../src/editor/engine-observer.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
+import { repoPath } from "../helpers/repo-root.js";
 
 // No unit test may launch a real editor. An unknown EngineAssociation still
 // resolves to the machine's default install, so the launch is stubbed here.
@@ -436,10 +437,7 @@ describe("native editor shutdown", () => {
   it("uses MainFrame so standalone asset editors close before subsystem teardown", () => {
     const source = readHandlerFile("EditorHandlers.cpp");
     const buildRules = fs.readFileSync(
-      new URL(
-        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/UE_MCP_Bridge.Build.cs",
-        import.meta.url,
-      ),
+      repoPath("plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/UE_MCP_Bridge.Build.cs"),
       "utf8",
     );
     const shutdownHandler = source.slice(

@@ -17,14 +17,13 @@ import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { EPIC_TOOL_EFFECTS } from "../../src/tools/epic/effects.js";
 import { EPIC_CATEGORIES } from "../../src/tools/epic/index.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
-const GEN_DIR = path.join(ROOT, "src", "tools", "epic");
+const CATALOG = path.join(REPO_ROOT, "tests", "golden", "epic-catalog.json");
+const GEN_DIR = path.join(REPO_ROOT, "src", "tools", "epic");
 
 interface Catalog {
   engineAssociation: string;
@@ -155,8 +154,8 @@ describe("the committed modules match their inputs", () => {
 
     // Under tsx: the generator imports ROUTING_PARAMS from source rather than
     // parsing it, so plain node cannot load it. Matches the epic:generate script.
-    execFileSync(process.execPath, ["--import", "tsx", path.join(ROOT, "scripts", "generate-epic-actions.mjs")], {
-      cwd: ROOT,
+    execFileSync(process.execPath, ["--import", "tsx", path.join(REPO_ROOT, "scripts", "generate-epic-actions.mjs")], {
+      cwd: REPO_ROOT,
       stdio: "pipe",
     });
 

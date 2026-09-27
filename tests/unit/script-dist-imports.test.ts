@@ -1,11 +1,10 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SCRIPTS = path.join(REPO, "scripts");
-const SRC = path.join(REPO, "src");
+const SCRIPTS = path.join(REPO_ROOT, "scripts");
+const SRC = path.join(REPO_ROOT, "src");
 
 /** `import { a, b } from '../dist/x.js'` and the await-import form. */
 function distImports(text: string): Array<{ names: string[]; module: string }> {

@@ -16,7 +16,6 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 import { renderAll } from "../../scripts/lib/handler-spec-gen.mjs";
@@ -44,9 +43,9 @@ import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 import { deployedPlugin, checkBridgeParity } from "../../src/bridge/bridge-parity.js";
 import type { BridgeCapabilities } from "../../src/bridge/bridge.js";
 import { paramMapperOf } from "../../src/surface/epic-input.js";
+import { REPO_ROOT } from "../helpers/repo-root.js";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {
+const SNAPSHOT = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "tests", "golden", "handler-specs.json"), "utf8")) as {
   handlerCount: number;
   handlers: HandlerSpecs;
 };
@@ -202,10 +201,10 @@ describe("the recording", () => {
 describe("the generated modules", () => {
   it("are exactly what the recording renders to", () => {
     const files = renderAll(SNAPSHOT);
-    const specsDir = path.join(ROOT, "src", "tools", "specs");
+    const specsDir = path.join(REPO_ROOT, "src", "tools", "specs");
     expect(fs.readdirSync(specsDir).map((f) => `src/tools/specs/${f}`).sort()).toEqual([...files.keys()].sort());
     for (const [rel, contents] of files) {
-      const onDisk = fs.readFileSync(path.join(ROOT, rel), "utf8").replace(/\r\n/g, "\n");
+      const onDisk = fs.readFileSync(path.join(REPO_ROOT, rel), "utf8").replace(/\r\n/g, "\n");
       expect(onDisk, `${rel} is stale: run npm run specs:generate`).toBe(contents);
     }
   });
@@ -266,7 +265,7 @@ describe("the animation surface", () => {
   });
 
   it("reads the same in the source the audits parse as it does at runtime", () => {
-    const parsed = readCategory(path.join(ROOT, "src", "tools", "animation.ts"));
+    const parsed = readCategory(path.join(REPO_ROOT, "src", "tools", "animation.ts"));
     expect(parsed).not.toBeNull();
     const byName = new Map(parsed!.actions.map((a: { name: string; description: string }) => [a.name, a.description]));
     for (const [action, spec] of specdActions()) {
@@ -355,7 +354,7 @@ function directlyDispatched(method: string): boolean {
   if (by === "rollback") return true;
   const [toolName, action] = by.split(".");
   const spec = ALL_TOOLS.find((t) => t.name === toolName)?.actions[action];
-  const source = fs.readFileSync(path.join(ROOT, "src", "tools", `${toolName}.ts`), "utf8");
+  const source = fs.readFileSync(path.join(REPO_ROOT, "src", "tools", `${toolName}.ts`), "utf8");
   const calls = [`bridge.call("${method}"`, `callOwnBridgeMethod(ctx, "${method}"`, `method: "${method}"`];
   return spec !== undefined && spec.kind !== "bridge" && calls.some((c) => source.includes(c));
 }
@@ -447,7 +446,7 @@ describe.each(SPEC_TOOLS)("the %s tool", (toolName) => {
   });
 
   it("reads the same in the source the audits parse as it does at runtime", () => {
-    const parsed = readCategory(path.join(ROOT, "src", "tools", `${toolName}.ts`));
+    const parsed = readCategory(path.join(REPO_ROOT, "src", "tools", `${toolName}.ts`));
     expect(parsed).not.toBeNull();
     const byName = new Map(parsed!.actions.map((a: { name: string; description: string }) => [a.name, a.description]));
     for (const [action, spec] of actions) {
