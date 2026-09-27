@@ -2,7 +2,7 @@
  * Facts about one editor, fetched when first asked for and kept until an
  * event says they moved: a reconnect (new capabilities) drops everything, a
  * PIE start or stop drops the PIE state, loading a level drops the map, and a
- * save or any other change drops the dirty package list.
+ * save or any other change drops the dirty package list and the world state.
  *
  * Gates and flow conditions read them through the `editor` namespace, so a
  * `when:` can say `editor.pie` or `editor.engineVersion`.
@@ -11,7 +11,6 @@ import type { IBridge } from "../bridge/bridge.js";
 import type { ProjectContext } from "../config/project.js";
 import type { ToolDef } from "../core/types.js";
 import { UProjectSchema } from "../surface/schemas.js";
-import { bridgeMethodEffect } from "../surface/action-effects.js";
 import * as fs from "node:fs";
 
 export const FACT_NAMES = [
@@ -22,6 +21,7 @@ export const FACT_NAMES = [
   "pie",
   "map",
   "dirtyPackages",
+  "world",
 ] as const;
 
 export type FactName = (typeof FACT_NAMES)[number];
@@ -40,14 +40,28 @@ export interface EditorFactsSource {
   readonly toolGraph?: readonly ToolDef[];
 }
 
+/**
+ * How a method's effect is read. The effects table imports the whole tool
+ * graph, which imports the editor handle that owns these facts, so the table
+ * installs itself here when it loads rather than being imported. Until then
+ * every unlisted call counts as a change, which only costs a refetch.
+ */
+type EffectOf = (method: string, params?: Record<string, unknown>, graph?: readonly ToolDef[]) => { effect: string };
+let effectOf: EffectOf | undefined;
+
+/** Called by surface/action-effects.ts as it loads. */
+export function installEffectClassifier(classify: EffectOf): void {
+  effectOf = classify;
+}
+
 /** Which facts a call invalidates, by its method. */
 function invalidatedBy(method: string, params: Record<string, unknown> | undefined, graph?: readonly ToolDef[]): FactName[] {
-  if (method === "pie_control" || method === "pie_start_ignoring_blueprint_errors") return ["pie", "dirtyPackages"];
-  if (method === "load_level" || method === "create_new_level") return ["map", "dirtyPackages"];
-  if (method.startsWith("save_")) return ["dirtyPackages"];
-  if (bridgeMethodEffect(method, params, graph).effect === "read") return [];
-  // Any other change can dirty a package.
-  return ["dirtyPackages"];
+  if (method === "pie_control" || method === "pie_start_ignoring_blueprint_errors") return ["pie", "dirtyPackages", "world"];
+  if (method === "load_level" || method === "create_new_level") return ["map", "dirtyPackages", "world"];
+  if (method.startsWith("save_")) return ["dirtyPackages", "world"];
+  if (effectOf?.(method, params, graph).effect === "read") return [];
+  // Any other change can dirty a package, which the world state counts.
+  return ["dirtyPackages", "world"];
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -157,6 +171,8 @@ export class EditorFacts {
       const reply = asRecord(await this.source.call("get_current_level", {}));
       return typeof reply.levelPath === "string" ? reply.levelPath : undefined;
     }
+    // The whole reply: probe.world hands it to a condition as it came.
+    if (name === "world") return this.source.call("get_world_state", {});
     const reply = asRecord(await this.source.call("list_dirty_packages", {}));
     const packages = [...(Array.isArray(reply.content) ? reply.content : []), ...(Array.isArray(reply.maps) ? reply.maps : [])];
     return packages.map((entry) => asRecord(entry).package).filter((p): p is string => typeof p === "string");

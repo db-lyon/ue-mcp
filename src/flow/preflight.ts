@@ -27,7 +27,7 @@ import { taskEffect } from "../surface/action-effects.js";
 import { ensureGuard } from "../editor/dialog-guard.js";
 import { pythonGateRefusal } from "../dispatch/python-gate.js";
 import { needsExplicitEditor, refuseUntargetedInRegistry } from "../dispatch/editor-gate.js";
-import { hostNamespaces, makeConditionEvaluator, type ProbeFacts, type StepScope } from "./condition.js";
+import { factsScope, hostNamespaces, makeConditionEvaluator, type ProbeFacts, type StepScope } from "./condition.js";
 import { BridgeFacts } from "./probes.js";
 import { stepAvailability } from "./flow-describe.js";
 import { GATE_IDS, GATES, gateFires } from "./gates.js";
@@ -187,7 +187,7 @@ export async function planPreflight(
     registry,
     context: { ...ctx } as never,
     references: { ...hostNamespaces(ctx), params: params ?? {} },
-    conditionEvaluator: makeConditionEvaluator(hostNamespaces(ctx), gateScope(ctx, graph, true, facts), facts),
+    conditionEvaluator: makeConditionEvaluator(hostNamespaces(ctx), [gateScope(ctx, graph, true, facts), factsScope(ctx)], facts),
   });
   const result = await runner.preflight(flowName, params, { skip });
   const refused: PlanRefusal[] = [];

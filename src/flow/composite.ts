@@ -21,7 +21,7 @@ import type { FlowContext } from "./context.js";
 import { finishCall, type CallPipeline } from "../dispatch/call-pipeline.js";
 import { applyHandlerOutcome, inFlowRun } from "./handler-outcome.js";
 import { builtinClassPath, LIVE_FLOWS_KEY, LIVE_REFERENCES_KEY } from "./task-call.js";
-import { hostNamespaces, makeConditionEvaluator } from "./condition.js";
+import { factsScope, hostNamespaces, makeConditionEvaluator } from "./condition.js";
 import { buildFlowRegistry } from "./registry.js";
 import { builtinFlows } from "./loader.js";
 
@@ -105,7 +105,7 @@ function liveRunner(ctx: FlowContext, registry: TaskRegistry, held: HeldComposit
     context: { ...ctx, [HELD_KEY]: held },
     hooks: { afterStep: async (_step, record) => keepNestedSteps(record) },
     references: namespaces,
-    conditionEvaluator: makeConditionEvaluator(namespaces),
+    conditionEvaluator: makeConditionEvaluator(namespaces, factsScope(ctx)),
   });
 }
 

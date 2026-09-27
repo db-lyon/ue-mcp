@@ -10,6 +10,7 @@
 import { resolveReferences } from "@db-lyon/flowkit";
 import type { ConditionContext, FlowRunnerConfig, FlowStepResult } from "@db-lyon/flowkit";
 import type { ToolContext } from "../core/types.js";
+import { FACT_NAMES, type FactName } from "../sessions/editor-facts.js";
 
 type ConditionEvaluator = NonNullable<FlowRunnerConfig["conditionEvaluator"]>;
 
@@ -26,14 +27,55 @@ export function hostNamespaces(ctx: ToolContext): Record<string, unknown> {
       get dir() { return project.projectDir ?? undefined; },
       get contentDir() { return project.contentDir ?? undefined; },
       get engine() { return project.engineAssociation ?? undefined; },
+      /** The merged `ue-mcp:` block, so `${project.config.bridge.port}` reads the setting in force. */
+      get config() { return project.projectConfig?.block; },
     },
-    editor: {
-      get connected() { return ctx.bridge.isConnected === true; },
-      get name() { return ctx.session?.name; },
-    },
+    editor: editorNamespace(ctx),
     session: {
       get name() { return ctx.session?.name; },
       get count() { return ctx.sessions?.size ?? 1; },
+    },
+  };
+}
+
+/**
+ * `editor.*`: the connection, and the editor's facts as far as they are known
+ * without a call. A condition that names a fact fetches it first (factsScope),
+ * so only an option reference reads the cached value.
+ */
+function editorNamespace(ctx: ToolContext, fetched: Record<string, unknown> = {}): Record<string, unknown> {
+  const facts = ctx.session?.facts;
+  const out: Record<string, unknown> = {
+    get connected() { return ctx.bridge.isConnected === true; },
+    get name() { return ctx.session?.name; },
+  };
+  for (const name of FACT_NAMES) {
+    Object.defineProperty(out, name, {
+      get: () => (name in fetched ? fetched[name] : facts?.peek(name)),
+      enumerable: true,
+    });
+  }
+  return out;
+}
+
+/** Built on first use: editor-facts.ts and this module import each other through the effects table. */
+let factReference: RegExp | undefined;
+const FACT_REFERENCE = (): RegExp =>
+  (factReference ??= new RegExp(String.raw`(?:^|[^\w.])editor\.(${FACT_NAMES.join("|")})\b`, "g"));
+
+/**
+ * The editor's facts for a condition: every fact the expression names is
+ * fetched (or read from the cache) before it is evaluated. A fact that cannot
+ * be read fails the condition rather than reading as false.
+ */
+export function factsScope(ctx: ToolContext): StepScope | undefined {
+  const facts = ctx.session?.facts;
+  if (!facts) return undefined;
+  return {
+    names: ["editor"],
+    read: async (_c, expression = "") => {
+      const named = [...new Set([...expression.matchAll(FACT_REFERENCE())].map((m) => m[1] as FactName))];
+      return { editor: editorNamespace(ctx, await facts.snapshot(named)) };
     },
   };
 }
@@ -234,7 +276,7 @@ function evaluate(tokens: Token[], scope: Scope): unknown {
  */
 export interface StepScope {
   names: readonly string[];
-  read(ctx: ConditionContext): Promise<Record<string, unknown>>;
+  read(ctx: ConditionContext, expression?: string): Promise<Record<string, unknown>>;
 }
 
 /**
@@ -243,15 +285,21 @@ export interface StepScope {
  */
 export function makeConditionEvaluator(
   namespaces: Record<string, unknown>,
-  stepScope?: StepScope,
+  stepScope?: StepScope | Array<StepScope | undefined>,
   facts?: ProbeFacts,
 ): ConditionEvaluator {
-  const names = [...(stepScope?.names ?? []), ...(facts ? [PROBE_NAMESPACE] : [])];
+  const scopes = (Array.isArray(stepScope) ? stepScope : [stepScope]).filter((s): s is StepScope => s !== undefined);
+  const names = [...scopes.flatMap((s) => s.names), ...(facts ? [PROBE_NAMESPACE] : [])];
   const base = evaluatorOver(namespaces, names);
-  if (!stepScope && !facts) return (expression, ctx) => base(expression, ctx, {});
-  const mentions = stepScope ? new RegExp(`(^|[^\\w.])(${stepScope.names.join("|")})\\.`) : undefined;
+  if (scopes.length === 0 && !facts) return (expression, ctx) => base(expression, ctx, {});
+  const mentioning = scopes.map((scope) => ({
+    scope,
+    mentions: new RegExp(`(^|[^\\w.])(${scope.names.join("|")})\\.`),
+  }));
   return async (expression, ctx) => {
-    const extra: Record<string, unknown> = mentions?.test(expression) ? await stepScope!.read(ctx) : {};
+    const reads = mentioning.filter((m) => m.mentions.test(expression));
+    const extras = await Promise.all(reads.map((m) => m.scope.read(ctx, expression)));
+    const extra: Record<string, unknown> = Object.assign({}, ...extras);
     if (facts) {
       const probes = probesNamed(expression);
       if (probes.length > 0) extra[PROBE_NAMESPACE] = await probeNamespace(facts, probes);

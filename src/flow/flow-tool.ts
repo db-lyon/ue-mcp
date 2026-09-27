@@ -30,7 +30,7 @@ import {
   trimError,
 } from "./events.js";
 import { unappliedRollbackCall } from "./handler-outcome.js";
-import { hostNamespaces, makeConditionEvaluator } from "./condition.js";
+import { factsScope, hostNamespaces, makeConditionEvaluator } from "./condition.js";
 import { gateGraph, gateScope, planPreflight } from "./preflight.js";
 import { keepNestedSteps } from "./composite.js";
 import { envelopeOfError, type ErrorEnvelope } from "../dispatch/error-envelope.js";
@@ -379,8 +379,8 @@ function makeRunner(
     hooks,
     // `${params.x}` in an option reads the run's own params.
     references: { ...namespaces, params: params ?? {} },
-    // A project's own checks can read `step.*`, `gate.*` and `probe.*` as a plan does.
-    conditionEvaluator: makeConditionEvaluator(namespaces, gateScope(ctx, graph, false, facts), facts),
+    // A project's own checks can read `step.*`, `gate.*`, `editor.*` facts and `probe.*` as a plan does.
+    conditionEvaluator: makeConditionEvaluator(namespaces, [gateScope(ctx, graph, false, facts), factsScope(ctx)], facts),
   });
 }
 

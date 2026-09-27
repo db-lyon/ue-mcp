@@ -261,10 +261,17 @@ Three more namespaces resolve in any option value, and in `when:`. They are read
 | `${project.dir}` | The project directory |
 | `${project.contentDir}` | The project's `Content` directory |
 | `${project.engine}` | The project's `EngineAssociation` |
+| `${project.config.<path>}` | A setting from the project's merged `ue-mcp:` block, such as `project.config.bridge.port` |
 | `${editor.connected}` | Whether the editor bridge is connected |
 | `${editor.name}` | The name of the editor session the flow runs in |
+| `${editor.engineVersion}`, `${editor.bridgeVersion}`, `${editor.handlers}` | What the connected editor reported at its handshake |
+| `${editor.enabledPlugins}` | The plugins the `.uproject` enables |
+| `${editor.pie}`, `${editor.map}`, `${editor.dirtyPackages}` | Whether Play In Editor is running, the loaded map, and the unsaved packages |
+| `${editor.world}` | The `editor(get_world_state)` reply, the same reading `probe.world` returns |
 | `${session.name}` | Same as `editor.name` |
 | `${session.count}` | How many editors this server drives |
+
+The editor facts are fetched the first time a `when:` names one and kept until an event moves them: a reconnect drops them all, starting or stopping PIE drops `pie`, loading a level drops `map`, and a save or any other change drops `dirtyPackages` and `world`. A fact that cannot be read fails the condition instead of reading as false. In an option value they read what is already known, without a call.
 
 A missing value resolves to nothing: the whole value becomes `undefined`, an embedded one an empty string. Any other `${ns.x}` is left as written.
 
@@ -341,7 +348,7 @@ A `when:`, a check and the server's gates can read facts about the editor as `pr
 | `probe.playing` | Whether a PIE or SIE session is running |
 | `probe.engine` | The connected editor's engine version |
 
-Each probe is read at most once per run and forgotten after any step that may change the editor, so the checks between two writes share one reading and a check after a save reads the state the save left. The gates read `editor.connected` from the same reading.
+Probes read the editor's facts, the same cache `editor.*` reads, so a probe and an `editor.*` fact never disagree. A reading is kept until an event moves it and forgotten after any step that may change the editor, so the checks between two writes share one reading and a check after a save reads the state the save left. The gates read `editor.connected` from the same reading.
 
 A probe that cannot be read is an error, never a false value: `when: "probe.dirty > 0"` with no editor connected fails the step instead of reading as "nothing is dirty". Guard a probe that needs the editor with one that does not: `probe.connected && probe.dirty > 0`.
 

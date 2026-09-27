@@ -29,6 +29,7 @@ import { flowCategoryForCheck } from "../flow/flow-surface.js";
 import { EPIC_TOOL_EFFECTS } from "../tools/epic/effects.js";
 import { INTERNAL_BRIDGE_TASKS, INTERNAL_NAMESPACE, internalMethod } from "../flow/internal-tasks.js";
 import type { ActionEffect, ActionEffectSource, ToolDef } from "../core/types.js";
+import { installEffectClassifier } from "../sessions/editor-facts.js";
 
 export interface ResolvedEffect {
   effect: ActionEffect;
@@ -229,3 +230,6 @@ export function bridgeMethodEffect(
 export function mayChangeState(effect: ActionEffect): boolean {
   return effect !== "read";
 }
+
+// Editor facts read each reply's effect to know what it invalidated.
+installEffectClassifier(bridgeMethodEffect);
