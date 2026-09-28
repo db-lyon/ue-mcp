@@ -47,31 +47,61 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "graphPath",
         "type": "string",
         "required": false,
-        "description": "PCGGraph to assign to the volume's component"
-      },
-      {
-        "name": "location",
-        "type": "vec3",
-        "required": false,
-        "description": "World location {x,y,z} (default origin)"
+        "description": "PCGGraph to assign to the volume's component; refused when it does not load"
       },
       {
         "name": "extent",
         "type": "vec3",
         "required": false,
-        "description": "Half-size of the volume box {x,y,z} (default 500 on each axis)"
+        "description": "Half-size of the volume box {x,y,z}, positive on every axis (default 500 on each axis)"
       },
       {
         "name": "label",
         "type": "string",
         "required": false,
-        "description": "Editor label. Also the idempotency key: an existing actor with this label is reported rather than duplicated"
+        "description": "Actor label; an existing actor with this label is reported rather than duplicated"
       },
       {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "When the label exists: skip (default, report it) | error"
+        "description": "When the label or name is taken: skip (default) | error"
+      },
+      {
+        "name": "location",
+        "type": "vec3",
+        "required": false,
+        "description": "World location"
+      },
+      {
+        "name": "rotation",
+        "type": "rotator",
+        "required": false,
+        "description": "World rotation"
+      },
+      {
+        "name": "scale",
+        "type": "vec3",
+        "required": false,
+        "description": "Actor scale"
+      },
+      {
+        "name": "folderPath",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
       }
     ],
     "contractExempt": "Spawns a volume under the contract values; nothing it reads fails first"

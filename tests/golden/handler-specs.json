@@ -1777,31 +1777,61 @@
           "name": "graphPath",
           "type": "string",
           "required": false,
-          "description": "PCGGraph to assign to the volume's component"
-        },
-        {
-          "name": "location",
-          "type": "vec3",
-          "required": false,
-          "description": "World location {x,y,z} (default origin)"
+          "description": "PCGGraph to assign to the volume's component; refused when it does not load"
         },
         {
           "name": "extent",
           "type": "vec3",
           "required": false,
-          "description": "Half-size of the volume box {x,y,z} (default 500 on each axis)"
+          "description": "Half-size of the volume box {x,y,z}, positive on every axis (default 500 on each axis)"
         },
         {
           "name": "label",
           "type": "string",
           "required": false,
-          "description": "Editor label. Also the idempotency key: an existing actor with this label is reported rather than duplicated"
+          "description": "Actor label; an existing actor with this label is reported rather than duplicated"
         },
         {
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "When the label exists: skip (default, report it) | error"
+          "description": "When the label or name is taken: skip (default) | error"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "World location"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation"
+        },
+        {
+          "name": "scale",
+          "type": "vec3",
+          "required": false,
+          "description": "Actor scale"
+        },
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
         }
       ],
       "contractExempt": "Spawns a volume under the contract values; nothing it reads fails first"
@@ -2320,6 +2350,12 @@
           "type": "string",
           "required": true,
           "description": "Blueprint asset path"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Name of the new component (default SmartObjectComp)"
         }
       ]
     },
@@ -2593,6 +2629,12 @@
           "type": "string",
           "required": true,
           "description": "Blueprint asset path"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Name of the new component (default StateTreeComp)"
         }
       ]
     },
@@ -9145,7 +9187,7 @@
           "name": "packagePath",
           "type": "string",
           "required": false,
-          "description": "Destination folder, used with name"
+          "description": "Destination folder, used with name (default /Game/Blueprints)"
         },
         {
           "name": "parentClass",
@@ -9168,8 +9210,7 @@
               "assetPath"
             ],
             [
-              "name",
-              "packagePath"
+              "name"
             ]
           ]
         }
@@ -9181,17 +9222,42 @@
         {
           "name": "assetPath",
           "type": "string",
-          "required": true,
+          "required": false,
           "description": "Full destination of the new Blueprint Interface",
           "aliases": [
             "path"
           ]
         },
         {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Asset name; with packagePath, the same destination as assetPath"
+        },
+        {
+          "name": "packagePath",
+          "type": "string",
+          "required": false,
+          "description": "Destination folder, used with name (default /Game/Blueprints)"
+        },
+        {
           "name": "onConflict",
           "type": "string",
           "required": false,
           "description": "skip (default) reports the existing entry; error refuses"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "assetPath"
+            ],
+            [
+              "name"
+            ]
+          ]
         }
       ],
       "contractExempt": "Creates and saves an interface at the contract path; nothing it reads fails first"
@@ -9691,6 +9757,12 @@
           "description": "Content folder (default /Game/Blueprints/GameFramework)"
         },
         {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        },
+        {
           "name": "parentClass",
           "type": "string",
           "required": false,
@@ -9712,6 +9784,12 @@
           "type": "string",
           "required": false,
           "description": "Content folder (default /Game/Blueprints/GameFramework)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip (default, returns the existing asset) or error when the asset already exists"
         },
         {
           "name": "parentClass",
@@ -9837,6 +9915,12 @@
           "type": "string",
           "required": false,
           "description": "Content folder (default /Game/Blueprints/GameFramework)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip (default, returns the existing asset) or error when the asset already exists"
         },
         {
           "name": "parentClass",
@@ -10730,6 +10814,12 @@
           "description": "Content folder (default /Game/Blueprints/GameFramework)"
         },
         {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip (default, returns the existing asset) or error when the asset already exists"
+        },
+        {
           "name": "parentClass",
           "type": "string",
           "required": false,
@@ -10751,6 +10841,12 @@
           "type": "string",
           "required": false,
           "description": "Content folder (default /Game/Blueprints/GameFramework)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "skip (default, returns the existing asset) or error when the asset already exists"
         },
         {
           "name": "parentClass",
@@ -11633,6 +11729,18 @@
           "type": "string",
           "required": false,
           "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
         }
       ]
     },
@@ -14817,6 +14925,12 @@
           "description": "auto (default, prefers PIE) | pie | game | editor"
         },
         {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance; a live world only, never widened to another"
+        },
+        {
           "name": "space",
           "type": "string",
           "required": false,
@@ -15900,6 +16014,12 @@
           "type": "string",
           "required": false,
           "description": "auto (default, prefers PIE) | pie | game | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance; a live world only, never widened to another"
         }
       ]
     },
@@ -16359,6 +16479,18 @@
           "type": "number",
           "required": false,
           "description": "0-based player index (default 0)"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "pie (default) | game | auto"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance; omit for the first running one"
         }
       ]
     },
@@ -18126,6 +18258,24 @@
           "description": "Actor label, applied even when another actor carries it"
         },
         {
+          "name": "staticMesh",
+          "type": "string",
+          "required": false,
+          "description": "Static mesh for a StaticMeshActor"
+        },
+        {
+          "name": "material",
+          "type": "string",
+          "required": false,
+          "description": "Material applied at slot 0"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the label or name is taken: skip (default) | error"
+        },
+        {
           "name": "location",
           "type": "vec3",
           "required": false,
@@ -18144,22 +18294,22 @@
           "description": "Actor scale"
         },
         {
-          "name": "staticMesh",
-          "type": "string",
-          "required": false,
-          "description": "Static mesh for a StaticMeshActor"
-        },
-        {
-          "name": "material",
-          "type": "string",
-          "required": false,
-          "description": "Material applied at slot 0"
-        },
-        {
           "name": "folderPath",
           "type": "string",
           "required": false,
           "description": "World Outliner folder"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
         }
       ]
     },
@@ -19060,6 +19210,12 @@
           "type": "string",
           "required": false,
           "description": "auto (default, prefers PIE) | pie | game | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance; a live world only, never widened to another"
         },
         {
           "name": "cursor",
@@ -22323,6 +22479,18 @@
           "type": "number",
           "required": false,
           "description": "Control-rotation roll"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "pie (default) | game | auto"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance; omit for the first running one"
         }
       ],
       "contractExempt": "rotates the running PIE player's view"
@@ -22361,6 +22529,18 @@
           "description": "Actor class: short name, /Script path or Blueprint class path"
         },
         {
+          "name": "staticMesh",
+          "type": "string",
+          "required": false,
+          "description": "Static mesh for a StaticMeshActor"
+        },
+        {
+          "name": "material",
+          "type": "string",
+          "required": false,
+          "description": "Material applied at slot 0"
+        },
+        {
           "name": "label",
           "type": "string",
           "required": false,
@@ -22391,16 +22571,10 @@
           "description": "Actor scale"
         },
         {
-          "name": "staticMesh",
+          "name": "folderPath",
           "type": "string",
           "required": false,
-          "description": "Static mesh for a StaticMeshActor"
-        },
-        {
-          "name": "material",
-          "type": "string",
-          "required": false,
-          "description": "Material applied at slot 0"
+          "description": "World Outliner folder"
         },
         {
           "name": "world",
@@ -32170,6 +32344,12 @@
           "type": "string",
           "required": false,
           "description": "auto (default, prefers PIE) | pie | game | editor"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance; a live world only, never widened to another"
         }
       ]
     },
@@ -33560,6 +33740,18 @@
           "type": "number",
           "required": true,
           "description": "Time-scale factor, greater than 0 (e.g. 500)"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "pie (default) | game | auto"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance; omit for the first running one"
         }
       ]
     },
@@ -34014,6 +34206,18 @@
           "type": "string",
           "required": false,
           "description": "Widget class name that locates the live host widget"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "Runtime world scope: pie (default) | game | auto"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "PIE instance whose widget takes focus"
         }
       ]
     },
@@ -36781,24 +36985,6 @@
           ]
         },
         {
-          "name": "location",
-          "type": "vec3",
-          "required": false,
-          "description": "World location of the actor (default origin)"
-        },
-        {
-          "name": "label",
-          "type": "string",
-          "required": false,
-          "description": "Actor label"
-        },
-        {
-          "name": "onConflict",
-          "type": "string",
-          "required": false,
-          "description": "skip | error | rename when an actor with that label exists (default skip)"
-        },
-        {
           "name": "volumeMultiplier",
           "type": "number",
           "required": false,
@@ -36806,6 +36992,54 @@
           "aliases": [
             "volume"
           ]
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Actor label; an existing actor with this label is reported rather than duplicated"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the label or name is taken: skip (default) | error"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "World location"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation"
+        },
+        {
+          "name": "scale",
+          "type": "vec3",
+          "required": false,
+          "description": "Actor scale"
+        },
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
         }
       ]
     },
@@ -36872,30 +37106,6 @@
           "description": "point | spot | directional | rect | sky"
         },
         {
-          "name": "onConflict",
-          "type": "string",
-          "required": false,
-          "description": "When the label or name is taken: skip (default) | error"
-        },
-        {
-          "name": "label",
-          "type": "string",
-          "required": false,
-          "description": "Actor label; an existing actor with this label is reported rather than duplicated"
-        },
-        {
-          "name": "location",
-          "type": "vec3",
-          "required": false,
-          "description": "World location"
-        },
-        {
-          "name": "rotation",
-          "type": "rotator",
-          "required": false,
-          "description": "World rotation"
-        },
-        {
           "name": "intensity",
           "type": "number",
           "required": false,
@@ -36918,18 +37128,60 @@
           "type": "number",
           "required": false,
           "description": "Point, spot and rect lights only"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Actor label; an existing actor with this label is reported rather than duplicated"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the label or name is taken: skip (default) | error"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "World location"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation"
+        },
+        {
+          "name": "scale",
+          "type": "vec3",
+          "required": false,
+          "description": "Actor scale"
+        },
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
         }
       ]
     },
     "spawn_nav_modifier_volume": {
       "category": "gameplay",
       "params": [
-        {
-          "name": "location",
-          "type": "vec3",
-          "required": false,
-          "description": "World location of the volume (default origin)"
-        },
         {
           "name": "extent",
           "type": "vec3",
@@ -36943,22 +37195,58 @@
           "description": "UNavArea subclass: NavArea_Null (default, cuts a hole), NavArea_Obstacle, or a /Script path"
         },
         {
-          "name": "label",
-          "type": "string",
-          "required": false,
-          "description": "Actor label, also what onConflict dedupes on"
-        },
-        {
           "name": "scale",
           "type": "vec3",
           "required": false,
           "description": "Actor scale, applied after the brush is built"
         },
         {
+          "name": "graphPath",
+          "type": "string",
+          "required": false,
+          "description": "Shared with the other volume spawns; a NavModifierVolume has no PCG component, so it is refused"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Actor label; an existing actor with this label is reported rather than duplicated"
+        },
+        {
           "name": "onConflict",
           "type": "string",
           "required": false,
-          "description": "skip (default, returns the actor already carrying label) or error when one does"
+          "description": "When the label or name is taken: skip (default) | error"
+        },
+        {
+          "name": "location",
+          "type": "vec3",
+          "required": false,
+          "description": "World location"
+        },
+        {
+          "name": "rotation",
+          "type": "rotator",
+          "required": false,
+          "description": "World rotation"
+        },
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
         }
       ],
       "contractExempt": "Spawns a NavModifierVolume under the contract values; nothing it reads fails first"
@@ -37068,18 +37356,6 @@
           "description": "The older spelling of skeletalMesh"
         },
         {
-          "name": "label",
-          "type": "string",
-          "required": false,
-          "description": "Actor label; an existing actor with this label is reported rather than duplicated"
-        },
-        {
-          "name": "onConflict",
-          "type": "string",
-          "required": false,
-          "description": "When the label or name is taken: skip (default) | error"
-        },
-        {
           "name": "transform",
           "type": "object",
           "required": false,
@@ -37106,6 +37382,36 @@
           ]
         },
         {
+          "name": "materials",
+          "type": "array",
+          "required": false,
+          "description": "Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone"
+        },
+        {
+          "name": "animSequence",
+          "type": "string",
+          "required": false,
+          "description": "Single-node preview animation; refused when it does not load"
+        },
+        {
+          "name": "loop",
+          "type": "boolean",
+          "required": false,
+          "description": "Loop the preview animation (default true)"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Actor label; an existing actor with this label is reported rather than duplicated"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the label or name is taken: skip (default) | error"
+        },
+        {
           "name": "location",
           "type": "vec3",
           "required": false,
@@ -37124,22 +37430,22 @@
           "description": "Actor scale"
         },
         {
-          "name": "materials",
-          "type": "array",
-          "required": false,
-          "description": "Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone"
-        },
-        {
-          "name": "animSequence",
+          "name": "folderPath",
           "type": "string",
           "required": false,
-          "description": "Single-node preview animation"
+          "description": "World Outliner folder"
         },
         {
-          "name": "loop",
-          "type": "boolean",
+          "name": "world",
+          "type": "string",
           "required": false,
-          "description": "Loop the preview animation (default true)"
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
         }
       ],
       "choices": [
@@ -37228,13 +37534,19 @@
           "name": "volumeType",
           "type": "string",
           "required": true,
-          "description": "Volume class, by short name or alias such as trigger, blocking, postprocess, navmesh"
+          "description": "Volume class, by short name or alias such as trigger, blocking, postprocess, navmesh, pcg"
         },
         {
-          "name": "onConflict",
+          "name": "extent",
+          "type": "vec3",
+          "required": false,
+          "description": "Half extent of the cube brush, positive on every axis (default 100, 100, 100)"
+        },
+        {
+          "name": "graphPath",
           "type": "string",
           "required": false,
-          "description": "When the label or name is taken: skip (default) | error"
+          "description": "PCG graph for a volume with a PCG component; refused when it does not load"
         },
         {
           "name": "label",
@@ -37243,22 +37555,46 @@
           "description": "Actor label; an existing actor with this label is reported rather than duplicated"
         },
         {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the label or name is taken: skip (default) | error"
+        },
+        {
           "name": "location",
           "type": "vec3",
           "required": false,
           "description": "World location"
         },
         {
-          "name": "extent",
-          "type": "vec3",
+          "name": "rotation",
+          "type": "rotator",
           "required": false,
-          "description": "Half extent of the cube brush (default 100, 100, 100)"
+          "description": "World rotation"
         },
         {
-          "name": "graphPath",
+          "name": "scale",
+          "type": "vec3",
+          "required": false,
+          "description": "Actor scale"
+        },
+        {
+          "name": "folderPath",
           "type": "string",
           "required": false,
-          "description": "PCG graph for a PCGVolume"
+          "description": "World Outliner folder"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
         }
       ]
     },
@@ -37276,6 +37612,18 @@
           "type": "boolean",
           "required": false,
           "description": "Show the mouse cursor (default false for gameOnly, true otherwise)"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "pie (default) | game | auto"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world instance; omit for the first running one"
         }
       ],
       "contractExempt": "sets the running PIE player's input mode"

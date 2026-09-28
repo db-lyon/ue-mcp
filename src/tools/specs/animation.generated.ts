@@ -2756,6 +2756,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "auto (default, prefers PIE) | pie | game | editor"
       },
       {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance; a live world only, never widened to another"
+      },
+      {
         "name": "space",
         "type": "string",
         "required": false,
@@ -2830,6 +2836,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "auto (default, prefers PIE) | pie | game | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance; a live world only, never widened to another"
       }
     ]
   },
@@ -2970,6 +2982,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "auto (default, prefers PIE) | pie | game | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance; a live world only, never widened to another"
       },
       {
         "name": "cursor",
@@ -4468,6 +4486,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "auto (default, prefers PIE) | pie | game | editor"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance; a live world only, never widened to another"
       }
     ]
   },

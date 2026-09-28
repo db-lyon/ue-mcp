@@ -1436,6 +1436,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Widget class name that locates the live host widget"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "Runtime world scope: pie (default) | game | auto"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "PIE instance whose widget takes focus"
       }
     ]
   },

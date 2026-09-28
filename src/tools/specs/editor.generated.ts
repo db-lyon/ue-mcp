@@ -815,6 +815,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "0-based player index (default 0)"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "pie (default) | game | auto"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance; omit for the first running one"
       }
     ]
   },
@@ -1504,6 +1516,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "Control-rotation roll"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "pie (default) | game | auto"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance; omit for the first running one"
       }
     ],
     "contractExempt": "rotates the running PIE player's view"
@@ -2257,6 +2281,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": true,
         "description": "Time-scale factor, greater than 0 (e.g. 500)"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "pie (default) | game | auto"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance; omit for the first running one"
       }
     ]
   },
@@ -2673,6 +2709,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Show the mouse cursor (default false for gameOnly, true otherwise)"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "pie (default) | game | auto"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world instance; omit for the first running one"
       }
     ],
     "contractExempt": "sets the running PIE player's input mode"

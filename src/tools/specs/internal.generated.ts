@@ -102,6 +102,24 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Actor label, applied even when another actor carries it"
       },
       {
+        "name": "staticMesh",
+        "type": "string",
+        "required": false,
+        "description": "Static mesh for a StaticMeshActor"
+      },
+      {
+        "name": "material",
+        "type": "string",
+        "required": false,
+        "description": "Material applied at slot 0"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "When the label or name is taken: skip (default) | error"
+      },
+      {
         "name": "location",
         "type": "vec3",
         "required": false,
@@ -120,22 +138,22 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Actor scale"
       },
       {
-        "name": "staticMesh",
-        "type": "string",
-        "required": false,
-        "description": "Static mesh for a StaticMeshActor"
-      },
-      {
-        "name": "material",
-        "type": "string",
-        "required": false,
-        "description": "Material applied at slot 0"
-      },
-      {
         "name": "folderPath",
         "type": "string",
         "required": false,
         "description": "World Outliner folder"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
       }
     ]
   }

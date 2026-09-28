@@ -7,8 +7,9 @@
  * reached the editor as an illegal asset name and came back as a bare
  * "Failed to create Blueprint".
  *
- * The destination is now a spec choice (#1057): assetPath OR name +
- * packagePath, checked before anything is sent. The handler folds the path
+ * The destination is a spec choice (#1057): assetPath OR name, with
+ * packagePath defaulting to /Game/Blueprints the way every other creator's
+ * folder defaults (F4), checked before anything is sent. The handler folds the path
  * spellings itself, so the bag reaches the bridge exactly as the caller wrote it.
  */
 import { describe, expect, it, vi } from "vitest";
@@ -44,7 +45,7 @@ describe("blueprint.create destination", () => {
 
   it("names the public parameters when the destination is missing", async () => {
     await expect(sent({ parentClass: "/Script/UMG.UserWidget" }))
-      .rejects.toThrow(/assetPath \(or path\) OR name \+ packagePath/);
+      .rejects.toThrow(/assetPath \(or path\) OR name/);
   });
 
   it("refuses both spellings of the destination at once", async () => {
@@ -52,7 +53,7 @@ describe("blueprint.create destination", () => {
       .rejects.toThrow(/takes one side/);
   });
 
-  it("refuses a name without its packagePath", async () => {
-    await expect(sent({ name: "WBP_ComputerDesktop" })).rejects.toThrow(/without packagePath/);
+  it("takes a name alone, the folder defaulting in the handler", async () => {
+    expect(await sent({ name: "WBP_ComputerDesktop" })).toEqual({ name: "WBP_ComputerDesktop" });
   });
 });

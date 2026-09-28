@@ -2757,7 +2757,7 @@ tasks:
       the same thing. A .uasset suffix, an object suffix, and backslashes are
       normalized away rather than reaching the editor as an invalid asset name.
       Idempotent by path: an existing Blueprint is reported rather than
-      replaced. Params: assetPath (or path) OR name + packagePath, parentClass?,
+      replaced. Params: assetPath (or path) OR name, packagePath?, parentClass?,
       onConflict?
   blueprint.add_variable:
     class_path: ue-mcp.builtin/blueprint.add_variable
@@ -3113,7 +3113,8 @@ tasks:
     group: blueprint
     description: >-
       Create BP Interface. Idempotent by path: an existing interface is reported
-      rather than replaced. Params: assetPath (or path), onConflict?
+      rather than replaced. Params: assetPath (or path) OR name, packagePath?,
+      onConflict?
   blueprint.add_interface:
     class_path: ue-mcp.builtin/blueprint.add_interface
     group: blueprint
@@ -4083,15 +4084,15 @@ tasks:
     group: level
     description: >-
       Spawn actor. Pass world:pie to spawn into the running PIE world (#585).
-      Params: actorClass, label?, onConflict?, location?, rotation?, scale?,
-      staticMesh?, material?, world?, pieInstance?
+      Params: actorClass, staticMesh?, material?, label?, onConflict?,
+      location?, rotation?, scale?, folderPath?, world?, pieInstance?
   level.delete_actor:
     class_path: ue-mcp.builtin/level.delete_actor
     group: level
     description: >-
       Remove actor. A label matching several actors is refused with the
       candidates rather than deleting one of them (#983). Params: actorLabel?,
-      actorPath?
+      actorPath?, world?, pieInstance?
   level.get_actor_details:
     class_path: ue-mcp.builtin/level.get_actor_details
     group: level
@@ -4259,8 +4260,9 @@ tasks:
     class_path: ue-mcp.builtin/level.spawn_volume
     group: level
     description: >-
-      Place volume. Params: volumeType, onConflict?, label?, location?, extent?,
-      graphPath?
+      Place volume. Params: volumeType, extent?, graphPath?, label?,
+      onConflict?, location?, rotation?, scale?, folderPath?, world?,
+      pieInstance?
   level.list_volumes:
     class_path: ue-mcp.builtin/level.list_volumes
     group: level
@@ -4275,8 +4277,9 @@ tasks:
     class_path: ue-mcp.builtin/level.spawn_light
     group: level
     description: >-
-      Place light (#331/#310). Params: lightType, onConflict?, label?,
-      location?, rotation?, intensity?, color?, mobility?, attenuationRadius?
+      Place light (#331/#310). Params: lightType, intensity?, color?, mobility?,
+      attenuationRadius?, label?, onConflict?, location?, rotation?, scale?,
+      folderPath?, world?, pieInstance?
   level.set_light_properties:
     class_path: ue-mcp.builtin/level.set_light_properties
     group: level
@@ -4625,8 +4628,9 @@ tasks:
       materialSlotCount. The animSequence is written to the component's editable
       AnimationData, so it persists across a level save/reload instead of only
       driving the runtime preview and coming back in A-pose (#790) (#679/#677).
-      Params: skeletalMesh OR meshPath, label?, onConflict?, transform?,
-      location?, rotation?, scale?, materials?, animSequence?, loop?
+      Params: skeletalMesh OR meshPath, transform?, materials?, animSequence?,
+      loop?, label?, onConflict?, location?, rotation?, scale?, folderPath?,
+      world?, pieInstance?
   level.delete_actors:
     class_path: ue-mcp.builtin/level.delete_actors
     group: level
@@ -7291,15 +7295,15 @@ tasks:
       Read a bone or socket transform on a live actor's SkeletalMeshComponent.
       Wraps GetBoneTransform / GetSocketTransform. Returns location, rotation,
       scale (#420). Params: actorLabel?, actorPath?, boneName, componentName?,
-      world?, space?
+      world?, pieInstance?, space?
   animation.list_bones:
     class_path: ue-mcp.builtin/animation.list_bones
     group: animation
     description: >-
       List bones in a live actor's SkeletalMeshComponent ref skeleton (name,
       index, parent), in reference-skeleton order so parents precede children
-      (#420). Params: actorLabel?, actorPath?, componentName?, world?, cursor?,
-      limit?
+      (#420). Params: actorLabel?, actorPath?, componentName?, world?,
+      pieInstance?, cursor?, limit?
   animation.rebind_leader_pose:
     class_path: ue-mcp.builtin/animation.rebind_leader_pose
     group: animation
@@ -7331,7 +7335,7 @@ tasks:
       animInstanceClass, componentSpaceTransformCount) so a clean component
       transform sitting on a dead anim instance is visible in one call
       (#922/#926). Params: actorLabel?, actorPath?, componentName?, boneNames?,
-      space?, world?
+      space?, world?, pieInstance?
   animation.measure_natural_speed:
     class_path: ue-mcp.builtin/animation.measure_natural_speed
     group: animation
@@ -7367,7 +7371,7 @@ tasks:
       effective class, and live post-process instance. Repeating the active
       override is a no-op. This never edits or saves a mesh, Blueprint, or
       component template. Params: actorLabel?, actorPath?,
-      animBlueprintClassPath?, clear?, componentName?, world?
+      animBlueprintClassPath?, clear?, componentName?, world?, pieInstance?
   animation.epic_add_actors:
     class_path: ue-mcp.builtin/animation.epic_add_actors
     group: animation
@@ -10282,7 +10286,8 @@ tasks:
     group: pcg
     description: >-
       Place PCG volume. Idempotent by editor label when one is given. Params:
-      graphPath?, location?, extent?, label?, onConflict?
+      graphPath?, extent?, label?, onConflict?, location?, rotation?, scale?,
+      folderPath?, world?, pieInstance?
   pcg.import_graph:
     class_path: ue-mcp.builtin/pcg.import_graph
     group: pcg
@@ -11501,8 +11506,8 @@ tasks:
     description: >-
       Place an AmbientSound actor playing a sound. A sound that does not load is
       refused rather than placing a silent actor. Params: soundPath (or
-      assetPath, or path), location?, label?, onConflict?, volumeMultiplier? (or
-      volume)
+      assetPath, or path), volumeMultiplier? (or volume), label?, onConflict?,
+      location?, rotation?, scale?, folderPath?, world?, pieInstance?
   audio.metasound_author:
     class_path: ue-mcp.builtin/audio.metasound_author
     group: audio
@@ -12146,7 +12151,7 @@ tasks:
       chain can be walked and verified rather than predicted. Locate the host
       with className when more than one instance is up. Setting focus where it
       already is reports unchanged. Params: widgetName (or widgetDisplayName),
-      userIndex?, className?
+      userIndex?, className?, world?, pieInstance?
   widget.create:
     class_path: ue-mcp.builtin/widget.create
     group: widget
@@ -12853,7 +12858,8 @@ tasks:
     group: editor
     description: >-
       Resolve the controlled pawn in the active PIE world. Returns
-      actorLabel/class/location/rotation (#228/#229). Params: playerIndex?
+      actorLabel/class/location/rotation (#228/#229). Params: playerIndex?,
+      world?, pieInstance?
   editor.list_pie_instances:
     class_path: ue-mcp.builtin/editor.list_pie_instances
     group: editor
@@ -13070,7 +13076,7 @@ tasks:
     group: editor
     description: >-
       Fast-forward PIE game time. Raises WorldSettings caps and calls
-      SetGlobalTimeDilation. Params: factor
+      SetGlobalTimeDilation. Params: factor, world?, pieInstance?
   editor.hot_reload:
     class_path: ue-mcp.builtin/editor.hot_reload
     group: editor
@@ -13791,7 +13797,7 @@ tasks:
     description: >-
       Point the running PIE player's view (control rotation) at a pitch/yaw/roll
       so a capture frames the intended direction. Requires PIE (#671). Params:
-      pitch?, yaw?, roll?
+      pitch?, yaw?, roll?, world?, pieInstance?
   editor.stage_game_input:
     class_path: ue-mcp.builtin/editor.stage_game_input
     group: editor
@@ -13800,7 +13806,7 @@ tasks:
       (gameOnly|gameAndUI|uiOnly) and mouse cursor so injected/simulated input
       reaches the pawn. This only sets the mode - the injection itself lives in
       the pie category (pie(inject_input*)), not here. Requires PIE (#671).
-      Params: inputMode?, showMouseCursor?
+      Params: inputMode?, showMouseCursor?, world?, pieInstance?
   editor.run_automation_tests:
     class_path: ue-mcp.builtin/editor.run_automation_tests
     group: editor
@@ -14321,8 +14327,9 @@ tasks:
       requires both Brush and AreaClass). extent is a HALF-size in world units,
       default 100. areaClass defaults to NavArea_Null, which cuts a hole in the
       navmesh; pass NavArea_Obstacle to make the region costly instead, or any
-      UNavArea subclass. Params: location?, extent?, areaClass?, label?, scale?,
-      onConflict?
+      UNavArea subclass. Params: extent?, areaClass?, scale?, graphPath?,
+      label?, onConflict?, location?, rotation?, folderPath?, world?,
+      pieInstance?
   gameplay.create_input_action:
     class_path: ue-mcp.builtin/gameplay.create_input_action
     group: gameplay
@@ -15026,7 +15033,7 @@ tasks:
   gameplay.add_state_tree_component:
     class_path: ue-mcp.builtin/gameplay.add_state_tree_component
     group: gameplay
-    description: 'Add StateTreeComponent. Params: blueprintPath'
+    description: 'Add StateTreeComponent. Params: blueprintPath, componentName?'
   gameplay.create_smart_object_def:
     class_path: ue-mcp.builtin/gameplay.create_smart_object_def
     group: gameplay
@@ -15040,7 +15047,7 @@ tasks:
   gameplay.add_smart_object_component:
     class_path: ue-mcp.builtin/gameplay.add_smart_object_component
     group: gameplay
-    description: 'Add SmartObjectComponent. Params: blueprintPath'
+    description: 'Add SmartObjectComponent. Params: blueprintPath, componentName?'
   gameplay.add_smart_object_slot:
     class_path: ue-mcp.builtin/gameplay.add_smart_object_slot
     group: gameplay
@@ -15109,31 +15116,31 @@ tasks:
     description: >-
       Create GameMode BP. parentClass must derive from GameModeBase (short name,
       /Script path, or a Blueprint asset path). Params: name, packagePath?,
-      parentClass?
+      onConflict?, parentClass?
   gameplay.create_game_state:
     class_path: ue-mcp.builtin/gameplay.create_game_state
     group: gameplay
     description: >-
       Create GameState BP. parentClass must derive from GameStateBase. Params:
-      name, packagePath?, parentClass?
+      name, packagePath?, onConflict?, parentClass?
   gameplay.create_player_controller:
     class_path: ue-mcp.builtin/gameplay.create_player_controller
     group: gameplay
     description: >-
       Create PlayerController BP. parentClass must derive from PlayerController.
-      Params: name, packagePath?, parentClass?
+      Params: name, packagePath?, onConflict?, parentClass?
   gameplay.create_player_state:
     class_path: ue-mcp.builtin/gameplay.create_player_state
     group: gameplay
     description: >-
       Create PlayerState BP. parentClass must derive from PlayerState. Params:
-      name, packagePath?, parentClass?
+      name, packagePath?, onConflict?, parentClass?
   gameplay.create_hud:
     class_path: ue-mcp.builtin/gameplay.create_hud
     group: gameplay
     description: >-
       Create HUD BP. parentClass must derive from HUD. Params: name,
-      packagePath?, parentClass?
+      packagePath?, onConflict?, parentClass?
   gameplay.set_world_game_mode:
     class_path: ue-mcp.builtin/gameplay.set_world_game_mode
     group: gameplay

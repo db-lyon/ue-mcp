@@ -207,6 +207,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Blueprint asset path"
+      },
+      {
+        "name": "componentName",
+        "type": "string",
+        "required": false,
+        "description": "Name of the new component (default SmartObjectComp)"
       }
     ]
   },
@@ -317,6 +323,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": true,
         "description": "Blueprint asset path"
+      },
+      {
+        "name": "componentName",
+        "type": "string",
+        "required": false,
+        "description": "Name of the new component (default StateTreeComp)"
       }
     ]
   },
@@ -512,6 +524,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Content folder (default /Game/Blueprints/GameFramework)"
       },
       {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+      },
+      {
         "name": "parentClass",
         "type": "string",
         "required": false,
@@ -535,6 +553,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Content folder (default /Game/Blueprints/GameFramework)"
       },
       {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+      },
+      {
         "name": "parentClass",
         "type": "string",
         "required": false,
@@ -556,6 +580,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Content folder (default /Game/Blueprints/GameFramework)"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "skip (default, returns the existing asset) or error when the asset already exists"
       },
       {
         "name": "parentClass",
@@ -635,6 +665,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Content folder (default /Game/Blueprints/GameFramework)"
       },
       {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "skip (default, returns the existing asset) or error when the asset already exists"
+      },
+      {
         "name": "parentClass",
         "type": "string",
         "required": false,
@@ -656,6 +692,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Content folder (default /Game/Blueprints/GameFramework)"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "skip (default, returns the existing asset) or error when the asset already exists"
       },
       {
         "name": "parentClass",
@@ -2431,12 +2473,6 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "gameplay",
     "params": [
       {
-        "name": "location",
-        "type": "vec3",
-        "required": false,
-        "description": "World location of the volume (default origin)"
-      },
-      {
         "name": "extent",
         "type": "vec3",
         "required": false,
@@ -2449,22 +2485,58 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "UNavArea subclass: NavArea_Null (default, cuts a hole), NavArea_Obstacle, or a /Script path"
       },
       {
-        "name": "label",
-        "type": "string",
-        "required": false,
-        "description": "Actor label, also what onConflict dedupes on"
-      },
-      {
         "name": "scale",
         "type": "vec3",
         "required": false,
         "description": "Actor scale, applied after the brush is built"
       },
       {
+        "name": "graphPath",
+        "type": "string",
+        "required": false,
+        "description": "Shared with the other volume spawns; a NavModifierVolume has no PCG component, so it is refused"
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": "Actor label; an existing actor with this label is reported rather than duplicated"
+      },
+      {
         "name": "onConflict",
         "type": "string",
         "required": false,
-        "description": "skip (default, returns the actor already carrying label) or error when one does"
+        "description": "When the label or name is taken: skip (default) | error"
+      },
+      {
+        "name": "location",
+        "type": "vec3",
+        "required": false,
+        "description": "World location"
+      },
+      {
+        "name": "rotation",
+        "type": "rotator",
+        "required": false,
+        "description": "World rotation"
+      },
+      {
+        "name": "folderPath",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
       }
     ],
     "contractExempt": "Spawns a NavModifierVolume under the contract values; nothing it reads fails first"

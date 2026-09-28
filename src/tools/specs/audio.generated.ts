@@ -1630,24 +1630,6 @@ export const handlerSpecs: HandlerSpecs = {
         ]
       },
       {
-        "name": "location",
-        "type": "vec3",
-        "required": false,
-        "description": "World location of the actor (default origin)"
-      },
-      {
-        "name": "label",
-        "type": "string",
-        "required": false,
-        "description": "Actor label"
-      },
-      {
-        "name": "onConflict",
-        "type": "string",
-        "required": false,
-        "description": "skip | error | rename when an actor with that label exists (default skip)"
-      },
-      {
         "name": "volumeMultiplier",
         "type": "number",
         "required": false,
@@ -1655,6 +1637,54 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "volume"
         ]
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": "Actor label; an existing actor with this label is reported rather than duplicated"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "When the label or name is taken: skip (default) | error"
+      },
+      {
+        "name": "location",
+        "type": "vec3",
+        "required": false,
+        "description": "World location"
+      },
+      {
+        "name": "rotation",
+        "type": "rotator",
+        "required": false,
+        "description": "World rotation"
+      },
+      {
+        "name": "scale",
+        "type": "vec3",
+        "required": false,
+        "description": "Actor scale"
+      },
+      {
+        "name": "folderPath",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
       }
     ]
   }

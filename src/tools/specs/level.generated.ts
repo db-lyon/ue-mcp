@@ -825,6 +825,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
       }
     ]
   },
@@ -2129,6 +2141,18 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Actor class: short name, /Script path or Blueprint class path"
       },
       {
+        "name": "staticMesh",
+        "type": "string",
+        "required": false,
+        "description": "Static mesh for a StaticMeshActor"
+      },
+      {
+        "name": "material",
+        "type": "string",
+        "required": false,
+        "description": "Material applied at slot 0"
+      },
+      {
         "name": "label",
         "type": "string",
         "required": false,
@@ -2159,16 +2183,10 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Actor scale"
       },
       {
-        "name": "staticMesh",
+        "name": "folderPath",
         "type": "string",
         "required": false,
-        "description": "Static mesh for a StaticMeshActor"
-      },
-      {
-        "name": "material",
-        "type": "string",
-        "required": false,
-        "description": "Material applied at slot 0"
+        "description": "World Outliner folder"
       },
       {
         "name": "world",
@@ -4538,30 +4556,6 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "point | spot | directional | rect | sky"
       },
       {
-        "name": "onConflict",
-        "type": "string",
-        "required": false,
-        "description": "When the label or name is taken: skip (default) | error"
-      },
-      {
-        "name": "label",
-        "type": "string",
-        "required": false,
-        "description": "Actor label; an existing actor with this label is reported rather than duplicated"
-      },
-      {
-        "name": "location",
-        "type": "vec3",
-        "required": false,
-        "description": "World location"
-      },
-      {
-        "name": "rotation",
-        "type": "rotator",
-        "required": false,
-        "description": "World rotation"
-      },
-      {
         "name": "intensity",
         "type": "number",
         "required": false,
@@ -4584,6 +4578,54 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "number",
         "required": false,
         "description": "Point, spot and rect lights only"
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": "Actor label; an existing actor with this label is reported rather than duplicated"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "When the label or name is taken: skip (default) | error"
+      },
+      {
+        "name": "location",
+        "type": "vec3",
+        "required": false,
+        "description": "World location"
+      },
+      {
+        "name": "rotation",
+        "type": "rotator",
+        "required": false,
+        "description": "World rotation"
+      },
+      {
+        "name": "scale",
+        "type": "vec3",
+        "required": false,
+        "description": "Actor scale"
+      },
+      {
+        "name": "folderPath",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
       }
     ]
   },
@@ -4602,18 +4644,6 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "The older spelling of skeletalMesh"
-      },
-      {
-        "name": "label",
-        "type": "string",
-        "required": false,
-        "description": "Actor label; an existing actor with this label is reported rather than duplicated"
-      },
-      {
-        "name": "onConflict",
-        "type": "string",
-        "required": false,
-        "description": "When the label or name is taken: skip (default) | error"
       },
       {
         "name": "transform",
@@ -4642,6 +4672,36 @@ export const handlerSpecs: HandlerSpecs = {
         ]
       },
       {
+        "name": "materials",
+        "type": "array",
+        "required": false,
+        "description": "Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone"
+      },
+      {
+        "name": "animSequence",
+        "type": "string",
+        "required": false,
+        "description": "Single-node preview animation; refused when it does not load"
+      },
+      {
+        "name": "loop",
+        "type": "boolean",
+        "required": false,
+        "description": "Loop the preview animation (default true)"
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": "Actor label; an existing actor with this label is reported rather than duplicated"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "When the label or name is taken: skip (default) | error"
+      },
+      {
         "name": "location",
         "type": "vec3",
         "required": false,
@@ -4660,22 +4720,22 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Actor scale"
       },
       {
-        "name": "materials",
-        "type": "array",
-        "required": false,
-        "description": "Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone"
-      },
-      {
-        "name": "animSequence",
+        "name": "folderPath",
         "type": "string",
         "required": false,
-        "description": "Single-node preview animation"
+        "description": "World Outliner folder"
       },
       {
-        "name": "loop",
-        "type": "boolean",
+        "name": "world",
+        "type": "string",
         "required": false,
-        "description": "Loop the preview animation (default true)"
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
       }
     ],
     "choices": [
@@ -4764,13 +4824,19 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "volumeType",
         "type": "string",
         "required": true,
-        "description": "Volume class, by short name or alias such as trigger, blocking, postprocess, navmesh"
+        "description": "Volume class, by short name or alias such as trigger, blocking, postprocess, navmesh, pcg"
       },
       {
-        "name": "onConflict",
+        "name": "extent",
+        "type": "vec3",
+        "required": false,
+        "description": "Half extent of the cube brush, positive on every axis (default 100, 100, 100)"
+      },
+      {
+        "name": "graphPath",
         "type": "string",
         "required": false,
-        "description": "When the label or name is taken: skip (default) | error"
+        "description": "PCG graph for a volume with a PCG component; refused when it does not load"
       },
       {
         "name": "label",
@@ -4779,22 +4845,46 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Actor label; an existing actor with this label is reported rather than duplicated"
       },
       {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "When the label or name is taken: skip (default) | error"
+      },
+      {
         "name": "location",
         "type": "vec3",
         "required": false,
         "description": "World location"
       },
       {
-        "name": "extent",
-        "type": "vec3",
+        "name": "rotation",
+        "type": "rotator",
         "required": false,
-        "description": "Half extent of the cube brush (default 100, 100, 100)"
+        "description": "World rotation"
       },
       {
-        "name": "graphPath",
+        "name": "scale",
+        "type": "vec3",
+        "required": false,
+        "description": "Actor scale"
+      },
+      {
+        "name": "folderPath",
         "type": "string",
         "required": false,
-        "description": "PCG graph for a PCGVolume"
+        "description": "World Outliner folder"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
       }
     ]
   },

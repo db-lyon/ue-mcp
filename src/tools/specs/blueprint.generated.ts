@@ -622,7 +622,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "packagePath",
         "type": "string",
         "required": false,
-        "description": "Destination folder, used with name"
+        "description": "Destination folder, used with name (default /Game/Blueprints)"
       },
       {
         "name": "parentClass",
@@ -645,8 +645,7 @@ export const handlerSpecs: HandlerSpecs = {
             "assetPath"
           ],
           [
-            "name",
-            "packagePath"
+            "name"
           ]
         ]
       }
@@ -658,17 +657,42 @@ export const handlerSpecs: HandlerSpecs = {
       {
         "name": "assetPath",
         "type": "string",
-        "required": true,
+        "required": false,
         "description": "Full destination of the new Blueprint Interface",
         "aliases": [
           "path"
         ]
       },
       {
+        "name": "name",
+        "type": "string",
+        "required": false,
+        "description": "Asset name; with packagePath, the same destination as assetPath"
+      },
+      {
+        "name": "packagePath",
+        "type": "string",
+        "required": false,
+        "description": "Destination folder, used with name (default /Game/Blueprints)"
+      },
+      {
         "name": "onConflict",
         "type": "string",
         "required": false,
         "description": "skip (default) reports the existing entry; error refuses"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "assetPath"
+          ],
+          [
+            "name"
+          ]
+        ]
       }
     ],
     "contractExempt": "Creates and saves an interface at the contract path; nothing it reads fails first"
