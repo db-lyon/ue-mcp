@@ -15,6 +15,8 @@
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerPropertyText.h"
+#include "BehaviorTreeEditTraits.h"
+#include "Families/MCPPropertyWrite.h"
 
 #include "JsonObjectConverter.h"
 #include "Modules/ModuleManager.h"
@@ -1020,9 +1022,6 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListBTTasks(const TSharedPtr<FJsonObje
 
 TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
-
 	// Every parameter is read before the load can fail (#1057).
 	FMCPBTSelector Selector = MCPBTReadSelector(Params);
 	const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
@@ -1030,7 +1029,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 	const FString SingleProperty = OptionalString(Params, TEXT("property")).TrimStartAndEnd();
 	const TSharedPtr<FJsonValue> SingleValue = TryGetParam(Params, TEXT("value"));
 
-	REQUIRE_ASSET(UBehaviorTree, BT, AssetPath);
+	// A node instance write: saved, never rebuilt from the graph.
+	FMCPEditScope Edit(Params, TEXT("set_bt_node_property"), TEXT("assetPath"), MCPBehaviorTree::AssetEdit());
+	if (auto Err = Edit.Open<UBehaviorTree>()) return Err;
+	const FString AssetPath = Edit.Path();
+	UBehaviorTree* BT = Edit.Target<UBehaviorTree>();
 
 	TArray<FMCPBTNodeRef> Nodes;
 	MCPBTCollectTree(BT, Nodes);
@@ -1125,16 +1128,45 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 		Snapshots.Add(MoveTemp(Snapshot));
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
 	BT->Modify();
 	Node->Modify();
 
+	// Each write goes through F5 on the node: its chain event fires, and a
+	// refused write is put back by the engine before anything is notified.
+	FString SinglePrevious;
 	for (int32 i = 0; i < Writes.Num(); ++i)
 	{
-		FString WriteError;
-		if (WriteBTNodeProperty(Node, Writes[i].Key, Writes[i].Value, WriteError))
+		FProperty* WriteProp = nullptr;
+		void* WriteAddr = nullptr;
+		UObject* WriteOwner = nullptr;
+		FString WriteResolveError;
+		MCPJsonProperty::ResolveDottedPath(Node, Writes[i].Key, WriteProp, WriteAddr, WriteOwner, WriteResolveError);
+		// A path that crosses into an instanced subobject notifies that object, with no chain from the node.
+		UObject* Owner = WriteOwner ? WriteOwner : Node;
+		TArray<MCPPropertyWrite::FLink> Chain;
+		if (Owner == Node) Chain = MCPPropertyWrite::ChainOf(Node->GetClass(), Writes[i].Key);
+		MCPPropertyWrite::FTarget Target{ Owner, Chain.Num() > 0 ? Chain[0].Property : nullptr, WriteProp, WriteAddr, Chain };
+		const TPair<FString, TSharedPtr<FJsonValue>>& Write = Writes[i];
+		MCPPropertyWrite::FOutcome Outcome;
+		if (WriteProp)
 		{
+			Outcome = MCPPropertyWrite::Write(Target, [Node, &Write](FString& OutError)
+			{
+				return FGameplayHandlers::WriteBTNodeProperty(Node, Write.Key, Write.Value, OutError);
+			});
+		}
+		else
+		{
+			// A path that does not resolve keeps the resolver's own error.
+			Outcome.Error = WriteResolveError;
+		}
+		if (Outcome.bWritten)
+		{
+			SinglePrevious = Outcome.Previous;
 			continue;
 		}
+		const FString WriteError = Outcome.Error;
 
 		// Put back every write this call already made. A partially applied
 		// batch is worse than a rejected one: the caller would have to guess
@@ -1156,10 +1188,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 			*Writes[i].Key, *Matches[0].Path, *Node->GetClass()->GetName(), *WriteError));
 	}
 
-	Node->PostEditChange();
 	BT->PostEditChange();
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(BT, SaveError);
+	// Every accepted write saves, as it always has, even one that kept its value.
+	Edit.Commit();
 
 	// #940 asks for the write to be proved rather than asserted: every target
 	// is read back off the node and reported next to what it held before.
@@ -1205,7 +1236,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("objectName"), Node->GetName());
 	Result->SetNumberField(TEXT("appliedCount"), Applied.Num());
 	Result->SetArrayField(TEXT("applied"), Applied);
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	if (Writes.Num() == 1) Result->SetStringField(TEXT("previousValue"), SinglePrevious);
 
 	if (RollbackProperties->Values.Num() > 0)
 	{
@@ -1215,5 +1246,5 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 		Payload->SetObjectField(TEXT("properties"), RollbackProperties);
 		MCPSetRollback(Result, TEXT("set_bt_node_property"), Payload);
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
