@@ -1,6 +1,7 @@
 #include "LevelHandlers.h"
 
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -83,7 +84,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SummarizeStaticMeshUsage(const TSharedPtr
 	}
 
 	const FString WorldScope = bEditorWorld ? TEXT("editor") : TEXT("pie");
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));

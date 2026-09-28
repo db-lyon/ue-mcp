@@ -24,8 +24,8 @@ private:
 	static TSharedPtr<FJsonValue> PlaceActor(const TSharedPtr<FJsonObject>& Params);
 	// internal_spawn_actor: place_actor that spawns under a taken label too.
 	static TSharedPtr<FJsonValue> SpawnActorUnchecked(const TSharedPtr<FJsonObject>& Params);
-	static class AActor* SpawnForPlacement(class UWorld* World, class UClass* Class,
-		const TSharedPtr<FJsonObject>& Params, const FString& Label);
+	// place_actor and internal_spawn_actor: one F6 spawn of actorClass.
+	static TSharedPtr<FJsonValue> PlaceActorOfClass(const TSharedPtr<FJsonObject>& Params, bool bLabelCheck);
 	static TSharedPtr<FJsonValue> DeleteActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetActorDetails(const TSharedPtr<FJsonObject>& Params);
 	// #240/#241/#302/#320/#370/#353: deep component-tree introspection - per-component

@@ -1,6 +1,8 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
+#include "Families/MCPWorldSpawn.h"
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
 #include "Handlers/VolumeHelpers_Internal.h"
@@ -119,7 +121,6 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecRotation = MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("World rotation"));
 	const FMCPParamSpec SpecScale = MCPParam::Optional(TEXT("scale"), EType::Vec3, TEXT("Actor scale"));
 	const FMCPParamSpec SpecComponentName = MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Component instance name"));
-	const FMCPParamSpec SpecLabel = MCPParam::Optional(TEXT("label"), EType::String, TEXT("Actor label; an existing actor with this label is reported rather than duplicated"));
 	const FMCPParamSpec SpecOnConflict = MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the label or name is taken: skip (default) | error"));
 	const FMCPParamSpec SpecPropertyName = MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property name, dotted paths supported"));
 	const FMCPParamSpec SpecWorldSpace = MCPParam::Optional(TEXT("worldSpace"), EType::Boolean, TEXT("Treat transforms as world space (default true)"));
@@ -162,27 +163,24 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecActorLabels,
 		MCPParam::Optional(TEXT("all"), EType::Boolean, TEXT("Target every actor")),
 	});
-	Registry.RegisterHandler(TEXT("place_actor"), &PlaceActor, {
+	Registry.RegisterHandler(TEXT("place_actor"), &PlaceActor, FMCPSpawn::ParamsWith({
 		MCPParam::Required(TEXT("actorClass"), EType::String, TEXT("Actor class: short name, /Script path or Blueprint class path")),
-		SpecLabel, SpecOnConflict, SpecLocation, SpecRotation, SpecScale,
 		MCPParam::Optional(TEXT("staticMesh"), EType::String, TEXT("Static mesh for a StaticMeshActor")),
 		MCPParam::Optional(TEXT("material"), EType::String, TEXT("Material applied at slot 0")),
-		SpecWorld, SpecPieInstance,
-	});
+	}));
 	{
 		// Reached only as the flow task internal.spawn_actor (src/flow/internal-tasks.ts).
 		FMCPHandlerRegistry::FCategoryScope InternalScope(Registry, TEXT("internal"));
-		Registry.RegisterHandler(TEXT("internal_spawn_actor"), &SpawnActorUnchecked, {
+		Registry.RegisterHandler(TEXT("internal_spawn_actor"), &SpawnActorUnchecked, FMCPSpawn::ParamsWith({
 			MCPParam::Required(TEXT("actorClass"), EType::String, TEXT("Actor class: short name, /Script path or Blueprint class path")),
 			MCPParam::Optional(TEXT("label"), EType::String, TEXT("Actor label, applied even when another actor carries it")),
-			SpecLocation, SpecRotation, SpecScale,
 			MCPParam::Optional(TEXT("staticMesh"), EType::String, TEXT("Static mesh for a StaticMeshActor")),
 			MCPParam::Optional(TEXT("material"), EType::String, TEXT("Material applied at slot 0")),
-			MCPParam::Optional(TEXT("folderPath"), EType::String, TEXT("World Outliner folder")),
-		});
+		}));
 	}
 	Registry.RegisterHandler(TEXT("delete_actor"), &DeleteActor, {
 		SpecActorLabel, SpecActorPath,
+		SpecWorld, SpecPieInstance,
 	});
 	Registry.RegisterHandler(TEXT("get_actor_details"), &GetActorDetails, {
 		SpecActorLabel, SpecActorPath,
@@ -242,11 +240,11 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecActorLabels, SpecActorPaths,
 	}, MCPSpec::AtLeastOne({ { TEXT("actorLabels") }, { TEXT("actorPaths") } })
 		.ContractExempt(TEXT("Deselects everything before it selects, so the contract's empty lists would clear the editor selection")));
-	Registry.RegisterHandler(TEXT("spawn_light"), &SpawnLight, {
+	Registry.RegisterHandler(TEXT("spawn_light"), &SpawnLight, FMCPSpawn::ParamsWith({
 		MCPParam::Required(TEXT("lightType"), EType::String, TEXT("point | spot | directional | rect | sky")),
-		SpecOnConflict, SpecLabel, SpecLocation, SpecRotation, SpecIntensity, SpecColor, SpecMobility,
+		SpecIntensity, SpecColor, SpecMobility,
 		MCPParam::Optional(TEXT("attenuationRadius"), EType::Number, TEXT("Point, spot and rect lights only")),
-	});
+	}));
 	Registry.RegisterHandler(TEXT("set_light_properties"), &SetLightProperties, {
 		SpecActorLabel, SpecActorPath, SpecIntensity, SpecColor,
 		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("DirectionalLight sun angle")),
@@ -257,12 +255,11 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("innerConeAngle"), EType::Number, TEXT("Spot light inner cone angle")),
 		MCPParam::Optional(TEXT("outerConeAngle"), EType::Number, TEXT("Spot light outer cone angle")),
 	});
-	Registry.RegisterHandler(TEXT("spawn_volume"), &SpawnVolume, {
-		MCPParam::Required(TEXT("volumeType"), EType::String, TEXT("Volume class, by short name or alias such as trigger, blocking, postprocess, navmesh")),
-		SpecOnConflict, SpecLabel, SpecLocation,
-		MCPParam::Optional(TEXT("extent"), EType::Vec3, TEXT("Half extent of the cube brush (default 100, 100, 100)")),
-		MCPParam::Optional(TEXT("graphPath"), EType::String, TEXT("PCG graph for a PCGVolume")),
-	});
+	Registry.RegisterHandler(TEXT("spawn_volume"), &SpawnVolume, FMCPSpawn::ParamsWith({
+		MCPParam::Required(TEXT("volumeType"), EType::String, TEXT("Volume class, by short name or alias such as trigger, blocking, postprocess, navmesh, pcg")),
+		MCPParam::Optional(TEXT("extent"), EType::Vec3, TEXT("Half extent of the cube brush, positive on every axis (default 100, 100, 100)")),
+		MCPParam::Optional(TEXT("graphPath"), EType::String, TEXT("PCG graph for a volume with a PCG component; refused when it does not load")),
+	}));
 	Registry.RegisterHandler(TEXT("add_component_to_actor"), &AddComponentToActor, {
 		SpecActorLabel, SpecActorPath,
 		MCPParam::Required(TEXT("componentClass"), EType::String, TEXT("Component class: short name or full path")),
@@ -486,20 +483,19 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #679/#677: spawn a SkeletalMeshActor for visual/deform verification. The
 	// mesh load fails first under the contract values. skeletalMesh is nullable
 	// only because the category shares the key with set_component_skeletal_mesh.
-	const TArray<FMCPParamSpec> SpawnSkeletalSpec = {
+	const TArray<FMCPParamSpec> SpawnSkeletalSpec = FMCPSpawn::ParamsWith({
 		MCPParam::Optional(TEXT("skeletalMesh"), EType::String, TEXT("SkeletalMesh asset path to spawn; null is refused here")).Nullable(),
 		MCPParam::Optional(TEXT("meshPath"), EType::String, TEXT("The older spelling of skeletalMesh")),
-		SpecLabel, SpecOnConflict,
 		MCPParam::Optional(TEXT("transform"), EType::Object, TEXT("Spawn transform; location, rotation and scale given on their own win over its parts")).WithFields({
 			MCPParam::OptionalField(TEXT("location"), EType::Vec3, TEXT("World location")),
 			MCPParam::OptionalField(TEXT("rotation"), EType::Rotator, TEXT("World rotation")),
 			MCPParam::OptionalField(TEXT("scale"), EType::Vec3, TEXT("Actor scale")),
 		}),
-		SpecLocation, SpecRotation, SpecScale,
 		MCPParam::Optional(TEXT("materials"), EType::Array, TEXT("Per-slot component material override paths; index is the slot, and a null or empty entry leaves that slot alone")),
-		MCPParam::Optional(TEXT("animSequence"), EType::String, TEXT("Single-node preview animation")),
+		MCPParam::Optional(TEXT("animSequence"), EType::String, TEXT("Single-node preview animation; refused when it does not load")),
 		MCPParam::Optional(TEXT("loop"), EType::Boolean, TEXT("Loop the preview animation (default true)")),
-	};
+	});
+
 	const FMCPSpecRules SpawnSkeletalRules = MCPSpec::ExactlyOne({ { TEXT("skeletalMesh") }, { TEXT("meshPath") } });
 	Registry.RegisterHandler(TEXT("spawn_skeletal_mesh_actor"), &SpawnSkeletalMeshActor, SpawnSkeletalSpec, SpawnSkeletalRules);
 	// Called once per selector by the contract test; the actor lookup fails first.
@@ -906,7 +902,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 	});
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
 
 	FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
@@ -1147,202 +1143,101 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetEditorVisibility(const TSharedPtr<FJso
 
 TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>& Params)
 {
-	MCPReadParamsAhead(Params, {
-		TEXT("actorClass"), TEXT("label"), TEXT("onConflict"), TEXT("location"), TEXT("rotation"), TEXT("scale"),
-		TEXT("staticMesh"), TEXT("material"), TEXT("world"), TEXT("pieInstance"),
-	});
-
-	FString ActorClass;
-	if (auto Err = RequireString(Params, TEXT("actorClass"), ActorClass)) return Err;
-
-	// #585: respect world:pie so the actor spawns into the running PIE world
-	// instead of silently landing in the editor world.
-	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World) return MCPError(TEXT("World not available"));
-
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	const FString Label = OptionalString(Params, TEXT("label"));
-
-	if (auto Existing = MCPCheckActorLabelExists(World, Label, OnConflict, TEXT("Actor")))
-	{
-		return Existing;
-	}
-
-	UClass* Class = MCPResolveClass(ActorClass);
-	if (!Class)
-	{
-		Class = LoadObject<UClass>(nullptr, *ActorClass);
-	}
-	if (!Class)
-	{
-		return MCPError(FString::Printf(TEXT("Actor class not found: %s"), *ActorClass));
-	}
-
-	AActor* NewActor = SpawnForPlacement(World, Class, Params, Label);
-	if (!NewActor)
-	{
-		return MCPError(TEXT("Failed to spawn actor"));
-	}
-
-	const FString FinalLabel = NewActor->GetActorLabel();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("actorLabel"), FinalLabel);
-	Result->SetStringField(TEXT("actorClass"), ActorClass);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("actorLabel"), FinalLabel);
-	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
-
-	return MCPResult(Result);
+	return PlaceActorOfClass(Params, /*bLabelCheck=*/true);
 }
 
 // internal_spawn_actor: place_actor without the label check. The demo flows
 // spawn under labels a replay has already used, which place_actor skips.
 TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorUnchecked(const TSharedPtr<FJsonObject>& Params)
 {
-	MCPReadParamsAhead(Params, {
-		TEXT("actorClass"), TEXT("label"), TEXT("location"), TEXT("rotation"), TEXT("scale"),
-		TEXT("staticMesh"), TEXT("material"), TEXT("folderPath"),
-	});
+	return PlaceActorOfClass(Params, /*bLabelCheck=*/false);
+}
 
+// Spawn actorClass through F6 with place_actor's mesh and material shorthands.
+// The shorthand assets are loaded before anything spawns, and one that cannot
+// apply to the class is a refusal, not a silent skip.
+TSharedPtr<FJsonValue> FLevelHandlers::PlaceActorOfClass(const TSharedPtr<FJsonObject>& Params, bool bLabelCheck)
+{
 	FString ActorClass;
 	if (auto Err = RequireString(Params, TEXT("actorClass"), ActorClass)) return Err;
-	const FString Label = OptionalString(Params, TEXT("label"));
-	const FString FolderPath = OptionalString(Params, TEXT("folderPath"));
+	const FString StaticMeshPath = OptionalString(Params, TEXT("staticMesh"));
+	const FString MaterialPath = OptionalString(Params, TEXT("material"));
+	FMCPSpawn Spawn(Params, { TEXT("Actor"), bLabelCheck });
 
-	REQUIRE_EDITOR_WORLD(World);
-
-	UClass* Class = MCPResolveClass(ActorClass);
-	if (!Class)
-	{
-		Class = LoadObject<UClass>(nullptr, *ActorClass);
-	}
+	UClass* Class = MCPResolveClassOfType(ActorClass, AActor::StaticClass());
+	if (!Class) Class = LoadObject<UClass>(nullptr, *ActorClass);
 	if (!Class || !Class->IsChildOf(AActor::StaticClass()))
 	{
 		return MCPError(FString::Printf(TEXT("Actor class not found: %s"), *ActorClass));
 	}
-
-	AActor* NewActor = SpawnForPlacement(World, Class, Params, Label);
-	if (!NewActor)
+	UStaticMesh* Mesh = nullptr;
+	if (!StaticMeshPath.IsEmpty())
 	{
-		return MCPError(TEXT("Failed to spawn actor"));
+		Mesh = LoadAssetByPath<UStaticMesh>(StaticMeshPath);
+		if (!Mesh) return MCPAssetLoadError(StaticMeshPath, TEXT("StaticMesh"));
+		if (!Class->IsChildOf(AStaticMeshActor::StaticClass()))
+		{
+			return MCPError(FString::Printf(TEXT("staticMesh applies to a StaticMeshActor, and %s is not one."), *Class->GetName()));
+		}
+	}
+	UMaterialInterface* Material = nullptr;
+	if (!MaterialPath.IsEmpty())
+	{
+		Material = LoadAssetByPath<UMaterialInterface>(MaterialPath);
+		if (!Material) return MCPAssetLoadError(MaterialPath, TEXT("MaterialInterface"));
 	}
 
-	// A bare Actor has no root, so its transform and attachments would have
-	// nothing to hold. Give it one and put it where it was asked to be.
-	if (!NewActor->GetRootComponent())
-	{
-		USceneComponent* Root = NewObject<USceneComponent>(NewActor, TEXT("DefaultSceneRoot"));
-		Root->RegisterComponent();
-		NewActor->SetRootComponent(Root);
-		NewActor->AddInstanceComponent(Root);
-		NewActor->SetActorTransform(FTransform(
-			OptionalRotator(Params, TEXT("rotation")),
-			OptionalVec3(Params, TEXT("location")),
-			OptionalVec3(Params, TEXT("scale"), FVector::OneVector)));
-	}
+	if (auto Early = Spawn.Open()) return Early;
+	AActor* NewActor = Spawn.SpawnAt(Class, FTransform(Spawn.RequestedRotation(), Spawn.RequestedLocation()));
+	if (!NewActor) return Spawn.Failed();
 
-	if (!FolderPath.IsEmpty())
-	{
-		NewActor->SetFolderPath(*FolderPath);
-	}
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("actorLabel"), NewActor->GetActorLabel());
-	Result->SetStringField(TEXT("actorPath"), NewActor->GetPathName());
-	Result->SetStringField(TEXT("actorName"), NewActor->GetName());
-	Result->SetStringField(TEXT("actorClass"), ActorClass);
-
-	// The path, not the label: a replay leaves several actors under one label.
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("actorPath"), NewActor->GetPathName());
-	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
-
-	return MCPResult(Result);
-}
-
-// Spawn Class at the params' transform with place_actor's mesh and material
-// shorthands. Whether the label is taken is the caller's question.
-AActor* FLevelHandlers::SpawnForPlacement(UWorld* World, UClass* Class, const TSharedPtr<FJsonObject>& Params, const FString& Label)
-{
-	const FVector Location = OptionalVec3(Params, TEXT("location"));
-	const FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
-
-	FTransform SpawnTransform(Rotation, Location);
-	AActor* NewActor = World->SpawnActor<AActor>(Class, SpawnTransform);
-	if (!NewActor)
-	{
-		return nullptr;
-	}
-
-	// #1119: SpawnActor does not run the editor's volume factory, so native
-	// volumes otherwise have no brush, bounds or collision. Keep any brush
-	// supplied by the class; only initialize a missing or polygonless one with
-	// the native 200 cm cube. The builder can snap location and resets scale, so restore
-	// the spawned transform before applying the caller's scale below.
+	// #1119: SpawnActor does not run the editor's volume factory, so a native
+	// volume has no brush, bounds or collision. Keep a brush the class supplies;
+	// give a missing or polygonless one the native 200 cm cube. The builder can
+	// snap location and resets scale, so the transform is restored after it.
 	AVolume* BuiltVolume = nullptr;
 	if (AVolume* Volume = Cast<AVolume>(NewActor);
 		Volume && (!Volume->Brush || !Volume->Brush->Polys || Volume->Brush->Polys->Element.Num() == 0))
 	{
 		const FTransform VolumeTransform = Volume->GetActorTransform();
-		UEMCP::BuildVolumeAsCube(World, Volume, FVector(100.0));
+		UEMCP::BuildVolumeAsCube(Spawn.World(), Volume, FVector(100.0));
 		Volume->SetActorTransform(VolumeTransform);
 		BuiltVolume = Volume;
 	}
 
-	if (!Label.IsEmpty())
+	// A bare Actor has no root, so its transform and attachments would have nothing to hold.
+	if (!NewActor->GetRootComponent())
 	{
-		NewActor->SetActorLabel(Label);
+		MCPWorldSpawn::AddInstanceComponent(NewActor, USceneComponent::StaticClass(), TEXT("DefaultSceneRoot"));
+		NewActor->SetActorTransform(FTransform(Spawn.RequestedRotation(), Spawn.RequestedLocation()));
 	}
+	Spawn.ApplyScale();
 
-	if (HasParam(Params, TEXT("scale")))
-	{
-		NewActor->SetActorScale3D(OptionalVec3(Params, TEXT("scale"), FVector::OneVector));
-	}
-
-	// Nav bounds are captured when registered, so re-register them against
-	// the final transform, not the unscaled cube the builder produced.
+	// Nav bounds are captured when registered, so re-register them against the final transform.
 	if (AVolume* PlacedVolume = Cast<AVolume>(NewActor))
 	{
 		if (BuiltVolume) BuiltVolume->PostEditChange();
 		UEMCP::NotifyVolumeBoundsChanged(PlacedVolume);
 	}
 
-	// Static mesh shorthand
-	FString StaticMeshPath = OptionalString(Params, TEXT("staticMesh"));
-	if (!StaticMeshPath.IsEmpty())
+	if (Mesh)
 	{
-		AStaticMeshActor* MeshActor = Cast<AStaticMeshActor>(NewActor);
-		if (MeshActor && MeshActor->GetStaticMeshComponent())
+		if (UStaticMeshComponent* MeshComp = CastChecked<AStaticMeshActor>(NewActor)->GetStaticMeshComponent())
 		{
-			UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *StaticMeshPath);
-			if (Mesh)
-			{
-				MeshActor->GetStaticMeshComponent()->SetStaticMesh(Mesh);
-			}
+			MeshComp->SetStaticMesh(Mesh);
 		}
 	}
-
-	// Material shorthand
-	FString MaterialPath = OptionalString(Params, TEXT("material"));
-	if (!MaterialPath.IsEmpty())
+	if (Material)
 	{
-		UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
-		if (Material)
+		UPrimitiveComponent* PrimComp = NewActor->FindComponentByClass<UPrimitiveComponent>();
+		if (!PrimComp)
 		{
-			UPrimitiveComponent* PrimComp = NewActor->FindComponentByClass<UPrimitiveComponent>();
-			if (PrimComp)
-			{
-				PrimComp->SetMaterial(0, Material);
-			}
+			return Spawn.Abandon(MCPError(FString::Printf(TEXT("material was given, but a %s has no primitive component to take it."), *Class->GetName())));
 		}
+		PrimComp->SetMaterial(0, Material);
 	}
 
-	return NewActor;
+	return MCPResult(Spawn.Finish());
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::DeleteActor(const TSharedPtr<FJsonObject>& Params)
@@ -1354,7 +1249,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActor(const TSharedPtr<FJsonObject>
 	FString Selector;
 	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), Selector)) return Err;
 
-	REQUIRE_EDITOR_WORLD(World);
+	// The world a spawn's rollback names, so undoing a PIE spawn deletes in PIE.
+	const FMCPRuntimeWorld Where = FMCPRuntimeWorld::Resolve(Params, TEXT("editor"));
+	if (auto Err = Where.Require(TEXT("Editor world not available"))) return Err;
+	UWorld* World = Where.World;
 
 	// #983: a duplicate label is refused rather than deleted at random. The
 	// miss stays idempotent, but "already deleted" would be a lie when three
@@ -1425,6 +1323,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActor(const TSharedPtr<FJsonObject>
 	}
 	LossNote += TEXT(" On a World Partition map the respawn also lands in whichever cell the transform falls in, which need not be the package the original lived in.");
 
+	Where.Echo(Payload);
 	MCPSetRollback(Result, TEXT("place_actor"), Payload);
 	Result->SetBoolField(TEXT("rollbackLossy"), true);
 	Result->SetStringField(TEXT("rollbackNote"), LossNote);
@@ -1432,7 +1331,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActor(const TSharedPtr<FJsonObject>
 	return MCPResult(Result);
 }
 
-TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObject>& Params)
+TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(
+const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, {
 		TEXT("actorLabel"), TEXT("actorPath"), TEXT("includeProperties"), TEXT("propertyName"), TEXT("world"),
@@ -1449,7 +1349,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 	UWorld* World = nullptr;
 	if (WorldScope.Equals(TEXT("pie"), ESearchCase::IgnoreCase) || WorldScope.Equals(TEXT("game"), ESearchCase::IgnoreCase))
 	{
-		World = ResolveWorldFromParams(Params, *WorldScope);
+		World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 		if (!World) return MCPError(TEXT("No PIE/Game world active (or no such pieInstance). See editor(list_pie_instances)."));
 	}
 	else
@@ -1582,7 +1482,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), Selector)) return Err;
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World '%s' not available"), *WorldScope));
@@ -1809,7 +1709,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetRelativeTransform(const TSharedPtr<FJs
 	});
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(FString::Printf(TEXT("World '%s' not available"), *WorldScope));
 
 	// #983: both ends take a path. Two duplicated labels would otherwise
@@ -1971,7 +1871,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	// resolves and the live actor moves. The resolver also matches the runtime
 	// instance name PIE shows.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	// LabelOrName, not label alone: a caller often has an internal name rather
@@ -2021,6 +1921,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLocation));
 	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRotation));
 	Payload->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(PreviousScale));
+	FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(Payload);
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 
 	return MCPResult(Result);
@@ -2037,7 +1938,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 	});
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	TSharedPtr<FJsonValue> ActorErr;
@@ -2093,6 +1994,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRotation));
+	FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(Payload);
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 
 	return MCPResult(Result);
@@ -2111,7 +2013,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::NavProjectPoint(const TSharedPtr<FJsonObj
 	const FVector Point = OptionalVec3(Params, TEXT("point"), FVector::ZeroVector);
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	UNavigationSystemV1* Nav = UNavigationSystemV1::GetCurrent(World);
@@ -2242,13 +2144,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 
 	FString ActorLabel;
 	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
-
 	FString ComponentClass;
 	if (auto Err = RequireString(Params, TEXT("componentClass"), ComponentClass)) return Err;
-
 	FString ComponentName;
 	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
-
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
 	REQUIRE_EDITOR_WORLD(World);
@@ -2258,78 +2157,55 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 	if (!Actor) return ActorErr;
 	ActorLabel = Actor->GetActorLabel();
 
-	// Idempotency: check for an existing component with the same name on the actor.
-	FName CompName = FName(*ComponentName);
+	auto Describe = [&](const TSharedPtr<FJsonObject>& Out, const UActorComponent* Component)
+	{
+		Out->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Out->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		Out->SetStringField(TEXT("componentName"), Component->GetName());
+		Out->SetStringField(TEXT("componentClass"), Component->GetClass()->GetName());
+	};
+
+	// Idempotency: a component of that name already on the actor.
+	const FName CompName(*ComponentName);
 	for (UActorComponent* Existing : Actor->GetComponents())
 	{
-		if (Existing && Existing->GetFName() == CompName)
+		if (!Existing || Existing->GetFName() != CompName) continue;
+		if (OnConflict == TEXT("error"))
 		{
-			if (OnConflict == TEXT("error"))
-			{
-				return MCPError(FString::Printf(
-					TEXT("Component '%s' already exists on '%s'"), *ComponentName, *ActorLabel));
-			}
-			auto ExistingResult = MCPSuccess();
-			MCPSetExisted(ExistingResult);
-			ExistingResult->SetStringField(TEXT("actorLabel"), ActorLabel);
-			ExistingResult->SetStringField(TEXT("actorPath"), Actor->GetPathName());
-			ExistingResult->SetStringField(TEXT("componentName"), ComponentName);
-			ExistingResult->SetStringField(TEXT("componentClass"), Existing->GetClass()->GetName());
-			return MCPResult(ExistingResult);
+			return MCPError(FString::Printf(TEXT("Component '%s' already exists on '%s'"), *ComponentName, *ActorLabel));
 		}
+		auto ExistingResult = MCPSuccess();
+		MCPSetExisted(ExistingResult);
+		Describe(ExistingResult, Existing);
+		return MCPResult(ExistingResult);
 	}
 
-	// (#137) Robust class resolution: full path, short name, or engine-module implicit lookup.
-	UClass* CompClass = nullptr;
-	if (ComponentClass.Contains(TEXT("/")) || ComponentClass.Contains(TEXT(".")))
-	{
-		CompClass = LoadObject<UClass>(nullptr, *ComponentClass);
-	}
-	if (!CompClass)
-	{
-		CompClass = MCPResolveClass(ComponentClass);
-	}
-	if (!CompClass)
-	{
-		CompClass = LoadObject<UClass>(nullptr, *(FString(TEXT("/Script/Engine.")) + ComponentClass));
-	}
-
+	// (#137) A full path, a short name, or an engine-module implicit lookup.
+	UClass* CompClass = MCPWorldSpawn::ResolveComponentClass(ComponentClass);
 	if (!CompClass)
 	{
 		return MCPError(FString::Printf(TEXT("Component class not found: %s. Try the short name (e.g. 'StaticMeshComponent') or the full path ('/Script/Engine.StaticMeshComponent')."), *ComponentClass));
 	}
-
 	if (!CompClass->IsChildOf(UActorComponent::StaticClass()))
 	{
 		return MCPError(FString::Printf(TEXT("Class '%s' is not an ActorComponent"), *ComponentClass));
 	}
 
-	UActorComponent* NewComponent = NewObject<UActorComponent>(Actor, CompClass, CompName);
+	FScopedTransaction Transaction(TEXT("UE_MCP"), FText::FromString(TEXT("add_component_to_actor")), Actor);
+	UActorComponent* NewComponent = MCPWorldSpawn::AddInstanceComponent(Actor, CompClass, CompName);
 	if (!NewComponent)
 	{
+		Transaction.Cancel();
 		return MCPError(TEXT("Failed to create component"));
 	}
 
-	USceneComponent* SceneComp = Cast<USceneComponent>(NewComponent);
-	if (SceneComp && Actor->GetRootComponent())
-	{
-		SceneComp->SetupAttachment(Actor->GetRootComponent());
-	}
-
-	NewComponent->RegisterComponent();
-	Actor->AddInstanceComponent(NewComponent);
-
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
-	Result->SetStringField(TEXT("componentName"), ComponentName);
-	Result->SetStringField(TEXT("componentClass"), NewComponent->GetClass()->GetName());
-
+	Describe(Result, NewComponent);
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Payload->SetStringField(TEXT("componentName"), ComponentName);
+	Payload->SetStringField(TEXT("componentName"), NewComponent->GetName());
 	MCPSetRollback(Result, TEXT("remove_component_from_actor"), Payload);
 	return MCPResult(Result);
 }
@@ -2724,48 +2600,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::ClearLevelScript(const TSharedPtr<FJsonOb
 	return MCPResult(Result);
 }
 
-// Resolve a component on a placed actor by name, case-insensitively, across
-// all components GetComponents returns (which includes inherited/SCS
-// components on placed Blueprint instances). Empty name -> root component.
-// (#539: case-sensitive exact-match was missing SCS components whose instance
-// name differed only in case, reporting "component not found".)
-static UActorComponent* FindComponentOnActor(AActor* Actor, const FString& Name)
-{
-	if (!Actor) return nullptr;
-	if (Name.IsEmpty()) return Actor->GetRootComponent();
-
-	TArray<UActorComponent*> Components;
-	Actor->GetComponents(Components);
-
-	// Pass 1: exact match (case-insensitive) by instance name or class name.
-	for (UActorComponent* Comp : Components)
-	{
-		if (Comp->GetName().Equals(Name, ESearchCase::IgnoreCase) ||
-			Comp->GetClass()->GetName().Equals(Name, ESearchCase::IgnoreCase))
-		{
-			return Comp;
-		}
-	}
-	// Pass 2: prefix match (e.g. "StaticMeshComponent" -> "StaticMeshComponent0").
-	for (UActorComponent* Comp : Components)
-	{
-		if (Comp->GetName().StartsWith(Name, ESearchCase::IgnoreCase) ||
-			Comp->GetClass()->GetName().StartsWith(Name, ESearchCase::IgnoreCase))
-		{
-			return Comp;
-		}
-	}
-	// Pass 3: substring (handles _GEN_VARIABLE suffixes and decorated names).
-	for (UActorComponent* Comp : Components)
-	{
-		if (Comp->GetName().Contains(Name, ESearchCase::IgnoreCase))
-		{
-			return Comp;
-		}
-	}
-	return nullptr;
-}
-
 TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	MCPReadParamsAhead(Params, {
@@ -2786,7 +2620,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 	// component - had no native path at all. Honour world/pieInstance like the
 	// other actor-facing actions.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor")).ToLower();
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(WorldScope == TEXT("pie")
@@ -2803,7 +2637,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 	if (!TargetActor) return ActorErr;
 	ActorLabel = TargetActor->GetActorLabel();
 
-	UActorComponent* TargetComp = FindComponentOnActor(TargetActor, ComponentName);
+	UActorComponent* TargetComp = MCPRuntime::FindComponent(TargetActor, ComponentName);
 	if (!TargetComp)
 	{
 		return MCPError(FString::Printf(TEXT("Component '%s' not found on actor '%s'"), *ComponentName, *ActorLabel));
@@ -2941,6 +2775,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 		if (!ComponentName.IsEmpty()) MeshPayload->SetStringField(TEXT("componentName"), ComponentName);
 		MeshPayload->SetStringField(TEXT("propertyName"), PropertyName);
 		MeshPayload->SetStringField(TEXT("value"), PreviousMesh.IsEmpty() ? FString(TEXT("None")) : PreviousMesh);
+		FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(MeshPayload);
 		MCPSetRollback(MeshResult, TEXT("set_component_property"), MeshPayload);
 		return MCPResult(MeshResult);
 	}
@@ -3069,6 +2904,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 	if (!ComponentName.IsEmpty()) Payload->SetStringField(TEXT("componentName"), ComponentName);
 	Payload->SetStringField(TEXT("propertyName"), PropertyName);
 	Payload->SetStringField(TEXT("value"), PreviousValueStr);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(Payload);
 	MCPSetRollback(Result, TEXT("set_component_property"), Payload);
 
 	return MCPResult(Result);
@@ -3098,7 +2934,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentDetails(const TSharedPtr<FJso
 	TArray<FString> PropFilter = JsonArrayToStringList(PropNamesArr);
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
 
 	FMCPActorSelector ActorSel;
@@ -3154,7 +2990,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentDetails(const TSharedPtr<FJso
 
 	if (!ComponentName.IsEmpty())
 	{
-		UActorComponent* TargetComp = FindComponentOnActor(TargetActor, ComponentName);
+		UActorComponent* TargetComp = MCPRuntime::FindComponent(TargetActor, ComponentName);
 		if (!TargetComp)
 		{
 			return MCPError(FString::Printf(TEXT("Component '%s' not found on actor '%s'"), *ComponentName, *ActorLabel));
@@ -3389,7 +3225,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonOb
 	if (ClassName.IsEmpty()) ClassName = TEXT("Actor");
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	// #675: resolve className to an actual UClass so Blueprint subclasses of a
@@ -3463,7 +3299,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByComponentClass(const TSharedPt
 	if (auto Err = RequireString(Params, TEXT("componentClass"), ComponentClass)) return Err;
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	TArray<TSharedPtr<FJsonValue>> Out;
@@ -3512,7 +3348,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::CountActorsByClass(const TSharedPtr<FJson
 	});
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	const int32 TopN = OptionalInt(Params, TEXT("topN"), 0);
@@ -3567,7 +3403,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetRVTSummary(const TSharedPtr<FJsonObjec
 	});
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	TArray<TSharedPtr<FJsonValue>> VolumesArr;
@@ -3639,7 +3475,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorBounds(const TSharedPtr<FJsonObje
 	FString ActorLabel;
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
 
 	FMCPActorSelector ActorSel;
@@ -3753,7 +3589,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 	const bool bForce = OptionalBool(Params, TEXT("force"), false);
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
@@ -3905,6 +3741,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 		MeshPayload->SetStringField(TEXT("actorLabel"), ActorLabel);
 		MeshPayload->SetStringField(TEXT("propertyName"), PropertyName);
 		MeshPayload->SetStringField(TEXT("value"), PreviousMesh.IsEmpty() ? FString(TEXT("None")) : PreviousMesh);
+		FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(MeshPayload);
 		MCPSetRollback(MeshResult, TEXT("set_actor_property"), MeshPayload);
 		return MCPResult(MeshResult);
 	}
@@ -4043,6 +3880,7 @@ WriteDone:
 	Payload->SetStringField(TEXT("propertyName"), PropertyName);
 	Payload->SetStringField(TEXT("value"), PrevValue);
 	if (bForce) Payload->SetBoolField(TEXT("force"), true);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(Payload);
 	MCPSetRollback(Result, TEXT("set_actor_property"), Payload);
 
 	return MCPResult(Result);
@@ -4075,7 +3913,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReadActorMotion(const TSharedPtr<FJsonObj
 	// "auto", not "pie": ResolveWorldScope only falls back to the editor world
 	// for "auto", and this action has always documented a PIE-preferred read
 	// that still answers with the editor world when PIE is not running.
-	UWorld* TargetWorld = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* TargetWorld = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 	if (!TargetWorld) return MCPError(TEXT("No world available (editor + PIE both null)"));
 
 	TArray<FString> Labels;

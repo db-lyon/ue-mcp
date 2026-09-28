@@ -4,6 +4,7 @@
 #include "Engine/Engine.h"
 #include "GameFramework/Actor.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "Misc/AutomationTest.h"
 #include "ScopedTransaction.h"
 
@@ -192,7 +193,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 	{
 		return MCPError(TEXT("dryRun must be a boolean"));
 	}
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(WorldScope == TEXT("pie")
@@ -495,7 +496,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RestoreComponentRelativeTransform(const T
 	{
 		return MCPError(TEXT("world must be editor or pie"));
 	}
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(WorldScope == TEXT("pie")

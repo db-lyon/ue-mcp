@@ -33,6 +33,7 @@
 #include "GameFramework/Actor.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 
 namespace
 {
@@ -234,7 +235,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 	});
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
@@ -396,7 +397,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RecreatePhysicsState(const TSharedPtr<FJs
 	});
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
@@ -605,7 +606,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::TestComponentOverlap(const TSharedPtr<FJs
 	MCP_CHECK_GAME_THREAD();
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));

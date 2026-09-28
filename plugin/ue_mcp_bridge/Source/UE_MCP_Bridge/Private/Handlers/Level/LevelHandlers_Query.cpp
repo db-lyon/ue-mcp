@@ -27,6 +27,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerQuery.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "Handlers/HandlerEditorState.h"
 
 #include "Components/ActorComponent.h"
@@ -1297,7 +1298,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 	// Everything below runs against this world. LevelRestore puts the original
 	// map back on every exit path from here on.
 	UWorld* World = LevelPath.IsEmpty()
-		? ResolveWorldFromParams(Params, *WorldScope)
+		? FMCPRuntimeWorld::Resolve(Params, *WorldScope).World
 		: GetEditorWorld();
 
 	if (!World)

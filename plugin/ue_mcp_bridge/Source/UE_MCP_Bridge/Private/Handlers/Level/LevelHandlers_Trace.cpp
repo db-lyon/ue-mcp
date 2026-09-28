@@ -5,6 +5,7 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -33,7 +34,7 @@ namespace
 	static UWorld* ResolveTraceWorld(const TSharedPtr<FJsonObject>& Params, TSharedPtr<FJsonValue>& OutError)
 	{
 		const FString Scope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-		UWorld* World = ResolveWorldFromParams(Params, *Scope);
+		UWorld* World = FMCPRuntimeWorld::Resolve(Params, *Scope).World;
 		if (!World)
 		{
 			OutError = MCPError(FString::Printf(
@@ -322,6 +323,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SnapActorToFloor(const TSharedPtr<FJsonOb
 	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	TSharedPtr<FJsonObject> Loc = MCPVec3ToJsonObject(PrevLoc);
 	Payload->SetObjectField(TEXT("location"), Loc);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(Payload);
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 	return MCPResult(Result);
 }

@@ -36,6 +36,7 @@
 #include "HandlerPagination.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "JsonSerializer.h"
 
 namespace
@@ -73,7 +74,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	MCP_CHECK_GAME_THREAD();
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
@@ -111,16 +112,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	TArray<FString> DirtyBefore;
 	MCPEditorState::CollectDirtyEditorPackageNames(DirtyBefore);
 
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	// The transiency contract, stated three ways so no single engine path can
 	// quietly persist this actor.
-	SpawnParameters.ObjectFlags |= RF_Transient;
-#if WITH_EDITOR
-	SpawnParameters.bTemporaryEditorActor = true;
-	SpawnParameters.bHideFromSceneOutliner = bHideFromOutliner;
-	SpawnParameters.bCreateActorPackage = false;
-#endif
+	const FActorSpawnParameters SpawnParameters = MCPTransientSpawnParameters(bHideFromOutliner);
+
 
 	AActor* Actor = World->SpawnActor<AActor>(
 		ActorClass, FTransform(Rotation, Location, Scale), SpawnParameters);
@@ -277,6 +272,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 
 	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
 	Rollback->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(Rollback);
 	MCPSetRollback(Result, TEXT("destroy_transient_actor"), Rollback);
 	return MCPResult(Result);
 }
@@ -293,7 +289,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DestroyTransientActor(const TSharedPtr<FJ
 	MCP_CHECK_GAME_THREAD();
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
@@ -447,7 +443,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListTransientActors(const TSharedPtr<FJso
 	MCP_CHECK_GAME_THREAD();
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));

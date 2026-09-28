@@ -6,6 +6,8 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
+#include "Families/MCPWorldSpawn.h"
 #include "HandlerJsonProperty.h"
 #include "JsonSerializer.h"
 #include "Editor.h"
@@ -66,106 +68,46 @@ namespace
 
 TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>& Params)
 {
-	MCPReadParamsAhead(Params, {
-		TEXT("lightType"), TEXT("onConflict"), TEXT("label"), TEXT("location"), TEXT("rotation"), TEXT("intensity"),
-		TEXT("color"), TEXT("mobility"), TEXT("attenuationRadius"),
-	});
-
+	MCPReadParamsAhead(Params, { TEXT("intensity"), TEXT("color"), TEXT("mobility"), TEXT("attenuationRadius") });
 	FString LightType;
 	if (auto Err = RequireString(Params, TEXT("lightType"), LightType)) return Err;
+	FMCPSpawn Spawn(Params, { TEXT("Light") });
 
-	REQUIRE_EDITOR_WORLD(World);
-
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	const FString Label = OptionalString(Params, TEXT("label"));
-
-	if (auto Existing = MCPCheckActorLabelExists(World, Label, OnConflict, TEXT("Light")))
-	{
-		return Existing;
-	}
-
-	const FVector Location = OptionalVec3(Params, TEXT("location"));
-
-	double Intensity = OptionalNumber(Params, TEXT("intensity"), 5000.0);
-
+	// lightType is the class preset over place_actor.
 	UClass* LightClass = nullptr;
-	if (LightType.Equals(TEXT("point"), ESearchCase::IgnoreCase))
-	{
-		LightClass = APointLight::StaticClass();
-	}
-	else if (LightType.Equals(TEXT("spot"), ESearchCase::IgnoreCase))
-	{
-		LightClass = ASpotLight::StaticClass();
-	}
-	else if (LightType.Equals(TEXT("directional"), ESearchCase::IgnoreCase))
-	{
-		LightClass = ADirectionalLight::StaticClass();
-	}
-	else if (LightType.Equals(TEXT("rect"), ESearchCase::IgnoreCase))
-	{
-		LightClass = ARectLight::StaticClass();
-	}
-	else if (LightType.Equals(TEXT("sky"), ESearchCase::IgnoreCase) || LightType.Equals(TEXT("skylight"), ESearchCase::IgnoreCase))
-	{
-		LightClass = ASkyLight::StaticClass();
-	}
+	if (LightType.Equals(TEXT("point"), ESearchCase::IgnoreCase)) LightClass = APointLight::StaticClass();
+	else if (LightType.Equals(TEXT("spot"), ESearchCase::IgnoreCase)) LightClass = ASpotLight::StaticClass();
+	else if (LightType.Equals(TEXT("directional"), ESearchCase::IgnoreCase)) LightClass = ADirectionalLight::StaticClass();
+	else if (LightType.Equals(TEXT("rect"), ESearchCase::IgnoreCase)) LightClass = ARectLight::StaticClass();
+	else if (LightType.Equals(TEXT("sky"), ESearchCase::IgnoreCase) || LightType.Equals(TEXT("skylight"), ESearchCase::IgnoreCase)) LightClass = ASkyLight::StaticClass();
 	else
 	{
 		return MCPError(FString::Printf(TEXT("Unknown light type: %s. Use point, spot, directional, rect, or sky."), *LightType));
 	}
 
-	const FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
+	if (auto Early = Spawn.Open()) return Early;
+	AActor* NewLight = Spawn.Spawn(LightClass);
+	if (!NewLight) return Spawn.Failed();
 
-	FTransform LightTransform(Rotation, Location);
-	AActor* NewLight = World->SpawnActor<AActor>(LightClass, LightTransform);
-	if (!NewLight)
-	{
-		return MCPError(TEXT("Failed to spawn light actor"));
-	}
+	const double Intensity = OptionalNumber(Params, TEXT("intensity"), 5000.0);
+	// Colour in 0-255 per channel, the shape set_light_properties reads.
+	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
+	const bool bHasColor = TryGetObjectParam(Params, TEXT("color"), ColorObj) && ColorObj && (*ColorObj).IsValid();
+	const FLinearColor LightColor = bHasColor ? MCPLightColorFrom255(*ColorObj) : FLinearColor::White;
 
-	if (!Label.IsEmpty())
-	{
-		NewLight->SetActorLabel(Label);
-	}
-
-	// Parse optional color (RGB 0-255 each, matches set_light_properties shape).
-	auto ParseLightColor = [&](FLinearColor& OutColor) -> bool
-	{
-		const TSharedPtr<FJsonObject>* ColorObj = nullptr;
-		if (!TryGetObjectParam(Params, TEXT("color"), ColorObj) || !ColorObj || !(*ColorObj).IsValid())
-		{
-			return false;
-		}
-		OutColor = MCPLightColorFrom255(*ColorObj);
-		return true;
-	};
-
-	// Parse optional mobility (#310). Default to Movable so the light renders
-	// immediately without a lighting build - that matches the "spawn this and
-	// it just works" UX MCP callers expect. SkyLight ignores this.
+	// Mobility defaults to Movable so the light renders without a lighting
+	// build (#310). A SkyLight ignores it.
 	const FString MobilityStr = OptionalString(Params, TEXT("mobility"), TEXT("Movable"));
 	EComponentMobility::Type Mobility = EComponentMobility::Movable;
-	if (MobilityStr.Equals(TEXT("Static"), ESearchCase::IgnoreCase))
-	{
-		Mobility = EComponentMobility::Static;
-	}
-	else if (MobilityStr.Equals(TEXT("Stationary"), ESearchCase::IgnoreCase))
-	{
-		Mobility = EComponentMobility::Stationary;
-	}
+	if (MobilityStr.Equals(TEXT("Static"), ESearchCase::IgnoreCase)) Mobility = EComponentMobility::Static;
+	else if (MobilityStr.Equals(TEXT("Stationary"), ESearchCase::IgnoreCase)) Mobility = EComponentMobility::Stationary;
 
 	if (ULightComponent* LightComponent = NewLight->FindComponentByClass<ULightComponent>())
 	{
 		LightComponent->SetMobility(Mobility);
 		LightComponent->SetIntensity(Intensity);
-		FLinearColor LightColor;
-		if (ParseLightColor(LightColor))
-		{
-			LightComponent->SetLightColor(LightColor);
-		}
-		// #723: attenuationRadius was accepted by the schema but never applied.
-		// It lives on the local-light components (point/spot/rect); directional
-		// and sky lights have no attenuation radius, so they ignore it.
+		if (bHasColor) LightComponent->SetLightColor(LightColor);
+		// #723: attenuationRadius lives on the local lights (point, spot, rect).
 		double AttenuationRadius = 0.0;
 		if (TryGetNumberParam(Params, TEXT("attenuationRadius"), AttenuationRadius) && AttenuationRadius > 0.0)
 		{
@@ -183,31 +125,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 	}
 	else if (USkyLightComponent* SkyComp = NewLight->FindComponentByClass<USkyLightComponent>())
 	{
-		// SkyLight has no ULightComponent - set intensity on USkyLightComponent
-		// directly and recapture so the change takes effect.
+		// SkyLight has no ULightComponent: its own component, then a recapture.
 		SkyComp->SetIntensity(Intensity);
-		FLinearColor LightColor;
-		if (ParseLightColor(LightColor))
-		{
-			SkyComp->SetLightColor(LightColor);
-		}
+		if (bHasColor) SkyComp->SetLightColor(LightColor);
 		SkyComp->SetVisibility(true);
 		SkyComp->RecaptureSky();
 	}
 
-	const FString FinalLabel = NewLight->GetActorLabel();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("actorLabel"), FinalLabel);
-	Result->SetStringField(TEXT("actorPath"), NewLight->GetPathName());
-	Result->SetStringField(TEXT("actorName"), NewLight->GetName());
+	TSharedPtr<FJsonObject> Result = Spawn.Finish();
 	Result->SetStringField(TEXT("lightType"), LightType);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("actorLabel"), FinalLabel);
-	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
-
 	return MCPResult(Result);
 }
 
@@ -545,7 +471,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFogProperties(const TSharedPtr<FJsonOb
 	});
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	// #983: a named selector goes through the shared resolver, so a duplicated
@@ -700,6 +626,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFogProperties(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("fogHeightFalloff"), FC->FogHeightFalloff);
 	if (bAnyChange)
 	{
+		FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(Rollback);
 		MCPSetRollback(Result, TEXT("set_fog_properties"), Rollback);
 	}
 	else

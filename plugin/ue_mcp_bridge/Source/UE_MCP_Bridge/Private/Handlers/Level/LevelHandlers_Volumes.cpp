@@ -6,6 +6,7 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPWorldSpawn.h"
 #include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
 #include "Misc/OutputDeviceNull.h"
@@ -32,6 +33,7 @@
 #include "Components/BrushComponent.h"
 #include "PCGComponent.h"
 #include "PCGGraph.h"
+#include "PCGVolume.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -98,131 +100,45 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListVolumes(const TSharedPtr<FJsonObject>
 
 TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>& Params)
 {
-	MCPReadParamsAhead(Params, {
-		TEXT("volumeType"), TEXT("onConflict"), TEXT("label"), TEXT("location"), TEXT("extent"), TEXT("graphPath"),
-	});
-
 	FString VolumeType;
 	if (auto Err = RequireString(Params, TEXT("volumeType"), VolumeType)) return Err;
 
-	REQUIRE_EDITOR_WORLD(World);
-
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	const FString Label = OptionalString(Params, TEXT("label"));
-
-	if (auto Existing = MCPCheckActorLabelExists(World, Label, OnConflict, TEXT("Volume")))
-	{
-		return Existing;
-	}
-
-	const FVector Location = OptionalVec3(Params, TEXT("location"));
-	const FVector Extent = OptionalVec3(Params, TEXT("extent"), FVector(100.0, 100.0, 100.0));
-
-	// Determine volume class
+	// volumeType is the class preset: a short alias, or any class name.
+	struct FAlias { const TCHAR* Long; const TCHAR* Short; UClass* Class; };
+	const FAlias Aliases[] = {
+		{ TEXT("BlockingVolume"), TEXT("blocking"), ABlockingVolume::StaticClass() },
+		{ TEXT("TriggerVolume"), TEXT("trigger"), ATriggerVolume::StaticClass() },
+		{ TEXT("PostProcessVolume"), TEXT("postprocess"), APostProcessVolume::StaticClass() },
+		{ TEXT("AudioVolume"), TEXT("audio"), AAudioVolume::StaticClass() },
+		{ TEXT("LightmassImportanceVolume"), TEXT("lightmass"), ALightmassImportanceVolume::StaticClass() },
+		{ TEXT("CullDistanceVolume"), TEXT("culldistance"), MCPResolveClass(TEXT("CullDistanceVolume")) },
+		{ TEXT("NavMeshBoundsVolume"), TEXT("navmesh"), ANavMeshBoundsVolume::StaticClass() },
+		{ TEXT("PainCausingVolume"), TEXT("pain"), APainCausingVolume::StaticClass() },
+		{ TEXT("PCGVolume"), TEXT("pcg"), APCGVolume::StaticClass() },
+	};
 	UClass* VolumeClass = nullptr;
-	if (VolumeType.Equals(TEXT("BlockingVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("blocking"), ESearchCase::IgnoreCase))
+	for (const FAlias& Alias : Aliases)
 	{
-		VolumeClass = ABlockingVolume::StaticClass();
+		if (VolumeType.Equals(Alias.Long, ESearchCase::IgnoreCase) || VolumeType.Equals(Alias.Short, ESearchCase::IgnoreCase))
+		{
+			VolumeClass = Alias.Class;
+			break;
+		}
 	}
-	else if (VolumeType.Equals(TEXT("TriggerVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("trigger"), ESearchCase::IgnoreCase))
-	{
-		VolumeClass = ATriggerVolume::StaticClass();
-	}
-	else if (VolumeType.Equals(TEXT("PostProcessVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("postprocess"), ESearchCase::IgnoreCase))
-	{
-		VolumeClass = APostProcessVolume::StaticClass();
-	}
-	else if (VolumeType.Equals(TEXT("AudioVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("audio"), ESearchCase::IgnoreCase))
-	{
-		VolumeClass = AAudioVolume::StaticClass();
-	}
-	else if (VolumeType.Equals(TEXT("LightmassImportanceVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("lightmass"), ESearchCase::IgnoreCase))
-	{
-		VolumeClass = ALightmassImportanceVolume::StaticClass();
-	}
-	else if (VolumeType.Equals(TEXT("CullDistanceVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("culldistance"), ESearchCase::IgnoreCase))
-	{
-		VolumeClass = MCPResolveClass(TEXT("CullDistanceVolume"));
-	}
-	else if (VolumeType.Equals(TEXT("NavMeshBoundsVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("navmesh"), ESearchCase::IgnoreCase))
-	{
-		VolumeClass = ANavMeshBoundsVolume::StaticClass();
-	}
-	else if (VolumeType.Equals(TEXT("PainCausingVolume"), ESearchCase::IgnoreCase) || VolumeType.Equals(TEXT("pain"), ESearchCase::IgnoreCase))
-	{
-		VolumeClass = APainCausingVolume::StaticClass();
-	}
-	else
-	{
-		// Try broad class lookup
-		VolumeClass = MCPResolveClass(VolumeType);
-	}
-
-	if (!VolumeClass)
+	if (!VolumeClass) VolumeClass = MCPResolveClass(VolumeType);
+	if (!VolumeClass || !VolumeClass->IsChildOf(AActor::StaticClass()))
 	{
 		return MCPError(FString::Printf(TEXT("Volume class not found: %s"), *VolumeType));
 	}
 
-	FTransform VolumeTransform(FRotator::ZeroRotator, Location);
-	AActor* NewVolume = World->SpawnActor<AActor>(VolumeClass, VolumeTransform);
-	if (!NewVolume)
+	const TSharedPtr<FJsonValue> Response = UEMCP::SpawnVolumeActor(Params, VolumeClass, FVector(100.0), TEXT("Volume"),
+		[](AActor*) -> TSharedPtr<FJsonValue> { return nullptr; });
+	if (const TSharedPtr<FJsonObject> Obj = Response.IsValid() && Response->Type == EJson::Object ? Response->AsObject() : nullptr)
 	{
-		return MCPError(TEXT("Failed to spawn volume actor"));
+		bool bCreated = false;
+		if (Obj->TryGetBoolField(TEXT("created"), bCreated) && bCreated) Obj->SetStringField(TEXT("volumeType"), VolumeType);
 	}
-
-	if (!Label.IsEmpty())
-	{
-		NewVolume->SetActorLabel(Label);
-	}
-
-	// #238: AVolume subclasses ship with an empty UModel by default - actor
-	// scale alone leaves bounds at zero, which silently breaks downstream
-	// systems (PCG samplers, navmesh bounds, audio queries). Build an actual
-	// cube and run FBSPOps::HandleVolumeShapeChanged to prep + re-register.
-	// Non-Volume actors keep the old scale-based behavior.
-	if (AVolume* Volume = Cast<AVolume>(NewVolume))
-	{
-		UEMCP::BuildVolumeAsCube(World, Volume, Extent);
-	}
-	else
-	{
-		NewVolume->SetActorScale3D(Extent / 100.0);
-	}
-
-	const FString FinalLabel = NewVolume->GetActorLabel();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("actorLabel"), FinalLabel);
-	Result->SetStringField(TEXT("actorPath"), NewVolume->GetPathName());
-	Result->SetStringField(TEXT("actorName"), NewVolume->GetName());
-	Result->SetStringField(TEXT("volumeType"), VolumeType);
-
-	// #238: when spawning a PCGVolume, accept and bind a graphPath so callers
-	// don't have to make a follow-up set_actor_property call.
-	FString GraphPath;
-	if (TryGetStringParam(Params, TEXT("graphPath"), GraphPath) && !GraphPath.IsEmpty())
-	{
-		if (UPCGComponent* PCGComp = NewVolume->FindComponentByClass<UPCGComponent>())
-		{
-			if (UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *GraphPath))
-			{
-				PCGComp->SetGraph(Graph);
-				Result->SetStringField(TEXT("graphPath"), GraphPath);
-				Result->SetStringField(TEXT("graphName"), Graph->GetName());
-			}
-			else
-			{
-				Result->SetStringField(TEXT("warning"), FString::Printf(TEXT("PCGGraph not found: %s - volume spawned without graph"), *GraphPath));
-			}
-		}
-	}
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("actorLabel"), FinalLabel);
-	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
-
-	return MCPResult(Result);
+	return Response;
 }
 
 

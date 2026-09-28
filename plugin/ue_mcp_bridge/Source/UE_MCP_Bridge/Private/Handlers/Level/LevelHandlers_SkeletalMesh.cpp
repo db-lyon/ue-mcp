@@ -1,6 +1,8 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
+#include "Families/MCPWorldSpawn.h"
 #include "HandlerSkinnedAsset.h"
 #include "Animation/SkeletalMeshActor.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -9,42 +11,40 @@
 // Spawning a skeletal mesh actor and setting the mesh on a skeletal mesh
 // component. Registration stays in LevelHandlers.cpp.
 
-// #679/#677: spawn a SkeletalMeshActor with a mesh (+ optional materials and
-// single-node animation) for visual and deform verification.
+// #679/#677: spawn_skeletal_mesh_actor is place_actor of a SkeletalMeshActor
+// with a mesh, optional per-slot materials and a single-node animation, for
+// visual and deform verification.
 TSharedPtr<FJsonValue> FLevelHandlers::SpawnSkeletalMeshActor(const TSharedPtr<FJsonObject>& Params)
 {
-	MCPReadParamsAhead(Params, {
-		TEXT("skeletalMesh"), TEXT("meshPath"), TEXT("label"), TEXT("onConflict"), TEXT("transform"), TEXT("location"),
-		TEXT("rotation"), TEXT("scale"), TEXT("materials"), TEXT("animSequence"), TEXT("loop"),
-	});
-
-	REQUIRE_EDITOR_WORLD(World);
-
+	MCPReadParamsAhead(Params, { TEXT("transform"), TEXT("materials"), TEXT("loop") });
 	FString MeshPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("skeletalMesh"), TEXT("meshPath"), MeshPath)) return Err;
-	REQUIRE_ASSET(USkeletalMesh, Mesh, MeshPath);
+	const FString AnimPath = OptionalString(Params, TEXT("animSequence"));
+	FMCPSpawn Spawn(Params, { TEXT("SkeletalMeshActor") });
 
-	const FString Label = OptionalString(Params, TEXT("label"));
-	if (TSharedPtr<FJsonValue> Existing = MCPCheckActorLabelExists(World, Label, OptionalString(Params, TEXT("onConflict")), TEXT("SkeletalMeshActor")))
+	REQUIRE_ASSET(USkeletalMesh, Mesh, MeshPath);
+	UAnimSequence* Anim = nullptr;
+	if (!AnimPath.IsEmpty())
 	{
-		return Existing;
+		Anim = LoadAssetByPath<UAnimSequence>(AnimPath);
+		if (!Anim) return MCPAssetLoadError(AnimPath, TEXT("AnimSequence"));
 	}
 
-	const FTransform SpawnXf = OptionalTransform(Params, TEXT("transform"));
-	FVector Loc = OptionalVec3(Params, TEXT("location"), SpawnXf.GetLocation());
-	FRotator Rot = OptionalRotator(Params, TEXT("rotation"), SpawnXf.Rotator());
-	FVector Scale = OptionalVec3(Params, TEXT("scale"), SpawnXf.GetScale3D());
+	// transform supplies defaults that location, rotation and scale override.
+	const FTransform Base = OptionalTransform(Params, TEXT("transform"));
+	const FTransform At(
+		OptionalRotator(Params, TEXT("rotation"), Base.Rotator()),
+		OptionalVec3(Params, TEXT("location"), Base.GetLocation()),
+		OptionalVec3(Params, TEXT("scale"), Base.GetScale3D()));
 
-	FActorSpawnParameters SpawnParams;
-	ASkeletalMeshActor* Actor = World->SpawnActor<ASkeletalMeshActor>(ASkeletalMeshActor::StaticClass(), FTransform(Rot, Loc, Scale), SpawnParams);
-	if (!Actor) return MCPError(TEXT("Failed to spawn SkeletalMeshActor"));
-	if (!Label.IsEmpty()) Actor->SetActorLabel(Label);
+	if (auto Early = Spawn.Open()) return Early;
+	ASkeletalMeshActor* Actor = Spawn.SpawnAt<ASkeletalMeshActor>(ASkeletalMeshActor::StaticClass(), At);
+	if (!Actor) return Spawn.Failed();
 
 	// #946: per-slot COMPONENT material overrides, reported rather than
-	// applied silently. These write the component's OverrideMaterials, which
-	// is a different thing from the mesh ASSET's own slots: the asset is
-	// untouched here. For an actor that is already placed, or to apply one
-	// material to every slot, use level(set_component_materials).
+	// applied silently. These write the component's OverrideMaterials, not the
+	// mesh asset's own slots. For an actor already placed, or one material on
+	// every slot, use level(set_component_materials).
 	TArray<TSharedPtr<FJsonValue>> MaterialResults;
 	int32 FailedMaterials = 0;
 	USkeletalMeshComponent* Comp = Actor->GetSkeletalMeshComponent();
@@ -66,10 +66,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnSkeletalMeshActor(const TSharedPtr<F
 				TSharedPtr<FJsonObject> MatRow = MakeShared<FJsonObject>();
 				MatRow->SetNumberField(TEXT("slotIndex"), i);
 				MatRow->SetStringField(TEXT("materialPath"), MatPath);
-
-				// A slot index past the end, or a path that does not load,
-				// used to be dropped on the floor. That reads as a successful
-				// assignment that never happened.
 				if (i >= SlotCount)
 				{
 					MatRow->SetBoolField(TEXT("ok"), false);
@@ -94,52 +90,37 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnSkeletalMeshActor(const TSharedPtr<F
 		}
 
 		// Optional single-node animation preview (visual deform check).
-		FString AnimPath = OptionalString(Params, TEXT("animSequence"));
-		if (!AnimPath.IsEmpty())
+		if (Anim)
 		{
-			if (UAnimSequence* Anim = LoadAssetByPath<UAnimSequence>(AnimPath))
-			{
-				const bool bLoop = OptionalBool(Params, TEXT("loop"), true);
-				Comp->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-				Comp->SetAnimation(Anim);
-				Comp->Play(bLoop);
+			const bool bLoop = OptionalBool(Params, TEXT("loop"), true);
+			Comp->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+			Comp->SetAnimation(Anim);
+			Comp->Play(bLoop);
 
-				// #766/#790: SetAnimation() only drives the RUNTIME single-node
-				// player. The editable AnimationData struct is what gets
-				// serialised with the level, so without also writing it the
-				// saved map stored AnimToPlay=None and every actor came back in
-				// A-pose after a reload - with no error to explain why.
-				Comp->AnimationData.AnimToPlay = Anim;
-				Comp->AnimationData.bSavedLooping = bLoop;
-				Comp->AnimationData.bSavedPlaying = true;
-				Comp->AnimationData.SavedPosition = 0.0f;
-				Comp->AnimationData.SavedPlayRate = 1.0f;
-				Comp->Modify();
-			}
+			// #766/#790: SetAnimation() only drives the RUNTIME single-node
+			// player. AnimationData is what the level serialises, so it is
+			// written too or the actor comes back in A-pose after a reload.
+			Comp->AnimationData.AnimToPlay = Anim;
+			Comp->AnimationData.bSavedLooping = bLoop;
+			Comp->AnimationData.bSavedPlaying = true;
+			Comp->AnimationData.SavedPosition = 0.0f;
+			Comp->AnimationData.SavedPlayRate = 1.0f;
+			Comp->Modify();
 		}
 	}
 
-	const FVector BoxExtent = Actor->GetComponentsBoundingBox(true).GetExtent();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetBoolField(TEXT("success"), FailedMaterials == 0);
+	TSharedPtr<FJsonObject> Result = Spawn.Finish();
 	if (FailedMaterials > 0)
 	{
+		Result->SetBoolField(TEXT("success"), false);
 		Result->SetStringField(TEXT("error"), FString::Printf(
 			TEXT("The actor was spawned but %d material override(s) did not apply; see materials[]."),
 			FailedMaterials));
 	}
-	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
-	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
 	Result->SetNumberField(TEXT("materialSlotCount"), Comp ? Comp->GetNumMaterials() : 0);
 	Result->SetArrayField(TEXT("materials"), MaterialResults);
-	Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Loc));
-	Result->SetObjectField(TEXT("boxExtent"), MCPVec3ToJsonObject(BoxExtent));
-	TSharedPtr<FJsonObject> Rb = MakeShared<FJsonObject>();
-	Rb->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
-	MCPSetRollback(Result, TEXT("delete_actor"), Rb);
+	Result->SetObjectField(TEXT("boxExtent"), MCPVec3ToJsonObject(Actor->GetComponentsBoundingBox(true).GetExtent()));
 	return MCPResult(Result);
 }
 
@@ -155,7 +136,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentSkeletalMesh(const TSharedPtr
 	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor")).ToLower();
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World)
 	{
 		return MCPError(WorldScope == TEXT("pie")
@@ -226,6 +207,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentSkeletalMesh(const TSharedPtr
 	if (PreviousMesh.IsEmpty()) Payload->SetField(TEXT("skeletalMesh"), MakeShared<FJsonValueNull>());
 	else Payload->SetStringField(TEXT("skeletalMesh"), PreviousMesh);
 	if (World->IsGameWorld()) Payload->SetStringField(TEXT("world"), TEXT("pie"));
+	FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).Echo(Payload);
 	MCPSetRollback(Result, TEXT("set_component_skeletal_mesh"), Payload);
 	return MCPResult(Result);
 }
