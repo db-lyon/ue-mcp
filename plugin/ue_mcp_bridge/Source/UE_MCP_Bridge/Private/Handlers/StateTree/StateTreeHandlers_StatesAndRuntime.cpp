@@ -1249,9 +1249,12 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 	else
 	{
 		State->Modify();
+		// Cleared the way the editor's Type change does: SetLinkedState and
+		// SetLinkedStateAsset check() their own link type and crash here.
 		State->Type = EStateTreeStateType::State;
-		State->SetLinkedState(FStateTreeStateLink());
-		State->SetLinkedStateAsset(nullptr);
+		State->LinkedSubtree = FStateTreeStateLink();
+		State->LinkedAsset = nullptr;
+		State->Parameters.bFixedLayout = false;
 	}
 
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
