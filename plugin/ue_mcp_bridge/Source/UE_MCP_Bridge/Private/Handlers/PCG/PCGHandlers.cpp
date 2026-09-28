@@ -1,10 +1,12 @@
 #include "PCGHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPCreate.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
 #include "HandlerJsonProperty.h"
 #include "Handlers/VolumeHelpers_Internal.h"
+#include "Families/MCPWorldSpawn.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -202,13 +204,11 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecActorLabel, SpecActorPath,
 		MCPParam::Optional(TEXT("seed"), EType::Integer, TEXT("Write the component's Seed before generating; the old one is reported as previousSeed")),
 	}, ActorChoice);
-	Registry.RegisterHandler(TEXT("add_pcg_volume"), &SpawnPCGVolume, {
-		MCPParam::Optional(TEXT("graphPath"), EType::String, TEXT("PCGGraph to assign to the volume's component")),
-		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("World location {x,y,z} (default origin)")),
-		MCPParam::Optional(TEXT("extent"), EType::Vec3, TEXT("Half-size of the volume box {x,y,z} (default 500 on each axis)")),
-		MCPParam::Optional(TEXT("label"), EType::String, TEXT("Editor label. Also the idempotency key: an existing actor with this label is reported rather than duplicated")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the label exists: skip (default, report it) | error")),
-	}, MCPSpec::ContractExempt(TEXT("Spawns a volume under the contract values; nothing it reads fails first")));
+	Registry.RegisterHandler(TEXT("add_pcg_volume"), &SpawnPCGVolume, FMCPSpawn::ParamsWith({
+		MCPParam::Optional(TEXT("graphPath"), EType::String, TEXT("PCGGraph to assign to the volume's component; refused when it does not load")),
+		MCPParam::Optional(TEXT("extent"), EType::Vec3, TEXT("Half-size of the volume box {x,y,z}, positive on every axis (default 500 on each axis)")),
+	}), MCPSpec::ContractExempt(TEXT("Spawns a volume under the contract values; nothing it reads fails first")));
+
 	Registry.RegisterHandler(TEXT("read_pcg_node_settings"), &ReadPCGNodeSettings, {
 		GraphPath(),
 		MCPParam::Required(TEXT("nodeName"), EType::String, TEXT("Engine name of the node, as read_graph reports it")),
@@ -325,25 +325,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponents(const TSharedPtr<FJsonObje
 
 TSharedPtr<FJsonValue> FPCGHandlers::CreatePCGGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/PCG"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	auto Created = MCPCreateAssetIdempotent<UPCGGraph>(Name, PackagePath, OnConflict, TEXT("PCGGraph"), nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
-	return MCPResult(Result);
+	FMCPCreate Create(Params, { TEXT("PCGGraph"), TEXT("/Game/PCG") });
+	if (auto Err = Create.Read()) return Err;
+	UPCGGraph* Graph = nullptr;
+	if (auto Early = Create.Make(Graph)) return Early;
+	return MCPResult(Create.Finish());
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGGraph(const TSharedPtr<FJsonObject>& Params)
@@ -1283,70 +1269,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObjec
 	return MCPResult(Result);
 }
 
+// add_pcg_volume is level(spawn_volume) with volumeType pcg and a 500 cm default half-size.
 TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject>& Params)
 {
-	REQUIRE_EDITOR_WORLD(World);
-
-	const FString Label = OptionalString(Params, TEXT("label"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	if (auto Existing = MCPCheckActorLabelExists(World, Label, OnConflict, TEXT("PCGVolume")))
-	{
-		return Existing;
-	}
-
-	// #218: location and extent are nested {x,y,z} objects; an axis left out keeps its default.
-	const FVector Location = OptionalVec3(Params, TEXT("location"), FVector::ZeroVector);
-	const FVector Extent = OptionalVec3(Params, TEXT("extent"), FVector(500.0, 500.0, 500.0));
-	const FString GraphPath = OptionalString(Params, TEXT("graphPath"));
-
-	// Spawn PCG Volume actor
-	FTransform SpawnTransform(FRotator::ZeroRotator, Location);
-	APCGVolume* PCGVolumeActor = World->SpawnActor<APCGVolume>(APCGVolume::StaticClass(), SpawnTransform);
-	if (!PCGVolumeActor)
-	{
-		return MCPError(TEXT("Failed to spawn PCGVolume actor"));
-	}
-
-	UEMCP::BuildVolumeAsCube(World, PCGVolumeActor, Extent);
-
-	if (!Label.IsEmpty())
-	{
-		PCGVolumeActor->SetActorLabel(Label);
-	}
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	TSharedPtr<FJsonObject> RBPayload = MakeShared<FJsonObject>();
-	RBPayload->SetStringField(TEXT("actorLabel"), PCGVolumeActor->GetActorLabel());
-	MCPSetRollback(Result, TEXT("delete_actor"), RBPayload);
-
-	if (!GraphPath.IsEmpty())
-	{
-		UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(GraphPath);
-		if (Graph)
-		{
-			UPCGComponent* PCGComp = PCGVolumeActor->FindComponentByClass<UPCGComponent>();
-			if (PCGComp)
-			{
-				PCGComp->SetGraph(Graph);
-				Result->SetStringField(TEXT("graphPath"), GraphPath);
-				Result->SetStringField(TEXT("graphName"), Graph->GetName());
-			}
-		}
-		else
-		{
-			Result->SetStringField(TEXT("warning"), FString::Printf(TEXT("PCGGraph not found: %s - volume spawned without graph"), *GraphPath));
-		}
-	}
-
-	Result->SetStringField(TEXT("actorName"), PCGVolumeActor->GetActorLabel());
-	Result->SetStringField(TEXT("actorClass"), PCGVolumeActor->GetClass()->GetName());
-
-	Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Location));
-	Result->SetObjectField(TEXT("extent"), MCPVec3ToJsonObject(Extent));
-
-	return MCPResult(Result);
+	return UEMCP::SpawnVolumeActor(Params, APCGVolume::StaticClass(), FVector(500.0), TEXT("PCGVolume"),
+		[](AActor*) -> TSharedPtr<FJsonValue> { return nullptr; });
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonObject>& Params)
