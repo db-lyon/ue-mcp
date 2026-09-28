@@ -69,101 +69,101 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_state"), &AddState, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("Parent state GUID (omit both parent selectors for a root state)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Parent state dot-path, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("Parent state GUID (omit both parent selectors for a root state)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Parent state dot-path, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Name for the new state")),
 		MCPParam::Optional(TEXT("stateType"), EType::String, TEXT("State type: State, Group, LinkedAsset, Subtree")),
 		MCPParam::Optional(TEXT("selectionBehavior"), EType::String, TEXT("Selection behavior: TryEnterState, TrySelectChildrenInOrder, TrySelectChildrenAtRandom, etc.")),
-		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Position among the new state's siblings (default: append)")),
+		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Position among the new state's siblings (default: append)")).Role(EMCPParamRole::SlotIndex),
 		MCPParam::Optional(TEXT("linkedSubtree"), EType::String, TEXT("StateTree ASSET path assigned to LinkedAsset. To link a Subtree state inside this asset, use set_state_link with linkType=subtree")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("remove_state_tree_state"), &RemoveState, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_state_property"), &SetStateProperty, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set: name, type, selectionBehavior, bEnabled, weight, linkedAsset, description, tag, customTickRate or color")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string. tag: gameplay tag or empty to clear. customTickRate: seconds or empty to disable. color: palette display name, GUID, or empty to clear")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("clear_state_tree_state_nodes"), &ClearStateNodes, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("add_state_tree_task"), &AddTask, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("structType"), EType::String, TEXT("C++ struct name, e.g. FMyStateTreeTask or an engine task like FStateTreeRunParallelStateTreesTask")),
 		MCPParam::Optional(TEXT("instanceProperties"), EType::Object, TEXT("Key-value map of instance data properties to set on the new node")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("add_state_tree_enter_condition"), &AddEnterCondition, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("structType"), EType::String, TEXT("C++ struct name of the condition")),
 		MCPParam::Optional(TEXT("instanceProperties"), EType::Object, TEXT("Key-value map of instance data properties to set on the new node")),
 		MCPParam::Optional(TEXT("operand"), EType::String, TEXT("Expression operand for conditions: And or Or")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("remove_state_tree_enter_condition"), &RemoveEnterCondition, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
-		MCPParam::Required(TEXT("conditionIndex"), EType::Integer, TEXT("Condition index within the list, as read_state reports it")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Required(TEXT("conditionIndex"), EType::Integer, TEXT("Condition index within the list, as read_state reports it")).Role(EMCPParamRole::SlotIndex),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("remove_state_tree_task"), &RemoveTask, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
-		MCPParam::Required(TEXT("taskIndex"), EType::Integer, TEXT("Task index within the state")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Required(TEXT("taskIndex"), EType::Integer, TEXT("Task index within the state")).Role(EMCPParamRole::SlotIndex),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_task_instance_property"), &SetTaskInstanceProperty, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
-		MCPParam::Required(TEXT("taskIndex"), EType::Integer, TEXT("Task index within the state")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Required(TEXT("taskIndex"), EType::Integer, TEXT("Task index within the state")).Role(EMCPParamRole::SlotIndex),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_task_property"), &SetTaskProperty, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
-		MCPParam::Required(TEXT("taskIndex"), EType::Integer, TEXT("Task index within the state")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Required(TEXT("taskIndex"), EType::Integer, TEXT("Task index within the state")).Role(EMCPParamRole::SlotIndex),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("add_state_tree_transition"), &AddTransition, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("trigger"), EType::String, TEXT("OnStateCompleted, OnStateSucceeded, OnStateFailed, OnTick or OnEvent; combine with | e.g. OnStateSucceeded|OnStateFailed")),
 		MCPParam::Required(TEXT("transitionType"), EType::String, TEXT("GotoState, NextState, NextSelectableState, Succeeded or Failed")),
 		MCPParam::Optional(TEXT("eventTag"), EType::String, TEXT("Gameplay tag for OnEvent transitions, e.g. MyGame.SomeEvent")),
-		MCPParam::Optional(TEXT("targetStateId"), EType::String, TEXT("Target state GUID for GotoState transitions")),
-		MCPParam::Optional(TEXT("targetStatePath"), EType::String, TEXT("Target state dot-path for GotoState transitions")),
+		MCPParam::Optional(TEXT("targetStateId"), EType::String, TEXT("Target state GUID for GotoState transitions")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("targetStatePath"), EType::String, TEXT("Target state dot-path for GotoState transitions")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Optional(TEXT("priority"), EType::String, TEXT("Low, Normal, Medium, High or Critical")),
 		MCPParam::Optional(TEXT("delayDuration"), EType::Number, TEXT("Transition delay in seconds")),
 		MCPParam::Optional(TEXT("bDelayTransition"), EType::Boolean, TEXT("Enable transition delay")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("add_state_tree_transition_condition"), &AddTransitionCondition, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
-		MCPParam::Required(TEXT("transitionIndex"), EType::Integer, TEXT("Transition index within the state")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Required(TEXT("transitionIndex"), EType::Integer, TEXT("Transition index within the state")).Role(EMCPParamRole::SlotIndex),
 		MCPParam::Required(TEXT("structType"), EType::String, TEXT("C++ struct name of the condition")),
 		MCPParam::Optional(TEXT("instanceProperties"), EType::Object, TEXT("Key-value map of instance data properties to set on the new node")),
 		MCPParam::Optional(TEXT("operand"), EType::String, TEXT("Expression operand for conditions: And or Or")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("remove_state_tree_transition"), &RemoveTransition, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
-		MCPParam::Required(TEXT("transitionIndex"), EType::Integer, TEXT("Transition index within the state")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Required(TEXT("transitionIndex"), EType::Integer, TEXT("Transition index within the state")).Role(EMCPParamRole::SlotIndex),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("add_state_tree_binding"), &AddBinding, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
@@ -193,17 +193,17 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("remove_state_tree_evaluator"), &RemoveEvaluator, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the evaluator node")),
+		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the evaluator node")).Role(EMCPParamRole::NodeRef),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_evaluator_instance_property"), &SetEvaluatorInstanceProperty, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the evaluator node")),
+		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the evaluator node")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_evaluator_property"), &SetEvaluatorProperty, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the evaluator node")),
+		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the evaluator node")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
@@ -214,17 +214,17 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("remove_state_tree_global_task"), &RemoveGlobalTask, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the global task node")),
+		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the global task node")).Role(EMCPParamRole::NodeRef),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_global_task_instance_property"), &SetGlobalTaskInstanceProperty, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the global task node")),
+		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the global task node")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_global_task_property"), &SetGlobalTaskProperty, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the global task node")),
+		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the global task node")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Property to set")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
@@ -238,26 +238,26 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("list_state_tree_state_parameters"), &ListStateParameters, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_state_parameter"), &AddStateParameter, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("paramName"), EType::String, TEXT("Parameter name")),
 		MCPParam::Required(TEXT("paramType"), EType::String, TEXT("Bool, Int32, Int64, Float, Double, Name, String or Text")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("remove_state_tree_state_parameter"), &RemoveStateParameter, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("paramName"), EType::String, TEXT("Parameter name")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_state_parameter"), &SetStateParameter, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("paramName"), EType::String, TEXT("Parameter name")),
 		MCPParam::Required(TEXT("value"), EType::String, TEXT("Property value as a string")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
@@ -287,51 +287,51 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("read_state_tree_state"), &ReadState, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_consideration"), &AddConsideration, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("structType"), EType::String, TEXT("C++ struct name of the consideration")),
 		MCPParam::Optional(TEXT("instanceProperties"), EType::Object, TEXT("Key-value map of instance data properties to set on the new node")),
 		MCPParam::Optional(TEXT("operand"), EType::String, TEXT("Expression operand for conditions: And or Or")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("remove_state_tree_consideration"), &RemoveConsideration, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
-		MCPParam::Required(TEXT("considerationIndex"), EType::Integer, TEXT("Index of the consideration within the state, as read_state reports it")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Required(TEXT("considerationIndex"), EType::Integer, TEXT("Index of the consideration within the state, as read_state reports it")).Role(EMCPParamRole::SlotIndex),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("remove_state_tree_transition_condition"), &RemoveTransitionCondition, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
-		MCPParam::Required(TEXT("transitionIndex"), EType::Integer, TEXT("Transition index within the state")),
-		MCPParam::Required(TEXT("conditionIndex"), EType::Integer, TEXT("Condition index within the list, as read_state reports it")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Required(TEXT("transitionIndex"), EType::Integer, TEXT("Transition index within the state")).Role(EMCPParamRole::SlotIndex),
+		MCPParam::Required(TEXT("conditionIndex"), EType::Integer, TEXT("Condition index within the list, as read_state reports it")).Role(EMCPParamRole::SlotIndex),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_state_link"), &SetStateLink, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("linkType"), EType::String, TEXT("subtree (a Subtree state in this asset), asset (another StateTree asset), or none (clear both)")),
-		MCPParam::Optional(TEXT("targetStateId"), EType::String, TEXT("linkType=subtree: GUID of the Subtree state to link to")),
-		MCPParam::Optional(TEXT("targetStatePath"), EType::String, TEXT("linkType=subtree: dot-path of the Subtree state to link to")),
+		MCPParam::Optional(TEXT("targetStateId"), EType::String, TEXT("linkType=subtree: GUID of the Subtree state to link to")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("targetStatePath"), EType::String, TEXT("linkType=subtree: dot-path of the Subtree state to link to")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Optional(TEXT("linkedAsset"), EType::String, TEXT("linkType=asset: the StateTree asset this state runs")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("move_state_tree_state"), &MoveState, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")),
-		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")),
-		MCPParam::Optional(TEXT("newParentStateId"), EType::String, TEXT("GUID of the state to move under")),
-		MCPParam::Optional(TEXT("newParentStatePath"), EType::String, TEXT("Dot-path of the state to move under, as an alternative to newParentStateId")),
+		MCPParam::Optional(TEXT("stateId"), EType::String, TEXT("GUID of the target state (or pass statePath)")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("statePath"), EType::String, TEXT("Dot-path to the target state, as an alternative to stateId")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("newParentStateId"), EType::String, TEXT("GUID of the state to move under")).Role(EMCPParamRole::NodeRef),
+		MCPParam::Optional(TEXT("newParentStatePath"), EType::String, TEXT("Dot-path of the state to move under, as an alternative to newParentStateId")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Optional(TEXT("toRoot"), EType::Boolean, TEXT("Move the state to the top level of the asset instead of under a parent")),
-		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Position among the new state's siblings (default: append)")),
+		MCPParam::Optional(TEXT("insertIndex"), EType::Integer, TEXT("Position among the new state's siblings (default: append)")).Role(EMCPParamRole::SlotIndex),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("set_state_tree_node_class"), &SetNodeClass, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StateTree asset path, e.g. /Game/Path/To/ST_Asset")).Role(EMCPParamRole::EditTarget),
-		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the Blueprint node wrapper, as every add_* action returns it")),
+		MCPParam::Required(TEXT("nodeId"), EType::String, TEXT("GUID of the Blueprint node wrapper, as every add_* action returns it")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Required(TEXT("nodeClass"), EType::String, TEXT("The Blueprint class this node runs, as a class path or a loaded class name")),
 	}, MCPSpec::Commit(EMCPCommitPolicy::None));
 	Registry.RegisterHandler(TEXT("read_state_tree_runtime"), &ReadRuntime, {
@@ -354,7 +354,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("request_state_tree_transition"), &RequestTransition, {
 		MCPParam::Optional(TEXT("actorLabel"), EType::String, TEXT("Label of the actor carrying the running StateTree component (or pass actorPath)")),
 		MCPParam::Optional(TEXT("actorPath"), EType::String, TEXT("Full object path of that actor; unambiguous where a label is not")),
-		MCPParam::Optional(TEXT("targetStateId"), EType::String, TEXT("GUID of the state to transition to (or pass targetStateTag)")),
+		MCPParam::Optional(TEXT("targetStateId"), EType::String, TEXT("GUID of the state to transition to (or pass targetStateTag)")).Role(EMCPParamRole::NodeRef),
 		MCPParam::Optional(TEXT("targetStateTag"), EType::String, TEXT("Tag of the state to transition to, UE 5.8 and later")),
 		MCPParam::Optional(TEXT("priority"), EType::String, TEXT("Low, Normal, Medium, High or Critical")),
 		MCPParam::Optional(TEXT("fallback"), EType::String, TEXT("None (default) or NextSelectableSibling")),
