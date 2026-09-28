@@ -138,18 +138,18 @@ bool FMCPEditScopeUndoRedoTest::RunTest(const FString& Parameters)
 		// The record belongs to the scope: begun in an inner block, it is still open when Finish settles.
 		FMCPEditScope Edit(Args(Tree), TEXT("test_scope_record"), TEXT("assetPath"), MCPStateTree::StructureEdit());
 		if (!TestFalse(TEXT("opens"), Edit.Open<UStateTree>().IsValid())) return false;
-		const float Before = Child->Weight;
+		const float WeightBefore = Child->Weight;
 		const int32 Depth = UndoDepth();
 		{
 			TestFalse(TEXT("an edit that does not save begins without a guard"), Edit.Begin().IsValid());
 			Child->Modify();
-			Child->Weight = Before + 4.f;
+			Child->Weight = WeightBefore + 4.f;
 			Edit.Commit();
 		}
 		Edit.Finish(MCPSuccess());
 		TestEqual(TEXT("one undo record for the whole edit"), UndoDepth(), Depth + 1);
 		GEditor->UndoTransaction();
-		TestEqual(TEXT("undo takes the inner-block write back"), Child->Weight, Before);
+		TestEqual(TEXT("undo takes the inner-block write back"), Child->Weight, WeightBefore);
 	}
 	return true;
 }

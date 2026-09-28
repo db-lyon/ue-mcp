@@ -2305,7 +2305,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ValidateStateTree(const TSharedPtr<FJ
 	FMCPEditScope Edit(Params, TEXT("validate_state_tree"), TEXT("assetPath"), FMCPCommitPolicy::Read());
 	if (auto Err = Edit.Open<UStateTree>(&MCPStateTree::NeedSchema)) return Err;
 	UStateTree* ST = Edit.Target<UStateTree>();
-	TMCPEditTraits<UStateTree>::Settle(ST);
+	TMCPEditTraits<UStateTree>::Settle(ST, EMCPSettle::Structure);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), ST->GetPathName());
