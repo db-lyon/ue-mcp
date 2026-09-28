@@ -72,6 +72,20 @@ const ROLLBACK_MARKERS = [
 ];
 
 /**
+ * The families that write both answers for the handler (Private/Families):
+ * an F4 create's Finish writes created/existed and the delete_asset rollback,
+ * an F6 spawn's Finish writes created and the delete_actor rollback, and the
+ * shared volume spawn and component-template add are built on them. A handler
+ * that goes through one answers both questions without spelling either.
+ */
+const FAMILY_MARKERS = [
+  "FMCPCreate ", "FMCPSpawn ", "UEMCP::SpawnVolumeActor(", "MCPBlueprintComponent::AddOfClass(",
+  "MCPWorldSpawn::DescribeTemplate(",
+];
+IDEMPOTENCY_MARKERS.push(...FAMILY_MARKERS);
+ROLLBACK_MARKERS.push(...FAMILY_MARKERS);
+
+/**
  * Markers that say a handler has CONSIDERED its inverse and reported that
  * there is not one.
  *
@@ -415,6 +429,19 @@ function markerViaLocalHelper(found, text, markers) {
 }
 
 /**
+ * A handler that returns another category's handler under its own name (a
+ * variant kept for its action name) answers with that handler's markers. One
+ * level, like the local helpers: the forwarded body is read, not followed.
+ */
+function markerViaForwardedHandler(found, sources, markers) {
+  for (const m of found.body.matchAll(/\b(F\w+Handlers)::(\w+)\s*\(/g)) {
+    const target = findHandlerBody(m[1], m[2], sources);
+    if (target && has(target.body, markers)) return `${m[1]}::${m[2]}`;
+  }
+  return null;
+}
+
+/**
  * Audit every registered handler.
  *
  * `classify` maps a bridge method name to "read" | "mutate" | "unknown". It is
@@ -433,9 +460,11 @@ export function auditHandlers(classify) {
     const idempotentDirect = found ? has(found.body, IDEMPOTENCY_MARKERS) : false;
     const rollbackDirect = found ? has(found.body, ROLLBACK_MARKERS) : false;
     const idempotentVia = found && !idempotentDirect
-      ? markerViaLocalHelper(found, text, IDEMPOTENCY_MARKERS) : null;
+      ? markerViaLocalHelper(found, text, IDEMPOTENCY_MARKERS) ?? markerViaForwardedHandler(found, sources, IDEMPOTENCY_MARKERS)
+      : null;
     const rollbackVia = found && !rollbackDirect
-      ? markerViaLocalHelper(found, text, ROLLBACK_MARKERS) : null;
+      ? markerViaLocalHelper(found, text, ROLLBACK_MARKERS) ?? markerViaForwardedHandler(found, sources, ROLLBACK_MARKERS)
+      : null;
     // Only meaningful when no rollback is emitted, but recorded either way so
     // a handler that emits both can be spotted as the contradiction it is. A
     // handler that delegates its whole body to a file-local helper declares it

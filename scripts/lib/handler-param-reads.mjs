@@ -49,8 +49,13 @@ const KEY_ARGS = new Map([
 /** Helpers that read fixed keys whatever they are passed. */
 const FIXED_KEYS = new Map([
   ["ResolveWorldFromParams", ["world", "pieInstance"]],
+  ["FMCPRuntimeWorld::Resolve", ["world", "pieInstance"]],
+  ["FMCPRuntimeWorld::ResolveLive", ["world", "pieInstance"]],
   ["ReadPageRequest", ["cursor", "limit"]],
 ]);
+
+/** What an F6 spawn scope reads when it is constructed (Families/MCPWorldSpawn.h). */
+const SPAWN_KEYS = ["label", "onConflict", "folderPath", "location", "rotation", "scale", "world", "pieInstance"];
 
 const DIRECT_READ = /(TryGet\w*Field|Get\w*Field|HasField|HasTypedField|TryGetField)\s*\(/;
 
@@ -202,6 +207,37 @@ export function paramReadsInBody(body, bag, sources, bindings = new Map(), depth
     addKey(args[2], "FMCPEditScope");
   }
 
+  // FMCPSpawn Spawn(Params, Spec) reads place_actor's params when it is built.
+  for (const m of code.matchAll(/\bFMCPSpawn\s+(\w+)\s*\(/g)) {
+    const open = m.index + m[0].length - 1;
+    const args = splitArgs(code.slice(open + 1, closeOf(code, open) - 1));
+    if (args[0] !== bag) continue;
+    scopes.add(m[1]);
+    for (const key of SPAWN_KEYS) keys.add(key);
+  }
+
+  // FMCPCreate Create(Params, { Label, Folder, bOnConflict, bAssetPath }) reads
+  // its destination on Read() and onConflict on Read() or Target().
+  for (const m of code.matchAll(/\bFMCPCreate\s+(\w+)\s*\(/g)) {
+    const open = m.index + m[0].length - 1;
+    const args = splitArgs(code.slice(open + 1, closeOf(code, open) - 1));
+    if (args[0] !== bag) continue;
+    scopes.add(m[1]);
+    const spec = splitArgs((args[1] ?? "").replace(/^\{|\}$/g, ""));
+    const onConflict = (spec[2] ?? "true").trim() !== "false";
+    const assetPath = (spec[3] ?? "false").trim() === "true";
+    // A scope handed to a helper is read there (OpenBuilderSession(Params, Create, ...)).
+    const reads = new RegExp(`\\b${m[1]}\\s*\\.\\s*Read\\s*\\(`).test(code)
+      || new RegExp(`\\w\\s*\\([^;]*,\\s*${m[1]}\\s*[,)]`).test(code);
+    const targets = new RegExp(`\\b${m[1]}\\s*\\.\\s*Target\\s*\\(`).test(code);
+    if (reads) {
+      keys.add("name");
+      keys.add("packagePath");
+      if (assetPath) keys.add("assetPath");
+    }
+    if (onConflict && (reads || targets)) keys.add("onConflict");
+  }
+
   for (const call of callsIn(code)) {
     if (scopes.has(call.name)) continue;
     if (call.receiver === bag && DIRECT_READ.test(`${call.name}(`)) {
@@ -221,8 +257,9 @@ export function paramReadsInBody(body, bag, sources, bindings = new Map(), depth
       for (const m of (call.args[1] ?? "").matchAll(/TEXT\(\s*"([^"]+)"\s*\)/g)) keys.add(m[1]);
       continue;
     }
-    if (FIXED_KEYS.has(bareName)) {
-      for (const key of FIXED_KEYS.get(bareName)) keys.add(key);
+    const fixed = FIXED_KEYS.get(call.name) ?? FIXED_KEYS.get(bareName);
+    if (fixed) {
+      for (const key of fixed) keys.add(key);
       continue;
     }
     if (bareName === "MCPResolveActor") {
