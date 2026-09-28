@@ -10,6 +10,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
+#include "Families/MCPCreate.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerQuery.h"
 #include "AudioHandlers_Internal.h"
@@ -56,34 +57,30 @@ namespace
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateSubmix(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/Submixes"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("SoundSubmix"), TEXT("/Game/Audio/Submixes") });
+	if (auto Err = Create.Read()) return Err;
 
-	auto Created = MCPCreateAssetIdempotent<USoundSubmix>(Name, PackagePath, OnConflict, TEXT("SoundSubmix"), nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	USoundSubmix* Submix = Created.Asset;
+	// A parent that does not load is refused before anything is created.
+	const FString ParentPath = OptionalString(Params, TEXT("parentPath"));
+	USoundSubmixBase* Parent = nullptr;
+	if (!ParentPath.IsEmpty())
+	{
+		Parent = LoadAssetByPath<USoundSubmixBase>(ParentPath);
+		if (!Parent) return MCPAssetLoadError(ParentPath, TEXT("SoundSubmixBase"));
+	}
+
+	USoundSubmix* Submix = nullptr;
+	if (auto Early = Create.Make(Submix)) return Early;
 
 	// Static levels live on the modulation-destination structs in UE5; set .Value.
 	SetNumberProp(Submix, TEXT("OutputVolumeModulation.Value"), Params, TEXT("outputVolume"));
 	SetNumberProp(Submix, TEXT("WetLevelModulation.Value"), Params, TEXT("wetLevel"));
 	SetNumberProp(Submix, TEXT("DryLevelModulation.Value"), Params, TEXT("dryLevel"));
+	if (Parent) Submix->SetParentSubmix(Parent);
 
-	FString ParentPath;
-	USoundSubmixBase* Parent = nullptr;
-	if (TryGetStringParam(Params, TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
-	{
-		Parent = LoadAssetByPath<USoundSubmixBase>(ParentPath);
-		if (Parent) Submix->SetParentSubmix(Parent);
-	}
-
-	auto Res = MCPSuccess();
-	MCPSetCreated(Res);
-	Res->SetStringField(TEXT("path"), Submix->GetPathName());
-	Res->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Res, Submix->GetPathName());
-	MCPAudio::SaveAndNote(Res, { Submix, Parent });
+	UObject* const AlsoSave[] = { Parent };
+	TSharedPtr<FJsonObject> Res = Create.Finish(/*bSave=*/true, AlsoSave);
+	if (Parent) Res->SetStringField(TEXT("parentPath"), Parent->GetPathName());
 	return MCPResult(Res);
 }
 
@@ -244,14 +241,20 @@ TSharedPtr<FJsonValue> FAudioHandlers::AddSubmixEffect(const TSharedPtr<FJsonObj
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundClass(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/SoundClasses"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("SoundClass"), TEXT("/Game/Audio/SoundClasses") });
+	if (auto Err = Create.Read()) return Err;
 
-	auto Created = MCPCreateAssetIdempotent<USoundClass>(Name, PackagePath, OnConflict, TEXT("SoundClass"), nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	USoundClass* SoundClass = Created.Asset;
+	// A parent that does not load is refused before anything is created.
+	const FString ParentPath = OptionalString(Params, TEXT("parentPath"));
+	USoundClass* Parent = nullptr;
+	if (!ParentPath.IsEmpty())
+	{
+		Parent = LoadAssetByPath<USoundClass>(ParentPath);
+		if (!Parent) return MCPAssetLoadError(ParentPath, TEXT("SoundClass"));
+	}
+
+	USoundClass* SoundClass = nullptr;
+	if (auto Early = Create.Make(SoundClass)) return Early;
 
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 	if (TryGetObjectParam(Params, TEXT("properties"), PropsObj) && PropsObj)
@@ -259,36 +262,23 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundClass(const TSharedPtr<FJsonOb
 		FString E;
 		SetProp(SoundClass, TEXT("Properties"), MakeShared<FJsonValueObject>(*PropsObj), E);
 	}
-
-	FString ParentPath;
-	USoundClass* Parent = nullptr;
-	if (TryGetStringParam(Params, TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
-	{
-		Parent = LoadAssetByPath<USoundClass>(ParentPath);
 #if WITH_EDITOR
-		if (Parent) SoundClass->SetParentClass(Parent);
+	if (Parent) SoundClass->SetParentClass(Parent);
 #endif
-	}
 
-	auto Res = MCPSuccess();
-	MCPSetCreated(Res);
-	Res->SetStringField(TEXT("path"), SoundClass->GetPathName());
-	Res->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Res, SoundClass->GetPathName());
-	MCPAudio::SaveAndNote(Res, { SoundClass, Parent });
+	UObject* const AlsoSave[] = { Parent };
+	TSharedPtr<FJsonObject> Res = Create.Finish(/*bSave=*/true, AlsoSave);
+	if (Parent) Res->SetStringField(TEXT("parentPath"), Parent->GetPathName());
 	return MCPResult(Res);
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundMix(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/SoundMixes"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("SoundMix"), TEXT("/Game/Audio/SoundMixes") });
+	if (auto Err = Create.Read()) return Err;
 
-	auto Created = MCPCreateAssetIdempotent<USoundMix>(Name, PackagePath, OnConflict, TEXT("SoundMix"), nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	USoundMix* Mix = Created.Asset;
+	USoundMix* Mix = nullptr;
+	if (auto Early = Create.Make(Mix)) return Early;
 
 	SetNumberProp(Mix, TEXT("FadeInTime"), Params, TEXT("fadeInTime"));
 	SetNumberProp(Mix, TEXT("FadeOutTime"), Params, TEXT("fadeOutTime"));
@@ -318,26 +308,18 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundMix(const TSharedPtr<FJsonObje
 		}
 	}
 
-	auto Res = MCPSuccess();
-	MCPSetCreated(Res);
-	Res->SetStringField(TEXT("path"), Mix->GetPathName());
-	Res->SetStringField(TEXT("name"), Name);
+	TSharedPtr<FJsonObject> Res = Create.Finish();
 	Res->SetNumberField(TEXT("adjusters"), Added);
-	MCPSetDeleteAssetRollback(Res, Mix->GetPathName());
-	MCPAudio::SaveAndNote(Res, { Mix });
 	return MCPResult(Res);
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateConcurrency(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/Concurrency"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("SoundConcurrency"), TEXT("/Game/Audio/Concurrency") });
+	if (auto Err = Create.Read()) return Err;
 
-	auto Created = MCPCreateAssetIdempotent<USoundConcurrency>(Name, PackagePath, OnConflict, TEXT("SoundConcurrency"), nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	USoundConcurrency* Conc = Created.Asset;
+	USoundConcurrency* Conc = nullptr;
+	if (auto Early = Create.Make(Conc)) return Early;
 
 	SetNumberProp(Conc, TEXT("Concurrency.MaxCount"), Params, TEXT("maxCount"));
 	SetBoolProp(Conc, TEXT("Concurrency.bLimitToOwner"), Params, TEXT("limitToOwner"));
@@ -348,26 +330,16 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateConcurrency(const TSharedPtr<FJsonO
 		FString E;
 		SetProp(Conc, TEXT("Concurrency.ResolutionRule"), MakeShared<FJsonValueString>(Rule), E);
 	}
-
-	auto Res = MCPSuccess();
-	MCPSetCreated(Res);
-	Res->SetStringField(TEXT("path"), Conc->GetPathName());
-	Res->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Res, Conc->GetPathName());
-	MCPAudio::SaveAndNote(Res, { Conc });
-	return MCPResult(Res);
+	return MCPResult(Create.Finish());
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateAttenuation(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/Attenuation"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("SoundAttenuation"), TEXT("/Game/Audio/Attenuation") });
+	if (auto Err = Create.Read()) return Err;
 
-	auto Created = MCPCreateAssetIdempotent<USoundAttenuation>(Name, PackagePath, OnConflict, TEXT("SoundAttenuation"), nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	USoundAttenuation* Atten = Created.Asset;
+	USoundAttenuation* Atten = nullptr;
+	if (auto Early = Create.Make(Atten)) return Early;
 
 	// Full settings struct, if provided.
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
@@ -387,14 +359,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateAttenuation(const TSharedPtr<FJsonO
 		FString E;
 		MCPJsonProperty::SetDottedPropertyFromJson(Atten, TEXT("Attenuation.bAttenuate"), MakeShared<FJsonValueBoolean>(true), E);
 	}
-
-	auto Res = MCPSuccess();
-	MCPSetCreated(Res);
-	Res->SetStringField(TEXT("path"), Atten->GetPathName());
-	Res->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Res, Atten->GetPathName());
-	MCPAudio::SaveAndNote(Res, { Atten });
-	return MCPResult(Res);
+	return MCPResult(Create.Finish());
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::SetSoundSubmix(const TSharedPtr<FJsonObject>& Params)

@@ -4,6 +4,8 @@
 #include "AudioHandlers_Internal.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
+#include "Families/MCPCreate.h"
+#include "Families/MCPWorldSpawn.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/ARFilter.h"
 #include "AssetToolsModule.h"
@@ -72,13 +74,11 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("volumeMultiplier"), EType::Number, TEXT("Volume multiplier (default 1)")).Alias(TEXT("volume")),
 		MCPParam::Optional(TEXT("pitchMultiplier"), EType::Number, TEXT("Pitch multiplier (default 1)")).Alias(TEXT("pitch")),
 	});
-	Registry.RegisterHandler(TEXT("spawn_ambient_sound"), &SpawnAmbientSound, {
+	Registry.RegisterHandler(TEXT("spawn_ambient_sound"), &SpawnAmbientSound, FMCPSpawn::ParamsWith({
 		MCPParam::Required(TEXT("soundPath"), EType::String, TEXT("Sound asset the AmbientSound plays")).Alias(TEXT("assetPath")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("World location of the actor (default origin)")),
-		MCPParam::Optional(TEXT("label"), EType::String, TEXT("Actor label")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip | error | rename when an actor with that label exists (default skip)")),
 		MCPParam::Optional(TEXT("volumeMultiplier"), EType::Number, TEXT("Volume multiplier on the audio component (default 1)")).Alias(TEXT("volume")),
-	});
+	}));
+
 
 	// MetaSound graph authoring (AudioHandlers_MetaSound.cpp)
 	Registry.RegisterHandler(TEXT("metasound_author"), &MetaSoundAuthor, {
@@ -598,24 +598,11 @@ TSharedPtr<FJsonValue> FAudioHandlers::ExtractSoundWavePCM(const TSharedPtr<FJso
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundCue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/SoundCues"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	USoundCueFactoryNew* SoundCueFactory = NewObject<USoundCueFactoryNew>();
-	auto Created = MCPCreateAssetIdempotent<USoundCue>(Name, PackagePath, OnConflict, TEXT("SoundCue"), SoundCueFactory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	MCPAudio::SaveAndNote(Result, { Created.Asset });
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
-	return MCPResult(Result);
+	FMCPCreate Create(Params, { TEXT("SoundCue"), TEXT("/Game/Audio/SoundCues") });
+	if (auto Err = Create.Read()) return Err;
+	USoundCue* Cue = nullptr;
+	if (auto Early = Create.Make(Cue, USoundCue::StaticClass(), NewObject<USoundCueFactoryNew>())) return Early;
+	return MCPResult(Create.Finish());
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJsonObject>& Params)
@@ -652,17 +639,15 @@ TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJso
 	return MCPResult(Result);
 }
 
+// spawn_ambient_sound is place_actor of an AmbientSound playing soundPath.
 TSharedPtr<FJsonValue> FAudioHandlers::SpawnAmbientSound(const TSharedPtr<FJsonObject>& Params)
 {
-	// Every parameter is read, and the sound loaded, before anything is spawned:
-	// an AmbientSound with no sound plays nothing (#1057).
+	// The sound is loaded before anything is spawned: an AmbientSound with no sound plays nothing (#1057).
 	FString SoundPath;
 	if (auto Err = RequireString(Params, TEXT("soundPath"), SoundPath)) return Err;
-	const FVector Location = OptionalVec3(Params, TEXT("location"));
-	const FString Label = OptionalString(Params, TEXT("label"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	double Volume = 1.0;
 	const bool bHasVolume = TryGetNumberParam(Params, TEXT("volumeMultiplier"), Volume);
+	FMCPSpawn Spawn(Params, { TEXT("AmbientSound") });
 
 	USoundBase* Sound = LoadAssetByPath<USoundBase>(SoundPath);
 	if (!Sound)
@@ -670,44 +655,16 @@ TSharedPtr<FJsonValue> FAudioHandlers::SpawnAmbientSound(const TSharedPtr<FJsonO
 		return MCPAssetLoadError(SoundPath, TEXT("SoundBase"));
 	}
 
-	REQUIRE_EDITOR_WORLD(World);
-
-	if (auto Existing = MCPCheckActorLabelExists(World, Label, OnConflict, TEXT("AmbientSound")))
-	{
-		return Existing;
-	}
-
-	FTransform SpawnTransform(FRotator::ZeroRotator, Location);
-	AAmbientSound* AmbientSoundActor = World->SpawnActor<AAmbientSound>(AAmbientSound::StaticClass(), SpawnTransform);
-	if (!AmbientSoundActor)
-	{
-		return MCPError(TEXT("Failed to spawn AmbientSound actor"));
-	}
-
-	if (!Label.IsEmpty())
-	{
-		AmbientSoundActor->SetActorLabel(Label);
-	}
-
+	if (auto Early = Spawn.Open()) return Early;
+	AAmbientSound* AmbientSoundActor = Spawn.Spawn<AAmbientSound>(AAmbientSound::StaticClass());
+	if (!AmbientSoundActor) return Spawn.Failed();
 	if (UAudioComponent* AudioComp = AmbientSoundActor->GetAudioComponent())
 	{
 		AudioComp->SetSound(Sound);
-		if (bHasVolume)
-		{
-			AudioComp->VolumeMultiplier = static_cast<float>(Volume);
-		}
+		if (bHasVolume) AudioComp->VolumeMultiplier = static_cast<float>(Volume);
 	}
 
-	const FString FinalLabel = AmbientSoundActor->GetActorLabel();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("assetPath"), SoundPath);
-	Result->SetStringField(TEXT("label"), FinalLabel);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("actorLabel"), FinalLabel);
-	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
-
+	TSharedPtr<FJsonObject> Result = Spawn.Finish();
+	Result->SetStringField(TEXT("soundPath"), Sound->GetPathName());
 	return MCPResult(Result);
 }
