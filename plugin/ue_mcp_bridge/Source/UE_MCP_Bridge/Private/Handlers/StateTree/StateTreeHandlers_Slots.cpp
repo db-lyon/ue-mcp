@@ -163,6 +163,36 @@ namespace
 		.Gate = nullptr, .OnAdded = nullptr,
 	};
 
+	/** The list's noun in a refusal: enter conditions and transition conditions share one kind. */
+	const TCHAR* StateTreeSlotNoun(const FStateTreeSlot& Slot)
+	{
+		return FCString::Strcmp(Slot.Member, TEXT("EnterConditions")) == 0 ? TEXT("enter condition") : Slot.Kind;
+	}
+
+	/** The list_node_types filter that lists what this slot accepts. */
+	const TCHAR* StateTreeSlotNodeType(const FStateTreeSlot& Slot)
+	{
+		return FCString::Strcmp(Slot.Kind, TEXT("global task")) == 0 ? TEXT("task") : Slot.Kind;
+	}
+
+	const TCHAR* StateTreeSlotArticle(const TCHAR* Noun)
+	{
+		return FCString::Strchr(TEXT("aeiou"), FChar::ToLower(Noun[0])) ? TEXT("an") : TEXT("a");
+	}
+
+	/** Word the list's index refusals after its owner, and name the transition a condition list belongs to. */
+	void StateTreeSlotWordErrors(TMCPSlotList<FStateTreeEditorNode>& List, const FStateTreeSlot& Slot, int32 Transition)
+	{
+		switch (Slot.Owner)
+		{
+		case FStateTreeSlot::EOwner::State: List.OwnedBy(TEXT("state")); break;
+		case FStateTreeSlot::EOwner::Transition:
+			List.OwnedBy(TEXT("transition")).At(FString::Printf(TEXT(" on transition %d"), Transition));
+			break;
+		default: List.OwnedBy(TEXT("tree")); break;
+		}
+	}
+
 	/** Every UPROPERTY of the node's instance data as export text. With
 	 *  bObject, a Blueprint node's instance object is read instead. */
 	TSharedPtr<FJsonObject> StateTreeSlotCaptureInstance(const FStateTreeEditorNode& Node, bool bObject)
@@ -277,6 +307,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ResolveSlot(const FNodeSlot& Slot, co
 	{
 		if (!Request.bHasTransition) return MCPError(TEXT("Missing required parameter 'transitionIndex'"));
 		TMCPSlotList<FStateTreeTransition> Transitions(OutState, TEXT("Transitions"), OutState->Transitions, TEXT("transition"), TEXT("transitionIndex"));
+		Transitions.OwnedBy(TEXT("state"));
 		if (auto Err = Transitions.CheckIndex(Request.Transition)) return Err;
 	}
 	return nullptr;
@@ -314,19 +345,20 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddSlotNode(const TSharedPtr<FJsonObj
 	{
 		return MCPError(!ResolveError.IsEmpty() ? ResolveError : FString::Printf(
 			TEXT("Struct not found: '%s'. Pass the C++ struct name or a /Script/Module.Struct path; statetree(list_node_types, nodeType=\"%s\") lists every one this tree's schema allows."),
-			*StructType, Slot.Kind));
+			*StructType, StateTreeSlotNodeType(Slot)));
 	}
 	const UScriptStruct* Base = Slot.Base ? Slot.Base() : nullptr;
 	if (Base && !NodeStruct->IsChildOf(Base))
 	{
 		return MCPError(FString::Printf(
-			TEXT("Struct '%s' does not derive from %s, so it cannot be used as a %s. statetree(list_node_types) lists the ones that can."),
-			*NodeStruct->GetName(), *Base->GetName(), Slot.Kind));
+			TEXT("Struct '%s' does not derive from %s, so it cannot be used as %s %s. statetree(list_node_types, nodeType=\"%s\") lists the ones that can."),
+			*NodeStruct->GetName(), *Base->GetName(), StateTreeSlotArticle(Slot.Kind), Slot.Kind, StateTreeSlotNodeType(Slot)));
 	}
 
 	UObject* Owner = State ? static_cast<UObject*>(State) : static_cast<UObject*>(EditorData);
-	TMCPSlotList<FStateTreeEditorNode> List(Owner, Slot.Member, Slot.List(*EditorData, State, Request.Transition), Slot.Kind,
+	TMCPSlotList<FStateTreeEditorNode> List(Owner, Slot.Member, Slot.List(*EditorData, State, Request.Transition), StateTreeSlotNoun(Slot),
 		Slot.IndexParam ? Slot.IndexParam : TEXT("nodeId"));
+	StateTreeSlotWordErrors(List, Slot, Request.Transition);
 	FMCPEditTransaction Txn(Edit);
 	FString Error;
 	FStateTreeEditorNode* NewNode = List.Add([&](FStateTreeEditorNode& Node, FString& OutError)
@@ -381,8 +413,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveSlotNode(const TSharedPtr<FJson
 	if (auto Err = ResolveSlot(Slot, Request, EditorData, State)) return Err;
 
 	UObject* Owner = State ? static_cast<UObject*>(State) : static_cast<UObject*>(EditorData);
-	TMCPSlotList<FStateTreeEditorNode> List(Owner, Slot.Member, Slot.List(*EditorData, State, Request.Transition), Slot.Kind,
+	TMCPSlotList<FStateTreeEditorNode> List(Owner, Slot.Member, Slot.List(*EditorData, State, Request.Transition), StateTreeSlotNoun(Slot),
 		Slot.IndexParam ? Slot.IndexParam : TEXT("nodeId"));
+	StateTreeSlotWordErrors(List, Slot, Request.Transition);
 	int32 Index = INDEX_NONE;
 	if (auto Err = FindSlotNode(List, Slot, Request, Index)) return Err;
 
@@ -447,8 +480,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetSlotNodeProperty(const TSharedPtr<
 	if (auto Err = ResolveSlot(Slot, Request, EditorData, State)) return Err;
 
 	UObject* Owner = State ? static_cast<UObject*>(State) : static_cast<UObject*>(EditorData);
-	TMCPSlotList<FStateTreeEditorNode> List(Owner, Slot.Member, Slot.List(*EditorData, State, Request.Transition), Slot.Kind,
+	TMCPSlotList<FStateTreeEditorNode> List(Owner, Slot.Member, Slot.List(*EditorData, State, Request.Transition), StateTreeSlotNoun(Slot),
 		Slot.IndexParam ? Slot.IndexParam : TEXT("nodeId"));
+	StateTreeSlotWordErrors(List, Slot, Request.Transition);
 	int32 Index = INDEX_NONE;
 	if (auto Err = FindSlotNode(List, Slot, Request, Index)) return Err;
 
@@ -467,8 +501,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetSlotNodeProperty(const TSharedPtr<
 	{
 		return MCPError(bInstance
 			? FString::Printf(TEXT("Property not found on %s instance data '%s': %s"), Slot.Kind, *Struct->GetName(), *PropName)
-			: FString::Printf(TEXT("Property not found on %s node struct '%s': %s. This action writes the node struct's own UPROPERTYs (bTaskEnabled and the like); the instance-property action writes instance data fields."),
-				Slot.Kind, *Struct->GetName(), *PropName));
+			: FString::Printf(TEXT("Property not found on %s node struct '%s': %s. This action writes the node struct's own UPROPERTYs (bTaskEnabled, bConsideredForCompletion and the like); statetree(%s) writes instance data fields."),
+				Slot.Kind, *Struct->GetName(), *PropName,
+				Slot.SetInstanceMethod ? *FString(Slot.SetInstanceMethod).Replace(TEXT("state_tree_"), TEXT("")) : TEXT("set_node_class")));
 	}
 
 	FMCPEditTransaction Txn(Edit);

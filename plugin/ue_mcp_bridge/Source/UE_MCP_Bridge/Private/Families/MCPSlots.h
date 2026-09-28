@@ -30,12 +30,30 @@ public:
 	const TElem& operator[](int32 Index) const { return Items[Index]; }
 	FProperty* MemberProperty() const { return Member; }
 
+	/** Word an empty list's refusal after what holds it: "the state has no tasks". */
+	TMCPSlotList& OwnedBy(const TCHAR* InOwnerNoun)
+	{
+		OwnerNoun = InOwnerNoun;
+		return *this;
+	}
+
+	/** Say which list an index refusal is about when the owner holds several: " on transition 0". */
+	TMCPSlotList& At(const FString& InWhere)
+	{
+		Where = InWhere;
+		return *this;
+	}
+
 	/** The refusal for an index this list does not have, or nullptr. */
 	TSharedPtr<FJsonValue> CheckIndex(int32 Index) const
 	{
 		if (Items.IsValidIndex(Index)) return nullptr;
-		return MCPError(FString::Printf(TEXT("Invalid %s %d. Valid values: %s."), IndexParam, Index,
-			Items.Num() > 0 ? *FString::Printf(TEXT("0 to %d"), Items.Num() - 1) : *FString::Printf(TEXT("none, there is no %s"), Noun)));
+		const FString Valid = Items.Num() > 0
+			? FString::Printf(TEXT("0 to %d"), Items.Num() - 1)
+			: OwnerNoun
+				? FString::Printf(TEXT("none, the %s has no %ss"), OwnerNoun, Noun)
+				: FString::Printf(TEXT("none, there is no %s"), Noun);
+		return MCPError(FString::Printf(TEXT("Invalid %s %d%s. Valid values: %s."), IndexParam, Index, *Where, *Valid));
 	}
 
 	int32 IndexOf(TFunctionRef<bool(const TElem&)> Match) const
@@ -109,4 +127,6 @@ private:
 	TArray<TElem>& Items;
 	const TCHAR* Noun;
 	const TCHAR* IndexParam;
+	const TCHAR* OwnerNoun = nullptr;
+	FString Where;
 };

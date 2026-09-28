@@ -1404,6 +1404,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 	const EStateTreeTransitionType TransType = ParseTransitionType(TypeStr);
 
 	TMCPSlotList<FStateTreeTransition> Transitions(State, TEXT("Transitions"), State->Transitions, TEXT("transition"), TEXT("transitionIndex"));
+	Transitions.OwnedBy(TEXT("state"));
 	FMCPEditTransaction Txn(Edit);
 	FString Error;
 	FStateTreeTransition* Trans = Transitions.Add(
@@ -1465,6 +1466,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTransition(const TSharedPtr<FJs
 	if (!State) return MCPError(TEXT("State not found"));
 
 	TMCPSlotList<FStateTreeTransition> Transitions(State, TEXT("Transitions"), State->Transitions, TEXT("transition"), TEXT("transitionIndex"));
+	Transitions.OwnedBy(TEXT("state"));
 	if (auto Err = Transitions.CheckIndex(TransIndex)) return Err;
 
 	// Captured before the removal so the inverse can rebuild the transition.
