@@ -27,10 +27,32 @@ namespace UEMCPCharacterisation
 	{
 		TMap<FString, int32> GuidTokens;
 		TArray<TPair<FString, FString>> Replacements;
+		/** Keys whose values carry engine-numbered names (Actor_12); the numbers become <n>. */
+		TSet<FString> NumberedKeys;
 
 		void Replace(const FString& From, const FString& To)
 		{
 			if (!From.IsEmpty()) Replacements.Emplace(From, To);
+		}
+
+		/** Mask the instance numbers in Key's values, which differ run to run. */
+		void Numbered(std::initializer_list<const TCHAR*> Keys)
+		{
+			for (const TCHAR* Key : Keys) NumberedKeys.Add(Key);
+		}
+
+		static FString MaskNumbers(const FString& In)
+		{
+			static const FRegexPattern Suffix(TEXT("_[0-9]+(?=$|[.:/])"));
+			FString Out;
+			int32 Last = 0;
+			FRegexMatcher Matcher(Suffix, In);
+			while (Matcher.FindNext())
+			{
+				Out += In.Mid(Last, Matcher.GetMatchBeginning() - Last) + TEXT("_<n>");
+				Last = Matcher.GetMatchEnding();
+			}
+			return Out + In.Mid(Last);
 		}
 
 		FString Text(const FString& In)
@@ -78,7 +100,16 @@ namespace UEMCPCharacterisation
 				for (const auto& Pair : Source->Values) Keys.Add(FString(Pair.Key));
 				Keys.Sort();
 				TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-				for (const FString& Key : Keys) Out->SetField(Key, Value(Source->TryGetField(Key)));
+				for (const FString& Key : Keys)
+				{
+					const TSharedPtr<FJsonValue> Field = Source->TryGetField(Key);
+					if (NumberedKeys.Contains(Key) && Field.IsValid() && Field->Type == EJson::String)
+					{
+						Out->SetField(Key, MakeShared<FJsonValueString>(MaskNumbers(Text(Field->AsString()))));
+						continue;
+					}
+					Out->SetField(Key, Value(Field));
+				}
 				return MakeShared<FJsonValueObject>(Out);
 			}
 			default:
