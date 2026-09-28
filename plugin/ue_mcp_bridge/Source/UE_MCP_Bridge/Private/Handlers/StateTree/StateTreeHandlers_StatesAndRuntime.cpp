@@ -62,6 +62,8 @@
 #include "StateTreeHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
+#include "Handlers/StateTree/StateTreeRuntimeComponent.h"
 
 #if UE_MCP_HAS_5_5_API
 
@@ -387,7 +389,7 @@ namespace
 		const TSharedPtr<FJsonObject>& Params, FStateTreeDepthRuntime& Out, FString& OutActorLabel)
 	{
 		const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("pie"));
-		UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+		UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 		if (!World)
 		{
 			return MCPError(FString::Printf(
@@ -404,33 +406,20 @@ namespace
 		OutActorLabel = Actor->GetActorLabel();
 
 		const FString CompName = OptionalString(Params, TEXT("componentName"));
-		TArray<FString> Candidates;
-		for (UActorComponent* Comp : Actor->GetComponents())
-		{
-			if (!Comp) continue;
-			FStructProperty* IP = CastField<FStructProperty>(Comp->GetClass()->FindPropertyByName(TEXT("InstanceData")));
-			FStructProperty* RP = CastField<FStructProperty>(Comp->GetClass()->FindPropertyByName(TEXT("StateTreeRef")));
-			const bool bShaped = IP && IP->Struct == FStateTreeInstanceData::StaticStruct()
-				&& RP && RP->Struct == FStateTreeReference::StaticStruct();
-			if (!bShaped) continue;
-			Candidates.Add(Comp->GetName());
-			if (!CompName.IsEmpty() && Comp->GetName() != CompName) continue;
-
-			FStateTreeReference* Ref = RP->ContainerPtrToValuePtr<FStateTreeReference>(Comp);
-			Out.Component = Comp;
-			Out.StateTree = Ref ? Ref->GetStateTree() : nullptr;
-			Out.InstanceData = IP->ContainerPtrToValuePtr<FStateTreeInstanceData>(Comp);
-			break;
-		}
+		const MCPStateTreeRuntime::FComponent Found = MCPStateTreeRuntime::Find(Actor, CompName);
+		Out.Component = Found.Component;
+		Out.StateTree = Found.StateTree;
+		Out.InstanceData = Found.InstanceData;
 
 		if (!Out.Component)
 		{
-			if (Candidates.Num() > 0 && !CompName.IsEmpty())
+			if (Found.Candidates.Num() > 0 && !CompName.IsEmpty())
 			{
 				return MCPError(FString::Printf(
 					TEXT("'%s' has no StateTree component named '%s'. It has: %s."),
-					*OutActorLabel, *CompName, *FString::Join(Candidates, TEXT(", "))));
+					*OutActorLabel, *CompName, *FString::Join(Found.Candidates, TEXT(", "))));
 			}
+
 			return MCPError(FString::Printf(
 				TEXT("No StateTree component on '%s'. Add one with gameplay(add_state_tree_component) and point its StateTreeRef at an asset."),
 				*OutActorLabel));
@@ -1343,6 +1332,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SendEvent(const TSharedPtr<FJsonObjec
 		if (HasParam(Params, TEXT("componentName"))) Payload->SetStringField(TEXT("componentName"), OptionalString(Params, TEXT("componentName")));
 		if (HasParam(Params, TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
 		Payload->SetStringField(TEXT("lossy"), TEXT("Sending an event has NO inverse. Once queued it is consumed on the next tick and whatever transition it triggered has already run; the inverse here only re-reads the runtime so a caller can see what happened. Undo the effect by requesting a transition back with statetree(request_transition), or by restarting the tree."));
+		FMCPRuntimeWorld::Resolve(Params, TEXT("pie")).Echo(Payload);
 		MCPSetRollback(Result, TEXT("read_state_tree_runtime"), Payload);
 	}
 	return MCPResult(Result);
@@ -1462,6 +1452,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RequestTransition(const TSharedPtr<FJ
 			Payload->SetStringField(TEXT("priority"), PriorityStr);
 		}
 		Payload->SetStringField(TEXT("lossy"), TEXT("A transition cannot be un-taken. Entering the previous state again re-runs its tasks' EnterState from the beginning rather than resuming where they were, so this inverse needs a targetStateId filled in by the caller from activeStatesBefore, and even then it is a re-entry rather than an undo."));
+		FMCPRuntimeWorld::Resolve(Params, TEXT("pie")).Echo(Payload);
 		MCPSetRollback(Result, TEXT("request_state_tree_transition"), Payload);
 	}
 	return MCPResult(Result);
