@@ -5,6 +5,8 @@
 
 #include "BlueprintHandlers.h"
 #include "BlueprintHandlers_Internal.h"
+#include "BlueprintEditTraits.h"
+#include "Families/MCPPropertyWrite.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
@@ -46,11 +48,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 	FString InterfacePathStr;
 	if (auto Err = RequireString(Params, TEXT("interfacePath"), InterfacePathStr)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(BlueprintPath);
-	if (!Blueprint)
-	{
-		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
-	}
+	FMCPEditScope Edit(Params, TEXT("add_blueprint_interface"), TEXT("blueprintPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UClass* InterfaceClass = LoadObject<UClass>(nullptr, *InterfacePathStr);
 	if (!InterfaceClass)
@@ -129,8 +129,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 	// the message says "known causes" rather than enumerating the world,
 	// because a future engine can add a third and prose that promises a
 	// complete list would then be a confident misdiagnosis.
+	if (auto Err = Edit.Begin()) return Err;
 	if (!FBlueprintEditorUtils::ImplementNewInterface(Blueprint, InterfaceAssetPath))
 	{
+		Edit.Cancel();
 		return MCPError(FString::Printf(TEXT(
 			"Unreal refused to implement '%s' on '%s', so nothing was added. Known causes: the interface declares "
 			"an animation-only function and this is not an Animation Blueprint, or the Blueprint already owns a "
@@ -144,13 +146,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 			*InterfacePathStr, *BlueprintPath));
 	}
 
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	// Save asset
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, BlueprintPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetStringField(TEXT("interfacePath"), InterfacePathStr);
@@ -171,7 +169,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 		"whatever was written INTO those stubs afterwards, which is the ordinary rollback window; remove the "
 		"interface by hand with preserveFunctions=true instead if an implementation was authored between the add "
 		"and the undo."));
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJsonObject>& Params)
@@ -184,11 +182,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("create_function"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Idempotency: existing function graph short-circuits.
 	for (UEdGraph* G : Blueprint->FunctionGraphs)
@@ -207,6 +203,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 		}
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
 	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
 		Blueprint,
 		FName(*FunctionName),
@@ -215,17 +212,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 	);
 	if (!NewGraph)
 	{
+		Edit.Cancel();
 		return MCPError(FString::Printf(TEXT("Failed to create function: %s"), *FunctionName));
 	}
 
 	FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, /*bIsUserCreated=*/true, /*SignatureFromObject=*/nullptr);
-
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -235,7 +229,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 	Payload->SetStringField(TEXT("functionName"), FunctionName);
 	MCPSetRollback(Result, TEXT("delete_function"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 
@@ -548,11 +542,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 	const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
 	TryGetArrayParam(Params, TEXT("parameters"), ParamsArr);
 
-	UBlueprint* Blueprint = LoadBlueprint(BlueprintPath);
-	if (!Blueprint)
-	{
-		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
-	}
+	FMCPEditScope Edit(Params, TEXT("add_event_dispatcher"), TEXT("blueprintPath"), MCPBlueprint::StructureEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	const FName DispatcherFName(*DispatcherName);
 
@@ -621,9 +613,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 	FEdGraphPinType DelegateType;
 	DelegateType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
 
+	if (auto Err = Edit.Begin()) return Err;
 	const bool bVarOk = FBlueprintEditorUtils::AddMemberVariable(Blueprint, DispatcherFName, DelegateType);
 	if (!bVarOk)
 	{
+		Edit.Cancel();
 		return MCPError(FString::Printf(TEXT("Failed to add event dispatcher variable: %s"), *DispatcherName));
 	}
 
@@ -635,6 +629,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 		// Roll the variable creation back so we don't leave a dangling delegate
 		// without a signature graph (which is exactly the bug we're fixing).
 		FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, DispatcherFName);
+		Edit.Cancel();
 		return MCPError(FString::Printf(TEXT("Failed to create signature graph for: %s"), *DispatcherName));
 	}
 
@@ -646,6 +641,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 	K2Schema->AddExtraFunctionFlags(NewGraph, (FUNC_BlueprintCallable | FUNC_BlueprintEvent | FUNC_Public));
 	K2Schema->MarkFunctionEntryAsEditable(NewGraph, true);
 
+	Blueprint->Modify();
 	Blueprint->DelegateSignatureGraphs.Add(NewGraph);
 
 	// Typed signature pins go on the entry node CreateFunctionGraphTerminators made.
@@ -662,13 +658,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 		}
 	}
 
-	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, BlueprintPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetStringField(TEXT("name"), DispatcherName);
@@ -681,7 +673,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 	Payload->SetStringField(TEXT("name"), DispatcherName);
 	MCPSetRollback(Result, TEXT("remove_event_dispatcher"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 
@@ -696,11 +688,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 	FString NewName;
 	if (auto Err = RequireString(Params, TEXT("newName"), NewName)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("rename_function"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Find the function graph
 	UEdGraph* FoundGraph = nullptr;
@@ -718,14 +708,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("Function not found: %s"), *OldName));
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
 	FBlueprintEditorUtils::RenameGraph(FoundGraph, NewName);
-
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("oldName"), OldName);
@@ -738,7 +725,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 	Payload->SetStringField(TEXT("newName"), OldName);
 	MCPSetRollback(Result, TEXT("rename_function"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 
@@ -750,11 +737,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 	FString FunctionName;
 	if (auto Err = RequireString(Params, TEXT("functionName"), FunctionName)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("delete_function"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UEdGraph* FoundGraph = nullptr;
 	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
@@ -780,14 +765,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 	// can say how much the inverse does not bring back.
 	const int32 DeletedNodeCount = FoundGraph->Nodes.Num();
 
+	if (auto Err = Edit.Begin()) return Err;
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, FoundGraph);
-
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
 	Result->SetBoolField(TEXT("deleted"), true);
@@ -806,7 +788,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 		"output parameters, its local variables and its flags are gone, and call sites that referenced the old "
 		"signature will not rebind to the empty one."),
 		DeletedNodeCount));
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 
@@ -894,13 +876,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::OverrideFunction(const TSharedPtr<FJs
 	// Read before the load can fail (#1057).
 	const FString InterfacePathStr = OptionalString(Params, TEXT("interfacePath"));
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("override_function"), TEXT("assetPath"), MCPBlueprint::StructureEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	const FName FuncName(*FunctionName);
+
+	// Implementing and conforming interfaces below mutate before the idempotency checks.
+	if (auto Err = Edit.Begin()) return Err;
 
 	// If the caller names an interface that is not yet implemented on this
 	// Blueprint (nor inherited), implement it first so its functions become
@@ -997,14 +980,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::OverrideFunction(const TSharedPtr<FJs
 		NewEventNode->PostPlacedNewNode();
 		NewEventNode->AllocateDefaultPins();
 		NewEventNode->ReconstructNode();
-
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		FString SaveError;
-		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+		Edit.Commit();
 
 		auto Result = MCPSuccess();
-		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -1019,7 +997,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::OverrideFunction(const TSharedPtr<FJs
 		Payload->SetStringField(TEXT("graphName"), EventGraph->GetName());
 		Payload->SetStringField(TEXT("nodeId"), NewEventNode->NodeGuid.ToString());
 		MCPSetRollback(Result, TEXT("delete_node"), Payload);
-		return MCPResult(Result);
+		return Edit.Finish(Result);
 	}
 
 	// #894: an animation layer override has to be an AnimationGraph. Creating a
@@ -1098,14 +1076,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::OverrideFunction(const TSharedPtr<FJs
 	{
 		UAnimationGraphSchema::ConformAnimGraphToInterface(Blueprint, *NewGraph, OverrideFunc);
 	}
-
-	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -1131,7 +1104,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::OverrideFunction(const TSharedPtr<FJs
 	Payload->SetStringField(TEXT("path"), AssetPath);
 	Payload->SetStringField(TEXT("functionName"), FunctionName);
 	MCPSetRollback(Result, TEXT("delete_function"), Payload);
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 

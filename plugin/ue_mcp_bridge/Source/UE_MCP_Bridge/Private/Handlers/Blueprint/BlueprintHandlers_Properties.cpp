@@ -5,6 +5,8 @@
 
 #include "BlueprintHandlers.h"
 #include "BlueprintHandlers_Internal.h"
+#include "BlueprintEditTraits.h"
+#include "Families/MCPPropertyWrite.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
@@ -68,11 +70,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 	FString TooltipStr;
 	const bool bHasTooltip = TryGetStringParam(Params, TEXT("tooltip"), TooltipStr);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("set_variable_properties"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Find the variable
 	FBPVariableDescription* FoundVar = nullptr;
@@ -185,6 +185,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 		return MCPResult(Noop);
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
+	Blueprint->Modify();
 	if (bHasExposeOnSpawn)
 	{
 		if (bExposeOnSpawn)
@@ -259,14 +261,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 		if (bPrivate) FoundVar->SetMetaData(FBlueprintMetadata::MD_Private, TEXT("true"));
 		else          FoundVar->RemoveMetaData(FBlueprintMetadata::MD_Private);
 	}
-
-	// Compile and save
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
@@ -292,7 +289,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 	if (bHasTooltip) Payload->SetStringField(TEXT("tooltip"), PrevTooltip);
 	MCPSetRollback(Result, TEXT("set_variable_properties"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr<FJsonObject>& Params)
@@ -315,15 +312,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		return MCPError(TEXT("Missing 'value' parameter"));
 	}
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("set_blueprint_component_property"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
-	// Refuse a package the save cannot write before anything changes; resolving
-	// an inherited template for write already mutates the Blueprint.
-	if (auto Blocked = MCPAssetWriteBlockedError(Blueprint, AssetPath, TEXT("set this component property"))) return Blocked;
+	// Begin before resolving: resolving an inherited template for write already
+	// mutates the Blueprint, so the #932 guard and the undo record come first.
+	if (auto Err = Edit.Begin()) return Err;
 
 	bool bIsInherited = false;
 	TArray<FString> Available;
@@ -371,23 +366,32 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 						return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
 					}
 				}
-				SkelComp->Modify();
-				SkelComp->SetSkeletalMeshAsset(NewMesh);
-				SkelComp->PostEditChange();
-				FKismetEditorUtilities::CompileBlueprint(Blueprint);
-				FString MeshSaveReason;
-				const bool bMeshSaved = SaveAssetPackageChecked(Blueprint, MeshSaveReason);
+				// F5 around the native setter, so the write is notified and reports what it replaced.
+				FProperty* MeshProp = MCPPropertyWrite::MemberOf(SkelComp, TEXT("SkeletalMeshAsset"));
+				MCPPropertyWrite::FOutcome MeshOutcome;
+				if (MeshProp)
+				{
+					MeshOutcome = MCPPropertyWrite::Write({ SkelComp, nullptr, MeshProp, MeshProp->ContainerPtrToValuePtr<void>(SkelComp) },
+						[SkelComp, NewMesh](FString&) { SkelComp->SetSkeletalMeshAsset(NewMesh); return true; });
+				}
+				else
+				{
+					SkelComp->Modify();
+					SkelComp->SetSkeletalMeshAsset(NewMesh);
+					SkelComp->PostEditChange();
+				}
+				Edit.Commit();
 
 				auto Result = MCPSuccess();
 				MCPSetUpdated(Result);
 				Result->SetStringField(TEXT("path"), AssetPath);
 				Result->SetStringField(TEXT("componentName"), ComponentName);
 				Result->SetStringField(TEXT("propertyName"), PropertyName);
-				MCPNoteSaveOutcome(Result, AssetPath, bMeshSaved, MeshSaveReason);
 				Result->SetStringField(TEXT("value"), NewMesh ? NewMesh->GetPathName() : TEXT("None"));
 				Result->SetStringField(TEXT("skinnedAsset"), SkelComp->GetSkinnedAsset() ? SkelComp->GetSkinnedAsset()->GetPathName() : TEXT("None"));
 				Result->SetStringField(TEXT("note"), TEXT("Routed through SetSkeletalMeshAsset so SkinnedAsset is updated (#680)"));
-				return MCPResult(Result);
+				if (MeshProp) MCPPropertyWrite::NotePrevious(Result, MeshOutcome);
+				return Edit.Finish(Result);
 			}
 		}
 	}
@@ -449,11 +453,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		PrevStructured = FMCPJsonSerializer::SerializeValue(ValuePtr, FinalProp);
 	}
 
-	Template->Modify();
-	FString SetErr;
-	if (!MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, ValueField, SetErr))
+	// F5: the template hears the chain from its member down to the leaf, and a refused value is restored.
+	const TArray<MCPPropertyWrite::FLink> Chain = MCPPropertyWrite::ChainOf(Template->GetClass(), PropertyName);
+	const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::Write(
+		{ Template, Chain.Num() > 0 ? Chain[0].Property : nullptr, FinalProp, ValuePtr, Chain },
+		[FinalProp, ValuePtr, &ValueField](FString& OutError) { return MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, ValueField, OutError); });
+	if (!Outcome.bWritten)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
+		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *Outcome.Error));
 	}
 
 	// Re-export for the rollback payload and no-op detection.
@@ -469,14 +476,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		Noop->SetStringField(TEXT("value"), NewValue);
 		return MCPResult(Noop);
 	}
-
-	Template->PostEditChange();
-
-	// Compile and save. A save that did not reach disk fails the call and says
-	// why, since the in-memory read-back looks right until the editor restarts.
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveReason;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveReason);
+	// A save that does not reach disk fails the call and says why (the scope's dialect).
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -485,7 +486,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("value"), NewValue);
 	Result->SetBoolField(TEXT("inherited"), bIsInherited);
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
+	MCPPropertyWrite::NotePrevious(Result, Outcome);
 	if (bMapBearing)
 	{
 		// #820: `value` is export text and cannot show a struct-keyed map
@@ -510,7 +511,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	}
 	MCPSetRollback(Result, TEXT("set_component_property"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -540,11 +541,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 		return MCPError(TEXT("Missing 'value' parameter"));
 	}
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	// Saves without a compile: the CDO write is the whole edit.
+	FMCPEditScope Edit(Params, TEXT("set_class_default"), TEXT("assetPath"), FMCPCommitPolicy::EditSave(EMCPSettle::None));
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UClass* GenClass = Blueprint->GeneratedClass;
 	if (!GenClass)
@@ -603,11 +603,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 	FString PrevValue;
 	FinalProp->ExportText_Direct(PrevValue, ValuePtr, ValuePtr, nullptr, PPF_None);
 
-	CDO->Modify();
-	FString SetErr;
-	if (!MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, ValueField, SetErr))
+	if (auto Err = Edit.Begin()) return Err;
+	const TArray<MCPPropertyWrite::FLink> Chain = MCPPropertyWrite::ChainOf(GenClass, PropertyName);
+	const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::Write(
+		{ CDO, Chain.Num() > 0 ? Chain[0].Property : nullptr, FinalProp, ValuePtr, Chain },
+		[FinalProp, ValuePtr, &ValueField](FString& OutError) { return MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, ValueField, OutError); });
+	if (!Outcome.bWritten)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
+		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *Outcome.Error));
 	}
 
 	// Re-export for rollback payload and no-op detection
@@ -622,19 +625,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 		Noop->SetStringField(TEXT("value"), NewValue);
 		return MCPResult(Noop);
 	}
-
-	CDO->PostEditChange();
-
-	// Save
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("value"), NewValue);
+	MCPPropertyWrite::NotePrevious(Result, Outcome);
 
 	// Rollback: self-inverse with previous value
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
@@ -643,7 +641,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 	Payload->SetStringField(TEXT("value"), PrevValue);
 	MCPSetRollback(Result, TEXT("set_class_default"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -671,11 +669,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 
 	bool bIsOutput = OptionalBool(Params, TEXT("isOutput"), false);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("add_function_parameter"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Find the function graph
 	UEdGraph* FuncGraph = nullptr;
@@ -760,6 +756,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 		return MCPError(FString::Printf(TEXT("Unrecognized parameter type: %s"), *TypeError));
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
 	if (bIsOutput)
 	{
 		// For output parameters, find or create the function result node
@@ -788,6 +785,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 			}
 			if (ResultNodeClass)
 			{
+				FuncGraph->Modify();
 				UEdGraphNode* NewResultNode = NewObject<UEdGraphNode>(FuncGraph, ResultNodeClass, NAME_None, RF_Transactional);
 				FuncGraph->AddNode(NewResultNode, false, false);
 				NewResultNode->CreateNewGuid();
@@ -803,6 +801,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 			PinInfo->PinName = FName(*ParamName);
 			PinInfo->PinType = PinType;
 			PinInfo->DesiredPinDirection = EGPD_Input;
+			ResultNode->Modify();
 			ResultNode->UserDefinedPins.Add(PinInfo);
 			ResultNode->ReconstructNode();
 		}
@@ -814,17 +813,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 		PinInfo->PinName = FName(*ParamName);
 		PinInfo->PinType = PinType;
 		PinInfo->DesiredPinDirection = EGPD_Output; // Entry outputs are function inputs
+		EntryNode->Modify();
 		EntryNode->UserDefinedPins.Add(PinInfo);
 		EntryNode->ReconstructNode();
 	}
-
-	// Compile and save
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
@@ -851,7 +846,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 			"Removing the parameter does not remove the function's return node. If this call was the one that minted "
 			"it, an empty return node is left behind in the graph after the rollback."));
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -877,11 +872,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 	FString Value;
 	if (auto Err = RequireString(Params, TEXT("value"), Value)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	// The compile runs inline, because its read-back decides whether the write
+	// stands; the scope owns the guard, the undo record and the save.
+	FMCPEditScope Edit(Params, TEXT("set_variable_default"), TEXT("assetPath"), FMCPCommitPolicy::EditSave(EMCPSettle::None));
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Find the variable description
 	FBPVariableDescription* FoundVar = nullptr;
@@ -985,9 +980,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 		}
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
+	Blueprint->Modify();
 	FoundVar->DefaultValue = StoredValue;
 
-	// Compile and save
+	// Compile now, to read the result back.
 	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 
@@ -1010,6 +1007,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 				}
 				FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 				FKismetEditorUtilities::CompileBlueprint(Blueprint);
+				Edit.Cancel();
 				return MCPError(FString::Printf(
 					TEXT("Variable '%s' compiled to '%s', not the requested '%s': the engine's import of that text loses part of it. "
 						"The previous default was restored and nothing was saved."),
@@ -1017,12 +1015,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 			}
 		}
 	}
-
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
@@ -1035,7 +1030,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 	Payload->SetStringField(TEXT("value"), PrevValue);
 	MCPSetRollback(Result, TEXT("set_variable_default"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ===========================================================================
@@ -1120,8 +1115,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	double RequestedTickInterval = 0.0;
 	const bool bHasTickInterval = TryGetNumberParam(Params, TEXT("TickInterval"), RequestedTickInterval);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint || !Blueprint->GeneratedClass) return MCPError(TEXT("Blueprint not found or not compiled"));
+	// This action has always answered a missing and an uncompiled Blueprint alike.
+	if (!LoadBlueprint(AssetPath)) return MCPError(TEXT("Blueprint not found or not compiled"));
+	FMCPEditScope Edit(Params, TEXT("set_actor_tick_settings"), TEXT("assetPath"), FMCPCommitPolicy::EditSave(EMCPSettle::None));
+	if (auto Err = Edit.Open<UBlueprint>([](UBlueprint* Loaded, const FString&) -> TSharedPtr<FJsonValue>
+		{
+			return Loaded->GeneratedClass ? nullptr : MCPError(TEXT("Blueprint not found or not compiled"));
+		})) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 	AActor* CDO = Cast<AActor>(Blueprint->GeneratedClass->GetDefaultObject(true));
 	if (!CDO) return MCPError(TEXT("Blueprint is not an Actor"));
 
@@ -1152,21 +1153,34 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	// A no-op does not dirty the package and does not save it. Reporting
 	// unchanged:true beside an unconditional MarkPackageDirty and SaveAsset was
 	// the claim and the contradiction in the same result.
-	bool bSaved = true;
-	FString SaveError;
+	MCPPropertyWrite::FOutcome Outcome;
 	if (!bNoChange)
 	{
-		CDO->PrimaryActorTick.bCanEverTick = bCanEverTick;
-		CDO->PrimaryActorTick.bStartWithTickEnabled = bStartWithTickEnabled;
-		CDO->PrimaryActorTick.TickInterval = NewTickInterval;
-
-		Blueprint->MarkPackageDirty();
-		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+		if (auto Err = Edit.Begin()) return Err;
+		auto Apply = [CDO, bCanEverTick, bStartWithTickEnabled, NewTickInterval](FString&)
+		{
+			CDO->PrimaryActorTick.bCanEverTick = bCanEverTick;
+			CDO->PrimaryActorTick.bStartWithTickEnabled = bStartWithTickEnabled;
+			CDO->PrimaryActorTick.TickInterval = NewTickInterval;
+			return true;
+		};
+		// F5 over the whole tick struct: the three fields land as one notified write.
+		if (FProperty* TickProp = MCPPropertyWrite::MemberOf(CDO, TEXT("PrimaryActorTick")))
+		{
+			Outcome = MCPPropertyWrite::Write({ CDO, nullptr, TickProp, TickProp->ContainerPtrToValuePtr<void>(CDO) }, Apply);
+		}
+		else
+		{
+			FString Unused;
+			CDO->Modify();
+			Apply(Unused);
+		}
+		Edit.Commit();
 	}
 
 	auto Result = MCPSuccess();
 	if (bNoChange) MCPSetExisted(Result); else MCPSetUpdated(Result);
-	if (!bNoChange) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	if (Outcome.bWritten) MCPPropertyWrite::NotePrevious(Result, Outcome);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("bCanEverTick"), bCanEverTick);
 	Result->SetBoolField(TEXT("bStartWithTickEnabled"), bStartWithTickEnabled);
@@ -1192,7 +1206,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 		Payload->SetNumberField(TEXT("TickInterval"), PrevTickInterval);
 		MCPSetRollback(Result, TEXT("set_actor_tick_settings"), Payload);
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ─── #128 get_component_property - inherited-aware single-prop read ──
@@ -1492,8 +1506,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentOverrideMaterials(const T
 		return MCPError(TEXT("Missing 'materialPaths' (string array)"));
 	}
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("set_component_override_materials"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
+	// Resolving an inherited template for write already mutates the Blueprint.
+	if (auto Err = Edit.Begin()) return Err;
 
 	bool bIsInherited = false;
 	TArray<FString> Available;
@@ -1536,17 +1553,29 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentOverrideMaterials(const T
 		PrevPaths.Add(MakeShared<FJsonValueString>(Prev ? Prev->GetPathName() : FString(TEXT("None"))));
 	}
 
-	Template->Modify();
-	MeshComp->OverrideMaterials = Loaded;
-	Template->PostEditChange();
-
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	auto Assign = [MeshComp, &Loaded](FString&)
+	{
+		MeshComp->OverrideMaterials.Reset();
+		for (UMaterialInterface* Material : Loaded) MeshComp->OverrideMaterials.Add(Material);
+		return true;
+	};
+	MCPPropertyWrite::FOutcome Outcome;
+	if (FProperty* OverrideProp = MCPPropertyWrite::MemberOf(MeshComp, TEXT("OverrideMaterials")))
+	{
+		Outcome = MCPPropertyWrite::Write({ MeshComp, nullptr, OverrideProp, OverrideProp->ContainerPtrToValuePtr<void>(MeshComp) }, Assign);
+	}
+	else
+	{
+		FString Unused;
+		Template->Modify();
+		Assign(Unused);
+		Template->PostEditChange();
+	}
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
+	if (Outcome.bWritten) MCPPropertyWrite::NotePrevious(Result, Outcome);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetNumberField(TEXT("materialCount"), Loaded.Num());
@@ -1561,7 +1590,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentOverrideMaterials(const T
 	Payload->SetArrayField(TEXT("materialPaths"), PrevPaths);
 	MCPSetRollback(Result, TEXT("set_component_override_materials"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // #457: Timeline track authoring. Create or look up a UTimelineTemplate by
@@ -1589,8 +1618,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
 	TryGetArrayParam(Params, TEXT("keyframes"), Keys);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("add_timeline_track"), TEXT("assetPath"), MCPBlueprint::StructureEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Find or create the UTimelineTemplate that backs the K2Node_Timeline.
 	const FName TimelineFName(*TimelineName);
@@ -1599,8 +1629,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	{
 		if (T && T->GetVariableName() == TimelineFName) { Timeline = T; break; }
 	}
+	// The template is created before the track checks, so the edit begins here.
+	if (auto Err = Edit.Begin()) return Err;
+	if (Timeline) Timeline->Modify();
 	if (!Timeline)
 	{
+		Blueprint->Modify();
 		// Mirror what FBlueprintEditorUtils does for new timelines: name the
 		// template "<TimelineName>_Template" so K2Node_Timeline lookup matches.
 		const FString TemplateName = UTimelineTemplate::TimelineVariableNameToTemplateName(TimelineFName);
@@ -1762,14 +1796,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("Unknown trackType '%s'. Use 'float' | 'vector' | 'color' | 'event'."), *TrackType));
 	}
 
-	// Recompile so K2Node_Timeline regenerates its output pins for the new track.
-	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	// Structure settles and compiles, so K2Node_Timeline regenerates its output pins.
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("timelineName"), TimelineName);
@@ -1786,7 +1816,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		"No action removes a timeline track: add_timeline_track is the only timeline action registered, so there is "
 		"nothing to name as an inverse. The track, its generated curve object and any TimelineLength this call "
 		"raised all stay."));
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -1807,9 +1837,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetCapsuleSize(const TSharedPtr<FJson
 	{
 		return MCPError(TEXT("Pass at least one of 'halfHeight' or 'radius'"));
 	}
+	double RequestedHalfHeight = 0.0;
+	TryGetNumberParam(Params, TEXT("halfHeight"), RequestedHalfHeight);
+	double RequestedRadius = 0.0;
+	TryGetNumberParam(Params, TEXT("radius"), RequestedRadius);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("set_capsule_size"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
+	// Resolving an inherited template for write already mutates the Blueprint.
+	if (auto Err = Edit.Begin()) return Err;
 
 	bool bIsInherited = false;
 	TArray<FString> Available;
@@ -1833,27 +1870,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetCapsuleSize(const TSharedPtr<FJson
 
 	float NewHalfHeight = PrevHalfHeight;
 	float NewRadius = PrevRadius;
-	if (bHasHalfHeight)
-	{
-		double H = PrevHalfHeight;
-		TryGetNumberParam(Params, TEXT("halfHeight"), H);
-		NewHalfHeight = (float)H;
-	}
-	if (bHasRadius)
-	{
-		double R = PrevRadius;
-		TryGetNumberParam(Params, TEXT("radius"), R);
-		NewRadius = (float)R;
-	}
+	if (bHasHalfHeight) NewHalfHeight = (float)RequestedHalfHeight;
+	if (bHasRadius) NewRadius = (float)RequestedRadius;
 
+	// The UFUNCTION setter stays (#419); the scope owns the record, compile and save.
 	Capsule->Modify();
 	Capsule->SetCapsuleSize(NewRadius, NewHalfHeight, /*bUpdateOverlaps*/ true);
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
@@ -1869,7 +1894,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetCapsuleSize(const TSharedPtr<FJson
 	Payload->SetNumberField(TEXT("halfHeight"), PrevHalfHeight);
 	Payload->SetNumberField(TEXT("radius"), PrevRadius);
 	MCPSetRollback(Result, TEXT("set_capsule_size"), Payload);
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ---------------------------------------------------------------------------

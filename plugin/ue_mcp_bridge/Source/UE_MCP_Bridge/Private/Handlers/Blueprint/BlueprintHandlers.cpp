@@ -1,5 +1,7 @@
 #include "BlueprintHandlers.h"
 #include "BlueprintHandlers_Internal.h"
+#include "BlueprintEditTraits.h"
+#include "Families/MCPPropertyWrite.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerPinType.h"
@@ -2017,11 +2019,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 	FString VarType = OptionalString(Params, TEXT("varType"), TEXT("Float"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("add_variable"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Idempotency: if the variable already exists on the blueprint, short-circuit.
 	const FName VarNameFName(*VarName);
@@ -2050,16 +2050,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 		return MCPError(FString::Printf(TEXT("Unrecognized variable type: %s"), *TypeError));
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
 	bool bSuccess = FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarNameFName, PinType);
 
 	if (bSuccess)
 	{
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		FString SaveError;
-		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
-
+		Edit.Commit();
 		auto Result = MCPSuccess();
-		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("variableName"), VarName);
@@ -2077,10 +2074,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 		Payload->SetStringField(TEXT("variableName"), VarName);
 		MCPSetRollback(Result, TEXT("delete_variable"), Payload);
 
-		return MCPResult(Result);
+		return Edit.Finish(Result);
 	}
 	else
 	{
+		Edit.Cancel();
 		return MCPError(TEXT("Failed to add variable - FBlueprintEditorUtils::AddMemberVariable returned false"));
 	}
 }
@@ -2101,11 +2099,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	const FString ParentComponent = OptionalString(Params, TEXT("parentComponent"));
 	const FString ChildActorClassPath = OptionalString(Params, TEXT("childActorClass"));
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("add_component"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Idempotency: existing SCS component with same name short-circuits.
 	if (MCPFindSCSNode(Blueprint->SimpleConstructionScript, ComponentName))
@@ -2146,6 +2142,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	}
 
 	// Try using SubobjectDataSubsystem (UE5 method)
+	if (auto Err = Edit.Begin()) return Err;
 	bool bSuccess = false;
 	if (USubobjectDataSubsystem* Subsystem = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
 	{
@@ -2227,13 +2224,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 
 	if (bSuccess)
 	{
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		// Save asset
-		FString SaveError;
-		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
-
+		Edit.Commit();
 		auto Result = MCPSuccess();
-		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentClass"), ComponentClass);
@@ -2244,10 +2236,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 		Payload->SetStringField(TEXT("componentName"), ComponentName);
 		MCPSetRollback(Result, TEXT("remove_component"), Payload);
 
-		return MCPResult(Result);
+		return Edit.Finish(Result);
 	}
 	else
 	{
+		Edit.Cancel();
 		return MCPError(TEXT("Failed to add component via SubobjectDataSubsystem"));
 	}
 }
@@ -3057,11 +3050,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 	FString ComponentName;
 	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("remove_component"), TEXT("assetPath"), MCPBlueprint::StructureEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
 	if (!SCS)
@@ -3153,6 +3144,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 	}
 
 	// Remove via SubobjectDataSubsystem if available
+	if (auto Err = Edit.Begin()) return Err;
 	bool bRemoved = false;
 	if (USubobjectDataSubsystem* Subsystem = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
 	{
@@ -3183,13 +3175,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 
 	if (bRemoved)
 	{
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		FString SaveError;
-		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
-
+		Edit.Commit();
 		auto Result = MCPSuccess();
-		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentName"), ComponentName);
 		Result->SetBoolField(TEXT("deleted"), true);
@@ -3244,10 +3231,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 				*RemovedParentName);
 		}
 		Result->SetStringField(TEXT("rollbackNote"), LossyNote);
-		return MCPResult(Result);
+		return Edit.Finish(Result);
 	}
 	else
 	{
+		Edit.Cancel();
 		return MCPError(TEXT("Failed to remove component"));
 	}
 }
@@ -3264,11 +3252,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 	FString VarName;
 	if (auto Err = RequireString(Params, TEXT("name"), VarName)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("delete_variable"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	bool bFound = false;
 	FEdGraphPinType RemovedType;
@@ -3292,15 +3278,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 		return MCPResult(Noop);
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
 	FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, FName(*VarName));
-
-	// Compile and save
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
 	Result->SetBoolField(TEXT("deleted"), true);
@@ -3350,7 +3332,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 			"express, so the inverse would fail on replay rather than restore anything."),
 			*RemovedTypeSpec));
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 TSharedPtr<FJsonValue> FBlueprintHandlers::DuplicateBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
@@ -3399,8 +3381,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddLocalVariable(const TSharedPtr<FJs
 	if (auto Err = RequireString(Params, TEXT("name"), VarName)) return Err;
 	FString TypeStr = OptionalString(Params, TEXT("varType"), TEXT("bool"));
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	// Compiles but has never saved.
+	FMCPEditScope Edit(Params, TEXT("add_local_variable"), TEXT("assetPath"), MCPBlueprint::ValueEdit().SaveIf(false));
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Find the function graph and its FunctionEntry node.
 	UEdGraph* FuncGraph = nullptr;
@@ -3444,10 +3428,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddLocalVariable(const TSharedPtr<FJs
 	NewVar.VarGuid = FGuid::NewGuid();
 	NewVar.VarType = PinType;
 	NewVar.FriendlyName = VarName;
+	if (auto Err = Edit.Begin()) return Err;
 	Entry->Modify();
 	Entry->LocalVariables.Add(NewVar);
-	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	Edit.Commit();
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -3464,7 +3448,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddLocalVariable(const TSharedPtr<FJs
 	Payload->SetStringField(TEXT("name"), VarName);
 	Payload->SetStringField(TEXT("op"), TEXT("remove"));
 	MCPSetRollback(Result, TEXT("edit_local_variable"), Payload);
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::ListLocalVariables(const TSharedPtr<FJsonObject>& Params)
@@ -3550,9 +3534,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentComponent(const TSharedPtr<FJ
 	FString NewParent;
 	if (auto Err = RequireString(Params, TEXT("newParent"), NewParent)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return MCPError(TEXT("Blueprint not found"));
-	if (auto Blocked = MCPAssetWriteBlockedError(Blueprint, AssetPath, TEXT("reparent this component"))) return Blocked;
+	FMCPEditScope Edit(Params, TEXT("reparent_component"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
 	if (!SCS) return MCPError(TEXT("Blueprint has no SCS"));
 
@@ -3578,13 +3562,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentComponent(const TSharedPtr<FJ
 		return MCPResult(NoOp);
 	}
 
+	// #932: the scope refuses a read-only package here, before anything moves.
+	if (auto Err = Edit.Begin()) return Err;
+	SCS->Modify();
 	SCS->RemoveNode(Child);
 	Parent->AddChildNode(Child);
-
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-
-	FString SaveReason;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveReason);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -3594,7 +3577,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentComponent(const TSharedPtr<FJ
 	{
 		Result->SetStringField(TEXT("previousParent"), PreviousParentName);
 	}
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
 
 	if (!PreviousParentName.IsEmpty())
 	{
@@ -3613,7 +3595,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentComponent(const TSharedPtr<FJ
 			"so no inverse is offered rather than one that would reparent it under the wrong node."),
 			*ComponentName));
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ─── #138 reparent_blueprint ────────────────────────────────────────
@@ -3626,17 +3608,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentBlueprint(const TSharedPtr<FJ
 	FString ParentClassName;
 	if (auto Err = RequireString(Params, TEXT("parentClass"), ParentClassName)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
-
-	// #932: reparenting reparents, recompiles AND saves, and the save is not
-	// optional. A .uasset that was never checked out of source control is
-	// read-only on disk, and asking the engine to write it turned the failed
-	// save into a FATAL error that took the whole editor process down. The
-	// asset itself was fine and the call replayed cleanly after a checkout, so
-	// the only thing missing was this question, asked before the Blueprint is
-	// touched rather than after it has already been reparented and recompiled.
-	if (auto Blocked = MCPAssetWriteBlockedError(Blueprint, AssetPath, TEXT("reparent this Blueprint"))) return Blocked;
+	FMCPEditScope Edit(Params, TEXT("reparent_blueprint"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Resolve parent class: full path > short name > engine-module implicit.
 	UClass* NewParent = nullptr;
@@ -3679,11 +3653,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentBlueprint(const TSharedPtr<FJ
 
 	// Prefer the canonical UBlueprintEditorLibrary path (matches the Python API
 	// users have been falling back to in the workaround).
+	// #932: a read-only .uasset is refused here, before the reparent. Writing
+	// one after it took the whole editor down.
+	if (auto Err = Edit.Begin()) return Err;
 	UBlueprintEditorLibrary::ReparentBlueprint(Blueprint, NewParent);
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-
-	FString SaveReason;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveReason);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -3693,7 +3667,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentBlueprint(const TSharedPtr<FJ
 	{
 		Result->SetStringField(TEXT("previousParent"), OldParent->GetPathName());
 	}
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
 
 	// Reparenting back to the previous class restores the hierarchy. The
 	// deprecated-class check above guards NewParent only, and reparenting AWAY
@@ -3729,7 +3702,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentBlueprint(const TSharedPtr<FJ
 				"This Blueprint had no ParentClass to reparent back to, so there is no previous value for the "
 				"inverse to restore and none is guessed.")));
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // #580 flush orphaned InheritableComponentHandler records. Invalid override
@@ -3741,8 +3714,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushInheritableComponentHandler(cons
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("flush_inheritable_component_handler"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UInheritableComponentHandler* ICH = Blueprint->GetInheritableComponentHandler(/*bCreateIfNecessary=*/false);
 	if (!ICH)
@@ -3800,16 +3774,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushInheritableComponentHandler(cons
 		return MCPResult(NoOp);
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
 	Blueprint->Modify();
 	ICH->ValidateTemplates();
 	const int32 After = CountRecords();
-
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	// Commit whatever the count says: the old tail compiled and saved on this path every time.
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("hadInheritableComponentHandler"), true);
@@ -3838,7 +3810,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushInheritableComponentHandler(cons
 		"This drops InheritableComponentHandler records whose component key no longer resolves, which is why the "
 		"engine considers them invalid. No action re-creates an override for a component that does not exist, and "
 		"the dropped records are not retained anywhere, so there is no inverse call."));
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::FlushComponentTemplates(const TSharedPtr<FJsonObject>& Params)

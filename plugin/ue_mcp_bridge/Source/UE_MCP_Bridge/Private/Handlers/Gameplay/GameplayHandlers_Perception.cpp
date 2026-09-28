@@ -42,6 +42,7 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Engine/Blueprint.h"
+#include "Handlers/Blueprint/BlueprintEditTraits.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "GameFramework/Actor.h"
@@ -788,6 +789,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSense(const TSharedPtr<FJsonObje
 		}
 		return MCPAssetNotFoundError(BlueprintPath, TEXT("Blueprint"));
 	}
+	// The refusals above keep their own wording; the scope owns the edit from here.
+	FMCPEditScope Edit(Params, TEXT("remove_sense"), TEXT("blueprintPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	Blueprint = Edit.Target<UBlueprint>();
 
 	USCS_Node* Node = nullptr;
 	TArray<FString> AvailableComponents;
@@ -909,12 +914,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSense(const TSharedPtr<FJsonObje
 		PerceptionLocalCaptureTunedSettings(Doomed, Uncaptured, TunedCount);
 	const bool bWasLastElement = (TargetIndex == Helper.Num() - 1);
 
+	if (auto Err = Edit.Begin()) return Err;
+	Template->Modify();
 	Helper.RemoveValues(TargetIndex, 1);
-
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
-	MCPNoteSaveOutcome(Result, Blueprint->GetPathName(), bSaved, SaveError);
+	Edit.Commit();
 
 	Result->SetBoolField(TEXT("alreadyRemoved"), false);
 	MCPSetUpdated(Result);
@@ -954,7 +957,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSense(const TSharedPtr<FJsonObje
 		{
 			Result->SetArrayField(TEXT("removedSettingsNotCaptured"), MCPStringListToJson(Uncaptured));
 		}
-		return MCPResult(Result);
+		return Edit.Finish(Result);
 	}
 
 	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
@@ -996,7 +999,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSense(const TSharedPtr<FJsonObje
 			"class rather than by index.");
 	}
 	Result->SetStringField(TEXT("rollbackNote"), RollbackNote);
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::GetPerceivedActors(const TSharedPtr<FJsonObject>& Params)

@@ -46,6 +46,9 @@
 #include "GameFramework/HUD.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/Blueprint.h"
+#include "Handlers/Blueprint/BlueprintEditTraits.h"
+#include "Handlers/Gameplay/BehaviorTreeEditTraits.h"
+#include "Families/MCPPropertyWrite.h"
 #include "Factories/BlueprintFactory.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
@@ -3038,7 +3041,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBehaviorTreeBlackboard(const TShare
 	FString BlackboardPath;
 	if (auto Err = RequireString(Params, TEXT("blackboardPath"), BlackboardPath)) return Err;
 
-	REQUIRE_ASSET(UBehaviorTree, BT, BehaviorTreePath);
+	// A write straight onto the runnable tree: saved, no graph rebuild.
+	FMCPEditScope Edit(Params, TEXT("set_behavior_tree_blackboard"), TEXT("behaviorTreePath"), MCPBehaviorTree::AssetEdit());
+	if (auto Err = Edit.Open<UBehaviorTree>()) return Err;
+	UBehaviorTree* BT = Edit.Target<UBehaviorTree>();
 
 	REQUIRE_ASSET(UBlackboardData, BB, BlackboardPath);
 
@@ -3050,15 +3056,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBehaviorTreeBlackboard(const TShare
 
 	UBlackboardData* Previous = Cast<UBlackboardData>(BBProp->GetObjectPropertyValue_InContainer(BT));
 
-	BT->Modify();
-	BBProp->SetObjectPropertyValue_InContainer(BT, BB);
-	BT->PostEditChange();
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(BT, SaveError);
+	if (auto Err = Edit.Begin()) return Err;
+	const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::Write(
+		{ BT, nullptr, BBProp, BBProp->ContainerPtrToValuePtr<void>(BT) },
+		[BBProp, BT, BB](FString&) { BBProp->SetObjectPropertyValue_InContainer(BT, BB); return true; });
+	// Saved on every call, as before, even when it named the blackboard already set.
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, BT->GetPathName(), bSaved, SaveError);
 	MCPSetUpdated(Result);
+	MCPPropertyWrite::NotePrevious(Result, Outcome);
 	Result->SetStringField(TEXT("behaviorTreePath"), BehaviorTreePath);
 	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 	if (Previous)
@@ -3070,7 +3077,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBehaviorTreeBlackboard(const TShare
 		Payload->SetStringField(TEXT("blackboardPath"), Previous->GetPathName());
 		MCPSetRollback(Result, TEXT("set_behavior_tree_blackboard"), Payload);
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // get_behavior_tree_info and read_behavior_tree_graph moved to
@@ -3085,7 +3092,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 	const TArray<TSharedPtr<FJsonValue>>* SenseArray = nullptr;
 	const bool bHasSenses = TryGetArrayParam(Params, TEXT("senses"), SenseArray) && SenseArray;
 
-	REQUIRE_ASSET(UBlueprint, BP, BPPath);
+	FMCPEditScope Edit(Params, TEXT("add_perception_component"), TEXT("blueprintPath"), MCPBlueprint::PlainEdit());
+	// A missing asset keeps this category's load error.
+	if (auto Err = Edit.Open<UBlueprint>()) return LoadAssetByPath<UBlueprint>(BPPath) ? Err : MCPAssetLoadError(BPPath, TEXT("UBlueprint"));
+	UBlueprint* BP = Edit.Target<UBlueprint>();
 
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.AIPerceptionComponent"));
 	if (!CompClass)
@@ -3152,6 +3162,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 		{
 			return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold an AIPerceptionComponent."));
 		}
+		if (auto Err = Edit.Begin()) return Err;
 		TargetNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("AIPerceptionComp"));
 		if (!TargetNode)
 		{
@@ -3184,23 +3195,17 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 			AlreadyConfigured.Add(MakeShared<FJsonValueString>(ConfigClass->GetName()));
 			continue;
 		}
+		if (auto Err = Edit.Begin()) return Err;
+		Template->Modify();
 		UAISenseConfig* Config = NewObject<UAISenseConfig>(Template, ConfigClass);
 		Template->ConfigureSense(*Config);
 		ConfiguredSenses.Add(MakeShared<FJsonValueString>(ConfigClass->GetName()));
 	}
 
-	bool bSaveAttempted = false;
-	bool bSaved = false;
-	FString SaveError;
-	if (bCreated || ConfiguredSenses.Num() > 0)
-	{
-		FKismetEditorUtilities::CompileBlueprint(BP);
-		bSaveAttempted = true;
-		bSaved = SaveAssetPackageChecked(BP, SaveError);
-	}
+	// Compiled and saved only when a component or a sense was added.
+	if (bCreated || ConfiguredSenses.Num() > 0) Edit.Commit();
 
 	auto Result = MCPSuccess();
-	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	if (bCreated) MCPSetCreated(Result); else MCPSetExisted(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TargetNode->GetVariableName().ToString());
@@ -3221,7 +3226,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 		MCPSetRollback(Result, TEXT("remove_component"), Payload);
 	}
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TSharedPtr<FJsonObject>& Params)
@@ -3257,7 +3262,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 		return MCPError(FString::Printf(TEXT("Sense config class not found: %s. Enable AIModule."), **SenseClassName));
 	}
 
-	REQUIRE_ASSET(UBlueprint, BP, BPPath);
+	FMCPEditScope Edit(Params, TEXT("configure_ai_perception_sense"), TEXT("blueprintPath"), MCPBlueprint::PlainEdit());
+	// A missing asset keeps this category's load error.
+	if (auto Err = Edit.Open<UBlueprint>()) return LoadAssetByPath<UBlueprint>(BPPath) ? Err : MCPAssetLoadError(BPPath, TEXT("UBlueprint"));
+	UBlueprint* BP = Edit.Target<UBlueprint>();
 
 	// Locate the AIPerceptionComponent template on the construction script.
 	UClass* PercClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.AIPerceptionComponent"));
@@ -3354,6 +3362,33 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 		}
 	}
 
+	// Whether any setting would move an existing config, probed on a copy, so a
+	// call that changes nothing never meets the #932 guard it has no save for.
+	bool bWillWrite = !bExisted;
+	if (bExisted && bHasSettings)
+	{
+		for (const auto& KV : (*PropsObj)->Values)
+		{
+			FProperty* P = Cfg->GetClass()->FindPropertyByName(FName(*KV.Key));
+			if (!P) continue;
+			FDefaultConstructedPropertyElement Probe(P);
+			P->CopyCompleteValue(Probe.GetObjAddress(), P->ContainerPtrToValuePtr<void>(Cfg));
+			FString ProbeErr;
+			// A value that will not convert is reported by the write below, inside the record.
+			if (!MCPJsonProperty::SetJsonOnProperty(P, Probe.GetObjAddress(), KV.Value, ProbeErr)
+				|| !P->Identical(Probe.GetObjAddress(), P->ContainerPtrToValuePtr<void>(Cfg)))
+			{
+				bWillWrite = true;
+				break;
+			}
+		}
+	}
+	if (bWillWrite)
+	{
+		if (auto Err = Edit.Begin()) return Err;
+		PercTemplate->Modify();
+	}
+
 	if (!bExisted)
 	{
 		Cfg = NewObject<UObject>(PercTemplate, SenseCfgClass, NAME_None, RF_Transactional);
@@ -3376,6 +3411,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 	TArray<FString> AppliedProps;
 	TArray<FString> ChangedProps;
 	TArray<FString> AlreadyAtValueProps;
+	// The value each setting replaced, the multi-key form of F5's previousValue.
+	const TSharedPtr<FJsonObject> PreviousValues = MakeShared<FJsonObject>();
 
 	auto UndoWrites = [&]()
 	{
@@ -3400,6 +3437,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 			// guard stays because a null deref would be worse than a message.
 			if (!P)
 			{
+				Edit.Cancel();
 				UndoWrites();
 				return MCPError(FString::Printf(
 					TEXT("Property '%s' vanished between validation and apply on %s."),
@@ -3410,20 +3448,35 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 			FString BeforeText;
 			P->ExportText_Direct(BeforeText, ValueAddr, ValueAddr, Cfg, PPF_None);
 
-			FString PErr;
-			if (!MCPJsonProperty::SetJsonOnProperty(P, ValueAddr, KV.Value, PErr))
+			// F5: notified on the config object, and a refused value is put back.
+			// A call the probe found unchanged writes plainly, so it dirties nothing.
+			const TSharedPtr<FJsonValue> SettingValue = KV.Value;
+			auto Apply = [P, ValueAddr, &SettingValue](FString& OutError) { return MCPJsonProperty::SetJsonOnProperty(P, ValueAddr, SettingValue, OutError); };
+			MCPPropertyWrite::FOutcome Outcome;
+			if (bWillWrite)
+			{
+				Outcome = MCPPropertyWrite::Write({ Cfg, nullptr, P, ValueAddr }, Apply);
+			}
+			else
+			{
+				Outcome.Previous = MCPPropertyWrite::Export(P, ValueAddr);
+				Outcome.bWritten = Apply(Outcome.Error);
+			}
+			if (!Outcome.bWritten)
 			{
 				// A value that will not convert is a failed call, not a skipped key.
+				Edit.Cancel();
 				UndoWrites();
 				return MCPError(FString::Printf(
 					TEXT("Could not set '%s' on %s: %s. %s"),
-					*FString(*KV.Key), *SenseCfgClass->GetName(), *PErr,
+					*FString(*KV.Key), *SenseCfgClass->GetName(), *Outcome.Error,
 					bExisted
 						? TEXT("The sense was left exactly as it was found; no setting was applied.")
 						: TEXT("The sense was not added.")));
 			}
 			Written.Add(FSenseSettingWrite{ P, BeforeText });
 			AppliedProps.Add(FString(*KV.Key));
+			PreviousValues->SetStringField(FString(*KV.Key), Outcome.Previous);
 
 			FString AfterText;
 			P->ExportText_Direct(AfterText, ValueAddr, ValueAddr, Cfg, PPF_None);
@@ -3435,21 +3488,13 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 	// Compile and save only when something actually moved. A call that found the
 	// sense already configured exactly as asked has no reason to dirty the asset.
 	const bool bChanged = (!bExisted || ChangedProps.Num() > 0);
-	bool bSaveAttempted = false;
-	bool bSaved = false;
-	FString SaveError;
-	if (bChanged)
-	{
-		FKismetEditorUtilities::CompileBlueprint(BP);
-		bSaveAttempted = true;
-		bSaved = SaveAssetPackageChecked(BP, SaveError);
-	}
+	if (bChanged) Edit.Commit();
 
 	// Three outcomes, reported apart: created, existed and updated, existed and
 	// unchanged. Collapsing the last two is what made the old result dishonest.
 	auto Result = MCPSuccess();
-	if (bSaveAttempted) MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	if (bExisted) MCPSetExisted(Result); else MCPSetCreated(Result);
+	if (AppliedProps.Num() > 0) Result->SetObjectField(TEXT("previousValues"), PreviousValues);
 	if (bExisted && ChangedProps.Num() > 0) MCPSetUpdated(Result);
 	else Result->SetBoolField(TEXT("updated"), false);
 	Result->SetBoolField(TEXT("changed"), bChanged);
@@ -3519,7 +3564,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 			"gameplay(read_perception) before tuning, and write them back with configure_sense."));
 	}
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr<FJsonObject>& Params)
@@ -3527,7 +3572,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 	FString BPPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
 
-	REQUIRE_ASSET(UBlueprint, BP, BPPath);
+	FMCPEditScope Edit(Params, TEXT("add_state_tree_component"), TEXT("blueprintPath"), MCPBlueprint::PlainEdit());
+	// A missing asset keeps this category's load error.
+	if (auto Err = Edit.Open<UBlueprint>()) return LoadAssetByPath<UBlueprint>(BPPath) ? Err : MCPAssetLoadError(BPPath, TEXT("UBlueprint"));
+	UBlueprint* BP = Edit.Target<UBlueprint>();
 
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTreeComponent"));
 	if (!CompClass)
@@ -3555,18 +3603,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 	{
 		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold a StateTreeComponent."));
 	}
+	if (auto Err = Edit.Begin()) return Err;
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("StateTreeComp"));
 	if (!NewNode)
 	{
 		return MCPError(TEXT("Failed to create the StateTreeComponent SCS node."));
 	}
 	BP->SimpleConstructionScript->AddNode(NewNode);
-	FKismetEditorUtilities::CompileBlueprint(BP);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(BP, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("StateTreeComp"));
@@ -3577,7 +3623,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 	Payload->SetStringField(TEXT("componentName"), TEXT("StateTreeComp"));
 	MCPSetRollback(Result, TEXT("remove_component"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedPtr<FJsonObject>& Params)
@@ -3585,7 +3631,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 	FString BPPath;
 	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
 
-	REQUIRE_ASSET(UBlueprint, BP, BPPath);
+	FMCPEditScope Edit(Params, TEXT("add_smart_object_component"), TEXT("blueprintPath"), MCPBlueprint::PlainEdit());
+	// A missing asset keeps this category's load error.
+	if (auto Err = Edit.Open<UBlueprint>()) return LoadAssetByPath<UBlueprint>(BPPath) ? Err : MCPAssetLoadError(BPPath, TEXT("UBlueprint"));
+	UBlueprint* BP = Edit.Target<UBlueprint>();
 
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectComponent"));
 	if (!CompClass)
@@ -3613,18 +3662,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 	{
 		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold a SmartObjectComponent."));
 	}
+	if (auto Err = Edit.Begin()) return Err;
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("SmartObjectComp"));
 	if (!NewNode)
 	{
 		return MCPError(TEXT("Failed to create the SmartObjectComponent SCS node."));
 	}
 	BP->SimpleConstructionScript->AddNode(NewNode);
-	FKismetEditorUtilities::CompileBlueprint(BP);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(BP, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, BPPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("SmartObjectComp"));
@@ -3635,7 +3682,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 	Payload->SetStringField(TEXT("componentName"), TEXT("SmartObjectComp"));
 	MCPSetRollback(Result, TEXT("remove_component"), Payload);
 
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ─────────────────────────────────────────────────────────────
