@@ -1,6 +1,7 @@
 #include "AssetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPCreate.h"
 #include "EdGraph/EdGraphNode.h"
 #include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
@@ -3172,78 +3173,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkRename(const TSharedPtr<FJsonObject>&
 
 TSharedPtr<FJsonValue> FAssetHandlers::CreateDataAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
-	FString ClassName;
-	if (auto Err = RequireString(Params, TEXT("className"), ClassName)) return Err;
-	// Every parameter is read before anything can fail (#1057).
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
-	const bool bHasProps = TryGetObjectParam(Params, TEXT("properties"), PropsObj);
-
-	// #823: shared resolution, so the prefixed C++ spelling ("UMyConfig",
-	// "/Script/MyGame.UMyConfig") resolves to the class UE registered as
-	// "MyConfig" instead of reporting the class missing.
-	UClass* DataClass = MCPResolveClass(ClassName);
-	if (auto Err = MCPCheckClassUsable(ClassName, DataClass, UDataAsset::StaticClass())) return Err;
-
-	const FString FullPath = FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *Name, *Name);
-
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("DataAsset"), DataClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UObject* NewAsset = Created.Asset;
-
-	// Optional properties object - use recursive JSON-to-property setter so that
-	// TArray<FStruct> with nested UObject refs, FGameplayTag, etc. all work (#196, #199).
-	int32 SetCount = 0;
-	TArray<FString> PropErrors;
-	if (bHasProps && PropsObj && (*PropsObj).IsValid())
-	{
-		for (const auto& Pair : (*PropsObj)->Values)
-		{
-			FProperty* Prop = DataClass->FindPropertyByName(FName(*Pair.Key));
-			if (!Prop)
-			{
-				PropErrors.Add(FString::Printf(TEXT("Property not found: %s"), *Pair.Key));
-				continue;
-			}
-			void* Addr = Prop->ContainerPtrToValuePtr<void>(NewAsset);
-			FString SetErr;
-			if (MCPJsonProperty::SetJsonOnProperty(Prop, Addr, Pair.Value, SetErr))
-			{
-				SetCount++;
-			}
-			else
-			{
-				PropErrors.Add(FString::Printf(TEXT("Failed to set %s: %s"), *Pair.Key, *SetErr));
-			}
-		}
-	}
-
-	FString SaveReason;
-	const bool bSaved = SaveAssetPackageChecked(NewAsset, SaveReason);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("assetPath"), FullPath);
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("className"), DataClass->GetName());
-	Result->SetNumberField(TEXT("propertiesSet"), SetCount);
-	if (PropErrors.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> Errs;
-		for (const FString& E : PropErrors) Errs.Add(MakeShared<FJsonValueString>(E));
-		Result->SetArrayField(TEXT("propertyErrors"), Errs);
-	}
-	MCPNoteSaveOutcome(Result, FullPath, bSaved, SaveReason);
-
-	// Rollback: delete the newly created asset
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("assetPath"), FullPath);
-	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-
-	return MCPResult(Result);
+	return CreateAssetOfClass(Params, UDataAsset::StaticClass());
 }
 
 // #726: create an asset of any concrete UObject class. create_data_asset only
@@ -3254,33 +3184,46 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataAsset(const TSharedPtr<FJsonObj
 // properties, and saves.
 TSharedPtr<FJsonValue> FAssetHandlers::CreateAssetByClass(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
+	return CreateAssetOfClass(Params, nullptr);
+}
+
+// create_asset_by_class and its create_data_asset preset: resolve className
+// (within Base when given), create it with a null factory (IAssetTools
+// NewObjects the exact class), apply the optional properties and save (#726).
+TSharedPtr<FJsonValue> FAssetHandlers::CreateAssetOfClass(const TSharedPtr<FJsonObject>& Params, UClass* Base)
+{
+	FMCPCreate Create(Params, { Base ? TEXT("DataAsset") : TEXT("Asset"), TEXT("/Game") });
+	if (auto Err = Create.Read()) return Err;
 	FString ClassName;
 	if (auto Err = RequireString(Params, TEXT("className"), ClassName)) return Err;
 	// Every parameter is read before anything can fail (#1057).
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 	const bool bHasProps = TryGetObjectParam(Params, TEXT("properties"), PropsObj);
 
-	// #823: shared resolution - same as create_data_asset, prefix tolerant.
+	// #823: shared resolution, so the prefixed C++ spelling ("UMyConfig",
+	// "/Script/MyGame.UMyConfig") resolves to the class UE registered as
+	// "MyConfig" instead of reporting the class missing.
 	UClass* AssetClass = MCPResolveClass(ClassName);
-	// Guard classes that cannot be standalone assets or need a specialized flow.
-	if (auto Err = MCPCheckClassUsable(ClassName, AssetClass)) return Err;
-	if (AssetClass->IsChildOf(AActor::StaticClass()) || AssetClass->IsChildOf(UActorComponent::StaticClass()))
+	if (Base)
 	{
-		return MCPClassUnusableError(ClassName, AssetClass, TEXT("not_an_asset"),
-			TEXT("it is an actor or component class, not an asset. Use level(place_actor) or level(add_component_to_actor)."));
+		if (auto Err = MCPCheckClassUsable(ClassName, AssetClass, Base)) return Err;
+	}
+	else
+	{
+		if (auto Err = MCPCheckClassUsable(ClassName, AssetClass)) return Err;
+		// Classes that cannot be standalone assets need a specialized flow.
+		if (AssetClass->IsChildOf(AActor::StaticClass()) || AssetClass->IsChildOf(UActorComponent::StaticClass()))
+		{
+			return MCPClassUnusableError(ClassName, AssetClass, TEXT("not_an_asset"),
+				TEXT("it is an actor or component class, not an asset. Use level(place_actor) or level(add_component_to_actor)."));
+		}
 	}
 
-	const FString FullPath = FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *Name, *Name);
+	UObject* NewAsset = nullptr;
+	if (auto Early = Create.Make(NewAsset, AssetClass)) return Early;
 
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, AssetClass->GetName(), AssetClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UObject* NewAsset = Created.Asset;
-
-	// Optional properties (recursive JSON-to-property setter), mirroring create_data_asset.
+	// The recursive JSON-to-property setter, so TArray<FStruct> with nested
+	// UObject refs, FGameplayTag and the like all work (#196, #199).
 	int32 SetCount = 0;
 	TArray<FString> PropErrors;
 	if (bHasProps && PropsObj && (*PropsObj).IsValid())
@@ -3293,9 +3236,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateAssetByClass(const TSharedPtr<FJson
 				PropErrors.Add(FString::Printf(TEXT("Property not found: %s"), *Pair.Key));
 				continue;
 			}
-			void* Addr = Prop->ContainerPtrToValuePtr<void>(NewAsset);
 			FString SetErr;
-			if (MCPJsonProperty::SetJsonOnProperty(Prop, Addr, Pair.Value, SetErr))
+			if (MCPJsonProperty::SetJsonOnProperty(Prop, Prop->ContainerPtrToValuePtr<void>(NewAsset), Pair.Value, SetErr))
 			{
 				SetCount++;
 			}
@@ -3306,27 +3248,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateAssetByClass(const TSharedPtr<FJson
 		}
 	}
 
-	FString SaveReason;
-	const bool bSaved = SaveAssetPackageChecked(NewAsset, SaveReason);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("assetPath"), FullPath);
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("className"), AssetClass->GetName());
+	TSharedPtr<FJsonObject> Result = Create.Finish();
 	Result->SetNumberField(TEXT("propertiesSet"), SetCount);
-	if (PropErrors.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> Errs;
-		for (const FString& E : PropErrors) Errs.Add(MakeShared<FJsonValueString>(E));
-		Result->SetArrayField(TEXT("propertyErrors"), Errs);
-	}
-	MCPNoteSaveOutcome(Result, FullPath, bSaved, SaveReason);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("assetPath"), FullPath);
-	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-
+	if (PropErrors.Num() > 0) Result->SetArrayField(TEXT("propertyErrors"), MCPStringListToJson(PropErrors));
 	return MCPResult(Result);
 }
 
@@ -4922,23 +4846,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureSettingsByType(const TSharedPtr
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	TryGetStringParam(Params, TEXT("assetPath"), AssetPath);
-	FString Name, PackagePath;
-	if (AssetPath.IsEmpty())
-	{
-		if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-		PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Import"));
-	}
-	else
-	{
-		FString Package, AssetName;
-		AssetPath.Split(TEXT("."), &Package, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-		Name = AssetName;
-		PackagePath = FPaths::GetPath(Package);
-	}
+	FMCPCreate Create(Params, { TEXT("InterchangePipeline"), TEXT("/Game/Import"), /*bOnConflict=*/true, /*bAssetPath=*/true });
+	if (auto Err = Create.Read()) return Err;
 	const FString MeshType = OptionalString(Params, TEXT("meshType"), TEXT("skeletal")).ToLower();
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
 	UClass* PipelineClass = FindObject<UClass>(nullptr, TEXT("/Script/InterchangePipelines.InterchangeGenericAssetsPipeline"));
 	if (!PipelineClass)
@@ -4946,9 +4856,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPt
 		return MCPError(TEXT("InterchangeGenericAssetsPipeline class not found. Enable the Interchange Editor plugin."));
 	}
 
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("InterchangePipeline"), PipelineClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UObject* NewAsset = Created.Asset;
+	UObject* NewAsset = nullptr;
+	if (auto Early = Create.Make(NewAsset, PipelineClass)) return Early;
 
 	// Default mesh-pipeline settings. We write through SetJsonOnProperty so
 	// every field stays in sync with the asset's UPROPERTY layout.
@@ -4986,7 +4895,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPt
 	auto JBool = [](bool B) { return MakeShared<FJsonValueBoolean>(B); };
 	auto JStr  = [](const TCHAR* S) { return MakeShared<FJsonValueString>(S); };
 
-	// Common mesh pipeline defaults (matches the user's Python boilerplate).
+	// Common mesh pipeline defaults.
 	const bool bSkeletal = (MeshType == TEXT("skeletal"));
 	SetSubProp(TEXT("CommonMeshesProperties"), TEXT("bRecomputeNormals"), JBool(false));
 	SetSubProp(TEXT("CommonMeshesProperties"), TEXT("bRecomputeTangents"), JBool(false));
@@ -5000,44 +4909,30 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPt
 	SetSubProp(TEXT("MeshPipeline"), TEXT("bImportStaticMeshes"), JBool(!bSkeletal));
 	SetSubProp(TEXT("MeshPipeline"), TEXT("bCreatePhysicsAsset"), JBool(false));
 
-	// Caller-supplied overrides.
+	// Caller-supplied overrides: dotted keys such as "MeshPipeline.bImportSkeletalMeshes".
 	const TSharedPtr<FJsonObject>* OptionsObj = nullptr;
 	int32 OverridesApplied = 0;
-	TArray<TSharedPtr<FJsonValue>> OverrideFailures;
+	TArray<FString> OverrideFailures;
 	if (TryGetObjectParam(Params, TEXT("options"), OptionsObj) && OptionsObj && (*OptionsObj).IsValid())
 	{
 		for (const auto& Pair : (*OptionsObj)->Values)
 		{
-			// Caller key is a dotted path: "MeshPipeline.bImportSkeletalMeshes" etc.
 			const FString Key(*Pair.Key);
 			int32 Dot = INDEX_NONE;
 			Key.FindLastChar('.', Dot);
-			if (Dot == INDEX_NONE)
-			{
-				if (SetSubProp(TEXT(""), *Key, Pair.Value)) ++OverridesApplied;
-				else OverrideFailures.Add(MakeShared<FJsonValueString>(Key));
-				continue;
-			}
-			const FString SubPath = Key.Left(Dot);
-			const FString Field = Key.RightChop(Dot + 1);
-			if (SetSubProp(SubPath, *Field, Pair.Value)) ++OverridesApplied;
-			else OverrideFailures.Add(MakeShared<FJsonValueString>(Key));
+			const bool bSet = Dot == INDEX_NONE
+				? SetSubProp(TEXT(""), *Key, Pair.Value)
+				: SetSubProp(Key.Left(Dot), *Key.RightChop(Dot + 1), Pair.Value);
+			if (bSet) ++OverridesApplied;
+			else OverrideFailures.Add(Key);
 		}
 	}
-
 	NewAsset->PostEditChange();
-	FString SaveReason;
-	const bool bSaved = SaveAssetPackageChecked(NewAsset, SaveReason);
 
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
+	TSharedPtr<FJsonObject> Result = Create.Finish();
 	Result->SetStringField(TEXT("meshType"), MeshType);
 	Result->SetNumberField(TEXT("overridesApplied"), OverridesApplied);
-	if (OverrideFailures.Num() > 0) Result->SetArrayField(TEXT("overrideFailures"), OverrideFailures);
-	MCPNoteSaveOutcome(Result, NewAsset->GetPathName(), bSaved, SaveReason);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	if (OverrideFailures.Num() > 0) Result->SetArrayField(TEXT("overrideFailures"), MCPStringListToJson(OverrideFailures));
 	return MCPResult(Result);
 }
 

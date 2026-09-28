@@ -10,6 +10,9 @@ public:
 	// Register all asset handlers
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
+	// #686: create a UserDefinedEnum; reflection(create_enum) is this under another name.
+	static TSharedPtr<FJsonValue> CreateUserDefinedEnum(const TSharedPtr<FJsonObject>& Params);
+
 private:
 	// Handler implementations
 	static TSharedPtr<FJsonValue> ListAssets(const TSharedPtr<FJsonObject>& Params);
@@ -78,6 +81,9 @@ private:
 	// #726: create an asset of any concrete UObject class via its registered
 	// factory (or NewObject fallback), not just UDataAsset subclasses.
 	static TSharedPtr<FJsonValue> CreateAssetByClass(const TSharedPtr<FJsonObject>& Params);
+	// The one implementation behind create_asset_by_class and create_data_asset (Base UDataAsset).
+	static TSharedPtr<FJsonValue> CreateAssetOfClass(const TSharedPtr<FJsonObject>& Params, UClass* Base);
+
 	// #1059: the node graph of any EdGraph-backed asset, with its pins and its
 	// connections. Reflection cannot reach either - UEdGraphNode::Pins has no
 	// UPROPERTY and UEdGraphPin is not a UObject - so this is the only way to
@@ -234,9 +240,9 @@ private:
 	static TSharedPtr<FJsonValue> HealthCheck(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ForceReload(const TSharedPtr<FJsonObject>& Params);
 
-	// #686: UserDefinedEnum authoring (create, list values, add/rename/remove enumerator)
-	static TSharedPtr<FJsonValue> CreateUserDefinedEnum(const TSharedPtr<FJsonObject>& Params);
+	// #686: UserDefinedEnum authoring (list values, add/rename/remove enumerator)
 	static TSharedPtr<FJsonValue> ListEnumValues(const TSharedPtr<FJsonObject>& Params);
+
 	static TSharedPtr<FJsonValue> EditUserDefinedEnum(const TSharedPtr<FJsonObject>& Params);
 
 	// #735: UserDefinedStruct authoring (create, list fields, add/rename/retype/remove member).

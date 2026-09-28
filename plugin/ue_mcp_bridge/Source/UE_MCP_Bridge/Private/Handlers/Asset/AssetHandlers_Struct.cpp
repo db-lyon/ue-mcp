@@ -15,6 +15,7 @@
 #include "Handlers/Blueprint/BlueprintHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPCreate.h"
 #include "MCPEngineCompat.h"
 #include "Kismet2/StructureEditorUtils.h"
 #include "UserDefinedStructure/UserDefinedStructEditorData.h"
@@ -79,21 +80,28 @@ static bool ResolveStructFieldGuid(const TSharedPtr<FJsonObject>& Params, UUserD
 
 TSharedPtr<FJsonValue> FAssetHandlers::CreateUserDefinedStruct(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("UserDefinedStruct"), TEXT("/Game") });
+	if (auto Err = Create.Read()) return Err;
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("UserDefinedStruct")))
+	auto Describe = [](const TSharedPtr<FJsonObject>& Out, UUserDefinedStruct* Struct)
 	{
-		return Existing;
+		TArray<TSharedPtr<FJsonValue>> FieldList;
+		int32 Idx = 0;
+		for (const FStructVariableDescription& Desc : FStructureEditorUtils::GetVarDesc(Struct))
+		{
+			FieldList.Add(MakeShared<FJsonValueObject>(StructFieldToJson(Desc, Idx++)));
+		}
+		Out->SetArrayField(TEXT("fields"), FieldList);
+		Out->SetNumberField(TEXT("count"), FieldList.Num());
+	};
+	UUserDefinedStruct* Struct = nullptr;
+	if (auto Early = Create.Construct<UUserDefinedStruct>(Struct, [](UPackage* Package, FName Name, EObjectFlags Flags)
+		{
+			return FStructureEditorUtils::CreateUserDefinedStruct(Package, Name, Flags);
+		}))
+	{
+		return FMCPCreate::DescribeExisting<UUserDefinedStruct>(Early, Describe);
 	}
-
-	UPackage* Package = CreatePackage(*(PackagePath + TEXT("/") + Name));
-	if (!Package) return MCPError(FString::Printf(TEXT("Failed to create package for %s"), *Name));
-
-	UUserDefinedStruct* Struct = FStructureEditorUtils::CreateUserDefinedStruct(Package, FName(*Name), RF_Public | RF_Standalone);
-	if (!Struct) return MCPError(TEXT("Failed to create UserDefinedStruct"));
 
 	// CreateUserDefinedStruct seeds one default member. Capture its GUID so we can
 	// strip it once the caller's own fields are in (a struct must never hit zero
@@ -144,24 +152,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateUserDefinedStruct(const TSharedPtr<
 		}
 	}
 
-	FAssetRegistryModule::AssetCreated(Struct);
-	FString SaveReason;
-	const bool bSaved = SaveAssetPackageChecked(Struct, SaveReason);
-
-	TSharedPtr<FJsonObject> Res = MCPSuccess();
-	MCPSetCreated(Res);
-	MCPNoteSaveOutcome(Res, Struct->GetPathName(), bSaved, SaveReason);
-	Res->SetStringField(TEXT("path"), Struct->GetPathName());
-	Res->SetStringField(TEXT("name"), Name);
-	TArray<TSharedPtr<FJsonValue>> FieldList;
-	int32 Idx = 0;
-	for (const FStructVariableDescription& Desc : FStructureEditorUtils::GetVarDesc(Struct))
-	{
-		FieldList.Add(MakeShared<FJsonValueObject>(StructFieldToJson(Desc, Idx++)));
-	}
-	Res->SetArrayField(TEXT("fields"), FieldList);
-	Res->SetNumberField(TEXT("count"), FieldList.Num());
-	MCPSetDeleteAssetRollback(Res, Struct->GetPathName());
+	TSharedPtr<FJsonObject> Res = Create.Finish();
+	Describe(Res, Struct);
 	return MCPResult(Res);
 }
 

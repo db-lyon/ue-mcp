@@ -6,6 +6,7 @@
 #include "AssetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPCreate.h"
 #include "HandlerAssetCreate.h"
 #include "HandlerJsonProperty.h"
 #include "JsonSerializer.h"
@@ -1408,46 +1409,23 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 
 TSharedPtr<FJsonValue> FAssetHandlers::CreateCurveTable(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FMCPCreate Create(Params, { TEXT("CurveTable"), TEXT("/Game/CurveTables") });
+	if (auto Err = Create.Read()) return Err;
 
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/CurveTables"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	auto Created = MCPCreateAssetIdempotentNewObject<UCurveTable>(Name, PackagePath, OnConflict, TEXT("CurveTable"));
-	if (Created.EarlyReturn)
+	auto Describe = [](const TSharedPtr<FJsonObject>& Out, UCurveTable* Table)
 	{
-		if (TSharedPtr<FJsonObject> ExistingObj = Created.EarlyReturn->AsObject())
-		{
-			bool bExisted = false;
-			if (ExistingObj->TryGetBoolField(TEXT("existed"), bExisted) && bExisted)
-			{
-				FString ExistingAssetPath;
-				ExistingObj->TryGetStringField(TEXT("path"), ExistingAssetPath);
-				if (UCurveTable* Existing = LoadAssetByPath<UCurveTable>(ExistingAssetPath))
-				{
-					ExistingObj->SetStringField(TEXT("assetPath"), Existing->GetPathName());
-					ExistingObj->SetStringField(TEXT("curveType"), CurveTableModeName(Existing->GetCurveTableMode()));
-					ExistingObj->SetNumberField(TEXT("rowCount"), Existing->GetRowMap().Num());
-				}
-			}
-		}
-		return Created.EarlyReturn;
-	}
+		Out->SetStringField(TEXT("curveType"), CurveTableModeName(Table->GetCurveTableMode()));
+		Out->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+	};
+	UCurveTable* Table = nullptr;
+	if (auto Early = Create.MakeNewObject(Table)) return FMCPCreate::DescribeExisting<UCurveTable>(Early, Describe);
 
-	UCurveTable* Table = Created.Asset;
+	// A curve table's save also invalidates its cached curves, so it saves through its own change routine.
+	TSharedPtr<FJsonObject> Result = Create.Finish(/*bSave=*/false);
 	FString SaveReason;
 	const bool bSaved = SaveCurveTableChange(Table, SaveReason);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
 	MCPNoteSaveOutcome(Result, Table->GetPathName(), bSaved, SaveReason);
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("packagePath"), PackagePath);
-	Result->SetStringField(TEXT("assetPath"), Table->GetPathName());
-	Result->SetStringField(TEXT("curveType"), CurveTableModeName(Table->GetCurveTableMode()));
-	Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
-	MCPSetDeleteAssetRollback(Result, Table->GetPathName());
+	Describe(Result, Table);
 	return MCPResult(Result);
 }
 
@@ -2067,14 +2045,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableKey(const TSharedPtr<FJsonOb
 
 TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
+	FMCPCreate Create(Params, { TEXT("DataTable"), TEXT("/Game/DataTables") });
+	if (auto Err = Create.Read()) return Err;
 	FString RowStruct;
 	if (auto Err = RequireString(Params, TEXT("rowStruct"), RowStruct)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/DataTables"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
 	// #1088: FTableRowBase and /Script/Engine.FTableRowBase are the spellings
 	// callers copy from headers; the UScriptStruct is named TableRowBase.
@@ -2087,45 +2061,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObj
 			: ResolveError);
 	}
 
+	auto Describe = [](const TSharedPtr<FJsonObject>& Out, UDataTable* Table)
+	{
+		Out->SetStringField(TEXT("rowStruct"), Table->RowStruct ? Table->RowStruct->GetName() : TEXT(""));
+		Out->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+	};
 	UDataTableFactory* Factory = NewObject<UDataTableFactory>();
 	Factory->Struct = ScriptStruct;
+	UDataTable* DataTable = nullptr;
+	if (auto Early = Create.Make(DataTable, UDataTable::StaticClass(), Factory)) return FMCPCreate::DescribeExisting<UDataTable>(Early, Describe);
 
-	auto Created = MCPCreateAssetIdempotent<UDataTable>(Name, PackagePath, OnConflict, TEXT("DataTable"), Factory);
-	if (Created.EarlyReturn)
-	{
-		// Augment the Existed payload with DataTable-specific fields if it was an idempotency hit.
-		if (TSharedPtr<FJsonObject> ExistingObj = Created.EarlyReturn->AsObject())
-		{
-			bool bExisted = false;
-			if (ExistingObj->TryGetBoolField(TEXT("existed"), bExisted) && bExisted)
-			{
-				FString ExistingAssetPath;
-				ExistingObj->TryGetStringField(TEXT("path"), ExistingAssetPath);
-				if (UDataTable* Existing = LoadAssetByPath<UDataTable>(ExistingAssetPath))
-				{
-					ExistingObj->SetStringField(TEXT("assetPath"), Existing->GetPathName());
-					ExistingObj->SetStringField(TEXT("rowStruct"), Existing->RowStruct ? Existing->RowStruct->GetName() : TEXT(""));
-					ExistingObj->SetNumberField(TEXT("rowCount"), Existing->GetRowMap().Num());
-				}
-			}
-		}
-		return Created.EarlyReturn;
-	}
-	UDataTable* DataTable = Created.Asset;
-	const FString AssetPath = DataTable->GetPathName();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("packagePath"), PackagePath);
-	Result->SetStringField(TEXT("assetPath"), AssetPath);
-	Result->SetStringField(TEXT("rowStruct"), ScriptStruct->GetName());
-	Result->SetNumberField(TEXT("rowCount"), DataTable ? DataTable->GetRowMap().Num() : 0);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("assetPath"), AssetPath);
-	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	Describe(Result, DataTable);
 	return MCPResult(Result);
 }
 
@@ -2946,37 +2893,18 @@ namespace
 
 TSharedPtr<FJsonValue> FAssetHandlers::CreateStringTable(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/StringTables"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("StringTable"), TEXT("/Game/StringTables") });
+	if (auto Err = Create.Read()) return Err;
 	const FString TableNamespace = OptionalString(Params, TEXT("namespace"));
 
-	auto Created = MCPCreateAssetIdempotentNewObject<UStringTable>(Name, PackagePath, OnConflict, TEXT("StringTable"));
-	if (Created.EarlyReturn)
+	// The readers' info fields, without their assetPath: a create reports path.
+	auto Describe = [](const TSharedPtr<FJsonObject>& Out, UStringTable* Table)
 	{
-		if (TSharedPtr<FJsonObject> ExistingObj = Created.EarlyReturn->AsObject())
-		{
-			bool bExisted = false;
-			if (ExistingObj->TryGetBoolField(TEXT("existed"), bExisted) && bExisted)
-			{
-				FString ExistingAssetPath;
-				ExistingObj->TryGetStringField(TEXT("path"), ExistingAssetPath);
-				if (UStringTable* Existing = LoadAssetByPath<UStringTable>(ExistingAssetPath))
-				{
-					SetStringTableInfoFields(ExistingObj, Existing);
-				}
-			}
-		}
-		return Created.EarlyReturn;
-	}
-
-	UStringTable* StringTable = Created.Asset;
-	if (!StringTable)
-	{
-		return MCPError(TEXT("Failed to create StringTable"));
-	}
+		SetStringTableInfoFields(Out, Table);
+		Out->RemoveField(TEXT("assetPath"));
+	};
+	UStringTable* StringTable = nullptr;
+	if (auto Early = Create.MakeNewObject(StringTable)) return FMCPCreate::DescribeExisting<UStringTable>(Early, Describe);
 
 	if (!TableNamespace.IsEmpty())
 	{
@@ -2988,20 +2916,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateStringTable(const TSharedPtr<FJsonO
 		StringTable->GetMutableStringTable()->SetNamespace(TableNamespace);
 #endif
 	}
-	FString SaveReason;
-	const bool bSaved = SaveAssetPackageChecked(StringTable, SaveReason);
 
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	MCPNoteSaveOutcome(Result, StringTable->GetPathName(), bSaved, SaveReason);
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("packagePath"), PackagePath);
-	SetStringTableInfoFields(Result, StringTable);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("assetPath"), StringTable->GetPathName());
-	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	Describe(Result, StringTable);
 	return MCPResult(Result);
 }
 

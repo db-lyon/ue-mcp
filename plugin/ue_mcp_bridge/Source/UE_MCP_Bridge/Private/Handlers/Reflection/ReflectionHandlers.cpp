@@ -1,5 +1,6 @@
 #include "ReflectionHandlers.h"
 #include "HandlerRegistry.h"
+#include "Handlers/Asset/AssetHandlers.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
 #include "HandlerPagination.h"
@@ -1288,78 +1289,20 @@ static TArray<FString> SuggestEnumNames(const FString& EnumName, int32 MaxSugges
 	return Suggestions;
 }
 
-// ─── #274  create_enum  ────────────────────────────────────────────────
-// Creates a UUserDefinedEnum asset and (optionally) populates entries.
+// create_enum is asset(create_user_defined_enum) under its reflection name:
+// its entries are that action's values.
 TSharedPtr<FJsonValue> FReflectionHandlers::CreateEnum(const TSharedPtr<FJsonObject>& Params)
 {
+	TSharedPtr<FJsonObject> Forwarded = MakeShared<FJsonObject>();
 	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	// Optional entries[] - array of strings or {name, displayName?}. Read before
-	// the existing-asset early return, so a skip does not report it unread.
-	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
-	const bool bHasEntries = TryGetArrayParam(Params, TEXT("entries"), EntriesArr) && EntriesArr;
-
-	UClass* FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/UnrealEd.EnumFactory"));
-	if (!FactoryClass)
+	if (TryGetStringParam(Params, TEXT("name"), Name)) Forwarded->SetStringField(TEXT("name"), Name);
+	Forwarded->SetStringField(TEXT("packagePath"), OptionalString(Params, TEXT("packagePath"), TEXT("/Game")));
+	Forwarded->SetStringField(TEXT("onConflict"), OptionalString(Params, TEXT("onConflict"), TEXT("skip")));
+	if (const TSharedPtr<FJsonValue> Entries = TryGetParam(Params, TEXT("entries")))
 	{
-		// fallback name some UE versions use
-		FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/UnrealEd.UserDefinedEnumFactory"));
+		Forwarded->SetField(TEXT("values"), Entries);
 	}
-	if (!FactoryClass)
-	{
-		return MCPError(TEXT("EnumFactory not found in /Script/UnrealEd"));
-	}
-	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
-
-	auto Created = MCPCreateAssetIdempotent<UUserDefinedEnum>(Name, PackagePath, OnConflict, TEXT("UserDefinedEnum"), Factory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UUserDefinedEnum* Enum = Created.Asset;
-
-	int32 Added = 0;
-	if (bHasEntries)
-	{
-		for (const TSharedPtr<FJsonValue>& Entry : *EntriesArr)
-		{
-			FString EntryName;
-			FString DisplayName;
-			if (Entry->Type == EJson::String)
-			{
-				EntryName = Entry->AsString();
-				DisplayName = EntryName;
-			}
-			else if (TSharedPtr<FJsonObject> Obj = Entry->AsObject())
-			{
-				Obj->TryGetStringField(TEXT("name"), EntryName);
-				if (!Obj->TryGetStringField(TEXT("displayName"), DisplayName))
-				{
-					DisplayName = EntryName;
-				}
-			}
-			if (EntryName.IsEmpty()) continue;
-			FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
-			int32 NewIndex = Enum->NumEnums() - 2; // -1 is the auto MAX entry
-			if (NewIndex >= 0)
-			{
-				FEnumEditorUtils::SetEnumeratorDisplayName(Enum, NewIndex, FText::FromString(DisplayName));
-			}
-			Added++;
-		}
-	}
-
-	Enum->MarkPackageDirty();
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Enum, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, Enum->GetPathName(), bSaved, SaveError);
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("assetPath"), Enum->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetNumberField(TEXT("entriesAdded"), Added);
-	MCPSetDeleteAssetRollback(Result, Enum->GetPathName());
-	return MCPResult(Result);
+	return FAssetHandlers::CreateUserDefinedEnum(Forwarded);
 }
 
 // ─── #274  set_enum_entries  ───────────────────────────────────────────
