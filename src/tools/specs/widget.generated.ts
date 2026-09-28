@@ -705,6 +705,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "integer",
         "required": false,
         "description": "Local player user index (default 0)"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "Runtime world scope: pie (default) | game | auto"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "PIE instance that must be running"
       }
     ]
   },

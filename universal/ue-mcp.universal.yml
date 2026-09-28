@@ -12142,7 +12142,8 @@ tasks:
     description: >-
       Read the live Slate focus path for a user index in PIE - which widget
       holds focus and the chain of widgets above it. Requires a running PIE or
-      Game world; the editor's own focus is never reported. Params: userIndex?
+      Game world; the editor's own focus is never reported. Params: userIndex?,
+      world?, pieInstance?
   widget.set_runtime_focus:
     class_path: ue-mcp.builtin/widget.set_runtime_focus
     group: widget
