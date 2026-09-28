@@ -237,6 +237,7 @@
 	},
 	"16_set_weight":
 	{
+		"previousValue": "1.0",
 		"rollback":
 		{
 			"method": "set_state_tree_state_property",
@@ -253,6 +254,7 @@
 	},
 	"17_set_description":
 	{
+		"previousValue": "",
 		"rollback":
 		{
 			"method": "set_state_tree_state_property",
@@ -269,6 +271,7 @@
 	},
 	"18_set_enabled":
 	{
+		"previousValue": "true",
 		"rollback":
 		{
 			"method": "set_state_tree_state_property",
@@ -285,6 +288,7 @@
 	},
 	"19_set_selection":
 	{
+		"previousValue": "TrySelectChildrenInOrder",
 		"rollback":
 		{
 			"method": "set_state_tree_state_property",
@@ -301,6 +305,7 @@
 	},
 	"20_set_tag_clear":
 	{
+		"previousValue": "",
 		"rollback":
 		{
 			"method": "set_state_tree_state_property",
@@ -327,6 +332,7 @@
 	},
 	"23_set_linked_asset_unlinked":
 	{
+		"previousValue": "None",
 		"rollbackNote": "This state had no linkedAsset before the call, and statetree(set_state_property) cannot be replayed with an empty one, so there is no inverse value. Clear the link with statetree(set_state_link, linkType=\"none\").",
 		"rollbackPossible": false,
 		"success": true,
@@ -339,6 +345,7 @@
 	},
 	"25_set_type":
 	{
+		"previousValue": "Group",
 		"rollback":
 		{
 			"method": "set_state_tree_state_property",
@@ -369,7 +376,9 @@
 			}
 		},
 		"rollbackNote": "The inverse names this task by INDEX into the state's task list. A later step that removes a task BELOW it shifts it down, and statetree(remove_task)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different task and remove the wrong one. There is no remove-task-by-nodeId action to address it by identity instead.",
+		"stateId": "<guid:0>",
 		"success": true,
+		"taskCount": 1,
 		"taskIndex": 0
 	},
 	"31_add_task_unknown_key":
@@ -379,11 +388,12 @@
 	},
 	"32_add_task_unknown_struct":
 	{
-		"error": "Struct not found: NoSuchStruct",
+		"error": "Struct not found: 'NoSuchStruct'. Pass the C++ struct name or a /Script/Module.Struct path; statetree(list_node_types, nodeType=\"task\") lists every one this tree's schema allows.",
 		"success": false
 	},
 	"33_set_task_instance":
 	{
+		"previousValue": "2.500000",
 		"rollback":
 		{
 			"method": "set_state_tree_task_instance_property",
@@ -406,16 +416,17 @@
 	},
 	"35_set_task_instance_bad_index":
 	{
-		"error": "Invalid taskIndex: 7",
+		"error": "Invalid taskIndex 7. Valid values: 0 to 0.",
 		"success": false
 	},
 	"36_set_task_instance_unknown":
 	{
-		"error": "Property not found on instance data: Nope",
+		"error": "Property not found on task instance data 'StateTreeDelayTaskInstanceData': Nope",
 		"success": false
 	},
 	"37_set_task_node":
 	{
+		"previousValue": "True",
 		"propertyName": "bTaskEnabled",
 		"rollback":
 		{
@@ -436,16 +447,17 @@
 	},
 	"38_set_task_node_unknown":
 	{
-		"error": "Property not found on task node struct 'StateTreeDelayTask': Nope. Note: this action targets FStateTreeTaskBase-level UPROPERTYs (e.g. bConsideredForCompletion, bTaskEnabled). Use set_task_instance_property for instance data fields.",
+		"error": "Property not found on task node struct 'StateTreeDelayTask': Nope. This action writes the node struct's own UPROPERTYs (bTaskEnabled, bConsideredForCompletion and the like); statetree(set_task_instance_property) writes instance data fields.",
 		"success": false
 	},
 	"39_set_task_node_bad_index":
 	{
-		"error": "Invalid taskIndex: 4 (state has 1 tasks)",
+		"error": "Invalid taskIndex 4. Valid values: 0 to 0.",
 		"success": false
 	},
 	"40_add_enter_condition":
 	{
+		"conditionCount": 1,
 		"conditionIndex": 0,
 		"created": true,
 		"existed": false,
@@ -461,6 +473,7 @@
 			}
 		},
 		"rollbackNote": "The inverse names this condition by INDEX into the state's enter-condition list. A later step that removes an enter condition BELOW it shifts it down, and statetree(remove_enter_condition)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different condition and remove the wrong one. There is no remove-enter-condition-by-nodeId action to address it by identity instead.",
+		"stateId": "<guid:0>",
 		"success": true
 	},
 	"41_remove_enter_condition":
@@ -485,13 +498,14 @@
 		},
 		"rollbackLossy": true,
 		"rollbackNote": "Replaying this appends the condition at the END of the list with a NEW nodeId, so its position in the And/Or expression and any property binding that named the old id are not restored.",
+		"stateId": "<guid:0>",
 		"structType": "StateTreeCompareIntCondition",
 		"success": true,
 		"updated": true
 	},
 	"42_remove_enter_condition_bad":
 	{
-		"error": "Invalid conditionIndex: 0 (state has 0 enter conditions)",
+		"error": "Invalid conditionIndex 0. Valid values: none, the state has no enter conditions.",
 		"success": false
 	},
 	"43_add_transition":
@@ -515,6 +529,7 @@
 	},
 	"44_add_transition_condition":
 	{
+		"conditionCount": 1,
 		"conditionIndex": 0,
 		"created": true,
 		"existed": false,
@@ -531,11 +546,12 @@
 			}
 		},
 		"rollbackNote": "The inverse names this condition by TWO indices: the transition's position in the state, and the condition's position in that transition. A later step that removes a transition BELOW this one, or a condition BELOW this one inside the same transition, shifts it down, and the rollbacks of statetree(remove_transition) and statetree(remove_transition_condition) re-add by APPENDING rather than reinserting, so in a flow mixing the two this pair can end up naming a different condition and remove the wrong one. There is no remove-transition-condition-by-nodeId action to address it by identity instead.",
+		"stateId": "<guid:0>",
 		"success": true
 	},
 	"45_add_transition_condition_bad":
 	{
-		"error": "Invalid transitionIndex: 3",
+		"error": "Invalid transitionIndex 3. Valid values: 0 to 0.",
 		"success": false
 	},
 	"46_remove_transition_condition":
@@ -573,6 +589,7 @@
 	},
 	"48_add_transition_condition_again":
 	{
+		"conditionCount": 1,
 		"conditionIndex": 0,
 		"created": true,
 		"existed": false,
@@ -589,6 +606,7 @@
 			}
 		},
 		"rollbackNote": "The inverse names this condition by TWO indices: the transition's position in the state, and the condition's position in that transition. A later step that removes a transition BELOW this one, or a condition BELOW this one inside the same transition, shifts it down, and the rollbacks of statetree(remove_transition) and statetree(remove_transition_condition) re-add by APPENDING rather than reinserting, so in a flow mixing the two this pair can end up naming a different condition and remove the wrong one. There is no remove-transition-condition-by-nodeId action to address it by identity instead.",
+		"stateId": "<guid:0>",
 		"success": true
 	},
 	"49_add_consideration":
@@ -788,7 +806,7 @@
 	},
 	"55_remove_transition_bad":
 	{
-		"error": "Invalid transitionIndex: 0",
+		"error": "Invalid transitionIndex 0. Valid values: none, the state has no transitions.",
 		"success": false
 	},
 	"56_remove_task":
@@ -812,6 +830,7 @@
 		},
 		"rollbackLossy": true,
 		"rollbackNote": "Replaying this appends the task at the END of the list with a NEW nodeId, so its taskIndex and any property binding that named the old id are not restored. Node-struct flags written with statetree(set_task_property) are not part of the payload either.",
+		"stateId": "<guid:0>",
 		"structType": "StateTreeDelayTask",
 		"success": true,
 		"taskCount": 0,
@@ -819,7 +838,7 @@
 	},
 	"57_remove_task_bad":
 	{
-		"error": "Invalid taskIndex: 0 (state has 0 tasks)",
+		"error": "Invalid taskIndex 0. Valid values: none, the state has no tasks.",
 		"success": false
 	},
 	"58_add_task_for_clear":
@@ -838,7 +857,9 @@
 			}
 		},
 		"rollbackNote": "The inverse names this task by INDEX into the state's task list. A later step that removes a task BELOW it shifts it down, and statetree(remove_task)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different task and remove the wrong one. There is no remove-task-by-nodeId action to address it by identity instead.",
+		"stateId": "<guid:0>",
 		"success": true,
+		"taskCount": 1,
 		"taskIndex": 0
 	},
 	"59_clear_nodes":
@@ -866,6 +887,7 @@
 	"61_add_evaluator":
 	{
 		"created": true,
+		"evaluatorCount": 1,
 		"existed": false,
 		"nodeId": "<guid:12>",
 		"rollback":
@@ -881,16 +903,17 @@
 	},
 	"62_add_evaluator_wrong_base":
 	{
-		"error": "Struct 'StateTreeDelayTask' does not derive from FStateTreeEvaluatorBase",
+		"error": "Struct 'StateTreeDelayTask' does not derive from StateTreeEvaluatorBase, so it cannot be used as an evaluator. statetree(list_node_types, nodeType=\"evaluator\") lists the ones that can.",
 		"success": false
 	},
 	"63_set_evaluator_instance_none":
 	{
-		"error": "Evaluator has no instance data",
+		"error": "This evaluator has no instance data to write.",
 		"success": false
 	},
 	"64_set_evaluator_node":
 	{
+		"previousValue": "None",
 		"propertyName": "EvaluatorClass",
 		"rollback":
 		{
@@ -951,13 +974,14 @@
 	},
 	"68_remove_evaluator_gone":
 	{
-		"error": "Evaluator node not found: <guid:12>",
+		"error": "No evaluator with nodeId <guid:12> in this StateTree.",
 		"success": false
 	},
 	"69_add_global_task":
 	{
 		"created": true,
 		"existed": false,
+		"globalTaskCount": 1,
 		"nodeId": "<guid:13>",
 		"rollback":
 		{
@@ -972,6 +996,7 @@
 	},
 	"70_set_global_instance":
 	{
+		"previousValue": "1.000000",
 		"rollback":
 		{
 			"method": "set_state_tree_global_task_instance_property",
@@ -993,6 +1018,7 @@
 	},
 	"72_set_global_node":
 	{
+		"previousValue": "True",
 		"propertyName": "bTaskEnabled",
 		"rollback":
 		{
@@ -1178,7 +1204,7 @@
 	},
 	"82_remove_global_task_gone":
 	{
-		"error": "Global task node not found: <guid:13>",
+		"error": "No global task with nodeId <guid:13> in this StateTree.",
 		"success": false
 	},
 	"83_list_colors":
@@ -1209,6 +1235,7 @@
 	},
 	"86_set_color":
 	{
+		"previousValue": "",
 		"rollback":
 		{
 			"method": "set_state_tree_state_property",
@@ -1266,6 +1293,7 @@
 	},
 	"91_set_state_parameter":
 	{
+		"previousValue": "0.000000",
 		"rollback":
 		{
 			"method": "set_state_tree_state_parameter",
