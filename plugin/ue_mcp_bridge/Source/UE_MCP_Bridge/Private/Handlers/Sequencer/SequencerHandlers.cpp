@@ -2,6 +2,7 @@
 #include "SequencerHandlers_Internal.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPCreate.h"
 
 #include "LevelSequenceEditorBlueprintLibrary.h"
 #include "MovieSceneSequencePlayer.h"
@@ -210,25 +211,12 @@ namespace
 
 TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Cinematics"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	auto Created = MCPCreateAssetIdempotentNewObject<ULevelSequence>(Name, PackagePath, OnConflict, TEXT("LevelSequence"));
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	ULevelSequence* NewSequence = Created.Asset;
+	FMCPCreate Create(Params, { TEXT("LevelSequence"), TEXT("/Game/Cinematics") });
+	if (auto Err = Create.Read()) return Err;
+	ULevelSequence* NewSequence = nullptr;
+	if (auto Early = Create.MakeNewObject(NewSequence)) return Early;
 	NewSequence->Initialize();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("path"), NewSequence->GetPathName());
-	Result->SetStringField(TEXT("packagePath"), PackagePath + TEXT("/") + Name);
-	MCPSetDeleteAssetRollback(Result, NewSequence->GetPathName());
-
-	return MCPResult(Result);
+	return MCPResult(Create.Finish());
 }
 
 TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJsonObject>& Params)

@@ -1,6 +1,7 @@
 #include "LandscapeHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPCreate.h"
 #include "HandlerPagination.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -1509,58 +1510,37 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::CreateLandscapeLayerInfo(const TShare
 {
 	FString LayerName;
 	if (auto Err = RequireString(Params, TEXT("layerName"), LayerName)) return Err;
-
 	const FString Name = OptionalString(Params, TEXT("name"), FString::Printf(TEXT("LI_%s"), *LayerName));
 	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Landscape/LayerInfos"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	TSharedPtr<FJsonValue> Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("LandscapeLayerInfoObject"));
-	if (Existing.IsValid()) return Existing;
-
-	const FString PackageFullPath = PackagePath / Name;
-	UPackage* Package = CreatePackage(*PackageFullPath);
-	if (!Package)
-	{
-		return MCPError(FString::Printf(TEXT("Failed to create package: %s"), *PackageFullPath));
-	}
-
-	ULandscapeLayerInfoObject* LayerInfo = NewObject<ULandscapeLayerInfoObject>(
-		Package, *Name, RF_Public | RF_Standalone);
-	if (!LayerInfo)
-	{
-		return MCPError(TEXT("Failed to create LandscapeLayerInfoObject"));
-	}
-
-PRAGMA_DISABLE_DEPRECATION_WARNINGS
-	LayerInfo->LayerName = FName(*LayerName);
-PRAGMA_ENABLE_DEPRECATION_WARNINGS
-
-	// physMaterial was documented here and never applied - the caller had to
-	// discover for themselves that it needed a second call. PhysicsCore is not
-	// a hard dependency of this module, so the class is reached by path and the
-	// property set through reflection rather than a link-time include.
 	const FString PhysMaterialPath = OptionalString(Params, TEXT("physMaterial"));
+	FMCPCreate Create(Params, { TEXT("LandscapeLayerInfoObject"), TEXT("/Game/Landscape/LayerInfos") });
+	Create.Target(Name, PackagePath);
+
+	// physMaterial is resolved before anything is created. PhysicsCore is not a
+	// hard dependency of this module, so the class is reached through the
+	// PhysMaterial property rather than a link-time include.
+	UObject* PhysMat = nullptr;
+	FObjectProperty* PhysProp = nullptr;
 	if (!PhysMaterialPath.IsEmpty())
 	{
-		UObject* PhysMat = LoadAssetByPath<UObject>(PhysMaterialPath);
-		if (!PhysMat)
+		PhysMat = LoadAssetByPath<UObject>(PhysMaterialPath);
+		if (!PhysMat) return MCPError(FString::Printf(TEXT("physMaterial not found: %s"), *PhysMaterialPath));
+		PhysProp = CastField<FObjectProperty>(ULandscapeLayerInfoObject::StaticClass()->FindPropertyByName(TEXT("PhysMaterial")));
+		if (!PhysProp || !PhysProp->PropertyClass || !PhysMat->IsA(PhysProp->PropertyClass))
 		{
-			// Both failure paths here run after the package and object exist, so
-			// bail out without leaving a half-made asset in memory.
-			LayerInfo->MarkAsGarbage();
-			return MCPError(FString::Printf(TEXT("physMaterial not found: %s"), *PhysMaterialPath));
-		}
-		FObjectProperty* Prop = CastField<FObjectProperty>(
-			ULandscapeLayerInfoObject::StaticClass()->FindPropertyByName(TEXT("PhysMaterial")));
-		if (!Prop || !Prop->PropertyClass || !PhysMat->IsA(Prop->PropertyClass))
-		{
-			LayerInfo->MarkAsGarbage();
 			return MCPError(FString::Printf(
 				TEXT("'%s' is a %s, not a PhysicalMaterial."),
 				*PhysMaterialPath, *PhysMat->GetClass()->GetName()));
 		}
-		Prop->SetObjectPropertyValue_InContainer(LayerInfo, PhysMat);
 	}
+
+	ULandscapeLayerInfoObject* LayerInfo = nullptr;
+	if (auto Early = Create.MakeNewObject(LayerInfo)) return Early;
+
+PRAGMA_DISABLE_DEPRECATION_WARNINGS
+	LayerInfo->LayerName = FName(*LayerName);
+PRAGMA_ENABLE_DEPRECATION_WARNINGS
+	if (PhysProp) PhysProp->SetObjectPropertyValue_InContainer(LayerInfo, PhysMat);
 
 	double Hardness = 0.0;
 	if (TryGetNumberParam(Params, TEXT("hardness"), Hardness))
@@ -1583,19 +1563,9 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 #endif
 	}
 
-	FAssetRegistryModule::AssetCreated(LayerInfo);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(LayerInfo, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), LayerInfo->GetPathName());
+	TSharedPtr<FJsonObject> Result = Create.Finish();
 	Result->SetStringField(TEXT("layerName"), LayerName);
-	Result->SetStringField(TEXT("packagePath"), PackagePath);
-	if (!PhysMaterialPath.IsEmpty()) Result->SetStringField(TEXT("physMaterial"), PhysMaterialPath);
-	MCPSetDeleteAssetRollback(Result, LayerInfo->GetPathName());
-	MCPNoteSaveOutcome(Result, LayerInfo->GetPathName(), bSaved, SaveError);
-
+	if (PhysMat) Result->SetStringField(TEXT("physMaterial"), PhysMat->GetPathName());
 	return MCPResult(Result);
 }
 

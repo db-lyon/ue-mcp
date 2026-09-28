@@ -1,6 +1,7 @@
 #include "FoliageHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPCreate.h"
 #include "HandlerPagination.h"
 #include "InstancedFoliageActor.h"
 #include "FoliageType.h"
@@ -578,85 +579,40 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJso
 	if (auto Err = RequireString(Params, TEXT("meshPath"), MeshPath)) return Err;
 
 	// Every parameter is read before anything can fail (#1057).
-	FString AssetName = OptionalString(Params, TEXT("name"));
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Foliage"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	const FString RequestedName = OptionalString(Params, TEXT("name"));
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Foliage"));
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
 	const bool bHasSettings = TryGetObjectParam(Params, TEXT("settings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid();
+	FMCPCreate Create(Params, { TEXT("FoliageType"), TEXT("/Game/Foliage") });
 
 	UStaticMesh* Mesh = LoadAssetByPath<UStaticMesh>(MeshPath);
 	if (!Mesh) return MCPAssetLoadError(MeshPath, TEXT("StaticMesh"));
 
-	if (AssetName.IsEmpty())
-	{
-		AssetName = FString::Printf(TEXT("FT_%s"), *Mesh->GetName());
-	}
-
-	if (auto Existing = MCPCheckAssetExists(PackagePath, AssetName, OnConflict, TEXT("FoliageType")))
-	{
-		return Existing;
-	}
-
-	FString PackageFullPath = PackagePath / AssetName;
-	UPackage* Package = CreatePackage(*PackageFullPath);
-	if (!Package)
-	{
-		return MCPError(FString::Printf(TEXT("Failed to create package: %s"), *PackageFullPath));
-	}
-
-	UFoliageType_InstancedStaticMesh* FoliageType = NewObject<UFoliageType_InstancedStaticMesh>(
-		Package, *AssetName, RF_Public | RF_Standalone);
-	if (!FoliageType)
-	{
-		return MCPError(TEXT("Failed to create FoliageType object"));
-	}
-
+	// The name defaults to FT_<mesh>, so it is known only once the mesh is.
+	Create.Target(RequestedName.IsEmpty() ? FString::Printf(TEXT("FT_%s"), *Mesh->GetName()) : RequestedName, PackagePath);
+	UFoliageType_InstancedStaticMesh* FoliageType = nullptr;
+	if (auto Early = Create.MakeNewObject(FoliageType)) return Early;
 	FoliageType->Mesh = Mesh;
 
-	// Apply optional settings if provided
+	// Optional settings, as export text per property.
 	if (bHasSettings)
 	{
 		for (const auto& KV : (*SettingsObj)->Values)
 		{
-			FString PropertyName(*KV.Key);
 			FString PropertyValue;
+			if (KV.Value->Type == EJson::String) PropertyValue = KV.Value->AsString();
+			else if (KV.Value->Type == EJson::Number) PropertyValue = FString::SanitizeFloat(KV.Value->AsNumber());
+			else if (KV.Value->Type == EJson::Boolean) PropertyValue = KV.Value->AsBool() ? TEXT("True") : TEXT("False");
 
-			if (KV.Value->Type == EJson::String)
+			if (FProperty* Property = FoliageType->GetClass()->FindPropertyByName(FName(*KV.Key)))
 			{
-				PropertyValue = KV.Value->AsString();
-			}
-			else if (KV.Value->Type == EJson::Number)
-			{
-				PropertyValue = FString::SanitizeFloat(KV.Value->AsNumber());
-			}
-			else if (KV.Value->Type == EJson::Boolean)
-			{
-				PropertyValue = KV.Value->AsBool() ? TEXT("True") : TEXT("False");
-			}
-
-			FProperty* Property = FoliageType->GetClass()->FindPropertyByName(FName(*PropertyName));
-			if (Property)
-			{
-				void* PropertyAddr = Property->ContainerPtrToValuePtr<void>(FoliageType);
-				Property->ImportText_Direct(*PropertyValue, PropertyAddr, FoliageType, PPF_None);
+				Property->ImportText_Direct(*PropertyValue, Property->ContainerPtrToValuePtr<void>(FoliageType), FoliageType, PPF_None);
 			}
 		}
 	}
 
-	// Notify asset registry and save
-	FAssetRegistryModule::AssetCreated(FoliageType);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(FoliageType, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), PackageFullPath);
-	Result->SetStringField(TEXT("name"), FoliageType->GetName());
-	Result->SetStringField(TEXT("className"), FoliageType->GetClass()->GetName());
-	Result->SetStringField(TEXT("meshPath"), MeshPath);
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	Result->SetStringField(TEXT("meshPath"), Mesh->GetPathName());
 	Result->SetStringField(TEXT("meshName"), Mesh->GetName());
-	MCPSetDeleteAssetRollback(Result, FoliageType->GetPathName());
-	MCPNoteSaveOutcome(Result, PackageFullPath, bSaved, SaveError);
-
 	return MCPResult(Result);
 }
