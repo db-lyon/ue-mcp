@@ -1,11 +1,48 @@
 #include "Families/MCPEditScope.h"
 
-FMCPEditScope::FMCPEditScope(const TSharedPtr<FJsonObject>& InParams, const TCHAR* InAction, const TCHAR* InTargetParam, const FMCPCommitPolicy& InPolicy)
+FMCPEditScope::FMCPEditScope(const TSharedPtr<FJsonObject>& InParams, const TCHAR* InAction, const FMCPCommitPolicy& InPolicy)
+	: Params(InParams)
+	, Action(InAction)
+	, Policy(InPolicy)
+{
+	ApplySpec(FMCPHandlerRegistry::ActiveSpec());
+}
+
+FMCPEditScope::FMCPEditScope(const TSharedPtr<FJsonObject>& InParams, const TCHAR* InAction, const FMCPHandlerSpec& InSpec, const FMCPCommitPolicy& InPolicy)
+	: Params(InParams)
+	, Action(InAction)
+	, Policy(InPolicy)
+{
+	ApplySpec(&InSpec);
+}
+
+FMCPEditScope::FMCPEditScope(const TSharedPtr<FJsonObject>& InParams, const TCHAR* InAction, const TCHAR* InTargetParam)
 	: Params(InParams)
 	, Action(InAction)
 	, TargetParam(InTargetParam)
-	, Policy(InPolicy)
+	, Policy(FMCPCommitPolicy::Read())
 {
+}
+
+void FMCPEditScope::ApplySpec(const FMCPHandlerSpec* Spec)
+{
+	if (!Spec)
+	{
+		SpecProblem = FString::Printf(TEXT("%s edits through a scope but runs without a registered spec, so nothing names its target."), *Action);
+		return;
+	}
+	TargetParam = FMCPHandlerRegistry::EditTargetParam(*Spec);
+	if (TargetParam.IsEmpty())
+	{
+		SpecProblem = FString::Printf(TEXT("%s edits through a scope but its spec declares no editTarget param."), *Action);
+		return;
+	}
+	if (Spec->CommitPolicy.IsSet())
+	{
+		const EMCPCommitPolicy Commit = Spec->CommitPolicy.GetValue();
+		Policy.bCompile = Commit == EMCPCommitPolicy::Compile || Commit == EMCPCommitPolicy::Both;
+		Policy.bSave = Commit == EMCPCommitPolicy::Save || Commit == EMCPCommitPolicy::Both;
+	}
 }
 
 FMCPEditScope::~FMCPEditScope()
@@ -17,6 +54,7 @@ TSharedPtr<FJsonValue> FMCPEditScope::OpenTargets(FOps&& InOps)
 {
 	Ops = MoveTemp(InOps);
 	Targets.Reset();
+	if (!SpecProblem.IsEmpty()) return MCPError(SpecProblem);
 
 	// One path, or an array of them when the action's spec takes several.
 	TArray<FString> Paths;

@@ -526,6 +526,33 @@ const TCHAR* FMCPHandlerRegistry::CommitPolicyName(EMCPCommitPolicy Policy)
 	}
 }
 
+namespace MCPActiveHandlerSpec
+{
+	static thread_local const FMCPHandlerSpec* GCurrent = nullptr;
+
+	/** Makes Spec the active one for a handler call and restores the caller's after it. */
+	struct FScope
+	{
+		const FMCPHandlerSpec* Previous;
+		explicit FScope(const FMCPHandlerSpec* Spec) : Previous(GCurrent) { GCurrent = Spec; }
+		~FScope() { GCurrent = Previous; }
+	};
+}
+
+const FMCPHandlerSpec* FMCPHandlerRegistry::ActiveSpec()
+{
+	return MCPActiveHandlerSpec::GCurrent;
+}
+
+FString FMCPHandlerRegistry::EditTargetParam(const FMCPHandlerSpec& Spec)
+{
+	for (const FMCPParamSpec& Param : Spec.Params)
+	{
+		if (Param.ParamRole == EMCPParamRole::EditTarget && Param.RoleKeys.Num() == 0) return Param.Name;
+	}
+	return FString();
+}
+
 TSharedPtr<FJsonObject> FMCPHandlerRegistry::BuildHandlerSpecsJson() const
 {
 	TArray<FString> Methods;
@@ -764,6 +791,7 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 		// #1057: a spec'd handler reads its parameters by their declared names only.
 		const FMCPHandlerSpec* Spec = HandlerSpecs.Find(MethodName);
 		const TSharedPtr<FJsonObject> Effective = Spec ? ResolveParamAliases(*Spec, Params) : Params;
+		const MCPActiveHandlerSpec::FScope ActiveSpecScope(Spec);
 
 		const FString* Category = HandlerCategories.Find(MethodName);
 		if (!Category || !Effective.IsValid())

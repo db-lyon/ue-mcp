@@ -524,6 +524,14 @@ public:
 	// Wire name of a commit policy: none, compile, save, both.
 	static const TCHAR* CommitPolicyName(EMCPCommitPolicy Policy);
 
+	// The spec of the handler ExecuteHandler is running on this thread, or null
+	// outside one and for a handler registered without a spec. A family scope
+	// reads the handler's roles and commit policy from it.
+	static const FMCPHandlerSpec* ActiveSpec();
+
+	// The plain parameter a spec declares with the editTarget role, or empty.
+	static FString EditTargetParam(const FMCPHandlerSpec& Spec);
+
 	// Specs of every handler registered with one, keyed by method name.
 	const TMap<FString, FMCPHandlerSpec>& GetHandlerSpecs() const { return HandlerSpecs; }
 

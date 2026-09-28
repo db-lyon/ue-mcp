@@ -5,11 +5,17 @@
 // and Finish() runs what the asset type declares: settle, compile, the
 // compile-failure policy, the save set and the result dialect.
 //
-//   FMCPEditScope Edit(Params, TEXT("add_state_tree_task"), TEXT("assetPath"), Policy);
+//   FMCPEditScope Edit(Params, TEXT("add_state_tree_task"), Policy);
 //   if (auto Err = Edit.Open<UStateTree>()) return Err;
 //   FMCPEditTransaction Txn(Edit);
 //   ...mutate... ; Txn.Commit();
 //   return Edit.Finish(Result);
+//
+// A writer's target is the param its spec declares with the editTarget role,
+// and the spec's commit policy, when it declares one, decides compile and save
+// (3.1). A reader commits nothing and names its target param itself:
+//
+//   FMCPEditScope Edit(Params, TEXT("read_state_tree"), TEXT("assetPath"));
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
@@ -17,6 +23,7 @@
 #include "Misc/Optional.h"
 #include "ScopedTransaction.h"
 #include "HandlerUtils.h"
+#include "HandlerRegistry.h"
 
 /** What Finish does when the type's compile op reports failure. */
 enum class EMCPCompileFailure : uint8
@@ -58,6 +65,15 @@ struct FMCPCommitPolicy
 		return Policy;
 	}
 
+	/** How a compile is handled, for an action whose spec declares that it compiles. */
+	static FMCPCommitPolicy OnCompile(EMCPCompileFailure OnFailure, bool bInEvenIfUnchanged)
+	{
+		FMCPCommitPolicy Policy;
+		Policy.OnCompileFailure = OnFailure;
+		Policy.bEvenIfUnchanged = bInEvenIfUnchanged;
+		return Policy;
+	}
+
 	static FMCPCommitPolicy CompileSave(EMCPCompileFailure OnFailure, bool bInEvenIfUnchanged)
 	{
 		FMCPCommitPolicy Policy;
@@ -86,7 +102,12 @@ class FMCPEditTransaction;
 class FMCPEditScope
 {
 public:
-	FMCPEditScope(const TSharedPtr<FJsonObject>& InParams, const TCHAR* InAction, const TCHAR* InTargetParam, const FMCPCommitPolicy& InPolicy);
+	/** A writer run by FMCPHandlerRegistry::ExecuteHandler: target and commit come from the handler's spec. */
+	FMCPEditScope(const TSharedPtr<FJsonObject>& InParams, const TCHAR* InAction, const FMCPCommitPolicy& InPolicy);
+	/** A writer over a spec the caller holds, for code that runs outside ExecuteHandler. */
+	FMCPEditScope(const TSharedPtr<FJsonObject>& InParams, const TCHAR* InAction, const FMCPHandlerSpec& InSpec, const FMCPCommitPolicy& InPolicy);
+	/** A reader: it commits nothing, and names the param that holds its target. */
+	FMCPEditScope(const TSharedPtr<FJsonObject>& InParams, const TCHAR* InAction, const TCHAR* InTargetParam);
 	~FMCPEditScope();
 
 	FMCPEditScope(const FMCPEditScope&) = delete;
@@ -166,11 +187,15 @@ private:
 	/** Compile and save one target, writing the type's keys and the dialect onto Out. */
 	bool CommitTarget(FTarget& Entry, const TSharedPtr<FJsonObject>& Out);
 	void CloseTransactions();
+	/** Take the target param and commit policy from the handler's spec. */
+	void ApplySpec(const FMCPHandlerSpec* Spec);
 
 	TSharedPtr<FJsonObject> Params;
 	FString Action;
 	FString TargetParam;
 	FMCPCommitPolicy Policy;
+	/** Why the spec could not configure this scope. Open returns it. */
+	FString SpecProblem;
 	FOps Ops;
 	TArray<FTarget> Targets;
 	TArray<FMCPEditTransaction*> OpenTransactions;

@@ -178,8 +178,10 @@ function selectorOverrides(body) {
 
 /**
  * The keys `body` reads off the parameter named `bag`.
- * Returns { keys: Set, opaque: string[] }; an opaque entry names a read whose
- * key is not a literal, or a function the bag reached that could not be found.
+ * Returns { keys: Set, opaque: string[], editTarget: boolean }; an opaque entry
+ * names a read whose key is not a literal, or a function the bag reached that
+ * could not be found. editTarget says the body opens a writer's edit scope,
+ * which reads the param the handler's spec declares with the editTarget role.
  */
 export function paramReadsInBody(body, bag, sources, bindings = new Map(), depth = 0) {
   const keys = new Set();
@@ -192,14 +194,18 @@ export function paramReadsInBody(body, bag, sources, bindings = new Map(), depth
     else opaque.push(`${what}(${arg})`);
   };
 
-  // FMCPEditScope Edit(Params, Action, TargetParam, Policy) reads its target param when it opens.
+  // FMCPEditScope reads its target when it opens: a reader's is the param it
+  // names, FMCPEditScope Edit(Params, Action, TEXT("assetPath")); a writer's,
+  // FMCPEditScope Edit(Params, Action, Policy), is its spec's editTarget.
   const scopes = new Set();
+  let editTarget = false;
   for (const m of code.matchAll(/\bFMCPEditScope\s+(\w+)\s*\(/g)) {
     const open = m.index + m[0].length - 1;
     const args = splitArgs(code.slice(open + 1, closeOf(code, open) - 1));
     if (args[0] !== bag) continue;
     scopes.add(m[1]);
-    addKey(args[2], "FMCPEditScope");
+    if (args.length === 3 && literalKey(args[2], bindings) !== null) addKey(args[2], "FMCPEditScope");
+    else editTarget = true;
   }
 
   for (const call of callsIn(code)) {
@@ -252,12 +258,20 @@ export function paramReadsInBody(body, bag, sources, bindings = new Map(), depth
     const nested = paramReadsInBody(def.body, def.params[at], sources, inner, depth + 1);
     for (const key of nested.keys) keys.add(key);
     opaque.push(...nested.opaque.map((o) => `${call.name} > ${o}`));
+    editTarget ||= nested.editTarget;
   }
-  return { keys, opaque };
+  return { keys, opaque, editTarget };
 }
 
-/** The keys one registered bridge method's handler reads, or null when its body is not found. */
-export function handlerParamReads(method, { registrations = readRegistrations(), sources = readAllSources() } = {}) {
+/**
+ * The keys one registered bridge method's handler reads, or null when its body
+ * is not found. `spec` is the method's recorded spec, which names the param a
+ * writer's edit scope reads; without it that read is opaque.
+ *
+ * @param {string} method
+ * @param {{ registrations?: Map<any, any>, sources?: Map<any, any>, spec?: { params?: Array<{ name: string, role?: string, roleKeys?: string[] }> } }} [options]
+ */
+export function handlerParamReads(method, { registrations = readRegistrations(), sources = readAllSources(), spec } = {}) {
   const reg = registrations.get(method);
   if (!reg) return null;
   const found = findHandlerBody(reg.className, reg.method, sources);
@@ -265,5 +279,11 @@ export function handlerParamReads(method, { registrations = readRegistrations(),
   const signature = /\(\s*const\s+TSharedPtr<FJsonObject>\s*&\s*(\w+)\s*\)/.exec(
     sources.get(found.file).slice(Math.max(0, found.start - 300), found.start + 1),
   );
-  return { ...paramReadsInBody(found.body, signature ? signature[1] : "Params", sources), file: found.file };
+  const reads = paramReadsInBody(found.body, signature ? signature[1] : "Params", sources);
+  if (reads.editTarget) {
+    const targets = (spec?.params ?? []).filter((p) => p.role === "editTarget" && !p.roleKeys).map((p) => p.name);
+    if (targets.length > 0) for (const name of targets) reads.keys.add(name);
+    else reads.opaque.push("FMCPEditScope (no editTarget in the spec)");
+  }
+  return { ...reads, file: found.file };
 }

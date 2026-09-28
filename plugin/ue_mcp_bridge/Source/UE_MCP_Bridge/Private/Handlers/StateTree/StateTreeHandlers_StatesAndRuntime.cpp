@@ -494,7 +494,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStateTreeNodeTypes(const TSharedP
 	const FString Filter = OptionalString(Params, TEXT("filter"));
 	const bool bIncludeInstanceProperties = OptionalBool(Params, TEXT("includeInstanceProperties"), true);
 	const bool bSchemaAllowedOnly = OptionalBool(Params, TEXT("schemaAllowedOnly"), true);
-	FMCPEditScope Edit(Params, TEXT("list_state_tree_node_types"), TEXT("assetPath"), FMCPCommitPolicy::Read());
+	FMCPEditScope Edit(Params, TEXT("list_state_tree_node_types"), TEXT("assetPath"));
 	if (auto Err = Edit.Open<UStateTree>()) return Err;
 	UStateTree* ST = Edit.Target<UStateTree>();
 	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
@@ -648,7 +648,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStateTreeNodeTypes(const TSharedP
 TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObject>& Params)
 {
 	const FStateRef StateRef = ReadStateRef(Params);
-	FMCPEditScope Edit(Params, TEXT("read_state_tree_state"), TEXT("assetPath"), FMCPCommitPolicy::Read());
+	FMCPEditScope Edit(Params, TEXT("read_state_tree_state"), TEXT("assetPath"));
 	if (auto Err = Edit.Open<UStateTree>()) return Err;
 	UStateTree* ST = Edit.Target<UStateTree>();
 	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
@@ -830,7 +830,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 	const bool bHasTargetStatePath = HasParam(Params, TEXT("targetStatePath"));
 	const FString TargetStatePathStr = OptionalString(Params, TEXT("targetStatePath"));
 	const FString LinkedAssetPath = OptionalString(Params, TEXT("linkedAsset"));
-	FMCPEditScope Edit(Params, TEXT("set_state_tree_state_link"), TEXT("assetPath"), MCPStateTree::StructureEdit());
+	FMCPEditScope Edit(Params, TEXT("set_state_tree_state_link"), MCPStateTree::StructureEdit());
 	if (auto Err = Edit.Open<UStateTree>()) return Err;
 	UStateTree* ST = Edit.Target<UStateTree>();
 	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
@@ -996,7 +996,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 	const FString NewParentPathStr = OptionalString(Params, TEXT("newParentStatePath"));
 	const bool bHasInsertIndex = HasParam(Params, TEXT("insertIndex"));
 	const int32 RequestedInsertIndex = static_cast<int32>(OptionalNumber(Params, TEXT("insertIndex")));
-	FMCPEditScope Edit(Params, TEXT("move_state_tree_state"), TEXT("assetPath"), MCPStateTree::StructureEdit());
+	FMCPEditScope Edit(Params, TEXT("move_state_tree_state"), MCPStateTree::StructureEdit());
 	if (auto Err = Edit.Open<UStateTree>()) return Err;
 	UStateTree* ST = Edit.Target<UStateTree>();
 	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
@@ -1135,7 +1135,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetNodeClass(const TSharedPtr<FJsonOb
 	if (auto Err = RequireString(Params, TEXT("nodeId"), NodeIdStr)) return Err;
 	FString ClassSpec;
 	if (auto Err = RequireString(Params, TEXT("nodeClass"), ClassSpec)) return Err;
-	FMCPEditScope Edit(Params, TEXT("set_state_tree_node_class"), TEXT("assetPath"), MCPStateTree::StructureEdit());
+	FMCPEditScope Edit(Params, TEXT("set_state_tree_node_class"), MCPStateTree::StructureEdit());
 	if (auto Err = Edit.Open<UStateTree>()) return Err;
 	UStateTree* ST = Edit.Target<UStateTree>();
 	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);

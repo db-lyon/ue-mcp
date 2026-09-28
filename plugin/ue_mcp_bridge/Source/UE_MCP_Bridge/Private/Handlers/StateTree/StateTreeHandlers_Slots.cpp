@@ -297,7 +297,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddSlotNode(const TSharedPtr<FJsonObj
 	const bool bHasOperand = Slot.bOperand && HasParam(Params, TEXT("operand"));
 	if (StructTypeErr) return StructTypeErr;
 
-	FMCPEditScope Edit(Params, Slot.AddMethod, TEXT("assetPath"), MCPStateTree::StructureEdit());
+	FMCPEditScope Edit(Params, Slot.AddMethod, MCPStateTree::StructureEdit());
 	if (auto Err = Edit.Open<UStateTree>()) return Err;
 	UStateTree* ST = Edit.Target<UStateTree>();
 	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
@@ -373,7 +373,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveSlotNode(const TSharedPtr<FJson
 	FSlotRequest Request;
 	ReadSlotRequest(Params, Slot, /*bAddressNode=*/true, Request);
 
-	FMCPEditScope Edit(Params, Slot.RemoveMethod, TEXT("assetPath"), MCPStateTree::StructureEdit());
+	FMCPEditScope Edit(Params, Slot.RemoveMethod, MCPStateTree::StructureEdit());
 	if (auto Err = Edit.Open<UStateTree>()) return Err;
 	UStateTree* ST = Edit.Target<UStateTree>();
 	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);
@@ -439,7 +439,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetSlotNodeProperty(const TSharedPtr<
 	const FString Value = OptionalString(Params, TEXT("value"));
 	const TCHAR* Method = bInstance ? Slot.SetInstanceMethod : Slot.SetNodeMethod;
 
-	FMCPEditScope Edit(Params, Method, TEXT("assetPath"), MCPStateTree::ValueEdit());
+	FMCPEditScope Edit(Params, Method, MCPStateTree::ValueEdit());
 	if (auto Err = Edit.Open<UStateTree>()) return Err;
 	UStateTree* ST = Edit.Target<UStateTree>();
 	UStateTreeEditorData* EditorData = MCPStateTree::EditorData(ST);

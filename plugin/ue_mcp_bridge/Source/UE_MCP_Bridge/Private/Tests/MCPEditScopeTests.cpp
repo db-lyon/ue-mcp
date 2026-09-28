@@ -1,7 +1,8 @@
 // The F1 edit scope, driven through StateTree as its first asset type: undo
 // and redo of a committed edit, no undo record for a refusal or a no-op, the
 // compile-failure policies, the #932 guard and a save that fails after the
-// guard passed, and several targets in one scope. Trees live in a private mount.
+// guard passed, several targets in one scope, and the target and commit
+// policy read from the handler's spec. Trees live in a private mount.
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
@@ -67,6 +68,18 @@ namespace MCPEditScopeTests
 	int32 UndoDepth()
 	{
 		return GEditor && GEditor->Trans ? GEditor->Trans->GetQueueLength() : -1;
+	}
+
+	/** A spec whose assetPath is the edit target and which leaves the commit to the policy given. */
+	const FMCPHandlerSpec& TargetSpec()
+	{
+		static const FMCPHandlerSpec Spec = []
+		{
+			FMCPHandlerSpec Out;
+			Out.Params.Add(MCPParam::Required(TEXT("assetPath"), EMCPParamType::String, TEXT("The tree")).Role(EMCPParamRole::EditTarget));
+			return Out;
+		}();
+		return Spec;
 	}
 }
 
@@ -165,7 +178,7 @@ bool FMCPEditScopeCompileFailureTest::RunTest(const FString& Parameters)
 
 	// Refuse: the call fails and nothing is written.
 	{
-		FMCPEditScope Edit(Args(Tree), TEXT("test_refuse"), TEXT("assetPath"),
+		FMCPEditScope Edit(Args(Tree), TEXT("test_refuse"), TargetSpec(),
 			FMCPCommitPolicy::CompileSave(EMCPCompileFailure::Refuse, /*bInEvenIfUnchanged=*/true));
 		if (!TestFalse(TEXT("opens"), Edit.Open<UStateTree>().IsValid())) return false;
 		TSharedPtr<FJsonObject> Result = MCPSuccess();
@@ -175,7 +188,7 @@ bool FMCPEditScopeCompileFailureTest::RunTest(const FString& Parameters)
 	}
 	// SaveAnyway: written although it did not compile.
 	{
-		FMCPEditScope Edit(Args(Tree), TEXT("test_save_anyway"), TEXT("assetPath"),
+		FMCPEditScope Edit(Args(Tree), TEXT("test_save_anyway"), TargetSpec(),
 			FMCPCommitPolicy::CompileSave(EMCPCompileFailure::SaveAnyway, /*bInEvenIfUnchanged=*/true));
 		if (!TestFalse(TEXT("opens"), Edit.Open<UStateTree>().IsValid())) return false;
 		TSharedPtr<FJsonObject> Result = MCPSuccess();
@@ -206,7 +219,7 @@ bool FMCPEditScopeSaveFailureTest::RunTest(const FString& Parameters)
 
 	// The scope opens while the file is writable; the write then fails at save time.
 	{
-		FMCPEditScope Edit(Args(Tree), TEXT("test_save_failure"), TEXT("assetPath"),
+		FMCPEditScope Edit(Args(Tree), TEXT("test_save_failure"), TargetSpec(),
 			FMCPCommitPolicy::CompileSave(EMCPCompileFailure::SaveAnyway, /*bInEvenIfUnchanged=*/true));
 		if (!TestFalse(TEXT("opens"), Edit.Open<UStateTree>().IsValid())) return false;
 		Platform.SetReadOnly(*File, true);
@@ -255,7 +268,7 @@ bool FMCPEditScopeMultiplicityTest::RunTest(const FString& Parameters)
 	};
 
 	{
-		FMCPEditScope Edit(Paths({ First, Second }), TEXT("test_many"), TEXT("assetPath"),
+		FMCPEditScope Edit(Paths({ First, Second }), TEXT("test_many"), TargetSpec(),
 			FMCPCommitPolicy::CompileSave(EMCPCompileFailure::SkipSave, /*bInEvenIfUnchanged=*/true));
 		if (!TestFalse(TEXT("opens both"), Edit.Open<UStateTree>().IsValid())) return false;
 		TestEqual(TEXT("two targets"), Edit.Num(), 2);
@@ -273,9 +286,56 @@ bool FMCPEditScopeMultiplicityTest::RunTest(const FString& Parameters)
 		}
 	}
 	{
-		FMCPEditScope Edit(Paths({ First, Mount.RootPath + TEXT("Missing") }), TEXT("test_many"), TEXT("assetPath"), FMCPCommitPolicy::Read());
+		FMCPEditScope Edit(Paths({ First, Mount.RootPath + TEXT("Missing") }), TEXT("test_many"), TEXT("assetPath"));
 		TestTrue(TEXT("one missing target refuses the whole call"), Edit.Open<UStateTree>().IsValid());
 	}
+	return true;
+}
+
+IMPLEMENT_CUSTOM_SIMPLE_AUTOMATION_TEST(FMCPEditScopeSpecTest, FMCPStateTreeTestBase,
+	"UE.MCP.Families.EditScope.Spec",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPEditScopeSpecTest::RunTest(const FString& Parameters)
+{
+	using namespace MCPEditScopeTests;
+	FMCPScopedTestMount Mount(TEXT("/UEMCPEditScopeSpec/"), TEXT("UEMCPEditScopeSpec"));
+	const FString Tree = Mount.RootPath + TEXT("ST_Spec");
+	FMCPHandlerRegistry Registry;
+	FStateTreeHandlers::RegisterHandlers(Registry);
+	if (!TestNotNull(TEXT("fixture tree"), MakeTree(Registry, Tree))) return false;
+
+	// The handler asks for compile and save; the spec's commit policy overrules it.
+	auto Probe = [](const TSharedPtr<FJsonObject>& Params) -> TSharedPtr<FJsonValue>
+	{
+		FMCPEditScope Edit(Params, TEXT("test_spec_scope"),
+			FMCPCommitPolicy::CompileSave(EMCPCompileFailure::SkipSave, /*bInEvenIfUnchanged=*/true));
+		if (auto Err = Edit.Open<UStateTree>()) return Err;
+		TSharedPtr<FJsonObject> Result = MCPSuccess();
+		Result->SetStringField(TEXT("target"), Edit.Path());
+		return Edit.Finish(Result);
+	};
+	Registry.RegisterHandler(TEXT("test_spec_scope"), Probe, {
+		MCPParam::Required(TEXT("treePath"), EMCPParamType::String, TEXT("The tree")).Role(EMCPParamRole::EditTarget),
+	}, MCPSpec::Commit(EMCPCommitPolicy::None));
+	Registry.RegisterHandler(TEXT("test_spec_scope_untargeted"), Probe, {
+		MCPParam::Required(TEXT("treePath"), EMCPParamType::String, TEXT("The tree")),
+	});
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("treePath"), Tree);
+	const TSharedPtr<FJsonObject> Result = Call(Registry, TEXT("test_spec_scope"), Params);
+	FString Target;
+	TestTrue(TEXT("the scope opens the spec's editTarget param"), Succeeded(Result) && Result->TryGetStringField(TEXT("target"), Target) && Target == Tree);
+	TestFalse(TEXT("commit none: nothing is compiled"), Result->HasField(TEXT("compiled")));
+	TestFalse(TEXT("commit none: nothing is saved"), Result->HasField(TEXT("saved")));
+
+	const TSharedPtr<FJsonObject> Untargeted = Call(Registry, TEXT("test_spec_scope_untargeted"), Params);
+	FString Error;
+	TestFalse(TEXT("a spec with no editTarget is refused"), Succeeded(Untargeted));
+	TestTrue(TEXT("and the refusal says why"), Untargeted->TryGetStringField(TEXT("error"), Error) && Error.Contains(TEXT("editTarget")));
+
+	TestNull(TEXT("no spec is active outside a handler call"), FMCPHandlerRegistry::ActiveSpec());
 	return true;
 }
 
