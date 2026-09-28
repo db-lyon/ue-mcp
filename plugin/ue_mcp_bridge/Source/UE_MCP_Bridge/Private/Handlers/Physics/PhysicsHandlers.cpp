@@ -1,6 +1,7 @@
 #include "PhysicsHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "Handlers/Blueprint/BlueprintHandlers_Internal.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
@@ -974,7 +975,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::AddImpulse(const TSharedPtr<FJsonObject
 	});
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	FMCPActorSelector ActorSel;

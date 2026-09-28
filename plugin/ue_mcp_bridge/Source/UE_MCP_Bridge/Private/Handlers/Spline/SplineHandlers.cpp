@@ -1,6 +1,7 @@
 #include "SplineHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "Components/SplineComponent.h"
 #include "Engine/World.h"
 #include "Editor.h"
@@ -112,7 +113,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::ReadSpline(const TSharedPtr<FJsonObject>
 
 	// #553: support editor or PIE world so runtime spline state is readable.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(TEXT("World not available"));
 
 	// #983: this is the action the report came in on. A level with several
