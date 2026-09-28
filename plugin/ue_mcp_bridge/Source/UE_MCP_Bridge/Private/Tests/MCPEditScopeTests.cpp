@@ -250,6 +250,8 @@ IMPLEMENT_CUSTOM_SIMPLE_AUTOMATION_TEST(FMCPEditScopeMultiplicityTest, FMCPState
 bool FMCPEditScopeMultiplicityTest::RunTest(const FString& Parameters)
 {
 	using namespace MCPEditScopeTests;
+	// The missing-target case loads a path that does not exist, which the asset subsystem logs.
+	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 	FMCPScopedTestMount Mount(TEXT("/UEMCPEditScopeMany/"), TEXT("UEMCPEditScopeMany"));
 	const FString First = Mount.RootPath + TEXT("ST_First");
 	const FString Second = Mount.RootPath + TEXT("ST_Second");
@@ -304,6 +306,7 @@ bool FMCPEditScopeSpecTest::RunTest(const FString& Parameters)
 	FMCPHandlerRegistry Registry;
 	FStateTreeHandlers::RegisterHandlers(Registry);
 	if (!TestNotNull(TEXT("fixture tree"), MakeTree(Registry, Tree))) return false;
+	const FMCPHandlerSpec* Outer = FMCPHandlerRegistry::ActiveSpec();
 
 	// The handler asks for compile and save; the spec's commit policy overrules it.
 	auto Probe = [](const TSharedPtr<FJsonObject>& Params) -> TSharedPtr<FJsonValue>
@@ -335,7 +338,7 @@ bool FMCPEditScopeSpecTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("a spec with no editTarget is refused"), Succeeded(Untargeted));
 	TestTrue(TEXT("and the refusal says why"), Untargeted->TryGetStringField(TEXT("error"), Error) && Error.Contains(TEXT("editTarget")));
 
-	TestNull(TEXT("no spec is active outside a handler call"), FMCPHandlerRegistry::ActiveSpec());
+	TestTrue(TEXT("a handler call restores the caller's active spec"), FMCPHandlerRegistry::ActiveSpec() == Outer);
 	return true;
 }
 

@@ -529,6 +529,19 @@ public:
 	// reads the handler's roles and commit policy from it.
 	static const FMCPHandlerSpec* ActiveSpec();
 
+	// Makes a spec the active one for as long as it lives, and restores the
+	// caller's after. ExecuteHandler opens one per call; code that calls a
+	// handler function directly opens its own.
+	struct FActiveSpecScope
+	{
+		explicit FActiveSpecScope(const FMCPHandlerSpec* Spec);
+		~FActiveSpecScope();
+		FActiveSpecScope(const FActiveSpecScope&) = delete;
+		FActiveSpecScope& operator=(const FActiveSpecScope&) = delete;
+	private:
+		const FMCPHandlerSpec* Previous;
+	};
+
 	// The plain parameter a spec declares with the editTarget role, or empty.
 	static FString EditTargetParam(const FMCPHandlerSpec& Spec);
 

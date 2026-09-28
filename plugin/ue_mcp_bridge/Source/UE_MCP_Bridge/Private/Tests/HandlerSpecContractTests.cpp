@@ -271,6 +271,7 @@ bool FMCPHandlerSpecContractTest::RunTest(const FString& Parameters)
 			TSet<FString> Read;
 			{
 				FMCPParamReadScope Scope(Params);
+				const FMCPHandlerRegistry::FActiveSpecScope SpecScope(&Spec);
 				(*Handler)(Params);
 				Read = Scope.ReadKeys();
 			}
