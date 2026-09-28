@@ -1,0 +1,1817 @@
+{
+	"01_read_without_editor_data":
+	{
+		"error": "StateTree '/<root>/ST_Char' has no editor data, so it has no schema, no states, and cannot compile. A tree created through the generic asset(create_asset_by_class) route lands in this state. Repair it with statetree(set_schema, assetPath=\"/<root>/ST_Char\"), which attaches the editor data, a schema and a root state, or create trees with gameplay(create_state_tree), which does that up front.",
+		"success": false
+	},
+	"02_compile_without_editor_data":
+	{
+		"error": "StateTree '/<root>/ST_Char' has no editor data, so it has no schema, no states, and cannot compile. A tree created through the generic asset(create_asset_by_class) route lands in this state. Repair it with statetree(set_schema, assetPath=\"/<root>/ST_Char\"), which attaches the editor data, a schema and a root state, or create trees with gameplay(create_state_tree), which does that up front.",
+		"success": false
+	},
+	"03_add_state_without_editor_data":
+	{
+		"error": "StateTree '/<root>/ST_Char' has no editor data, so it has no schema, no states, and cannot compile. A tree created through the generic asset(create_asset_by_class) route lands in this state. Repair it with statetree(set_schema, assetPath=\"/<root>/ST_Char\"), which attaches the editor data, a schema and a root state, or create trees with gameplay(create_state_tree), which does that up front.",
+		"success": false
+	},
+	"04_set_schema":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"availableSchemas": [
+			"/Script/GameplayCameras.CameraDirectorStateTreeSchema"
+		],
+		"compiled": true,
+		"createdEditorData": true,
+		"createdRootState": true,
+		"errors": [],
+		"previousSchema": "",
+		"rollbackNote": "The tree had no schema before this call, and nothing in this surface removes a schema: a StateTree without one cannot compile, so putting it back is not a state worth restoring. Delete the asset if the create was wrong.",
+		"rollbackPossible": false,
+		"saved": true,
+		"schema": "/Script/GameplayCameras.CameraDirectorStateTreeSchema",
+		"schemaNote": "Neither gameplay StateTree schema is present in this project, so '/Script/GameplayCameras.CameraDirectorStateTreeSchema' was used and the tree compiles against that instead. StateTreeComponentSchema and StateTreeAIComponentSchema ship in the GameplayStateTree plugin, which is disabled by default: enable it with project(enable_plugin, pluginName=\"GameplayStateTree\"), restart the editor, then pass schema=\"/Script/GameplayStateTreeModule.StateTreeComponentSchema\".",
+		"schemaSource": "fallback",
+		"success": true,
+		"updated": true,
+		"warnings": []
+	},
+	"05_set_schema_again":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"availableSchemas": [
+			"/Script/GameplayCameras.CameraDirectorStateTreeSchema"
+		],
+		"compiled": true,
+		"createdEditorData": false,
+		"createdRootState": false,
+		"errors": [],
+		"previousSchema": "/Script/GameplayCameras.CameraDirectorStateTreeSchema",
+		"rollback":
+		{
+			"method": "set_state_tree_schema",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"schema": "/Script/GameplayCameras.CameraDirectorStateTreeSchema"
+			}
+		},
+		"saved": true,
+		"schema": "/Script/GameplayCameras.CameraDirectorStateTreeSchema",
+		"schemaNote": "Neither gameplay StateTree schema is present in this project, so '/Script/GameplayCameras.CameraDirectorStateTreeSchema' was used and the tree compiles against that instead. StateTreeComponentSchema and StateTreeAIComponentSchema ship in the GameplayStateTree plugin, which is disabled by default: enable it with project(enable_plugin, pluginName=\"GameplayStateTree\"), restart the editor, then pass schema=\"/Script/GameplayStateTreeModule.StateTreeComponentSchema\".",
+		"schemaSource": "fallback",
+		"success": true,
+		"updated": false,
+		"warnings": []
+	},
+	"06_set_schema_linked":
+	{
+		"assetPath": "/<root>/ST_CharLinked.ST_CharLinked",
+		"availableSchemas": [
+			"/Script/GameplayCameras.CameraDirectorStateTreeSchema"
+		],
+		"compiled": true,
+		"createdEditorData": true,
+		"createdRootState": true,
+		"errors": [],
+		"previousSchema": "",
+		"rollbackNote": "The tree had no schema before this call, and nothing in this surface removes a schema: a StateTree without one cannot compile, so putting it back is not a state worth restoring. Delete the asset if the create was wrong.",
+		"rollbackPossible": false,
+		"saved": true,
+		"schema": "/Script/GameplayCameras.CameraDirectorStateTreeSchema",
+		"schemaNote": "Neither gameplay StateTree schema is present in this project, so '/Script/GameplayCameras.CameraDirectorStateTreeSchema' was used and the tree compiles against that instead. StateTreeComponentSchema and StateTreeAIComponentSchema ship in the GameplayStateTree plugin, which is disabled by default: enable it with project(enable_plugin, pluginName=\"GameplayStateTree\"), restart the editor, then pass schema=\"/Script/GameplayStateTreeModule.StateTreeComponentSchema\".",
+		"schemaSource": "fallback",
+		"success": true,
+		"updated": true,
+		"warnings": []
+	},
+	"07_missing_asset":
+	{
+		"assetPath": "/<root>/Nope",
+		"error": "Asset not found: '/<root>/Nope'. No package exists at '/<root>/Nope' and the Asset Registry has no entry for it. Tried '/<root>/Nope' and '/<root>/Nope.Nope'.",
+		"objectPath": "/<root>/Nope.Nope",
+		"packageExistsOnDisk": false,
+		"packagePath": "/<root>/Nope",
+		"playInEditorActive": false,
+		"reason": "missing",
+		"registryMatched": false,
+		"success": false
+	},
+	"10_add_child":
+	{
+		"created": true,
+		"existed": false,
+		"rollback":
+		{
+			"method": "remove_state_tree_state",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"stateId": "<guid:0>"
+			}
+		},
+		"stateId": "<guid:0>",
+		"stateName": "Child",
+		"statePath": "Root/Child",
+		"success": true
+	},
+	"11_add_group_first":
+	{
+		"created": true,
+		"existed": false,
+		"rollback":
+		{
+			"method": "remove_state_tree_state",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"stateId": "<guid:1>"
+			}
+		},
+		"stateId": "<guid:1>",
+		"stateName": "Second",
+		"statePath": "Root/Second",
+		"success": true
+	},
+	"12_add_subtree_root":
+	{
+		"created": true,
+		"existed": false,
+		"rollback":
+		{
+			"method": "remove_state_tree_state",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"stateId": "<guid:2>"
+			}
+		},
+		"stateId": "<guid:2>",
+		"stateName": "Sub",
+		"statePath": "Sub",
+		"success": true
+	},
+	"13_add_linked_asset":
+	{
+		"created": true,
+		"existed": false,
+		"rollback":
+		{
+			"method": "remove_state_tree_state",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"stateId": "<guid:3>"
+			}
+		},
+		"stateId": "<guid:3>",
+		"stateName": "Link",
+		"statePath": "Root/Link",
+		"success": true
+	},
+	"14_list_states":
+	{
+		"count": 5,
+		"hasMore": false,
+		"limit": 200,
+		"pageOffset": 0,
+		"states": [
+			{
+				"id": "<guid:4>",
+				"name": "Root",
+				"path": "Root",
+				"type": "State"
+			},
+			{
+				"id": "<guid:1>",
+				"name": "Second",
+				"path": "Root/Second",
+				"type": "Group"
+			},
+			{
+				"id": "<guid:0>",
+				"name": "Child",
+				"path": "Root/Child",
+				"type": "State"
+			},
+			{
+				"id": "<guid:3>",
+				"name": "Link",
+				"path": "Root/Link",
+				"type": "LinkedAsset"
+			},
+			{
+				"id": "<guid:2>",
+				"name": "Sub",
+				"path": "Sub",
+				"type": "Subtree"
+			}
+		],
+		"success": true,
+		"total": 5,
+		"totalKnown": true
+	},
+	"15_list_states_paged":
+	{
+		"count": 2,
+		"hasMore": true,
+		"limit": 2,
+		"nextCursor": "<cursor>",
+		"pageOffset": 0,
+		"states": [
+			{
+				"id": "<guid:4>",
+				"name": "Root",
+				"path": "Root",
+				"type": "State"
+			},
+			{
+				"id": "<guid:1>",
+				"name": "Second",
+				"path": "Root/Second",
+				"type": "Group"
+			}
+		],
+		"success": true,
+		"total": 5,
+		"totalKnown": true
+	},
+	"16_set_weight":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_state_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"propertyName": "weight",
+				"stateId": "<guid:0>",
+				"value": "1.0"
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"17_set_description":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_state_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"propertyName": "description",
+				"stateId": "<guid:0>",
+				"value": ""
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"18_set_enabled":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_state_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"propertyName": "bEnabled",
+				"stateId": "<guid:0>",
+				"value": "true"
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"19_set_selection":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_state_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"propertyName": "selectionBehavior",
+				"stateId": "<guid:0>",
+				"value": "TrySelectChildrenInOrder"
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"20_set_tag_clear":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_state_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"propertyName": "tag",
+				"stateId": "<guid:0>",
+				"value": ""
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"21_set_tag_unknown":
+	{
+		"error": "Gameplay tag not found: No.Such.Tag.Anywhere",
+		"success": false
+	},
+	"22_set_unknown_property":
+	{
+		"error": "Unknown state property: nope",
+		"success": false
+	},
+	"23_set_linked_asset_unlinked":
+	{
+		"rollbackNote": "This state had no linkedAsset before the call, and statetree(set_state_property) cannot be replayed with an empty one, so there is no inverse value. Clear the link with statetree(set_state_link, linkType=\"none\").",
+		"rollbackPossible": false,
+		"success": true,
+		"updated": true
+	},
+	"24_set_state_missing":
+	{
+		"error": "State not found",
+		"success": false
+	},
+	"25_set_type":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_state_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"propertyName": "type",
+				"stateId": "<guid:1>",
+				"value": "Group"
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"30_add_task":
+	{
+		"created": true,
+		"existed": false,
+		"nodeId": "<guid:5>",
+		"rollback":
+		{
+			"method": "remove_state_tree_task",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"stateId": "<guid:0>",
+				"taskIndex": 0
+			}
+		},
+		"rollbackNote": "The inverse names this task by INDEX into the state's task list. A later step that removes a task BELOW it shifts it down, and statetree(remove_task)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different task and remove the wrong one. There is no remove-task-by-nodeId action to address it by identity instead.",
+		"success": true,
+		"taskIndex": 0
+	},
+	"31_add_task_unknown_key":
+	{
+		"error": "instanceProperties: 'NoSuchProperty' is not a property of StateTreeDelayTaskInstanceData",
+		"success": false
+	},
+	"32_add_task_unknown_struct":
+	{
+		"error": "Struct not found: NoSuchStruct",
+		"success": false
+	},
+	"33_set_task_instance":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_task_instance_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"propertyName": "Duration",
+				"stateId": "<guid:0>",
+				"taskIndex": 0,
+				"value": "2.500000"
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"34_set_task_instance_bad_value":
+	{
+		"error": "Could not set 'Duration' (type float): 'banana' is not a number",
+		"success": false
+	},
+	"35_set_task_instance_bad_index":
+	{
+		"error": "Invalid taskIndex: 7",
+		"success": false
+	},
+	"36_set_task_instance_unknown":
+	{
+		"error": "Property not found on instance data: Nope",
+		"success": false
+	},
+	"37_set_task_node":
+	{
+		"propertyName": "bTaskEnabled",
+		"rollback":
+		{
+			"method": "set_state_tree_task_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"propertyName": "bTaskEnabled",
+				"stateId": "<guid:0>",
+				"taskIndex": 0,
+				"value": "True"
+			}
+		},
+		"structType": "StateTreeDelayTask",
+		"success": true,
+		"updated": true,
+		"value": "false"
+	},
+	"38_set_task_node_unknown":
+	{
+		"error": "Property not found on task node struct 'StateTreeDelayTask': Nope. Note: this action targets FStateTreeTaskBase-level UPROPERTYs (e.g. bConsideredForCompletion, bTaskEnabled). Use set_task_instance_property for instance data fields.",
+		"success": false
+	},
+	"39_set_task_node_bad_index":
+	{
+		"error": "Invalid taskIndex: 4 (state has 1 tasks)",
+		"success": false
+	},
+	"40_add_enter_condition":
+	{
+		"conditionIndex": 0,
+		"created": true,
+		"existed": false,
+		"nodeId": "<guid:6>",
+		"rollback":
+		{
+			"method": "remove_state_tree_enter_condition",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"conditionIndex": 0,
+				"stateId": "<guid:0>"
+			}
+		},
+		"rollbackNote": "The inverse names this condition by INDEX into the state's enter-condition list. A later step that removes an enter condition BELOW it shifts it down, and statetree(remove_enter_condition)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different condition and remove the wrong one. There is no remove-enter-condition-by-nodeId action to address it by identity instead.",
+		"success": true
+	},
+	"41_remove_enter_condition":
+	{
+		"conditionCount": 0,
+		"removed": true,
+		"rollback":
+		{
+			"method": "add_state_tree_enter_condition",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"instanceProperties":
+				{
+					"Left": "0",
+					"Right": "0"
+				},
+				"operand": "Or",
+				"stateId": "<guid:0>",
+				"structType": "StateTreeCompareIntCondition"
+			}
+		},
+		"rollbackLossy": true,
+		"rollbackNote": "Replaying this appends the condition at the END of the list with a NEW nodeId, so its position in the And/Or expression and any property binding that named the old id are not restored.",
+		"structType": "StateTreeCompareIntCondition",
+		"success": true,
+		"updated": true
+	},
+	"42_remove_enter_condition_bad":
+	{
+		"error": "Invalid conditionIndex: 0 (state has 0 enter conditions)",
+		"success": false
+	},
+	"43_add_transition":
+	{
+		"created": true,
+		"existed": false,
+		"rollback":
+		{
+			"method": "remove_state_tree_transition",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"stateId": "<guid:0>",
+				"transitionIndex": 0
+			}
+		},
+		"rollbackNote": "The inverse names this transition by INDEX into the state's transition list. A later step that removes a transition BELOW it shifts it down, and statetree(remove_transition)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different transition and remove the wrong one. There is no remove-transition-by-transitionId action to address it by identity instead.",
+		"success": true,
+		"transitionId": "<guid:7>",
+		"transitionIndex": 0
+	},
+	"44_add_transition_condition":
+	{
+		"conditionIndex": 0,
+		"created": true,
+		"existed": false,
+		"nodeId": "<guid:8>",
+		"rollback":
+		{
+			"method": "remove_state_tree_transition_condition",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"conditionIndex": 0,
+				"stateId": "<guid:0>",
+				"transitionIndex": 0
+			}
+		},
+		"rollbackNote": "The inverse names this condition by TWO indices: the transition's position in the state, and the condition's position in that transition. A later step that removes a transition BELOW this one, or a condition BELOW this one inside the same transition, shifts it down, and the rollbacks of statetree(remove_transition) and statetree(remove_transition_condition) re-add by APPENDING rather than reinserting, so in a flow mixing the two this pair can end up naming a different condition and remove the wrong one. There is no remove-transition-condition-by-nodeId action to address it by identity instead.",
+		"success": true
+	},
+	"45_add_transition_condition_bad":
+	{
+		"error": "Invalid transitionIndex: 3",
+		"success": false
+	},
+	"46_remove_transition_condition":
+	{
+		"conditionCount": 0,
+		"removed": true,
+		"rollback":
+		{
+			"method": "add_state_tree_transition_condition",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"instanceProperties":
+				{
+					"Left": "0",
+					"Right": "0"
+				},
+				"lossy": "Replaying this appends the condition at the END of the transition's list with a NEW nodeId, so its position in an And/Or expression and any property binding that named the old id are not restored.",
+				"operand": "And",
+				"stateId": "<guid:0>",
+				"structType": "StateTreeCompareIntCondition",
+				"transitionIndex": 0
+			}
+		},
+		"stateId": "<guid:0>",
+		"structType": "StateTreeCompareIntCondition",
+		"success": true,
+		"transitionIndex": 0,
+		"updated": true
+	},
+	"47_remove_transition_condition_bad":
+	{
+		"error": "Invalid conditionIndex 0 on transition 0. Valid values: none, the transition has no conditions.",
+		"success": false
+	},
+	"48_add_transition_condition_again":
+	{
+		"conditionIndex": 0,
+		"created": true,
+		"existed": false,
+		"nodeId": "<guid:9>",
+		"rollback":
+		{
+			"method": "remove_state_tree_transition_condition",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"conditionIndex": 0,
+				"stateId": "<guid:0>",
+				"transitionIndex": 0
+			}
+		},
+		"rollbackNote": "The inverse names this condition by TWO indices: the transition's position in the state, and the condition's position in that transition. A later step that removes a transition BELOW this one, or a condition BELOW this one inside the same transition, shifts it down, and the rollbacks of statetree(remove_transition) and statetree(remove_transition_condition) re-add by APPENDING rather than reinserting, so in a flow mixing the two this pair can end up naming a different condition and remove the wrong one. There is no remove-transition-condition-by-nodeId action to address it by identity instead.",
+		"success": true
+	},
+	"49_add_consideration":
+	{
+		"considerationCount": 1,
+		"considerationIndex": 0,
+		"created": true,
+		"existed": false,
+		"nodeId": "<guid:10>",
+		"parentScoresByUtility": false,
+		"rollback":
+		{
+			"method": "remove_state_tree_consideration",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"considerationIndex": 0,
+				"stateId": "<guid:0>"
+			}
+		},
+		"stateId": "<guid:0>",
+		"success": true,
+		"warning": "The parent state's selectionBehavior does not score children by utility, so this consideration is never evaluated. Set the parent with statetree(set_state_property, propertyName=\"selectionBehavior\", value=\"TrySelectChildrenWithHighestUtility\")."
+	},
+	"50_add_consideration_wrong_base":
+	{
+		"error": "Struct 'StateTreeDelayTask' does not derive from StateTreeConsiderationBase, so it cannot be used as a consideration. statetree(list_node_types, nodeType=\"consideration\") lists the ones that can.",
+		"success": false
+	},
+	"51_remove_consideration":
+	{
+		"considerationCount": 0,
+		"removed": true,
+		"rollback":
+		{
+			"method": "add_state_tree_consideration",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"instanceProperties":
+				{
+					"Input": "0.000000",
+					"Interval": "(Max=1.000000)"
+				},
+				"lossy": "Replaying this appends the consideration at the END of the list with a NEW nodeId, so its position in an And/Or expression and any property binding that named the old id are not restored.",
+				"operand": "Or",
+				"stateId": "<guid:0>",
+				"structType": "StateTreeFloatInputConsideration"
+			}
+		},
+		"stateId": "<guid:0>",
+		"structType": "StateTreeFloatInputConsideration",
+		"success": true,
+		"updated": true
+	},
+	"52_remove_consideration_bad":
+	{
+		"error": "Invalid considerationIndex 0. Valid values: none, the state has no considerations.",
+		"success": false
+	},
+	"53_read_state":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"bEnabled": false,
+		"childCount": 0,
+		"considerations": [],
+		"description": "hello",
+		"enterConditions": [],
+		"link":
+		{
+			"linkedAsset": "",
+			"linkedSubtreeName": "None",
+			"linkedSubtreeStateId": ""
+		},
+		"name": "Child",
+		"objectPath": "/<root>/ST_Char.ST_Char:StateTreeEditorData_0.StateTreeState_0.StateTreeState_0",
+		"parentStateId": "<guid:4>",
+		"problems": [],
+		"propertyWriteNote": "Fields with no typed setter (Transitions[i].Priority, Transitions[i].bTransitionEnabled, Transitions[i].DelayRandomVariance, Transitions[i].ReactivateTargetState, RequiredEventToEnter, bHasRequiredEventToEnter, TasksCompletion) are UPROPERTYs on this object: write them with editor(set_property, objectPath=<objectPath>, propertyName=\"Transitions[0].Priority\", ...).",
+		"requiredEventToEnter":
+		{
+			"enabled": false,
+			"payloadStruct": "",
+			"tag": "None"
+		},
+		"selectionBehavior": "TryEnterState",
+		"stateId": "<guid:0>",
+		"statePath": "Root/Child",
+		"success": true,
+		"tag": "",
+		"tasks": [
+			{
+				"expressionIndent": 0,
+				"index": 0,
+				"instanceProperties":
+				{
+					"bRunForever": "False",
+					"Duration": "3.000000",
+					"RandomDeviation": "0.000000"
+				},
+				"instanceStruct": "StateTreeDelayTaskInstanceData",
+				"nodeId": "<guid:5>",
+				"nodeProperties":
+				{
+					"bCanEditConsideredForCompletion": "True",
+					"bConsideredForCompletion": "True",
+					"bHasTaskCompletionDelegateDispatcher": "False",
+					"BindingsBatch": "(Value=65535)",
+					"bTaskEnabled": "False",
+					"ExecutionRuntimeTemplateIndex": "(Value=65535)",
+					"InstanceDataHandle": "(Index=65535,StateHandle=(Index=65535))",
+					"InstanceTemplateIndex": "(Value=65535)",
+					"Name": "None",
+					"OutputBindingsBatch": "(Value=65535)",
+					"TransitionHandlingPriority": "Normal"
+				},
+				"operand": "And",
+				"structPath": "/Script/StateTreeModule.StateTreeDelayTask",
+				"structType": "StateTreeDelayTask"
+			}
+		],
+		"tasksCompletion": "Any",
+		"transitions": [
+			{
+				"bDelayTransition": true,
+				"bTransitionEnabled": true,
+				"conditions": [
+					{
+						"expressionIndent": 0,
+						"index": 0,
+						"instanceProperties":
+						{
+							"Left": "0",
+							"Right": "0"
+						},
+						"instanceStruct": "StateTreeCompareIntConditionInstanceData",
+						"nodeId": "<guid:9>",
+						"nodeProperties":
+						{
+							"BindingsBatch": "(Value=65535)",
+							"bInvert": "False",
+							"DeltaIndent": "0",
+							"EvaluationMode": "Evaluated",
+							"ExecutionRuntimeTemplateIndex": "(Value=65535)",
+							"InstanceDataHandle": "(Index=65535,StateHandle=(Index=65535))",
+							"InstanceTemplateIndex": "(Value=65535)",
+							"Name": "None",
+							"Operand": "And",
+							"Operator": "Equal",
+							"OutputBindingsBatch": "(Value=65535)"
+						},
+						"operand": "And",
+						"structPath": "/Script/StateTreeModule.StateTreeCompareIntCondition",
+						"structType": "StateTreeCompareIntCondition"
+					}
+				],
+				"delayDuration": 1.5,
+				"delayRandomVariance": 0,
+				"eventPayloadStruct": "",
+				"eventTag": "None",
+				"index": 0,
+				"priority": "High",
+				"propertyPathPrefix": "Transitions[0]",
+				"targetStateId": "<guid:1>",
+				"targetStatePath": "Root/Second",
+				"transitionId": "<guid:7>",
+				"transitionType": "GotoState",
+				"trigger": "OnStateCompleted"
+			}
+		],
+		"type": "State",
+		"weight": 2.5
+	},
+	"54_remove_transition":
+	{
+		"removed": true,
+		"rollback":
+		{
+			"method": "add_state_tree_transition",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"bDelayTransition": true,
+				"delayDuration": 1.5,
+				"priority": "High",
+				"stateId": "<guid:0>",
+				"targetStateId": "<guid:1>",
+				"transitionType": "GotoState",
+				"trigger": "OnStateSucceeded|OnStateFailed"
+			}
+		},
+		"rollbackLossy": true,
+		"rollbackNote": "Replaying this appends the transition at the END of the state's list with a NEW transitionId, so its transitionIndex is not restored. The payload carries the trigger, transition type, target state, event tag, priority, bDelayTransition and delayDuration, and nothing else on the transition: its conditions, its delegate listener, RequiredEvent.PayloadStruct, RequiredEvent.bConsumeEventOnSelect, DelayRandomVariance, bTransitionEnabled and ReactivateTargetState are all left at their defaults. The 1 condition(s) on it are gone; replay each with statetree(add_transition_condition).",
+		"success": true,
+		"transitionCount": 0,
+		"updated": true
+	},
+	"55_remove_transition_bad":
+	{
+		"error": "Invalid transitionIndex: 0",
+		"success": false
+	},
+	"56_remove_task":
+	{
+		"removed": true,
+		"rollback":
+		{
+			"method": "add_state_tree_task",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"instanceProperties":
+				{
+					"bRunForever": "False",
+					"Duration": "3.000000",
+					"RandomDeviation": "0.000000"
+				},
+				"stateId": "<guid:0>",
+				"structType": "StateTreeDelayTask"
+			}
+		},
+		"rollbackLossy": true,
+		"rollbackNote": "Replaying this appends the task at the END of the list with a NEW nodeId, so its taskIndex and any property binding that named the old id are not restored. Node-struct flags written with statetree(set_task_property) are not part of the payload either.",
+		"structType": "StateTreeDelayTask",
+		"success": true,
+		"taskCount": 0,
+		"updated": true
+	},
+	"57_remove_task_bad":
+	{
+		"error": "Invalid taskIndex: 0 (state has 0 tasks)",
+		"success": false
+	},
+	"58_add_task_for_clear":
+	{
+		"created": true,
+		"existed": false,
+		"nodeId": "<guid:11>",
+		"rollback":
+		{
+			"method": "remove_state_tree_task",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"stateId": "<guid:0>",
+				"taskIndex": 0
+			}
+		},
+		"rollbackNote": "The inverse names this task by INDEX into the state's task list. A later step that removes a task BELOW it shifts it down, and statetree(remove_task)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different task and remove the wrong one. There is no remove-task-by-nodeId action to address it by identity instead.",
+		"success": true,
+		"taskIndex": 0
+	},
+	"59_clear_nodes":
+	{
+		"cleared": true,
+		"clearedEnterConditions": 0,
+		"clearedTasks": 1,
+		"clearedTransitions": 0,
+		"rollbackNote": "This drops every task, enter condition and transition plus the single-task slot in one call, and no single action rebuilds them: their struct types, instance values, operands, order and node ids are all gone. Read the state with statetree(read_state) BEFORE clearing it and replay statetree(add_task) / statetree(add_enter_condition) / statetree(add_transition) from that.",
+		"rollbackPossible": false,
+		"success": true,
+		"updated": true
+	},
+	"60_clear_nodes_again":
+	{
+		"cleared": false,
+		"clearedEnterConditions": 0,
+		"clearedTasks": 0,
+		"clearedTransitions": 0,
+		"rollbackNote": "This drops every task, enter condition and transition plus the single-task slot in one call, and no single action rebuilds them: their struct types, instance values, operands, order and node ids are all gone. Read the state with statetree(read_state) BEFORE clearing it and replay statetree(add_task) / statetree(add_enter_condition) / statetree(add_transition) from that.",
+		"rollbackPossible": false,
+		"success": true,
+		"unchanged": true
+	},
+	"61_add_evaluator":
+	{
+		"created": true,
+		"existed": false,
+		"nodeId": "<guid:12>",
+		"rollback":
+		{
+			"method": "remove_state_tree_evaluator",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"nodeId": "<guid:12>"
+			}
+		},
+		"success": true
+	},
+	"62_add_evaluator_wrong_base":
+	{
+		"error": "Struct 'StateTreeDelayTask' does not derive from FStateTreeEvaluatorBase",
+		"success": false
+	},
+	"63_set_evaluator_instance_none":
+	{
+		"error": "Evaluator has no instance data",
+		"success": false
+	},
+	"64_set_evaluator_node":
+	{
+		"propertyName": "EvaluatorClass",
+		"rollback":
+		{
+			"method": "set_state_tree_evaluator_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"nodeId": "<guid:12>",
+				"propertyName": "EvaluatorClass",
+				"value": "None"
+			}
+		},
+		"structType": "StateTreeBlueprintEvaluatorWrapper",
+		"success": true,
+		"updated": true,
+		"value": "None"
+	},
+	"65_set_evaluator_bad_id":
+	{
+		"error": "Invalid nodeId: not-a-guid",
+		"success": false
+	},
+	"66_set_node_class_native":
+	{
+		"error": "Class not found for nodeClass 'NoSuchClass'. Tried: NoSuchClass, ANoSuchClass, UNoSuchClass, NoSuchClass_C. UE reflection stores class names without the C++ type prefix, so UMyConfig is registered as 'MyConfig' and its path is /Script/<Module>.MyConfig. No loaded class name resembles it: the owning module may not be loaded yet (check reflection(is_module_loaded)).",
+		"reason": "class_not_found",
+		"requested": "NoSuchClass",
+		"success": false,
+		"suggestions": [],
+		"tried": [
+			"NoSuchClass",
+			"ANoSuchClass",
+			"UNoSuchClass",
+			"NoSuchClass_C"
+		]
+	},
+	"67_remove_evaluator":
+	{
+		"evaluatorCount": 0,
+		"removed": true,
+		"rollback":
+		{
+			"method": "add_state_tree_evaluator",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"instanceProperties":
+				{
+				},
+				"structType": "StateTreeBlueprintEvaluatorWrapper"
+			}
+		},
+		"rollbackLossy": true,
+		"rollbackNote": "Replaying this appends the evaluator at the END of the list with a NEW nodeId, so its evaluation order and any property binding that named the old id are not restored. Node-struct fields written with statetree(set_evaluator_property) are not part of the payload either.",
+		"structType": "StateTreeBlueprintEvaluatorWrapper",
+		"success": true,
+		"updated": true
+	},
+	"68_remove_evaluator_gone":
+	{
+		"error": "Evaluator node not found: <guid:12>",
+		"success": false
+	},
+	"69_add_global_task":
+	{
+		"created": true,
+		"existed": false,
+		"nodeId": "<guid:13>",
+		"rollback":
+		{
+			"method": "remove_state_tree_global_task",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"nodeId": "<guid:13>"
+			}
+		},
+		"success": true
+	},
+	"70_set_global_instance":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_global_task_instance_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"nodeId": "<guid:13>",
+				"propertyName": "Duration",
+				"value": "1.000000"
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"71_set_global_instance_bad":
+	{
+		"error": "Could not set 'Duration' (type float): 'banana' is not a number",
+		"success": false
+	},
+	"72_set_global_node":
+	{
+		"propertyName": "bTaskEnabled",
+		"rollback":
+		{
+			"method": "set_state_tree_global_task_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"nodeId": "<guid:13>",
+				"propertyName": "bTaskEnabled",
+				"value": "True"
+			}
+		},
+		"structType": "StateTreeDelayTask",
+		"success": true,
+		"updated": true,
+		"value": "false"
+	},
+	"73_set_node_class_not_wrapper":
+	{
+		"error": "Node struct 'StateTreeDelayTask' has no class property, so it is a native node rather than a Blueprint wrapper. Configure it with statetree(set_task_instance_property) / set_task_property, or the evaluator and global-task equivalents. statetree(list_node_types) reports each family's blueprintWrapperStruct.",
+		"success": false
+	},
+	"74_add_binding":
+	{
+		"bindingChangedNotified": true,
+		"created": true,
+		"existed": false,
+		"replacedExistingBinding": false,
+		"rollback":
+		{
+			"method": "remove_state_tree_binding",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"targetPath": "RandomDeviation",
+				"targetStructId": "<guid:13>"
+			}
+		},
+		"success": true
+	},
+	"75_add_binding_replace":
+	{
+		"bindingChangedNotified": true,
+		"created": true,
+		"existed": false,
+		"replacedExistingBinding": false,
+		"rollback":
+		{
+			"method": "remove_state_tree_binding",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"targetPath": "RandomDeviation",
+				"targetStructId": "<guid:13>"
+			}
+		},
+		"success": true
+	},
+	"76_list_bindings":
+	{
+		"bindings": [
+			{
+				"sourcePath": "Random Deviation",
+				"sourceStructId": "<guid:13>",
+				"targetPath": "Random Deviation",
+				"targetStructId": "<guid:13>"
+			}
+		],
+		"success": true
+	},
+	"77_list_bindings_filtered":
+	{
+		"bindings": [
+			{
+				"sourcePath": "Random Deviation",
+				"sourceStructId": "<guid:13>",
+				"targetPath": "Random Deviation",
+				"targetStructId": "<guid:13>"
+			}
+		],
+		"success": true
+	},
+	"78_remove_binding":
+	{
+		"alreadyRemoved": true,
+		"removed": true,
+		"removedBindings": [],
+		"rollbackNote": "No binding on this target path was found to remove, so there is no source path statetree(add_binding) could be replayed with.",
+		"rollbackPossible": false,
+		"success": true
+	},
+	"79_remove_binding_again":
+	{
+		"alreadyRemoved": true,
+		"removed": true,
+		"removedBindings": [],
+		"rollbackNote": "No binding on this target path was found to remove, so there is no source path statetree(add_binding) could be replayed with.",
+		"rollbackPossible": false,
+		"success": true
+	},
+	"80_list_bindable_sources":
+	{
+		"assetPath": "/<root>/ST_Char",
+		"count": 9,
+		"hasMore": false,
+		"limit": 200,
+		"pageOffset": 0,
+		"sources": [
+			{
+				"structId": "<guid:14>",
+				"structPath": "/Script/CoreUObject.Object",
+				"structType": "Object"
+			},
+			{
+				"structId": "<guid:13>",
+				"structPath": "/Script/StateTreeModule.StateTreeDelayTaskInstanceData",
+				"structType": "StateTreeDelayTaskInstanceData"
+			},
+			{
+				"structId": "<guid:15>",
+				"structPath": "/Script/StateTreeModule.StateTreeDelayTask",
+				"structType": "StateTreeDelayTask"
+			},
+			{
+				"structId": "<guid:16>",
+				"structPath": "",
+				"structType": "(none)"
+			},
+			{
+				"structId": "<guid:17>",
+				"structPath": "",
+				"structType": "(none)"
+			},
+			{
+				"structId": "<guid:18>",
+				"structPath": "",
+				"structType": "(none)"
+			},
+			{
+				"structId": "<guid:19>",
+				"structPath": "",
+				"structType": "(none)"
+			},
+			{
+				"structId": "<guid:20>",
+				"structPath": "",
+				"structType": "(none)"
+			},
+			{
+				"structId": "<guid:21>",
+				"structPath": "",
+				"structType": "(none)"
+			}
+		],
+		"success": true,
+		"total": 9,
+		"totalKnown": true
+	},
+	"81_remove_global_task":
+	{
+		"globalTaskCount": 0,
+		"removed": true,
+		"rollback":
+		{
+			"method": "add_state_tree_global_task",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"instanceProperties":
+				{
+					"bRunForever": "False",
+					"Duration": "4.000000",
+					"RandomDeviation": "0.000000"
+				},
+				"structType": "StateTreeDelayTask"
+			}
+		},
+		"rollbackLossy": true,
+		"rollbackNote": "Replaying this appends the global task at the END of the list with a NEW nodeId, so its order and any property binding that named the old id are not restored. Node-struct fields written with statetree(set_global_task_property) are not part of the payload either.",
+		"structType": "StateTreeDelayTask",
+		"success": true,
+		"updated": true
+	},
+	"82_remove_global_task_gone":
+	{
+		"error": "Global task node not found: <guid:13>",
+		"success": false
+	},
+	"83_list_colors":
+	{
+		"colors": [
+			{
+				"color": "(R=0.013702,G=0.309469,B=0.386429,A=1.000000)",
+				"displayName": "Default Color",
+				"id": "<guid:22>"
+			}
+		],
+		"success": true
+	},
+	"84_add_color":
+	{
+		"colorId": "<guid:23>",
+		"created": true,
+		"displayName": "Red",
+		"existed": false,
+		"rollbackNote": "The bridge has no action that removes a palette entry, so there is no inverse to emit. The added colour is inert until a state references it: clear that reference with statetree(set_state_property, propertyName=\"color\", value=\"\").",
+		"rollbackPossible": false,
+		"success": true
+	},
+	"85_add_color_duplicate":
+	{
+		"error": "A color with name 'Red' already exists",
+		"success": false
+	},
+	"86_set_color":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_state_property",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"propertyName": "color",
+				"stateId": "<guid:0>",
+				"value": ""
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"87_set_color_unknown":
+	{
+		"error": "Color not found with name: Blue. Use list_colors to see available colors.",
+		"success": false
+	},
+	"88_add_state_parameter":
+	{
+		"created": true,
+		"existed": false,
+		"paramName": "P",
+		"paramType": "Float",
+		"rollback":
+		{
+			"method": "remove_state_tree_state_parameter",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"paramName": "P",
+				"stateId": "<guid:0>"
+			}
+		},
+		"success": true
+	},
+	"89_add_state_parameter_bad_type":
+	{
+		"error": "Unsupported parameter type: Vector. Supported: Bool, Int32, Int64, Float, Double, Name, String, Text",
+		"success": false
+	},
+	"90_list_state_parameters":
+	{
+		"bFixedLayout": false,
+		"parameters": [
+			{
+				"id": "<guid:24>",
+				"name": "P",
+				"type": "Float",
+				"value": "0.000000"
+			}
+		],
+		"success": true
+	},
+	"91_set_state_parameter":
+	{
+		"rollback":
+		{
+			"method": "set_state_tree_state_parameter",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"paramName": "P",
+				"stateId": "<guid:0>",
+				"value": "0.000000"
+			}
+		},
+		"success": true,
+		"updated": true
+	},
+	"92_set_state_parameter_bad":
+	{
+		"error": "Could not set 'P' (type float): 'banana' is not a number",
+		"success": false
+	},
+	"93_set_state_parameter_missing":
+	{
+		"error": "Parameter not found: Nope",
+		"success": false
+	},
+	"94_remove_state_parameter":
+	{
+		"paramType": "Float",
+		"priorValue": "1.500000",
+		"removed": true,
+		"rollback":
+		{
+			"method": "add_state_tree_state_parameter",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"paramName": "P",
+				"paramType": "Float",
+				"stateId": "<guid:0>"
+			}
+		},
+		"rollbackLossy": true,
+		"rollbackNote": "statetree(add_state_parameter) recreates the parameter at its type default and appends it to the bag, so the value ('1.500000', reported as priorValue) and the parameter's position and id do not come back. Follow the rollback with statetree(set_state_parameter, paramName=\"P\", value=\"1.500000\"), and re-add any binding that named the old parameter id.",
+		"success": true,
+		"updated": true
+	},
+	"95_remove_state_parameter_again":
+	{
+		"alreadyRemoved": true,
+		"removed": true,
+		"rollbackNote": "The state had no parameter named 'P', so this call changed nothing and there is nothing to restore.",
+		"rollbackPossible": false,
+		"success": true
+	},
+	"96_set_root_parameters":
+	{
+		"parameterCount": 1,
+		"rollbackNote": "There is no action that removes a root parameter, so the parameters this call created cannot be taken back out. Read the tree with statetree(read) before calling it if the previous root parameter list has to be recoverable.",
+		"rollbackPossible": false,
+		"success": true,
+		"updated": true
+	},
+	"100_link_subtree":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"linkType": "subtree",
+		"parameterCount": 0,
+		"parametersFixedLayout": true,
+		"rollback":
+		{
+			"method": "set_state_tree_state_link",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"linkedAsset": "/<root>/ST_CharLinked.ST_CharLinked",
+				"linkType": "asset",
+				"stateId": "<guid:1>"
+			}
+		},
+		"stateId": "<guid:1>",
+		"statePath": "Root/Second",
+		"success": true,
+		"targetStateId": "<guid:2>",
+		"targetStatePath": "Sub",
+		"updated": true
+	},
+	"101_link_subtree_again":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"linkType": "subtree",
+		"note": "The state already carried exactly this link.",
+		"parameterCount": 0,
+		"parametersFixedLayout": true,
+		"rollback":
+		{
+			"method": "set_state_tree_state_link",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"linkType": "subtree",
+				"stateId": "<guid:1>",
+				"targetStateId": "<guid:2>"
+			}
+		},
+		"stateId": "<guid:1>",
+		"statePath": "Root/Second",
+		"success": true,
+		"targetStateId": "<guid:2>",
+		"targetStatePath": "Sub",
+		"unchanged": true
+	},
+	"102_link_asset":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"linkedAsset": "/<root>/ST_CharLinked.ST_CharLinked",
+		"linkType": "asset",
+		"parameterCount": 0,
+		"parametersFixedLayout": true,
+		"rollback":
+		{
+			"method": "set_state_tree_state_link",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"linkType": "subtree",
+				"stateId": "<guid:1>",
+				"targetStateId": "<guid:2>"
+			}
+		},
+		"stateId": "<guid:1>",
+		"statePath": "Root/Second",
+		"success": true,
+		"updated": true
+	},
+	"103_link_none":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"linkType": "none",
+		"parameterCount": 0,
+		"parametersFixedLayout": false,
+		"rollback":
+		{
+			"method": "set_state_tree_state_link",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"linkedAsset": "/<root>/ST_CharLinked.ST_CharLinked",
+				"linkType": "asset",
+				"stateId": "<guid:1>"
+			}
+		},
+		"stateId": "<guid:1>",
+		"statePath": "Root/Second",
+		"success": true,
+		"updated": true
+	},
+	"104_link_bad_type":
+	{
+		"error": "Unknown linkType 'sideways'. Valid values: subtree (link to a Subtree state in THIS asset, via targetStateId or targetStatePath), asset (run another StateTree asset, via linkedAsset), none (clear both and return the state to a plain State).",
+		"success": false
+	},
+	"105_move_reorder":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"atRoot": false,
+		"index": 1,
+		"parentStateId": "<guid:4>",
+		"previousIndex": 0,
+		"previousParentStateId": "<guid:4>",
+		"rollback":
+		{
+			"method": "move_state_tree_state",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"insertIndex": 0,
+				"newParentStateId": "<guid:4>",
+				"stateId": "<guid:1>"
+			}
+		},
+		"stateId": "<guid:1>",
+		"statePath": "Root/Second",
+		"success": true,
+		"updated": true
+	},
+	"106_move_unchanged":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"atRoot": false,
+		"index": 1,
+		"note": "The state is already this parent's child at this position, so nothing moved.",
+		"parentStateId": "<guid:4>",
+		"previousIndex": 1,
+		"previousParentStateId": "<guid:4>",
+		"rollback":
+		{
+			"method": "move_state_tree_state",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"insertIndex": 1,
+				"newParentStateId": "<guid:4>",
+				"stateId": "<guid:1>"
+			}
+		},
+		"stateId": "<guid:1>",
+		"statePath": "Root/Second",
+		"success": true,
+		"unchanged": true
+	},
+	"107_move_to_root":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"atRoot": true,
+		"index": 2,
+		"parentStateId": "",
+		"previousIndex": 1,
+		"previousParentStateId": "<guid:4>",
+		"rollback":
+		{
+			"method": "move_state_tree_state",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"insertIndex": 1,
+				"newParentStateId": "<guid:4>",
+				"stateId": "<guid:1>"
+			}
+		},
+		"stateId": "<guid:1>",
+		"statePath": "Second",
+		"success": true,
+		"updated": true
+	},
+	"108_move_under_descendant":
+	{
+		"error": "'Child' is a descendant of 'Root', so moving 'Root' under it would detach the whole branch from the tree.",
+		"success": false
+	},
+	"109_move_back":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"atRoot": false,
+		"index": 0,
+		"parentStateId": "<guid:4>",
+		"previousIndex": 2,
+		"previousParentStateId": "",
+		"rollback":
+		{
+			"method": "move_state_tree_state",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"insertIndex": 2,
+				"stateId": "<guid:1>",
+				"toRoot": true
+			}
+		},
+		"stateId": "<guid:1>",
+		"statePath": "Root/Second",
+		"success": true,
+		"updated": true
+	},
+	"110_read_tree":
+	{
+		"assetPath": "/<root>/ST_Char",
+		"editorBindings": [],
+		"evaluators": [],
+		"globalTasks": [],
+		"rootParameters":
+		{
+			"Speed": "0.000000"
+		},
+		"schemaClass": "/Script/GameplayCameras.CameraDirectorStateTreeSchema",
+		"schemaPath": "/Script/GameplayCameras.CameraDirectorStateTreeSchema",
+		"subTrees": [
+			{
+				"bEnabled": true,
+				"children": [
+					{
+						"bEnabled": true,
+						"children": [],
+						"description": "",
+						"enterConditions": [],
+						"id": "<guid:1>",
+						"name": "Second",
+						"path": "Root/Second",
+						"selectionBehavior": "TryEnterState",
+						"tasks": [],
+						"transitions": [],
+						"type": "State"
+					},
+					{
+						"bEnabled": false,
+						"children": [],
+						"color": "Red",
+						"colorId": "<guid:23>",
+						"description": "hello",
+						"enterConditions": [],
+						"id": "<guid:0>",
+						"name": "Child",
+						"path": "Root/Child",
+						"selectionBehavior": "TryEnterState",
+						"tasks": [],
+						"transitions": [],
+						"type": "State"
+					},
+					{
+						"bEnabled": true,
+						"children": [],
+						"description": "",
+						"enterConditions": [],
+						"id": "<guid:3>",
+						"linkedAsset": "/<root>/ST_CharLinked.ST_CharLinked",
+						"name": "Link",
+						"path": "Root/Link",
+						"selectionBehavior": "TrySelectChildrenInOrder",
+						"tasks": [],
+						"transitions": [],
+						"type": "LinkedAsset"
+					}
+				],
+				"description": "",
+				"enterConditions": [],
+				"id": "<guid:4>",
+				"name": "Root",
+				"path": "Root",
+				"selectionBehavior": "TrySelectChildrenInOrder",
+				"tasks": [],
+				"transitions": [],
+				"type": "State"
+			},
+			{
+				"bEnabled": true,
+				"children": [],
+				"description": "",
+				"enterConditions": [],
+				"id": "<guid:2>",
+				"name": "Sub",
+				"path": "Sub",
+				"selectionBehavior": "TrySelectChildrenInOrder",
+				"tasks": [],
+				"transitions": [],
+				"type": "Subtree"
+			}
+		],
+		"success": true
+	},
+	"111_list_node_types":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"count": 1,
+		"schema":
+		{
+			"allowEnterConditions": true,
+			"allowEvaluators": true,
+			"allowGlobalParameters": true,
+			"allowMultipleTasks": true,
+			"allowTasksCompletion": true,
+			"allowUtilityConsiderations": true,
+			"contextData": [
+				{
+					"name": "ContextOwner",
+					"struct": "/Script/CoreUObject.Object"
+				}
+			],
+			"scheduledTickAllowed": false,
+			"schemaClass": "/Script/GameplayCameras.CameraDirectorStateTreeSchema"
+		},
+		"success": true,
+		"task":
+		{
+			"baseStruct": "StateTreeTaskBase",
+			"blueprintClassProperty": "TaskClass",
+			"blueprintCount": 0,
+			"blueprintNodeClasses": [],
+			"blueprintRecipe": "Add the wrapper with structType=\"StateTreeBlueprintTaskWrapper\", then statetree(set_node_class, nodeId=<the returned nodeId>, nodeClass=<classPath>). The second call is required: the wrapper reports the Blueprint class AS its instance data type, so a node added before the class is set has no instance data at all.",
+			"blueprintWrapperStruct": "StateTreeBlueprintTaskWrapper",
+			"count": 1,
+			"nodeTypes": [
+				{
+					"description": "Simple task to wait indefinitely or for a given time (in seconds) before succeeding.",
+					"displayName": "Delay Task",
+					"instanceDataIsClass": false,
+					"instanceDataType": "StateTreeDelayTaskInstanceData",
+					"instanceProperties": [
+						{
+							"class": "FloatProperty",
+							"description": "Delay before the task ends.",
+							"name": "Duration",
+							"type": "float"
+						},
+						{
+							"class": "FloatProperty",
+							"description": "Adds random range to the Duration.",
+							"name": "RandomDeviation",
+							"type": "float"
+						},
+						{
+							"class": "BoolProperty",
+							"description": "If true the task will run forever until a transition stops it.",
+							"name": "bRunForever",
+							"type": "bool"
+						}
+					],
+					"nodeProperties": [
+						{
+							"class": "BoolProperty",
+							"description": "True if the node is Enabled (i.e. not explicitly disabled in the asset).",
+							"name": "bTaskEnabled",
+							"type": "uint8"
+						},
+						{
+							"class": "BoolProperty",
+							"description": "True if the node is bound to a task completion delegate listener.",
+							"name": "bHasTaskCompletionDelegateDispatcher",
+							"type": "uint8"
+						},
+						{
+							"class": "EnumProperty",
+							"name": "TransitionHandlingPriority",
+							"type": "EStateTreeTransitionPriority"
+						},
+						{
+							"class": "BoolProperty",
+							"description": "True if the task is considered for completion.\nFalse if the task runs in the background without affecting the state completion.",
+							"name": "bConsideredForCompletion",
+							"type": "uint8"
+						},
+						{
+							"class": "BoolProperty",
+							"description": "True if the user can edit bConsideredForCompletion in the editor.",
+							"name": "bCanEditConsideredForCompletion",
+							"type": "uint8"
+						},
+						{
+							"class": "NameProperty",
+							"description": "Name of the node.",
+							"name": "Name",
+							"type": "FName"
+						},
+						{
+							"class": "StructProperty",
+							"description": "Property binding copy batch handle.",
+							"name": "BindingsBatch",
+							"type": "FStateTreeIndex16"
+						},
+						{
+							"class": "StructProperty",
+							"description": "Property output binding copy batch handle.",
+							"name": "OutputBindingsBatch",
+							"type": "FStateTreeIndex16"
+						},
+						{
+							"class": "StructProperty",
+							"description": "Index of template instance data for the node. Can point to Shared or Default instance data in StateTree depending on node type.",
+							"name": "InstanceTemplateIndex",
+							"type": "FStateTreeIndex16"
+						},
+						{
+							"class": "StructProperty",
+							"description": "Index of template execution runtime data for the node.",
+							"name": "ExecutionRuntimeTemplateIndex",
+							"type": "FStateTreeIndex16"
+						},
+						{
+							"class": "StructProperty",
+							"description": "Data handle to access the instance data.",
+							"name": "InstanceDataHandle",
+							"type": "FStateTreeDataHandle"
+						}
+					],
+					"structPath": "/Script/StateTreeModule.StateTreeDelayTask",
+					"structType": "StateTreeDelayTask"
+				}
+			]
+		},
+		"usage": "structType is what add_task, add_enter_condition, add_transition_condition, add_consideration, add_evaluator and add_global_task take. instanceProperties names the keys those actions' instanceProperties map accepts, and nodeProperties names the keys set_task_property / set_evaluator_property / set_global_task_property accept."
+	},
+	"112_list_node_types_bad":
+	{
+		"error": "Unknown nodeType 'gizmo'. Valid values: task, condition, evaluator, consideration, all (default).",
+		"success": false
+	},
+	"113_validate":
+	{
+		"assetPath": "/<root>/ST_Char.ST_Char",
+		"schemaClass": "/Script/GameplayCameras.CameraDirectorStateTreeSchema",
+		"schemaPath": "/Script/GameplayCameras.CameraDirectorStateTreeSchema",
+		"success": true,
+		"validated": true
+	},
+	"114_compile":
+	{
+		"compiled": true,
+		"errors": [],
+		"rollbackNote": "Compiling regenerates the asset's runtime data from its editor data and saves the package. There is no action that restores the previous compiled data, and recompiling produces this same result rather than the earlier one.",
+		"rollbackPossible": false,
+		"saved": true,
+		"success": true,
+		"updated": true,
+		"warnings": []
+	},
+	"115_remove_state":
+	{
+		"removed": true,
+		"rollback":
+		{
+			"method": "add_state_tree_state",
+			"payload":
+			{
+				"assetPath": "/<root>/ST_Char.ST_Char",
+				"insertIndex": 2,
+				"name": "Link",
+				"selectionBehavior": "TrySelectChildrenInOrder",
+				"stateId": "<guid:4>",
+				"stateType": "LinkedAsset"
+			}
+		},
+		"rollbackLossy": true,
+		"rollbackNote": "statetree(add_state) re-creates an EMPTY state with a NEW stateId, under the same parent and at the same name, type, selection behaviour and sibling index. Its tasks, enter conditions, transitions, utility considerations, state parameters and child states are not restored, nor is any binding or transition elsewhere that named its old id. Because the id changes, a rollback record from another step in the same flow that names this state or any state that was under it fails with \"State not found\" and leaves the chain half applied. Read the branch with statetree(read) before removing it if it has to come back whole.",
+		"success": true,
+		"updated": true
+	},
+	"116_remove_state_missing":
+	{
+		"error": "State not found",
+		"success": false
+	},
+	"117_read_state_missing":
+	{
+		"error": "State not found. Pass stateId (a GUID from statetree(list_states)) or statePath (the dot-path that action also returns).",
+		"success": false
+	},
+	"120_read_runtime_no_actor":
+	{
+		"error": "Actor 'UEMCPNoSuchActor' not found in the editor world. Searched every placed actor by editor label, then by internal object name, then by full object path (146 actors). Pass actorPath for an exact object path when a label is ambiguous or absent. List the real labels with level(get_outliner).",
+		"success": false
+	},
+	"121_send_event_no_actor":
+	{
+		"error": "Gameplay tag 'A.B' is not registered, so no StateTree transition could ever match it. Register it first with gameplay(add_gameplay_tag); a transition's eventTag has to name a real tag.",
+		"success": false
+	},
+	"122_request_transition_no_actor":
+	{
+		"error": "Actor 'UEMCPNoSuchActor' not found in the editor world. Searched every placed actor by editor label, then by internal object name, then by full object path (146 actors). Pass actorPath for an exact object path when a label is ambiguous or absent. List the real labels with level(get_outliner).",
+		"success": false
+	}
+}

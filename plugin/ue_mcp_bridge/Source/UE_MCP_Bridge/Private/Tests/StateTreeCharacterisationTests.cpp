@@ -41,10 +41,46 @@ IMPLEMENT_CUSTOM_SIMPLE_AUTOMATION_TEST(FMCPStateTreeCharacterisationTest, FMCPS
 	"UE.MCP.StateTree.Characterisation.Responses",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+namespace MCPStateTreeCharacterisation
+{
+	/**
+	 * The response with its run-to-run noise removed: a paging cursor encodes
+	 * a state GUID the normaliser cannot see inside the base64, and bindable
+	 * sources come out in GUID hash order.
+	 */
+	TSharedPtr<FJsonObject> Stable(const TSharedPtr<FJsonObject>& Result)
+	{
+		if (!Result.IsValid()) return Result;
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>(*Result);
+		FString Cursor;
+		if (Out->TryGetStringField(TEXT("nextCursor"), Cursor) && !Cursor.IsEmpty())
+		{
+			Out->SetStringField(TEXT("nextCursor"), TEXT("<cursor>"));
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Sources = nullptr;
+		if (Out->TryGetArrayField(TEXT("sources"), Sources))
+		{
+			TArray<TSharedPtr<FJsonValue>> Sorted = *Sources;
+			auto SortKey = [](const TSharedPtr<FJsonValue>& V)
+			{
+				const TSharedPtr<FJsonObject>* O = nullptr;
+				if (!V.IsValid() || !V->TryGetObject(O)) return FString();
+				return (*O)->GetStringField(TEXT("structPath")) + TEXT("|") + (*O)->GetStringField(TEXT("structType"));
+			};
+			Sorted.StableSort([&](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B) { return SortKey(A) < SortKey(B); });
+			Out->SetArrayField(TEXT("sources"), Sorted);
+		}
+		return Out;
+	}
+}
+
 bool FMCPStateTreeCharacterisationTest::RunTest(const FString& Parameters)
 {
 	using namespace MCPStateTreeCharacterisation;
 	using UEMCPStateTreeTests::Call;
+
+	// 07_missing_asset loads a path that does not exist, which the asset subsystem logs as an error.
+	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	FMCPScopedTestMount Mount(TEXT("/UEMCPStateTreeChar/"), TEXT("UEMCPStateTreeChar"));
 	const FString Tree = Mount.RootPath + TEXT("ST_Char");
@@ -63,7 +99,7 @@ bool FMCPStateTreeCharacterisationTest::RunTest(const FString& Parameters)
 	auto Step = [&](const TCHAR* Name, const TCHAR* Method, const FArgs& Args)
 	{
 		const TSharedPtr<FJsonObject> Result = Call(Registry, Method, Args.Obj);
-		Run.Add(Name, MakeShared<FJsonValueObject>(Result));
+		Run.Add(Name, MakeShared<FJsonValueObject>(Stable(Result)));
 		return Result;
 	};
 	auto At = [&]() { return FArgs().S(TEXT("assetPath"), Tree); };
