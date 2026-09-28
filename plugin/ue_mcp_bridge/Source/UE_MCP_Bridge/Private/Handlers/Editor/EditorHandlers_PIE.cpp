@@ -7,6 +7,7 @@
 #include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 
 #include "UObject/GCObjectScopeGuard.h"
 #include "HandlerFunctionCall.h"
@@ -498,13 +499,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieGetRuntimeValue(const TSharedPtr<FJso
 	FString PropertyName;
 	TSharedPtr<FJsonValue> PropertyErr = RequireString(Params, TEXT("propertyName"), PropertyName);
 
-	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("pie"));
-	int32 PIEInstance = INDEX_NONE;
-	double RawPIEInstance = 0.0;
-	if (TryGetNumberParam(Params, TEXT("pieInstance"), RawPIEInstance))
-	{
-		PIEInstance = FMath::RoundToInt(RawPIEInstance);
-	}
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::Resolve(Params, TEXT("pie"));
 
 	if (!GEditor)
 	{
@@ -527,7 +522,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieGetRuntimeValue(const TSharedPtr<FJso
 	// #778: honour pieInstance so a client world is reachable.
 	// #983: through the shared resolver, so actorPath wins over actorLabel and
 	// a duplicated label is refused rather than read off one of the copies.
-	UWorld* PIEWorld = ResolveWorldScope(WorldScope, PIEInstance);
+	if (auto Err = Live.Require(TEXT("PIE is not active. Start a PIE session first."))) return Err;
+	UWorld* PIEWorld = Live.World;
 	FMCPActorSelector PieSel;
 	PieSel.Match = EMCPActorMatch::LabelNameOrPath;
 	PieSel.WorldLabel = TEXT("PIE");
@@ -1025,13 +1021,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
 	const bool bHasPaths = TryGetArrayParam(Params, TEXT("paths"), PathsArr) && PathsArr && PathsArr->Num() > 0;
 	// #778: was GEditor->PlayWorld, which is always the primary/server world.
-	const FString WorldHint = OptionalString(Params, TEXT("world"), TEXT("auto"));
-	int32 PIEInstance = INDEX_NONE;
-	double RawPIEInstance = 0.0;
-	if (TryGetNumberParam(Params, TEXT("pieInstance"), RawPIEInstance))
-	{
-		PIEInstance = FMath::RoundToInt(RawPIEInstance);
-	}
+	const FMCPRuntimeWorld Where = FMCPRuntimeWorld::Resolve(Params, TEXT("auto"));
 
 	if (!GEditor) return MCPError(TEXT("Editor not available"));
 
@@ -1048,9 +1038,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 	}
 	if (Paths.Num() == 0) return MCPError(TEXT("'paths' must contain at least one non-empty string"));
 
-	UWorld* World = ResolveWorldScope(WorldHint, PIEInstance);
-	if (!World) World = GetEditorWorld();
-	if (!World) return MCPError(TEXT("No world available"));
+	if (auto Err = Where.Require(TEXT("No world available"))) return Err;
+	UWorld* World = Where.World;
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	int32 Matched = 0;
@@ -1155,11 +1144,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetPieTimeScale(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("'factor' must be > 0"));
 	}
 
-	UWorld* World = GetPIEWorld();
-	if (!World)
-	{
-		return MCPError(TEXT("No PIE/Game world active - start PIE first"));
-	}
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(TEXT("No PIE/Game world active - start PIE first"))) return Err;
+	UWorld* World = Live.World;
 
 	AWorldSettings* WS = World->GetWorldSettings();
 	if (!WS)
@@ -1204,6 +1191,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetPieTimeScale(const TSharedPtr<FJsonOb
 	{
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetNumberField(TEXT("factor"), PreviousFactor);
+		FMCPRuntimeWorld::Resolve(Params, TEXT("pie")).Echo(Payload);
 		MCPSetRollback(Result, TEXT("set_pie_time_scale"), Payload);
 		// The caps are not part of the inverse: this handler only ever widens
 		// them, and it takes no parameter that would narrow them back.
@@ -1241,12 +1229,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetPiePawn(const TSharedPtr<FJsonObject>
 
 	if (!GEditor) return MCPError(TEXT("Editor not available"));
 
-	FWorldContext* PieCtx = GEditor->GetPIEWorldContext();
-	UWorld* PieWorld = PieCtx ? PieCtx->World() : nullptr;
-	if (!PieWorld)
-	{
-		return MCPError(TEXT("PIE not running - start PIE before resolving the player pawn"));
-	}
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(TEXT("PIE not running - start PIE before resolving the player pawn"))) return Err;
+	UWorld* PieWorld = Live.World;
 
 	APlayerController* PC = UGameplayStatics::GetPlayerController(PieWorld, PlayerIndex);
 	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
@@ -1298,14 +1283,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObj
 	// #778: this used GEditor->GetPIEWorldContext(), which is always the
 	// primary (server) context, so 'pieInstance' could never reach it and a
 	// client world was unaddressable. Route through the shared resolver.
-	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor")).ToLower();
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World)
+	const FMCPRuntimeWorld Where = FMCPRuntimeWorld::Resolve(Params, TEXT("editor"));
+	if (auto Err = Where.Require(Where.Scope.Equals(TEXT("editor"), ESearchCase::IgnoreCase)
+			? TEXT("No editor world available")
+			: TEXT("PIE not running - cannot invoke against PIE world. See editor(list_pie_instances).")))
 	{
-		return MCPError(WorldScope == TEXT("pie")
-			? TEXT("PIE not running (or no such pieInstance) - cannot invoke against PIE world. See editor(list_pie_instances).")
-			: TEXT("No editor world available"));
+		return Err;
 	}
+	UWorld* World = Where.World;
 
 	// Describe the world that was actually resolved, not the requested scope:
 	// world="auto" resolves to PIE when a session is running.
@@ -1629,14 +1614,15 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 	// to the editor world, which has no GameInstance: a server-authoritative
 	// entry point implemented as a static that looks a UGameInstanceSubsystem up
 	// off its world context could not be exercised in PIE at all.
-	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor")).ToLower();
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
-	if (!World)
+	const FMCPRuntimeWorld Where = FMCPRuntimeWorld::Resolve(Params, TEXT("editor"));
+	if (auto Err = Where.Require(Where.Scope.Equals(TEXT("editor"), ESearchCase::IgnoreCase)
+			? TEXT("No editor world available")
+			: TEXT("PIE not running - cannot invoke against a PIE world. See editor(list_pie_instances).")))
 	{
-		return MCPError(WorldScope == TEXT("pie") || WorldScope == TEXT("game")
-			? TEXT("PIE not running (or no such pieInstance) - cannot invoke against a PIE world. See editor(list_pie_instances).")
-			: TEXT("No editor world available"));
+		return Err;
 	}
+	UWorld* World = Where.World;
+
 	// Describe the world that was actually resolved, not the requested scope:
 	// world="auto" resolves to PIE when a session is running.
 	const FString WorldLabel = World->IsPlayInEditor() ? TEXT("PIE") : TEXT("editor");
@@ -1980,9 +1966,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 // capture frames the intended direction without manual mouse-look.
 TSharedPtr<FJsonValue> FEditorHandlers::PieSetPlayerView(const TSharedPtr<FJsonObject>& Params)
 {
-	FWorldContext* PieCtx = GEditor ? GEditor->GetPIEWorldContext() : nullptr;
-	UWorld* World = PieCtx ? PieCtx->World() : nullptr;
-	if (!World) return MCPError(TEXT("PIE not running"));
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(TEXT("PIE not running"))) return Err;
+	UWorld* World = Live.World;
 	APlayerController* PC = World->GetFirstPlayerController();
 	if (!PC) return MCPError(TEXT("No PIE player controller"));
 
@@ -2006,6 +1992,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieSetPlayerView(const TSharedPtr<FJsonO
 	Payload->SetNumberField(TEXT("pitch"), PreviousRot.Pitch);
 	Payload->SetNumberField(TEXT("yaw"), PreviousRot.Yaw);
 	Payload->SetNumberField(TEXT("roll"), PreviousRot.Roll);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("pie")).Echo(Payload);
 	MCPSetRollback(Result, TEXT("pie_set_player_view"), Payload);
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
@@ -2017,9 +2004,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieSetPlayerView(const TSharedPtr<FJsonO
 // game viewport) so injected/simulated input reaches the pawn.
 TSharedPtr<FJsonValue> FEditorHandlers::StageGameInput(const TSharedPtr<FJsonObject>& Params)
 {
-	FWorldContext* PieCtx = GEditor ? GEditor->GetPIEWorldContext() : nullptr;
-	UWorld* World = PieCtx ? PieCtx->World() : nullptr;
-	if (!World) return MCPError(TEXT("PIE not running"));
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(TEXT("PIE not running"))) return Err;
+	UWorld* World = Live.World;
+
 	APlayerController* PC = World->GetFirstPlayerController();
 	if (!PC) return MCPError(TEXT("No PIE player controller"));
 

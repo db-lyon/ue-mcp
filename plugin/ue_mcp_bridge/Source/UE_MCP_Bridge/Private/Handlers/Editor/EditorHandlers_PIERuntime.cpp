@@ -13,6 +13,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "HandlerPagination.h"
 #include "HandlerFunctionCall.h"
 #include "HandlerJsonProperty.h"
@@ -394,7 +395,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeObjectFunction(const TSharedPtr<FJ
 	TSharedPtr<FJsonObject> ArgsMap;
 	if (auto Err = MCPReadFunctionArgs(Params, TEXT("args"), ArgsMap)) return Err;
 
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 
 	FString Description, Error;
 	UObject* Target = ResolveRuntimeObject(Params, World, Description, Error);
@@ -485,7 +486,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeObjectFunctions(const TSharedPtr<F
 		}
 	}
 
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 	FGCObjectScopeGuard WorldGuard(World);
 	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> Results;
@@ -603,7 +604,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetObjectProperties(const TSharedPtr<FJs
 	const int32 MaxProperties = FMath::Clamp(OptionalInt(Params, TEXT("limit"), 200), 1, 5000);
 	const int32 MaxValueChars = FMath::Clamp(OptionalInt(Params, TEXT("maxValueLength"), 2000), 64, 100000);
 
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 
 	FString Description, Error;
 	UObject* Target = ResolveRuntimeObject(Params, World, Description, Error);
@@ -717,7 +718,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetObjectProperties(const TSharedPtr<FJs
 TSharedPtr<FJsonValue> FEditorHandlers::ReadBoneTransforms(const TSharedPtr<FJsonObject>& Params)
 {
 	// Every parameter is read before anything can fail (#1057).
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 	HasParam(Params, TEXT("actorLabel"));
 	HasParam(Params, TEXT("actorPath"));
 	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
@@ -960,7 +961,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ReadBoneTransforms(const TSharedPtr<FJso
 TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJsonObject>& Params)
 {
 	// Every parameter is read before anything can fail (#1057).
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("pie"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("pie")).World;
 	HasParam(Params, TEXT("actorLabel"));
 	HasParam(Params, TEXT("actorPath"));
 	const bool bHasLocation = HasParam(Params, TEXT("location"));
@@ -1087,7 +1088,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonObject>& Params)
 {
 	// Every parameter is read before anything can fail (#1057).
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("pie"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("pie")).World;
 	HasParam(Params, TEXT("actorLabel"));
 	HasParam(Params, TEXT("actorPath"));
 	const FString ModeStr = OptionalString(Params, TEXT("mode"));
@@ -1364,7 +1365,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::FindLiveObjects(const TSharedPtr<FJsonOb
 	const bool bScopeToWorld = !WorldScope.Equals(TEXT("any"), ESearchCase::IgnoreCase);
 	if (bScopeToWorld)
 	{
-		ScopeWorld = ResolveWorldFromParams(Params, TEXT("editor"));
+		ScopeWorld = FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).World;
 		if (!ScopeWorld)
 		{
 			return MCPError(FString::Printf(TEXT("No world for scope '%s'. Use world=any to search every world."), *WorldScope));
@@ -1509,7 +1510,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	if (PropertyErr) return PropertyErr;
 	if (!NewValue.IsValid()) return MCPError(TEXT("Missing 'value' parameter"));
 
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 
 	FString Description, Error;
 	UObject* Target = ResolveRuntimeObject(Params, World, Description, Error);
@@ -1658,6 +1659,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		Payload->SetStringField(TEXT("propertyName"), ResolvedName);
 		Payload->SetField(TEXT("value"), PreviousStructured);
 		Payload->SetBoolField(TEXT("postEditChange"), bPostEditChange);
+		FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(Payload);
 		MCPSetRollback(Result, TEXT("set_object_property"), Payload);
 		Result->SetBoolField(TEXT("rollbackLossy"), !bRollbackRoundTrips);
 		Result->SetStringField(TEXT("rollbackNote"), bRollbackRoundTrips

@@ -1,6 +1,7 @@
 #include "EditorHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "HandlerFunctionCall.h"
 #include "HandlerCommitSave.h"
 #include "HandlerPagination.h"
@@ -751,6 +752,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #126: fast-forward PIE game time
 	Registry.RegisterHandler(TEXT("set_pie_time_scale"), &SetPieTimeScale, {
 		MCPParam::Required(TEXT("factor"), EType::Number, TEXT("Time-scale factor, greater than 0 (e.g. 500)")),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("pie (default) | game | auto")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world instance; omit for the first running one")),
 	});
 	Registry.RegisterHandler(TEXT("capture_scene_png"), &CaptureScenePng, {
 		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png")).Alias(TEXT("filename")),
@@ -772,6 +775,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("toggles realtime on every level viewport")));
 	Registry.RegisterHandler(TEXT("get_pie_pawn"), &GetPiePawn, {
 		MCPParam::Optional(TEXT("playerIndex"), EType::Number, TEXT("0-based player index (default 0)")),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("pie (default) | game | auto")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world instance; omit for the first running one")),
 	});
 	Registry.RegisterHandler(TEXT("invoke_function"), &InvokeFunction, {
 		MCPParam::Required(TEXT("functionName"), EType::String, TEXT("BlueprintCallable or Exec UFUNCTION on the actor, or on component")),
@@ -806,11 +811,16 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("pitch"), EType::Number, TEXT("Control-rotation pitch")),
 		MCPParam::Optional(TEXT("yaw"), EType::Number, TEXT("Control-rotation yaw")),
 		MCPParam::Optional(TEXT("roll"), EType::Number, TEXT("Control-rotation roll")),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("pie (default) | game | auto")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world instance; omit for the first running one")),
 	}, MCPSpec::ContractExempt(TEXT("rotates the running PIE player's view")));
 	Registry.RegisterHandler(TEXT("stage_game_input"), &StageGameInput, {
 		MCPParam::Optional(TEXT("inputMode"), EType::String, TEXT("gameOnly (default) | gameAndUI | uiOnly")),
 		MCPParam::Optional(TEXT("showMouseCursor"), EType::Boolean, TEXT("Show the mouse cursor (default false for gameOnly, true otherwise)")),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("pie (default) | game | auto")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world instance; omit for the first running one")),
 	}, MCPSpec::ContractExempt(TEXT("sets the running PIE player's input mode")));
+
 	// #455: discover UBlueprintFunctionLibrary classes (GeometryScript,
 	// Kismet, anything user-defined). Pair with editor.invoke_function to
 	// drive GeometryScript ops from MCP without hand-writing each handler.
@@ -4108,7 +4118,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	// #599: allow capturing the PIE world (not just the editor world) so a
 	// framed shot reflects the running game.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
 
 	// #966: both capture actions take both names. filename reaches this one
