@@ -476,7 +476,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	// #696: enable + force-build Nanite on a static mesh.
 	Registry.RegisterHandler(TEXT("set_nanite_settings"), &SetNaniteSettings, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Alias(TEXT("meshPath")),
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")).Alias(TEXT("meshPath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("enabled"), EType::Boolean, TEXT("Enable Nanite (default true)")),
 		MCPParam::Optional(TEXT("positionPrecision"), EType::Integer, TEXT("Nanite position precision")),
 	});
@@ -536,7 +536,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #637: export a selected actor's mesh to FBX + metadata sidecar.
 	Registry.RegisterHandler(TEXT("export_actor_fbx"), &ExportActorFbx, {
 		SpecActorLabel, SpecActorPath,
-		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("Output .fbx path")).Alias(TEXT("filePath")),
+		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("Output .fbx path")).Alias(TEXT("filePath")).Role(EMCPParamRole::OutputPath),
 	});
 	Registry.RegisterHandler(TEXT("snap_actor_to_floor"), &SnapActorToFloor, {
 		SpecActorLabel, SpecActorPath,

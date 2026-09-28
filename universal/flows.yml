@@ -195,3 +195,238 @@ flows:
     steps:
       1:
         task: demo.cleanup
+
+  # Building blocks: commit one asset. Each takes params.assetPath, compiles,
+  # and saves only when the compile passed, since a failed step stops the flow.
+  commit_blueprint:
+    description: >-
+      Compile a Blueprint and save it. The save runs only when the compile
+      passed. Params: assetPath.
+    steps:
+      1:
+        task: blueprint.compile
+        options:
+          assetPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+
+  commit_widget:
+    description: >-
+      Compile a Widget Blueprint and save it. The save runs only when the
+      compile passed. Params: assetPath.
+    steps:
+      1:
+        task: blueprint.compile
+        options:
+          assetPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+
+  commit_niagara:
+    description: >-
+      Compile a Niagara system, wait for the compile it asked for, and save
+      it. The save runs only when the compile passed. Params: assetPath (the
+      system).
+    steps:
+      1:
+        task: niagara.compile
+        options:
+          systemPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+
+  commit_statetree:
+    description: >-
+      Compile a StateTree and save it. The save runs only when the compile
+      passed. Params: assetPath.
+    steps:
+      1:
+        task: statetree.compile
+        options:
+          assetPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+
+  commit_material:
+    description: >-
+      Recompile a material and save it. The save runs only when the
+      recompile passed. Params: assetPath.
+    steps:
+      1:
+        task: material.recompile
+        options:
+          assetPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+
+  # Save everything, then prove it: a package still dirty fails the flow.
+  save_and_verify_clean:
+    description: >-
+      Save every dirty content and map package, then fail if any package is
+      still dirty, reading the world state fresh after the save.
+    steps:
+      1:
+        task: editor.save_dirty
+      2:
+        task: editor.list_dirty_packages
+        checks:
+          - when: probe.dirty > 0
+            action: error
+            message: >-
+              Packages are still dirty after the save. Step 1 reports each
+              package and why it did not save.
+
+  # Lifecycle.
+  editor_up:
+    description: >-
+      Start the project's editor unless one is already connected, then report
+      its status.
+    steps:
+      1:
+        task: editor.start_editor
+        when: "!probe.connected"
+      2:
+        task: project.get_status
+
+  clean_restart:
+    description: >-
+      Restart the editor from a clean state: refuses while any package is
+      unsaved (run save_and_verify_clean first), then stops the editor if one
+      is running, starts it, and reports its status.
+    checks:
+      - when: probe.connected && probe.dirty > 0
+        action: error
+        message: >-
+          Packages are unsaved, and closing the editor would prompt for or
+          lose them. Run the save_and_verify_clean flow first.
+    steps:
+      1:
+        task: editor.stop_editor
+        when: probe.connected
+      2:
+        task: editor.start_editor
+      3:
+        task: project.get_status
+
+  cpp_iterate:
+    description: >-
+      Rebuild the project's C++ and bring the editor back on it. Live Coding
+      by default. With params.full true: stop the editor, run a full build,
+      and start it again. Ends by checking for a crash.
+    steps:
+      1:
+        task: project.live_coding_compile
+        when: "!params.full"
+        options:
+          wait: true
+      2:
+        task: editor.stop_editor
+        when: params.full && probe.connected
+      3:
+        task: project.build
+        when: params.full
+      4:
+        task: editor.start_editor
+        when: params.full
+      5:
+        task: editor.check_for_crashes
+
+  # QA.
+  qa_gate:
+    description: >-
+      Checks before calling work done: no new crash, the content under
+      params.directory passes data validation, and nothing is left unsaved.
+      Params: directory (for example /Game/Characters).
+    steps:
+      1:
+        task: editor.check_for_crashes
+      2:
+        task: editor.validate_assets
+        options:
+          directory: ${params.directory}
+      3:
+        task: editor.list_dirty_packages
+        checks:
+          - when: probe.dirty > 0
+            action: error
+            message: >-
+              Packages are unsaved. Save them (the save_and_verify_clean flow)
+              before calling the work done.
+
+  playtest_smoke:
+    description: >-
+      Start PIE, wait until a pawn is controlled, check for a crash, and stop
+      PIE whether or not those passed. Refuses to start over a session that
+      is already running.
+    checks:
+      - when: probe.playing
+        action: error
+        message: >-
+          A PIE or SIE session is already running. Stop it with
+          editor(play_in_editor, pieAction=stop) first.
+    steps:
+      1:
+        task: editor.play_in_editor
+        options:
+          pieAction: start
+      # PIE begins on a later editor tick; poll until the pawn is there.
+      2:
+        task: editor.get_pie_pawn
+        retries: 30
+        retryDelay: 1000
+      3:
+        task: editor.check_for_crashes
+    finally:
+      - task: editor.play_in_editor
+        ignore_failure: true
+        options:
+          pieAction: stop
+
+  # The sandbox pattern: scratch folder and level, run, clean up. The work is
+  # sandbox_body, a flow of its own so a project replaces its steps.
+  sandbox:
+    description: >-
+      Run sandbox_body inside a scratch content folder and level, then load
+      the level you started on and delete the folder, whether or not the
+      body passed. Override sandbox_body's steps in ue-mcp.yml to put your
+      own work there. Params: folder (the scratch folder, for example
+      /Game/Sandbox).
+    steps:
+      1:
+        task: level.get_current
+      2:
+        task: asset.create_folder
+        options:
+          path: ${params.folder}
+      3:
+        task: level.create
+        options:
+          levelPath: ${params.folder}/L_Sandbox
+      4:
+        flow: sandbox_body
+    finally:
+      - task: level.load
+        options:
+          levelPath: ${steps.1.mapPackagePath}
+      - task: asset.delete_folder
+        options:
+          path: ${params.folder}
+          force: true
+
+  sandbox_body:
+    description: >-
+      The work the sandbox flow runs inside its scratch level. Ships as one
+      read of the current level; a project replaces these steps.
+    steps:
+      1:
+        task: level.get_current

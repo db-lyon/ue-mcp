@@ -53,8 +53,15 @@ export async function refuseIfBlocked(
  * it: an agent that answers the dialog does not then have to tell the server
  * it did.
  */
-export function observeReply<T>(session: EditorSession | undefined, method: string, result: T): T {
+export function observeReply<T>(
+  session: EditorSession | undefined,
+  method: string,
+  result: T,
+  params?: Record<string, unknown>,
+): T {
   if (session) existingGuard(session)?.observe(method, result);
+  // The same reply is the event that moves the editor's facts.
+  session?.facts?.observe(method, params);
   return result;
 }
 
@@ -112,7 +119,7 @@ export class DialogGatedBridge extends ForwardingBridge {
   ): Promise<unknown> {
     const blocked = await refuseIfBlocked(this.session, method);
     if (blocked) return blocked;
-    return observeReply(this.session, method, await this.inner.call(method, params, timeoutMs));
+    return observeReply(this.session, method, await this.inner.call(method, params, timeoutMs), params);
   }
 }
 
@@ -133,8 +140,8 @@ export class GuardedBridge extends ForwardingBridge {
   }
 
   /** Feed the reply back to the guard, which decides what it proves. */
-  private observe<T>(method: string, result: T): T {
-    return observeReply(this.session, method, result);
+  private observe<T>(method: string, result: T, params?: Record<string, unknown>): T {
+    return observeReply(this.session, method, result, params);
   }
 
   async call(
@@ -149,7 +156,7 @@ export class GuardedBridge extends ForwardingBridge {
       if (this.registry.size === 0) {
         const blocked = await this.guardCall(method);
         if (blocked) return blocked;
-        return this.observe(method, await this.inner.call(method, params, timeoutMs));
+        return this.observe(method, await this.inner.call(method, params, timeoutMs), params);
       }
 
       const ctx = makeCallContext(
@@ -165,6 +172,7 @@ export class GuardedBridge extends ForwardingBridge {
       return this.observe(
         method,
         await runGuarded(ctx, this.registry, () => this.inner.call(method, params, timeoutMs)),
+        params,
       );
     } catch (e) {
       // Every route into the editor comes through here (an MCP tool call, a

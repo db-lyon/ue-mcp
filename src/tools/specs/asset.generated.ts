@@ -18,7 +18,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "CurveTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rowName",
@@ -62,7 +63,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "CurveTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rowName",
@@ -97,7 +99,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "DataTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rowName",
@@ -127,7 +130,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "EdGraph-backed asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -180,7 +184,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StaticMesh, SkeletalMesh or Skeleton asset path"
+        "description": "StaticMesh, SkeletalMesh or Skeleton asset path",
+        "role": "editTarget"
       },
       {
         "name": "socketName",
@@ -230,7 +235,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Asset path; a Blueprint path writes its generated-class CDO",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "propertyName",
@@ -410,7 +416,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh to read",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "fillMethod",
@@ -446,7 +453,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputPath",
         "type": "string",
         "required": false,
-        "description": "Asset to write (default '<assetPath>_Filled')"
+        "description": "Asset to write (default '<assetPath>_Filled')",
+        "role": "editTarget"
       },
       {
         "name": "inPlace",
@@ -458,7 +466,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "backupPath",
         "type": "string",
         "required": false,
-        "description": "Copy the source here before an inPlace edit, the only way back to the original geometry"
+        "description": "Copy the source here before an inPlace edit, the only way back to the original geometry",
+        "role": "editTarget"
       },
       {
         "name": "lodType",
@@ -539,7 +548,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh to read",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "axis",
@@ -581,7 +591,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputPath",
         "type": "string",
         "required": false,
-        "description": "Asset to write (default '<assetPath>_Mirrored')"
+        "description": "Asset to write (default '<assetPath>_Mirrored')",
+        "role": "editTarget"
       },
       {
         "name": "inPlace",
@@ -593,7 +604,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "backupPath",
         "type": "string",
         "required": false,
-        "description": "Copy the source here before an inPlace edit, the only way back to the original geometry"
+        "description": "Copy the source here before an inPlace edit, the only way back to the original geometry",
+        "role": "editTarget"
       },
       {
         "name": "lodType",
@@ -674,7 +686,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh to read",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "remeshMode",
@@ -746,7 +759,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputPath",
         "type": "string",
         "required": false,
-        "description": "Asset to write (default '<assetPath>_Remeshed')"
+        "description": "Asset to write (default '<assetPath>_Remeshed')",
+        "role": "editTarget"
       },
       {
         "name": "inPlace",
@@ -758,7 +772,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "backupPath",
         "type": "string",
         "required": false,
-        "description": "Copy the source here before an inPlace edit, the only way back to the original geometry"
+        "description": "Copy the source here before an inPlace edit, the only way back to the original geometry",
+        "role": "editTarget"
       },
       {
         "name": "lodType",
@@ -839,7 +854,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh to read",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "simplifyMode",
@@ -905,7 +921,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputPath",
         "type": "string",
         "required": false,
-        "description": "Asset to write (default '<assetPath>_Simplified')"
+        "description": "Asset to write (default '<assetPath>_Simplified')",
+        "role": "editTarget"
       },
       {
         "name": "inPlace",
@@ -917,7 +934,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "backupPath",
         "type": "string",
         "required": false,
-        "description": "Copy the source here before an inPlace edit, the only way back to the original geometry"
+        "description": "Copy the source here before an inPlace edit, the only way back to the original geometry",
+        "role": "editTarget"
       },
       {
         "name": "lodType",
@@ -1127,7 +1145,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SkeletalMesh asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "lodIndex",
@@ -1311,7 +1330,13 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "Rename descriptors: {sourcePath, destinationPath}, {assetPath, newName} or {sourcePath, newPackagePath, newName}",
-        "items": "object"
+        "items": "object",
+        "role": "editTarget",
+        "roleKeys": [
+          "sourcePath",
+          "destinationPath",
+          "assetPath"
+        ]
       }
     ]
   },
@@ -1323,14 +1348,19 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": false,
         "description": "{assetPath, properties} snapshots to write back",
-        "items": "object"
+        "items": "object",
+        "role": "editTarget",
+        "roleKeys": [
+          "assetPath"
+        ]
       },
       {
         "name": "createdAssetPaths",
         "type": "array",
         "required": false,
         "description": "Assets the upsert created, to delete",
-        "items": "string"
+        "items": "string",
+        "role": "editTarget"
       },
       {
         "name": "save",
@@ -1351,7 +1381,11 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Asset updates: [{assetPath, properties}], max 500",
         "items": "object",
         "minItems": 1,
-        "maxItems": 500
+        "maxItems": 500,
+        "role": "editTarget",
+        "roleKeys": [
+          "assetPath"
+        ]
       },
       {
         "name": "save",
@@ -1477,7 +1511,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "CustomizableObject asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "optimizationLevel",
@@ -1503,7 +1538,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "EdGraph-backed asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -1764,7 +1800,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": false,
-        "description": "Object path of the new pipeline"
+        "description": "Object path of the new pipeline",
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -1916,7 +1953,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Asset that owns the new subobject",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "className",
@@ -2042,7 +2080,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Asset to delete",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "force",
@@ -2063,7 +2102,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "paths"
         ],
-        "items": "string"
+        "items": "string",
+        "role": "editTarget"
       },
       {
         "name": "force",
@@ -2150,7 +2190,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "EdGraph-backed asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -2227,7 +2268,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "destinationPath",
         "type": "string",
         "required": true,
-        "description": "Object path of the copy"
+        "description": "Object path of the copy",
+        "role": "editTarget"
       },
       {
         "name": "onConflict",
@@ -2247,7 +2289,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "UserDefinedEnum asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "op",
@@ -2285,7 +2328,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "UserDefinedStruct asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "op",
@@ -2335,7 +2379,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputPath",
         "type": "string",
         "required": true,
-        "description": "File to write; a relative path resolves against the project directory"
+        "description": "File to write; a relative path resolves against the project directory",
+        "role": "outputPath"
       }
     ]
   },
@@ -2358,7 +2403,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "PNG file to write; a relative path resolves against the project directory",
         "aliases": [
           "filePath"
-        ]
+        ],
+        "role": "outputPath"
       }
     ]
   },
@@ -2391,7 +2437,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputPath",
         "type": "string",
         "required": false,
-        "description": "PNG to write (default under Saved/UVLayouts)"
+        "description": "PNG to write (default under Saved/UVLayouts)",
+        "role": "outputPath"
       },
       {
         "name": "imageSize",
@@ -2429,7 +2476,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "DataTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rows",
@@ -2459,7 +2507,8 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": false,
         "description": "The exact assets to act on, the safest way to drive it",
-        "items": "string"
+        "items": "string",
+        "role": "editTarget"
       },
       {
         "name": "directory",
@@ -2592,7 +2641,8 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "Redirector packages, or the folders holding them",
-        "items": "string"
+        "items": "string",
+        "role": "editTarget"
       },
       {
         "name": "dryRun",
@@ -2624,7 +2674,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Asset to reload from disk",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "discardUnsaved",
@@ -2644,7 +2695,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "lodIndex",
@@ -2725,7 +2777,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh whose collision to build or clear",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "op",
@@ -3189,7 +3242,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "CurveTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "jsonString",
@@ -3435,7 +3489,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StringTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "filePath",
@@ -3459,7 +3514,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StringTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "csvPath",
@@ -3826,7 +3882,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "targetPath",
         "type": "string",
         "required": true,
-        "description": "StaticMesh being cut; the result inherits its transform, materials, collision and Nanite setting"
+        "description": "StaticMesh being cut; the result inherits its transform, materials, collision and Nanite setting",
+        "role": "editTarget"
       },
       {
         "name": "toolPath",
@@ -3838,7 +3895,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "outputPath",
         "type": "string",
         "required": false,
-        "description": "Asset to write (default '<targetPath>_<Operation>')"
+        "description": "Asset to write (default '<targetPath>_<Operation>')",
+        "role": "editTarget"
       },
       {
         "name": "inPlace",
@@ -4059,19 +4117,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "sourcePath",
         "type": "string",
         "required": false,
-        "description": "Asset to rename, together with destinationPath"
+        "description": "Asset to rename, together with destinationPath",
+        "role": "editTarget"
       },
       {
         "name": "destinationPath",
         "type": "string",
         "required": false,
-        "description": "New object path, together with sourcePath"
+        "description": "New object path, together with sourcePath",
+        "role": "editTarget"
       },
       {
         "name": "assetPath",
         "type": "string",
         "required": false,
-        "description": "Asset to rename in its own folder, together with newName"
+        "description": "Asset to rename in its own folder, together with newName",
+        "role": "editTarget"
       },
       {
         "name": "newName",
@@ -4412,14 +4473,16 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh to recenter",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "assetPaths",
         "type": "array",
         "required": false,
         "description": "StaticMeshes to recenter together; the first sets the reference pivot",
-        "items": "string"
+        "items": "string",
+        "role": "editTarget"
       }
     ],
     "choices": [
@@ -4446,7 +4509,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Imported asset to rebuild from its source file",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "filePath",
@@ -4469,7 +4533,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "DataTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "jsonPath",
@@ -4506,7 +4571,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Asset whose package to reload",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       }
     ]
   },
@@ -4520,7 +4586,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "CurveTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rowName",
@@ -4540,7 +4607,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "DataTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rowName",
@@ -4560,7 +4628,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "EdGraph-backed asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -4589,7 +4658,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StaticMesh, SkeletalMesh or Skeleton asset path"
+        "description": "StaticMesh, SkeletalMesh or Skeleton asset path",
+        "role": "editTarget"
       },
       {
         "name": "socketName",
@@ -4609,7 +4679,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StringTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "key",
@@ -4626,19 +4697,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "sourcePath",
         "type": "string",
         "required": false,
-        "description": "Asset to rename, together with destinationPath"
+        "description": "Asset to rename, together with destinationPath",
+        "role": "editTarget"
       },
       {
         "name": "destinationPath",
         "type": "string",
         "required": false,
-        "description": "New object path, together with sourcePath"
+        "description": "New object path, together with sourcePath",
+        "role": "editTarget"
       },
       {
         "name": "assetPath",
         "type": "string",
         "required": false,
-        "description": "Asset to rename in its own folder, together with newName"
+        "description": "Asset to rename in its own folder, together with newName",
+        "role": "editTarget"
       },
       {
         "name": "newName",
@@ -4664,7 +4738,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "CurveTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "oldName",
@@ -4693,7 +4768,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "DataTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "oldName",
@@ -4722,7 +4798,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "UserDefinedStruct asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "fieldName",
@@ -4784,7 +4861,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Asset to save; omit to save every dirty asset under /Game",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "force",
@@ -4874,7 +4952,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Asset path; a Blueprint path writes its generated-class CDO",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "propertyName",
@@ -4906,7 +4985,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SkeletalMesh asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "properties",
@@ -4938,7 +5018,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "CurveTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rowName",
@@ -4965,7 +5046,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "DataTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rowName",
@@ -4997,7 +5079,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "DataTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rowName",
@@ -5027,7 +5110,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "materialPath",
@@ -5081,7 +5165,11 @@ export const handlerSpecs: HandlerSpecs = {
           }
         ],
         "minItems": 1,
-        "maxItems": 500
+        "maxItems": 500,
+        "role": "editTarget",
+        "roleKeys": [
+          "assetPath"
+        ]
       },
       {
         "name": "save",
@@ -5110,7 +5198,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StaticMesh asset path"
+        "description": "StaticMesh asset path",
+        "role": "editTarget"
       },
       {
         "name": "bHasNavigationData",
@@ -5136,7 +5225,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SkeletalMesh asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "slots",
@@ -5154,7 +5244,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "SkeletalMesh asset path"
+        "description": "SkeletalMesh asset path",
+        "role": "editTarget"
       },
       {
         "name": "enabled",
@@ -5184,7 +5275,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "SkeletalMesh asset path"
+        "description": "SkeletalMesh asset path",
+        "role": "editTarget"
       },
       {
         "name": "edits",
@@ -5242,7 +5334,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StaticMesh or SkeletalMesh asset path"
+        "description": "StaticMesh or SkeletalMesh asset path",
+        "role": "editTarget"
       },
       {
         "name": "socketName",
@@ -5280,7 +5373,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StringTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "key",
@@ -5312,7 +5406,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Texture2D asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "settings",
@@ -5367,7 +5462,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh or SkeletalMesh asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "lodIndex",
@@ -5436,7 +5532,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh or SkeletalMesh asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "lodIndex",
@@ -5523,7 +5620,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SkeletalMesh asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "lodIndex",
@@ -5557,7 +5655,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "StaticMesh or SkeletalMesh asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "lodIndex",
@@ -5656,7 +5755,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "DataTable asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rowName",

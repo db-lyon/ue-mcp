@@ -1,8 +1,6 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { loadConfig, deepMerge, type LoadedConfig } from "@db-lyon/flowkit";
+import { deepMerge, type LoadedConfig } from "@db-lyon/flowkit";
 import { FlowConfigSchema, type FlowConfig } from "./schema.js";
-import { readGlobalConfigDoc, selectedOverlay } from "../config/ue-mcp-config.js";
+import { ProjectConfig } from "../config/project-config.js";
 import type { ToolDef } from "../core/types.js";
 import { actionTaskEntry, universalFlows, universalTask } from "./universal.js";
 
@@ -40,16 +38,14 @@ export interface PluginContribution {
 }
 
 /**
- * Load ue-mcp.yml from the given directory, layered on top of built-in defaults.
+ * Load the flow config for a directory, layered on top of built-in defaults.
  * Returns the merged config even if no project ue-mcp.yml exists.
  *
  * Layer order (lowest precedence first):
  *   universal layer (universal/ue-mcp.universal.yml)
  *   plugin contributions
- *   ~/.ue-mcp/config.yml (warn and ignore on read/parse errors)
- *   ue-mcp.yml
- *   ue-mcp.{env}.yml
- *   ue-mcp.local.yml
+ *   the project's cascade (config/project-config.ts): user-global, ue-mcp.yml,
+ *   the selected overlay, ue-mcp.local.yml
  *
  * onGlobalConfigError lets a live reader preserve an earlier valid snapshot;
  * the default warns and ignores the optional user-global file.
@@ -61,8 +57,7 @@ export function loadFlowConfig(
   onGlobalConfigError?: (file: string, error: unknown) => void,
 ): LoadedConfig<FlowConfig> {
   const dir = configDir ?? process.cwd();
-  const configPath = path.join(dir, "ue-mcp.yml");
-  let defaults = buildDefaults(tools);
+  const defaults = buildDefaults(tools);
 
   if (pluginContribution) {
     const baseTasks = (defaults.tasks ?? {}) as Record<string, unknown>;
@@ -71,24 +66,6 @@ export function loadFlowConfig(
     defaults.flows = { ...baseFlows, ...(pluginContribution.flows ?? {}) };
   }
 
-  // User-global layer (~/.ue-mcp/config.yml): sits above built-in defaults and
-  // below the project file. Folding it into `defaults` gives flowkit's loader
-  // the right precedence for free - global < project < {env} < local.
-  const globalDoc = readGlobalConfigDoc(onGlobalConfigError);
-  if (Object.keys(globalDoc).length > 0) {
-    defaults = deepMerge(defaults, globalDoc) as Record<string, unknown>;
-  }
-
-  if (!fs.existsSync(configPath)) {
-    return { config: FlowConfigSchema.parse(defaults), configDir: dir };
-  }
-
-  return loadConfig({
-    filename: "ue-mcp.yml",
-    schema: FlowConfigSchema,
-    defaults,
-    // The same overlay the `ue-mcp:` block merges, `env:` included.
-    env: selectedOverlay(dir),
-    configDir: dir,
-  });
+  const layered = ProjectConfig.for(dir).flowDoc(onGlobalConfigError);
+  return { config: FlowConfigSchema.parse(deepMerge(defaults, layered)), configDir: dir };
 }

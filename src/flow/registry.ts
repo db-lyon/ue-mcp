@@ -7,6 +7,7 @@ import type {
   TaskContextInput,
   TaskDefinition,
   TaskDescription,
+  TaskResult,
 } from "@db-lyon/flowkit";
 import type { ToolDef } from "../core/types.js";
 import type { FlowContext } from "./context.js";
@@ -20,6 +21,8 @@ import { paramMapperOf } from "../surface/epic-input.js";
 import { builtinClassPath, LIVE_REFERENCES_KEY, resolveConfiguredTask } from "./task-call.js";
 import { actionOptionSpecs } from "../surface/option-specs.js";
 import { internalTasks } from "./internal-tasks.js";
+import { isContextCommand } from "../runtime/context-commands.js";
+import { UeMcpTask } from "../task.js";
 import { RECORDED_HANDLER_SPECS } from "../tools/specs/index.js";
 import type { ParamSpec } from "../surface/handler-spec.js";
 
@@ -102,6 +105,24 @@ class MicroTaskRegistry extends DescribedTaskRegistry {
   }
 }
 
+/** A task that refuses to run a context command, saying what to do instead. */
+function contextCommandRefusal(taskName: string): TaskConstructor {
+  class ContextCommandRefusal extends UeMcpTask {
+    get taskName() { return taskName; }
+    async execute(): Promise<TaskResult> {
+      return {
+        success: false,
+        error: new McpError(
+          ErrorCode.INVALID_PARAMS,
+          `${taskName} changes which editor calls run in, so it is not a task and a flow cannot call it. `
+            + "Call it directly, before or after the flow.",
+        ),
+      };
+    }
+  }
+  return ContextCommandRefusal as unknown as TaskConstructor;
+}
+
 /**
  * Walk all category tools and register every action as a flowkit task.
  *
@@ -143,6 +164,13 @@ export function buildFlowRegistry(tools: ToolDef[]): DescribedTaskRegistry {
   for (const tool of tools) {
     for (const [actionName, spec] of Object.entries(tool.actions)) {
       const taskName = `${tool.name}.${actionName}`;
+      // Context commands are dispatched by the runtime, never as tasks, so no
+      // flow can re-point the editor it runs in.
+      // The alias the defaults point at answers with why, instead of a failed lookup.
+      if (isContextCommand(taskName)) {
+        registry.registerClassPath(builtinClassPath(taskName), contextCommandRefusal(taskName));
+        continue;
+      }
 
       // The same preparation a category tool's own handler builds, so the
       // live route and every other route fold, repair and check alike.

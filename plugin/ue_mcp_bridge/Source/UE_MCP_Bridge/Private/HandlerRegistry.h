@@ -46,6 +46,36 @@ enum class EMCPValueForm : uint8
 };
 
 /**
+ * What a parameter addresses, beyond its wire type. Published as the name
+ * ParamRoleName returns. Recorded only: the advertised schema never carries it.
+ */
+enum class EMCPParamRole : uint8
+{
+	None,
+	/** The asset the call writes. Asset locks are taken on it. */
+	EditTarget,
+	/** A node inside the asset: a state, graph node or widget. */
+	NodeRef,
+	/** A pin on a node. */
+	PinRef,
+	/** A position in an ordered list. */
+	SlotIndex,
+	/** A placed actor. */
+	ActorRef,
+	/** A file or folder on disk the call writes. */
+	OutputPath,
+};
+
+/** What a call commits after its edit. Unset on a spec means the handler's own behaviour. */
+enum class EMCPCommitPolicy : uint8
+{
+	None,
+	Compile,
+	Save,
+	Both,
+};
+
+/**
  * Bounds on a value. Min and Max bound a number, MinLength and MaxLength a
  * string, and on an array each applies to every element; MinItems and
  * MaxItems bound the array itself. Unset means unbounded.
@@ -152,6 +182,39 @@ struct FMCPParamSpec : TMCPBoundedValue<FMCPParamSpec>
 	FString VariantKey;
 	/** The shapes of a tagged Object parameter, or of each element of a tagged Array of objects. */
 	TArray<FMCPParamVariant> Variants;
+	/** What the parameter addresses. */
+	EMCPParamRole ParamRole = EMCPParamRole::None;
+	/** On an array of objects, the element keys that carry the role; each one present counts. */
+	TArray<FString> RoleKeys;
+	/** The value the handler uses when the parameter is absent. */
+	TSharedPtr<FJsonValue> DefaultValue;
+
+	FMCPParamSpec Role(EMCPParamRole InRole) const
+	{
+		FMCPParamSpec Copy = *this;
+		Copy.ParamRole = InRole;
+		return Copy;
+	}
+
+	/** `.Role(EMCPParamRole::EditTarget, { TEXT("sourcePath"), TEXT("assetPath") })` on an array of objects. */
+	FMCPParamSpec Role(EMCPParamRole InRole, const TArray<FString>& InKeys) const
+	{
+		FMCPParamSpec Copy = Role(InRole);
+		Copy.RoleKeys = InKeys;
+		return Copy;
+	}
+
+	FMCPParamSpec Default(const TSharedPtr<FJsonValue>& Value) const
+	{
+		FMCPParamSpec Copy = *this;
+		Copy.DefaultValue = Value;
+		return Copy;
+	}
+
+	FMCPParamSpec Default(bool bValue) const { return Default(MakeShared<FJsonValueBoolean>(bValue)); }
+	FMCPParamSpec Default(int32 Value) const { return Default(MakeShared<FJsonValueNumber>(Value)); }
+	FMCPParamSpec Default(double Value) const { return Default(MakeShared<FJsonValueNumber>(Value)); }
+	FMCPParamSpec Default(const TCHAR* Value) const { return Default(MakeShared<FJsonValueString>(FString(Value))); }
 
 	FMCPParamSpec Alias(const TCHAR* InAlias) const
 	{
@@ -297,6 +360,15 @@ struct FMCPSpecRules
 	TArray<FMCPParamChoice> Choices;
 	/** Why the contract test must not call this handler. Empty when it may. */
 	FString ContractExemptReason;
+	/** What the call commits after its edit. Unset means the handler's own behaviour. */
+	TOptional<EMCPCommitPolicy> CommitPolicy;
+
+	FMCPSpecRules Commit(EMCPCommitPolicy Policy) const
+	{
+		FMCPSpecRules Copy = *this;
+		Copy.CommitPolicy = Policy;
+		return Copy;
+	}
 
 	FMCPSpecRules ExactlyOne(const TArray<TArray<FString>>& Branches) const
 	{
@@ -346,6 +418,11 @@ namespace MCPSpec
 	{
 		return FMCPSpecRules().ContractExempt(Reason);
 	}
+
+	inline FMCPSpecRules Commit(EMCPCommitPolicy Policy)
+	{
+		return FMCPSpecRules().Commit(Policy);
+	}
 }
 
 /** A handler's declared parameters. Present, even when empty, only for a handler registered with one. */
@@ -355,6 +432,8 @@ struct FMCPHandlerSpec
 	TArray<FMCPParamChoice> Choices;
 	/** Non-empty when the contract test must not call the handler, saying why. */
 	FString ContractExemptReason;
+	/** What the call commits after its edit. Unset means the handler's own behaviour. */
+	TOptional<EMCPCommitPolicy> CommitPolicy;
 };
 
 class FMCPHandlerRegistry
@@ -392,7 +471,7 @@ public:
 
 	// Register a C++ handler together with its parameter spec (#1057). The
 	// handler is registered either way; a spec that fails ValidateHandlerSpec is
-	// logged and dropped, and the call returns false.
+	// logged, dropped and kept in GetRefusedSpecs, and the call returns false.
 	bool RegisterHandler(const FString& MethodName, FHandlerFunction Handler, const TArray<FMCPParamSpec>& Params);
 
 	// The same, with the spec's choices and contract exemption (MCPSpec::ExactlyOne,
@@ -413,6 +492,9 @@ public:
 	// Why one parameter's nullable, union, literal, field, form or variant shape
 	// does not fit its type, or empty when it does.
 	static FString ValidateValueShape(const FMCPParamSpec& Param);
+
+	// Why a parameter's role or default does not fit it, or empty when they do.
+	static FString ValidateRoleAndDefault(const FMCPParamSpec& Param);
 
 	// Why one object field does not fit its declared type, or empty when it
 	// does. Owner names what holds it, for the message.
@@ -436,8 +518,38 @@ public:
 	// Lowercase wire name of a parameter type.
 	static const TCHAR* ParamTypeName(EMCPParamType Type);
 
+	// Wire name of a role: editTarget, nodeRef, pinRef, slotIndex, actorRef, outputPath.
+	static const TCHAR* ParamRoleName(EMCPParamRole Role);
+
+	// Wire name of a commit policy: none, compile, save, both.
+	static const TCHAR* CommitPolicyName(EMCPCommitPolicy Policy);
+
+	// The spec of the handler ExecuteHandler is running on this thread, or null
+	// outside one and for a handler registered without a spec. A family scope
+	// reads the handler's roles and commit policy from it.
+	static const FMCPHandlerSpec* ActiveSpec();
+
+	// Makes a spec the active one for as long as it lives, and restores the
+	// caller's after. ExecuteHandler opens one per call; code that calls a
+	// handler function directly opens its own.
+	struct FActiveSpecScope
+	{
+		explicit FActiveSpecScope(const FMCPHandlerSpec* Spec);
+		~FActiveSpecScope();
+		FActiveSpecScope(const FActiveSpecScope&) = delete;
+		FActiveSpecScope& operator=(const FActiveSpecScope&) = delete;
+	private:
+		const FMCPHandlerSpec* Previous;
+	};
+
+	// The plain parameter a spec declares with the editTarget role, or empty.
+	static FString EditTargetParam(const FMCPHandlerSpec& Spec);
+
 	// Specs of every handler registered with one, keyed by method name.
 	const TMap<FString, FMCPHandlerSpec>& GetHandlerSpecs() const { return HandlerSpecs; }
+
+	// Why each refused spec was refused, keyed by method name. Empty on a healthy build.
+	const TMap<FString, FString>& GetRefusedSpecs() const { return RefusedSpecs; }
 
 	// { method: { category?, params: [...], choices?, contractExempt? } } for the capabilities payload.
 	TSharedPtr<FJsonObject> BuildHandlerSpecsJson() const;
@@ -493,6 +605,9 @@ private:
 	// Declared parameter contracts (#1057). Written during registration only,
 	// so the socket thread may read it for the capabilities payload.
 	TMap<FString, FMCPHandlerSpec> HandlerSpecs;
+
+	// Specs ValidateHandlerSpec refused, with the reason.
+	TMap<FString, FString> RefusedSpecs;
 
 	void TagCategory(const FString& MethodName);
 };

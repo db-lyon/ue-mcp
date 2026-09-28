@@ -15,7 +15,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": false,
-        "description": "MassEntityConfigAsset path, /Game/Folder/Name[.Name]"
+        "description": "MassEntityConfigAsset path, /Game/Folder/Name[.Name]",
+        "role": "editTarget"
       },
       {
         "name": "name",

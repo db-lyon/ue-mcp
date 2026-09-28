@@ -1,24 +1,18 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { deepMerge } from "@db-lyon/flowkit";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { info, warn } from "../core/log.js";
 import { UProjectSchema, UeMcpConfigSchema } from "../surface/schemas.js";
 import { resolveEngineRoot, type EngineLookup } from "../editor/engine-root.js";
 import {
-  configLayerFiles,
   localConfigPath,
-  overlayConfigPath,
-  selectedOverlay,
   projectConfigPath,
   readConfigDoc,
-  readGlobalUeMcpBlock,
-  readUeMcpBlock,
   writeConfigDoc,
 } from "./ue-mcp-config.js";
+import { ProjectConfig } from "./project-config.js";
 import { setInstalledHooks, setFeedbackMode, type FeedbackMode } from "./user-state.js";
 import { resolveUProjectPath } from "./uproject-path.js";
-import { readEnv } from "../core/env.js";
 
 export interface PluginInfo {
   name: string;
@@ -200,6 +194,8 @@ export class ProjectContext {
   contentDir: string | null = null;
   engineAssociation: string | null = null;
   config: UeMcpConfig = {};
+  /** The cascade `config` was validated from. Replaced, never mutated, when the project moves. */
+  projectConfig: ProjectConfig | null = null;
 
   get isLoaded(): boolean {
     return this.projectPath !== null;
@@ -436,6 +432,7 @@ export class ProjectContext {
     migrateLegacyLocalYaml(this.projectDir);
     migrateLegacyFeedbackModeInYaml(this.projectDir);
 
+    this.projectConfig = ProjectConfig.for(this.projectDir);
     this.config = readUeMcpConfig(this.projectDir);
     if (Object.keys(this.config).length > 0) {
       info("project", `loaded config from ue-mcp.yml (merged with any global / env / local layers)`);
@@ -444,63 +441,20 @@ export class ProjectContext {
 }
 
 /**
- * Load the `ue-mcp:` block with the full layered cascade, each
- * layer deep-merged over the one before (low -> high precedence):
+ * The merged `ue-mcp:` block of a project, from the one cascade in
+ * project-config.ts (configLayerFiles with the selected overlay), each layer
+ * deep-merged over the one before (low -> high precedence):
  *
  *     ~/.ue-mcp/config.yml   (user-global, untracked)
  *     <project>/ue-mcp.yml   (project, tracked)
- *     ue-mcp.{env}.yml       (env overlay, when UE_MCP_ENV is set)
+ *     ue-mcp.{env}.yml       (the overlay UE_MCP_ENV, else `env:`, selects)
  *     ue-mcp.local.yml       (per-machine, untracked)
  *
  * Env vars (UE_MCP_CONTEXT_STRATEGY, ...) still win over the merged result;
- * they are applied where each setting is consumed, not here. Machine *state*
- * (installedHooks, feedback mode) is not config and never merged - it lives in
- * ~/.ue-mcp/state.json.
+ * they are applied where each setting is consumed, not here.
  */
-function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
-  const global = readGlobalUeMcpBlock();
-  const project = readUeMcpBlock(projectConfigPath(projectDir));
-
-  const layers: Record<string, unknown>[] = [global, project];
-  for (const layer of configLayerFiles(projectDir, overlayFor(projectDir))) {
-    if (layer.target === "env" || layer.target === "local") layers.push(readUeMcpBlock(layer.file));
-  }
-
-  return layers.reduce(
-    (acc, layer) => deepMerge(acc, layer) as Record<string, unknown>,
-    {} as Record<string, unknown>,
-  );
-}
-
-/**
- * Which `ue-mcp.<env>.yml` overlay this project merges (#817).
- *
- * UE_MCP_ENV is one value for the whole process, so with more than one project
- * it puts every one of them on the same overlay. `env:` lets a project name its
- * own. The variable still wins, which keeps a single-project user on exactly
- * the behaviour they have.
- *
- * One caveat is worth a warning rather than silence: the editor plugin reads
- * `bridge.port` out of these same files, and it selects its overlay from
- * UE_MCP_ENV and nothing else. An overlay chosen by `env:` that pins the port
- * would leave the client connecting to one port while the editor bound
- * another.
- */
-function overlayFor(projectDir: string): string | undefined {
-  const named = selectedOverlay(projectDir);
-  if (!named || readEnv("env")) return named;
-
-  const overlay = readUeMcpBlock(overlayConfigPath(projectDir, named));
-  if ((overlay.bridge as { port?: unknown } | undefined)?.port !== undefined) {
-    warn(
-      "project",
-      `ue-mcp.${named}.yml pins bridge.port and that overlay is selected by 'env: ${named}' in this project's ` +
-        `config. The editor plugin selects its overlay from UE_MCP_ENV only, so it will not read that pin and ` +
-        `the two would use different ports. Move the pin into ue-mcp.yml or ue-mcp.local.yml, or select the ` +
-        `overlay with UE_MCP_ENV.`,
-    );
-  }
-  return named;
+export function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
+  return ProjectConfig.for(projectDir).block;
 }
 
 /**

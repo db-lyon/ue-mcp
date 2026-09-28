@@ -115,7 +115,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": false,
-        "description": "Blueprint whose component template to edit; needs componentName"
+        "description": "Blueprint whose component template to edit; needs componentName",
+        "role": "editTarget"
       },
       {
         "name": "componentName",

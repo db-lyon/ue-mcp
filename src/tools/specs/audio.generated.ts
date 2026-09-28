@@ -18,7 +18,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Sound asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "submixPath",
@@ -41,7 +42,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "submixPath",
         "type": "string",
         "required": true,
-        "description": "SoundSubmix whose effect chain to append to"
+        "description": "SoundSubmix whose effect chain to append to",
+        "role": "editTarget"
       },
       {
         "name": "effectType",
@@ -496,7 +498,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSoundSource asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -528,7 +531,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSoundSource asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -554,7 +558,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSoundSource asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeClassName",
@@ -690,7 +695,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSoundSource asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       }
     ]
   },
@@ -704,7 +710,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSoundSource asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "fromNodeId",
@@ -742,7 +749,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSoundSource asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "fromNodeId",
@@ -774,7 +782,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSoundSource asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphInput",
@@ -806,7 +815,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSoundSource asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "fromNodeId",
@@ -838,7 +848,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSound asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "fromNodeId",
@@ -1067,7 +1078,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSound asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "memberKind",
@@ -1093,7 +1105,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSound asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
@@ -1119,7 +1132,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSound asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "memberKind",
@@ -1195,7 +1209,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "MetaSoundSource asset path",
         "aliases": [
           "metasoundPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "value",
@@ -1309,7 +1324,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "Audio asset path"
+        "description": "Audio asset path",
+        "role": "editTarget"
       },
       {
         "name": "propertyName",
@@ -1335,7 +1351,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Sound asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "attenuationPath",
@@ -1355,7 +1372,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Sound asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "soundClassPath",
@@ -1375,7 +1393,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SoundClass to reparent",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "parentPath",
@@ -1395,7 +1414,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Sound asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "concurrencyPath",
@@ -1415,7 +1435,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Sound asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "submixPath",
@@ -1432,7 +1453,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "submixPath",
         "type": "string",
         "required": true,
-        "description": "SoundSubmix to reparent"
+        "description": "SoundSubmix to reparent",
+        "role": "editTarget"
       },
       {
         "name": "parentPath",
@@ -1452,7 +1474,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SoundCue asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeType",
@@ -1528,7 +1551,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SoundCue asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "childNodeId",
@@ -1560,7 +1584,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SoundCue asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "childNodeId",
@@ -1606,7 +1631,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SoundCue asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeId",

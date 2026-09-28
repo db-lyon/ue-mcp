@@ -54,7 +54,7 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		TypePath(TEXT("FoliageType asset path")).Alias(TEXT("foliageTypeName")),
 	});
 	Registry.RegisterHandler(TEXT("set_foliage_type_settings"), &SetFoliageTypeSettings, {
-		TypePath(TypePathOrName).Alias(TEXT("foliageTypeName")),
+		TypePath(TypePathOrName).Alias(TEXT("foliageTypeName")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("settings"), EType::Object, TEXT("Property name to value; each is imported as text onto the FoliageType")),
 	});
 	Registry.RegisterHandler(TEXT("create_foliage_type"), &CreateFoliageType, {
@@ -71,7 +71,7 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("settings"), EType::Object, TEXT("Property name to value, dotted paths supported")),
 		MCPParam::Required(TEXT("where"), EType::Array, TEXT("Predicate over each type's current values: [{field, op, value}]")).Items(EType::Object),
 		MCPParam::Optional(TEXT("whereMode"), EType::String, TEXT("all (default) | any")),
-		MCPParam::Optional(TEXT("foliageTypePaths"), EType::Array, TEXT("Explicit FoliageType asset paths")).Items(EType::String),
+		MCPParam::Optional(TEXT("foliageTypePaths"), EType::Array, TEXT("Explicit FoliageType asset paths")).Items(EType::String).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("directory"), EType::String, TEXT("Content directory to scan for FoliageType assets")),
 		MCPParam::Optional(TEXT("recursive"), EType::Boolean, TEXT("Scan directory recursively (default true)")),
 		MCPParam::Optional(TEXT("fromLevel"), EType::Boolean, TEXT("Take the foliage types placed in the open level")),
@@ -128,7 +128,7 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("spawnerPath"), EType::String, TEXT("ProceduralFoliageSpawner asset path")),
 	});
 	Registry.RegisterHandler(TEXT("set_procedural_foliage_spawner_types"), &SetProceduralFoliageSpawnerTypes, {
-		MCPParam::Required(TEXT("spawnerPath"), EType::String, TEXT("ProceduralFoliageSpawner asset path")),
+		MCPParam::Required(TEXT("spawnerPath"), EType::String, TEXT("ProceduralFoliageSpawner asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("foliageTypePaths"), EType::Array, TEXT("FoliageType assets, or Blueprints whose class derives from FoliageType")).Items(EType::String),
 		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("replace (default) | add | remove")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the spawner package after a change (default true)")),

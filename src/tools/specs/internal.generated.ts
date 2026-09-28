@@ -69,7 +69,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "skeletalMeshPath",
         "type": "string",
         "required": true,
-        "description": "SkeletalMesh whose reference skeleton to edit"
+        "description": "SkeletalMesh whose reference skeleton to edit",
+        "role": "editTarget"
       },
       {
         "name": "edits",

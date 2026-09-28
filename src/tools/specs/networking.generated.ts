@@ -15,7 +15,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "netCullDistanceSquared",
@@ -32,7 +33,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "netUpdateFrequency",
@@ -66,7 +68,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "alwaysRelevant",
@@ -83,7 +86,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "dormancy",
@@ -100,7 +104,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "loadOnClient",
@@ -117,7 +122,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "netPriority",
@@ -134,7 +140,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "onlyRelevantToOwner",
@@ -151,7 +158,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "variableName",
@@ -189,7 +197,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "replicateMovement",
@@ -206,7 +215,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Actor Blueprint asset path"
+        "description": "Actor Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "replicates",

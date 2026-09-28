@@ -3,18 +3,19 @@ import { UeMcpTask } from "../task.js";
 import { stripEditorTarget } from "../surface/target-params.js";
 import type { CallPreparation } from "../dispatch/call-pipeline.js";
 import type { FlowContext } from "./context.js";
-import { runBridge, runFlowAction, runHandler } from "./run-action.js";
+import { flowFamily, handlerFamily, type ActionFamily } from "./run-action.js";
+import { ActionTask, BridgeTask, type BridgeBinding } from "./bridge-task.js";
 import { takeHeldComposite } from "./composite.js";
 import { stripAction } from "../surface/routing-params.js";
 import type { FlowActionSpec } from "../core/types.js";
 
 /**
- * Create a TaskConstructor for a bridge-delegation action.
- * The bridge method (and optional param mapper) are closed over in the class,
- * along with the action's authored timeout and the category's preparation.
+ * Create a TaskConstructor for a bridge-delegation action: the one bridge
+ * executor with this action's method, param mapper, authored timeout and
+ * category preparation bound.
  *
  * `timeoutMs` is the action's OWN budget, the floor it needs. It is not the
- * caller's: the caller's arrives in the parameters and wins in runBridge.
+ * caller's: the caller's arrives in the parameters and wins.
  */
 export function bridgeTaskClass(
   name: string,
@@ -23,14 +24,9 @@ export function bridgeTaskClass(
   timeoutMs?: number,
   prep?: CallPreparation,
 ): TaskConstructor {
-  class FactoryBridgeTask extends UeMcpTask {
-    get taskName() { return name; }
-    async execute(): Promise<TaskResult> {
-      // `editor` addresses a session; on this route it is never a bridge
-      // parameter, so it comes off before the mapper can forward it.
-      const options = stripEditorTarget(this.options as Record<string, unknown>);
-      return runBridge(this.ctx, name, method, mapParams, timeoutMs, options, prep);
-    }
+  // `editor` addresses a session; ActionTask strips it before the mapper sees it.
+  class FactoryBridgeTask extends BridgeTask {
+    static override binding: BridgeBinding = { name, method, mapParams, timeoutMs, prep };
   }
   Object.defineProperty(FactoryBridgeTask, "name", { value: `BridgeTask_${name}` });
   return FactoryBridgeTask as unknown as TaskConstructor;
@@ -49,11 +45,15 @@ export function handlerTaskClass(
   prep?: CallPreparation,
   optionsSchema?: OptionSpecs,
 ): TaskConstructor {
-  class FactoryHandlerTask extends UeMcpTask {
+  class FactoryHandlerTask extends ActionTask {
     static optionsSchema = optionsSchema;
     get taskName() { return name; }
-    async execute(): Promise<TaskResult> {
-      return runHandler(this.ctx, name, fn, this.options as Record<string, unknown>, prep);
+    // A handler reads its options as given, as it always has.
+    protected override actionOptions(): Record<string, unknown> {
+      return this.options as Record<string, unknown>;
+    }
+    protected family(): ActionFamily {
+      return handlerFamily(name, fn, prep);
     }
   }
   Object.defineProperty(FactoryHandlerTask, "name", { value: `HandlerTask_${name}` });
@@ -85,17 +85,19 @@ export function compositeTaskClass(
   spec: FlowActionSpec,
   prep?: CallPreparation,
 ): TaskConstructor {
-  class FactoryCompositeTask extends UeMcpTask {
+  class FactoryCompositeTask extends ActionTask {
     static expand = spec.expand
       ? (options: Record<string, unknown>) => spec.expand!(stripAction(stripEditorTarget(options)))
       : undefined;
     get taskName() { return name; }
-    async execute(): Promise<TaskResult> {
+    override async execute(): Promise<TaskResult> {
       // The live runner built for this call hands its prepared input over once.
       const held = takeHeldComposite(this.ctx, name);
       if (held) return held.settle(this.ctx);
-      const options = stripEditorTarget(this.options as Record<string, unknown>);
-      return runFlowAction(this.ctx, name, spec, options, prep);
+      return super.execute();
+    }
+    protected family(): ActionFamily {
+      return flowFamily(name, spec, prep);
     }
   }
   Object.defineProperty(FactoryCompositeTask, "name", { value: `CompositeTask_${name}` });

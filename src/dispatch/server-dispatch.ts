@@ -8,6 +8,7 @@ import { McpError as SdkMcpError } from "@modelcontextprotocol/sdk/types.js";
 import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "../core/types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
+import { errorEnvelope, withBodyEnvelope } from "./error-envelope.js";
 import { debug } from "../core/log.js";
 import { consumeUpgradeNotice } from "../core/version-check.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
@@ -39,6 +40,10 @@ import { hostNamespaces } from "../flow/condition.js";
 import { dialogGate } from "../flow/gates.js";
 import type { FlowDefinition, TaskDefinition } from "@db-lyon/flowkit";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
+import { isContextCommand, runContextCommand } from "../runtime/context-commands.js";
+import { actionPreparation } from "../flow/run-action.js";
+import type { CallPreparation } from "./call-pipeline.js";
+import { MICRO_GATEWAY_TOOL, resolveMicroCall } from "../surface/context/micro-context.js";
 
 type TextBlock = { type: "text"; text: string };
 
@@ -60,31 +65,41 @@ function withUpgradeNotice(content: TextBlock[]): TextBlock[] {
 }
 
 /**
- * Structured tail for an error a caller has to make a decision about (#799).
- * A bridge timeout is not a failed call: the editor may have finished it. The
- * prose says so, and this block says so in a form a client can branch on
- * without matching strings.
+ * Structured tail for every error (#799): the code, any details (a bridge
+ * timeout says the editor may have finished the call), and the envelope under
+ * `error`, so a client branches without matching strings.
  */
-function machineErrorBlock(e: unknown): TextBlock[] {
-  if (!(e instanceof McpError) || !e.details) return [];
-  return [{
+function machineErrorBlock(code: string, message: string, e?: unknown): TextBlock {
+  const details = e instanceof McpError ? e.details : undefined;
+  const envelope = errorEnvelope({ code, message, body: details });
+  return {
     type: "text" as const,
-    text: "MACHINE_ERROR=" + JSON.stringify({ code: e.code, ...e.details }),
-  }];
+    text: "MACHINE_ERROR=" + JSON.stringify({ code, ...details, error: envelope }),
+  };
 }
 
-/** The one error shape every tool answers with: `Error [CODE]: message`, then any tail. */
-export function errorResult(code: string, message: string, tail: TextBlock[] = []): ToolResult {
+/** The one error shape every tool answers with: `Error [CODE]: message`, the machine block, then any tail. */
+export function errorResult(code: string, message: string, tail: TextBlock[] = [], cause?: unknown): ToolResult {
   return {
-    content: withUpgradeNotice([{ type: "text" as const, text: `Error [${code}]: ${message}` }, ...tail]),
+    content: withUpgradeNotice([
+      { type: "text" as const, text: `Error [${code}]: ${message}` },
+      machineErrorBlock(code, message, cause),
+      ...tail,
+    ]),
     isError: true,
   };
 }
 
-/** A refusal payload, returned as the error result it is. */
+/** A refusal payload, returned as the error result it is. A refusal waits on the editor's state. */
 function refusalResult(refusal: unknown, tail: TextBlock[] = []): ToolResult {
+  const r = refusal && typeof refusal === "object" ? (refusal as Record<string, unknown>) : {};
+  const message = [r.message, r.error, r.reason].find((v): v is string => typeof v === "string") ?? "A dialog refused this call.";
   return {
-    content: withUpgradeNotice([{ type: "text" as const, text: JSON.stringify(refusal, null, 2) }, ...tail]),
+    content: withUpgradeNotice([
+      { type: "text" as const, text: JSON.stringify(refusal, null, 2) },
+      machineErrorBlock("DIALOG_BLOCKED", message),
+      ...tail,
+    ]),
     isError: true,
   };
 }
@@ -205,6 +220,31 @@ function liveDefinitions(
 }
 
 /**
+ * The options and category preparation a context command reads, seen past
+ * the micro gateway, whose arguments are checked against the category's
+ * shape exactly as the gateway task would check them.
+ */
+function contextCommandCall(
+  tool: ToolDef,
+  params: Record<string, unknown>,
+  taskName: string,
+  ctx: ToolContext,
+): { options: Record<string, unknown>; prep: CallPreparation } {
+  const dot = taskName.indexOf(".");
+  const category = taskName.slice(0, dot);
+  const action = taskName.slice(dot + 1);
+  let home = tool;
+  let options = stripAction(params);
+  if (tool.name === MICRO_GATEWAY_TOOL) {
+    const graph = ctx.getToolGraph?.() ?? [];
+    options = resolveMicroCall(graph, params).params;
+    home = graph.find((t) => t.name === category) ?? tool;
+  }
+  const spec = home.actions[action];
+  return { options, prep: spec ? actionPreparation(home.options, action, spec) : { action } };
+}
+
+/**
  * One call to a category tool (or the micro gateway). `envelope` says the
  * tool is advertised as `action` + `args`, so the flat shape is validated here
  * rather than by the SDK.
@@ -266,6 +306,30 @@ export async function dispatchCategoryCall(
   // One lock scope per call: every action it runs, the action's own children
   // included, locks into it, and it is released when the call returns.
   flowCtx.assetLocks = flowCtx.openAssetLocks?.(flowCtx);
+
+  // A context command creates, chooses or moves an editor. The runtime runs
+  // it, outside the task registry, so it never needs the session's load.
+  const command = isContextCommand(effectiveTask);
+  if (command) {
+    const served = attribution(sessions, session);
+    try {
+      const commandCall = contextCommandCall(tool, params, subject.taskName, flowCtx);
+      const result = await runContextCommand(flowCtx, subject.taskName, commandCall.options, commandCall.prep);
+      if (!result.success && !isDialogRefusal(result.data)) {
+        const msg = result.error?.message ?? `Task ${taskName} failed`;
+        return errorResult("TASK_FAILED", msg, served, result.error);
+      }
+      if (!result.success) return refusalResult(result.data, served);
+      const text = typeof result.data === "string" ? result.data : JSON.stringify(result.data, null, 2);
+      return { content: withUpgradeNotice([{ type: "text" as const, text }, ...served]) };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const code = e instanceof McpError ? e.code : "UNKNOWN";
+      return errorResult(code, msg, served, e);
+    } finally {
+      await flowCtx.assetLocks?.releaseAll();
+    }
+  }
 
   // The addressed session's own registry, built on demand rather than falling
   // back to the first project's (D1). A call for an action this session does
@@ -329,7 +393,7 @@ export async function dispatchCategoryCall(
       const code = result.error instanceof McpError && result.error.code === ErrorCode.ASSET_LOCKED
         ? ErrorCode.ASSET_LOCKED
         : "TASK_FAILED";
-      return errorResult(code, msg, [...machineErrorBlock(result.error), ...served]);
+      return errorResult(code, msg, served, result.error);
     }
 
     // An allow-listed read still SAYS a dialog is up: get_status must never
@@ -395,13 +459,14 @@ export async function dispatchCategoryCall(
           text: "MACHINE_DIRECTIVE=" + JSON.stringify(result.data.machine),
         });
       }
-      blocks.push({ type: "text" as const, text: stringify(result.data.result) });
+      blocks.push({ type: "text" as const, text: stringify(withBodyEnvelope(result.data.result)) });
       return { content: withUpgradeNotice([...blocks, ...served]) };
     }
 
     return {
       content: withUpgradeNotice([
-        { type: "text" as const, text: stringify(result.data) },
+        // A handler that reported its own failure gets the envelope beside its fields.
+        { type: "text" as const, text: stringify(withBodyEnvelope(result.data)) },
         ...served,
       ]),
     };
@@ -418,7 +483,7 @@ export async function dispatchCategoryCall(
     }
     const msg = e instanceof Error ? e.message : String(e);
     const code = e instanceof McpError ? e.code : "UNKNOWN";
-    return errorResult(code, msg, [...machineErrorBlock(e), ...served]);
+    return errorResult(code, msg, served, e);
   } finally {
     await flowCtx.assetLocks?.releaseAll();
   }
@@ -480,6 +545,6 @@ export async function dispatchFlowCall(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const code = e instanceof McpError ? e.code : "UNKNOWN";
-    return errorResult(code, msg, machineErrorBlock(e));
+    return errorResult(code, msg, [], e);
   }
 }

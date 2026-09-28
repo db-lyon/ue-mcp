@@ -93,7 +93,9 @@ back before retrying, and prefer an idempotent retry (pass the same names) so a
 call that did land is not repeated.
 ```
 
-A `MACHINE_ERROR` block carries the same thing structurally: `{"code":"BRIDGE_TIMEOUT","outcome":"unknown","operationId":"12","method":"add_widget"}`. Treat `outcome: "unknown"` as "verify, then retry", never as "failed".
+A `MACHINE_ERROR` block carries the same thing structurally: `{"code":"BRIDGE_TIMEOUT","outcome":"unknown","operationId":"12","method":"add_widget","error":{"class":"failure","retryable":false,...}}`. Treat `outcome: "unknown"` as "verify, then retry", never as "failed".
+
+Every error result carries that block, and its `error` field is the error envelope: `class` is `usage` (fix the call), `precondition` (fix the editor's state first), `failure` (the operation ran and failed) or `internal`; `retryable` says whether the same call may succeed later unchanged; `didYouMean` lists the closest names when the call named something that does not exist. A handler that answers `success: false` in its body carries the same envelope as `errorEnvelope`, and a failed flow step carries it on its `error` with `step` set to the step's path.
 
 What to do:
 

@@ -117,15 +117,15 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("cueType"), EType::String, TEXT("Static (default, GameplayCueNotify_Static) | Actor (GameplayCueNotify_Actor)")),
 	}, CreatesBlueprint);
 	Registry.RegisterHandler(TEXT("add_ability_system_component"), &AddAbilitySystemComponent, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Name of the AbilitySystemComponent (default AbilitySystemComp)")),
 	});
 	Registry.RegisterHandler(TEXT("add_attribute"), &AddAttribute, {
-		MCPParam::Required(TEXT("attributeSetPath"), EType::String, TEXT("AttributeSet Blueprint asset path")),
+		MCPParam::Required(TEXT("attributeSetPath"), EType::String, TEXT("AttributeSet Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("attributeName"), EType::String, TEXT("FGameplayAttributeData variable to add")),
 	});
 	Registry.RegisterHandler(TEXT("set_ability_tags"), &SetAbilityTags, {
-		MCPParam::Required(TEXT("abilityPath"), EType::String, TEXT("GameplayAbility Blueprint asset path")),
+		MCPParam::Required(TEXT("abilityPath"), EType::String, TEXT("GameplayAbility Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("ability_tags"), EType::Array, TEXT("AbilityTags container, written whole")).Items(EType::String),
 		MCPParam::Optional(TEXT("cancel_abilities_with_tag"), EType::Array, TEXT("CancelAbilitiesWithTag container, written whole")).Items(EType::String),
 		MCPParam::Optional(TEXT("block_abilities_with_tag"), EType::Array, TEXT("BlockAbilitiesWithTag container, written whole")).Items(EType::String),
@@ -133,13 +133,13 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("activation_blocked_tags"), EType::Array, TEXT("ActivationBlockedTags container, written whole")).Items(EType::String),
 	});
 	Registry.RegisterHandler(TEXT("set_effect_modifier"), &SetEffectModifier, {
-		MCPParam::Required(TEXT("effectPath"), EType::String, TEXT("GameplayEffect Blueprint asset path")),
+		MCPParam::Required(TEXT("effectPath"), EType::String, TEXT("GameplayEffect Blueprint asset path")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("attribute"), EType::String, TEXT("Attribute to modify: SetName.Attribute, or a unique attribute name")),
 		MCPParam::Optional(TEXT("operation"), EType::String, TEXT("Additive (default) | Multiplicative | Division | Override")),
 		MCPParam::Optional(TEXT("magnitude"), EType::Number, TEXT("Static magnitude (default 0)")),
 	});
 	Registry.RegisterHandler(TEXT("set_asc_defaults"), &SetAscDefaults, {
-		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path carrying the AbilitySystemComponent")),
+		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path carrying the AbilitySystemComponent")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("attributeSet"), EType::String, TEXT("AttributeSet content path or class name")).Alias(TEXT("attributeSetPath")),
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("AbilitySystemComponent to wire (default: the first one)")),
 		MCPParam::Optional(TEXT("initDataTable"), EType::String, TEXT("DataTable of starting attribute values")),
@@ -283,14 +283,14 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		PieInstance(),
 	});
 	Registry.RegisterHandler(TEXT("add_effect_cue"), &AddEffectCue, {
-		MCPParam::Required(TEXT("effectPath"), EType::String, TEXT("GameplayEffect Blueprint asset path")).Alias(TEXT("effectClass")),
+		MCPParam::Required(TEXT("effectPath"), EType::String, TEXT("GameplayEffect Blueprint asset path")).Alias(TEXT("effectClass")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("cueTag"), EType::String, TEXT("Registered GameplayCue tag, under the GameplayCue root")),
 		MCPParam::Optional(TEXT("minLevel"), EType::Number, TEXT("Lowest effect level this cue covers, used to normalise the magnitude")),
 		MCPParam::Optional(TEXT("maxLevel"), EType::Number, TEXT("Highest effect level this cue covers")),
 		MCPParam::Optional(TEXT("magnitudeAttribute"), EType::String, TEXT("Attribute the cue takes its magnitude from (SetName.Attribute), instead of the effect level")),
 	});
 	Registry.RegisterHandler(TEXT("remove_effect_cue"), &RemoveEffectCue, {
-		MCPParam::Required(TEXT("effectPath"), EType::String, TEXT("GameplayEffect Blueprint asset path")).Alias(TEXT("effectClass")),
+		MCPParam::Required(TEXT("effectPath"), EType::String, TEXT("GameplayEffect Blueprint asset path")).Alias(TEXT("effectClass")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("cueTag"), EType::String, TEXT("GameplayCue tag to unlink. May be one that is no longer registered")),
 	});
 	Registry.RegisterHandler(TEXT("validate_cue_coverage"), &ValidateCueCoverage, {

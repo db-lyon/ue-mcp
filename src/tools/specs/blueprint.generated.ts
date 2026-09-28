@@ -15,7 +15,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Blueprint asset path"
+        "description": "Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "interfacePath",
@@ -35,7 +36,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "componentClass",
@@ -79,7 +81,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "eventName",
@@ -139,7 +142,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Blueprint asset path"
+        "description": "Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -166,7 +170,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionName",
@@ -204,7 +209,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionName",
@@ -239,7 +245,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -271,7 +278,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "timelineName",
@@ -310,7 +318,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -413,7 +422,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -457,7 +467,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -477,7 +488,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       }
     ]
   },
@@ -489,7 +501,8 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "array",
         "required": true,
         "description": "Blueprint asset paths to compile",
-        "items": "string"
+        "items": "string",
+        "role": "editTarget"
       },
       {
         "name": "save",
@@ -509,7 +522,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -583,7 +597,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -610,7 +625,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -662,7 +678,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Full destination of the new Blueprint Interface",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "onConflict",
@@ -683,7 +700,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionName",
@@ -709,7 +727,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "macroName",
@@ -749,7 +768,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionName",
@@ -769,7 +789,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -801,7 +822,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "macroName",
@@ -821,7 +843,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -856,7 +879,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -908,7 +932,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -964,7 +989,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "destinationPath",
         "type": "string",
         "required": true,
-        "description": "Full destination asset path"
+        "description": "Full destination asset path",
+        "role": "editTarget"
       }
     ]
   },
@@ -978,7 +1004,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "op",
@@ -1052,7 +1079,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionName",
@@ -1105,7 +1133,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "UserDefinedStruct asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "tooltip",
@@ -1214,7 +1243,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       }
     ]
   },
@@ -1228,7 +1258,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       }
     ]
   },
@@ -1466,7 +1497,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -1702,7 +1734,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionName",
@@ -1953,7 +1986,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -1994,7 +2028,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "blueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "interfacePath",
@@ -2020,7 +2055,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "componentName",
@@ -2040,7 +2076,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "blueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -2060,7 +2097,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "oldName",
@@ -2086,7 +2124,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "oldName",
@@ -2112,7 +2151,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "UserDefinedEnum asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "order",
@@ -2132,7 +2172,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "UserDefinedStruct asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "order",
@@ -2152,7 +2193,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "parentClass",
@@ -2172,7 +2214,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "componentName",
@@ -2449,7 +2492,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "bCanEverTick",
@@ -2481,7 +2525,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "componentName",
@@ -2513,7 +2558,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -2545,7 +2591,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "componentName",
@@ -2600,7 +2647,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "propertyName",
@@ -2626,7 +2674,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "componentName",
@@ -2653,7 +2702,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "UserDefinedEnum asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "bitflags",
@@ -2680,7 +2730,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "functionName",
@@ -2766,7 +2817,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -2807,7 +2859,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "graphName",
@@ -2854,7 +2907,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "UserDefinedStruct asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "defaultValue",
@@ -2886,7 +2940,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -2912,7 +2967,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",

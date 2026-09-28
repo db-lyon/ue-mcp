@@ -15,7 +15,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "sourceStructId",
@@ -41,7 +42,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Target property path"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_color": {
     "category": "statetree",
@@ -50,7 +52,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "displayName",
@@ -64,7 +67,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "FLinearColor string, e.g. (R=1.0,G=0.0,B=0.0,A=1.0)"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_consideration": {
     "category": "statetree",
@@ -73,19 +77,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "structType",
@@ -105,7 +112,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Expression operand for conditions: And or Or"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_enter_condition": {
     "category": "statetree",
@@ -114,19 +122,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "structType",
@@ -146,7 +157,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Expression operand for conditions: And or Or"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_evaluator": {
     "category": "statetree",
@@ -155,7 +167,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "structType",
@@ -169,7 +182,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Key-value map of instance data properties to set on the new node"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_global_task": {
     "category": "statetree",
@@ -178,7 +192,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "structType",
@@ -192,7 +207,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Key-value map of instance data properties to set on the new node"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_state": {
     "category": "statetree",
@@ -201,19 +217,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "Parent state GUID (omit both parent selectors for a root state)"
+        "description": "Parent state GUID (omit both parent selectors for a root state)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Parent state dot-path, as an alternative to stateId"
+        "description": "Parent state dot-path, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "name",
@@ -237,7 +256,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "insertIndex",
         "type": "integer",
         "required": false,
-        "description": "Position among the new state's siblings (default: append)"
+        "description": "Position among the new state's siblings (default: append)",
+        "role": "slotIndex"
       },
       {
         "name": "linkedSubtree",
@@ -245,7 +265,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "StateTree ASSET path assigned to LinkedAsset. To link a Subtree state inside this asset, use set_state_link with linkType=subtree"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_state_parameter": {
     "category": "statetree",
@@ -254,19 +275,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "paramName",
@@ -280,7 +304,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Bool, Int32, Int64, Float, Double, Name, String or Text"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_task": {
     "category": "statetree",
@@ -289,19 +314,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "structType",
@@ -315,7 +343,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Key-value map of instance data properties to set on the new node"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_transition": {
     "category": "statetree",
@@ -324,19 +353,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "trigger",
@@ -360,13 +392,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "targetStateId",
         "type": "string",
         "required": false,
-        "description": "Target state GUID for GotoState transitions"
+        "description": "Target state GUID for GotoState transitions",
+        "role": "nodeRef"
       },
       {
         "name": "targetStatePath",
         "type": "string",
         "required": false,
-        "description": "Target state dot-path for GotoState transitions"
+        "description": "Target state dot-path for GotoState transitions",
+        "role": "nodeRef"
       },
       {
         "name": "priority",
@@ -386,7 +420,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Enable transition delay"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "add_state_tree_transition_condition": {
     "category": "statetree",
@@ -395,25 +430,29 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "transitionIndex",
         "type": "integer",
         "required": true,
-        "description": "Transition index within the state"
+        "description": "Transition index within the state",
+        "role": "slotIndex"
       },
       {
         "name": "structType",
@@ -433,7 +472,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Expression operand for conditions: And or Or"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "clear_state_tree_state_nodes": {
     "category": "statetree",
@@ -442,21 +482,25 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "compile_state_tree": {
     "category": "statetree",
@@ -465,9 +509,11 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       }
-    ]
+    ],
+    "commit": "both"
   },
   "list_state_tree_bindable_sources": {
     "category": "statetree",
@@ -568,13 +614,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       }
     ]
   },
@@ -608,31 +656,36 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "newParentStateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the state to move under"
+        "description": "GUID of the state to move under",
+        "role": "nodeRef"
       },
       {
         "name": "newParentStatePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path of the state to move under, as an alternative to newParentStateId"
+        "description": "Dot-path of the state to move under, as an alternative to newParentStateId",
+        "role": "nodeRef"
       },
       {
         "name": "toRoot",
@@ -644,9 +697,11 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "insertIndex",
         "type": "integer",
         "required": false,
-        "description": "Position among the new state's siblings (default: append)"
+        "description": "Position among the new state's siblings (default: append)",
+        "role": "slotIndex"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "read_state_tree": {
     "category": "statetree",
@@ -713,13 +768,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       }
     ]
   },
@@ -730,7 +787,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "targetStructId",
@@ -744,7 +802,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Target property path"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "remove_state_tree_consideration": {
     "category": "statetree",
@@ -753,27 +812,32 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "considerationIndex",
         "type": "integer",
         "required": true,
-        "description": "Index of the consideration within the state, as read_state reports it"
+        "description": "Index of the consideration within the state, as read_state reports it",
+        "role": "slotIndex"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "remove_state_tree_enter_condition": {
     "category": "statetree",
@@ -782,27 +846,32 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "conditionIndex",
         "type": "integer",
         "required": true,
-        "description": "Condition index within the list, as read_state reports it"
+        "description": "Condition index within the list, as read_state reports it",
+        "role": "slotIndex"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "remove_state_tree_evaluator": {
     "category": "statetree",
@@ -811,15 +880,18 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
         "type": "string",
         "required": true,
-        "description": "GUID of the evaluator node"
+        "description": "GUID of the evaluator node",
+        "role": "nodeRef"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "remove_state_tree_global_task": {
     "category": "statetree",
@@ -828,15 +900,18 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
         "type": "string",
         "required": true,
-        "description": "GUID of the global task node"
+        "description": "GUID of the global task node",
+        "role": "nodeRef"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "remove_state_tree_state": {
     "category": "statetree",
@@ -845,21 +920,25 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "remove_state_tree_state_parameter": {
     "category": "statetree",
@@ -868,19 +947,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "paramName",
@@ -888,7 +970,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Parameter name"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "remove_state_tree_task": {
     "category": "statetree",
@@ -897,27 +980,32 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "taskIndex",
         "type": "integer",
         "required": true,
-        "description": "Task index within the state"
+        "description": "Task index within the state",
+        "role": "slotIndex"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "remove_state_tree_transition": {
     "category": "statetree",
@@ -926,27 +1014,32 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "transitionIndex",
         "type": "integer",
         "required": true,
-        "description": "Transition index within the state"
+        "description": "Transition index within the state",
+        "role": "slotIndex"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "remove_state_tree_transition_condition": {
     "category": "statetree",
@@ -955,33 +1048,39 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "transitionIndex",
         "type": "integer",
         "required": true,
-        "description": "Transition index within the state"
+        "description": "Transition index within the state",
+        "role": "slotIndex"
       },
       {
         "name": "conditionIndex",
         "type": "integer",
         "required": true,
-        "description": "Condition index within the list, as read_state reports it"
+        "description": "Condition index within the list, as read_state reports it",
+        "role": "slotIndex"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "request_state_tree_transition": {
     "category": "statetree",
@@ -1002,7 +1101,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "targetStateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the state to transition to (or pass targetStateTag)"
+        "description": "GUID of the state to transition to (or pass targetStateTag)",
+        "role": "nodeRef"
       },
       {
         "name": "targetStateTag",
@@ -1096,13 +1196,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
         "type": "string",
         "required": true,
-        "description": "GUID of the evaluator node"
+        "description": "GUID of the evaluator node",
+        "role": "nodeRef"
       },
       {
         "name": "propertyName",
@@ -1116,7 +1218,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Property value as a string"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_evaluator_property": {
     "category": "statetree",
@@ -1125,13 +1228,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
         "type": "string",
         "required": true,
-        "description": "GUID of the evaluator node"
+        "description": "GUID of the evaluator node",
+        "role": "nodeRef"
       },
       {
         "name": "propertyName",
@@ -1145,7 +1250,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Property value as a string"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_global_task_instance_property": {
     "category": "statetree",
@@ -1154,13 +1260,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
         "type": "string",
         "required": true,
-        "description": "GUID of the global task node"
+        "description": "GUID of the global task node",
+        "role": "nodeRef"
       },
       {
         "name": "propertyName",
@@ -1174,7 +1282,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Property value as a string"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_global_task_property": {
     "category": "statetree",
@@ -1183,13 +1292,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
         "type": "string",
         "required": true,
-        "description": "GUID of the global task node"
+        "description": "GUID of the global task node",
+        "role": "nodeRef"
       },
       {
         "name": "propertyName",
@@ -1203,7 +1314,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Property value as a string"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_node_class": {
     "category": "statetree",
@@ -1212,13 +1324,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "nodeId",
         "type": "string",
         "required": true,
-        "description": "GUID of the Blueprint node wrapper, as every add_* action returns it"
+        "description": "GUID of the Blueprint node wrapper, as every add_* action returns it",
+        "role": "nodeRef"
       },
       {
         "name": "nodeClass",
@@ -1226,7 +1340,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "The Blueprint class this node runs, as a class path or a loaded class name"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_root_parameters": {
     "category": "statetree",
@@ -1235,7 +1350,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "parameters",
@@ -1244,7 +1360,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Root parameter definitions [{name, type}] where type is float, int32, bool, string, name or double",
         "items": "object"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_schema": {
     "category": "statetree",
@@ -1253,7 +1370,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "schema",
@@ -1261,7 +1379,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Schema class path, e.g. /Script/GameplayStateTreeModule.StateTreeComponentSchema (default: the first concrete schema this editor has)"
       }
-    ]
+    ],
+    "commit": "both"
   },
   "set_state_tree_state_link": {
     "category": "statetree",
@@ -1270,19 +1389,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "linkType",
@@ -1294,13 +1416,15 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "targetStateId",
         "type": "string",
         "required": false,
-        "description": "linkType=subtree: GUID of the Subtree state to link to"
+        "description": "linkType=subtree: GUID of the Subtree state to link to",
+        "role": "nodeRef"
       },
       {
         "name": "targetStatePath",
         "type": "string",
         "required": false,
-        "description": "linkType=subtree: dot-path of the Subtree state to link to"
+        "description": "linkType=subtree: dot-path of the Subtree state to link to",
+        "role": "nodeRef"
       },
       {
         "name": "linkedAsset",
@@ -1308,7 +1432,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "linkType=asset: the StateTree asset this state runs"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_state_parameter": {
     "category": "statetree",
@@ -1317,19 +1442,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "paramName",
@@ -1343,7 +1471,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Property value as a string"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_state_property": {
     "category": "statetree",
@@ -1352,19 +1481,22 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "propertyName",
@@ -1378,7 +1510,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Property value as a string. tag: gameplay tag or empty to clear. customTickRate: seconds or empty to disable. color: palette display name, GUID, or empty to clear"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_task_instance_property": {
     "category": "statetree",
@@ -1387,25 +1520,29 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "taskIndex",
         "type": "integer",
         "required": true,
-        "description": "Task index within the state"
+        "description": "Task index within the state",
+        "role": "slotIndex"
       },
       {
         "name": "propertyName",
@@ -1419,7 +1556,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Property value as a string"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "set_state_tree_task_property": {
     "category": "statetree",
@@ -1428,25 +1566,29 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset"
+        "description": "StateTree asset path, e.g. /Game/Path/To/ST_Asset",
+        "role": "editTarget"
       },
       {
         "name": "stateId",
         "type": "string",
         "required": false,
-        "description": "GUID of the target state (or pass statePath)"
+        "description": "GUID of the target state (or pass statePath)",
+        "role": "nodeRef"
       },
       {
         "name": "statePath",
         "type": "string",
         "required": false,
-        "description": "Dot-path to the target state, as an alternative to stateId"
+        "description": "Dot-path to the target state, as an alternative to stateId",
+        "role": "nodeRef"
       },
       {
         "name": "taskIndex",
         "type": "integer",
         "required": true,
-        "description": "Task index within the state"
+        "description": "Task index within the state",
+        "role": "slotIndex"
       },
       {
         "name": "propertyName",
@@ -1460,7 +1602,8 @@ export const handlerSpecs: HandlerSpecs = {
         "required": true,
         "description": "Property value as a string"
       }
-    ]
+    ],
+    "commit": "none"
   },
   "validate_state_tree": {
     "category": "statetree",

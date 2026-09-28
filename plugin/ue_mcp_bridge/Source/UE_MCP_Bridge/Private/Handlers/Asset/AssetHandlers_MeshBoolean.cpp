@@ -90,9 +90,9 @@ void FAssetMeshBooleanHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	using EType = EMCPParamType;
 	Registry.RegisterHandlerWithTimeout(TEXT("mesh_boolean"), &MeshBoolean, 300.0f, {
 		MCPParam::Required(TEXT("operation"), EType::String, TEXT("union | subtract | intersect | trimInside | trimOutside | newPolyGroupInside | newPolyGroupOutside")),
-		MCPParam::Required(TEXT("targetPath"), EType::String, TEXT("StaticMesh being cut; the result inherits its transform, materials, collision and Nanite setting")),
+		MCPParam::Required(TEXT("targetPath"), EType::String, TEXT("StaticMesh being cut; the result inherits its transform, materials, collision and Nanite setting")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("toolPath"), EType::String, TEXT("StaticMesh doing the cutting")),
-		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<targetPath>_<Operation>')")),
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Asset to write (default '<targetPath>_<Operation>')")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("inPlace"), EType::Boolean, TEXT("Overwrite targetPath instead (default false); not with outputPath, and the only destructive form")),
 		MCPParam::Optional(TEXT("targetTransform"), EType::Object, TEXT("Where the target sits for the boolean (default identity)")).WithFields({
 			MCPParam::OptionalField(TEXT("location"), EType::Vec3, TEXT("Translation")),

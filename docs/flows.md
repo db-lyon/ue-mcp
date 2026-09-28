@@ -157,6 +157,8 @@ Every MCP action is registered as a task using its `category.action` name. Some 
 | `editor.start_editor` | Launch the Unreal Editor |
 | `shell` | Run a shell command |
 
+Four project actions are not tasks: `project.set_project`, `project.add_editor`, `project.use_editor` and `project.drop_editor` change which editor calls run in, so the server runs them as context commands and a flow step naming one fails. Call them directly, before or after the flow.
+
 See the full list by running `flow(action="list")` (the bundled defaults are the universal layer, `universal/ue-mcp.universal.yml`, which every project config merges over).
 
 ### Task Types
@@ -200,6 +202,18 @@ taskDef.options  <  step.options  <  runtime params
 So a step with `options: { levelPath: "/Game/Flows/Beacon" }` in the YAML will use `/Game/MyCustomLevel` if you pass `params: { levelPath: "/Game/MyCustomLevel" }` at runtime.
 
 Params apply to every step - steps that don't use a given key simply ignore it. This makes flows fully parameterizable without templating syntax.
+
+When steps name the same input differently, reference the param instead: `${params.<key>}` in any option value reads the run's own `params`. The library flows take their inputs this way, and a run that omits one is refused before step 1 with the param named:
+
+```yaml
+steps:
+  1:
+    task: niagara.compile
+    options: { systemPath: "${params.assetPath}" }
+  2:
+    task: asset.save
+    options: { assetPath: "${params.assetPath}" }
+```
 
 ## Step References
 
@@ -249,10 +263,17 @@ Three more namespaces resolve in any option value, and in `when:`. They are read
 | `${project.dir}` | The project directory |
 | `${project.contentDir}` | The project's `Content` directory |
 | `${project.engine}` | The project's `EngineAssociation` |
+| `${project.config.<path>}` | A setting from the project's merged `ue-mcp:` block, such as `project.config.bridge.port` |
 | `${editor.connected}` | Whether the editor bridge is connected |
 | `${editor.name}` | The name of the editor session the flow runs in |
+| `${editor.engineVersion}`, `${editor.bridgeVersion}`, `${editor.handlers}` | What the connected editor reported at its handshake |
+| `${editor.enabledPlugins}` | The plugins the `.uproject` enables |
+| `${editor.pie}`, `${editor.map}`, `${editor.dirtyPackages}` | Whether Play In Editor is running, the loaded map, and the unsaved packages |
+| `${editor.world}` | The `editor(get_world_state)` reply, the same reading `probe.world` returns |
 | `${session.name}` | Same as `editor.name` |
 | `${session.count}` | How many editors this server drives |
+
+The editor facts are fetched the first time a `when:` names one and kept until an event moves them: a reconnect drops them all, starting or stopping PIE drops `pie`, loading a level drops `map`, and a save or any other change drops `dirtyPackages` and `world`. A fact that cannot be read fails the condition instead of reading as false. In an option value they read what is already known, without a call.
 
 A missing value resolves to nothing: the whole value becomes `undefined`, an embedded one an empty string. Any other `${ns.x}` is left as written.
 
@@ -278,9 +299,9 @@ steps:
 A condition is a small expression language, interpreted rather than run as code:
 
 - Literals: numbers, `'text'` or `"text"`, `true`, `false`, `null`.
-- Names under `steps`, `params` (the run's `params`), `error` (in `on_failure` and `finally`), `project`, `editor` and `session`, written bare (`steps.1.count`) or as a reference (`${steps.1.count}`).
+- Names under `steps`, `params` (the run's `params`), `error` (in `on_failure` and `finally`), `project`, `editor`, `session` and `probe` (see [Probes](#probes)), written bare (`steps.1.count`) or as a reference (`${steps.1.count}`).
 - `==` `!=` `<` `<=` `>` `>=`, where a number and a numeric string compare as numbers.
-- `!` or `not`, `&&` or `and`, `||` or `or`, and parentheses.
+- `!` or `not`, `&&` or `and`, `||` or `or`, and parentheses. `&&` and `||` short-circuit: the side they skip is never read.
 
 A condition that is not an expression keeps its original meaning: its references are resolved and the result is tested for truthiness, where `false`, `0`, `null`, `undefined` and the empty string are false. `when: "${steps.1.ok}"` works as it always did. A string that contains an operator but does not parse fails the step with the grammar in the error, rather than being read as a non-empty string. A reference to a step that has not run fails the step too.
 
@@ -316,6 +337,22 @@ Besides `steps`, `params`, `project`, `editor` and `session`, a check (or a `whe
 | `gate.python` | The step is `editor.execute_python` and its gate would refuse it: the `taskSummary` matches actions its `ruledOut` does not cover |
 
 The server's own gates are declared once, each as a `when` over these facts, and `gate.<name>` is that declaration evaluated. A plan adds them as checks, so `flow(plan)` reports what a run would be refused for (see [Execution Plan](#execution-plan)). A run is refused by the same declarations, evaluated live where dispatch, the bridge and `execute_python` always refused.
+
+## Probes
+
+A `when:`, a check and the server's gates can read facts about the editor as `probe.<name>`:
+
+| Probe | Value |
+|-------|-------|
+| `probe.connected` | Whether the editor bridge is connected. Never fails. |
+| `probe.world` | `editor(get_world_state)`: `editorWorldName`, `persistentLevelPackage`, `mode` (`editor`, `play`, `simulate`), `playInEditor`, `dirtyPackages`, `dirtyPackageCount` |
+| `probe.dirty` | How many content and map packages are unsaved |
+| `probe.playing` | Whether a PIE or SIE session is running |
+| `probe.engine` | The connected editor's engine version |
+
+Probes read the editor's facts, the same cache `editor.*` reads, so a probe and an `editor.*` fact never disagree. A reading is kept until an event moves it and forgotten after any step that may change the editor, so the checks between two writes share one reading and a check after a save reads the state the save left. The gates read `editor.connected` from the same reading.
+
+A probe that cannot be read is an error, never a false value: `when: "probe.dirty > 0"` with no editor connected fails the step instead of reading as "nothing is dirty". Guard a probe that needs the editor with one that does not: `probe.connected && probe.dirty > 0`.
 
 ## Flow-level Hooks
 
@@ -537,13 +574,36 @@ Returns each step with its task name, type, and skip status, and a `preflight` f
 
 `preflight` evaluates the flow's own `checks` and the server's gates (`gate.untargeted`, `gate.editor`, `gate.dialog`, `gate.python`) for every step, nested flows and hooks included. A refusal with no `path` is one for the whole run, such as an untargeted run while more than one editor is registered; its message is the one the run itself would be refused with. `params` and `skip` are read as `run` reads them.
 
+### Validation
+
+`flow(run)` validates the whole plan before step 1 and refuses with one usage error listing every problem it found, so a broken flow never gets halfway. It checks that every task and nested flow exists (with the closest names when one does not), that a spec'd action gets its required options and choices from the task's defaults, the step or the run's `params`, that `${steps.N.x}` references bind to one earlier step, that `${params.x}` names a param the run was given, that `${error.x}` is used only in `on_failure` and `finally`, and that every `when:` and check expression parses and names real probes. The plan carries the same report as `validation: { ok, problems, warnings? }` without refusing; a warning is an option the action does not take, which has no effect.
+
+### Freeze
+
+The plan also carries `frozen`: the flow as the steps a run would execute, written as a flow definition. Nested flows are expanded in place, every option is resolved (task defaults, overrides, the step, `params`, and the `project`, `editor`, `session` and `params` references), and `${steps.N.x}` references are renumbered to the flat plan. Save `frozen.definition` under `flows:` in `ue-mcp.yml` and run it with no `params` to run exactly those steps, after reviewing them. A plan a flat definition cannot express is refused with the reason, under `frozen.refused`: a nested flow with its own hooks or checks, a flow step that retries or tolerates failure, or a reference to a nested flow's result.
+
 ### Describing a flow
 
 `project(action="describe_action", name="<flow>")` answers with the flow's resolved plan when the name is not an action (`flow.<name>` works too): every step with nested flows flattened under paths such as `3/1`, each step's `options`, `when`, `ignore_failure` and `checks`, deprecation from the flow and from each task, and `source`, the config layer that last set the flow and each step (`built-in`, `plugin:<name>`, `ue-mcp.yml`, an env overlay, `ue-mcp.local.yml`, or the user-global file). `project(search_tools)` lists matching flows under a separate `flows` key, and `project(list_available_actions)` counts which flows can run with no editor.
 
 ## Built-in Flows
 
-UE-MCP ships with three built-in flows you can run out of the box.
+UE-MCP ships built-in flows you can run out of the box: a small library for everyday work, and demos.
+
+| Flow | Params | What it does |
+|------|--------|--------------|
+| `commit_blueprint`, `commit_widget`, `commit_niagara`, `commit_statetree`, `commit_material` | `assetPath` | Compile (or recompile) the asset, then save it. The save runs only when the compile passed. |
+| `save_and_verify_clean` | | Save every dirty package, then fail if any is still dirty. |
+| `editor_up` | | Start the editor unless one is connected, then report its status. |
+| `clean_restart` | | Refuse while anything is unsaved, then stop and start the editor. |
+| `cpp_iterate` | `full?` | Live Coding compile by default; `full: true` stops the editor, builds and starts it. Ends with a crash check. |
+| `qa_gate` | `directory` | No new crash, data validation passes under `directory`, nothing unsaved. |
+| `playtest_smoke` | | Start PIE, wait for a controlled pawn, check for a crash, always stop PIE. |
+| `sandbox` | `folder` | Make a scratch folder and level, run `sandbox_body`, then load the level you started on and delete the folder. Override `sandbox_body`'s steps in `ue-mcp.yml` with your own work. |
+
+```
+flow(action="run", flowName="commit_niagara", params={ "assetPath": "/Game/VFX/NS_Spark" })
+```
 
 | Flow | Steps | What it does |
 |------|-------|--------------|
@@ -861,6 +921,8 @@ abstract class UeMcpTask<TOpts = Record<string, unknown>> {
   protected logger: Logger;             // Scoped logger
 
   protected get bridge(): IBridge;      // Shortcut for this.ctx.bridge
+  protected get env(): TaskEnv;         // project, projectConfig, editor, facts, call, locks
+  static requires?: TaskRequirements;   // { editor?: true, project?: true }, checked before execute
 
   abstract get taskName(): string;      // Descriptive name for logging
   abstract execute(): Promise<TaskResult>;  // Your task logic

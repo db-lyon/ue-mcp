@@ -941,7 +941,7 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		TableParam,
 	});
 	Registry.RegisterHandler(TEXT("chooser_add_column"), &AddColumn, {
-		TableParam,
+		TableParam.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("columnType"), EType::String, TEXT("Chooser column struct short name (EnumColumn, BoolColumn, FloatRangeColumn, GameplayTagColumn, ObjectColumn, Output*Column and so on)")),
 		MCPParam::Optional(TEXT("inputStruct"), EType::String, TEXT("Parameter struct to bind the column input (e.g. EnumContextProperty, BoolContextProperty)")),
 		MCPParam::Optional(TEXT("boundProperty"), EType::String, TEXT("Context property name the column reads at evaluation time")),
@@ -951,14 +951,14 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		TableParam,
 	});
 	Registry.RegisterHandler(TEXT("chooser_add_row"), &AddRow, {
-		TableParam,
+		TableParam.Role(EMCPParamRole::EditTarget),
 		OutputParam,
 		OutputTypeParam,
 		CellsParam,
 		InputsParam,
 	});
 	Registry.RegisterHandler(TEXT("chooser_set_row"), &SetRow, {
-		TableParam,
+		TableParam.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("index"), EType::Integer, TEXT("Row index, 0-based")),
 		OutputParam,
 		OutputTypeParam,
@@ -967,7 +967,7 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		InputsParam,
 	});
 	Registry.RegisterHandler(TEXT("chooser_delete_row"), &DeleteRow, {
-		TableParam,
+		TableParam.Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("index"), EType::Integer, TEXT("Row index, 0-based")),
 	});
 	Registry.RegisterHandler(TEXT("chooser_list_object_references"), &ListObjectReferences, {
@@ -976,7 +976,7 @@ void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("pathFilter"), EType::String, TEXT("Substring filter on the referenced object path")),
 	});
 	Registry.RegisterHandler(TEXT("chooser_remap_object_references"), &RemapObjectReferences, {
-		ChooserPathParam,
+		ChooserPathParam.Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("from"), EType::String, TEXT("Exact object path to replace (with to)")),
 		MCPParam::Optional(TEXT("to"), EType::String, TEXT("Replacement object path (with from)")),
 		MCPParam::Optional(TEXT("fromPrefix"), EType::String, TEXT("Path prefix to rewrite, e.g. /Game/Vendor/ (with toPrefix)")),

@@ -1192,11 +1192,8 @@ export function stampBlockedEditor(
   return out;
 }
 
-/** One guard per editor. */
-const guards = new WeakMap<EditorSession, DialogGuard>();
-
 /**
- * The guard for a session, created from the session itself if it has none.
+ * The guard for a session, kept on the session, created from it if it has none.
  *
  * The gate fails closed: no guard means the boundary cannot establish whether
  * a modal is up, so it refuses. That is only safe if every session HAS one,
@@ -1209,7 +1206,7 @@ const guards = new WeakMap<EditorSession, DialogGuard>();
  * pass upgrades this guard rather than competing with it.
  */
 export async function ensureGuard(session: EditorSession): Promise<DialogGuard> {
-  const existing = guards.get(session);
+  const existing = session.dialogGuard;
   if (existing) return existing;
   const guard = guardFor(session, sessionGuardDeps(session, false));
   guard.startWatching();
@@ -1243,7 +1240,7 @@ export function sessionGuardDeps(
 }
 
 export function guardFor(session: EditorSession, deps: GuardDeps): DialogGuard {
-  const existing = guards.get(session);
+  const existing = session.dialogGuard;
   if (existing) {
     // The guard is kept, but its dependencies are REPLACED. They close over
     // whether the connected client can be elicited, which is not known at
@@ -1255,16 +1252,16 @@ export function guardFor(session: EditorSession, deps: GuardDeps): DialogGuard {
     return existing;
   }
   const created = new DialogGuard(deps);
-  guards.set(session, created);
+  session.dialogGuard = created;
   return created;
 }
 
 export function existingGuard(session: EditorSession): DialogGuard | undefined {
-  return guards.get(session);
+  return session.dialogGuard;
 }
 
 /** Test seam. */
 export function forgetGuard(session: EditorSession): void {
-  guards.get(session)?.stopWatching();
-  guards.delete(session);
+  session.dialogGuard?.stopWatching();
+  session.dialogGuard = undefined;
 }

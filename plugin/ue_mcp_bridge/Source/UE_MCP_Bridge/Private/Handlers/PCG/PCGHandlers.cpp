@@ -166,33 +166,33 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		GraphPath(),
 	});
 	Registry.RegisterHandler(TEXT("add_pcg_node"), &AddPCGNode, {
-		GraphPath(),
+		GraphPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeType"), EType::String, TEXT("PCG settings class of the node to add")),
 		MCPParam::Optional(TEXT("posX"), EType::Number, TEXT("Graph editor X position for the new node")),
 		MCPParam::Optional(TEXT("posY"), EType::Number, TEXT("Graph editor Y position for the new node")),
 	});
 	Registry.RegisterHandler(TEXT("connect_pcg_nodes"), &ConnectPCGNodes, {
-		GraphPath(),
+		GraphPath().Role(EMCPParamRole::EditTarget),
 		SourceNode(),
 		MCPParam::Optional(TEXT("sourcePin"), EType::String, TEXT("Output pin label. connect_nodes defaults to the first output pin, disconnect_nodes to any")).Alias(TEXT("sourcePinLabel")),
 		TargetNode(),
 		MCPParam::Optional(TEXT("targetPin"), EType::String, TEXT("Input pin label. connect_nodes defaults to the first input pin, disconnect_nodes to any")).Alias(TEXT("targetPinLabel")),
 	});
 	Registry.RegisterHandler(TEXT("disconnect_pcg_nodes"), &DisconnectPCGNodes, {
-		GraphPath(),
+		GraphPath().Role(EMCPParamRole::EditTarget),
 		SourceNode(),
 		TargetNode(),
 		MCPParam::Optional(TEXT("sourcePin"), EType::String, TEXT("Output pin label. connect_nodes defaults to the first output pin, disconnect_nodes to any")).Alias(TEXT("sourcePinLabel")),
 		MCPParam::Optional(TEXT("targetPin"), EType::String, TEXT("Input pin label. connect_nodes defaults to the first input pin, disconnect_nodes to any")).Alias(TEXT("targetPinLabel")),
 	});
 	Registry.RegisterHandler(TEXT("remove_pcg_node"), &RemovePCGNode, {
-		GraphPath(),
+		GraphPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeName"), EType::String, TEXT("Engine name of the node, as read_graph reports it")),
 	});
 	// Called once per branch by the contract test: a settings object, then the
 	// single-property pair. Either way the graph load fails first.
 	Registry.RegisterHandler(TEXT("set_pcg_node_settings"), &SetPCGNodeSettings, {
-		GraphPath(),
+		GraphPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeName"), EType::String, TEXT("Engine name of the node, as read_graph reports it")),
 		MCPParam::Optional(TEXT("settings"), EType::Object, TEXT("{propertyPath: value}; dotted paths and nested structs supported")),
 		MCPParam::Optional(TEXT("propertyName"), EType::String, TEXT("One property to write instead of a settings object")),
@@ -217,7 +217,7 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecActorLabel, SpecActorPath,
 	}, ActorChoice);
 	Registry.RegisterHandler(TEXT("set_static_mesh_spawner_meshes"), &SetStaticMeshSpawnerMeshes, {
-		GraphPath(),
+		GraphPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodeName"), EType::String, TEXT("Engine name of the node, as read_graph reports it")),
 		MCPParam::Required(TEXT("entries"), EType::Array, TEXT("Weighted mesh entries")).Items(EType::Object).WithFields({
 			MCPParam::RequiredField(TEXT("mesh"), EType::String, TEXT("StaticMesh asset path; an entry without one is skipped")),
@@ -240,7 +240,7 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// #213: bulk JSON-driven graph authoring (mirrors material.import_graph).
 	Registry.RegisterHandler(TEXT("import_pcg_graph"), &ImportGraph, {
-		GraphPath(),
+		GraphPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("nodes"), EType::Array, TEXT("[{name, class, posX?, posY?, settings?}]")).Items(EType::Object),
 		MCPParam::Optional(TEXT("connections"), EType::Array, TEXT("[{from, fromPin?, to, toPin?}]")).Items(EType::Object),
 		MCPParam::Optional(TEXT("replace"), EType::Boolean, TEXT("Wipe existing user nodes first (default false)")),
@@ -252,7 +252,7 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// #1087: give instance nodes their own settings so the editor can edit them.
 	Registry.RegisterHandler(TEXT("unwrap_pcg_instance_nodes"), &UnwrapInstanceNodes, {
-		GraphPath(),
+		GraphPath().Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("nodeName"), EType::String, TEXT("Only this node (default: every node in the graph)")),
 	});
 }

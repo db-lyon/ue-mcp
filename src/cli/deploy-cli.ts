@@ -1,5 +1,6 @@
 import * as path from "node:path";
-import { ProjectContext } from "../config/project.js";
+import type { ProjectContext } from "../config/project.js";
+import { openProject } from "../runtime/runtime.js";
 import { deploy } from "../editor/deployer.js";
 import { coreSkillsInstalled, conflictMessages, installCoreSkills, syncPluginSkills } from "../extensions/skills.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
@@ -26,9 +27,9 @@ async function deployCmd(argv: string[]) {
     process.exit(1);
   }
 
-  const project = new ProjectContext();
+  let project: ProjectContext;
   try {
-    project.setProject(uprojectPath);
+    project = openProject(uprojectPath);
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
     process.exit(1);

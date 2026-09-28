@@ -27,7 +27,8 @@ import { taskEffect } from "../surface/action-effects.js";
 import { ensureGuard } from "../editor/dialog-guard.js";
 import { pythonGateRefusal } from "../dispatch/python-gate.js";
 import { needsExplicitEditor, refuseUntargetedInRegistry } from "../dispatch/editor-gate.js";
-import { hostNamespaces, makeConditionEvaluator, type StepScope } from "./condition.js";
+import { factsScope, hostNamespaces, makeConditionEvaluator, type ProbeFacts, type StepScope } from "./condition.js";
+import { BridgeFacts, ProbeError } from "./probes.js";
 import { stepAvailability } from "./flow-describe.js";
 import { GATE_IDS, GATES, gateFires } from "./gates.js";
 
@@ -39,7 +40,7 @@ const PLANNED_CALL = "flow.run";
  * is the declared gate evaluated over the others and the host namespaces. A
  * flow-level check sees no step, and only `gate.untargeted` can fire there.
  */
-export function gateScope(ctx: ToolContext, graph: readonly ToolDef[], oneReading = false): StepScope {
+export function gateScope(ctx: ToolContext, graph: readonly ToolDef[], oneReading = false, facts?: ProbeFacts): StepScope {
   let dialogProbe: Promise<((subject: string, kind: "bridge" | "action") => Promise<boolean>) | undefined> | undefined;
   // A plan reads the screen once for all its steps; a run reads it per step.
   const dialog = () => (dialogProbe ??= ctx.session
@@ -50,8 +51,13 @@ export function gateScope(ctx: ToolContext, graph: readonly ToolDef[], oneReadin
     }, () => undefined)
     : Promise.resolve(undefined));
 
-  const gates = (facts: Record<string, unknown>) =>
-    Object.fromEntries(GATE_IDS.map((id) => [id, gateFires(id, { ...hostNamespaces(ctx), ...facts })]));
+  // The gates read `editor.connected` from the run's probes when it has them,
+  // so a gate, a check and a `when:` see one reading.
+  const gates = async (stepFacts: Record<string, unknown>) => {
+    const host = hostNamespaces(ctx);
+    if (facts) host.editor = { ...(host.editor as object), connected: await facts.read("connected") };
+    return Object.fromEntries(GATE_IDS.map((id) => [id, gateFires(id, { ...host, ...stepFacts })]));
+  };
 
   return {
     names: ["step", "call", "gate"],
@@ -59,8 +65,8 @@ export function gateScope(ctx: ToolContext, graph: readonly ToolDef[], oneReadin
       const call = { task: PLANNED_CALL, targeted: ctx.callTargeted === true, needs_target: needsExplicitEditor(PLANNED_CALL, graph) };
       const step = c.step;
       if (!step || step.type !== "task") {
-        const facts = { call, step: step ? { name: step.name, type: step.type } : {} };
-        return { ...facts, gate: gates(facts) };
+        const flowFacts = { call, step: step ? { name: step.name, type: step.type } : {} };
+        return { ...flowFacts, gate: await gates(flowFacts) };
       }
       const name = step.name;
       const dot = name.indexOf(".");
@@ -74,14 +80,14 @@ export function gateScope(ctx: ToolContext, graph: readonly ToolDef[], oneReadin
       // Runtime params reach every step under the default flat scope.
       const options = { ...(step.options ?? {}), ...(c.params ?? {}) };
       const python = name === "editor.execute_python" && (await pythonGateRefusal(ctx, options)) !== null;
-      const facts = {
+      const stepFacts = {
         call,
         step: {
           name, type: step.type, effect: taskEffect(name, graph).effect, availability, bridge: spec?.bridge,
           dialog_blocked: blocked, python_refused: python,
         },
       };
-      return { ...facts, gate: gates(facts) };
+      return { ...stepFacts, gate: await gates(stepFacts) };
     },
   };
 }
@@ -113,11 +119,14 @@ type StepMap = Record<string, Record<string, unknown> | undefined>;
 
 function withChecks(steps: unknown, checks: StepCheck[]): unknown {
   if (!steps || typeof steps !== "object") return steps;
-  return Object.fromEntries(Object.entries(steps as StepMap).map(([n, step]) => {
-    if (!step || typeof step !== "object") return [n, step];
+  const one = (step: Record<string, unknown> | undefined) => {
+    if (!step || typeof step !== "object") return step;
     const existing = Array.isArray(step.checks) ? (step.checks as StepCheck[]) : [];
-    return [n, { ...step, checks: [...existing, ...checks] }];
-  }));
+    return { ...step, checks: [...existing, ...checks] };
+  };
+  // Hooks are lists and main steps a numbered map; each keeps its shape.
+  if (Array.isArray(steps)) return steps.map(one);
+  return Object.fromEntries(Object.entries(steps as StepMap).map(([n, step]) => [n, one(step)]));
 }
 
 /** A copy of `flows` with the gate checks declared on every flow, step and hook step. */
@@ -160,6 +169,28 @@ function fired(outcomes: CheckOutcome[]): Array<{ action: string; message: strin
     .map((o) => ({ action: o.action, message: o.error ? `${o.message} (${o.error.message})` : o.message }));
 }
 
+type FlowSteps = Record<string, { steps?: Record<string, { task?: string; flow?: string }> } | undefined>;
+
+/** Whether a step before the one being checked, in the same flow, may change the editor. */
+function changesBefore(flows: Record<string, unknown>, c: ConditionContext, graph: readonly ToolDef[]): boolean {
+  const step = c.step;
+  if (!step || !c.flowName) return false;
+  const flow = (flows as FlowSteps)[c.flowName];
+  return Object.entries(flow?.steps ?? {}).some(([n, s]) =>
+    Number(n) < step.stepNumber && (s.flow !== undefined || (s.task !== undefined && taskEffect(s.task, graph).effect !== "read")));
+}
+
+/** The editor facts scope, unknown to a plan behind a step that may change the editor. */
+function deferAfterChange(scope: StepScope | undefined, flows: Record<string, unknown>, graph: readonly ToolDef[]): StepScope | undefined {
+  if (!scope) return undefined;
+  return {
+    names: scope.names,
+    read: (c, expression) => changesBefore(flows, c, graph)
+      ? Promise.reject(new Error("editor facts are read when the run reaches this step, because an earlier step may change the editor"))
+      : scope.read(c, expression),
+  };
+}
+
 /** What a run of `flowName` would be refused for, evaluated without running anything. */
 export async function planPreflight(
   registry: TaskRegistry,
@@ -170,13 +201,23 @@ export async function planPreflight(
   params?: Record<string, unknown>,
   skip?: string[],
 ): Promise<PlanPreflight> {
+  // A plan reads each probe once: nothing runs between its checks. A check
+  // behind a step that may change the editor reads the state that step
+  // leaves, which only the run can see, so the plan reports it unknown.
+  const facts = new BridgeFacts(ctx);
+  const deferred: ProbeFacts = {
+    read: (name) => name === "engine"
+      ? facts.read(name)
+      : Promise.reject(new ProbeError(name, "read when the run reaches this step, because an earlier step may change the editor")),
+  };
+  const planFacts = (c: ConditionContext): ProbeFacts => (changesBefore(config.flows, c, graph) ? deferred : facts);
   const runner = new FlowRunner({
     tasks: config.tasks as Record<string, TaskDefinition>,
     flows: withGateChecks(config.flows, gateChecks(ctx, graph)),
     registry,
     context: { ...ctx } as never,
-    references: hostNamespaces(ctx),
-    conditionEvaluator: makeConditionEvaluator(hostNamespaces(ctx), gateScope(ctx, graph, true)),
+    references: { ...hostNamespaces(ctx), params: params ?? {} },
+    conditionEvaluator: makeConditionEvaluator(hostNamespaces(ctx), [gateScope(ctx, graph, true, facts), deferAfterChange(factsScope(ctx), config.flows, graph)], planFacts),
   });
   const result = await runner.preflight(flowName, params, { skip });
   const refused: PlanRefusal[] = [];

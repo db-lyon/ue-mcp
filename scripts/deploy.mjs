@@ -6,11 +6,10 @@
 import { tsImport } from "tsx/esm/api";
 
 const { deploy, deploySummary } = await tsImport("../src/editor/deployer.ts", import.meta.url);
-const { ProjectContext } = await tsImport("../src/config/project.ts", import.meta.url);
+const { openProject } = await tsImport("../src/runtime/runtime.ts", import.meta.url);
 
-const proj = new ProjectContext();
 const target = process.argv[2] ?? "tests/ue_mcp/ue_mcp.uproject";
-proj.setProject(target);
+const proj = openProject(target);
 const result = deploy(proj);
 console.log(deploySummary(result));
 if (result.error) process.exit(1);

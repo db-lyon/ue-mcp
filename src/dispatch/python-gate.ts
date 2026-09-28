@@ -119,32 +119,37 @@ export function parseRulings(raw: unknown): ParsedRulings {
   return { accepted, rejected };
 }
 
-// ── Session-scoped memory ──────────────────────────────────────────────────────
-// Keyed the same way the workaround stack is, so one editor's rulings never
-// answer for another's.
+// ── Per-editor memory ──────────────────────────────────────────────────────────
+// An editor handle keeps its own rulings, so one editor's never answer for
+// another's. A session that is only a key is partitioned by that key.
 
-const remembered = new Map<string, Map<string, string>>();
+type RulingScope = WorkaroundScopeSource & { session?: { pythonRulings?: Map<string, string> } };
 
-function storeFor(scope: string): Map<string, string> {
-  let store = remembered.get(scope);
+const keyedRulings = new Map<string, Map<string, string>>();
+
+function storeFor(ctx: RulingScope | undefined): Map<string, string> {
+  const own = ctx?.session?.pythonRulings;
+  if (own) return own;
+  const scope = workaroundScope(ctx);
+  let store = keyedRulings.get(scope);
   if (!store) {
     store = new Map();
-    remembered.set(scope, store);
+    keyedRulings.set(scope, store);
   }
   return store;
 }
 
 /**
- * Fold this call's rulings into what the session already knows, and return the
+ * Fold this call's rulings into what the editor already knows, and return the
  * union. This is what makes the gate converge: a reworded taskSummary produces
  * a different candidate set, and without this every earlier justification would
  * have to be typed again.
  */
 function recordRulings(
-  ctx: WorkaroundScopeSource | undefined,
+  ctx: RulingScope | undefined,
   rulings: Map<string, string>,
 ): Map<string, string> {
-  const store = storeFor(workaroundScope(ctx));
+  const store = storeFor(ctx);
   for (const [key, reason] of rulings) {
     // Re-insert so a repeated key moves to the newest end of the eviction order.
     store.delete(key);
@@ -158,15 +163,14 @@ function recordRulings(
   return new Map(store);
 }
 
-
-/** What the session already knows, plus this call's rulings, recording nothing. */
-function knownRulings(ctx: WorkaroundScopeSource | undefined, rulings: Map<string, string>): Map<string, string> {
-  return new Map([...(remembered.get(workaroundScope(ctx)) ?? []), ...rulings]);
+/** What the editor already knows, plus this call's rulings, recording nothing. */
+function knownRulings(ctx: RulingScope | undefined, rulings: Map<string, string>): Map<string, string> {
+  return new Map([...storeFor(ctx), ...rulings]);
 }
 
-/** Drop every partition. Test-only. */
+/** Drop every keyed partition. Test-only; a handle's own rulings go with the handle. */
 export function resetRulings(): void {
-  remembered.clear();
+  keyedRulings.clear();
 }
 
 // ── The gate itself ────────────────────────────────────────────────────────────

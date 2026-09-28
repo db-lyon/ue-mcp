@@ -82,6 +82,16 @@ static void ReadHidden(const TSharedPtr<FJsonObject>& Bag, const FString& Role)
     expect(sorted(paramReadsInBody(body, "Params", new Map()).keys)).toEqual(["actorLabel", "actorPath", "targetLabel", "targetPath"]);
   });
 
+  it("reads a reader's edit scope target by name, and marks a writer's as its spec's editTarget", () => {
+    const reader = paramReadsInBody(`{ FMCPEditScope Edit(Params, TEXT("read_x"), TEXT("assetPath")); }`, "Params", new Map());
+    expect(sorted(reader.keys)).toEqual(["assetPath"]);
+    expect(reader.editTarget).toBe(false);
+    const writer = paramReadsInBody(`{ FMCPEditScope Edit(Params, TEXT("set_x"), MCPStateTree::ValueEdit()); }`, "Params", new Map());
+    expect(sorted(writer.keys)).toEqual([]);
+    expect(writer.opaque).toEqual([]);
+    expect(writer.editTarget).toBe(true);
+  });
+
   it("reports a key it cannot resolve, and a function it cannot find, as opaque", () => {
     const body = `{
 		OptionalString(Params, KeyFromSomewhere);
@@ -102,7 +112,7 @@ static void ReadHidden(const TSharedPtr<FJsonObject>& Bag, const FString& Role)
     let agree = 0;
     for (const [method, spec] of Object.entries(SNAPSHOT.handlers)) {
       if (spec.contractExempt) continue;
-      const reads = handlerParamReads(method, { registrations: REGISTRATIONS, sources: SOURCES });
+      const reads = handlerParamReads(method, { registrations: REGISTRATIONS, sources: SOURCES, spec });
       if (!reads || reads.opaque.length > 0) continue;
       readable++;
       if (sorted(reads.keys).join() === sorted(spec.params.map((p) => p.name)).join()) agree++;
@@ -120,7 +130,7 @@ describe("a contract-exempt spec", () => {
   });
 
   it.each(exempt)("%s reads exactly what it declares", (method, spec) => {
-    const reads = handlerParamReads(method, { registrations: REGISTRATIONS, sources: SOURCES });
+    const reads = handlerParamReads(method, { registrations: REGISTRATIONS, sources: SOURCES, spec });
     expect(reads, `${method}: its handler body was not found, so nothing holds it to its spec`).not.toBeNull();
     expect(reads!.opaque, `${method}: reads the source cannot resolve; read them through a helper with a literal key`).toEqual([]);
     expect(sorted(reads!.keys), method).toEqual(sorted(spec.params.map((p) => p.name)));

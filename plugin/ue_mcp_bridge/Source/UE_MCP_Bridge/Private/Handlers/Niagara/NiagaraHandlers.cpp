@@ -239,11 +239,11 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("valueZ"), EType::Number, TEXT("Z component of a vector parameter")),
 	}, ActorChoice.ExactlyOne({ { TEXT("value") }, { TEXT("valueX"), TEXT("valueY"), TEXT("valueZ") } }));
 	Registry.RegisterHandler(TEXT("add_emitter_to_system"), &AddEmitterToSystem, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("emitterPath"), EType::String, TEXT("NiagaraEmitter asset to add")),
 	});
 	Registry.RegisterHandler(TEXT("set_emitter_property"), &SetEmitterProperty, {
-		MCPParam::Required(TEXT("systemPath"), EType::String, TEXT("NiagaraSystem asset path")).Alias(TEXT("assetPath")),
+		MCPParam::Required(TEXT("systemPath"), EType::String, TEXT("NiagaraSystem asset path")).Alias(TEXT("assetPath")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("emitterName"), EType::String, TEXT("Emitter handle name (default: the first emitter)")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Emitter property to set")),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value, as a string")),
@@ -259,19 +259,19 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		EmitterIndexParam(),
 	});
 	Registry.RegisterHandler(TEXT("add_emitter_renderer"), &AddEmitterRenderer, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rendererType"), EType::String, TEXT("sprite|mesh|ribbon or full class name")),
 		EmitterNameParam(),
 		EmitterIndexParam(),
 	});
 	Registry.RegisterHandler(TEXT("remove_emitter_renderer"), &RemoveEmitterRenderer, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("rendererIndex"), EType::Integer, TEXT("Index of the renderer on the emitter")),
 		EmitterNameParam(),
 		EmitterIndexParam(),
 	});
 	Registry.RegisterHandler(TEXT("set_renderer_property"), &SetRendererProperty, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("rendererIndex"), EType::Integer, TEXT("Index of the renderer on the emitter (default 0)")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Renderer property to set")),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value: a bool, number or string, an asset path for an object property, or JSON for a struct, enum, name or array")),
@@ -307,7 +307,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		ModuleFilterParam(),
 	});
 	Registry.RegisterHandler(TEXT("set_niagara_module_input"), &SetModuleInput, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		ModuleNameParam(),
 		MCPParam::Required(TEXT("inputName"), EType::String, TEXT("Module input pin name")),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("A scalar, [x,y,z], {x,y,z[,w]} or {r,g,b[,a]} (alpha defaults to 1); a gapped object, an empty array or a non-finite number is refused")),
@@ -316,7 +316,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		StackFilterParam(),
 	});
 	Registry.RegisterHandler(TEXT("add_niagara_module"), &AddModule, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("moduleScript"), EType::String, TEXT("Stock module script path, e.g. /Niagara/Modules/Emitter/SpawnRate")),
 		StackContextParam(),
 		EmitterNameParam(),
@@ -331,7 +331,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		ModuleFilterParam(),
 	});
 	Registry.RegisterHandler(TEXT("set_niagara_dynamic_input"), &SetDynamicInput, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		StackContextParam(),
 		ModuleNameParam(),
 		MCPParam::Required(TEXT("inputName"), EType::String, TEXT("Module input pin name")),
@@ -340,7 +340,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		EmitterIndexParam(),
 	});
 	Registry.RegisterHandler(TEXT("remove_niagara_dynamic_input"), &RemoveDynamicInput, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		StackContextParam(),
 		ModuleNameParam(),
 		MCPParam::Required(TEXT("inputName"), EType::String, TEXT("Module input pin name")),
@@ -348,27 +348,27 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		EmitterIndexParam(),
 	});
 	Registry.RegisterHandler(TEXT("add_niagara_simulation_stage"), &AddSimulationStage, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("stageName"), EType::String, TEXT("Simulation stage name")),
 		EmitterNameParam(),
 		EmitterIndexParam(),
 		MCPParam::Optional(TEXT("enabled"), EType::Boolean, TEXT("Create the stage enabled (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("remove_niagara_simulation_stage"), &RemoveSimulationStage, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("stageName"), EType::String, TEXT("Simulation stage name")),
 		EmitterNameParam(),
 		EmitterIndexParam(),
 	});
 	Registry.RegisterHandler(TEXT("add_niagara_event_handler"), &AddEventHandler, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("eventName"), EType::String, TEXT("Event handler name")),
 		EmitterNameParam(),
 		EmitterIndexParam(),
 		MCPParam::Optional(TEXT("sourceEmitterId"), EType::String, TEXT("Id of the emitter whose events this handler listens to (default: this emitter)")),
 	});
 	Registry.RegisterHandler(TEXT("remove_niagara_event_handler"), &RemoveEventHandler, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Required(TEXT("eventName"), EType::String, TEXT("Event handler name")),
 		EmitterNameParam(),
 		EmitterIndexParam(),
@@ -382,20 +382,20 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, HlslGraphChoice);
 	Registry.RegisterHandler(TEXT("set_niagara_custom_hlsl"), &SetCustomHlsl, {
 		MCPParam::Required(TEXT("hlsl"), EType::String, TEXT("The new HLSL body")),
-		HlslScriptPathParam, HlslSystemPathParam, HlslStackContextParam,
+		HlslScriptPathParam, HlslSystemPathParam.Role(EMCPParamRole::EditTarget), HlslStackContextParam,
 		EmitterNameParam(),
 		EmitterIndexParam(),
 		MCPParam::Optional(TEXT("nodeIndex"), EType::Integer, TEXT("Which CustomHLSL node when the graph has several (default 0)")),
 	}, HlslGraphChoice);
 	Registry.RegisterHandler(TEXT("remove_niagara_module"), &RemoveModule, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		StackContextParam(),
 		ModuleNameParam(),
 		EmitterNameParam(),
 		EmitterIndexParam(),
 	});
 	Registry.RegisterHandler(TEXT("set_niagara_module_enabled"), &SetModuleEnabled, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		StackContextParam(),
 		ModuleNameParam(),
 		MCPParam::Required(TEXT("enabled"), EType::Boolean, TEXT("The state to set")),
@@ -403,7 +403,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		EmitterIndexParam(),
 	});
 	Registry.RegisterHandler(TEXT("remove_emitter_from_system"), &RemoveEmitterFromSystem, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		EmitterNameParam(),
 		EmitterIndexParam(),
 	});
@@ -418,7 +418,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		StackFilterParam(),
 	});
 	Registry.RegisterHandler(TEXT("set_niagara_static_switch"), &SetStaticSwitch, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		ModuleNameParam(),
 		MCPParam::Required(TEXT("switchName"), EType::String, TEXT("Static switch input name")),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("Switch value, as a string")),
@@ -443,7 +443,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		PinListParam(TEXT("outputs"), TEXT("Outputs declared on a pass-through CustomHLSL node")),
 	}, MCPSpec::ContractExempt(TEXT("Creates and saves a module script under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("compile_niagara_system"), &CompileSystem, {
-		SystemPathParam(),
+		SystemPathParam().Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Recompile even when nothing looks dirty (default true)")),
 		MCPParam::Optional(TEXT("includeGpuShaders"), EType::Boolean, TEXT("Also wait for GPU shader compilation to finish (default false)")),
 	});

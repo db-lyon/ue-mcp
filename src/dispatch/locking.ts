@@ -34,49 +34,40 @@ export function resolveLockingConfig(cfg?: { enabled?: boolean; ttlSeconds?: num
 }
 
 
-/** Keys whose string value is an in-editor asset path (not a filesystem source). */
-const PATH_KEYS = [
-  "assetPath", "path", "blueprintPath", "sourcePath", "destinationPath",
-  "targetPath", "materialPath",
-];
-
 export interface ActionClassification {
   mutates: boolean;
   /** Distinct asset paths this call would mutate (may be empty even when mutating). */
   paths: string[];
 }
 
-function looksLikeAssetPath(v: unknown): v is string {
-  return typeof v === "string" && v.length > 0 && v.includes("/");
-}
-
 /**
- * Spec'd path params that never name the asset an edit writes: files on disk
- * and folders a new asset is created under.
+ * The package a value names, when it names one: `/Mount/Asset`, with any
+ * `:Subobject` suffix dropped. An in-asset address (`Root.Patrol`) is not one.
  */
-const NOT_ASSET_PATHS = new Set(["filePath", "csvPath", "jsonPath", "folderPath", "packagePath", "subPath"]);
-
-/** `/Mount/Asset`, not an in-asset address (`Root.Patrol`) or an actor (`...:PersistentLevel.A`). */
-function looksLikeContentPath(v: unknown): v is string {
-  return typeof v === "string" && /^\/[A-Za-z0-9_]+\/[^:]+$/.test(v);
+function contentPath(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const path = v.split(":")[0];
+  return /^\/[A-Za-z0-9_]+\/.+$/.test(path) ? path : undefined;
 }
 
-const specPathKeyCache = new Map<string, string[]>();
+/** Where an edit target arrives: its name and aliases, and on a list of objects the element keys. */
+interface EditTargetKey {
+  keys: string[];
+  roleKeys?: string[];
+}
 
-/** String params the method's recorded C++ spec names `*Path`, aliases included. */
-function specPathKeys(method: string): string[] {
-  let keys = specPathKeyCache.get(method);
-  if (!keys) {
-    keys = [];
-    for (const param of RECORDED_HANDLER_SPECS[method]?.params ?? []) {
-      if (param.type !== "string" || NOT_ASSET_PATHS.has(param.name)) continue;
-      for (const name of [param.name, ...(param.aliases ?? [])]) {
-        if (/(?:^p|P)ath$/.test(name)) keys.push(name);
-      }
-    }
-    specPathKeyCache.set(method, keys);
+const editTargetCache = new Map<string, EditTargetKey[]>();
+
+/** The params the method's recorded C++ spec declares with the editTarget role. */
+function editTargets(method: string): EditTargetKey[] {
+  let targets = editTargetCache.get(method);
+  if (!targets) {
+    targets = (RECORDED_HANDLER_SPECS[method]?.params ?? [])
+      .filter((p) => p.role === "editTarget")
+      .map((p) => ({ keys: [p.name, ...(p.aliases ?? [])], roleKeys: p.roleKeys }));
+    editTargetCache.set(method, targets);
   }
-  return keys;
+  return targets;
 }
 
 const methodIndexes = new WeakMap<readonly ToolDef[], Map<string, string>>();
@@ -139,38 +130,21 @@ export function classifyAction(
   const effect = taskName.includes(".") ? taskEffect(taskName, graph) : bridgeMethodEffect(taskName, params, graph);
   if (effect.effect === "read") return { mutates: false, paths: [] };
 
+  // The asset is what the C++ spec declares as the edit target; nothing is
+  // guessed from a parameter's name.
   const paths = new Set<string>();
-  for (const key of PATH_KEYS) {
-    if (looksLikeAssetPath(params[key])) paths.add(params[key] as string);
-  }
-  // Whatever else the C++ spec declares as a path to an asset.
+  const add = (v: unknown) => {
+    const path = contentPath(v);
+    if (path) paths.add(path);
+  };
   const method = bridgeMethodOf(taskName, graph);
-  for (const key of method ? specPathKeys(method) : []) {
-    if (!PATH_KEYS.includes(key) && looksLikeContentPath(params[key])) paths.add(params[key] as string);
-  }
-  // Batch shapes.
-  if (Array.isArray(params.assetPaths)) {
-    for (const p of params.assetPaths) if (looksLikeAssetPath(p)) paths.add(p);
-  }
-  if (Array.isArray(params.renames)) {
-    for (const r of params.renames) {
-      const rr = r as Record<string, unknown>;
-      if (looksLikeAssetPath(rr?.sourcePath)) paths.add(rr.sourcePath as string);
-      else if (looksLikeAssetPath(rr?.assetPath)) paths.add(rr.assetPath as string);
-    }
-  }
-  if (Array.isArray(params.items)) {
-    for (const item of params.items) {
-      const descriptor = item as Record<string, unknown>;
-      if (looksLikeAssetPath(descriptor?.assetPath)) paths.add(descriptor.assetPath as string);
-    }
-  }
-  // Batch mesh material assignment: the mesh is written, the material is only
-  // read, so only assetPath is locked.
-  if (Array.isArray(params.assignments)) {
-    for (const a of params.assignments) {
-      const entry = a as Record<string, unknown>;
-      if (looksLikeAssetPath(entry?.assetPath)) paths.add(entry.assetPath as string);
+  for (const target of method ? editTargets(method) : []) {
+    for (const key of target.keys) {
+      const values = Array.isArray(params[key]) ? (params[key] as unknown[]) : [params[key]];
+      for (const value of values) {
+        if (!target.roleKeys) add(value);
+        else if (value && typeof value === "object") for (const k of target.roleKeys) add((value as Record<string, unknown>)[k]);
+      }
     }
   }
   return { mutates: true, paths: [...paths] };

@@ -16188,8 +16188,8 @@ tasks:
       (name|type|selectionBehavior|bEnabled|weight|linkedAsset|description|tag|customTickRate|color).
       For tag: gameplay tag string or empty to clear. For customTickRate: number
       in seconds or empty to disable. For color: palette color display name,
-      GUID, or empty to clear. Params: assetPath, stateId?, statePath?,
-      propertyName, value
+      GUID, or empty to clear. Returns previousValue, the value the write
+      replaced. Params: assetPath, stateId?, statePath?, propertyName, value
   statetree.clear_state_nodes:
     class_path: ue-mcp.builtin/statetree.clear_state_nodes
     group: statetree
@@ -16202,13 +16202,15 @@ tasks:
     description: >-
       Add a task to a state. structType is a C++ struct name, e.g.
       FMyStateTreeTask or an engine-shipped task like
-      FStateTreeRunParallelStateTreesTask. Params: assetPath, stateId?,
+      FStateTreeRunParallelStateTreesTask. Returns taskCount, the list's length
+      after the add, and the owning stateId. Params: assetPath, stateId?,
       statePath?, structType, instanceProperties?
   statetree.add_enter_condition:
     class_path: ue-mcp.builtin/statetree.add_enter_condition
     group: statetree
     description: >-
-      Add an enter condition to a state. Params: assetPath, stateId?,
+      Add an enter condition to a state. Returns conditionCount, the list's
+      length after the add, and the owning stateId. Params: assetPath, stateId?,
       statePath?, structType, instanceProperties?, operand?
   statetree.remove_enter_condition:
     class_path: ue-mcp.builtin/statetree.remove_enter_condition
@@ -16224,8 +16226,9 @@ tasks:
     class_path: ue-mcp.builtin/statetree.set_task_instance_property
     group: statetree
     description: >-
-      Set a property on a task's instance data. Params: assetPath, stateId?,
-      statePath?, taskIndex, propertyName, value
+      Set a property on a task's instance data. Returns previousValue, the value
+      the write replaced. Params: assetPath, stateId?, statePath?, taskIndex,
+      propertyName, value
   statetree.set_task_property:
     class_path: ue-mcp.builtin/statetree.set_task_property
     group: statetree
@@ -16233,8 +16236,9 @@ tasks:
       Set a property on the task's node struct (FStateTreeTaskBase-level:
       bConsideredForCompletion, bTaskEnabled, bShouldStateChangeOnReselect).
       Distinct from set_task_instance_property which targets instance data.
-      value is string-encoded, e.g. 'true'/'false'. Params: assetPath, stateId?,
-      statePath?, taskIndex, propertyName, value
+      value is string-encoded, e.g. 'true'/'false'. Returns previousValue, the
+      value the write replaced. Params: assetPath, stateId?, statePath?,
+      taskIndex, propertyName, value
   statetree.add_transition:
     class_path: ue-mcp.builtin/statetree.add_transition
     group: statetree
@@ -16246,8 +16250,10 @@ tasks:
     class_path: ue-mcp.builtin/statetree.add_transition_condition
     group: statetree
     description: >-
-      Add a condition to an existing transition. Params: assetPath, stateId?,
-      statePath?, transitionIndex, structType, instanceProperties?, operand?
+      Add a condition to an existing transition. Returns conditionCount, the
+      list's length after the add, and the owning stateId. Params: assetPath,
+      stateId?, statePath?, transitionIndex, structType, instanceProperties?,
+      operand?
   statetree.remove_transition:
     class_path: ue-mcp.builtin/statetree.remove_transition
     group: statetree
@@ -16282,8 +16288,9 @@ tasks:
     class_path: ue-mcp.builtin/statetree.add_evaluator
     group: statetree
     description: >-
-      Add an evaluator to the StateTree (tree-level). Params: assetPath,
-      structType, instanceProperties?
+      Add an evaluator to the StateTree (tree-level). Returns evaluatorCount,
+      the list's length after the add. Params: assetPath, structType,
+      instanceProperties?
   statetree.remove_evaluator:
     class_path: ue-mcp.builtin/statetree.remove_evaluator
     group: statetree
@@ -16292,21 +16299,22 @@ tasks:
     class_path: ue-mcp.builtin/statetree.set_evaluator_instance_property
     group: statetree
     description: >-
-      Set a property on an evaluator's instance data. Params: assetPath, nodeId,
-      propertyName, value
+      Set a property on an evaluator's instance data. Returns previousValue, the
+      value the write replaced. Params: assetPath, nodeId, propertyName, value
   statetree.set_evaluator_property:
     class_path: ue-mcp.builtin/statetree.set_evaluator_property
     group: statetree
     description: >-
       Set a property on the evaluator's node struct
-      (FStateTreeEvaluatorBase-level). Params: assetPath, nodeId, propertyName,
-      value
+      (FStateTreeEvaluatorBase-level). Returns previousValue, the value the
+      write replaced. Params: assetPath, nodeId, propertyName, value
   statetree.add_global_task:
     class_path: ue-mcp.builtin/statetree.add_global_task
     group: statetree
     description: >-
-      Add a global task to the StateTree (tree-level). Params: assetPath,
-      structType, instanceProperties?
+      Add a global task to the StateTree (tree-level). Returns globalTaskCount,
+      the list's length after the add. Params: assetPath, structType,
+      instanceProperties?
   statetree.remove_global_task:
     class_path: ue-mcp.builtin/statetree.remove_global_task
     group: statetree
@@ -16315,14 +16323,16 @@ tasks:
     class_path: ue-mcp.builtin/statetree.set_global_task_instance_property
     group: statetree
     description: >-
-      Set a property on a global task's instance data. Params: assetPath,
-      nodeId, propertyName, value
+      Set a property on a global task's instance data. Returns previousValue,
+      the value the write replaced. Params: assetPath, nodeId, propertyName,
+      value
   statetree.set_global_task_property:
     class_path: ue-mcp.builtin/statetree.set_global_task_property
     group: statetree
     description: >-
       Set a property on a global task's node struct (FStateTreeTaskBase-level).
-      Params: assetPath, nodeId, propertyName, value
+      Returns previousValue, the value the write replaced. Params: assetPath,
+      nodeId, propertyName, value
   statetree.list_colors:
     class_path: ue-mcp.builtin/statetree.list_colors
     group: statetree
@@ -16359,8 +16369,8 @@ tasks:
     group: statetree
     description: >-
       Set the value of an existing state parameter. On fixed-layout states, also
-      marks the parameter as overridden. Params: assetPath, stateId?,
-      statePath?, paramName, value
+      marks the parameter as overridden. Returns previousValue, the value the
+      write replaced. Params: assetPath, stateId?, statePath?, paramName, value
   statetree.set_root_parameters:
     class_path: ue-mcp.builtin/statetree.set_root_parameters
     group: statetree
@@ -17875,6 +17885,219 @@ flows:
     steps:
       1:
         task: demo.cleanup
+  commit_blueprint:
+    description: >-
+      Compile a Blueprint and save it. The save runs only when the compile
+      passed. Params: assetPath.
+    steps:
+      1:
+        task: blueprint.compile
+        options:
+          assetPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+  commit_widget:
+    description: >-
+      Compile a Widget Blueprint and save it. The save runs only when the
+      compile passed. Params: assetPath.
+    steps:
+      1:
+        task: blueprint.compile
+        options:
+          assetPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+  commit_niagara:
+    description: >-
+      Compile a Niagara system, wait for the compile it asked for, and save it.
+      The save runs only when the compile passed. Params: assetPath (the
+      system).
+    steps:
+      1:
+        task: niagara.compile
+        options:
+          systemPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+  commit_statetree:
+    description: >-
+      Compile a StateTree and save it. The save runs only when the compile
+      passed. Params: assetPath.
+    steps:
+      1:
+        task: statetree.compile
+        options:
+          assetPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+  commit_material:
+    description: >-
+      Recompile a material and save it. The save runs only when the recompile
+      passed. Params: assetPath.
+    steps:
+      1:
+        task: material.recompile
+        options:
+          assetPath: ${params.assetPath}
+      2:
+        task: asset.save
+        options:
+          assetPath: ${params.assetPath}
+  save_and_verify_clean:
+    description: >-
+      Save every dirty content and map package, then fail if any package is
+      still dirty, reading the world state fresh after the save.
+    steps:
+      1:
+        task: editor.save_dirty
+      2:
+        task: editor.list_dirty_packages
+        checks:
+          - when: probe.dirty > 0
+            action: error
+            message: >-
+              Packages are still dirty after the save. Step 1 reports each
+              package and why it did not save.
+  editor_up:
+    description: >-
+      Start the project's editor unless one is already connected, then report
+      its status.
+    steps:
+      1:
+        task: editor.start_editor
+        when: '!probe.connected'
+      2:
+        task: project.get_status
+  clean_restart:
+    description: >-
+      Restart the editor from a clean state: refuses while any package is
+      unsaved (run save_and_verify_clean first), then stops the editor if one is
+      running, starts it, and reports its status.
+    checks:
+      - when: probe.connected && probe.dirty > 0
+        action: error
+        message: >-
+          Packages are unsaved, and closing the editor would prompt for or lose
+          them. Run the save_and_verify_clean flow first.
+    steps:
+      1:
+        task: editor.stop_editor
+        when: probe.connected
+      2:
+        task: editor.start_editor
+      3:
+        task: project.get_status
+  cpp_iterate:
+    description: >-
+      Rebuild the project's C++ and bring the editor back on it. Live Coding by
+      default. With params.full true: stop the editor, run a full build, and
+      start it again. Ends by checking for a crash.
+    steps:
+      1:
+        task: project.live_coding_compile
+        when: '!params.full'
+        options:
+          wait: true
+      2:
+        task: editor.stop_editor
+        when: params.full && probe.connected
+      3:
+        task: project.build
+        when: params.full
+      4:
+        task: editor.start_editor
+        when: params.full
+      5:
+        task: editor.check_for_crashes
+  qa_gate:
+    description: >-
+      Checks before calling work done: no new crash, the content under
+      params.directory passes data validation, and nothing is left unsaved.
+      Params: directory (for example /Game/Characters).
+    steps:
+      1:
+        task: editor.check_for_crashes
+      2:
+        task: editor.validate_assets
+        options:
+          directory: ${params.directory}
+      3:
+        task: editor.list_dirty_packages
+        checks:
+          - when: probe.dirty > 0
+            action: error
+            message: >-
+              Packages are unsaved. Save them (the save_and_verify_clean flow)
+              before calling the work done.
+  playtest_smoke:
+    description: >-
+      Start PIE, wait until a pawn is controlled, check for a crash, and stop
+      PIE whether or not those passed. Refuses to start over a session that is
+      already running.
+    checks:
+      - when: probe.playing
+        action: error
+        message: >-
+          A PIE or SIE session is already running. Stop it with
+          editor(play_in_editor, pieAction=stop) first.
+    steps:
+      1:
+        task: editor.play_in_editor
+        options:
+          pieAction: start
+      2:
+        task: editor.get_pie_pawn
+        retries: 30
+        retryDelay: 1000
+      3:
+        task: editor.check_for_crashes
+    finally:
+      - task: editor.play_in_editor
+        ignore_failure: true
+        options:
+          pieAction: stop
+  sandbox:
+    description: >-
+      Run sandbox_body inside a scratch content folder and level, then load the
+      level you started on and delete the folder, whether or not the body
+      passed. Override sandbox_body's steps in ue-mcp.yml to put your own work
+      there. Params: folder (the scratch folder, for example /Game/Sandbox).
+    steps:
+      1:
+        task: level.get_current
+      2:
+        task: asset.create_folder
+        options:
+          path: ${params.folder}
+      3:
+        task: level.create
+        options:
+          levelPath: ${params.folder}/L_Sandbox
+      4:
+        flow: sandbox_body
+    finally:
+      - task: level.load
+        options:
+          levelPath: ${steps.1.mapPackagePath}
+      - task: asset.delete_folder
+        options:
+          path: ${params.folder}
+          force: true
+  sandbox_body:
+    description: >-
+      The work the sandbox flow runs inside its scratch level. Ships as one read
+      of the current level; a project replaces these steps.
+    steps:
+      1:
+        task: level.get_current
   demo_step_1:
     description: >-
       Neon Shrine demo step 1 (create_level): Create new level at

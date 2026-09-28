@@ -343,7 +343,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("maxLogChars"), EType::Number, TEXT("Keep only the last N characters of logged output")),
 	}, MCPSpec::ContractExempt(TEXT("runs a Python file")));
 	Registry.RegisterHandler(TEXT("set_property"), &SetProperty, {
-		ObjectPathParam(TEXT("Object, asset, class or Blueprint path. A class or Blueprint resolves to its default object")),
+		ObjectPathParam(TEXT("Object, asset, class or Blueprint path. A class or Blueprint resolves to its default object")).Role(EMCPParamRole::EditTarget),
 		PropertyNameParam(),
 		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value as structured JSON, the form get_property returns under value")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package to disk after the write (default true; false leaves it dirty)")),
@@ -688,7 +688,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("hot_reload"), &HotReload, NoParams,
 		MCPSpec::ContractExempt(TEXT("recompiles and reloads C++ modules")));
 	Registry.RegisterHandler(TEXT("create_new_level"), &CreateNewLevel, {
-		MCPParam::Required(TEXT("levelPath"), EType::String, TEXT("Long package path of the new level, e.g. /Game/Maps/MyLevel. Validated before the engine is asked")),
+		MCPParam::Required(TEXT("levelPath"), EType::String, TEXT("Long package path of the new level, e.g. /Game/Maps/MyLevel. Validated before the engine is asked")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("templateLevel"), EType::String, TEXT("Level to copy; omit, Empty or None for a blank level")),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the level exists: skip (default) returns it untouched, error refuses")),
 	}, MCPSpec::ContractExempt(TEXT("creates and opens a level")));
@@ -753,7 +753,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("factor"), EType::Number, TEXT("Time-scale factor, greater than 0 (e.g. 500)")),
 	});
 	Registry.RegisterHandler(TEXT("capture_scene_png"), &CaptureScenePng, {
-		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png")).Alias(TEXT("filename")),
+		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png")).Alias(TEXT("filename")).Role(EMCPParamRole::OutputPath),
 		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("Camera location")),
 		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("Camera rotation")),
 		MCPParam::Optional(TEXT("focusActorLabel"), EType::String, TEXT("Frame the camera on this actor's bounds")),

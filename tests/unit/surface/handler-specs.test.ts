@@ -188,6 +188,40 @@ describe("the recording", () => {
     expect(operations.safeParse([{ op: "clear", frame: 1 }]).success, "another variant's field").toBe(false);
   });
 
+  it("refuses a role, default or commit policy that does not fit", () => {
+    const one = (param: Partial<ParamSpec>, commit?: string): string =>
+      specProblems({ probe: { params: [{ name: "v", type: "string", required: false, description: "", ...param } as ParamSpec], commit } as HandlerSpecs[string] }).join("\n");
+    expect(one({ role: "editTarget" })).toBe("");
+    expect(one({ type: "array", items: "string", role: "editTarget" })).toBe("");
+    expect(one({ type: "array", items: "object", role: "editTarget", roleKeys: ["sourcePath", "assetPath"] })).toBe("");
+    expect(one({ type: "integer", role: "slotIndex", default: 0 })).toBe("");
+    expect(one({ default: "skip" }, "save")).toBe("");
+    expect(one({ role: "nope" as never })).toContain("unknown role");
+    expect(one({ type: "integer", role: "editTarget" })).toContain("path role");
+    expect(one({ role: "slotIndex" })).toContain("slot index");
+    expect(one({ type: "array", items: "object", role: "editTarget" })).toContain("no role keys");
+    expect(one({ role: "editTarget", roleKeys: ["assetPath"] })).toContain("not an array of objects");
+    expect(one({
+      type: "array", items: "object", role: "editTarget", roleKeys: ["meshPath"],
+      fields: [{ name: "assetPath", type: "string", required: true, description: "" }],
+    })).toContain("not one of its declared fields");
+    expect(one({ required: true, default: "x" })).toContain("required and also has a default");
+    expect(one({ default: 3 })).toContain("not a value of its type");
+    expect(one({ type: "integer", default: 0.5 })).toContain("not a value of its type");
+    expect(one({}, "sometimes")).toContain("unknown commit policy");
+  });
+
+  it("lets a writer and a reader share a key whatever its role or default", () => {
+    const shared = {
+      handlers: {
+        read: { category: "animation", params: [{ name: "assetPath", type: "string", required: true, description: "" }] },
+        write: { category: "animation", params: [{ name: "assetPath", type: "string", required: true, description: "", role: "editTarget" }] },
+        save: { category: "animation", params: [{ name: "assetPath", type: "string", required: false, description: "", default: "/Game/A" }] },
+      },
+    };
+    expect(() => renderAll(shared)).not.toThrow();
+  });
+
   it("refuses one category key declared with two types", () => {
     const clash = {
       handlers: {
@@ -528,6 +562,13 @@ describe("drift against a connected editor", () => {
     expect(compareHandlerSpecs(recorded, changed).drifted).toEqual(["one"]);
     expect(compareHandlerSpecs(recorded, { ...recorded, two: { params: [] } }).drifted).toEqual(["two"]);
     expect(compareHandlerSpecs(recorded, {}).drifted).toEqual(["one"]);
+  });
+
+  it("counts a changed role, default or commit policy as drift", () => {
+    const param = recorded.one.params[0];
+    expect(compareHandlerSpecs(recorded, { one: { ...recorded.one, params: [{ ...param, role: "editTarget" }] } }).drifted).toEqual(["one"]);
+    expect(compareHandlerSpecs(recorded, { one: { ...recorded.one, params: [{ ...param, default: "/Game/A" }] } }).drifted).toEqual(["one"]);
+    expect(compareHandlerSpecs(recorded, { one: { ...recorded.one, commit: "save" } }).drifted).toEqual(["one"]);
   });
 
   it("is reported by project(get_status) only when there is some", () => {

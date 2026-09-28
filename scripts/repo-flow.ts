@@ -13,15 +13,11 @@
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ALL_TOOLS } from "../src/tools.js";
-import { loadFlowConfig } from "../src/flow/loader.js";
-import { buildFlowRegistry } from "../src/flow/registry.js";
 import { createFlowTool } from "../src/flow/flow-tool.js";
-import { ProjectContext } from "../src/config/project.js";
+import { UeMcpRuntime } from "../src/runtime/runtime.js";
 import type { FlowConfig } from "../src/flow/schema.js";
 import type { IBridge } from "../src/bridge/bridge.js";
-import type { ToolContext } from "../src/core/types.js";
-import { connectTestBridge, TEST_PROJECT_DIR, TEST_PROJECT_UPROJECT } from "./bridge-target.mjs";
+import { connectTestBridge, TEST_PROJECT_UPROJECT } from "./bridge-target.mjs";
 
 interface TestBridge {
   call: (method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<unknown>;
@@ -53,16 +49,14 @@ export async function runRepoFlow(
   bridge: IBridge,
   configure?: (config: FlowConfig) => void,
 ): Promise<RepoFlowResult> {
-  const config = loadFlowConfig(ALL_TOOLS, TEST_PROJECT_DIR).config;
+  const host = await UeMcpRuntime.flowHost(TEST_PROJECT_UPROJECT);
+  const config = host.flowConfig();
   if (!config.flows[flowName]) {
     throw new Error(`tests/ue_mcp/ue-mcp.yml declares no flow '${flowName}'. It has: ${Object.keys(config.flows).join(", ")}`);
   }
   configure?.(config);
-  const project = new ProjectContext();
-  project.setProject(TEST_PROJECT_UPROJECT);
-  const ctx = { bridge, project, getToolGraph: () => ALL_TOOLS } as unknown as ToolContext;
-  const flow = createFlowTool(buildFlowRegistry(ALL_TOOLS), () => config);
-  return await flow.handler(ctx, { action: "run", flowName }) as RepoFlowResult;
+  const flow = createFlowTool(host.registry, () => config);
+  return await flow.handler(host.contextFor(bridge), { action: "run", flowName }) as RepoFlowResult;
 }
 
 async function main(flowName: string): Promise<boolean> {

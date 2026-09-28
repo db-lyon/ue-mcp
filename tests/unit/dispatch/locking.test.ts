@@ -56,10 +56,9 @@ describe("classifyAction", () => {
     // other gate gives it: nothing vouches for it, so it is treated as a
     // change. The path is what keeps this narrow, not the verdict.
     expect(classifyAction("asset.frobnicate", { assetPath: "/Game/Foo" }).mutates).toBe(true);
-    expect(classifyAction("asset.frobnicate", { assetPath: "/Game/Foo" }).paths).toEqual(["/Game/Foo"]);
-    // With no asset path to lock it still runs unlocked, which is what stops a
-    // conservative verdict from serialising the whole surface.
-    expect(classifyAction("asset.frobnicate", { name: "X" }).paths).toEqual([]);
+    // Nothing declares what it writes, so there is no path to lock, which is
+    // what stops a conservative verdict from serialising the whole surface.
+    expect(classifyAction("asset.frobnicate", { assetPath: "/Game/Foo" }).paths).toEqual([]);
   });
 
   it("locks a declared mutation whose verb no list ever had", () => {
@@ -176,25 +175,52 @@ describe("withAssetLocks", () => {
   });
 });
 
-describe("lock keys from the recorded C++ spec (defect 4)", () => {
-  it("locks the asset an edit names through a param outside the fixed key list", () => {
+describe("lock keys from editTarget roles in the recorded C++ spec", () => {
+  it("locks the asset edits addressed by skeletonPath, systemPath, cuePath and sequencePath", () => {
     expect(classifyAction("animation.add_virtual_bone", { skeletonPath: "/Game/Chars/SK_Skel", sourceBone: "root", targetBone: "hand_r" }).paths)
       .toEqual(["/Game/Chars/SK_Skel"]);
     expect(classifyAction("niagara.add_renderer", { systemPath: "/Game/FX/NS_Fire", emitterName: "E" }).paths)
       .toEqual(["/Game/FX/NS_Fire"]);
     expect(classifyAction("audio.cue_add_node", { cuePath: "/Game/Audio/SC_Hit", nodeType: "Random" }).paths)
       .toEqual(["/Game/Audio/SC_Hit"]);
+    expect(classifyAction("editor.set_sequence_keyframes", { sequencePath: "/Game/Cine/LS_Intro", trackName: "T" }).paths)
+      .toEqual(["/Game/Cine/LS_Intro"]);
   });
 
-  it("locks a bare bridge method's spec'd asset path", () => {
-    expect(classifyAction("add_virtual_bone", { skeletonPath: "/Game/Chars/SK_Skel" }).paths).toEqual(["/Game/Chars/SK_Skel"]);
-  });
-
-  it("does not take in-asset addresses, actors, folders or files as lock keys", () => {
+  it("locks the StateTree a statePath edit writes, and not the state it addresses", () => {
     expect(classifyAction("statetree.add_state", {
       assetPath: "/Game/AI/ST_Guard", statePath: "Root.Patrol", name: "Idle",
     }).paths).toEqual(["/Game/AI/ST_Guard"]);
+  });
+
+  it("locks an edit target sent under its alias", () => {
+    expect(classifyAction("editor.set_sequence_keyframes", { assetPath: "/Game/Cine/LS_Intro" }).paths).toEqual(["/Game/Cine/LS_Intro"]);
+  });
+
+  it("locks a bare bridge method's edit target", () => {
+    expect(classifyAction("add_virtual_bone", { skeletonPath: "/Game/Chars/SK_Skel" }).paths).toEqual(["/Game/Chars/SK_Skel"]);
+    expect(classifyAction("add_state_tree_state", { assetPath: "/Game/AI/ST_Guard", statePath: "Root" }).paths).toEqual(["/Game/AI/ST_Guard"]);
+  });
+
+  it("locks the package of an object path, and every element key a list's role names", () => {
+    expect(classifyAction("editor.set_property", { objectPath: "/Game/Data/DA_X.DA_X:Sub", propertyName: "P", value: 1 }).paths)
+      .toEqual(["/Game/Data/DA_X.DA_X"]);
+    expect(classifyAction("asset.bulk_rename", { renames: [{ sourcePath: "/Game/A", destinationPath: "/Game/B" }] }).paths.sort())
+      .toEqual(["/Game/A", "/Game/B"]);
+    expect(classifyAction("asset.set_mesh_materials_batch", {
+      assignments: [{ assetPath: "/Game/SM_A", materialPath: "/Game/M_A" }, { assetPath: "/Game/SM_B", materialPath: "/Game/M_A" }],
+    }).paths.sort()).toEqual(["/Game/SM_A", "/Game/SM_B"]);
+  });
+
+  it("does not lock an asset the edit only reads", () => {
+    expect(classifyAction("asset.set_mesh_material", { assetPath: "/Game/SM_Rock", materialPath: "/Game/M_Rock" }).paths)
+      .toEqual(["/Game/SM_Rock"]);
+    expect(classifyAction("animation.create_blendspace", { name: "BS", skeletonPath: "/Game/Chars/SK_Skel" }).paths).toEqual([]);
+  });
+
+  it("does not take actors, folders or files as lock keys", () => {
     expect(classifyAction("level.add_actor_tag", { actorPath: "/Game/Maps/L.L:PersistentLevel.A", tag: "t" }).paths).toEqual([]);
     expect(classifyAction("material.build_material", { packagePath: "/Game/Materials", name: "M" }).paths).toEqual([]);
+    expect(classifyAction("project.write_cpp_file", { path: "/home/me/Source/A.cpp", content: "" }).paths).toEqual([]);
   });
 });

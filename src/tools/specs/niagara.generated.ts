@@ -15,7 +15,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "rendererType",
@@ -44,7 +45,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "emitterPath",
@@ -61,7 +63,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "eventName",
@@ -96,7 +99,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "moduleScript",
@@ -137,7 +141,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "stageName",
@@ -172,7 +177,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "force",
@@ -764,7 +770,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "emitterName",
@@ -787,7 +794,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "rendererIndex",
@@ -816,7 +824,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "stackContext",
@@ -857,7 +866,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "eventName",
@@ -886,7 +896,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "stackContext",
@@ -921,7 +932,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "stageName",
@@ -953,7 +965,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "NiagaraSystem asset path",
         "aliases": [
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "emitterName",
@@ -994,7 +1007,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": false,
-        "description": "NiagaraSystem whose emitter stack holds the CustomHLSL node"
+        "description": "NiagaraSystem whose emitter stack holds the CustomHLSL node",
+        "role": "editTarget"
       },
       {
         "name": "stackContext",
@@ -1042,7 +1056,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "stackContext",
@@ -1089,7 +1104,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "stackContext",
@@ -1130,7 +1146,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "moduleName",
@@ -1256,7 +1273,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "moduleName",
@@ -1303,7 +1321,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "systemPath",
         "type": "string",
         "required": true,
-        "description": "NiagaraSystem asset path"
+        "description": "NiagaraSystem asset path",
+        "role": "editTarget"
       },
       {
         "name": "rendererIndex",

@@ -15,7 +15,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Blueprint asset path"
+        "description": "Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "componentName",
@@ -32,7 +33,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "attributeSetPath",
         "type": "string",
         "required": true,
-        "description": "AttributeSet Blueprint asset path"
+        "description": "AttributeSet Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "attributeName",
@@ -52,7 +54,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "GameplayEffect Blueprint asset path",
         "aliases": [
           "effectClass"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "cueTag",
@@ -793,7 +796,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "GameplayEffect Blueprint asset path",
         "aliases": [
           "effectClass"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "cueTag",
@@ -933,7 +937,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "abilityPath",
         "type": "string",
         "required": true,
-        "description": "GameplayAbility Blueprint asset path"
+        "description": "GameplayAbility Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "ability_tags",
@@ -979,7 +984,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Blueprint asset path carrying the AbilitySystemComponent"
+        "description": "Blueprint asset path carrying the AbilitySystemComponent",
+        "role": "editTarget"
       },
       {
         "name": "attributeSet",
@@ -1052,7 +1058,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "effectPath",
         "type": "string",
         "required": true,
-        "description": "GameplayEffect Blueprint asset path"
+        "description": "GameplayEffect Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "attribute",

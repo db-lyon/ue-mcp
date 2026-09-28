@@ -320,7 +320,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Where to write the heightmap; a relative path resolves under the project Saved directory",
         "aliases": [
           "outputPath"
-        ]
+        ],
+        "role": "outputPath"
       },
       {
         "name": "actorLabel",

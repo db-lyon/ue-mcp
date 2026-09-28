@@ -10,6 +10,7 @@
 import { resolveReferences } from "@db-lyon/flowkit";
 import type { ConditionContext, FlowRunnerConfig, FlowStepResult } from "@db-lyon/flowkit";
 import type { ToolContext } from "../core/types.js";
+import { FACT_NAMES, type FactName } from "../sessions/editor-facts.js";
 
 type ConditionEvaluator = NonNullable<FlowRunnerConfig["conditionEvaluator"]>;
 
@@ -26,14 +27,55 @@ export function hostNamespaces(ctx: ToolContext): Record<string, unknown> {
       get dir() { return project.projectDir ?? undefined; },
       get contentDir() { return project.contentDir ?? undefined; },
       get engine() { return project.engineAssociation ?? undefined; },
+      /** The merged `ue-mcp:` block, so `${project.config.bridge.port}` reads the setting in force. */
+      get config() { return project.projectConfig?.block; },
     },
-    editor: {
-      get connected() { return ctx.bridge.isConnected === true; },
-      get name() { return ctx.session?.name; },
-    },
+    editor: editorNamespace(ctx),
     session: {
       get name() { return ctx.session?.name; },
       get count() { return ctx.sessions?.size ?? 1; },
+    },
+  };
+}
+
+/**
+ * `editor.*`: the connection, and the editor's facts as far as they are known
+ * without a call. A condition that names a fact fetches it first (factsScope),
+ * so only an option reference reads the cached value.
+ */
+function editorNamespace(ctx: ToolContext, fetched: Record<string, unknown> = {}): Record<string, unknown> {
+  const facts = ctx.session?.facts;
+  const out: Record<string, unknown> = {
+    get connected() { return ctx.bridge.isConnected === true; },
+    get name() { return ctx.session?.name; },
+  };
+  for (const name of FACT_NAMES) {
+    Object.defineProperty(out, name, {
+      get: () => (name in fetched ? fetched[name] : facts?.peek(name)),
+      enumerable: true,
+    });
+  }
+  return out;
+}
+
+/** Built on first use: editor-facts.ts and this module import each other through the effects table. */
+let factReference: RegExp | undefined;
+const FACT_REFERENCE = (): RegExp =>
+  (factReference ??= new RegExp(String.raw`(?:^|[^\w.])editor\.(${FACT_NAMES.join("|")})\b`, "g"));
+
+/**
+ * The editor's facts for a condition: every fact the expression names is
+ * fetched (or read from the cache) before it is evaluated. A fact that cannot
+ * be read fails the condition rather than reading as false.
+ */
+export function factsScope(ctx: ToolContext): StepScope | undefined {
+  const facts = ctx.session?.facts;
+  if (!facts) return undefined;
+  return {
+    names: ["editor"],
+    read: async (_c, expression = "") => {
+      const named = [...new Set([...expression.matchAll(FACT_REFERENCE())].map((m) => m[1] as FactName))];
+      return { editor: editorNamespace(ctx, await facts.snapshot(named)) };
     },
   };
 }
@@ -139,6 +181,8 @@ function getPath(obj: unknown, path: string): unknown {
 }
 
 interface Scope {
+  /** Parse only: every lookup answers undefined. Used by the plan validator. */
+  dry?: boolean;
   steps: FlowStepResult[];
   params?: Record<string, unknown>;
   error?: Record<string, unknown>;
@@ -146,6 +190,7 @@ interface Scope {
 }
 
 function lookup(ns: string, path: string, scope: Scope): unknown {
+  if (scope.dry) return undefined;
   if (ns === "steps") {
     // Step lookup by number or name is the runner's own; it throws on a step
     // that has not run, as a reference in an option does.
@@ -159,9 +204,19 @@ function lookup(ns: string, path: string, scope: Scope): unknown {
   return getPath(scope.namespaces[ns], path);
 }
 
-/** Recursive descent over the token list. */
+/**
+ * Recursive descent over the token list. `&&` and `||` short-circuit: the
+ * operand they skip is parsed with every lookup suppressed, so a guard such as
+ * `probe.connected && probe.world.mode == 'play'` never reads the second probe
+ * when the first is false.
+ */
 function evaluate(tokens: Token[], scope: Scope): unknown {
   let pos = 0;
+  let skipping = 0;
+  const skipped = <T>(fn: () => T): T => {
+    skipping++;
+    try { return fn(); } finally { skipping--; }
+  };
   const peek = () => tokens[pos];
   const isOp = (v: string) => peek()?.kind === "op" && (peek() as { value: string }).value === v;
 
@@ -169,7 +224,7 @@ function evaluate(tokens: Token[], scope: Scope): unknown {
     const t = tokens[pos++];
     if (!t) throw new NotAnExpression();
     if (t.kind === "lit") return t.value;
-    if (t.kind === "ref" || t.kind === "name") return lookup(t.ns, t.path, scope);
+    if (t.kind === "ref" || t.kind === "name") return skipping > 0 ? undefined : lookup(t.ns, t.path, scope);
     if (t.value === "(") {
       const v = or();
       if (!isOp(")")) throw new NotAnExpression();
@@ -193,12 +248,20 @@ function evaluate(tokens: Token[], scope: Scope): unknown {
   };
   const and = (): unknown => {
     let v = not();
-    while (isOp("&&")) { pos++; const r = not(); v = truthy(v) && truthy(r); }
+    while (isOp("&&")) {
+      pos++;
+      if (!truthy(v)) { skipped(not); v = false; continue; }
+      v = truthy(not());
+    }
     return v;
   };
   const or = (): unknown => {
     let v = and();
-    while (isOp("||")) { pos++; const r = and(); v = truthy(v) || truthy(r); }
+    while (isOp("||")) {
+      pos++;
+      if (truthy(v)) { skipped(and); v = true; continue; }
+      v = truthy(and());
+    }
     return v;
   };
 
@@ -213,20 +276,88 @@ function evaluate(tokens: Token[], scope: Scope): unknown {
  */
 export interface StepScope {
   names: readonly string[];
-  read(ctx: ConditionContext): Promise<Record<string, unknown>>;
+  read(ctx: ConditionContext, expression?: string): Promise<Record<string, unknown>>;
 }
 
 /**
  * The flow runner's `conditionEvaluator`. `namespaces` are the host namespaces
  * the option references use, so `when:` and `options:` read the same names.
  */
-export function makeConditionEvaluator(namespaces: Record<string, unknown>, stepScope?: StepScope): ConditionEvaluator {
-  const base = evaluatorOver(namespaces, stepScope?.names ?? []);
-  if (!stepScope) return (expression, ctx) => base(expression, ctx, {});
-  const mentions = new RegExp(`(^|[^\\w.])(${stepScope.names.join("|")})\\.`);
-  return (expression, ctx) => mentions.test(expression)
-    ? stepScope.read(ctx).then((extra) => base(expression, ctx, extra))
-    : base(expression, ctx, {});
+export function makeConditionEvaluator(
+  namespaces: Record<string, unknown>,
+  stepScope?: StepScope | Array<StepScope | undefined>,
+  facts?: ProbeFacts | ((ctx: ConditionContext) => ProbeFacts),
+): ConditionEvaluator {
+  const scopes = (Array.isArray(stepScope) ? stepScope : [stepScope]).filter((s): s is StepScope => s !== undefined);
+  const names = [...scopes.flatMap((s) => s.names), ...(facts ? [PROBE_NAMESPACE] : [])];
+  const base = evaluatorOver(namespaces, names);
+  if (scopes.length === 0 && !facts) return (expression, ctx) => base(expression, ctx, {});
+  const mentioning = scopes.map((scope) => ({
+    scope,
+    mentions: new RegExp(`(^|[^\\w.])(${scope.names.join("|")})\\.`),
+  }));
+  return async (expression, ctx) => {
+    const reads = mentioning.filter((m) => m.mentions.test(expression));
+    const extras = await Promise.all(reads.map((m) => m.scope.read(ctx, expression)));
+    const extra: Record<string, unknown> = Object.assign({}, ...extras);
+    if (facts) {
+      const probes = probesNamed(expression);
+      if (probes.length > 0) extra[PROBE_NAMESPACE] = await probeNamespace(typeof facts === "function" ? facts(ctx) : facts, probes);
+    }
+    return base(expression, ctx, extra);
+  };
+}
+
+/** The namespace `when:` and checks read probes under: `probe.connected`, `probe.world.mode`. */
+export const PROBE_NAMESPACE = "probe";
+
+/** What the evaluator needs from the editor's facts: one memoized read per name. */
+export interface ProbeFacts {
+  read(name: string): Promise<unknown>;
+}
+
+/** The probe names an expression mentions, in order, once each. */
+export function probesNamed(expression: string): string[] {
+  const out: string[] = [];
+  for (const m of expression.matchAll(/(^|[^\w.])probe\.(\w+)/g)) if (!out.includes(m[2])) out.push(m[2]);
+  return out;
+}
+
+/**
+ * Read every named probe, then hand the evaluator an object whose failed
+ * probes throw when reached. A failing probe is an error, never a falsy value;
+ * one a short-circuit skips is never touched.
+ */
+async function probeNamespace(facts: ProbeFacts, names: string[]): Promise<Record<string, unknown>> {
+  const ns: Record<string, unknown> = {};
+  for (const name of names) {
+    try {
+      const value = await facts.read(name);
+      Object.defineProperty(ns, name, { value, enumerable: true });
+    } catch (e) {
+      Object.defineProperty(ns, name, { enumerable: true, get: () => { throw e; } });
+    }
+  }
+  return ns;
+}
+
+/**
+ * Why a `when:` or check expression would fail to evaluate, or null when it
+ * parses. Reads nothing: every name answers undefined. A string that is not an
+ * expression (plain `${}` truthiness, prose) is valid, as at run time.
+ */
+export function expressionProblem(expression: string | boolean, names: readonly string[]): string | null {
+  if (typeof expression === "boolean") return null;
+  const known = new Set(["steps", "params", "error", ...names]);
+  try {
+    evaluate(tokenize(expression, known), { dry: true, steps: [], namespaces: {} });
+    return null;
+  } catch (e) {
+    if (!(e instanceof NotAnExpression)) return e instanceof Error ? e.message : String(e);
+    if (!LOOKS_LIKE_EXPRESSION.test(expression.replace(/\$\{[^}]*\}/g, "x"))) return null;
+    return `'${expression}' is not a valid expression. It takes literals, names under ${[...known].join(", ")}, `
+      + "${ns.path} references, == != < <= > >=, !/not, &&/and, ||/or and parentheses.";
+  }
 }
 
 /** One expression over plain namespaces, outside any flow run. */

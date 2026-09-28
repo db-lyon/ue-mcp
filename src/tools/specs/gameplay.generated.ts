@@ -15,7 +15,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blackboardPath",
         "type": "string",
         "required": true,
-        "description": "BlackboardData asset path"
+        "description": "BlackboardData asset path",
+        "role": "editTarget"
       },
       {
         "name": "keyName",
@@ -53,7 +54,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "BehaviorTree asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodeClass",
@@ -106,7 +108,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "queryPath",
         "type": "string",
         "required": true,
-        "description": "EnvQuery asset path"
+        "description": "EnvQuery asset path",
+        "role": "editTarget"
       },
       {
         "name": "generatorClass",
@@ -123,7 +126,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "queryPath",
         "type": "string",
         "required": true,
-        "description": "EnvQuery asset path"
+        "description": "EnvQuery asset path",
+        "role": "editTarget"
       },
       {
         "name": "testClass",
@@ -156,7 +160,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "mappingContext",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "inputActionPath",
@@ -188,7 +193,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Blueprint asset path"
+        "description": "Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "senses",
@@ -206,7 +212,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Blueprint asset path"
+        "description": "Blueprint asset path",
+        "role": "editTarget"
       }
     ]
   },
@@ -217,7 +224,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "SmartObjectDefinition asset path"
+        "description": "SmartObjectDefinition asset path",
+        "role": "editTarget"
       },
       {
         "name": "behaviorClass",
@@ -240,7 +248,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "SmartObjectDefinition asset path"
+        "description": "SmartObjectDefinition asset path",
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -287,7 +296,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "SmartObjectDefinition asset path"
+        "description": "SmartObjectDefinition asset path",
+        "role": "editTarget"
       },
       {
         "name": "slotIndex",
@@ -316,7 +326,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Blueprint asset path"
+        "description": "Blueprint asset path",
+        "role": "editTarget"
       }
     ]
   },
@@ -397,7 +408,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Blueprint asset path"
+        "description": "Blueprint asset path",
+        "role": "editTarget"
       },
       {
         "name": "senseType",
@@ -1270,7 +1282,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "BehaviorTree asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "node",
@@ -1559,7 +1572,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blackboardPath",
         "type": "string",
         "required": true,
-        "description": "BlackboardData asset path"
+        "description": "BlackboardData asset path",
+        "role": "editTarget"
       },
       {
         "name": "keyName",
@@ -1579,7 +1593,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "BehaviorTree asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "node",
@@ -1599,7 +1614,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "queryPath",
         "type": "string",
         "required": true,
-        "description": "EnvQuery asset path"
+        "description": "EnvQuery asset path",
+        "role": "editTarget"
       },
       {
         "name": "optionIndex",
@@ -1616,7 +1632,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "queryPath",
         "type": "string",
         "required": true,
-        "description": "EnvQuery asset path"
+        "description": "EnvQuery asset path",
+        "role": "editTarget"
       },
       {
         "name": "testIndex",
@@ -1643,7 +1660,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "mappingContext",
           "assetPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "mappingIndex",
@@ -1704,7 +1722,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "MassEntityConfigAsset path"
+        "description": "MassEntityConfigAsset path",
+        "role": "editTarget"
       },
       {
         "name": "traitClass",
@@ -1727,7 +1746,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blueprintPath",
         "type": "string",
         "required": true,
-        "description": "Blueprint carrying the AIPerceptionComponent template"
+        "description": "Blueprint carrying the AIPerceptionComponent template",
+        "role": "editTarget"
       },
       {
         "name": "index",
@@ -1756,7 +1776,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "SmartObjectDefinition asset path"
+        "description": "SmartObjectDefinition asset path",
+        "role": "editTarget"
       },
       {
         "name": "slotIndex",
@@ -1773,7 +1794,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "queryPath",
         "type": "string",
         "required": true,
-        "description": "EnvQuery asset path"
+        "description": "EnvQuery asset path",
+        "role": "editTarget"
       },
       {
         "name": "order",
@@ -1797,7 +1819,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "MassEntityConfigAsset path"
+        "description": "MassEntityConfigAsset path",
+        "role": "editTarget"
       },
       {
         "name": "order",
@@ -1995,7 +2018,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "inputActionPath",
         "type": "string",
         "required": true,
-        "description": "InputAction asset path"
+        "description": "InputAction asset path",
+        "role": "editTarget"
       },
       {
         "name": "triggers",
@@ -2026,7 +2050,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "behaviorTreePath",
         "type": "string",
         "required": true,
-        "description": "BehaviorTree asset path"
+        "description": "BehaviorTree asset path",
+        "role": "editTarget"
       },
       {
         "name": "blackboardPath",
@@ -2043,7 +2068,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "blackboardPath",
         "type": "string",
         "required": true,
-        "description": "Child BlackboardData asset path"
+        "description": "Child BlackboardData asset path",
+        "role": "editTarget"
       },
       {
         "name": "parentPath",
@@ -2069,7 +2095,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "BehaviorTree asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodePath",
@@ -2125,7 +2152,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "BehaviorTree asset path",
         "aliases": [
           "path"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "nodePath",
@@ -2178,7 +2206,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "imcPath",
         "type": "string",
         "required": true,
-        "description": "InputMappingContext asset path"
+        "description": "InputMappingContext asset path",
+        "role": "editTarget"
       },
       {
         "name": "newInputActionPath",
@@ -2219,7 +2248,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "imcPath",
         "type": "string",
         "required": true,
-        "description": "InputMappingContext asset path"
+        "description": "InputMappingContext asset path",
+        "role": "editTarget"
       },
       {
         "name": "newKey",
@@ -2307,7 +2337,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "imcPath",
         "type": "string",
         "required": true,
-        "description": "InputMappingContext asset path"
+        "description": "InputMappingContext asset path",
+        "role": "editTarget"
       },
       {
         "name": "mappingIndex",
@@ -2344,7 +2375,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "inputActionPath",
         "type": "string",
         "required": true,
-        "description": "InputAction asset path"
+        "description": "InputAction asset path",
+        "role": "editTarget"
       },
       {
         "name": "mappingName",
@@ -2379,7 +2411,8 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "assetPath",
         "type": "string",
         "required": true,
-        "description": "SmartObjectDefinition asset path"
+        "description": "SmartObjectDefinition asset path",
+        "role": "editTarget"
       },
       {
         "name": "slotIndex",

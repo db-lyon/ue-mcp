@@ -40,7 +40,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "widgetClass",
@@ -83,7 +84,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -122,7 +124,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -188,7 +191,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -281,7 +285,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -314,7 +319,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "properties",
@@ -336,7 +342,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "widgetName",
@@ -366,7 +373,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "widgetName",
@@ -396,7 +404,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -443,7 +452,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -490,7 +500,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -529,7 +540,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "name",
@@ -582,7 +594,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -621,7 +634,8 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Destination package path, including the new asset name",
         "aliases": [
           "destinationPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "destinationParentClass",
@@ -1107,7 +1121,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "widgetName",
@@ -1171,7 +1186,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "widgetName",
@@ -1195,7 +1211,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -1228,7 +1245,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -1282,7 +1300,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -1318,7 +1337,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "widgetName",
@@ -1348,7 +1368,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "previous",
@@ -1400,7 +1421,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "widgetName",
@@ -1450,7 +1472,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "rules",
@@ -1538,7 +1561,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "widgetName",
@@ -1577,7 +1601,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "widgetName",
@@ -1613,7 +1638,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "animationName",
@@ -1646,7 +1672,8 @@ export const handlerSpecs: HandlerSpecs = {
         "aliases": [
           "path",
           "widgetBlueprintPath"
-        ]
+        ],
+        "role": "editTarget"
       },
       {
         "name": "wrapperClass",

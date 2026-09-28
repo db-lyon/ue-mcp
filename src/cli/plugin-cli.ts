@@ -59,7 +59,8 @@ import { resolvePublishToken } from "../extensions/registry-auth.js";
 import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
 import { packageVersion } from "../core/package-root.js";
 import { deriveDefaultPrefix, deriveUePluginName, writeScaffold } from "../extensions/plugin-scaffold.js";
-import { ProjectContext } from "../config/project.js";
+import type { ProjectContext } from "../config/project.js";
+import { openProject } from "../runtime/runtime.js";
 import { registryBase } from "../extensions/registry-catalog.js";
 import { findUProject, projectDirOf } from "../config/uproject-path.js";
 
@@ -522,10 +523,8 @@ function cmdCreate(args: string[]): void {
 
 /** The project in `projectDir`, or undefined when it holds no .uproject. */
 function projectContextIn(projectDir: string): ProjectContext | undefined {
-  const ctx = new ProjectContext();
   try {
-    ctx.setProject(projectDir);
-    return ctx;
+    return openProject(projectDir);
   } catch {
     return undefined;
   }

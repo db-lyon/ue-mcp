@@ -49,7 +49,7 @@ void FPhysicsHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, OneActor);
 	Registry.RegisterHandler(TEXT("set_collision"), &SetCollision, {
 		ActorLabel(), ActorPath(),
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Blueprint whose component template to edit; needs componentName")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Blueprint whose component template to edit; needs componentName")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Primitive component name (prefix match on an actor, default every one); required with assetPath")),
 		MCPParam::Optional(TEXT("collisionProfile"), EType::String, TEXT("Collision profile (preset) name, applied before the overrides")),
 		CollisionEnabled(TEXT("NoCollision | QueryOnly | PhysicsOnly | QueryAndPhysics")),

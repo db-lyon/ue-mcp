@@ -3,7 +3,8 @@ import { EPIC_CATEGORIES } from "../tools/epic/index.js";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { projectConfigPath, readConfigDoc, writeConfigDoc } from "../config/ue-mcp-config.js";
-import { ProjectContext } from "../config/project.js";
+import type { ProjectContext } from "../config/project.js";
+import { openProject } from "../runtime/runtime.js";
 import { deploy } from "../editor/deployer.js";
 import { inspectInstall, installWarning } from "../editor/install-check.js";
 import {
@@ -234,9 +235,9 @@ async function init(argv: string[]) {
     }
   }
 
-  const project = new ProjectContext();
+  let project: ProjectContext;
   try {
-    project.setProject(uprojectPath);
+    project = openProject(uprojectPath);
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
     process.exit(1);

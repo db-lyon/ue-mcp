@@ -30,9 +30,14 @@ import {
   trimError,
 } from "./events.js";
 import { unappliedRollbackCall } from "./handler-outcome.js";
-import { hostNamespaces, makeConditionEvaluator } from "./condition.js";
+import { factsScope, hostNamespaces, makeConditionEvaluator } from "./condition.js";
 import { gateGraph, gateScope, planPreflight } from "./preflight.js";
 import { keepNestedSteps } from "./composite.js";
+import { envelopeOfError, type ErrorEnvelope } from "../dispatch/error-envelope.js";
+import { BridgeFacts } from "./probes.js";
+import { planValidationError, validatePlan } from "./validate-plan.js";
+import { freezeFlow } from "./freeze.js";
+import { taskEffect } from "../surface/action-effects.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -170,7 +175,14 @@ async function planFlow(
 
   // Plan mode short-circuits inside the runner before any hooks fire,
   // so the runId placeholder we pass here is never observed.
-  const runner = makeRunner(registry, config, ctx, nextRunId(), flowName);
+  const flowParams = params.params as Record<string, unknown> | undefined;
+  const skip = params.skip as string[] | undefined;
+  // Everything a run would be refused for before step 1, listed together.
+  const validation = await validatePlan({ config, registry, graph: gateGraph(ctx), flowName, params: flowParams, skip });
+  if (validation.problems.some((p) => p.kind === "flow" && p.path === undefined)) {
+    throw planValidationError(flowName, validation);
+  }
+  const runner = makeRunner(registry, config, ctx, nextRunId(), flowName, flowParams);
   const plan = await runner.run({ flowName, plan: true });
   // What a run would be refused for, by the same gates that refuse it.
   const preflight = await planPreflight(
@@ -179,10 +191,14 @@ async function planFlow(
     ctx,
     gateGraph(ctx),
     flowName,
-    params.params as Record<string, unknown> | undefined,
-    params.skip as string[] | undefined,
+    flowParams,
+    skip,
   );
-  return { ...plan, preflight };
+  // The resolved plan as a flow definition: review it, save it under flows:, run it.
+  const frozen = validation.ok
+    ? freezeFlow({ config, flowName, params: flowParams, skip, namespaces: hostNamespaces(ctx) })
+    : { from: flowName, refused: ["The plan has problems; see validation."] };
+  return { ...plan, preflight, validation, frozen };
 }
 
 async function runFlow(
@@ -197,6 +213,10 @@ async function runFlow(
   const flowParams = params.params as Record<string, unknown> | undefined;
   const rollback_on_failure = params.rollback_on_failure as boolean | undefined;
 
+  // Validate the whole plan before step 1, and refuse with every problem at once.
+  const validation = await validatePlan({ config, registry, graph: gateGraph(ctx), flowName, params: flowParams, skip });
+  if (!validation.ok) throw planValidationError(flowName, validation);
+
   // One runId per top-level call. Every per-step / per-run event we
   // emit carries this id so SSE subscribers can filter to a specific
   // run; the response includes it so callers can correlate.
@@ -206,7 +226,7 @@ async function runFlow(
   // so no other agent writes between two steps of it.
   const locks = ctx.assetLocks ? undefined : ctx.openAssetLocks?.(ctx);
   const runCtx: ToolContext = locks ? { ...ctx, assetLocks: locks } : ctx;
-  const runner = makeRunner(registry, config, runCtx, runId, flowName);
+  const runner = makeRunner(registry, config, runCtx, runId, flowName, flowParams);
   let result: FlowRunResult;
   try {
     result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure });
@@ -224,6 +244,7 @@ function makeRunner(
   ctx: ToolContext,
   runId: string,
   flowName: string,
+  params?: Record<string, unknown>,
 ): FlowRunner {
   // The whole context, not two fields of it. Rebuilding it field-by-field
   // dropped `elicit`, `getFlows`, `getPlugins` and now the editor session, so
@@ -239,6 +260,14 @@ function makeRunner(
   let activeSnapshot: Snapshot | undefined;
   let flowFailed = false;
   const snapshotEnabled = !!(snapCfg?.enabled && ctx.project.projectDir);
+
+  // One reading of each probe per run, forgotten after any step that may
+  // change the editor, so a check after a save or a restart reads it anew.
+  const facts = new BridgeFacts(ctx);
+  const graph = gateGraph(ctx);
+  const forgetAfter = (step: PlanStep): void => {
+    if (step.type === "flow" || taskEffect(step.name, graph).effect !== "read") facts.invalidate();
+  };
 
   // Always-on per-step observation. Each hook emits a single event on
   // the module-level bus that the HTTP server's /flows/events SSE
@@ -281,6 +310,7 @@ function makeRunner(
       });
     },
     afterStep: async (step: PlanStep, result: FlowStepResult) => {
+      forgetAfter(step);
       keepNestedSteps(result);
       emitFlowEvent({
         type: "step_completed",
@@ -292,6 +322,7 @@ function makeRunner(
       });
     },
     onStepError: async (step: PlanStep, error: Error) => {
+      forgetAfter(step);
       emitFlowEvent({
         type: "step_failed",
         runId,
@@ -346,9 +377,10 @@ function makeRunner(
     registry,
     context: flowCtx,
     hooks,
-    references: namespaces,
-    // A project's own checks can read `step.*` and `gate.*` as a plan does.
-    conditionEvaluator: makeConditionEvaluator(namespaces, gateScope(ctx, gateGraph(ctx))),
+    // `${params.x}` in an option reads the run's own params.
+    references: { ...namespaces, params: params ?? {} },
+    // A project's own checks can read `step.*`, `gate.*`, `editor.*` facts and `probe.*` as a plan does.
+    conditionEvaluator: makeConditionEvaluator(namespaces, [gateScope(ctx, graph, false, facts), factsScope(ctx)], facts),
   });
 }
 
@@ -498,13 +530,31 @@ function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
     steps: result.steps.map((s) => reportStep(s, replayed)),
     rollback: result.rollback,
     hookErrors: result.hookErrors,
+    error: runEnvelope(result),
   };
+}
+
+/** The envelope for a run that stopped: the stopping step's, else the run's own error. */
+function runEnvelope(result: FlowRunResult): ErrorEnvelope | undefined {
+  if (result.success) return undefined;
+  const find = (steps: FlowStepResult[], prefix: string): ErrorEnvelope | undefined => {
+    for (const s of steps) {
+      if (s.skipped || s.ignoredFailure || s.result?.success !== false) continue;
+      const path = `${prefix}${s.stepNumber}`;
+      const deeper = s.nestedSteps ? find(s.nestedSteps, `${path}/`) : undefined;
+      if (deeper) return deeper;
+      if (s.result.error) return envelopeOfError(s.result.error, path, s.result.data);
+    }
+    return undefined;
+  };
+  return find(result.steps, "") ?? (result.error ? envelopeOfError(result.error) : undefined);
 }
 
 /**
  * One step, and the child flow's steps under it, as the caller reads them.
  */
-function reportStep(s: FlowStepResult, replayed: boolean): Record<string, unknown> {
+function reportStep(s: FlowStepResult, replayed: boolean, prefix = ""): Record<string, unknown> {
+  const path = `${prefix}${s.stepNumber}`;
   return {
     stepNumber: s.stepNumber,
     name: s.name,
@@ -517,8 +567,13 @@ function reportStep(s: FlowStepResult, replayed: boolean): Record<string, unknow
     ignoredFailure: s.ignoredFailure ? true : undefined,
     duration: s.duration,
     attempts: s.attempts,
+    // The envelope's fields ride on the step's own error object.
     error: s.result?.error
-      ? { message: s.result.error.message, name: s.result.error.name }
+      ? {
+          ...envelopeOfError(s.result.error, path, s.result.data),
+          message: s.result.error.message,
+          name: s.result.error.name,
+        }
       : undefined,
     data: s.result?.data,
     // The inverse a FAILING step carried for the part of its write that landed,
@@ -542,7 +597,7 @@ function reportStep(s: FlowStepResult, replayed: boolean): Record<string, unknow
     // A `flow` step's child steps, from flowkit 0.17.1. Before it, a nested
     // step was summarised to `data.stepCount` and everything else about the
     // child was reachable only by reading its run error as prose.
-    nestedSteps: s.nestedSteps?.map((child) => reportStep(child, replayed)),
+    nestedSteps: s.nestedSteps?.map((child) => reportStep(child, replayed, `${path}/`)),
   };
 }
 

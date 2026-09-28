@@ -179,7 +179,7 @@ void FMassHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// creates anything.
 	using EType = EMCPParamType;
 	Registry.RegisterHandler(TEXT("ensure_mass_entity_config"), &EnsureEntityConfig, {
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("MassEntityConfigAsset path, /Game/Folder/Name[.Name]")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("MassEntityConfigAsset path, /Game/Folder/Name[.Name]")).Role(EMCPParamRole::EditTarget),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Asset name, when assetPath is not given")),
 		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("Content folder for name (default /Game)")),
 		MCPParam::Required(TEXT("traits"), EType::Array, TEXT("Ordered trait list; the order is the asset's order and a class may appear once"))
