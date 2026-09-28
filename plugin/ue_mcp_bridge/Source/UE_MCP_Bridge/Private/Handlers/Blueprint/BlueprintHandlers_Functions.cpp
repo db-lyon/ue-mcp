@@ -7,6 +7,8 @@
 #include "BlueprintHandlers_Internal.h"
 #include "BlueprintEditTraits.h"
 #include "Families/MCPPropertyWrite.h"
+#include "Families/MCPCreate.h"
+
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
@@ -794,60 +796,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprintInterface(const TSharedPtr<FJsonObject>& Params)
 {
-	// 'path' is the spec's alias, renamed to assetPath before this runs.
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FMCPCreate Create(Params, { TEXT("Interface"), TEXT("/Game/Blueprints"), /*bOnConflict=*/true, /*bAssetPath=*/true });
+	if (auto Err = Create.Read()) return Err;
 
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	// Idempotency: check if asset already exists.
-	if (UBlueprint* Existing = LoadBlueprint(AssetPath))
-	{
-		if (OnConflict == TEXT("error"))
-		{
-			return MCPError(FString::Printf(TEXT("Interface '%s' already exists"), *AssetPath));
-		}
-		auto Result = MCPSuccess();
-		MCPSetExisted(Result);
-		Result->SetStringField(TEXT("path"), AssetPath);
-		Result->SetStringField(TEXT("name"), Existing->GetName());
-		return MCPResult(Result);
-	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	FString PackageName;
-	FString AssetName;
-	AssetPath.Split(TEXT("/"), &PackageName, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-
-	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
-	BlueprintFactory->BlueprintType = BPTYPE_Interface;
-	BlueprintFactory->ParentClass = UInterface::StaticClass();
-
-	UBlueprint* NewInterface = Cast<UBlueprint>(AssetTools.CreateAsset(AssetName, PackageName, UBlueprint::StaticClass(), BlueprintFactory));
-	if (!NewInterface)
-	{
-		return MCPError(TEXT("Failed to create Blueprint Interface"));
-	}
-
-	FKismetEditorUtilities::CompileBlueprint(NewInterface);
-
-	const FString ObjectPath = NewInterface->GetPathName();
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(NewInterface, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	MCPNoteSaveOutcome(Result, ObjectPath, bSaved, SaveError);
-	Result->SetStringField(TEXT("path"), AssetPath);
-	Result->SetStringField(TEXT("name"), NewInterface->GetName());
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("assetPath"), ObjectPath);
-	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-
-	return MCPResult(Result);
+	UBlueprintFactory* Factory = NewObject<UBlueprintFactory>();
+	Factory->BlueprintType = BPTYPE_Interface;
+	TSharedPtr<FJsonValue> Early;
+	const TSharedPtr<FJsonObject> Result = MCPCreatePreset::BlueprintSubclass(
+		Create, UInterface::StaticClass(), Early, [](UBlueprint*) {}, Factory);
+	return Result.IsValid() ? MCPResult(Result) : Early;
 }
 
 
