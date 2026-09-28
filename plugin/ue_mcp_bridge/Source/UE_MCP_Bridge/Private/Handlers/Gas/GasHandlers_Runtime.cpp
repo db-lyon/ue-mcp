@@ -7,6 +7,7 @@
 
 #include "GasHandlers.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "GameFramework/Actor.h"
@@ -90,23 +91,6 @@ FString ListAttributeDataPropertyNames(UClass* SetClass)
 
 namespace
 {
-	// Defaults to "auto" (prefer PIE), since runtime GAS control is almost
-	// always exercised during Play-In-Editor.
-	UWorld* ResolveRuntimeWorld(const TSharedPtr<FJsonObject>& Params)
-	{
-		return ResolveWorldFromParams(Params, TEXT("auto"));
-	}
-
-	// A rollback replays against the PIE instance the call acted on.
-	void CopyPieInstanceToRollback(const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonObject>& Payload)
-	{
-		double PieInstance = 0.0;
-		if (TryGetNumberParam(Params, TEXT("pieInstance"), PieInstance))
-		{
-			Payload->SetNumberField(TEXT("pieInstance"), PieInstance);
-		}
-	}
-
 	// Find the actor in the resolved world and return its
 	// AbilitySystemComponent. On any failure writes a structured error to
 	// OutError and returns nullptr.
@@ -122,12 +106,14 @@ namespace
 			return nullptr;
 		}
 
-		UWorld* World = ResolveRuntimeWorld(Params);
-		if (!World)
+		// Defaults to "auto" (prefer PIE): runtime GAS control is almost always exercised in PIE.
+		const FMCPRuntimeWorld Where = FMCPRuntimeWorld::Resolve(Params, TEXT("auto"));
+		if (auto Err = Where.Require(TEXT("No world available. For PIE actors, start Play-In-Editor first.")))
 		{
-			OutError = MCPError(TEXT("No world available. For PIE actors, start Play-In-Editor first."));
+			OutError = Err;
 			return nullptr;
 		}
+		UWorld* World = Where.World;
 
 		// #956: label, internal name, or full object path, in that fixed order.
 		// A verification actor spawned into the editor world often has no label
@@ -273,9 +259,6 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 	FString EffectSpec;
 	if (auto Err = RequireString(Params, TEXT("effectClass"), EffectSpec)) return Err;
 
-	// Captured before anything resolves, because the rollback record has to name
-	// the same world scope this call ran against rather than re-guessing it.
-	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
 	// Read before anything can fail (#1057).
 	const float Level = static_cast<float>(OptionalNumber(Params, TEXT("level"), 1.0));
 	const TSharedPtr<FJsonObject>* SetByCaller = nullptr;
@@ -384,8 +367,7 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 		TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
 		RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 		RollbackPayload->SetStringField(TEXT("effectHandle"), Active.ToString());
-		RollbackPayload->SetStringField(TEXT("world"), WorldScope);
-		CopyPieInstanceToRollback(Params, RollbackPayload);
+		FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 		if (bStackedOntoExisting)
 		{
 			// This call added ONE stack to an effect that was already there.
@@ -427,7 +409,6 @@ TSharedPtr<FJsonValue> FGasHandlers::RemoveEffect(const TSharedPtr<FJsonObject>&
 {
 	MCP_CHECK_GAME_THREAD();
 
-	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
 	// Read before anything can fail (#1057). effectPath is a spec alias of effectClass.
 	const FString HandleText = OptionalString(Params, TEXT("effectHandle"));
 	const FString EffectSpec = OptionalString(Params, TEXT("effectClass"));
@@ -548,8 +529,7 @@ TSharedPtr<FJsonValue> FGasHandlers::RemoveEffect(const TSharedPtr<FJsonObject>&
 		RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 		RollbackPayload->SetStringField(TEXT("effectClass"), RemovedClassPath);
 		RollbackPayload->SetNumberField(TEXT("level"), RemovedLevel);
-		RollbackPayload->SetStringField(TEXT("world"), WorldScope);
-		CopyPieInstanceToRollback(Params, RollbackPayload);
+		FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 		MCPSetRollback(Result, TEXT("apply_effect"), RollbackPayload);
 		Result->SetBoolField(TEXT("rollbackLossy"), true);
 		Result->SetStringField(TEXT("rollbackNote"),
@@ -583,7 +563,6 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAttribute(const TSharedPtr<FJsonObject>&
 		return MCPError(TEXT("Missing required parameter 'value'"));
 	}
 
-	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
 
 	AActor* Actor = nullptr;
 	TSharedPtr<FJsonValue> Err;
@@ -638,8 +617,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAttribute(const TSharedPtr<FJsonObject>&
 		RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 		RollbackPayload->SetStringField(TEXT("attribute"), QualifiedAttribute);
 		RollbackPayload->SetNumberField(TEXT("value"), OldBase);
-		RollbackPayload->SetStringField(TEXT("world"), WorldScope);
-		CopyPieInstanceToRollback(Params, RollbackPayload);
+		FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 		MCPSetRollback(Result, TEXT("set_attribute"), RollbackPayload);
 		Result->SetBoolField(TEXT("rollbackLossy"), false);
 	}
@@ -947,8 +925,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetLiveAttributeValue(const TSharedPtr<FJso
 	RollbackPayload->SetStringField(TEXT("valueType"), ValueType);
 	RollbackPayload->SetNumberField(TEXT("value"),
 		ValueType == TEXT("base") ? PreviousBase : PreviousCurrent);
-	RollbackPayload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world"), TEXT("auto")));
-	CopyPieInstanceToRollback(Params, RollbackPayload);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 	MCPSetRollback(Result, TEXT("set_live_attribute_value"), RollbackPayload);
 	Result->SetBoolField(TEXT("rollbackLossy"), Req.bAdopted);
 	if (Req.bAdopted)
@@ -1275,6 +1252,7 @@ TSharedPtr<FJsonValue> FGasHandlers::GrantAbility(const TSharedPtr<FJsonObject>&
 	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
 	RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	RollbackPayload->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 	MCPSetRollback(Result, TEXT("revoke_ability"), RollbackPayload);
 
 	return MCPResult(Result);
@@ -1334,6 +1312,7 @@ TSharedPtr<FJsonValue> FGasHandlers::RevokeAbility(const TSharedPtr<FJsonObject>
 	RollbackPayload->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
 	RollbackPayload->SetNumberField(TEXT("level"), RevokedLevel);
 	RollbackPayload->SetNumberField(TEXT("inputId"), RevokedInputID);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 	MCPSetRollback(Result, TEXT("grant_ability"), RollbackPayload);
 	return MCPResult(Result);
 }
@@ -1707,8 +1686,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddLooseGameplayTag(const TSharedPtr<FJsonO
 	RollbackPayload->SetStringField(TEXT("actorPath"), Req.Actor->GetPathName());
 	RollbackPayload->SetStringField(TEXT("tag"), Req.Tag.ToString());
 	RollbackPayload->SetNumberField(TEXT("count"), Added);
-	RollbackPayload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world"), TEXT("auto")));
-	CopyPieInstanceToRollback(Params, RollbackPayload);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 	MCPSetRollback(Result, TEXT("remove_loose_gameplay_tag"), RollbackPayload);
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
 	return MCPResult(Result);
@@ -1764,8 +1742,7 @@ TSharedPtr<FJsonValue> FGasHandlers::RemoveLooseGameplayTag(const TSharedPtr<FJs
 	RollbackPayload->SetStringField(TEXT("actorPath"), Req.Actor->GetPathName());
 	RollbackPayload->SetStringField(TEXT("tag"), Req.Tag.ToString());
 	RollbackPayload->SetNumberField(TEXT("count"), Removed);
-	RollbackPayload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world"), TEXT("auto")));
-	CopyPieInstanceToRollback(Params, RollbackPayload);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 	MCPSetRollback(Result, TEXT("add_loose_gameplay_tag"), RollbackPayload);
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
 	return MCPResult(Result);

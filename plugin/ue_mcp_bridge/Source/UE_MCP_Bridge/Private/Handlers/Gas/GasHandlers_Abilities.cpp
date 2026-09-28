@@ -42,6 +42,7 @@
 
 #include "GasHandlers.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -399,6 +400,7 @@ TSharedPtr<FJsonValue> FGasHandlers::BindAbilityInput(const TSharedPtr<FJsonObje
 	RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	RollbackPayload->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
 	RollbackPayload->SetNumberField(TEXT("inputId"), PreviousInputID);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 	MCPSetRollback(Result, TEXT("bind_ability_input"), RollbackPayload);
 
 	return MCPResult(Result);
@@ -449,6 +451,7 @@ TSharedPtr<FJsonValue> FGasHandlers::ClearAbilityInput(const TSharedPtr<FJsonObj
 	RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	RollbackPayload->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
 	RollbackPayload->SetNumberField(TEXT("inputId"), PreviousInputID);
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 	MCPSetRollback(Result, TEXT("bind_ability_input"), RollbackPayload);
 
 	return MCPResult(Result);
@@ -594,6 +597,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SendAbilityInput(const TSharedPtr<FJsonObje
 	RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	RollbackPayload->SetNumberField(TEXT("inputId"), InputID);
 	RollbackPayload->SetStringField(TEXT("inputEvent"), bWantPressed ? TEXT("released") : TEXT("pressed"));
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 	MCPSetRollback(Result, TEXT("send_ability_input"), RollbackPayload);
 	Result->SetStringField(TEXT("rollbackNote"), TEXT(
 		"The rollback restores the ASC's InputPressed state, which is what this call changed. It does NOT "
