@@ -28,7 +28,7 @@ import { ensureGuard } from "../editor/dialog-guard.js";
 import { pythonGateRefusal } from "../dispatch/python-gate.js";
 import { needsExplicitEditor, refuseUntargetedInRegistry } from "../dispatch/editor-gate.js";
 import { factsScope, hostNamespaces, makeConditionEvaluator, type ProbeFacts, type StepScope } from "./condition.js";
-import { BridgeFacts } from "./probes.js";
+import { BridgeFacts, ProbeError } from "./probes.js";
 import { stepAvailability } from "./flow-describe.js";
 import { GATE_IDS, GATES, gateFires } from "./gates.js";
 
@@ -169,6 +169,28 @@ function fired(outcomes: CheckOutcome[]): Array<{ action: string; message: strin
     .map((o) => ({ action: o.action, message: o.error ? `${o.message} (${o.error.message})` : o.message }));
 }
 
+type FlowSteps = Record<string, { steps?: Record<string, { task?: string; flow?: string }> } | undefined>;
+
+/** Whether a step before the one being checked, in the same flow, may change the editor. */
+function changesBefore(flows: Record<string, unknown>, c: ConditionContext, graph: readonly ToolDef[]): boolean {
+  const step = c.step;
+  if (!step || !c.flowName) return false;
+  const flow = (flows as FlowSteps)[c.flowName];
+  return Object.entries(flow?.steps ?? {}).some(([n, s]) =>
+    Number(n) < step.stepNumber && (s.flow !== undefined || (s.task !== undefined && taskEffect(s.task, graph).effect !== "read")));
+}
+
+/** The editor facts scope, unknown to a plan behind a step that may change the editor. */
+function deferAfterChange(scope: StepScope | undefined, flows: Record<string, unknown>, graph: readonly ToolDef[]): StepScope | undefined {
+  if (!scope) return undefined;
+  return {
+    names: scope.names,
+    read: (c, expression) => changesBefore(flows, c, graph)
+      ? Promise.reject(new Error("editor facts are read when the run reaches this step, because an earlier step may change the editor"))
+      : scope.read(c, expression),
+  };
+}
+
 /** What a run of `flowName` would be refused for, evaluated without running anything. */
 export async function planPreflight(
   registry: TaskRegistry,
@@ -179,15 +201,23 @@ export async function planPreflight(
   params?: Record<string, unknown>,
   skip?: string[],
 ): Promise<PlanPreflight> {
-  // A plan reads each probe once: nothing runs between its checks.
+  // A plan reads each probe once: nothing runs between its checks. A check
+  // behind a step that may change the editor reads the state that step
+  // leaves, which only the run can see, so the plan reports it unknown.
   const facts = new BridgeFacts(ctx);
+  const deferred: ProbeFacts = {
+    read: (name) => name === "engine"
+      ? facts.read(name)
+      : Promise.reject(new ProbeError(name, "read when the run reaches this step, because an earlier step may change the editor")),
+  };
+  const planFacts = (c: ConditionContext): ProbeFacts => (changesBefore(config.flows, c, graph) ? deferred : facts);
   const runner = new FlowRunner({
     tasks: config.tasks as Record<string, TaskDefinition>,
     flows: withGateChecks(config.flows, gateChecks(ctx, graph)),
     registry,
     context: { ...ctx } as never,
     references: { ...hostNamespaces(ctx), params: params ?? {} },
-    conditionEvaluator: makeConditionEvaluator(hostNamespaces(ctx), [gateScope(ctx, graph, true, facts), factsScope(ctx)], facts),
+    conditionEvaluator: makeConditionEvaluator(hostNamespaces(ctx), [gateScope(ctx, graph, true, facts), deferAfterChange(factsScope(ctx), config.flows, graph)], planFacts),
   });
   const result = await runner.preflight(flowName, params, { skip });
   const refused: PlanRefusal[] = [];

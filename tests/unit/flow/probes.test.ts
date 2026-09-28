@@ -119,6 +119,26 @@ describe("probes in a flow run", () => {
     expect(calls).toEqual([]);
   });
 
+  it("leaves a plan's check behind a write to the run, and still decides one before it", async () => {
+    const { ctx } = editor(() => ({ mode: "editor", dirtyPackageCount: 2 }));
+    const config = FlowConfigSchema.parse({
+      ...buildDefaults([tool]),
+      flows: {
+        go: {
+          steps: {
+            1: { task: "asset.read", options: { assetPath: "/Game/A" }, checks: [{ when: "probe.playing", action: "error", message: "Playing." }] },
+            2: { task: "asset.save", options: { assetPath: "/Game/A" } },
+            3: { task: "asset.read", options: { assetPath: "/Game/A" }, checks: [{ when: "probe.dirty > 0", action: "error", message: "Still dirty." }] },
+          },
+        },
+      },
+    });
+    const tool_ = createFlowTool(buildFlowRegistry([tool]), () => config);
+    const plan = await tool_.handler(ctx, { action: "plan", flowName: "go" }) as { preflight: { ok: boolean; steps: Array<{ path: string; status: string }> } };
+    expect(plan.preflight.ok).toBe(true);
+    expect(plan.preflight.steps.map((s) => s.status)).toEqual(["run", "run", "unknown"]);
+  });
+
   it("fails the step whose check reads a probe that fails", async () => {
     const { result } = run({
       steps: {

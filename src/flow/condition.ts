@@ -286,7 +286,7 @@ export interface StepScope {
 export function makeConditionEvaluator(
   namespaces: Record<string, unknown>,
   stepScope?: StepScope | Array<StepScope | undefined>,
-  facts?: ProbeFacts,
+  facts?: ProbeFacts | ((ctx: ConditionContext) => ProbeFacts),
 ): ConditionEvaluator {
   const scopes = (Array.isArray(stepScope) ? stepScope : [stepScope]).filter((s): s is StepScope => s !== undefined);
   const names = [...scopes.flatMap((s) => s.names), ...(facts ? [PROBE_NAMESPACE] : [])];
@@ -302,7 +302,7 @@ export function makeConditionEvaluator(
     const extra: Record<string, unknown> = Object.assign({}, ...extras);
     if (facts) {
       const probes = probesNamed(expression);
-      if (probes.length > 0) extra[PROBE_NAMESPACE] = await probeNamespace(facts, probes);
+      if (probes.length > 0) extra[PROBE_NAMESPACE] = await probeNamespace(typeof facts === "function" ? facts(ctx) : facts, probes);
     }
     return base(expression, ctx, extra);
   };
