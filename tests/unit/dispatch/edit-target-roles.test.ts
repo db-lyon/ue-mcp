@@ -61,6 +61,20 @@ describe("edit target roles", () => {
     expect(readers).toEqual([]);
   });
 
+  it("are declared by every handler that declares a commit policy, which the edit scope needs to open it", () => {
+    const untargeted = Object.entries(RECORDED_HANDLER_SPECS)
+      .filter(([, spec]) => spec.commit !== undefined && !spec.params.some((p) => p.role === "editTarget"))
+      .map(([method]) => method);
+    expect(untargeted).toEqual([]);
+  });
+
+  it("come with a commit policy on every StateTree writer, since its edit scope takes compile and save from it", () => {
+    const missing = Object.entries(RECORDED_HANDLER_SPECS)
+      .filter(([, spec]) => spec.category === "statetree" && spec.params.some((p) => p.role === "editTarget") && spec.commit === undefined)
+      .map(([method]) => method);
+    expect(missing).toEqual([]);
+  });
+
   it("list only handlers that exist and declare no edit target", () => {
     for (const method of reviewed) {
       expect(RECORDED_HANDLER_SPECS[method], method).toBeDefined();
