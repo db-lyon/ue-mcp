@@ -5,6 +5,8 @@
 
 #include "BlueprintHandlers.h"
 #include "BlueprintHandlers_Internal.h"
+#include "BlueprintEditTraits.h"
+#include "Families/MCPPropertyWrite.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
@@ -89,11 +91,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	const TSharedPtr<FJsonObject>* NodeParams = nullptr;
 	TryGetObjectParam(Params, TEXT("nodeParams"), NodeParams);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("add_node"), TEXT("assetPath"), MCPBlueprint::StructureEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	// Find the target graph
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
@@ -148,6 +148,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	}
 
 	// Create node instance
+	if (auto Err = Edit.Begin()) return Err;
 	UEdGraphNode* NewNode = NewObject<UEdGraphNode>(TargetGraph, NodeUClass, NAME_None, RF_Transactional);
 	if (!NewNode)
 	{
@@ -721,22 +722,28 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	// triggers that plus invalidates cached CDO info; CompileBlueprint alone
 	// was leaving nodes in newly-created function graphs in a half-initialized
 	// state where pins appeared but the underlying function binding didn't.
+	// The scope marks it structurally modified, compiles and saves.
 	TargetGraph->NotifyGraphChanged();
-	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
-
-	// Compile and save
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeClass"), NewNode->GetClass()->GetName());
 	const FString NodeIdStr = NewNode->NodeGuid.ToString();
 	Result->SetStringField(TEXT("nodeId"), NodeIdStr);
+
+	// Rollback: delete the node we just created by guid.
+	// Note: add_node has no natural key, so we cannot short-circuit on replay.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("graphName"), GraphName);
+	Payload->SetStringField(TEXT("nodeId"), NodeIdStr);
+	MCPSetRollback(Result, TEXT("delete_node"), Payload);
+
+	// Title and pins are read after the compile, as they always were.
+	const TSharedPtr<FJsonValue> Out = Edit.Finish(Result);
 	Result->SetStringField(TEXT("title"), NewNode->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 
 	// Return pin info so the caller knows what to connect
@@ -751,16 +758,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		PinsArray.Add(MakeShared<FJsonValueObject>(PinObj));
 	}
 	Result->SetArrayField(TEXT("pins"), PinsArray);
-
-	// Rollback: delete the node we just created by guid.
-	// Note: add_node has no natural key, so we cannot short-circuit on replay.
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("path"), AssetPath);
-	Payload->SetStringField(TEXT("graphName"), GraphName);
-	Payload->SetStringField(TEXT("nodeId"), NodeIdStr);
-	MCPSetRollback(Result, TEXT("delete_node"), Payload);
-
-	return MCPResult(Result);
+	return Out;
 }
 
 
@@ -942,11 +940,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	TryGetBoolParam(Params, TEXT("breakExistingSource"), bBreakExistingSource);
 	TryGetBoolParam(Params, TEXT("breakExistingTarget"), bBreakExistingTarget);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("connect_pins"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph)
@@ -1093,6 +1089,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	UPackage* Package = Blueprint->GetOutermost();
 	const bool bWasPackageDirty = Package && Package->IsDirty();
 
+	if (auto Err = Edit.Begin()) return Err;
 	if (bBreakExistingSource)
 	{
 		SourcePin->BreakAllPinLinks();
@@ -1121,13 +1118,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 			}
 		}
 
-		// Compile and save
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		FString SaveError;
-		const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+		Edit.Commit();
 
 		auto Result = MCPSuccess();
-		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 		if (bAlreadyLinked)
 		{
 			MCPSetUpdated(Result);
@@ -1180,7 +1173,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 					BrokenTotal));
 			}
 		}
-		return MCPResult(Result);
+		return Edit.Finish(Result);
 	}
 	else
 	{
@@ -1225,11 +1218,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	FString NodeId;
 	if (auto Err = RequireString(Params, TEXT("nodeId"), NodeId)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("delete_node"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph)
@@ -1314,6 +1305,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	// it, and one it only references is left alone by the delete and still
 	// resolves on paste. What the paste does not restore is named in the
 	// rollback note instead of being used to withhold the rollback.
+	if (auto Err = Edit.Begin()) return Err;
 	FString DeletedT3D;
 	int32 DeletedLinkCount = 0;
 	const bool bIsComposite = NodeToDelete->IsA<UK2Node_Composite>();
@@ -1450,13 +1442,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	{
 		FBlueprintEditorUtils::RemoveNode(Blueprint, NodeToDelete, /*bDontRecompile*/ true);
 	}
-
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeId"), NodeId);
@@ -1575,7 +1563,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 			"rollback that does nothing. Rebuild the node with add_node."),
 			*NodeId, *NodeClassName));
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 
@@ -1596,8 +1584,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RefreshNode(const TSharedPtr<FJsonObj
 
 	const bool bBreakOrphanedPins = OptionalBool(Params, TEXT("breakOrphanedPins"), false);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("refresh_node"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
@@ -1654,6 +1643,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RefreshNode(const TSharedPtr<FJsonObj
 	const FString Before = PinSignature(Node);
 	const int32 PinsBefore = Node->Pins.Num();
 
+	if (auto Err = Edit.Begin()) return Err;
 	Schema->ReconstructNode(*Node);
 
 	// An orphaned pin survives a rebuild only while it is linked, so breaking
@@ -1687,17 +1677,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RefreshNode(const TSharedPtr<FJsonObj
 	const bool bChanged = Before != After || BrokenOrphanLinks.Num() > 0;
 	const TArray<TSharedPtr<FJsonValue>> RemainingOrphans = OrphanedPins(Node);
 
-	bool bSaveRan = false, bSaved = false;
-	FString SaveError;
-	if (bChanged)
-	{
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
-		bSaveRan = true;
-	}
+	// Only a rebuild that changed something is compiled and saved.
+	if (bChanged) Edit.Commit();
 
 	auto Result = MCPSuccess();
-	if (bSaveRan) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	if (bChanged)
 	{
 		MCPSetUpdated(Result);
@@ -1711,7 +1694,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RefreshNode(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
 	Result->SetNumberField(TEXT("pinsBefore"), PinsBefore);
-	Result->SetNumberField(TEXT("pinsAfter"), Node->Pins.Num());
 	Result->SetArrayField(TEXT("brokenOrphanLinks"), BrokenOrphanLinks);
 	Result->SetArrayField(TEXT("orphanedPins"), RemainingOrphans);
 	if (RemainingOrphans.Num() > 0)
@@ -1725,7 +1707,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RefreshNode(const TSharedPtr<FJsonObj
 			"brokenOrphanLinks, and those pins no longer exist, so they cannot be re-made."))
 		: FString(TEXT("A rebuild derives the pins from the node's current definition; there is no earlier pin set "
 			"to return to.")));
-	return MCPResult(Result);
+	// Read after the compile, as it always was.
+	const TSharedPtr<FJsonValue> Out = Edit.Finish(Result);
+	Result->SetNumberField(TEXT("pinsAfter"), Node->Pins.Num());
+	return Out;
 }
 
 
@@ -1749,8 +1734,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DisconnectPins(const TSharedPtr<FJson
 	const FString LinkedNodeId = OptionalString(Params, TEXT("linkedNodeId"));
 	const FString LinkedPinName = OptionalString(Params, TEXT("linkedPinName"));
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("disconnect_pins"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
@@ -1837,17 +1823,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DisconnectPins(const TSharedPtr<FJson
 		}
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
 	for (UEdGraphPin* Linked : ToBreak)
 	{
 		Schema->BreakSinglePinLink(Pin, Linked);
 	}
-
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	MCPSetUpdated(Result);
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetBoolField(TEXT("alreadyDisconnected"), false);
 	Result->SetNumberField(TEXT("brokenLinkCount"), BrokenLinks.Num());
 	Result->SetArrayField(TEXT("brokenLinks"), BrokenLinks);
@@ -1862,7 +1845,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DisconnectPins(const TSharedPtr<FJson
 			"pinName and direction; feed each back through connect_pins against '%s' on this node."),
 			BrokenLinks.Num(), *PinName));
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 
@@ -1882,11 +1865,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 	FString DefaultValue;
 	if (auto Err = RequireString(Params, TEXT("value"), DefaultValue)) return Err;
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("set_node_property"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph)
@@ -1944,6 +1925,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 		const UEdGraphSchema* Schema = TargetGraph->GetSchema();
 		if (Schema)
 		{
+			if (auto Err = Edit.Begin()) return Err;
 			if (bIsTextPin)
 			{
 				Schema->TrySetDefaultText(*TargetPin, FText::FromString(DefaultValue));
@@ -1989,19 +1971,25 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 
 		if (FinalProp)
 		{
-			void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
-			// ImportText_Direct returns nullptr on parse failure. Previously we
-			// ignored that - a malformed DefaultValue silently corrupted the
-			// node's default. Now we surface the failure as an error so callers
-			// see the bad input immediately rather than at compile time.
-			const TCHAR* Parsed = FinalProp->ImportText_Direct(*DefaultValue, ValuePtr, nullptr, PPF_None);
-			if (Parsed == nullptr)
+			// F5: the node is notified with the chain from its own member down to
+			// the leaf, and a value that does not import leaves the old one in place.
+			if (auto Err = Edit.Begin()) return Err;
+			MCPPropertyWrite::FTarget Target;
+			Target.Owner = TargetNode;
+			Target.Leaf = FinalProp;
+			Target.Value = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
+			Target.Chain = MCPPropertyWrite::ChainOf(TargetNode->GetClass(), PinName);
+			Target.Member = Target.Chain.Num() > 0 ? Target.Chain[0].Property : FinalProp;
+			const MCPPropertyWrite::FOutcome Outcome = MCPPropertyWrite::Write(Target, [&](FString& OutError)
 			{
-				return MCPError(FString::Printf(
+				if (FinalProp->ImportText_Direct(*DefaultValue, Target.Value, nullptr, PPF_None)) return true;
+				OutError = FString::Printf(
 					TEXT("DefaultValue '%s' is not valid for property '%s' (type %s). Use UE's text format (e.g. `(X=1,Y=2,Z=3)` for FVector)."),
-					*DefaultValue, *FinalProp->GetName(), *FinalProp->GetCPPType()));
-			}
-			TargetNode->PostEditChange();
+					*DefaultValue, *FinalProp->GetName(), *FinalProp->GetCPPType());
+				return false;
+			});
+			if (!Outcome.bWritten) return MCPError(Outcome.Error);
+			PrevValue = Outcome.Previous;
 			// #325: writing pin-defining properties on a K2Node (e.g. VariableReference
 			// on K2Node_VariableGet, FunctionReference on K2Node_CallFunction) leaves
 			// the node's pins frozen at the old class until ReconstructNode is called.
@@ -2035,13 +2023,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 			*PinName, *FString::Join(PinNames, TEXT(", ")), *FString::Join(PropNames, TEXT(", "))));
 	}
 
-	// Compile and save
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
@@ -2049,6 +2033,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("propertyName"), PinName);
 	Result->SetStringField(TEXT("value"), DefaultValue);
 	Result->SetStringField(TEXT("setVia"), bSetViaPin ? TEXT("pin") : TEXT("property"));
+	Result->SetStringField(TEXT("previousValue"), PrevValue);
 
 	// Rollback: self-inverse with previous pin default value (pin path only; property path has no reliable previous capture)
 	if (bSetViaPin && bHasPrevValue)
@@ -2061,7 +2046,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 		Payload->SetStringField(TEXT("defaultValue"), PrevValue);
 		MCPSetRollback(Result, TEXT("set_node_property"), Payload);
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -2487,11 +2472,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 	const bool bHasAnchorX = TryGetNumberParam(Params, TEXT("posX"), AnchorX);
 	const bool bHasAnchorY = TryGetNumberParam(Params, TEXT("posY"), AnchorY);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint)
-	{
-		return BlueprintNotFoundError(AssetPath);
-	}
+	FMCPEditScope Edit(Params, TEXT("import_nodes_t3d"), TEXT("assetPath"), MCPBlueprint::ValueEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph)
@@ -2504,6 +2487,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 		return MCPError(TEXT("T3D text is not importable into this graph (schema mismatch or malformed)"));
 	}
 
+	if (auto Err = Edit.Begin()) return Err;
 	TSet<UEdGraphNode*> PastedNodes;
 	FEdGraphUtilities::ImportNodesFromText(TargetGraph, T3D, /*out*/ PastedNodes);
 
@@ -2570,16 +2554,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 		NodeIds.Add(MakeShared<FJsonValueString>(Node->NodeGuid.ToString()));
 	}
 
+	// The scope marks the Blueprint modified, compiles and saves.
 	TargetGraph->NotifyGraphChanged();
-	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-
-	// Compile and save
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+	Edit.Commit();
 
 	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
@@ -2605,7 +2584,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 			"undoes it. Every new nodeId is listed in nodeIds; delete them individually to reverse this import."),
 			NodeIds.Num()));
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -2735,8 +2714,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CleanupGraph(const TSharedPtr<FJsonOb
 	// Read before the load can fail (#1057).
 	const FString GraphName = OptionalString(Params, TEXT("graphName"));
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("cleanup_graph"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	TArray<UEdGraph*> Graphs;
 	if (!GraphName.IsEmpty())
@@ -2773,6 +2753,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CleanupGraph(const TSharedPtr<FJsonOb
 
 			if (bOrphan)
 			{
+				// Begun at the first orphan, so a sweep that finds none never meets the #932 guard.
+				if (auto Err = Edit.Begin()) return Err;
 				TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 				Entry->SetStringField(TEXT("graph"), Graph->GetName());
 				Entry->SetStringField(TEXT("nodeGuid"), Node->NodeGuid.ToString());
@@ -2807,17 +2789,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CleanupGraph(const TSharedPtr<FJsonOb
 		}
 	}
 
-	bool bSaveRan = false, bSaved = false;
-	FString SaveError;
-	if (Removed > 0)
-	{
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
-		bSaveRan = true;
-	}
+	if (Removed > 0) Edit.Commit();
 
 	auto Result = MCPSuccess();
-	if (bSaveRan) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetNumberField(TEXT("removed"), Removed);
 	Result->SetArrayField(TEXT("removedNodes"), RemovedIds);
@@ -2839,7 +2813,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CleanupGraph(const TSharedPtr<FJsonOb
 		"a call node whose target function is merely renamed or in an unloaded plugin looks like an orphan here, "
 		"which is the case worth checking before treating this cleanup as final."),
 		Restorable, Removed));
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // #267 - connect_pins_batch: apply many wirings in one call, single compile.
@@ -2855,8 +2829,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 		return MCPError(TEXT("Missing 'connections' array - each entry: {sourceNode, sourcePin, targetNode, targetPin}"));
 	}
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("connect_pins_batch"), TEXT("assetPath"), MCPBlueprint::PlainEdit());
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
@@ -2916,6 +2891,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 			Existed++;
 			continue;
 		}
+		if (auto Err = Edit.Begin()) return Err;
 		if (Schema->TryCreateConnection(SP, TP))
 		{
 			EntryResult->SetStringField(TEXT("status"), TEXT("connected"));
@@ -2931,17 +2907,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 		Detail.Add(MakeShared<FJsonValueObject>(EntryResult));
 	}
 
-	bool bSaveRan = false, bSaved = false;
-	FString SaveError;
-	if (Connected > 0)
-	{
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
-		bSaveRan = true;
-	}
+	if (Connected > 0) Edit.Commit();
 
 	auto Result = MCPSuccess();
-	if (bSaveRan) MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetNumberField(TEXT("total"), ConnectionsArray->Num());
@@ -2958,7 +2926,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 		"No action breaks a Blueprint pin link, so these connections have no inverse call. delete_node is not it: it "
 		"would remove nodes this call only wired up. The per-connection results say which links were newly made, "
 		"which is what a manual undo would have to break."));
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // #277 - set_node_position: write NodePosX/NodePosY on a target node.
@@ -2973,8 +2941,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodePosition(const TSharedPtr<FJso
 	int32 PosX = OptionalInt(Params, TEXT("posX"), 0);
 	int32 PosY = OptionalInt(Params, TEXT("posY"), 0);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("set_node_position"), TEXT("assetPath"), FMCPCommitPolicy::Edit(EMCPSettle::None));
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 	UEdGraph* Graph = FindGraph(Blueprint, GraphName);
 	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	UEdGraphNode* Node = FindNodeByGuidOrName(Graph, NodeId);
@@ -2991,10 +2960,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodePosition(const TSharedPtr<FJso
 	// claims in one result.
 	if (!bUnchanged)
 	{
+		// Modify before the write, so the undo record holds the old position.
+		if (auto Err = Edit.Begin()) return Err;
+		Node->Modify();
 		Node->NodePosX = PosX;
 		Node->NodePosY = PosY;
-		Node->Modify();
 		Graph->NotifyGraphChanged();
+		Edit.Commit();
 	}
 
 	auto Result = MCPSuccess();
@@ -3024,7 +2996,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodePosition(const TSharedPtr<FJso
 		Payload->SetNumberField(TEXT("posY"), PrevPosY);
 		MCPSetRollback(Result, TEXT("set_node_position"), Payload);
 	}
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
 
 // #277 - auto_layout_graph: simple topological layered layout. Each node is
@@ -3042,8 +3014,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 	const int32 PositionsLimit = FMath::Max(0, OptionalInt(Params, TEXT("previousPositionsLimit"), 200));
 	const bool bForcePositions = OptionalBool(Params, TEXT("capturePreviousPositions"), false);
 
-	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
-	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	FMCPEditScope Edit(Params, TEXT("auto_layout_graph"), TEXT("assetPath"), FMCPCommitPolicy::Edit(EMCPSettle::None));
+	if (auto Err = Edit.Open<UBlueprint>()) return Err;
+	UBlueprint* Blueprint = Edit.Target<UBlueprint>();
 	UEdGraph* Graph = FindGraph(Blueprint, GraphName);
 	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 
@@ -3138,9 +3111,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 			// claim-and-contradiction the marker fix two lines below removed.
 			if (PrevPosX != NewPosX || PrevPosY != NewPosY)
 			{
+				if (auto Err = Edit.Begin()) return Err;
+				Node->Modify();
 				Node->NodePosX = NewPosX;
 				Node->NodePosY = NewPosY;
-				Node->Modify();
 				Moved++;
 			}
 			Repositioned++;
@@ -3152,6 +3126,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 	if (Moved > 0)
 	{
 		Graph->NotifyGraphChanged();
+		Edit.Commit();
 	}
 
 	auto Result = MCPSuccess();
@@ -3185,5 +3160,5 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 			"captured and the old layout is gone. Pass capturePreviousPositions=true (or raise "
 			"previousPositionsLimit) BEFORE running this if you need to be able to put it back."),
 			NodeCount, PositionsLimit));
-	return MCPResult(Result);
+	return Edit.Finish(Result);
 }
