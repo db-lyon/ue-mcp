@@ -12,6 +12,10 @@
 #include "NavMesh/NavMeshBoundsVolume.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Package.h"
+#include "PCGComponent.h"
+#include "PCGGraph.h"
+#include "HandlerUtils.h"
+#include "Families/MCPWorldSpawn.h"
 
 namespace UEMCP
 {
@@ -66,5 +70,68 @@ namespace UEMCP
 		{
 			NavSys->OnNavigationBoundsUpdated(NavVolume);
 		}
+	}
+
+	TSharedPtr<FJsonValue> SpawnVolumeActor(
+		const TSharedPtr<FJsonObject>& Params,
+		UClass* VolumeClass,
+		const FVector& DefaultExtent,
+		const TCHAR* TypeLabel,
+		TFunctionRef<TSharedPtr<FJsonValue>(AActor*)> Configure)
+	{
+		FMCPSpawn Spawn(Params, { TypeLabel });
+		const FVector Extent = OptionalVec3(Params, TEXT("extent"), DefaultExtent);
+		const FString GraphPath = OptionalString(Params, TEXT("graphPath"));
+		if (Extent.X <= 0.0 || Extent.Y <= 0.0 || Extent.Z <= 0.0)
+		{
+			return MCPError(TEXT("extent must be positive on every axis (it is a half-size, not a corner)."));
+		}
+		UPCGGraph* Graph = nullptr;
+		if (!GraphPath.IsEmpty())
+		{
+			Graph = LoadAssetByPath<UPCGGraph>(GraphPath);
+			if (!Graph) return MCPAssetLoadError(GraphPath, TEXT("PCGGraph"));
+		}
+
+		if (auto Early = Spawn.Open()) return Early;
+		AActor* NewActor = Spawn.SpawnAt<AActor>(VolumeClass, FTransform(Spawn.RequestedRotation(), Spawn.RequestedLocation()));
+		if (!NewActor) return Spawn.Failed();
+
+		// #238: a spawned AVolume has no brush and so no bounds; build the cube.
+		// Its builder resets scale, so the caller's scale goes on afterwards.
+		if (AVolume* Volume = Cast<AVolume>(NewActor))
+		{
+			BuildVolumeAsCube(Spawn.World(), Volume, Extent);
+			Spawn.ApplyScale();
+			NotifyVolumeBoundsChanged(Volume);
+		}
+		else
+		{
+			NewActor->SetActorScale3D(Extent / 100.0);
+		}
+
+		if (Graph)
+		{
+			UPCGComponent* PCGComp = NewActor->FindComponentByClass<UPCGComponent>();
+			if (!PCGComp)
+			{
+				return Spawn.Abandon(MCPError(FString::Printf(
+					TEXT("graphPath was given, but a %s has no PCG component to bind it to."), *NewActor->GetClass()->GetName())));
+			}
+			PCGComp->SetGraph(Graph);
+		}
+		if (auto Err = Configure(NewActor)) return Spawn.Abandon(Err);
+
+		TSharedPtr<FJsonObject> Result = Spawn.Finish();
+		// The built extent, read back rather than echoed: a zero here is the failure #238 fixed.
+		FVector BoundsOrigin, BoundsExtent;
+		NewActor->GetActorBounds(/*bOnlyCollidingComponents=*/false, BoundsOrigin, BoundsExtent);
+		Result->SetObjectField(TEXT("extent"), MCPVec3ToJsonObject(BoundsExtent));
+		if (Graph)
+		{
+			Result->SetStringField(TEXT("graphPath"), Graph->GetPathName());
+			Result->SetStringField(TEXT("graphName"), Graph->GetName());
+		}
+		return MCPResult(Result);
 	}
 }

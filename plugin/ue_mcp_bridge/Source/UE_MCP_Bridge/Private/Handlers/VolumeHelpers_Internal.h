@@ -1,9 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 
 class UWorld;
 class AVolume;
+class AActor;
+class UClass;
 
 namespace UEMCP
 {
@@ -25,4 +29,19 @@ namespace UEMCP
 	 *  Only NavMeshBoundsVolume registers bounds, and a PostEditChange with
 	 *  no property does not re-register them. Call after the final transform. */
 	void NotifyVolumeBoundsChanged(AVolume* Volume);
+
+	/**
+	 * The one volume spawn behind spawn_volume, add_pcg_volume and
+	 * spawn_nav_modifier_volume: place_actor's params (F6), plus extent (a
+	 * half-size, positive on every axis) for the cube brush and graphPath for
+	 * a PCG component, both checked before anything spawns. Configure runs on
+	 * the new volume; a refusal from it destroys the volume. The result is
+	 * the spawn shape plus the built extent and the bound graph.
+	 */
+	TSharedPtr<FJsonValue> SpawnVolumeActor(
+		const TSharedPtr<FJsonObject>& Params,
+		UClass* VolumeClass,
+		const FVector& DefaultExtent,
+		const TCHAR* TypeLabel,
+		TFunctionRef<TSharedPtr<FJsonValue>(AActor*)> Configure);
 }

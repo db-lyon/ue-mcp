@@ -5,6 +5,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/World.h"
+#include "HandlerWorld.h"
 #include "EngineUtils.h"
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -67,14 +68,9 @@ namespace UEMCP::SceneCapture
 			World = InWorld;
 			if (!World) { OutError = TEXT("World not available"); return false; }
 
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.ObjectFlags |= RF_Transient;
-#if WITH_EDITOR
-			SpawnParams.bTemporaryEditorActor = true;
-			SpawnParams.bHideFromSceneOutliner = true;
-			SpawnParams.bCreateActorPackage = false;
-#endif
-			Actor = World->SpawnActor<ASceneCapture2D>(ASceneCapture2D::StaticClass(), Location, Rotation, SpawnParams);
+			const FActorSpawnParameters SpawnParams = MCPTransientSpawnParameters();
+			Actor
+ = World->SpawnActor<ASceneCapture2D>(ASceneCapture2D::StaticClass(), Location, Rotation, SpawnParams);
 			if (!Actor) { OutError = TEXT("Failed to spawn SceneCapture2D actor"); return false; }
 			Actor->SetActorHiddenInGame(true);
 

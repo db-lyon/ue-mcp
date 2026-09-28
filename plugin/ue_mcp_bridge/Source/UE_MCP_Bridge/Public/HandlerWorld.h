@@ -130,6 +130,21 @@ inline UWorld* ResolveWorldFromParams(const TSharedPtr<FJsonObject>& Params, con
 	return ResolveWorldScope(Scope, PIEInstance);
 }
 
+/** Spawn parameters for an actor that must never persist: transient, a
+ *  temporary editor actor, and given no external actor package. */
+inline FActorSpawnParameters MCPTransientSpawnParameters(bool bHideFromOutliner = true)
+{
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	SpawnParams.ObjectFlags |= RF_Transient;
+#if WITH_EDITOR
+	SpawnParams.bTemporaryEditorActor = true;
+	SpawnParams.bHideFromSceneOutliner = bHideFromOutliner;
+	SpawnParams.bCreateActorPackage = false;
+#endif
+	return SpawnParams;
+}
+
 /** Get the editor world or return an error response. */
 #define REQUIRE_EDITOR_WORLD(WorldVar) \
 	UWorld* WorldVar = GetEditorWorld(); \
