@@ -68,8 +68,9 @@ describe("lock ownership", () => {
     await withAssetLocks(
       a.bridge,
       { enabled: true, ttlSeconds: 60 },
-      "asset.create_data_asset",
-      { assetPath: "/Game/Thing" },
+      // Locks follow the editTarget role in the recorded spec, which add_state declares on assetPath.
+      "statetree.add_state",
+      { assetPath: "/Game/Thing", name: "S" },
       async () => "done",
       a.lockOwnerId,
     );
