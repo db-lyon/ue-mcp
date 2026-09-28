@@ -9,6 +9,7 @@
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "HandlerPagination.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -131,18 +132,21 @@ namespace
 		Candidates.Add(TPair<FString, UWorld*>(Scope, World));
 	}
 
-	static TArray<TPair<FString, UWorld*>> BuildWorldCandidates(const FString& RequestedScope)
+	// The worlds a query searches, in order. A pieInstance names one live world
+	// and is never widened to another (F7); without one the first live world answers.
+	static TArray<TPair<FString, UWorld*>> BuildWorldCandidates(const FString& RequestedScope, int32 PIEInstance)
 	{
 		TArray<TPair<FString, UWorld*>> Candidates;
+		const FWorldContext* Live = FMCPRuntimeWorld::LiveContext(PIEInstance);
 		if (RequestedScope == TEXT("auto"))
 		{
-			AddWorldCandidate(Candidates, TEXT("pie"), GetPIEWorld());
-			AddWorldCandidate(Candidates, TEXT("editor"), GetEditorWorld());
+			AddWorldCandidate(Candidates, TEXT("pie"), Live ? Live->World() : nullptr);
+			if (PIEInstance == INDEX_NONE) AddWorldCandidate(Candidates, TEXT("editor"), GetEditorWorld());
 			return Candidates;
 		}
 		if (RequestedScope == TEXT("pie") || RequestedScope == TEXT("game"))
 		{
-			AddWorldCandidate(Candidates, RequestedScope, GetPIEWorld());
+			AddWorldCandidate(Candidates, RequestedScope, Live ? Live->World() : nullptr);
 			return Candidates;
 		}
 		if (RequestedScope == TEXT("editor"))
@@ -194,6 +198,7 @@ namespace
 	/** Resolve the live actor a query names. The caller reads `world` and
 	 *  `actorPath` itself, before anything can fail (#1057). */
 	static TSharedPtr<FJsonValue> ResolveSkeletalActorForQuery(
+		const TSharedPtr<FJsonObject>& Params,
 		const FString& WorldScope,
 		const FString& ActorPath,
 		const FString& ActorToken,
@@ -213,7 +218,9 @@ namespace
 		// #983: actorPath wins over the label token, and a label naming more
 		// than one actor in the world that answered is refused rather than
 		// read off whichever the iterator reached first.
-		TArray<TPair<FString, UWorld*>> Candidates = BuildWorldCandidates(RequestedScope);
+		int32 PIEInstance = INDEX_NONE;
+		TryGetNumberParam(Params, TEXT("pieInstance"), PIEInstance);
+		TArray<TPair<FString, UWorld*>> Candidates = BuildWorldCandidates(RequestedScope, PIEInstance);
 		for (const TPair<FString, UWorld*>& Candidate : Candidates)
 		{
 			if (!ActorPath.IsEmpty())
@@ -245,7 +252,9 @@ namespace
 		}
 		if (Candidates.Num() == 0)
 		{
-			return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *RequestedScope));
+			FMCPRuntimeWorld Missing;
+			Missing.Requested = PIEInstance;
+			return MCPError(Missing.Missing(FString::Printf(TEXT("World not available for scope '%s'"), *RequestedScope)));
 		}
 		return MakeSkeletalActorNotFoundError(ActorToken, RequestedScope, Candidates);
 	}
@@ -266,7 +275,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransform(const TSharedPtr<FJs
 	UWorld* World = nullptr;
 	AActor* Actor = nullptr;
 	FString ResolvedWorldScope;
-	if (auto Err = ResolveSkeletalActorForQuery(WorldScope, ActorPath, ActorLabel, World, Actor, ResolvedWorldScope)) return Err;
+	if (auto Err = ResolveSkeletalActorForQuery(Params, WorldScope, ActorPath, ActorLabel, World, Actor, ResolvedWorldScope)) return Err;
 	// A caller who passed only actorPath left ActorLabel holding the path, and
 	// every message below reads better naming the actor that answered (#983).
 	ActorLabel = Actor->GetActorLabel();
@@ -334,7 +343,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListBones(const TSharedPtr<FJsonObjec
 	UWorld* World = nullptr;
 	AActor* Actor = nullptr;
 	FString ResolvedWorldScope;
-	if (auto Err = ResolveSkeletalActorForQuery(WorldScope, ActorPath, ActorLabel, World, Actor, ResolvedWorldScope)) return Err;
+	if (auto Err = ResolveSkeletalActorForQuery(Params, WorldScope, ActorPath, ActorLabel, World, Actor, ResolvedWorldScope)) return Err;
 	// A caller who passed only actorPath left ActorLabel holding the path, and
 	// every message below reads better naming the actor that answered (#983).
 	ActorLabel = Actor->GetActorLabel();
@@ -561,7 +570,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetLivePostProcessAnimBlueprint(const
 	UWorld* World = nullptr;
 	AActor* Actor = nullptr;
 	FString ResolvedWorldScope;
-	if (auto Err = ResolveSkeletalActorForQuery(WorldScope, ActorPath, ActorLabel, World, Actor, ResolvedWorldScope)) return Err;
+	if (auto Err = ResolveSkeletalActorForQuery(Params, WorldScope, ActorPath, ActorLabel, World, Actor, ResolvedWorldScope)) return Err;
 	ActorLabel = Actor->GetActorLabel();
 	USkeletalMeshComponent* SK = ResolveSkeletalMeshComp(Actor, ComponentName);
 	if (!SK) return MakeSkeletalComponentNotFoundError(Actor, ActorLabel, ComponentName);
@@ -630,6 +639,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetLivePostProcessAnimBlueprint(const
 	{
 		Rollback->SetBoolField(TEXT("clear"), true);
 	}
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(Rollback);
 	MCPSetRollback(Result, TEXT("set_live_post_process_anim_blueprint"), Rollback);
 	return MCPResult(Result);
 #endif
@@ -672,7 +682,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetLiveBoneTransforms(const TSharedPt
 	UWorld* World = nullptr;
 	AActor* Actor = nullptr;
 	FString ResolvedWorldScope;
-	if (auto Err = ResolveSkeletalActorForQuery(WorldScope, ActorPath, ActorLabel, World, Actor, ResolvedWorldScope)) return Err;
+	if (auto Err = ResolveSkeletalActorForQuery(Params, WorldScope, ActorPath, ActorLabel, World, Actor, ResolvedWorldScope)) return Err;
 	// A caller who passed only actorPath left ActorLabel holding the path, and
 	// every message below reads better naming the actor that answered (#983).
 	ActorLabel = Actor->GetActorLabel();

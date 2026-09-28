@@ -1,5 +1,6 @@
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
+#include "Families/MCPCreate.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
@@ -1033,19 +1034,23 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	{
 		return MCPParam::Optional(TEXT("world"), EType::String, TEXT("auto (default, prefers PIE) | pie | game | editor"));
 	};
+	auto PieInstance = []()
+	{
+		return MCPParam::Optional(TEXT("pieInstance"), EType::Number, TEXT("PIE world instance; a live world only, never widened to another"));
+	};
 	Registry.RegisterHandler(TEXT("get_bone_transform"), &GetBoneTransform, {
 		ActorLabel(),
 		ActorPath(),
 		MCPParam::Required(TEXT("boneName"), EType::String, TEXT("Bone or socket to read")),
 		ComponentName(),
-		WorldScope(),
+		WorldScope(), PieInstance(),
 		MCPParam::Optional(TEXT("space"), EType::String, TEXT("world (default) | component | local")),
 	});
 	Registry.RegisterHandler(TEXT("list_bones"), &ListBones, {
 		ActorLabel(),
 		ActorPath(),
 		ComponentName(),
-		WorldScope(),
+		WorldScope(), PieInstance(),
 		Cursor(),
 		Limit(TEXT("Bones per page (default 200, max 5000)")),
 	});
@@ -1065,7 +1070,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("animBlueprintClassPath"), EType::String, TEXT("AnimBlueprintGeneratedClass object path, e.g. /Game/Animations/ABP_Name.ABP_Name_C, not the AnimBlueprint asset path")),
 		MCPParam::Optional(TEXT("clear"), EType::Boolean, TEXT("Clear the transient override and fall back to the skeletal mesh asset's post-process AnimBP")),
 		ComponentName(),
-		WorldScope(),
+		WorldScope(), PieInstance(),
 	});
 
 	// #922/#923/#926 - evaluated pose reads (live component, and asset sampling)
@@ -1075,7 +1080,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		ComponentName(),
 		MCPParam::Optional(TEXT("boneNames"), EType::Array, TEXT("Bones to read (default every bone, max 1000)")).Items(EType::String),
 		MCPParam::Optional(TEXT("space"), EType::String, TEXT("world (default) | component | local")),
-		WorldScope(),
+		WorldScope(), PieInstance(),
 	});
 	auto BlendPosition = []()
 	{
@@ -1847,46 +1852,30 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimMontage(const TSharedPtr<FJso
 }
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
+	FMCPCreate Create(Params, { TEXT("AnimBlueprint"), TEXT("/Game/Animations") });
+	if (auto Err = Create.Read()) return Err;
 	FString SkeletonPath;
 	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
 
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
-	FString ParentClassName = OptionalString(Params, TEXT("parentClass"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	UObject* SkeletonAsset = MCPLoadAssetObject(SkeletonPath);
-	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
+	USkeleton* Skeleton = Cast<USkeleton>(MCPLoadAssetObject(SkeletonPath));
 	if (!Skeleton)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
+	// A parentClass that does not resolve to an AnimInstance is refused, not ignored.
+	TSharedPtr<FJsonValue> ParentErr;
+	UClass* Parent = MCPCreatePreset::ResolveParent(Params, UAnimInstance::StaticClass(), TEXT("AnimBlueprint"), ParentErr);
+	if (!Parent) return ParentErr;
 
 	UAnimBlueprintFactory* Factory = NewObject<UAnimBlueprintFactory>();
 	Factory->TargetSkeleton = Skeleton;
+	Factory->ParentClass = Parent;
+	UAnimBlueprint* AnimBP = nullptr;
+	if (auto Early = Create.Make(AnimBP, UAnimBlueprint::StaticClass(), Factory)) return MCPCreatePreset::DescribeExisting(Early);
 
-	if (!ParentClassName.IsEmpty())
-	{
-		UClass* FoundClass = FindFirstObject<UClass>(*ParentClassName);
-		if (FoundClass && FoundClass->IsChildOf(UAnimInstance::StaticClass()))
-		{
-			Factory->ParentClass = FoundClass;
-		}
-	}
-
-	auto Created = MCPCreateAssetIdempotent<UAnimBlueprint>(Name, PackagePath, OnConflict, TEXT("AnimBlueprint"), Factory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	auto Result = MCPSuccess();
-	MCPAnimSaveOutcome(Result, Created.Asset, Created.Asset->GetPathName());
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Created.Asset->GetName());
-	Result->SetStringField(TEXT("class"), Created.Asset->GetClass()->GetName());
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	MCPCreatePreset::DescribeBlueprint(Result, AnimBP);
+	Result->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
 	return MCPResult(Result);
 }
 
@@ -1895,14 +1884,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
+	FMCPCreate Create(Params, { TEXT("AnimMontage"), TEXT("/Game/Animations") });
+	if (auto Err = Create.Read()) return Err;
 	FString AnimSequencePath;
 	if (auto Err = RequireString(Params, TEXT("animSequencePath"), AnimSequencePath)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
 	UAnimSequence* SourceSequence = LoadAssetByPath<UAnimSequence>(AnimSequencePath);
 	if (!SourceSequence)
@@ -1913,19 +1898,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 	UAnimMontageFactory* Factory = NewObject<UAnimMontageFactory>();
 	Factory->TargetSkeleton = SourceSequence->GetSkeleton();
 	Factory->SourceAnimation = SourceSequence;
-
-	auto Created = MCPCreateAssetIdempotent<UAnimMontage>(Name, PackagePath, OnConflict, TEXT("AnimMontage"), Factory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	auto Result = MCPSuccess();
-	MCPAnimSaveOutcome(Result, Created.Asset, Created.Asset->GetPathName());
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Created.Asset->GetName());
-	Result->SetStringField(TEXT("class"), Created.Asset->GetClass()->GetName());
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
-	return MCPResult(Result);
+	UAnimMontage* Montage = nullptr;
+	if (auto Early = Create.Make(Montage, UAnimMontage::StaticClass(), Factory)) return Early;
+	return MCPResult(Create.Finish());
 }
 
 namespace
@@ -2676,24 +2651,19 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveAnimNotify(const TSharedPtr<FJs
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
+	FMCPCreate Create(Params, { TEXT("BlendSpace"), TEXT("/Game/Animations") });
+	if (auto Err = Create.Read()) return Err;
 	FString SkeletonPath;
 	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
 
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
-	FString AxisHorizontal = OptionalString(Params, TEXT("axisHorizontal"), TEXT("Speed"));
-	FString AxisVertical = OptionalString(Params, TEXT("axisVertical"), TEXT("Direction"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	const FString AxisHorizontal = OptionalString(Params, TEXT("axisHorizontal"), TEXT("Speed"));
+	const FString AxisVertical = OptionalString(Params, TEXT("axisVertical"), TEXT("Direction"));
+	const double HorizontalMin = OptionalNumber(Params, TEXT("horizontalMin"), 0.0);
+	const double HorizontalMax = OptionalNumber(Params, TEXT("horizontalMax"), 500.0);
+	const double VerticalMin = OptionalNumber(Params, TEXT("verticalMin"), -180.0);
+	const double VerticalMax = OptionalNumber(Params, TEXT("verticalMax"), 180.0);
 
-	double HorizontalMin = OptionalNumber(Params, TEXT("horizontalMin"), 0.0);
-	double HorizontalMax = OptionalNumber(Params, TEXT("horizontalMax"), 500.0);
-	double VerticalMin = OptionalNumber(Params, TEXT("verticalMin"), -180.0);
-	double VerticalMax = OptionalNumber(Params, TEXT("verticalMax"), 180.0);
-
-	UObject* SkeletonAsset = MCPLoadAssetObject(SkeletonPath);
-	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
+	USkeleton* Skeleton = Cast<USkeleton>(MCPLoadAssetObject(SkeletonPath));
 	if (!Skeleton)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
@@ -2701,31 +2671,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 
 	UBlendSpaceFactoryNew* Factory = NewObject<UBlendSpaceFactoryNew>();
 	Factory->TargetSkeleton = Skeleton;
+	UBlendSpace* BlendSpace = nullptr;
+	if (auto Early = Create.Make(BlendSpace, UBlendSpace::StaticClass(), Factory)) return Early;
 
-	auto Created = MCPCreateAssetIdempotent<UBlendSpace>(Name, PackagePath, OnConflict, TEXT("BlendSpace"), Factory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	UBlendSpace* BlendSpace = Created.Asset;
 	FBlendParameter& BlendParam0 = const_cast<FBlendParameter&>(BlendSpace->GetBlendParameter(0));
 	BlendParam0.DisplayName = AxisHorizontal;
 	BlendParam0.Min = HorizontalMin;
 	BlendParam0.Max = HorizontalMax;
-
 	FBlendParameter& BlendParam1 = const_cast<FBlendParameter&>(BlendSpace->GetBlendParameter(1));
 	BlendParam1.DisplayName = AxisVertical;
 	BlendParam1.Min = VerticalMin;
 	BlendParam1.Max = VerticalMax;
 
-	auto Result = MCPSuccess();
-	MCPAnimSaveOutcome(Result, BlendSpace, BlendSpace->GetPathName());
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), BlendSpace->GetPathName());
-	Result->SetStringField(TEXT("name"), BlendSpace->GetName());
-	Result->SetStringField(TEXT("class"), BlendSpace->GetClass()->GetName());
+	TSharedPtr<FJsonObject> Result = Create.Finish();
 	Result->SetStringField(TEXT("axisHorizontal"), AxisHorizontal);
 	Result->SetStringField(TEXT("axisVertical"), AxisVertical);
-	MCPSetDeleteAssetRollback(Result, BlendSpace->GetPathName());
-
 	return MCPResult(Result);
 }
 
@@ -2734,15 +2694,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 // handler creates a UBlendSpace which won't behave as 1D.
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace1D(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FMCPCreate Create(Params, { TEXT("BlendSpace1D"), TEXT("/Game/Animations") });
+	if (auto Err = Create.Read()) return Err;
 	FString SkeletonPath;
 	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
 
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
-	FString AxisName = OptionalString(Params, TEXT("axisName"), TEXT("Speed"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
+	const FString AxisName = OptionalString(Params, TEXT("axisName"), TEXT("Speed"));
 	const double AxisMin = OptionalNumber(Params, TEXT("axisMin"), 0.0);
 	const double AxisMax = OptionalNumber(Params, TEXT("axisMax"), 500.0);
 	const int32 GridNum = (int32)OptionalNumber(Params, TEXT("gridNum"), 4.0);
@@ -2752,25 +2709,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace1D(const TSharedPtr<F
 
 	UBlendSpaceFactory1D* Factory = NewObject<UBlendSpaceFactory1D>();
 	Factory->TargetSkeleton = Skeleton;
+	UBlendSpace1D* BS = nullptr;
+	if (auto Early = Create.Make(BS, UBlendSpace1D::StaticClass(), Factory)) return Early;
 
-	auto Created = MCPCreateAssetIdempotent<UBlendSpace1D>(Name, PackagePath, OnConflict, TEXT("BlendSpace1D"), Factory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	UBlendSpace1D* BS = Created.Asset;
 	FBlendParameter& BlendParam0 = const_cast<FBlendParameter&>(BS->GetBlendParameter(0));
 	BlendParam0.DisplayName = AxisName;
 	BlendParam0.Min = AxisMin;
 	BlendParam0.Max = AxisMax;
 	BlendParam0.GridNum = GridNum;
 
-	auto Result = MCPSuccess();
-	MCPAnimSaveOutcome(Result, BS, BS->GetPathName());
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), BS->GetPathName());
-	Result->SetStringField(TEXT("name"), BS->GetName());
-	Result->SetStringField(TEXT("class"), BS->GetClass()->GetName());
+	TSharedPtr<FJsonObject> Result = Create.Finish();
 	Result->SetStringField(TEXT("axisName"), AxisName);
-	MCPSetDeleteAssetRollback(Result, BS->GetPathName());
 	return MCPResult(Result);
 }
 

@@ -5,6 +5,7 @@
 
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
+#include "Families/MCPCreate.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
 #include "Engine/Blueprint.h"
@@ -1399,21 +1400,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimGraph(const TSharedPtr<FJsonO
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
+	FMCPCreate Create(Params, { TEXT("IKRigDefinition"), TEXT("/Game") });
+	if (auto Err = Create.Read()) return Err;
 	FString SkeletalMeshPath;
 	if (auto Err = RequireString(Params, TEXT("skeletalMeshPath"), SkeletalMeshPath)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	// Read before the load can fail (#1057).
 	FString RetargetRoot;
 	TryGetStringParam(Params, TEXT("retargetRoot"), RetargetRoot);
 	const TArray<TSharedPtr<FJsonValue>>* ChainsArr = nullptr;
 	TryGetArrayParam(Params, TEXT("chains"), ChainsArr);
 
-	// Load the skeletal mesh to get the skeleton
 	USkeletalMesh* SkelMesh = LoadAssetByPath<USkeletalMesh>(SkeletalMeshPath);
 	if (!SkelMesh)
 	{
@@ -1426,23 +1422,19 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 		return MCPError(TEXT("IKRigDefinitionFactory not found - is the IKRig plugin enabled?"));
 	}
 
-	auto Created = MCPCreateAssetIdempotent<UIKRigDefinition>(Name, PackagePath, OnConflict, TEXT("IKRigDefinition"), Factory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UIKRigDefinition* IKRig = Created.Asset;
+	UIKRigDefinition* IKRig = nullptr;
+	if (auto Early = Create.Make(IKRig, UIKRigDefinition::StaticClass(), Factory)) return Early;
 
 	// Prefer IKRigController to atomically configure the rig (#97, #103)
 	int32 ChainsAdded = 0;
 	TArray<FString> ChainErrors;
-
 	if (UIKRigController* Controller = UIKRigController::GetController(IKRig))
 	{
 		Controller->SetSkeletalMesh(SkelMesh);
-
 		if (!RetargetRoot.IsEmpty())
 		{
 			Controller->SetRetargetRoot(FName(*RetargetRoot));
 		}
-
 		if (ChainsArr)
 		{
 			for (const TSharedPtr<FJsonValue>& V : *ChainsArr)
@@ -1459,19 +1451,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 					ChainErrors.Add(FString::Printf(TEXT("Chain missing name/startBone/endBone: %s"), *CName));
 					continue;
 				}
-				FName AddedName = Controller->AddRetargetChain(
-					FName(*CName),
-					FName(*SBone),
-					FName(*EBone),
-					Goal.IsEmpty() ? NAME_None : FName(*Goal));
-				if (AddedName != NAME_None)
-				{
-					ChainsAdded++;
-				}
-				else
-				{
-					ChainErrors.Add(FString::Printf(TEXT("Failed to add chain: %s"), *CName));
-				}
+				const FName AddedName = Controller->AddRetargetChain(
+					FName(*CName), FName(*SBone), FName(*EBone), Goal.IsEmpty() ? NAME_None : FName(*Goal));
+				if (AddedName != NAME_None) ChainsAdded++;
+				else ChainErrors.Add(FString::Printf(TEXT("Failed to add chain: %s"), *CName));
 			}
 		}
 	}
@@ -1480,25 +1463,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 		// Fallback if controller not available: basic preview mesh only
 		IKRig->SetPreviewMesh(SkelMesh, false);
 	}
-
 	IKRig->MarkPackageDirty();
 
-	auto Result = MCPSuccess();
-	MCPAnimSaveOutcome(Result, IKRig, IKRig->GetPathName());
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("assetPath"), IKRig->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	Result->SetStringField(TEXT("skeletalMeshPath"), SkelMesh->GetPathName());
 	if (!RetargetRoot.IsEmpty()) Result->SetStringField(TEXT("retargetRoot"), RetargetRoot);
 	Result->SetNumberField(TEXT("chainsAdded"), ChainsAdded);
 	if (ChainErrors.Num() > 0)
 	{
-		TArray<TSharedPtr<FJsonValue>> ErrArr;
-		for (const FString& E : ChainErrors) ErrArr.Add(MakeShared<FJsonValueString>(E));
-		Result->SetArrayField(TEXT("chainErrors"), ErrArr);
+		Result->SetArrayField(TEXT("chainErrors"), MCPStringListToJson(ChainErrors));
 	}
-	MCPSetDeleteAssetRollback(Result, IKRig->GetPathName());
-
 	return MCPResult(Result);
 }
 
@@ -2074,17 +2048,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRetargeter(const TSharedPtr<FJs
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchDatabase(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/MotionMatching"));
+	FMCPCreate Create(Params, { TEXT("PoseSearchDatabase"), TEXT("/Game/MotionMatching") });
+	if (auto Err = Create.Read()) return Err;
+	const FString Name = Create.Name();
+	const FString PackagePath = Create.PackagePath();
 	const FString SchemaPath = OptionalString(Params, TEXT("schemaPath"), TEXT(""));
 	// #833: a database indexes THROUGH its schema, so a database whose schema
 	// is missing or unsamplable fails BuildIndex and the editor reports the
 	// database as the invalid asset. Naming a skeleton is enough to author the
 	// schema here, so the one call produces something that can actually index.
 	const FString SkeletonPath = OptionalString(Params, TEXT("skeletonPath"), TEXT(""));
-	// Read before anything can fail (#1057).
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
 	// Resolve (or author) the schema BEFORE the database exists, so a bad
 	// schema argument leaves no half-built database behind.
@@ -2129,21 +2102,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchDatabase(const TShare
 		}
 	}
 
-	auto Created = MCPCreateAssetIdempotentNewObject<UPoseSearchDatabase>(Name, PackagePath, OnConflict, TEXT("PoseSearchDatabase"));
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UPoseSearchDatabase* Database = Created.Asset;
-
+	UPoseSearchDatabase* Database = nullptr;
+	if (auto Early = Create.MakeNewObject(Database)) return Early;
 	if (Schema)
 	{
 		Database->Schema = Schema;
 	}
 
-	TSharedPtr<FJsonObject> Res = MCPSuccess();
-	MCPAnimSaveOutcome(Res, Database, Database->GetPathName());
-	MCPSetCreated(Res);
-	Res->SetStringField(TEXT("path"), Database->GetPathName());
-	Res->SetStringField(TEXT("name"), Name);
-	Res->SetStringField(TEXT("packagePath"), PackagePath);
+	TSharedPtr<FJsonObject> Res = Create.Finish();
 	Res->SetStringField(TEXT("schemaPath"), Schema ? Schema->GetPathName() : ResolvedSchemaPath);
 	Res->SetBoolField(TEXT("schemaCreated"), bSchemaCreated);
 	Res->SetBoolField(TEXT("indexable"), Schema != nullptr);
@@ -2154,7 +2120,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchDatabase(const TShare
 			TEXT("refuse to add clips to it. Give it one with animation(set_pose_search_schema), or pass skeletonPath ")
 			TEXT("to this action and it authors the schema alongside the database."));
 	}
-	MCPSetDeleteAssetRollback(Res, Database->GetPathName());
 	return MCPResult(Res);
 }
 

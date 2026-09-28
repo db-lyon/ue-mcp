@@ -10,6 +10,7 @@
 
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
+#include "Families/MCPCreate.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
 #include "PoseSearch/PoseSearchSchema.h"
@@ -230,14 +231,12 @@ static void PlaceAnimNode(UEdGraph* Graph, UEdGraphNode* Node, int32 X, int32 Y)
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchSchema(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FMCPCreate Create(Params, { TEXT("PoseSearchSchema"), TEXT("/Game/MotionMatching") });
+	if (auto Err = Create.Read()) return Err;
 	FString SkeletonPath;
 	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/MotionMatching"));
 	// Every parameter is read before anything can fail (#1057).
 	const FString MirrorPath = OptionalString(Params, TEXT("mirrorDataTablePath"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	int32 SampleRate = 0;
 	const bool bHasSampleRate = TryGetNumberParam(Params, TEXT("sampleRate"), SampleRate);
 	const bool bAddDefaultChannels = OptionalBool(Params, TEXT("addDefaultChannels"), true);
@@ -252,10 +251,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchSchema(const TSharedP
 		if (!MirrorTable) return MCPError(FString::Printf(TEXT("MirrorDataTable not found: %s"), *MirrorPath));
 	}
 
-	auto Created = MCPCreateAssetIdempotentNewObject<UPoseSearchSchema>(Name, PackagePath, OnConflict, TEXT("PoseSearchSchema"));
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UPoseSearchSchema* Schema = Created.Asset;
-
+	UPoseSearchSchema* Schema = nullptr;
+	if (auto Early = Create.MakeNewObject(Schema)) return Early;
 	Schema->AddSkeleton(Skeleton, MirrorTable);
 	if (bHasSampleRate && SampleRate > 0)
 	{
@@ -269,15 +266,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchSchema(const TSharedP
 	}
 	MCPPoseSearch::Finalize(Schema);
 
-	TSharedPtr<FJsonObject> Res = MCPSuccess();
-	MCPAnimSaveOutcome(Res, Schema, Schema->GetPathName());
-	MCPSetCreated(Res);
-	Res->SetStringField(TEXT("path"), Schema->GetPathName());
-	Res->SetStringField(TEXT("skeletonPath"), SkeletonPath);
-	Res->SetStringField(TEXT("mirrorDataTablePath"), MirrorPath);
+	TSharedPtr<FJsonObject> Res = Create.Finish();
+	Res->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
+	Res->SetStringField(TEXT("mirrorDataTablePath"), MirrorTable ? MirrorTable->GetPathName() : FString());
 	Res->SetNumberField(TEXT("sampleRate"), Schema->SampleRate);
 	Res->SetNumberField(TEXT("channelCount"), Schema->GetChannels().Num());
-	MCPSetDeleteAssetRollback(Res, Schema->GetPathName());
 	return MCPResult(Res);
 }
 
@@ -515,33 +508,34 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadPoseSearchSchema(const TSharedPtr
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateMirrorDataTable(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FMCPCreate Create(Params, { TEXT("MirrorDataTable"), TEXT("/Game/MotionMatching") });
+	if (auto Err = Create.Read()) return Err;
 	FString SkeletonPath;
 	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/MotionMatching"));
 	// Read before the load can fail (#1057).
-	MCPReadParamsAhead(Params, { TEXT("expressions"), TEXT("mirrorAxis"), TEXT("mirrorRootMotion"), TEXT("onConflict") });
+	MCPReadParamsAhead(Params, { TEXT("expressions"), TEXT("mirrorAxis"), TEXT("mirrorRootMotion") });
 
 	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 
-	auto Created = MCPCreateAssetIdempotentNewObject<UMirrorDataTable>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("MirrorDataTable"));
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UMirrorDataTable* Table = Created.Asset;
-
-	Table->RowStruct = FMirrorTableRow::StaticStruct();
-	Table->Skeleton = Skeleton;
 	// mirrorAxis was accepted and ignored, always producing an X-axis table.
 	// A skeleton authored down Y mirrors to nonsense with no error anywhere.
+	// Checked before the asset exists, so a bad axis creates nothing.
 	const FString AxisStr = OptionalString(Params, TEXT("mirrorAxis"), TEXT("X")).ToUpper();
-	if      (AxisStr == TEXT("X")) Table->MirrorAxis = EAxis::X;
-	else if (AxisStr == TEXT("Y")) Table->MirrorAxis = EAxis::Y;
-	else if (AxisStr == TEXT("Z")) Table->MirrorAxis = EAxis::Z;
+	EAxis::Type Axis = EAxis::X;
+	if      (AxisStr == TEXT("X")) Axis = EAxis::X;
+	else if (AxisStr == TEXT("Y")) Axis = EAxis::Y;
+	else if (AxisStr == TEXT("Z")) Axis = EAxis::Z;
 	else
 	{
 		return MCPError(FString::Printf(TEXT("Unknown mirrorAxis '%s'. Expected X, Y or Z."), *AxisStr));
 	}
+
+	UMirrorDataTable* Table = nullptr;
+	if (auto Early = Create.MakeNewObject(Table)) return Early;
+	Table->RowStruct = FMirrorTableRow::StaticStruct();
+	Table->Skeleton = Skeleton;
+	Table->MirrorAxis = Axis;
 	Table->bMirrorRootMotion = OptionalBool(Params, TEXT("mirrorRootMotion"), true);
 
 	// Build find/replace expressions. Default matches the UE mannequin (_l <-> _r suffix).
@@ -580,14 +574,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMirrorDataTable(const TSharedPt
 	Table->UpdateFromFindReplaceExpressions(UMirrorDataTable::FFindReplaceOptions::Sync());
 #endif
 
-	TSharedPtr<FJsonObject> Res = MCPSuccess();
-	MCPAnimSaveOutcome(Res, Table, Table->GetPathName());
-	MCPSetCreated(Res);
-	Res->SetStringField(TEXT("path"), Table->GetPathName());
-	Res->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+	TSharedPtr<FJsonObject> Res = Create.Finish();
+	Res->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
 	Res->SetNumberField(TEXT("expressionCount"), Table->MirrorFindReplaceExpressions.Num());
 	Res->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
-	MCPSetDeleteAssetRollback(Res, Table->GetPathName());
 	return MCPResult(Res);
 }
 
@@ -621,15 +611,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadMirrorDataTable(const TSharedPtr<
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchNormalizationSet(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/MotionMatching"));
+	FMCPCreate Create(Params, { TEXT("PoseSearchNormalizationSet"), TEXT("/Game/MotionMatching") });
+	if (auto Err = Create.Read()) return Err;
 
-	auto Created = MCPCreateAssetIdempotentNewObject<UPoseSearchNormalizationSet>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("PoseSearchNormalizationSet"));
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UPoseSearchNormalizationSet* NormSet = Created.Asset;
-
-	TArray<TSharedPtr<FJsonValue>> AddedDatabases;
+	// Every database is loaded before the set exists, so a bad path creates nothing.
+	TArray<UPoseSearchDatabase*> Resolved;
 	const TArray<TSharedPtr<FJsonValue>>* Databases = nullptr;
 	if (TryGetArrayParam(Params, TEXT("databases"), Databases) && Databases)
 	{
@@ -639,18 +625,22 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchNormalizationSet(cons
 			if (!V->TryGetString(DbPath)) continue;
 			UPoseSearchDatabase* Db = LoadAssetByPath<UPoseSearchDatabase>(DbPath);
 			if (!Db) return MCPError(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *DbPath));
-			NormSet->Databases.Add(Db);
-			AddedDatabases.Add(MakeShared<FJsonValueString>(Db->GetPathName()));
+			Resolved.Add(Db);
 		}
 	}
 
-	TSharedPtr<FJsonObject> Res = MCPSuccess();
-	MCPAnimSaveOutcome(Res, NormSet, NormSet->GetPathName());
-	MCPSetCreated(Res);
-	Res->SetStringField(TEXT("path"), NormSet->GetPathName());
+	UPoseSearchNormalizationSet* NormSet = nullptr;
+	if (auto Early = Create.MakeNewObject(NormSet)) return Early;
+	TArray<TSharedPtr<FJsonValue>> AddedDatabases;
+	for (UPoseSearchDatabase* Db : Resolved)
+	{
+		NormSet->Databases.Add(Db);
+		AddedDatabases.Add(MakeShared<FJsonValueString>(Db->GetPathName()));
+	}
+
+	TSharedPtr<FJsonObject> Res = Create.Finish();
 	Res->SetNumberField(TEXT("databaseCount"), AddedDatabases.Num());
 	Res->SetArrayField(TEXT("databases"), AddedDatabases);
-	MCPSetDeleteAssetRollback(Res, NormSet->GetPathName());
 	return MCPResult(Res);
 }
 

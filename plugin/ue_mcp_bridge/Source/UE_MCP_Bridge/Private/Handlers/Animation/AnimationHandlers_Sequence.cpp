@@ -5,6 +5,7 @@
 
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
+#include "Families/MCPCreate.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
@@ -582,23 +583,18 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ScanAnimationTracks(const TSharedPtr<
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
+	FMCPCreate Create(Params, { TEXT("AnimSequence"), TEXT("/Game/Animations") });
+	if (auto Err = Create.Read()) return Err;
 	FString SkeletonPath;
 	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
-	double FrameRate = OptionalNumber(Params, TEXT("frameRate"), 30.0);
-	double NumFrames = OptionalNumber(Params, TEXT("numFrames"), 30.0);
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	const double FrameRate = OptionalNumber(Params, TEXT("frameRate"), 30.0);
+	const double NumFrames = OptionalNumber(Params, TEXT("numFrames"), 30.0);
 
 	UObject* SkeletonAsset = MCPLoadAssetObject(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
 	{
-		USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(SkeletonAsset);
-		if (SkelMesh)
+		if (USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(SkeletonAsset))
 		{
 			Skeleton = SkelMesh->GetSkeleton();
 		}
@@ -608,24 +604,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
 
-	auto Created = MCPCreateAssetIdempotentNewObject<UAnimSequence>(Name, PackagePath, OnConflict, TEXT("AnimSequence"));
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UAnimSequence* NewSeq = Created.Asset;
-	const FString FullAssetPath = NewSeq->GetPathName();
-
+	UAnimSequence* NewSeq = nullptr;
+	if (auto Early = Create.MakeNewObject(NewSeq)) return Early;
 	NewSeq->SetSkeleton(Skeleton);
 
-	// Set up frame count and duration via the data controller
+	// Frame count and duration go through the data controller, whose model is initialised first.
 	IAnimationDataController& Controller = NewSeq->GetController();
-
-	FFrameRate DesiredFrameRate(static_cast<int32>(FrameRate), 1);
-	int32 FrameCount = static_cast<int32>(NumFrames);
-
-	// Initialize the data model first - required before any modifications
 	Controller.InitializeModel();
 	Controller.OpenBracket(NSLOCTEXT("MCP", "CreateSequence", "MCP Create Sequence"));
-	Controller.SetFrameRate(DesiredFrameRate);
-	Controller.SetNumberOfFrames(FrameCount);
+	Controller.SetFrameRate(FFrameRate(static_cast<int32>(FrameRate), 1));
+	Controller.SetNumberOfFrames(static_cast<int32>(NumFrames));
 	Controller.NotifyPopulated();
 	Controller.CloseBracket(false);
 
@@ -636,17 +624,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 	NewSeq->PostEditChange();
 	NewSeq->MarkPackageDirty();
 
-	auto Result = MCPSuccess();
-	MCPAnimSaveOutcome(Result, NewSeq, FullAssetPath);
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), FullAssetPath);
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	Result->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
 	Result->SetNumberField(TEXT("numFrames"), NumFrames);
 	Result->SetNumberField(TEXT("frameRate"), FrameRate);
 	Result->SetNumberField(TEXT("sequenceLength"), NewSeq->GetPlayLength());
-	MCPSetDeleteAssetRollback(Result, NewSeq->GetPathName());
-
 	return MCPResult(Result);
 }
 
@@ -1566,26 +1548,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyAnimationModifier(const TSharedP
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimComposite(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FMCPCreate Create(Params, { TEXT("AnimComposite"), TEXT("/Game/Animations") });
+	if (auto Err = Create.Read()) return Err;
 	FString SkeletonPath;
 	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
 	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 
-	auto Created = MCPCreateAssetIdempotentNewObject<UAnimComposite>(Name, PackagePath, OnConflict, TEXT("AnimComposite"));
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UAnimComposite* Composite = Created.Asset;
+	UAnimComposite* Composite = nullptr;
+	if (auto Early = Create.MakeNewObject(Composite)) return Early;
 	Composite->SetSkeleton(Skeleton);
 
-	TSharedPtr<FJsonObject> Result = MCPSuccess();
-	MCPAnimSaveOutcome(Result, Composite, Composite->GetPathName());
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), Composite->GetPathName());
-	MCPSetDeleteAssetRollback(Result, Composite->GetPathName());
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	Result->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
 	return MCPResult(Result);
 }
 
