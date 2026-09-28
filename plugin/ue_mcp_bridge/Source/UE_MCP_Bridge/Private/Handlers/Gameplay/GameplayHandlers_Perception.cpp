@@ -36,6 +36,7 @@
 
 #include "GameplayHandlers.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "HandlerJsonProperty.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -520,7 +521,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadPerception(const TSharedPtr<FJsonO
 	// The world is needed for the live-actor route, and for the stimuli-source
 	// audit on either route. "auto" prefers PIE, which is where perception
 	// actually runs.
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 
 	UAIPerceptionComponent* Component = nullptr;
 	AActor* Actor = nullptr;
@@ -1006,7 +1007,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetPerceivedActors(const TSharedPtr<FJ
 {
 	// Read before anything can fail (#1057); the class resolves further down.
 	const FString SenseSpec = OptionalString(Params, TEXT("senseType"));
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 	if (!World)
 	{
 		return MCPError(TEXT(
@@ -1117,7 +1118,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CheckPerception(const TSharedPtr<FJson
 	// read here, before a perceiver miss can return (#1057).
 	(void)HasParam(Params, TEXT("targetLabel"));
 	(void)HasParam(Params, TEXT("targetPath"));
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 	if (!World)
 	{
 		return MCPError(TEXT(
@@ -1252,7 +1253,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CheckPerception(const TSharedPtr<FJson
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ReportNoiseEvent(const TSharedPtr<FJsonObject>& Params)
 {
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).World;
 
 	// Every parameter is read before anything can fail (#1057). The actor
 	// selectors are resolved later; asking for each key here marks it read.

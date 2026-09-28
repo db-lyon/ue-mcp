@@ -1,6 +1,7 @@
 #include "GameplayHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerAssetCreate.h"
@@ -47,8 +48,15 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/Blueprint.h"
 #include "Handlers/Blueprint/BlueprintEditTraits.h"
+#include "Handlers/Blueprint/BlueprintComponentTemplate.h"
 #include "Handlers/Gameplay/BehaviorTreeEditTraits.h"
 #include "Families/MCPPropertyWrite.h"
+#include "Families/MCPCreate.h"
+#include "Families/MCPWorldSpawn.h"
+#include "Handlers/StateTree/StateTreeRuntimeComponent.h"
+
+
+
 #include "Factories/BlueprintFactory.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
@@ -563,37 +571,35 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("create_game_mode"), &CreateGameMode, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Blueprint name")),
-		FrameworkPackage(),
+		FrameworkPackage(), NewAssetOnConflict(),
 		MCPParam::Optional(TEXT("parentClass"), EType::String, TEXT("Parent deriving from GameModeBase: short name, /Script path or Blueprint asset path")),
 	});
 	Registry.RegisterHandler(TEXT("create_game_state"), &CreateGameState, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Blueprint name")),
-		FrameworkPackage(),
+		FrameworkPackage(), NewAssetOnConflict(),
 		MCPParam::Optional(TEXT("parentClass"), EType::String, TEXT("Parent deriving from GameStateBase: short name, /Script path or Blueprint asset path")),
 	});
 	Registry.RegisterHandler(TEXT("create_player_controller"), &CreatePlayerController, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Blueprint name")),
-		FrameworkPackage(),
+		FrameworkPackage(), NewAssetOnConflict(),
 		MCPParam::Optional(TEXT("parentClass"), EType::String, TEXT("Parent deriving from PlayerController: short name, /Script path or Blueprint asset path")),
 	});
 	Registry.RegisterHandler(TEXT("create_player_state"), &CreatePlayerState, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Blueprint name")),
-		FrameworkPackage(),
+		FrameworkPackage(), NewAssetOnConflict(),
 		MCPParam::Optional(TEXT("parentClass"), EType::String, TEXT("Parent deriving from PlayerState: short name, /Script path or Blueprint asset path")),
 	});
 	Registry.RegisterHandler(TEXT("create_hud"), &CreateHud, {
 		MCPParam::Required(TEXT("name"), EType::String, TEXT("Blueprint name")),
-		FrameworkPackage(),
+		FrameworkPackage(), NewAssetOnConflict(),
 		MCPParam::Optional(TEXT("parentClass"), EType::String, TEXT("Parent deriving from HUD: short name, /Script path or Blueprint asset path")),
 	});
-	Registry.RegisterHandler(TEXT("spawn_nav_modifier_volume"), &SpawnNavModifierVolume, {
-		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("World location of the volume (default origin)")),
+	Registry.RegisterHandler(TEXT("spawn_nav_modifier_volume"), &SpawnNavModifierVolume, FMCPSpawn::ParamsWith({
 		MCPParam::Optional(TEXT("extent"), EType::Vec3, TEXT("Half-size in world units, positive on every axis (default 100)")),
 		MCPParam::Optional(TEXT("areaClass"), EType::String, TEXT("UNavArea subclass: NavArea_Null (default, cuts a hole), NavArea_Obstacle, or a /Script path")),
-		MCPParam::Optional(TEXT("label"), EType::String, TEXT("Actor label, also what onConflict dedupes on")),
 		MCPParam::Optional(TEXT("scale"), EType::Vec3, TEXT("Actor scale, applied after the brush is built")),
-		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip (default, returns the actor already carrying label) or error when one does")),
-	}, MCPSpec::ContractExempt(TEXT("Spawns a NavModifierVolume under the contract values; nothing it reads fails first")));
+		MCPParam::Optional(TEXT("graphPath"), EType::String, TEXT("Shared with the other volume spawns; a NavModifierVolume has no PCG component, so it is refused")),
+	}, EType::Number), MCPSpec::ContractExempt(TEXT("Spawns a NavModifierVolume under the contract values; nothing it reads fails first")));
 	Registry.RegisterHandler(TEXT("set_world_game_mode"), &SetWorldGameMode, {
 		MCPParam::Required(TEXT("gameModeClass"), EType::String, TEXT("GameMode class or Blueprint path")).Alias(TEXT("gameModePath")),
 	});
@@ -730,10 +736,13 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	});
 	Registry.RegisterHandler(TEXT("add_state_tree_component"), &AddStateTreeComponent, {
 		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
+		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Name of the new component (default StateTreeComp)")),
 	});
 	Registry.RegisterHandler(TEXT("add_smart_object_component"), &AddSmartObjectComponent, {
 		MCPParam::Required(TEXT("blueprintPath"), EType::String, TEXT("Blueprint asset path")),
+		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Name of the new component (default SmartObjectComp)")),
 	});
+
 	Registry.RegisterHandler(TEXT("add_smart_object_slot"), &AddSmartObjectSlot, {
 		SlotAsset(),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Slot name")),
@@ -1002,11 +1011,8 @@ namespace
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/SmartObjects"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("SmartObjectDefinition"), TEXT("/Game/AI/SmartObjects") });
+	if (auto Err = Create.Read()) return Err;
 
 	UClass* SmartObjectDefClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectDefinition"));
 	if (!SmartObjectDefClass)
@@ -1014,45 +1020,37 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 		return MCPError(TEXT("SmartObjectDefinition class not found. Enable SmartObjects plugin."));
 	}
 
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("SmartObjectDefinition"), SmartObjectDefClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
+	UObject* Definition = nullptr;
+	if (auto Early = Create.Make(Definition, SmartObjectDefClass)) return Early;
 
 	// #833: a definition with slots and no behavior definition anywhere fails
 	// the editor's asset check. Setting the default here is the one-call way to
 	// make every slot added later legal, and it had no route before.
 	const FString DefaultBehavior = OptionalString(Params, TEXT("defaultBehaviorClass"));
+	FString DefaultBehaviorClass;
+	int32 Index = INDEX_NONE;
 	if (!DefaultBehavior.IsEmpty())
 	{
 		const TSharedPtr<FJsonObject>* InstanceProps = nullptr;
 		TryGetObjectParam(Params, TEXT("instanceProperties"), InstanceProps);
 		UObject* Instance = nullptr;
-		int32 Index = INDEX_NONE;
-		Created.Asset->Modify();
+		Definition->Modify();
 		const FString Err = AppendBehaviorDefinition(
-			Created.Asset, Created.Asset->GetClass(), Created.Asset,
+			Definition, Definition->GetClass(), Definition,
 			TEXT("DefaultBehaviorDefinitions"), DefaultBehavior, InstanceProps, Instance, Index);
-		if (!Err.IsEmpty())
-		{
-			// Nothing usable was written, so do not leave the asset behind: a
-			// definition whose default silently failed is the broken shape.
-			UEditorAssetLibrary::DeleteAsset(Created.Asset->GetPathName());
-			return MCPError(Err);
-		}
-		Created.Asset->PostEditChange();
-		Result->SetStringField(TEXT("defaultBehavior"), Instance->GetClass()->GetPathName());
-		Result->SetNumberField(TEXT("defaultBehaviorIndex"), Index);
+		// A definition whose default silently failed is the broken shape, so it goes.
+		if (!Err.IsEmpty()) return Create.Abandon(MCPError(Err));
+		Definition->PostEditChange();
+		DefaultBehaviorClass = Instance->GetClass()->GetPathName();
 	}
 
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
-	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
-
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetNumberField(TEXT("defaultBehaviorCount"), CountDefaultBehaviorDefinitions(Created.Asset));
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	if (!DefaultBehaviorClass.IsEmpty())
+	{
+		Result->SetStringField(TEXT("defaultBehavior"), DefaultBehaviorClass);
+		Result->SetNumberField(TEXT("defaultBehaviorIndex"), Index);
+	}
+	Result->SetNumberField(TEXT("defaultBehaviorCount"), CountDefaultBehaviorDefinitions(Definition));
 	// No slots yet, so the definition is valid either way; the field is set so
 	// a caller reads the same key on create as on every slot write.
 	Result->SetBoolField(TEXT("definitionValid"), true);
@@ -1063,8 +1061,6 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 			TEXT("editor's asset check rejects any slot added later that carries no behavior of its own. Pass ")
 			TEXT("defaultBehaviorClass here, or behaviorClass on gameplay(add_smart_object_slot)."));
 	}
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
 	return MCPResult(Result);
 }
 
@@ -1768,11 +1764,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ProjectPointToNavigation(const TShared
 }
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlackboard(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("BlackboardData"), TEXT("/Game/AI") });
+	if (auto Err = Create.Read()) return Err;
 
 	UClass* BlackboardClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.BlackboardData"));
 	if (!BlackboardClass)
@@ -1780,29 +1773,15 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlackboard(const TSharedPtr<FJso
 		return MCPError(TEXT("BlackboardData class not found."));
 	}
 
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("BlackboardData"), BlackboardClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
-	return MCPResult(Result);
+	UObject* Blackboard = nullptr;
+	if (auto Early = Create.Make(Blackboard, BlackboardClass)) return Early;
+	return MCPResult(Create.Finish());
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("BehaviorTree"), TEXT("/Game/AI") });
+	if (auto Err = Create.Read()) return Err;
 	// Read before anything can fail (#1057).
 	const FString BlackboardPath = OptionalString(Params, TEXT("blackboardPath"));
 
@@ -1820,39 +1799,26 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJ
 		if (!BB) return MCPAssetLoadError(BlackboardPath, TEXT("UBlackboardData"));
 	}
 
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("BehaviorTree"), BTClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
+	UObject* Created = nullptr;
+	if (auto Early = Create.Make(Created, BTClass)) return Early;
 	if (BB)
 	{
-		if (UBehaviorTree* BT = Cast<UBehaviorTree>(Created.Asset))
+		if (UBehaviorTree* BT = Cast<UBehaviorTree>(Created))
 		{
 			BT->BlackboardAsset = BB;
 			BT->PostEditChange();
 		}
 	}
 
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
+	TSharedPtr<FJsonObject> Result = Create.Finish();
 	if (BB) Result->SetStringField(TEXT("blackboardPath"), BB->GetPathName());
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
 	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateEqsQuery(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/EQS"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("EnvironmentQuery"), TEXT("/Game/AI/EQS") });
+	if (auto Err = Create.Read()) return Err;
 
 	// The asset type reads as "Environment Query" in the editor, but the UClass
 	// is UEnvQuery. Looking up the display name found nothing, so this action
@@ -1865,29 +1831,15 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateEqsQuery(const TSharedPtr<FJsonO
 			"EQS lives in AIModule, which a project with no AI content may never load."));
 	}
 
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("EnvironmentQuery"), EQSClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
-	return MCPResult(Result);
+	UObject* Query = nullptr;
+	if (auto Early = Create.Make(Query, EQSClass)) return Early;
+	return MCPResult(Create.Finish());
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	FMCPCreate Create(Params, { TEXT("StateTree"), TEXT("/Game/AI") });
+	if (auto Err = Create.Read()) return Err;
 
 	UClass* STClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTree"));
 	if (!STClass)
@@ -1895,33 +1847,26 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 		return MCPError(TEXT("StateTree class not found. Enable StateTree plugin."));
 	}
 
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("StateTree"), STClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UObject* Created = nullptr;
+	if (auto Early = Create.Make(Created, STClass)) return Early;
 
 	// #653/#681: a bare UStateTree has no EditorData, so every statetree(*)
 	// authoring action failed with "EditorData not found" and nothing could be
 	// persisted. Mirror UStateTreeFactory: attach a UStateTreeEditorData with a
 	// concrete schema and a root state, then compile - so states/tasks are
 	// authorable AND serialize with the asset (survive save/load).
-	UStateTree* StateTree = Cast<UStateTree>(Created.Asset);
+	UStateTree* StateTree = Cast<UStateTree>(Created);
 	if (!StateTree)
 	{
 		return MCPError(TEXT("Created asset is not a UStateTree"));
 	}
 
 	// #833: the schema is not optional dressing. Without one the compiler bails
-	// with "does not have a schema" and the asset is written dead, so the
-	// resolution failing is a failed create, not a silent substitution.
+	// with "does not have a schema" and the asset is written dead, so a schema
+	// that does not resolve is a failed create and the tree goes again.
 	MCPStateTreeSchema::FResolution Schema = MCPStateTreeSchema::Resolve(
 		OptionalString(Params, TEXT("schema")));
-	if (!Schema.SchemaClass)
-	{
-		// The asset exists at this point. Delete it rather than leave a
-		// schema-less tree behind, which is the exact shape being fixed.
-		const FString OrphanPath = StateTree->GetPathName();
-		UEditorAssetLibrary::DeleteAsset(OrphanPath);
-		return MCPStateTreeSchema::UnresolvedError(Schema);
-	}
+	if (!Schema.SchemaClass) return Create.Abandon(MCPStateTreeSchema::UnresolvedError(Schema));
 
 	const MCPStateTreeSchema::FAttachOutcome Attach =
 		MCPStateTreeSchema::AttachSchema(StateTree, Schema.SchemaClass);
@@ -1935,14 +1880,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 #endif
 	StateTree->MarkPackageDirty();
 
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(StateTree, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, StateTree->GetPathName(), bSaved, SaveError);
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), StateTree->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
+	TSharedPtr<FJsonObject> Result = Create.Finish();
 	Result->SetStringField(TEXT("schema"), Schema.SchemaClass->GetPathName());
 	Result->SetStringField(TEXT("schemaSource"), Schema.Source);
 	Result->SetBoolField(TEXT("compiled"), bCompiled);
@@ -1952,8 +1890,6 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 		Result->SetStringField(TEXT("schemaNote"), Schema.Note);
 		Result->SetArrayField(TEXT("availableSchemas"), MCPStateTreeSchema::ConcreteSchemaPathsJson());
 	}
-	MCPSetDeleteAssetRollback(Result, StateTree->GetPathName());
-
 	return MCPResult(Result);
 }
 
@@ -1970,7 +1906,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetStateTreeRuntime(const TSharedPtr<F
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("pie"));
 	// Read before the world or actor lookup can fail (#1057).
 	const FString CompName = OptionalString(Params, TEXT("componentName"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
 
 	FMCPActorSelector ActorSel;
@@ -1981,28 +1917,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetStateTreeRuntime(const TSharedPtr<F
 	if (!Actor) return ActorErr;
 	ActorLabel = Actor->GetActorLabel();
 
-	// Find a component that carries StateTree runtime data (by having an
-	// InstanceData property of type FStateTreeInstanceData + a StateTreeRef).
-	UActorComponent* STComp = nullptr;
-	FStructProperty* InstanceProp = nullptr;
-	FStructProperty* RefProp = nullptr;
-	for (UActorComponent* Comp : Actor->GetComponents())
-	{
-		if (!Comp) continue;
-		if (!CompName.IsEmpty() && Comp->GetName() != CompName) continue;
-		FStructProperty* IP = CastField<FStructProperty>(Comp->GetClass()->FindPropertyByName(TEXT("InstanceData")));
-		FStructProperty* RP = CastField<FStructProperty>(Comp->GetClass()->FindPropertyByName(TEXT("StateTreeRef")));
-		if (IP && IP->Struct == FStateTreeInstanceData::StaticStruct() &&
-			RP && RP->Struct == FStateTreeReference::StaticStruct())
-		{
-			STComp = Comp; InstanceProp = IP; RefProp = RP; break;
-		}
-	}
+	const MCPStateTreeRuntime::FComponent Found = MCPStateTreeRuntime::Find(Actor, CompName);
+	UActorComponent* STComp = Found.Component;
 	if (!STComp) return MCPError(FString::Printf(TEXT("No StateTree component found on '%s'"), *ActorLabel));
-
-	FStateTreeReference* Ref = RefProp->ContainerPtrToValuePtr<FStateTreeReference>(STComp);
-	const UStateTree* StateTree = Ref ? Ref->GetStateTree() : nullptr;
-	FStateTreeInstanceData* InstanceData = InstanceProp->ContainerPtrToValuePtr<FStateTreeInstanceData>(STComp);
+	const UStateTree* StateTree = Found.StateTree;
+	FStateTreeInstanceData* InstanceData = Found.InstanceData;
 	if (!StateTree || !InstanceData) return MCPError(TEXT("StateTree asset or instance data unavailable"));
 
 	auto Result = MCPSuccess();
@@ -2028,247 +1947,86 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetStateTreeRuntime(const TSharedPtr<F
 	return MCPResult(Result);
 }
 
-// Resolve an optional caller-supplied parentClass, requiring it to derive from
-// the framework base the action is for. Returning the engine default silently
-// when the caller named a class is how you end up debugging a Blueprint that
-// simply is not the thing you asked for.
-static bool ResolveFrameworkParent(const TSharedPtr<FJsonObject>& Params, const FString& DefaultPath,
-	const TCHAR* FriendlyTypeName, FString& OutPath, TSharedPtr<FJsonValue>& OutError)
+// A Blueprint subclass of the framework class at BasePath, or of the caller's
+// parentClass, which must derive from it.
+TSharedPtr<FJsonValue> FGameplayHandlers::CreateFrameworkBlueprint(const TSharedPtr<FJsonObject>& Params, const TCHAR* BasePath, const TCHAR* FriendlyType)
 {
-	OutPath = DefaultPath;
-	const FString Requested = OptionalString(Params, TEXT("parentClass"));
-	if (Requested.IsEmpty()) return true;
+	FMCPCreate Create(Params, { FriendlyType, TEXT("/Game/Blueprints/GameFramework") });
+	if (auto Err = Create.Read()) return Err;
 
-	UClass* Base = FindObject<UClass>(nullptr, *DefaultPath);
-	UClass* Resolved = MCPResolveClass(Requested);
-	if (!Resolved)
+	UClass* Base = FindObject<UClass>(nullptr, BasePath);
+	if (!Base)
 	{
-		OutError = MCPError(FString::Printf(TEXT("parentClass not found: %s"), *Requested));
-		return false;
+		return MCPError(FString::Printf(TEXT("%s class not found: %s"), FriendlyType, BasePath));
 	}
-	if (Base && !Resolved->IsChildOf(Base))
-	{
-		OutError = MCPError(FString::Printf(
-			TEXT("parentClass '%s' does not derive from %s, so it cannot be used as a %s."),
-			*Resolved->GetPathName(), *Base->GetName(), FriendlyTypeName));
-		return false;
-	}
-	OutPath = Resolved->GetPathName();
-	return true;
-}
+	TSharedPtr<FJsonValue> ParentErr;
+	UClass* Parent = MCPCreatePreset::ResolveParent(Params, Base, FriendlyType, ParentErr);
+	if (!Parent) return ParentErr;
 
-TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FString& Name, const FString& PackagePath, const FString& ParentClassPath, const FString& FriendlyTypeName)
-{
-	UClass* ParentClass = FindObject<UClass>(nullptr, *ParentClassPath);
-	if (!ParentClass)
-	{
-		return MCPError(FString::Printf(TEXT("%s class not found: %s"), *FriendlyTypeName, *ParentClassPath));
-	}
-
-	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
-	BlueprintFactory->ParentClass = ParentClass;
-
-	auto Created = MCPCreateAssetIdempotent<UBlueprint>(Name, PackagePath, TEXT("skip"), FriendlyTypeName, BlueprintFactory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-	UBlueprint* NewBlueprint = Created.Asset;
-
-	NewBlueprint->ParentClass = ParentClass;
-	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
-
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(NewBlueprint, SaveError);
-
-	const FString CreatedPath = NewBlueprint->GetPathName();
-
-	auto Result = MCPSuccess();
-	MCPNoteSaveOutcome(Result, NewBlueprint->GetPathName(), bSaved, SaveError);
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), CreatedPath);
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("type"), FriendlyTypeName);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("assetPath"), CreatedPath);
-	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-
-	return MCPResult(Result);
+	return MCPCreatePreset::BlueprintSubclass(Create, Parent);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateGameMode(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
-
-	FString ParentPath;
-	TSharedPtr<FJsonValue> ParentErr;
-	if (!ResolveFrameworkParent(Params, TEXT("/Script/Engine.GameModeBase"), TEXT("GameMode"), ParentPath, ParentErr)) return ParentErr;
-
-	return CreateBlueprintWithParent(Name, PackagePath, ParentPath, TEXT("GameMode"));
+	return CreateFrameworkBlueprint(Params, TEXT("/Script/Engine.GameModeBase"), TEXT("GameMode"));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateGameState(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
-
-	FString ParentPath;
-	TSharedPtr<FJsonValue> ParentErr;
-	if (!ResolveFrameworkParent(Params, TEXT("/Script/Engine.GameStateBase"), TEXT("GameState"), ParentPath, ParentErr)) return ParentErr;
-
-	return CreateBlueprintWithParent(Name, PackagePath, ParentPath, TEXT("GameState"));
+	return CreateFrameworkBlueprint(Params, TEXT("/Script/Engine.GameStateBase"), TEXT("GameState"));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreatePlayerController(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
-
-	FString ParentPath;
-	TSharedPtr<FJsonValue> ParentErr;
-	if (!ResolveFrameworkParent(Params, TEXT("/Script/Engine.PlayerController"), TEXT("PlayerController"), ParentPath, ParentErr)) return ParentErr;
-
-	return CreateBlueprintWithParent(Name, PackagePath, ParentPath, TEXT("PlayerController"));
+	return CreateFrameworkBlueprint(Params, TEXT("/Script/Engine.PlayerController"), TEXT("PlayerController"));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreatePlayerState(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
-
-	FString ParentPath;
-	TSharedPtr<FJsonValue> ParentErr;
-	if (!ResolveFrameworkParent(Params, TEXT("/Script/Engine.PlayerState"), TEXT("PlayerState"), ParentPath, ParentErr)) return ParentErr;
-
-	return CreateBlueprintWithParent(Name, PackagePath, ParentPath, TEXT("PlayerState"));
+	return CreateFrameworkBlueprint(Params, TEXT("/Script/Engine.PlayerState"), TEXT("PlayerState"));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateHud(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
-
-	FString ParentPath;
-	TSharedPtr<FJsonValue> ParentErr;
-	if (!ResolveFrameworkParent(Params, TEXT("/Script/Engine.HUD"), TEXT("HUD"), ParentPath, ParentErr)) return ParentErr;
-
-	return CreateBlueprintWithParent(Name, PackagePath, ParentPath, TEXT("HUD"));
+	return CreateFrameworkBlueprint(Params, TEXT("/Script/Engine.HUD"), TEXT("HUD"));
 }
 
+// spawn_nav_modifier_volume is level(spawn_volume) of a NavModifierVolume with
+// an areaClass. The default AreaClass (UNavArea_Null) cuts a navmesh hole; the
+// brush the shared volume spawn builds is what makes it bound anything.
 TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPtr<FJsonObject>& Params)
 {
-	REQUIRE_EDITOR_WORLD(World);
-
-	const FString Label = OptionalString(Params, TEXT("label"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	if (auto Existing = MCPCheckActorLabelExists(World, Label, OnConflict, TEXT("NavModifierVolume")))
-	{
-		return Existing;
-	}
-
-	const FVector Location = OptionalVec3(Params, TEXT("location"));
-	const FVector Scale = OptionalVec3(Params, TEXT("scale"), FVector::OneVector);
-
-	FTransform SpawnTransform;
-	SpawnTransform.SetLocation(Location);
-	SpawnTransform.SetScale3D(Scale);
-
-	ANavModifierVolume* NewVolume = World->SpawnActor<ANavModifierVolume>(ANavModifierVolume::StaticClass(), SpawnTransform);
-	if (!NewVolume)
-	{
-		return MCPError(TEXT("Failed to spawn NavModifierVolume"));
-	}
-
-	if (!Label.IsEmpty())
-	{
-		NewVolume->SetActorLabel(Label);
-	}
-
-	// areaClass and extent were documented and accepted but never applied.
-	// The default AreaClass is UNavArea_Null (see ANavModifierVolume's
-	// constructor), which cuts a navmesh hole, so a default volume is useful -
-	// what made every one of these inert was the missing brush below.
-	FString AreaClassPath = OptionalString(Params, TEXT("areaClass"));
+	// areaClass is checked before anything spawns.
+	const FString AreaClassPath = OptionalString(Params, TEXT("areaClass"));
+	UClass* AreaClass = nullptr;
 	if (!AreaClassPath.IsEmpty())
 	{
-		UClass* AreaClass = MCPResolveClass(AreaClassPath);
-		if (!AreaClass || !AreaClass->IsChildOf(UNavArea::StaticClass()))
+		AreaClass = MCPResolveClassOfType(AreaClassPath, UNavArea::StaticClass());
+		if (!AreaClass)
 		{
-			World->DestroyActor(NewVolume);
 			return MCPError(FString::Printf(
 				TEXT("areaClass '%s' is not a UNavArea subclass (try NavArea_Null, NavArea_Obstacle, or a /Script/... path)."),
 				*AreaClassPath));
 		}
-		NewVolume->SetAreaClass(AreaClass);
 	}
 
-	// A bare SpawnActor leaves an AVolume with Brush == nullptr, so the volume
-	// has NO geometry at all - it bounds nothing and modifies nothing no matter
-	// what area class it carries. Every call this action has ever served
-	// produced one of those and reported created: true. Building the brush is
-	// therefore unconditional, not gated on the caller passing extent.
-	//
-	// extent is a half-size in world units, defaulting to a 200-unit box.
-	// Reuses the shared helper spawn_volume has used since #238 rather than a
-	// hand-rolled UCubeBuilder::Build - the model, polys, brush-component
-	// wiring and csgPrepMovingBrush all have to happen, and doing a subset
-	// silently yields the same inert actor.
-	const FVector Extent = HasParam(Params, TEXT("extent"))
-		? OptionalVec3(Params, TEXT("extent"), FVector(100.f, 100.f, 100.f))
-		: FVector(100.f, 100.f, 100.f);
-	if (Extent.X <= 0.f || Extent.Y <= 0.f || Extent.Z <= 0.f)
+	const TSharedPtr<FJsonValue> Response = UEMCP::SpawnVolumeActor(Params, ANavModifierVolume::StaticClass(), FVector(100.0), TEXT("NavModifierVolume"),
+		[AreaClass](AActor* Actor) -> TSharedPtr<FJsonValue>
+		{
+			if (AreaClass) CastChecked<ANavModifierVolume>(Actor)->SetAreaClass(AreaClass);
+			return nullptr;
+		});
+	const TSharedPtr<FJsonObject> Obj = Response.IsValid() && Response->Type == EJson::Object ? Response->AsObject() : nullptr;
+	FString Path;
+	bool bCreated = false;
+	if (Obj.IsValid() && Obj->TryGetBoolField(TEXT("created"), bCreated) && bCreated && Obj->TryGetStringField(TEXT("actorPath"), Path))
 	{
-		World->DestroyActor(NewVolume);
-		return MCPError(TEXT("extent must be positive on every axis (it is a half-size, not a corner)."));
+		if (const ANavModifierVolume* Volume = FindObject<ANavModifierVolume>(nullptr, *Path))
+		{
+			Obj->SetStringField(TEXT("areaClass"), Volume->GetAreaClass() ? Volume->GetAreaClass()->GetName() : TEXT("(default)"));
+		}
 	}
-	UEMCP::BuildVolumeAsCube(World, NewVolume, Extent);
-	// The helper resets scale to one (the brush carries the size), so a caller's
-	// scale has to be re-applied after it or it is silently discarded.
-	if (!Scale.Equals(FVector::OneVector))
-	{
-		NewVolume->SetActorScale3D(Scale);
-	}
-
-	const FString FinalLabel = NewVolume->GetActorLabel();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("actorLabel"), FinalLabel);
-	Result->SetStringField(TEXT("actorName"), NewVolume->GetName());
-	Result->SetStringField(TEXT("areaClass"), NewVolume->GetAreaClass()
-		? NewVolume->GetAreaClass()->GetName() : TEXT("(default)"));
-	// Read the built bounds back rather than echoing the request: a volume that
-	// reports created with a zero extent is the exact failure being fixed here.
-	FVector BoundsOrigin, BoundsExtent;
-	NewVolume->GetActorBounds(/*bOnlyCollidingComponents=*/false, BoundsOrigin, BoundsExtent);
-	TSharedPtr<FJsonObject> ExtentJson = MakeShared<FJsonObject>();
-	ExtentJson->SetNumberField(TEXT("x"), BoundsExtent.X);
-	ExtentJson->SetNumberField(TEXT("y"), BoundsExtent.Y);
-	ExtentJson->SetNumberField(TEXT("z"), BoundsExtent.Z);
-	Result->SetObjectField(TEXT("extent"), ExtentJson);
-
-	TSharedPtr<FJsonObject> LocationResult = MakeShared<FJsonObject>();
-	FVector ActorLocation = NewVolume->GetActorLocation();
-	LocationResult->SetNumberField(TEXT("x"), ActorLocation.X);
-	LocationResult->SetNumberField(TEXT("y"), ActorLocation.Y);
-	LocationResult->SetNumberField(TEXT("z"), ActorLocation.Z);
-	Result->SetObjectField(TEXT("location"), LocationResult);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("actorLabel"), FinalLabel);
-	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
-
-	return MCPResult(Result);
+	return Response;
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::RebuildNavmesh(const TSharedPtr<FJsonObject>& Params)
@@ -3143,33 +2901,18 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 	// duplicated, and requested senses are applied to it - returning
 	// existed: true without configuring them made "add a sense" impossible
 	// on any Blueprint that already had the component.
-	USCS_Node* TargetNode = nullptr;
-	bool bCreated = false;
-	if (BP->SimpleConstructionScript)
+	if (auto Err = MCPWorldSpawn::RequireConstructionScript(BP)) return Err;
+	USCS_Node* TargetNode = MCPWorldSpawn::FindTemplateOfClass(BP, CompClass);
+	const bool bCreated = TargetNode == nullptr;
+	if (bCreated)
 	{
-		for (USCS_Node* N : BP->SimpleConstructionScript->GetAllNodes())
-		{
-			if (N && N->ComponentTemplate && N->ComponentTemplate->GetClass() == CompClass)
-			{
-				TargetNode = N;
-				break;
-			}
-		}
-	}
-	if (!TargetNode)
-	{
-		if (!BP->SimpleConstructionScript)
-		{
-			return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold an AIPerceptionComponent."));
-		}
 		if (auto Err = Edit.Begin()) return Err;
-		TargetNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("AIPerceptionComp"));
+		TargetNode = MCPWorldSpawn::AddTemplate(BP, CompClass, TEXT("AIPerceptionComp"));
 		if (!TargetNode)
 		{
-			return MCPError(TEXT("Failed to create the AIPerceptionComponent SCS node."));
+			Edit.Cancel();
+			return MCPError(TEXT("Failed to create the AIPerceptionComponent construction-script node."));
 		}
-		BP->SimpleConstructionScript->AddNode(TargetNode);
-		bCreated = true;
 	}
 
 	UAIPerceptionComponent* Template = Cast<UAIPerceptionComponent>(TargetNode->ComponentTemplate);
@@ -3207,24 +2950,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 
 	auto Result = MCPSuccess();
 	if (bCreated) MCPSetCreated(Result); else MCPSetExisted(Result);
-	Result->SetStringField(TEXT("blueprintPath"), BPPath);
-	Result->SetStringField(TEXT("component"), TargetNode->GetVariableName().ToString());
+	MCPWorldSpawn::DescribeTemplate(Result, BPPath, TargetNode);
 	Result->SetArrayField(TEXT("senses"), ConfiguredSenses);
 	if (AlreadyConfigured.Num() > 0)
 	{
 		Result->SetArrayField(TEXT("sensesAlreadyPresent"), AlreadyConfigured);
 	}
+	// The remove-component inverse only undoes a component this call created;
+	// removing one that was already there would destroy what the caller kept.
+	if (!bCreated) Result->RemoveField(TEXT("rollback"));
 
-	// Only offer the remove-component inverse when this call actually created
-	// it. Removing a component that already existed is not an undo of adding
-	// senses to it - it destroys something the caller did not ask us to touch.
-	if (bCreated)
-	{
-		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("path"), BPPath);
-		Payload->SetStringField(TEXT("componentName"), TargetNode->GetVariableName().ToString());
-		MCPSetRollback(Result, TEXT("remove_component"), Payload);
-	}
 
 	return Edit.Finish(Result);
 }
@@ -3569,120 +3304,14 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 
 TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	FString BPPath;
-	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
-
-	FMCPEditScope Edit(Params, TEXT("add_state_tree_component"), TEXT("blueprintPath"), MCPBlueprint::PlainEdit());
-	// A missing asset keeps this category's load error.
-	if (auto Err = Edit.Open<UBlueprint>()) return LoadAssetByPath<UBlueprint>(BPPath) ? Err : MCPAssetLoadError(BPPath, TEXT("UBlueprint"));
-	UBlueprint* BP = Edit.Target<UBlueprint>();
-
-	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTreeComponent"));
-	if (!CompClass)
-	{
-		return MCPError(TEXT("StateTreeComponent not found. Enable StateTree plugin."));
-	}
-
-	// Idempotency: check for existing component by name/class on the SCS
-	if (BP->SimpleConstructionScript)
-	{
-		for (USCS_Node* N : BP->SimpleConstructionScript->GetAllNodes())
-		{
-			if (N && N->ComponentTemplate && N->ComponentTemplate->GetClass() == CompClass)
-			{
-				auto Existed = MCPSuccess();
-				MCPSetExisted(Existed);
-				Existed->SetStringField(TEXT("blueprintPath"), BPPath);
-				Existed->SetStringField(TEXT("component"), N->GetVariableName().ToString());
-				return MCPResult(Existed);
-			}
-		}
-	}
-
-	if (!BP->SimpleConstructionScript)
-	{
-		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold a StateTreeComponent."));
-	}
-	if (auto Err = Edit.Begin()) return Err;
-	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("StateTreeComp"));
-	if (!NewNode)
-	{
-		return MCPError(TEXT("Failed to create the StateTreeComponent SCS node."));
-	}
-	BP->SimpleConstructionScript->AddNode(NewNode);
-	Edit.Commit();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("blueprintPath"), BPPath);
-	Result->SetStringField(TEXT("component"), TEXT("StateTreeComp"));
-
-	// Rollback: remove_component handler
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("path"), BPPath);
-	Payload->SetStringField(TEXT("componentName"), TEXT("StateTreeComp"));
-	MCPSetRollback(Result, TEXT("remove_component"), Payload);
-
-	return Edit.Finish(Result);
+	return MCPBlueprintComponent::AddOfClass(Params, TEXT("add_state_tree_component"),
+		TEXT("/Script/StateTreeModule.StateTreeComponent"), TEXT("StateTreeComp"), TEXT("Enable StateTree plugin."));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	FString BPPath;
-	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
-
-	FMCPEditScope Edit(Params, TEXT("add_smart_object_component"), TEXT("blueprintPath"), MCPBlueprint::PlainEdit());
-	// A missing asset keeps this category's load error.
-	if (auto Err = Edit.Open<UBlueprint>()) return LoadAssetByPath<UBlueprint>(BPPath) ? Err : MCPAssetLoadError(BPPath, TEXT("UBlueprint"));
-	UBlueprint* BP = Edit.Target<UBlueprint>();
-
-	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectComponent"));
-	if (!CompClass)
-	{
-		return MCPError(TEXT("SmartObjectComponent not found. Enable SmartObjects plugin."));
-	}
-
-	// Idempotency: existing component of this class already on the SCS?
-	if (BP->SimpleConstructionScript)
-	{
-		for (USCS_Node* N : BP->SimpleConstructionScript->GetAllNodes())
-		{
-			if (N && N->ComponentTemplate && N->ComponentTemplate->GetClass() == CompClass)
-			{
-				auto Existed = MCPSuccess();
-				MCPSetExisted(Existed);
-				Existed->SetStringField(TEXT("blueprintPath"), BPPath);
-				Existed->SetStringField(TEXT("component"), N->GetVariableName().ToString());
-				return MCPResult(Existed);
-			}
-		}
-	}
-
-	if (!BP->SimpleConstructionScript)
-	{
-		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?), so it cannot hold a SmartObjectComponent."));
-	}
-	if (auto Err = Edit.Begin()) return Err;
-	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("SmartObjectComp"));
-	if (!NewNode)
-	{
-		return MCPError(TEXT("Failed to create the SmartObjectComponent SCS node."));
-	}
-	BP->SimpleConstructionScript->AddNode(NewNode);
-	Edit.Commit();
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("blueprintPath"), BPPath);
-	Result->SetStringField(TEXT("component"), TEXT("SmartObjectComp"));
-
-	// Rollback: remove_component
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("path"), BPPath);
-	Payload->SetStringField(TEXT("componentName"), TEXT("SmartObjectComp"));
-	MCPSetRollback(Result, TEXT("remove_component"), Payload);
-
-	return Edit.Finish(Result);
+	return MCPBlueprintComponent::AddOfClass(Params, TEXT("add_smart_object_component"),
+		TEXT("/Script/SmartObjectsModule.SmartObjectComponent"), TEXT("SmartObjectComp"), TEXT("Enable SmartObjects plugin."));
 }
 
 // ─────────────────────────────────────────────────────────────

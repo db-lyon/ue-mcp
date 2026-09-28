@@ -18,6 +18,7 @@
 
 #include "GameplayHandlers.h"
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "HandlerPagination.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -669,7 +670,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RunEqsQuery(const TSharedPtr<FJsonObje
 
 	// Every parameter is read before anything can fail (#1057).
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *WorldScope).World;
 	const bool bHasQuerierLabel = HasParam(Params, TEXT("querierLabel"));
 	const bool bHasQuerierPath = HasParam(Params, TEXT("querierPath"));
 	const FString ModeName = OptionalString(Params, TEXT("runMode"), TEXT("all"));

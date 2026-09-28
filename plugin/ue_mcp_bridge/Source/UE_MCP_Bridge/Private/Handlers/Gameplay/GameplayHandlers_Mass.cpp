@@ -55,6 +55,7 @@
 #include "GameplayHandlers.h"
 
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "HandlerJsonProperty.h"
 
 #include "Dom/JsonObject.h"
@@ -1060,7 +1061,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::QueryZoneGraph(const TSharedPtr<FJsonO
 
 	// Every parameter is read before anything can fail (#1057).
 	const FString QueryMode = OptionalString(Params, TEXT("queryMode"), TEXT("summary")).ToLower();
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("editor"));
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, TEXT("editor")).World;
 	const int32 Limit = FMath::Clamp(OptionalInt(Params, TEXT("limit"), 50), 1, 5000);
 	const FString ActorToken = OptionalString(Params, TEXT("actorPath"), OptionalString(Params, TEXT("actorLabel")));
 	const TArray<TSharedPtr<FJsonValue>>* TagArray = nullptr;

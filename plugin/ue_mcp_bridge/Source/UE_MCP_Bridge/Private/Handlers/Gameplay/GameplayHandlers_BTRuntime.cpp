@@ -20,6 +20,7 @@
 #include "GameplayHandlers.h"
 
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 
 #include "AIController.h"
 #include "BrainComponent.h"
@@ -265,7 +266,7 @@ namespace
 		// Default "auto": a running tree is almost always a PIE tree, and an
 		// editor-world fallback still answers for an actor placed in the level.
 		const FString Scope = OptionalString(Params, TEXT("world"), TEXT("auto"));
-		Out.World = ResolveWorldFromParams(Params, *Scope);
+		Out.World = FMCPRuntimeWorld::Resolve(Params, *Scope).World;
 		if (!Out.World)
 		{
 			OutError = MCPError(FString::Printf(
@@ -1130,6 +1131,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetLiveBlackboard(const TSharedPtr<FJs
 	{
 		RollbackPayload->SetField(TEXT("value"), PreviousTyped);
 	}
+	FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 	MCPSetRollback(Result, TEXT("set_live_blackboard"), RollbackPayload);
 	if (!bPreviousWasNull && !PreviousTyped.IsValid())
 	{
@@ -1163,7 +1165,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RunBehaviorTree(const TSharedPtr<FJson
 		// creates the component. So a missing brain is only fatal when the
 		// actor is not an AIController either.
 		const FString FallbackScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
-		UWorld* World = ResolveWorldFromParams(Params, *FallbackScope);
+		UWorld* World = FMCPRuntimeWorld::Resolve(Params, *FallbackScope).World;
 		TSharedPtr<FJsonValue> ActorErr;
 		FMCPActorSelector Selector;
 		Selector.Match = EMCPActorMatch::LabelNameOrPath;
@@ -1308,6 +1310,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RunBehaviorTree(const TSharedPtr<FJson
 	{
 		RollbackPayload->SetStringField(TEXT("assetPath"), PreviousTree->GetPathName());
 		RollbackPayload->SetBoolField(TEXT("restartIfRunning"), true);
+		FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 		MCPSetRollback(Result, TEXT("run_behavior_tree"), RollbackPayload);
 		// A restarted tree comes back at its root, not at the node it was on.
 		Result->SetBoolField(TEXT("rollbackLossy"), true);
@@ -1318,6 +1321,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RunBehaviorTree(const TSharedPtr<FJson
 	else
 	{
 		RollbackPayload->SetStringField(TEXT("mode"), TEXT("stop"));
+		FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 		MCPSetRollback(Result, TEXT("stop_behavior_tree"), RollbackPayload);
 	}
 	return MCPResult(Result);
@@ -1388,6 +1392,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::StopBehaviorTree(const TSharedPtr<FJso
 		{
 			RollbackPayload->SetStringField(TEXT("assetPath"), RunningTree->GetPathName());
 			RollbackPayload->SetBoolField(TEXT("restartIfRunning"), true);
+			FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 			MCPSetRollback(Result, TEXT("run_behavior_tree"), RollbackPayload);
 			// Honest about what a restart does and does not restore.
 			Result->SetBoolField(TEXT("rollbackLossy"), true);
@@ -1435,6 +1440,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::StopBehaviorTree(const TSharedPtr<FJso
 		Result->SetBoolField(TEXT("alreadyPaused"), false);
 		MCPSetUpdated(Result);
 		RollbackPayload->SetStringField(TEXT("mode"), TEXT("resume"));
+		FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 		MCPSetRollback(Result, TEXT("stop_behavior_tree"), RollbackPayload);
 	}
 	else // resume
@@ -1455,6 +1461,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::StopBehaviorTree(const TSharedPtr<FJso
 			Resumed == EAILogicResuming::RestartedInstead ? TEXT("restartedInstead") : TEXT("continue"));
 		MCPSetUpdated(Result);
 		RollbackPayload->SetStringField(TEXT("mode"), TEXT("pause"));
+		FMCPRuntimeWorld::Resolve(Params, TEXT("auto")).Echo(RollbackPayload);
 		MCPSetRollback(Result, TEXT("stop_behavior_tree"), RollbackPayload);
 	}
 
@@ -1481,7 +1488,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListAiAgents(const TSharedPtr<FJsonObj
 	MCP_CHECK_GAME_THREAD();
 
 	const FString Scope = OptionalString(Params, TEXT("world"), TEXT("auto"));
-	UWorld* World = ResolveWorldFromParams(Params, *Scope);
+	UWorld* World = FMCPRuntimeWorld::Resolve(Params, *Scope).World;
 
 	// Read before the world check can fail (#1057).
 	const bool bRunningOnly = OptionalBool(Params, TEXT("runningOnly"), false);
