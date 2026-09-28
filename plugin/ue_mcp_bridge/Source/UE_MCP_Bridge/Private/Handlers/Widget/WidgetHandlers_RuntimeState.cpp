@@ -1,6 +1,7 @@
 #include "WidgetHandlers.h"
 
 #include "HandlerUtils.h"
+#include "Families/MCPRuntime.h"
 #include "JsonSerializer.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
@@ -89,16 +90,6 @@ namespace WidgetRuntimeState
 		return ChildClassFilter.IsEmpty()
 			|| Widget->GetClass()->GetName().Contains(ChildClassFilter, ESearchCase::IgnoreCase);
 	}
-
-	static int32 ResolvePIEInstance(const UWorld* World)
-	{
-		if (!GEngine || !World) return INDEX_NONE;
-		for (const FWorldContext& Context : GEngine->GetWorldContexts())
-		{
-			if (Context.World() == World) return Context.PIEInstance;
-		}
-		return INDEX_NONE;
-	}
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::InspectRuntimeInstances(const TSharedPtr<FJsonObject>& Params)
@@ -111,7 +102,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::InspectRuntimeInstances(const TSharedPtr
 	// this guard a query made before PIE started would answer with editor-side
 	// instances and label them with a PIE net mode. Refuse anything that is not
 	// a live play world instead.
-	UWorld* World = ResolveWorldFromParams(Params, TEXT("pie"));
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	UWorld* World = Live.World;
 
 	// Every parameter is read before anything can fail (#1057).
 	const FString WidgetName = OptionalString(Params, TEXT("widgetName"));
@@ -128,10 +120,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::InspectRuntimeInstances(const TSharedPtr
 	const int32 MaxNodesPerInstance = FMath::Clamp(OptionalInt(Params, TEXT("maxNodesPerInstance"), 250), 1, 2000);
 	const TArray<FString> PropertyNames = ReadStringArray(Params, TEXT("propertyNames"));
 
-	if (!World || (World->WorldType != EWorldType::PIE && World->WorldType != EWorldType::Game))
-	{
-		return MCPError(TEXT("No live PIE/Game world. Runtime widget inspection reads a running session only: start PIE, or pass a pieInstance that exists. 'world' accepts pie (the default), game or auto; any other value resolves to the editor world, which is never a valid target here."));
-	}
+	if (auto Err = Live.Require(TEXT("No live PIE/Game world. Runtime widget inspection reads a running session only: start PIE, or pass a pieInstance that exists. 'world' accepts pie (the default), game or auto; any other value resolves to the editor world, which is never a valid target here."))) return Err;
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
 	{
 		return MCPError(TEXT("Provide widgetName (exact instance name) or classFilter (class-name substring)."));
@@ -223,8 +212,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::InspectRuntimeInstances(const TSharedPtr
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("worldName"), World->GetName());
 	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
-	const int32 PIEInstance = ResolvePIEInstance(World);
-	if (PIEInstance != INDEX_NONE) Result->SetNumberField(TEXT("pieInstance"), PIEInstance);
+	if (Live.PIEInstance != INDEX_NONE) Result->SetNumberField(TEXT("pieInstance"), Live.PIEInstance);
+
 	Result->SetBoolField(TEXT("includeSubtree"), bIncludeSubtree);
 	Result->SetArrayField(TEXT("instances"), InstanceResults);
 	Result->SetNumberField(TEXT("matchCount"), TotalMatchCount);

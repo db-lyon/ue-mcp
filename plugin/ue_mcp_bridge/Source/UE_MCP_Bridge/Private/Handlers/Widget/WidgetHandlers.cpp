@@ -6,6 +6,9 @@
 #include "Families/MCPEditScope.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
+#include "Families/MCPCreate.h"
+#include "Families/MCPRuntime.h"
+
 #include <type_traits>
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
@@ -617,7 +620,10 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("widgetName"), EType::String, TEXT("Named child of a live PIE widget, or the live UserWidget's own name")).Alias(TEXT("widgetDisplayName")),
 		UserIndex(),
 		ClassName(),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("Runtime world scope: pie (default) | game | auto")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("PIE instance whose widget takes focus")),
 	});
+
 
 	// CommonUI. Bodies live in WidgetHandlers_CommonUI.cpp.
 	// className names the contract; assetPath also checks that blueprint's tree against it.
@@ -697,42 +703,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetBlueprints(const TSharedPtr<FJ
 	return MCPResult(Result);
 }
 
-/**
- * Where a widget create action puts its asset: the full assetPath, or name in
- * packagePath (DefaultPackage when omitted). assetPath wins when both arrive,
- * which is what the TS normalizer sends after composing one from the other.
- */
-static TSharedPtr<FJsonValue> WidgetCreateTargetFromParams(
-	const TSharedPtr<FJsonObject>& Params, const TCHAR* DefaultPackage, FString& OutName, FString& OutPackagePath)
-{
-	const FString AssetPath = OptionalString(Params, TEXT("assetPath"));
-	const FString Name = OptionalString(Params, TEXT("name"));
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"));
-	if (!AssetPath.IsEmpty())
-	{
-		AssetPath.Split(TEXT("/"), &OutPackagePath, &OutName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-		if (OutName.IsEmpty() || OutPackagePath.IsEmpty())
-		{
-			return MCPError(FString::Printf(TEXT("Invalid assetPath '%s'. Expected '/Game/.../AssetName'"), *AssetPath));
-		}
-		return nullptr;
-	}
-	if (!Name.IsEmpty())
-	{
-		OutName = Name;
-		OutPackagePath = PackagePath.IsEmpty() ? FString(DefaultPackage) : PackagePath;
-		return nullptr;
-	}
-	return MCPError(TEXT("Missing required parameter 'assetPath' (or name, with packagePath)"));
-}
-
 TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	FString ParentClassName = OptionalString(Params, TEXT("parentClass"), TEXT("UserWidget"));
-	FString Name;
-	FString PackagePath;
-	if (auto Err = WidgetCreateTargetFromParams(Params, TEXT("/Game/UI/Widgets"), Name, PackagePath)) return Err;
+	FMCPCreate Create(Params, { TEXT("WidgetBlueprint"), TEXT("/Game/UI/Widgets"), /*bOnConflict=*/true, /*bAssetPath=*/true });
+	const FString ParentClassName = OptionalString(Params, TEXT("parentClass"), TEXT("UserWidget"));
+	if (auto Err = Create.Read()) return Err;
 
 	// (#134) Resolve parentClass string - accept short names ("UserWidget"),
 	// short names with U prefix, and full class paths. Default to UUserWidget
@@ -751,28 +726,18 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<F
 
 	UWidgetBlueprintFactory* WidgetFactory = NewObject<UWidgetBlueprintFactory>();
 	WidgetFactory->ParentClass = ParentClass;
-
-	auto Created = MCPCreateAssetIdempotent<UWidgetBlueprint>(Name, PackagePath, OnConflict, TEXT("WidgetBlueprint"), WidgetFactory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UWidgetBlueprint* WidgetBP = nullptr;
+	if (auto Early = Create.Make(WidgetBP, UWidgetBlueprint::StaticClass(), WidgetFactory)) return MCPCreatePreset::DescribeExisting(Early);
 
 	// #728: a project can name a default root widget class, so the factory can
 	// hand back a blueprint that already owns a widget. Give it its entry in
 	// WidgetVariableNameToGuidMap before the asset reaches disk, rather than
 	// leaving the first compile to report the missing one.
-	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::Sync(Created.Asset);
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::Sync(WidgetBP);
 
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("parentClass"), ParentClass->GetPathName());
-	MCPSetWidgetGuidOutcome(Result, GuidSync, Created.Asset->GetPathName());
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	MCPCreatePreset::DescribeBlueprint(Result, WidgetBP);
+	MCPSetWidgetGuidOutcome(Result, GuidSync, WidgetBP->GetPathName());
 	return MCPResult(Result);
 }
 
@@ -834,10 +799,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetTree(const TSharedPtr<FJsonObj
 
 TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	FString PackagePath;
-	FString AssetName;
-	if (auto Err = WidgetCreateTargetFromParams(Params, TEXT("/Game/EditorUtilities"), AssetName, PackagePath)) return Err;
+	FMCPCreate Create(Params, { TEXT("EditorUtilityWidgetBlueprint"), TEXT("/Game/EditorUtilities"), /*bOnConflict=*/true, /*bAssetPath=*/true });
+	if (auto Err = Create.Read()) return Err;
 
 	UClass* EUWBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityWidgetBlueprint"));
 	if (!EUWBClass)
@@ -856,38 +819,27 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 	UWidgetBlueprintFactory* WidgetFactory = NewObject<UWidgetBlueprintFactory>();
 	WidgetFactory->ParentClass = EUWClass;
 	WidgetFactory->BlueprintType = BPTYPE_Normal;
-
-	auto Created = MCPCreateAssetIdempotent<UObject>(AssetName, PackagePath, OnConflict, TEXT("EditorUtilityWidgetBlueprint"), EUWBClass, WidgetFactory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UObject* Created = nullptr;
+	if (auto Early = Create.Make(Created, EUWBClass, WidgetFactory)) return MCPCreatePreset::DescribeExisting(Early);
 
 	// #728: an editor utility widget is a WidgetBlueprint too, and a project
 	// that names a default root widget class has the factory build one here.
 	MCPWidgetGuidMap::FSyncReport GuidSync;
-	if (UWidgetBlueprint* CreatedWidgetBP = Cast<UWidgetBlueprint>(Created.Asset))
+	if (UWidgetBlueprint* CreatedWidgetBP = Cast<UWidgetBlueprint>(Created))
 	{
 		GuidSync = MCPWidgetGuidMap::Sync(CreatedWidgetBP);
 	}
 
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), AssetName);
-	MCPSetWidgetGuidOutcome(Result, GuidSync, Created.Asset->GetPathName());
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	MCPCreatePreset::DescribeBlueprint(Result, Cast<UBlueprint>(Created));
+	MCPSetWidgetGuidOutcome(Result, GuidSync, Created->GetPathName());
 	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	FString PackagePath;
-	FString AssetName;
-	if (auto Err = WidgetCreateTargetFromParams(Params, TEXT("/Game/EditorUtilities"), AssetName, PackagePath)) return Err;
+	FMCPCreate Create(Params, { TEXT("EditorUtilityBlueprint"), TEXT("/Game/EditorUtilities"), /*bOnConflict=*/true, /*bAssetPath=*/true });
+	if (auto Err = Create.Read()) return Err;
 
 	UClass* EUBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityBlueprint"));
 	if (!EUBClass)
@@ -895,19 +847,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 		return MCPError(TEXT("EditorUtilityBlueprint class not found. Enable Blutility plugin."));
 	}
 
-	auto Created = MCPCreateAssetIdempotent<UObject>(AssetName, PackagePath, OnConflict, TEXT("EditorUtilityBlueprint"), EUBClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	FString SaveError;
-	const bool bSaved = SaveAssetPackageChecked(Created.Asset, SaveError);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	MCPNoteSaveOutcome(Result, Created.Asset->GetPathName(), bSaved, SaveError);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), AssetName);
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
+	UObject* Created = nullptr;
+	if (auto Early = Create.Make(Created, EUBClass)) return MCPCreatePreset::DescribeExisting(Early);
+	TSharedPtr<FJsonObject> Result = Create.Finish();
+	MCPCreatePreset::DescribeBlueprint(Result, Cast<UBlueprint>(Created));
 	return MCPResult(Result);
 }
 TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params)
@@ -1967,28 +1910,6 @@ namespace WidgetRuntime_Internal
 	static TMap<FString, uint64> PreviousLayoutCaptureFrames;
 	static uint64 LayoutCaptureSequence = 0;
 
-	// The live world the call names: pieInstance picks one PIE client, and
-	// without it the first PIE or Game world answers.
-	static UWorld* ResolveWidgetRuntimeWorld(const TSharedPtr<FJsonObject>& Params)
-	{
-		UWorld* World = ResolveWorldFromParams(Params, TEXT("pie"));
-		const bool bLive = World && (World->WorldType == EWorldType::PIE || World->WorldType == EWorldType::Game);
-		return bLive ? World : nullptr;
-	}
-
-	// Why no live world answered, naming the pieInstance when one was asked for.
-	static FString NoRuntimeWorldMessage(const TSharedPtr<FJsonObject>& Params, const TCHAR* Default)
-	{
-		int32 Requested = INDEX_NONE;
-		if (TryGetNumberParam(Params, TEXT("pieInstance"), Requested))
-		{
-			return FString::Printf(
-				TEXT("No live PIE world has pieInstance %d. editor(list_pie_instances) lists the running ones."),
-				Requested);
-		}
-		return Default;
-	}
-
 	static FString SafeGetText(UWidget* Widget)
 	{
 		if (UTextBlock* T = Cast<UTextBlock>(Widget))       return T->GetText().ToString();
@@ -2606,11 +2527,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListRuntimeWidgets(const TSharedPtr<FJso
 		return Err;
 	}
 
-	UWorld* World = ResolveWidgetRuntimeWorld(Params);
-	if (!World)
-	{
-		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Is Play-In-Editor running?")));
-	}
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(TEXT("No PIE world available. Is Play-In-Editor running?"))) return Err;
+	UWorld* World = Live.World;
 
 	TArray<MCPPagination::FPageRow> Rows;
 	for (TObjectIterator<UUserWidget> It; It; ++It)
@@ -2668,11 +2587,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 	const FString ChildName = OptionalString(Params, TEXT("childName"), TEXT(""));
 	const bool bIncludeLayout = OptionalBool(Params, TEXT("includeLayout"), false);
 
-	UWorld* World = ResolveWidgetRuntimeWorld(Params);
-	if (!World)
-	{
-		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Is Play-In-Editor running?")));
-	}
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(TEXT("No PIE world available. Is Play-In-Editor running?"))) return Err;
+	UWorld* World = Live.World;
 
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
 	{
@@ -2855,11 +2772,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetToViewport(const TSharedPtr<FJs
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	const int32 ZOrder = OptionalInt(Params, TEXT("zOrder"), 0);
 
-	UWorld* World = ResolveWidgetRuntimeWorld(Params);
-	if (!World)
-	{
-		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Start Play-In-Editor first (editor pie_control action=play).")));
-	}
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(TEXT("No PIE world available. Start Play-In-Editor first (editor pie_control action=play)."))) return Err;
+	UWorld* World = Live.World;
 
 	// Resolve the WidgetBlueprint's generated UUserWidget class.
 	UClass* WidgetClass = LoadClass<UUserWidget>(nullptr, *AssetPath);
@@ -2922,11 +2837,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::InvokeRuntimeWidgetFunction(const TShare
 	// Read by the child interaction, on the paths that take them.
 	MCPReadParamsAhead(Params, { TEXT("value"), TEXT("commitMethod") });
 
-	UWorld* World = ResolveWidgetRuntimeWorld(Params);
-	if (!World)
-	{
-		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Is Play-In-Editor running?")));
-	}
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(TEXT("No PIE world available. Is Play-In-Editor running?"))) return Err;
+	UWorld* World = Live.World;
 
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
 	{
@@ -3068,11 +2981,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeDelegates(const TSharedPtr<FJs
 	FString ClassFilter;
 	TryGetStringParam(Params, TEXT("className"), ClassFilter);
 
-	UWorld* World = ResolveWidgetRuntimeWorld(Params);
-	if (!World)
-	{
-		return MCPError(NoRuntimeWorldMessage(Params, TEXT("No PIE world available. Is Play-In-Editor running?")));
-	}
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(TEXT("No PIE world available. Is Play-In-Editor running?"))) return Err;
+	UWorld* World = Live.World;
 
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
 	{

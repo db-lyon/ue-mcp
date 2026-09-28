@@ -40,6 +40,7 @@
 #include "WidgetGuidMap.h"
 #include "WidgetEditTraits.h"
 #include "Families/MCPEditScope.h"
+#include "Families/MCPRuntime.h"
 
 #include "WidgetBlueprint.h"
 #include "Blueprint/UserWidget.h"
@@ -2464,12 +2465,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeFocusPath(const TSharedPtr<FJs
 	{
 		return MCPError(TEXT("Slate is not initialised in this process, so there is no focus to report."));
 	}
-	if (!GetPIEWorld())
-	{
-		return MCPError(
+	if (auto Err = FMCPRuntimeWorld::ResolveLive(Params).Require(
 			TEXT("No PIE or Game world is running. Focus is only meaningful while the game is playing - ")
 			TEXT("start PIE with editor(play_in_editor) first. The editor's own focus is not reported ")
-			TEXT("because it is the editor UI, not the game's."));
+			TEXT("because it is the editor UI, not the game's.")))
+	{
+		return Err;
 	}
 
 	FSlateApplication& Slate = FSlateApplication::Get();
@@ -2531,13 +2532,15 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetRuntimeFocus(const TSharedPtr<FJsonOb
 	{
 		return MCPError(TEXT("Slate is not initialised in this process."));
 	}
-	UWorld* World = GetPIEWorld();
-	if (!World)
-	{
-		return MCPError(
+	const FMCPRuntimeWorld Live = FMCPRuntimeWorld::ResolveLive(Params);
+	if (auto Err = Live.Require(
 			TEXT("No PIE or Game world is running. Focus can only be set on a live widget - start PIE with ")
-			TEXT("editor(play_in_editor), then add the widget with widget(add_to_viewport)."));
+			TEXT("editor(play_in_editor), then add the widget with widget(add_to_viewport).")))
+	{
+		return Err;
 	}
+	UWorld* World = Live.World;
+
 
 	// Find the live UMG widget. Named child first (the common case), then a
 	// UUserWidget of that name.
