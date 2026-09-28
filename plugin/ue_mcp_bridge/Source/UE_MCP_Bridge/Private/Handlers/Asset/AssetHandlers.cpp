@@ -4280,9 +4280,50 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteFolder(const TSharedPtr<FJsonObject
 		}
 		else
 		{
-			Entry->SetStringField(TEXT("status"), TEXT("failed"));
-			Entry->SetStringField(TEXT("reason"), TEXT("delete_failed"));
-			Failed++;
+			// A force delete can drop a package from the registry and still leave its
+			// file, as a map that was the edited world moments before does. Its files
+			// go once nothing holds the package, and the directory with them.
+			TArray<FString> Stuck;
+			FString Dir;
+			bool bRemoved = false;
+			if (bForce && FPackageName::TryConvertLongPackageNameToFilename(Norm + TEXT("/"), Dir) && IFileManager::Get().DirectoryExists(*Dir))
+			{
+				CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+				TArray<FString> Files;
+				IFileManager::Get().FindFilesRecursive(Files, *Dir, TEXT("*.uasset"), true, false);
+				IFileManager::Get().FindFilesRecursive(Files, *Dir, TEXT("*.umap"), true, false, /*bClearFileNames=*/false);
+				for (const FString& File : Files)
+				{
+					FString PackageName;
+					const bool bLoaded = FPackageName::TryConvertFilenameToLongPackageName(File, PackageName) && FindPackage(nullptr, *PackageName);
+					if (bLoaded || !IFileManager::Get().Delete(*File, /*RequireExists=*/false, /*EvenReadOnly=*/true))
+					{
+						Stuck.Add(PackageName.IsEmpty() ? File : PackageName);
+					}
+				}
+				if (Stuck.Num() == 0 && IFileManager::Get().DeleteDirectory(*Dir, /*RequireExists=*/false, /*Tree=*/true))
+				{
+					IAssetRegistry::GetChecked().RemovePath(Norm);
+					bRemoved = !IFileManager::Get().DirectoryExists(*Dir);
+				}
+			}
+			if (bRemoved)
+			{
+				Entry->SetStringField(TEXT("status"), TEXT("deleted"));
+				DeletedPaths.Add(MakeShared<FJsonValueString>(Norm));
+				Deleted++;
+			}
+			else
+			{
+				Entry->SetStringField(TEXT("status"), TEXT("failed"));
+				Entry->SetStringField(TEXT("reason"), TEXT("delete_failed"));
+				if (Stuck.Num() > 0)
+				{
+					Entry->SetArrayField(TEXT("packagesKept"), MCPStringListToJson(Stuck));
+					Entry->SetStringField(TEXT("note"), TEXT("These packages are still loaded or their files could not be removed. Load another level, then delete again."));
+				}
+				Failed++;
+			}
 		}
 		Entries.Add(MakeShared<FJsonValueObject>(Entry));
 	}
