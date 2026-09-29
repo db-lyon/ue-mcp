@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1070,
+  "handlerCount": 1071,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -23941,6 +23941,42 @@
           "aliases": [
             "assetPath"
           ]
+        }
+      ]
+    },
+    "read_skeletal_mesh_bone_vertex_bounds": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "SkeletalMesh asset path"
+        },
+        {
+          "name": "boneNames",
+          "type": "array",
+          "required": false,
+          "description": "Bones to report; omit for every bone that owns at least one vertex",
+          "items": "string"
+        },
+        {
+          "name": "minWeight",
+          "type": "number",
+          "required": false,
+          "description": "Count a vertex for every bone weighing at least this much (0 < minWeight <= 1); omit to count each vertex once, for its dominant bone"
+        },
+        {
+          "name": "lodIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+        },
+        {
+          "name": "profileName",
+          "type": "string",
+          "required": false,
+          "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
         }
       ]
     },

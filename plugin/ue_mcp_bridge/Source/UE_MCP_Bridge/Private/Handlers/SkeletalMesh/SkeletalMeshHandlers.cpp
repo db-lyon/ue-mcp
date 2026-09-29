@@ -715,6 +715,12 @@ void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("vertexIndices"), EType::Array, TEXT("Source MeshDescription vertex IDs to read (1-256)")).Items(EType::Integer),
 		SpecSkinLodIndex, SpecProfileName,
 	});
+	Registry.RegisterHandler(TEXT("read_skeletal_mesh_bone_vertex_bounds"), &ReadBoneVertexBounds, {
+		SpecAssetPath,
+		MCPParam::Optional(TEXT("boneNames"), EType::Array, TEXT("Bones to report; omit for every bone that owns at least one vertex")).Items(EType::String),
+		MCPParam::Optional(TEXT("minWeight"), EType::Number, TEXT("Count a vertex for every bone weighing at least this much (0 < minWeight <= 1); omit to count each vertex once, for its dominant bone")),
+		SpecSkinLodIndex, SpecProfileName,
+	});
 	Registry.RegisterHandler(TEXT("set_skeletal_mesh_skin_weights"), &SetSkinWeights, {
 		SpecAssetPath,
 		MCPParam::Required(TEXT("edits"), EType::Array, TEXT("Selected source vertices and their complete replacement influences (1-256)")).Items(EType::Object).WithFields({
@@ -770,6 +776,211 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkinWeights(const TSharedPtr<F
 		TEXT("weightEncoding"),
 		TEXT("source MeshDescription weights are normalized and quantized to uint16; rawWeight is exact source storage, while the rebuilt render buffer may use 8-bit weights unless high-precision skin weights are enabled"));
 	Result->SetArrayField(TEXT("vertices"), Vertices);
+	return MCPResult(Result);
+#endif
+}
+
+TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadBoneVertexBounds(const TSharedPtr<FJsonObject>& Params)
+{
+	// Read before the target resolves; also on engines that refuse the call (#1057).
+	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("boneNames"), TEXT("minWeight"), TEXT("lodIndex"), TEXT("profileName") });
+#if !(WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API)
+	return MCPError(TEXT("read_skeletal_mesh_bone_vertex_bounds requires an Unreal Editor build on Unreal Engine 5.4 or newer"));
+#else
+	FMCPSkinWeightTarget Target;
+	if (TSharedPtr<FJsonValue> Error = MCPResolveSkinWeightTarget(Params, Target)) return Error;
+
+	const FReferenceSkeleton& RefSkeleton = Target.Mesh->GetRefSkeleton();
+	const int32 BoneCount = RefSkeleton.GetNum();
+	if (BoneCount <= 0)
+	{
+		return MCPError(FString::Printf(TEXT("'%s' has an empty reference skeleton"), *Target.Mesh->GetPathName()));
+	}
+
+	// minWeight switches from one bone per vertex to every bone at or above the threshold.
+	bool bThresholdMode = false;
+	double MinWeight = 0.0;
+	if (HasParam(Params, TEXT("minWeight")))
+	{
+		if (!TryGetNumberParam(Params, TEXT("minWeight"), MinWeight)
+			|| !FMath::IsFinite(MinWeight) || MinWeight <= 0.0 || MinWeight > 1.0)
+		{
+			return MCPError(TEXT("minWeight must be a finite number with 0 < minWeight <= 1"));
+		}
+		bThresholdMode = true;
+	}
+
+	TArray<int32> RequestedBones;
+	if (HasParam(Params, TEXT("boneNames")))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!TryGetArrayParam(Params, TEXT("boneNames"), Values) || !Values || Values->IsEmpty())
+		{
+			return MCPError(TEXT("boneNames must be a non-empty array of bone names; omit it for every weighted bone"));
+		}
+		for (int32 InputIndex = 0; InputIndex < Values->Num(); ++InputIndex)
+		{
+			FString BoneName;
+			if (!(*Values)[InputIndex].IsValid() || !(*Values)[InputIndex]->TryGetString(BoneName) || BoneName.IsEmpty())
+			{
+				return MCPError(FString::Printf(TEXT("boneNames[%d] must be a non-empty string"), InputIndex));
+			}
+			const int32 BoneIndex = RefSkeleton.FindBoneIndex(FName(*BoneName));
+			if (BoneIndex == INDEX_NONE)
+			{
+				return MCPError(FString::Printf(
+					TEXT("boneNames[%d]='%s' is not a bone of '%s'"), InputIndex, *BoneName, *Target.Mesh->GetPathName()));
+			}
+			if (RequestedBones.Contains(BoneIndex))
+			{
+				return MCPError(FString::Printf(TEXT("boneNames contains duplicate bone '%s'"), *BoneName));
+			}
+			RequestedBones.Add(BoneIndex);
+		}
+	}
+
+	// Bind-pose component-space transform of every bone. Parents precede children in a reference skeleton.
+	const TArray<FTransform>& RefBonePose = RefSkeleton.GetRefBonePose();
+	TArray<FTransform> ComponentPose;
+	ComponentPose.SetNum(BoneCount);
+	for (int32 BoneIndex = 0; BoneIndex < BoneCount; ++BoneIndex)
+	{
+		const int32 ParentIndex = RefSkeleton.GetParentIndex(BoneIndex);
+		ComponentPose[BoneIndex] = ParentIndex == INDEX_NONE
+			? RefBonePose[BoneIndex]
+			: RefBonePose[BoneIndex] * ComponentPose[ParentIndex];
+	}
+
+	struct FBoneAccumulator
+	{
+		int32 VertexCount = 0;
+		FBox ComponentBox = FBox(ForceInit);
+		FBox BoneBox = FBox(ForceInit);
+	};
+	TArray<FBoneAccumulator> Accumulators;
+	Accumulators.SetNum(BoneCount);
+
+	const FMeshDescription& Description = *Target.Description;
+	const FSkeletalMeshConstAttributes Attributes(Description);
+	const FSkinWeightsVertexAttributesConstRef SkinWeights = Attributes.GetVertexSkinWeights(Target.ProfileName);
+	const TVertexAttributesConstRef<FVector3f> Positions = Description.GetVertexPositions();
+
+	auto AddVertex = [&](const int32 BoneIndex, const FVector& Position)
+	{
+		FBoneAccumulator& Accumulator = Accumulators[BoneIndex];
+		++Accumulator.VertexCount;
+		Accumulator.ComponentBox += Position;
+		Accumulator.BoneBox += ComponentPose[BoneIndex].InverseTransformPosition(Position);
+	};
+
+	int32 SourceVertexCount = 0;
+	int32 UnweightedVertexCount = 0;
+	int32 BelowThresholdVertexCount = 0;
+	for (const FVertexID VertexID : Description.Vertices().GetElementIDs())
+	{
+		++SourceVertexCount;
+		const FVector Position(Positions[VertexID]);
+		const FVertexBoneWeightsConst Weights = SkinWeights.Get(VertexID);
+		int32 DominantBone = INDEX_NONE;
+		float DominantWeight = 0.0f;
+		bool bCounted = false;
+		bool bHasInfluence = false;
+		for (int32 InfluenceIndex = 0; InfluenceIndex < Weights.Num(); ++InfluenceIndex)
+		{
+			const UE::AnimationCore::FBoneWeight Weight = Weights[InfluenceIndex];
+			const int32 BoneIndex = static_cast<int32>(Weight.GetBoneIndex());
+			if (!RefSkeleton.IsValidIndex(BoneIndex) || Weight.GetRawWeight() == 0)
+			{
+				continue;
+			}
+			bHasInfluence = true;
+			if (bThresholdMode)
+			{
+				if (Weight.GetWeight() >= MinWeight)
+				{
+					AddVertex(BoneIndex, Position);
+					bCounted = true;
+				}
+			}
+			// Ties go to the lower bone index so the result does not depend on influence order.
+			else if (Weight.GetWeight() > DominantWeight
+				|| (Weight.GetWeight() == DominantWeight && BoneIndex < DominantBone))
+			{
+				DominantBone = BoneIndex;
+				DominantWeight = Weight.GetWeight();
+			}
+		}
+		if (!bThresholdMode && DominantBone != INDEX_NONE)
+		{
+			AddVertex(DominantBone, Position);
+			bCounted = true;
+		}
+		if (!bHasInfluence)
+		{
+			++UnweightedVertexCount;
+		}
+		else if (!bCounted)
+		{
+			++BelowThresholdVertexCount;
+		}
+	}
+
+	auto BoxToJson = [](const FBox& Box)
+	{
+		auto Object = MakeShared<FJsonObject>();
+		Object->SetObjectField(TEXT("min"), MCPVec3ToJsonObject(Box.Min));
+		Object->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(Box.Max));
+		Object->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Box.GetCenter()));
+		Object->SetObjectField(TEXT("extent"), MCPVec3ToJsonObject(Box.GetExtent()));
+		return Object;
+	};
+
+	TArray<int32> ReportedBones = RequestedBones;
+	if (ReportedBones.IsEmpty())
+	{
+		for (int32 BoneIndex = 0; BoneIndex < BoneCount; ++BoneIndex)
+		{
+			if (Accumulators[BoneIndex].VertexCount > 0) ReportedBones.Add(BoneIndex);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Bones;
+	for (const int32 BoneIndex : ReportedBones)
+	{
+		const FBoneAccumulator& Accumulator = Accumulators[BoneIndex];
+		const int32 ParentIndex = RefSkeleton.GetParentIndex(BoneIndex);
+		auto Bone = MakeShared<FJsonObject>();
+		Bone->SetStringField(TEXT("boneName"), RefSkeleton.GetBoneName(BoneIndex).ToString());
+		Bone->SetNumberField(TEXT("boneIndex"), BoneIndex);
+		Bone->SetStringField(TEXT("parentName"), ParentIndex == INDEX_NONE ? FString() : RefSkeleton.GetBoneName(ParentIndex).ToString());
+		Bone->SetNumberField(TEXT("vertexCount"), Accumulator.VertexCount);
+		Bone->SetObjectField(TEXT("bindPose"), MCPTransformToJsonObject(ComponentPose[BoneIndex]));
+		if (Accumulator.VertexCount > 0)
+		{
+			Bone->SetObjectField(TEXT("componentSpace"), BoxToJson(Accumulator.ComponentBox));
+			Bone->SetObjectField(TEXT("boneSpace"), BoxToJson(Accumulator.BoneBox));
+		}
+		Bones.Add(MakeShared<FJsonValueObject>(Bone));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), Target.Mesh->GetPathName());
+	Result->SetNumberField(TEXT("lodIndex"), Target.LodIndex);
+	Result->SetStringField(TEXT("profileName"), Target.DisplayProfileName);
+	Result->SetStringField(TEXT("mode"), bThresholdMode ? TEXT("minWeight") : TEXT("dominant"));
+	if (bThresholdMode)
+	{
+		Result->SetNumberField(TEXT("minWeight"), MinWeight);
+		Result->SetNumberField(TEXT("belowThresholdVertexCount"), BelowThresholdVertexCount);
+	}
+	Result->SetNumberField(TEXT("vertexCount"), SourceVertexCount);
+	Result->SetNumberField(TEXT("unweightedVertexCount"), UnweightedVertexCount);
+	Result->SetNumberField(TEXT("skeletonBoneCount"), BoneCount);
+	Result->SetNumberField(TEXT("count"), Bones.Num());
+	Result->SetStringField(
+		TEXT("coordinateSpace"),
+		TEXT("componentSpace boxes are source MeshDescription positions in the mesh's bind (reference) pose; boneSpace boxes are the same positions in each bone's bind-pose frame, which is the frame a physics body on that bone uses; bindPose is the bone's component-space reference transform"));
+	Result->SetArrayField(TEXT("bones"), Bones);
 	return MCPResult(Result);
 #endif
 }

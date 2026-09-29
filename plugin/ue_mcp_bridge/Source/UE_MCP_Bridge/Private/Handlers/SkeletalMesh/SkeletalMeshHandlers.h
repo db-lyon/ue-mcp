@@ -13,5 +13,6 @@ private:
 	static TSharedPtr<FJsonValue> SetOptimizeForInstancing(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadBuildSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadSkinWeights(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadBoneVertexBounds(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetSkinWeights(const TSharedPtr<FJsonObject>& Params);
 };

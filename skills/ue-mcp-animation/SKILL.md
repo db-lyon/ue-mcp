@@ -35,6 +35,13 @@ The weight setter edits one existing source LOD and profile, saves only when a
 selected value changed, and leaves all unlisted vertices, LODs, and profiles
 alone. It does not infer bones, fit a mesh, or auto-rig a character.
 
+To size a physics body, socket or hit volume from the mesh, call
+`asset(action="read_skeletal_mesh_bone_vertex_bounds", assetPath=<mesh>)`.
+Each bone's `boneSpace` box is its dominant vertices in the bone's own
+bind-pose frame, the frame a physics body on that bone uses; `componentSpace`
+is the same set in the mesh's bind pose. Pass `boneNames` to limit the report,
+or `minWeight` to count a vertex for every bone weighing at least that much.
+
 ## Required loop
 
 1. Call `project(action="get_status")`; verify the intended project and editor.

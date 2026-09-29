@@ -4155,6 +4155,42 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "read_skeletal_mesh_bone_vertex_bounds": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "SkeletalMesh asset path"
+      },
+      {
+        "name": "boneNames",
+        "type": "array",
+        "required": false,
+        "description": "Bones to report; omit for every bone that owns at least one vertex",
+        "items": "string"
+      },
+      {
+        "name": "minWeight",
+        "type": "number",
+        "required": false,
+        "description": "Count a vertex for every bone weighing at least this much (0 < minWeight <= 1); omit to count each vertex once, for its dominant bone"
+      },
+      {
+        "name": "lodIndex",
+        "type": "integer",
+        "required": false,
+        "description": "Source LOD (default 0); generated LODs without source geometry are refused"
+      },
+      {
+        "name": "profileName",
+        "type": "string",
+        "required": false,
+        "description": "Existing skin-weight profile; omit or pass 'default' for the default profile"
+      }
+    ]
+  },
   "read_skeletal_mesh_build_settings": {
     "category": "asset",
     "params": [
@@ -5590,6 +5626,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   read_curvetable: "Params: assetPath (or path), rowFilter?",
   read_datatable: "Params: assetPath (or path), rowFilter?, outputPath?",
   read_import_sources: "Params: assetPath (or path)",
+  read_skeletal_mesh_bone_vertex_bounds: "Params: assetPath, boneNames?, minWeight?, lodIndex?, profileName?",
   read_skeletal_mesh_build_settings: "Params: assetPath, lodIndex?, allLods?",
   read_skeletal_mesh_skin_weights: "Params: assetPath, vertexIndices, lodIndex?, profileName?",
   read_stringtable: "Params: assetPath (or path), keyFilter?",
@@ -5645,7 +5682,7 @@ export const schema: Record<string, z.ZodType> = {
   applyPlaneCut: z.boolean().optional().describe("Remove the geometry on the far side of the plane before reflecting (default true)"),
   assetLodIndex: z.number().int().optional().describe("LOD inside the clothing asset (default: lodIndex, clamped)"),
   assetName: z.string().optional().describe("Alias for name"),
-  assetPath: z.string().optional().describe("CurveTable asset path (add_curvetable_key, add_curvetable_row, get_curvetable_keys, import_curvetable, list_curvetable_rows, read_curvetable, remove_curvetable_row, rename_curvetable_row, set_curvetable_keys). DataTable asset path (add_datatable_row, fill_datatable_from_json, get_datatable_row, read_datatable, reimport_datatable, remove_datatable_row, rename_datatable_row, set_datatable_cell, set_datatable_row, update_datatable_row). EdGraph-backed asset path (add_graph_node, connect_graph_pins, disconnect_graph_pins, read_asset_graph, remove_graph_node). StaticMesh, SkeletalMesh or Skeleton asset path (add_socket, list_asset_sockets, list_sockets, remove_socket). Asset path; a Blueprint path writes its generated-class CDO (append_asset_array_elements, set_asset_property). StaticMesh to cut; it is never modified (apply_mesh_fracture). StaticMesh to read (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). Asset to check (asset_health_check). Alias for skeletalMeshPath (bind_cloth_to_section, read_cloth_data, set_cloth_config, unbind_cloth_from_section). StaticMesh or SkeletalMesh asset path (check_uvs, export_uv_layout, get_mesh_bounds, get_mesh_geometry, get_mesh_info, measure_mesh_geometry, read_uv_channels, set_socket_transform, set_uv_channel_count, transform_uvs, unwrap_uvs). CustomizableObject asset path (compile_customizable_object). Object path of the new pipeline (create_interchange_pipeline). Asset that owns the new subobject (create_subobject). Asset to delete (delete_asset). Blueprint, Skeleton or SkeletalMesh to diff from (diff_asset). UserDefinedEnum asset path (edit_user_defined_enum). UserDefinedStruct asset path (edit_user_defined_struct, list_struct_fields, rename_struct_field). Asset to export (export_asset). Texture2D asset path (export_texture, get_texture_info, set_texture_settings). Asset to reload from disk (force_reload_asset). StaticMesh asset path (generate_lightmap_uvs, get_mesh_collision, set_mesh_material, set_mesh_nav). StaticMesh whose collision to build or clear (generate_mesh_collision). Asset path; a Blueprint path reads its generated-class CDO (get_asset_properties, read_asset_properties). StringTable asset path (get_stringtable_entry, import_stringtable, import_stringtable_csv, list_stringtable_keys, read_stringtable, remove_stringtable_entry, set_stringtable_entry). UEnum or UserDefinedEnum asset path (list_enum_values). SkeletalMesh or Skeleton asset path (list_skeleton_bones). Asset to rename in its own folder, together with newName (move_asset, rename_asset). Asset path (read_asset). Imported asset path (read_import_sources). SkeletalMesh asset path (read_skeletal_mesh_build_settings, read_skeletal_mesh_skin_weights, set_sk_material_slots, set_skeletal_mesh_optimize_for_instancing, set_skeletal_mesh_skin_weights). StaticMesh to recenter (recenter_pivot). Imported asset to rebuild from its source file (reimport_asset). Asset whose package to reload (reload_package). Asset to save; omit to save every dirty asset under /Game (save_asset)"),
+  assetPath: z.string().optional().describe("CurveTable asset path (add_curvetable_key, add_curvetable_row, get_curvetable_keys, import_curvetable, list_curvetable_rows, read_curvetable, remove_curvetable_row, rename_curvetable_row, set_curvetable_keys). DataTable asset path (add_datatable_row, fill_datatable_from_json, get_datatable_row, read_datatable, reimport_datatable, remove_datatable_row, rename_datatable_row, set_datatable_cell, set_datatable_row, update_datatable_row). EdGraph-backed asset path (add_graph_node, connect_graph_pins, disconnect_graph_pins, read_asset_graph, remove_graph_node). StaticMesh, SkeletalMesh or Skeleton asset path (add_socket, list_asset_sockets, list_sockets, remove_socket). Asset path; a Blueprint path writes its generated-class CDO (append_asset_array_elements, set_asset_property). StaticMesh to cut; it is never modified (apply_mesh_fracture). StaticMesh to read (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). Asset to check (asset_health_check). Alias for skeletalMeshPath (bind_cloth_to_section, read_cloth_data, set_cloth_config, unbind_cloth_from_section). StaticMesh or SkeletalMesh asset path (check_uvs, export_uv_layout, get_mesh_bounds, get_mesh_geometry, get_mesh_info, measure_mesh_geometry, read_uv_channels, set_socket_transform, set_uv_channel_count, transform_uvs, unwrap_uvs). CustomizableObject asset path (compile_customizable_object). Object path of the new pipeline (create_interchange_pipeline). Asset that owns the new subobject (create_subobject). Asset to delete (delete_asset). Blueprint, Skeleton or SkeletalMesh to diff from (diff_asset). UserDefinedEnum asset path (edit_user_defined_enum). UserDefinedStruct asset path (edit_user_defined_struct, list_struct_fields, rename_struct_field). Asset to export (export_asset). Texture2D asset path (export_texture, get_texture_info, set_texture_settings). Asset to reload from disk (force_reload_asset). StaticMesh asset path (generate_lightmap_uvs, get_mesh_collision, set_mesh_material, set_mesh_nav). StaticMesh whose collision to build or clear (generate_mesh_collision). Asset path; a Blueprint path reads its generated-class CDO (get_asset_properties, read_asset_properties). StringTable asset path (get_stringtable_entry, import_stringtable, import_stringtable_csv, list_stringtable_keys, read_stringtable, remove_stringtable_entry, set_stringtable_entry). UEnum or UserDefinedEnum asset path (list_enum_values). SkeletalMesh or Skeleton asset path (list_skeleton_bones). Asset to rename in its own folder, together with newName (move_asset, rename_asset). Asset path (read_asset). Imported asset path (read_import_sources). SkeletalMesh asset path (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_build_settings, read_skeletal_mesh_skin_weights, set_sk_material_slots, set_skeletal_mesh_optimize_for_instancing, set_skeletal_mesh_skin_weights). StaticMesh to recenter (recenter_pivot). Imported asset to rebuild from its source file (reimport_asset). Asset whose package to reload (reload_package). Asset to save; omit to save every dirty asset under /Game (save_asset)"),
   assetPathA: z.string().optional().describe("First Texture2D"),
   assetPathB: z.string().optional().describe("Second Texture2D"),
   assetPaths: z.array(z.string()).optional().describe("The exact assets to read (bulk_read_asset_properties). Assets to delete (delete_asset_batch). The exact assets to act on, the safest way to drive it (fix_asset_hygiene). StaticMeshes to recenter together; the first sets the reference pivot (recenter_pivot)"),
@@ -5661,6 +5698,7 @@ export const schema: Record<string, z.ZodType> = {
   backupToChannel: z.number().optional().describe("Copy the existing UVs here first"),
   bHasNavigationData: z.boolean().optional().describe("Whether the mesh generates navigation data"),
   boneName: z.string().optional().describe("Bone to attach to (SkeletalMesh and Skeleton, default root)"),
+  boneNames: z.array(z.string()).optional().describe("Bones to report; omit for every bone that owns at least one vertex"),
   boundaryConstraint: z.string().optional().describe("Fixed | Refine | Free (default) | Ignore"),
   channel: z.number().optional().describe("Channel to draw (default 0) (export_uv_layout). Channel to remove (op=remove) (set_uv_channel_count). Channel to transform (default 0) (transform_uvs). Channel to write (default 0) (unwrap_uvs)"),
   channelCount: z.number().optional().describe("Target channel count (op=set)"),
@@ -5773,7 +5811,7 @@ export const schema: Record<string, z.ZodType> = {
   lightmapResolution: z.number().optional().describe("The mesh's lightmap resolution"),
   limit: z.number().int().optional().describe("Rows to return (default 200, max 2000) (bulk_read_asset_properties). Rows per page, 1 to 5000 (default 500) (list_assets). Rows per page, 1 to 2000 (default 50) (list_textures, search_assets_fts)"),
   lodGroup: z.string().optional().describe("Texture LOD group, applied to the imported texture (import_texture). Texture LOD group: World, WorldNormalMap, Character, UI, Lightmap, Effects and the rest (set_texture_settings)"),
-  lodIndex: z.number().int().optional().describe("LOD to read when lodType names one (default 0) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Mesh LOD (bind_cloth_to_section, unbind_cloth_from_section). Source LOD to act on (default 0) (check_uvs, export_uv_layout, generate_lightmap_uvs, read_uv_channels, set_uv_channel_count, transform_uvs, unwrap_uvs). LOD to read (default 0) (get_mesh_geometry). LOD to measure (default 0) (measure_mesh_geometry). LOD of each input to read when lodType names one (default 0) (mesh_boolean). LOD to target (default 0); not with allLods (read_skeletal_mesh_build_settings, set_skeletal_mesh_optimize_for_instancing). Source LOD (default 0); generated LODs without source geometry are refused (read_skeletal_mesh_skin_weights, set_skeletal_mesh_skin_weights)"),
+  lodIndex: z.number().int().optional().describe("LOD to read when lodType names one (default 0) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Mesh LOD (bind_cloth_to_section, unbind_cloth_from_section). Source LOD to act on (default 0) (check_uvs, export_uv_layout, generate_lightmap_uvs, read_uv_channels, set_uv_channel_count, transform_uvs, unwrap_uvs). LOD to read (default 0) (get_mesh_geometry). LOD to measure (default 0) (measure_mesh_geometry). LOD of each input to read when lodType names one (default 0) (mesh_boolean). Source LOD (default 0); generated LODs without source geometry are refused (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_skin_weights, set_skeletal_mesh_skin_weights). LOD to target (default 0); not with allLods (read_skeletal_mesh_build_settings, set_skeletal_mesh_optimize_for_instancing)"),
   lodType: z.string().optional().describe("MaxAvailable (default, ignores lodIndex) | HiResSourceModel | SourceModel | RenderData"),
   markAsCustomized: z.boolean().optional().describe("Mark the collision customized so a reimport keeps it (default true)"),
   matchSubclasses: z.boolean().optional().describe("Also match subclasses of classNames (default true)"),
@@ -5793,6 +5831,7 @@ export const schema: Record<string, z.ZodType> = {
   minLightmapResolution: z.number().optional().describe("Packing resolution floor (default 64)"),
   minPieceTriangles: z.number().int().optional().describe("Discard pieces with fewer triangles than this (default 4)"),
   minThickness: z.number().optional().describe("Thinnest a shape may be, in centimetres (default 1)"),
+  minWeight: z.number().optional().describe("Count a vertex for every bone weighing at least this much (0 < minWeight <= 1); omit to count each vertex once, for its dominant bone"),
   mode: z.string().optional().describe("Alias for curveType"),
   name: z.string().optional().describe("Asset name (create_asset_by_class, create_curvetable, create_customizable_object, create_data_asset, create_datatable, create_stringtable, create_user_defined_enum, create_user_defined_struct). Pipeline asset name, placed in packagePath (create_interchange_pipeline). Asset name, without '/' or '.' (create_render_target_2d). Subobject name (create_subobject). Enumerator to act on by short or display name; add_value uses it as the display name when displayName is omitted (edit_user_defined_enum). Asset name (default: the file name) (import_animation, import_file, import_skeletal_mesh, import_static_mesh, import_texture)"),
   namespace: z.string().optional().describe("StringTable namespace"),
