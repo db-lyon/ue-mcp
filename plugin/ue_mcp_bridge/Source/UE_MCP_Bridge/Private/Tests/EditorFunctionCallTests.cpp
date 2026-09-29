@@ -1,6 +1,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerFunctionCall.h"
+#include "HandlerRegistry.h"
+#include "Handlers/Editor/EditorHandlers.h"
 
 #include "Engine/BrushBuilder.h"
 #include "Kismet/KismetStringLibrary.h"
@@ -217,6 +219,56 @@ bool FEditorRuntimeValuePathParseTest::RunTest(const FString& Parameters)
 		MCPFunctionCall::ParseCallSegment(TEXT("GetAt(overclock"), Name, Args, bHasArgList, Error));
 	TestTrue(TEXT("an unbalanced list explains itself"), !Error.IsEmpty());
 
+	return true;
+}
+
+/**
+ * A project function library with FString& out-params (a planner that returns
+ * its manifest and error by reference) is reachable through
+ * invoke_static_function, and an agent fell back to Python for want of knowing
+ * it. UKismetStringLibrary::Split has the same shape: const FString& inputs
+ * passed by name, two FString& outputs, a bool return. The source is large so
+ * the output is shown to arrive whole.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEditorInvokeStaticOutParamsTest,
+	"UE.MCP.Editor.FunctionCall.StaticLibraryOutParamsReturnWhole",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FEditorInvokeStaticOutParamsTest::RunTest(const FString& Parameters)
+{
+	FMCPHandlerRegistry Registry;
+	FEditorHandlers::RegisterHandlers(Registry);
+
+	const FString Right = FString::ChrN(200000, TEXT('x'));
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	Args->SetStringField(TEXT("SourceString"), TEXT("zone=") + Right);
+	Args->SetStringField(TEXT("InStr"), TEXT("="));
+
+	// The U prefix is optional, as it is for a project class.
+	for (const TCHAR* ClassName : { TEXT("KismetStringLibrary"), TEXT("UKismetStringLibrary") })
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("className"), ClassName);
+		Params->SetStringField(TEXT("functionName"), TEXT("Split"));
+		Params->SetObjectField(TEXT("args"), Args);
+
+		const TSharedPtr<FJsonValue> Response = Registry.ExecuteHandler(TEXT("invoke_static_function"), Params);
+		const TSharedPtr<FJsonObject> Result = Response.IsValid() && Response->Type == EJson::Object ? Response->AsObject() : nullptr;
+		if (!TestTrue(FString::Printf(TEXT("%s resolves and the call answers"), ClassName), Result.IsValid() && Result->GetBoolField(TEXT("success"))))
+		{
+			continue;
+		}
+		const TSharedPtr<FJsonObject>* Outputs = nullptr;
+		if (!TestTrue(TEXT("returnValues is present"), Result->TryGetObjectField(TEXT("returnValues"), Outputs))) continue;
+		FString Left, RightOut, Returned;
+		(*Outputs)->TryGetStringField(TEXT("LeftS"), Left);
+		(*Outputs)->TryGetStringField(TEXT("RightS"), RightOut);
+		(*Outputs)->TryGetStringField(TEXT("ReturnValue"), Returned);
+		TestEqual(TEXT("the first out-param is captured"), Left, FString(TEXT("zone")));
+		TestEqual(TEXT("the large out-param arrives whole"), RightOut.Len(), Right.Len());
+		TestTrue(TEXT("the bool return is captured"), Returned.ToBool());
+	}
 	return true;
 }
 

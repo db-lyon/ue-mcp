@@ -342,6 +342,31 @@ inline void MCPReadParamsAhead(const TSharedPtr<FJsonObject>& Params, std::initi
 	}
 }
 
+/** Refuse a save that sweeps every dirty package when the call carried a key the
+ *  handler does not take. Unknown keys are otherwise ignored, so
+ *  asset(save, assetPaths=[...]) before it took assetPaths fell through to "save
+ *  everything" and wrote packages nobody named. Returns null when every key is in
+ *  Allowed or is a routing name. */
+inline TSharedPtr<FJsonValue> MCPRefuseSweepWithUnknownParams(
+	const TSharedPtr<FJsonObject>& Params, std::initializer_list<const TCHAR*> Allowed, const TCHAR* Action)
+{
+	if (!Params.IsValid()) return nullptr;
+	TArray<FString> Unknown;
+	for (const auto& JsonEntry : Params->Values)
+	{
+		// The key type differs across engine versions; the pair conversion is the portable read.
+		const TPair<FString, TSharedPtr<FJsonValue>> Pair(JsonEntry.Key, JsonEntry.Value);
+		bool bAllowed = MCPRoutingParamNames().Contains(Pair.Key);
+		for (const TCHAR* Name : Allowed) bAllowed |= Pair.Key == Name;
+		if (!bAllowed) Unknown.Add(Pair.Key);
+	}
+	if (Unknown.Num() == 0) return nullptr;
+	Unknown.Sort();
+	return MCPError(FString::Printf(
+		TEXT("%s saves every dirty package, and it does not take '%s', so it refused rather than save packages the call may not have meant. Nothing was saved. To save named packages use asset(action='save', assetPaths=[...])."),
+		Action, *FString::Join(Unknown, TEXT("', '"))));
+}
+
 // ── Vector/Rotator/Color/Transform extraction ────────────────────────────────
 //
 // Wire shape contract (matches src/schemas.ts):

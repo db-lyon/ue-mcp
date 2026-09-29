@@ -3076,6 +3076,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 {
 	const bool bIncludeMaps = OptionalBool(Params, TEXT("includeMaps"), true);
 	const bool bIncludeContent = OptionalBool(Params, TEXT("includeContent"), true);
+	if (auto Refused = MCPRefuseSweepWithUnknownParams(Params, { TEXT("includeMaps"), TEXT("includeContent"), TEXT("commitDeletes") }, TEXT("editor(save_dirty)"))) return Refused;
 
 	// #1156: a deleted World Partition actor's package cannot be written, only
 	// deleted; the editor's save path does that and reports it.

@@ -27919,16 +27919,23 @@
           "name": "assetPath",
           "type": "string",
           "required": false,
-          "description": "Asset to save; omit to save every dirty asset under /Game",
+          "description": "Asset to save; omit it and assetPaths to save every dirty asset under /Game",
           "aliases": [
             "path"
           ]
         },
         {
+          "name": "assetPaths",
+          "type": "array",
+          "required": false,
+          "description": "Save exactly these loaded packages (asset, object or package paths) and no others; each is reported saved, notDirty or failed",
+          "items": "string"
+        },
+        {
           "name": "force",
           "type": "boolean",
           "required": false,
-          "description": "Write the package even when it is not dirty (needs assetPath)"
+          "description": "Write the package even when it is not dirty (needs assetPath or assetPaths)"
         }
       ]
     },

@@ -558,8 +558,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the new asset (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("save_asset"), &SaveAsset, {
-		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to save; omit to save every dirty asset under /Game")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Write the package even when it is not dirty (needs assetPath)")),
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to save; omit it and assetPaths to save every dirty asset under /Game")).Alias(TEXT("path")),
+		MCPParam::Optional(TEXT("assetPaths"), EType::Array, TEXT("Save exactly these loaded packages (asset, object or package paths) and no others; each is reported saved, notDirty or failed")).Items(EType::String),
+		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Write the package even when it is not dirty (needs assetPath or assetPaths)")),
 	});
 	Registry.RegisterHandler(TEXT("save_all_dirty"), &SaveAllDirty, {
 		MCPParam::Optional(TEXT("saveMapPackages"), EType::Boolean, TEXT("Include map packages (default true)")),
@@ -3405,6 +3406,168 @@ namespace
 			Out->SetStringField(TEXT("modifiedUtc"), FM.GetTimeStamp(*Resolved).ToIso8601());
 		}
 	}
+
+	/** asset(save, assetPaths): write exactly the packages named, and nothing
+	 *  else. Every entry is resolved before anything is written, and an entry
+	 *  that names nothing in memory refuses the whole call, because a partial
+	 *  save of a list the caller got wrong is not what they asked for either. */
+	TSharedPtr<FJsonValue> MCPSaveNamedPackages(const TArray<TSharedPtr<FJsonValue>>& PathValues, bool bForce)
+	{
+		TArray<UPackage*> Packages;
+		TArray<TSharedPtr<FJsonObject>> Rows;
+		TArray<TSharedPtr<FJsonValue>> Refused;
+		for (const TSharedPtr<FJsonValue>& Value : PathValues)
+		{
+			FString Path;
+			if (Value.IsValid()) Value->TryGetString(Path);
+			Path.TrimStartAndEndInline();
+
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("path"), Path);
+			FString Reason;
+			UPackage* Package = nullptr;
+			if (!Path.StartsWith(TEXT("/")))
+			{
+				Reason = TEXT("not a package or object path; every entry must be a string starting with '/'");
+			}
+			else
+			{
+				// Found, never loaded: a package that is not in memory holds no
+				// unsaved edit. The object's own package is what an external
+				// (one-file-per-actor) actor saves to, so naming the actor names
+				// its package and naming the map does not.
+				const FString PackageName = FPackageName::ObjectPathToPackageName(Path);
+				UObject* Found = FindObject<UObject>(nullptr, *Path);
+				Package = Found ? Found->GetPackage() : FindPackage(nullptr, *PackageName);
+				if (!Package)
+				{
+					Reason = FPackageName::DoesPackageExist(PackageName)
+						? TEXT("not loaded, so it has no unsaved changes; asset(save, assetPath, force=true) loads and rewrites one package")
+						: TEXT("no asset or package at this path");
+				}
+				else
+				{
+					MCPPackageWriteBlocked(Package, Reason);
+				}
+			}
+			if (!Reason.IsEmpty())
+			{
+				Row->SetStringField(TEXT("status"), TEXT("refused"));
+				Row->SetStringField(TEXT("reason"), Reason);
+				Refused.Add(MakeShared<FJsonValueObject>(Row));
+				continue;
+			}
+			// Two object paths in one package are one save.
+			if (Packages.Contains(Package)) continue;
+			Row->SetStringField(TEXT("package"), Package->GetName());
+			Packages.Add(Package);
+			Rows.Add(Row);
+		}
+
+		if (Refused.Num() > 0)
+		{
+			auto Result = MCPSuccess();
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("%d of %d assetPaths cannot be saved, so nothing was written. The first: '%s' - %s"),
+				Refused.Num(), PathValues.Num(),
+				*Refused[0]->AsObject()->GetStringField(TEXT("path")),
+				*Refused[0]->AsObject()->GetStringField(TEXT("reason"))));
+			Result->SetArrayField(TEXT("refused"), Refused);
+			return MCPResult(Result);
+		}
+
+		// The dirty flag and the file's timestamp are read before the save,
+		// because afterwards a clean package cannot tell "written" from "skipped".
+		TArray<UPackage*> ToSave;
+		TArray<FDateTime> StampBefore;
+		for (int32 i = 0; i < Packages.Num(); ++i)
+		{
+			const bool bWasDirty = Packages[i]->IsDirty();
+			Rows[i]->SetBoolField(TEXT("wasDirty"), bWasDirty);
+			FString FileName;
+			ResolvePackageFileName(Packages[i], FileName);
+			StampBefore.Add(FileName.IsEmpty() ? FDateTime::MinValue() : IFileManager::Get().GetTimeStamp(*FileName));
+			if (bWasDirty || bForce) ToSave.Add(Packages[i]);
+		}
+
+		FMCPSaveDiagnostics SaveDiagnostics;
+		if (ToSave.Num() > 0)
+		{
+			UEditorLoadingAndSavingUtils::SavePackages(ToSave, /*bOnlyDirty=*/false);
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Results;
+		int32 SavedCount = 0, NotDirtyCount = 0, FailedCount = 0;
+		FString FirstFailure;
+		for (int32 i = 0; i < Packages.Num(); ++i)
+		{
+			UPackage* Package = Packages[i];
+			const TSharedPtr<FJsonObject>& Row = Rows[i];
+			if (!ToSave.Contains(Package))
+			{
+				Row->SetStringField(TEXT("status"), TEXT("notDirty"));
+				Row->SetStringField(TEXT("reason"), TEXT("no unsaved changes; pass force=true to write it anyway"));
+				++NotDirtyCount;
+			}
+			else
+			{
+				FString FileName;
+				ResolvePackageFileName(Package, FileName);
+				const FDateTime StampAfter = FileName.IsEmpty() ? FDateTime::MinValue() : IFileManager::Get().GetTimeStamp(*FileName);
+				const bool bFileExists = StampAfter != FDateTime::MinValue();
+				// ponytail: a forced save of a clean package is judged by the file's mtime alone; a same-second rewrite on a filesystem with one-second mtimes reads as failed until the save reports per package.
+				const bool bWritten = bFileExists
+					&& ((Row->GetBoolField(TEXT("wasDirty")) && !Package->IsDirty()) || StampAfter != StampBefore[i]);
+				Row->SetBoolField(TEXT("stillDirty"), Package->IsDirty());
+				if (bWritten)
+				{
+					Row->SetStringField(TEXT("status"), TEXT("saved"));
+					++SavedCount;
+				}
+				else
+				{
+					Row->SetStringField(TEXT("status"), TEXT("failed"));
+					const FString EngineReason = SaveDiagnostics.GetReason();
+					Row->SetStringField(TEXT("reason"), EngineReason.IsEmpty()
+						? FString(TEXT("the file on disk was not rewritten"))
+						: EngineReason);
+					if (FirstFailure.IsEmpty()) FirstFailure = FString::Printf(TEXT("%s: %s"), *Package->GetName(), *Row->GetStringField(TEXT("reason")));
+					++FailedCount;
+				}
+			}
+			DescribeOnDisk(Row, Package->GetName());
+			Results.Add(MakeShared<FJsonValueObject>(Row));
+		}
+
+		auto Result = MCPSuccess();
+		Result->SetBoolField(TEXT("force"), bForce);
+		Result->SetArrayField(TEXT("results"), Results);
+		Result->SetNumberField(TEXT("savedCount"), SavedCount);
+		Result->SetNumberField(TEXT("notDirtyCount"), NotDirtyCount);
+		Result->SetNumberField(TEXT("failedCount"), FailedCount);
+		if (SavedCount > 0)
+		{
+			MCPSetUpdated(Result);
+		}
+		else
+		{
+			Result->SetBoolField(TEXT("updated"), false);
+			Result->SetBoolField(TEXT("unchanged"), true);
+		}
+		if (FailedCount > 0)
+		{
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("%d of %d packages did not reach disk. The first: %s"), FailedCount, ToSave.Num(), *FirstFailure));
+			MCPAttachSaveDiagnostics(Result, SaveDiagnostics);
+		}
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("A save overwrites the files on disk with what is in memory. The previous file contents are gone and the ")
+			TEXT("bridge holds no copy, so there is no un-save. There is no inverse action."));
+		return MCPResult(Result);
+	}
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::SaveAsset(const TSharedPtr<FJsonObject>& Params)
@@ -3416,6 +3579,22 @@ TSharedPtr<FJsonValue> FAssetHandlers::SaveAsset(const TSharedPtr<FJsonObject>& 
 	// property writes through some subsystems), so a dirty-only save
 	// skipped them and still returned success.
 	const bool bForce = OptionalBool(Params, TEXT("force"), false);
+	// assetPaths saves exactly the packages it names. Before it was a
+	// parameter, a seven-path call fell through to the save-everything branch
+	// below and wrote every dirty package, World Partition actors included.
+	if (HasParam(Params, TEXT("assetPaths")))
+	{
+		if (HasParam(Params, TEXT("assetPath")))
+		{
+			return MCPError(TEXT("Specify only one of assetPaths or assetPath. Nothing was saved."));
+		}
+		const TArray<TSharedPtr<FJsonValue>>* PathValues = nullptr;
+		if (!TryGetArrayParam(Params, TEXT("assetPaths"), PathValues) || !PathValues || PathValues->Num() == 0)
+		{
+			return MCPError(TEXT("assetPaths must be a non-empty array of asset, object or package paths. Nothing was saved."));
+		}
+		return MCPSaveNamedPackages(*PathValues, bForce);
+	}
 	if (bHasAssetPath && !AssetPath.IsEmpty() && AssetPath != TEXT("all"))
 	{
 		auto Result = MCPSuccess();
@@ -3523,6 +3702,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SaveAsset(const TSharedPtr<FJsonObject>& 
 		{
 			return MCPError(TEXT("'force' requires an assetPath - it forces one package to disk. To flush everything, use asset(save_all_dirty), which reports exactly which packages were written."));
 		}
+		if (auto Refused = MCPRefuseSweepWithUnknownParams(Params, { TEXT("assetPath"), TEXT("force") }, TEXT("asset(save) with no assetPath"))) return Refused;
 		// Counted before the sweep for the same reason as the single-asset
 		// branch: SaveDirectory is dirty-only, so with nothing dirty it writes
 		// nothing, and afterwards there is no way to tell that from a sweep
@@ -3565,6 +3745,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SaveAllDirty(const TSharedPtr<FJsonObject
 {
 	const bool bSaveMapPackages = OptionalBool(Params, TEXT("saveMapPackages"), true);
 	const bool bSaveContentPackages = OptionalBool(Params, TEXT("saveContentPackages"), true);
+	if (auto Refused = MCPRefuseSweepWithUnknownParams(Params, { TEXT("saveMapPackages"), TEXT("saveContentPackages") }, TEXT("asset(save_all_dirty)"))) return Refused;
 
 	// #768: capture what was dirty BEFORE saving, so the response can name the
 	// packages this call was responsible for and report whether each one

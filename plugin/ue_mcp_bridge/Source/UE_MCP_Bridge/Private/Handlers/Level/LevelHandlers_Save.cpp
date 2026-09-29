@@ -255,6 +255,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SaveLevel(const TSharedPtr<FJsonObject>& 
 	// package of a deleted World Partition actor instead of failing on it.
 	if (OptionalBool(Params, TEXT("commitDeletes"), false))
 	{
+		// This branch writes every dirty package, not only the level's.
+		if (auto Refused = MCPRefuseSweepWithUnknownParams(Params, { TEXT("force"), TEXT("includeExternalActors"), TEXT("commitDeletes") }, TEXT("level(save, commitDeletes=true)"))) return Refused;
 		TSharedPtr<FJsonObject> Committed = MCPSaveDirtyCommittingDeletes(true, true);
 		Committed->SetStringField(TEXT("levelName"), World->GetName());
 		Committed->SetStringField(TEXT("levelPath"), World->GetPathName());
