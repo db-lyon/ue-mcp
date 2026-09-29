@@ -1785,6 +1785,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 		MeshResult->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
 		if (PathInfo.bUsedKeySelector) MeshResult->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+		MeshResult->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 		MeshResult->SetStringField(TEXT("type"), Property->GetCPPType());
 		if (bSaveMesh) EditorSetPropertyPersist(Asset, AssetPath, MeshResult);
 		else MeshResult->SetBoolField(TEXT("saved"), false);
@@ -1895,6 +1896,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+	Result->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("type"), Property->GetCPPType());
 	// previousValue and value are BOTH structured, and set_object_property
 	// reports the same pair in the same form. A caller that reads them off one
@@ -2006,6 +2008,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetProperty(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("className"), Object->GetClass()->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+	Result->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("leafPropertyName"), Property->GetName());
 	Result->SetStringField(TEXT("type"), Property->GetCPPType());
 	Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, Property));

@@ -45,6 +45,7 @@ namespace
 		/** PropertyName with every [Field=Value] selector replaced by the index
 		 *  preflight matched. Empty when the path selected nothing by key. */
 		FString IndexedPath;
+		FString ResolvedPropertyName;
 		TSharedPtr<FJsonValue> RequestedValue;
 		TSharedPtr<FJsonValue> PreviousValue;
 		FString PreviousText;
@@ -80,6 +81,7 @@ namespace
 	{
 		TSharedPtr<FJsonObject> Readback = MakeShared<FJsonObject>();
 		Readback->SetStringField(TEXT("propertyName"), Prepared.PropertyName);
+		if (!Prepared.ResolvedPropertyName.IsEmpty()) Readback->SetStringField(TEXT("resolvedPropertyName"), Prepared.ResolvedPropertyName);
 		if (!Prepared.IndexedPath.IsEmpty()) Readback->SetStringField(TEXT("indexedPath"), Prepared.IndexedPath);
 		Readback->SetBoolField(TEXT("ok"), Prepared.Error.IsEmpty());
 		if (!Prepared.Error.IsEmpty())
@@ -100,6 +102,7 @@ namespace
 	{
 		TSharedPtr<FJsonObject> Readback = MakeShared<FJsonObject>();
 		Readback->SetStringField(TEXT("propertyName"), Prepared.PropertyName);
+		if (!Prepared.ResolvedPropertyName.IsEmpty()) Readback->SetStringField(TEXT("resolvedPropertyName"), Prepared.ResolvedPropertyName);
 		Readback->SetBoolField(TEXT("ok"), false);
 		Readback->SetStringField(TEXT("error"), Prepared.Error);
 		Readback->SetBoolField(TEXT("changed"), false);
@@ -254,6 +257,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 				}
 				else
 				{
+					PreparedProperty.ResolvedPropertyName = PathInfo.IndexedPath;
 					if (PathInfo.bUsedKeySelector) PreparedProperty.IndexedPath = PathInfo.IndexedPath;
 					// Dry-fit the value against a scratch copy of the property so a
 					// bad payload is caught without touching the live asset.

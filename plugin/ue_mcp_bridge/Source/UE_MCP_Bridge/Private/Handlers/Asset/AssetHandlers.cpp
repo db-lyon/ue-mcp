@@ -1862,6 +1862,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetPropertiesImpl(const TSharedPtr<
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("propertyName"), PropertyName);
 		if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+		Result->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 		Result->SetStringField(TEXT("type"), Prop->GetCPPType());
 		if (bJsonValues)
 		{
@@ -5283,6 +5284,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+	Result->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("previousValue"), PrevValue);
 	Result->SetStringField(TEXT("value"), NewValue);
 	MCPDescribePropertyWritePersistence(Result, Asset, PropertyName, bSave, bPersisted, PersistReason);
@@ -5452,6 +5454,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+	Result->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("elementType"), ArrayProp->Inner->GetCPPType());
 	Result->SetNumberField(TEXT("previousNum"), PreviousNum);
 	Result->SetNumberField(TEXT("appendedCount"), AppendedCount);
