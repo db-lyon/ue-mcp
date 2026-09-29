@@ -13,6 +13,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "Animation/Skeleton.h"
+#include "AnimationRuntime.h"
 #include "UObject/Package.h"
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
@@ -455,7 +456,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 	int32 MeshSocketCount = 0;
 	int32 SkeletonSocketCount = 0;
 
-	auto AppendSkeletalSocket = [&SocketArray](const USkeletalMeshSocket* Socket, const TCHAR* Source)
+	// Sockets are resolved against one reference pose: the mesh's for a SkeletalMesh (its
+	// Skeleton's sockets included, since they ride on the mesh's bones at runtime), the
+	// Skeleton's own for a Skeleton asset.
+	const FReferenceSkeleton* PoseSkeleton = nullptr;
+	TArray<FTransform> ComponentPose;
+	auto UseReferencePose = [&PoseSkeleton, &ComponentPose](const FReferenceSkeleton& RefSkeleton)
+	{
+		PoseSkeleton = &RefSkeleton;
+		FAnimationRuntime::FillUpComponentSpaceTransforms(RefSkeleton, RefSkeleton.GetRefBonePose(), ComponentPose);
+	};
+
+	auto AppendSkeletalSocket = [&SocketArray, &PoseSkeleton, &ComponentPose](const USkeletalMeshSocket* Socket, const TCHAR* Source)
 	{
 		if (!Socket) return;
 		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
@@ -471,6 +483,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 
 		TSharedPtr<FJsonObject> Scale = MCPVec3ToJsonObject(Socket->RelativeScale);
 		S->SetObjectField(TEXT("relativeScale"), Scale);
+
+		const int32 BoneIndex = PoseSkeleton ? PoseSkeleton->FindBoneIndex(Socket->BoneName) : INDEX_NONE;
+		if (ComponentPose.IsValidIndex(BoneIndex))
+		{
+			S->SetObjectField(TEXT("componentTransform"),
+				MCPTransformToJsonObject(Socket->GetSocketLocalTransform() * ComponentPose[BoneIndex]));
+		}
+		else
+		{
+			S->SetStringField(TEXT("componentTransformError"), FString::Printf(
+				TEXT("Bone '%s' is not in the reference skeleton"), *Socket->BoneName.ToString()));
+		}
 
 		SocketArray.Add(MakeShared<FJsonValueObject>(S));
 	};
@@ -501,6 +525,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 	}
 	else if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
 	{
+		UseReferencePose(SKM->GetRefSkeleton());
+		Result->SetStringField(TEXT("componentTransformPose"), TEXT("SkeletalMesh reference pose"));
 		for (USkeletalMeshSocket* Socket : SKM->GetMeshOnlySocketList())
 		{
 			if (!Socket) continue;
@@ -521,6 +547,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 	}
 	else if (USkeleton* Skel = Cast<USkeleton>(Asset))
 	{
+		UseReferencePose(Skel->GetReferenceSkeleton());
+		Result->SetStringField(TEXT("componentTransformPose"), TEXT("Skeleton reference pose"));
 		// #465: rig-level sockets live here. List them with the same shape as mesh sockets.
 		for (USkeletalMeshSocket* Socket : Skel->Sockets)
 		{
