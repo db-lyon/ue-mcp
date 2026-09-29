@@ -54,13 +54,45 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "location",
         "type": "vec3",
         "required": false,
-        "description": "World location {x,y,z} (default origin)"
+        "description": "World location {x,y,z} (default origin); wins over transform.location"
+      },
+      {
+        "name": "transform",
+        "type": "object",
+        "required": false,
+        "description": "Actor transform; scale multiplies the extent",
+        "fields": [
+          {
+            "name": "location",
+            "type": "vec3",
+            "required": false,
+            "description": "World location"
+          },
+          {
+            "name": "rotation",
+            "type": "rotator",
+            "required": false,
+            "description": "World rotation"
+          },
+          {
+            "name": "scale",
+            "type": "vec3",
+            "required": false,
+            "description": "Actor scale (default 1)"
+          },
+          {
+            "name": "scale3D",
+            "type": "vec3",
+            "required": false,
+            "description": "Same as scale"
+          }
+        ]
       },
       {
         "name": "extent",
         "type": "vec3",
         "required": false,
-        "description": "Half-size of the volume box {x,y,z} (default 500 on each axis)"
+        "description": "Half-size of the volume box {x,y,z} before scale (default 500 on each axis)"
       },
       {
         "name": "label",
@@ -176,7 +208,10 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "packagePath",
         "type": "string",
         "required": false,
-        "description": "Folder for the new graph (default /Game/PCG)"
+        "description": "Folder for the new graph (default /Game/PCG)",
+        "aliases": [
+          "path"
+        ]
       },
       {
         "name": "onConflict",
@@ -622,10 +657,10 @@ export const handlerSpecs: HandlerSpecs = {
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
   add_pcg_node: "Params: assetPath (or path), nodeType, posX?, posY?",
-  add_pcg_volume: "Params: graphPath?, location?, extent?, label?, onConflict?",
+  add_pcg_volume: "Params: graphPath?, location?, transform?, extent?, label?, onConflict?",
   cleanup_pcg: "Params: actorLabel OR actorPath, removeComponents?",
   connect_pcg_nodes: "Params: assetPath (or path), sourceNode (or sourceNodeName), sourcePin? (or sourcePinLabel), targetNode (or targetNodeName), targetPin? (or targetPinLabel)",
-  create_pcg_graph: "Params: name, packagePath?, onConflict?",
+  create_pcg_graph: "Params: name, packagePath? (or path), onConflict?",
   disconnect_pcg_nodes: "Params: assetPath (or path), sourceNode (or sourceNodeName), targetNode (or targetNodeName), sourcePin? (or sourcePinLabel), targetPin? (or targetPinLabel)",
   execute_pcg_graph: "Params: actorLabel OR actorPath, seed?",
   export_pcg_graph: "Params: assetPath (or path), includeSettings?",
@@ -651,19 +686,19 @@ export const schema: Record<string, z.ZodType> = {
   connections: z.array(z.record(z.unknown())).optional().describe("[{from, fromPin?, to, toPin?}]"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the 'nextCursor' from the previous page, unmodified"),
   entries: z.array(z.object({ mesh: z.string().describe("StaticMesh asset path; an entry without one is skipped"), weight: z.number().optional().describe("Relative pick weight (default 1), truncated to a whole number") })).optional().describe("Weighted mesh entries"),
-  extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Half-size of the volume box {x,y,z} (default 500 on each axis)"),
+  extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Half-size of the volume box {x,y,z} before scale (default 500 on each axis)"),
   graphPath: z.string().optional().describe("PCGGraph to assign to the volume's component (add_pcg_volume). PCGGraph to assign (default: re-apply the component's current graph) (toggle_pcg_graph)"),
   includeSettings: z.boolean().optional().describe("Include per-node editable settings in the response (default true)"),
   label: z.string().optional().describe("Editor label. Also the idempotency key: an existing actor with this label is reported rather than duplicated"),
   limit: z.number().int().optional().describe("Rows to return on this page (default 200, max 2000)"),
-  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location {x,y,z} (default origin)"),
+  location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location {x,y,z} (default origin); wins over transform.location"),
   name: z.string().optional().describe("Graph asset name"),
   nodeName: z.string().optional().describe("Engine name of the node, as read_graph reports it (read_pcg_node_settings, remove_pcg_node, set_pcg_node_settings, set_static_mesh_spawner_meshes). Only this node (default: every node in the graph) (unwrap_pcg_instance_nodes)"),
   nodes: z.array(z.record(z.unknown())).optional().describe("[{name, class, posX?, posY?, settings?}]"),
   nodeType: z.string().optional().describe("PCG settings class of the node to add"),
   onConflict: z.string().optional().describe("When the label exists: skip (default, report it) | error (add_pcg_volume). When the graph exists: skip (default, report it) | error (create_pcg_graph)"),
   packagePath: z.string().optional().describe("Folder for the new graph (default /Game/PCG)"),
-  path: z.string().optional().describe("Alias for assetPath"),
+  path: z.string().optional().describe("Alias for assetPath (add_pcg_node, connect_pcg_nodes, disconnect_pcg_nodes, export_pcg_graph, import_pcg_graph, read_pcg_graph, read_pcg_node_settings, remove_pcg_node, set_pcg_node_settings, set_static_mesh_spawner_meshes, unwrap_pcg_instance_nodes). Alias for packagePath (create_pcg_graph)"),
   posX: z.number().optional().describe("Graph editor X position for the new node"),
   posY: z.number().optional().describe("Graph editor Y position for the new node"),
   propertyName: z.string().optional().describe("One property to write instead of a settings object"),
@@ -680,6 +715,7 @@ export const schema: Record<string, z.ZodType> = {
   targetNodeName: z.string().optional().describe("Alias for targetNode"),
   targetPin: z.string().optional().describe("Input pin label. connect_nodes defaults to the first input pin, disconnect_nodes to any"),
   targetPinLabel: z.string().optional().describe("Alias for targetPin"),
+  transform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale (default 1)"), scale3D: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Same as scale") }).optional().describe("Actor transform; scale multiplies the extent"),
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */

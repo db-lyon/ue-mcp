@@ -1774,13 +1774,45 @@
           "name": "location",
           "type": "vec3",
           "required": false,
-          "description": "World location {x,y,z} (default origin)"
+          "description": "World location {x,y,z} (default origin); wins over transform.location"
+        },
+        {
+          "name": "transform",
+          "type": "object",
+          "required": false,
+          "description": "Actor transform; scale multiplies the extent",
+          "fields": [
+            {
+              "name": "location",
+              "type": "vec3",
+              "required": false,
+              "description": "World location"
+            },
+            {
+              "name": "rotation",
+              "type": "rotator",
+              "required": false,
+              "description": "World rotation"
+            },
+            {
+              "name": "scale",
+              "type": "vec3",
+              "required": false,
+              "description": "Actor scale (default 1)"
+            },
+            {
+              "name": "scale3D",
+              "type": "vec3",
+              "required": false,
+              "description": "Same as scale"
+            }
+          ]
         },
         {
           "name": "extent",
           "type": "vec3",
           "required": false,
-          "description": "Half-size of the volume box {x,y,z} (default 500 on each axis)"
+          "description": "Half-size of the volume box {x,y,z} before scale (default 500 on each axis)"
         },
         {
           "name": "label",
@@ -10610,7 +10642,10 @@
           "name": "packagePath",
           "type": "string",
           "required": false,
-          "description": "Folder for the new graph (default /Game/PCG)"
+          "description": "Folder for the new graph (default /Game/PCG)",
+          "aliases": [
+            "path"
+          ]
         },
         {
           "name": "onConflict",
