@@ -742,6 +742,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectInstance(const TSharedPtr<FJs
 	const void* Container = Object;
 	UObject* Owner = Object;
 	FString ScopeType;
+	MCPJsonProperty::FResolvedPathInfo PathInfo;
 
 	if (!PropertyPath.IsEmpty())
 	{
@@ -749,7 +750,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectInstance(const TSharedPtr<FJs
 		void* ScopeAddr = nullptr;
 		UObject* ScopeOwner = nullptr;
 		FString ResolveErr;
-		if (!MCPJsonProperty::ResolveDottedPath(Object, PropertyPath, ScopeProp, ScopeAddr, ScopeOwner, ResolveErr))
+		if (!MCPJsonProperty::ResolveDottedPath(Object, PropertyPath, ScopeProp, ScopeAddr, ScopeOwner, ResolveErr, &PathInfo))
 		{
 			return MCPError(FString::Printf(
 				TEXT("Cannot resolve 'propertyPath' %s on %s: %s. Omit propertyPath to list the object's own ")
@@ -826,6 +827,9 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectInstance(const TSharedPtr<FJs
 	if (!PropertyPath.IsEmpty())
 	{
 		Result->SetStringField(TEXT("propertyPath"), PropertyPath);
+		// Rows keep the caller's keyed prefix in their 'path', so the next write
+		// selects by the same key; this is the index that key matched.
+		if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
 		SchemaAddIfNonEmpty(Result, TEXT("scopeType"), ScopeType);
 		// When propertyPath followed an object reference, the rows belong to
 		// THAT object. Its path is here so a caller can aim the next call

@@ -1521,7 +1521,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	void* ValueAddr = nullptr;
 	UObject* LeafOwner = nullptr;
 	FString ResolveError;
-	if (!MCPJsonProperty::ResolveDottedPath(Target, ResolvedName, Prop, ValueAddr, LeafOwner, ResolveError))
+	MCPJsonProperty::FResolvedPathInfo PathInfo;
+	if (!MCPJsonProperty::ResolveDottedPath(Target, ResolvedName, Prop, ValueAddr, LeafOwner, ResolveError, &PathInfo))
 	{
 		// Guessing a variable name is the main failure mode, exactly as it is
 		// for a function name, so answer with what the class does have.
@@ -1631,6 +1632,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("objectClass"), Target->GetClass()->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("resolvedPropertyName"), ResolvedName);
+	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("leafPropertyName"), Prop->GetName());
 	Result->SetStringField(TEXT("type"), Prop->GetCPPType());
 	Result->SetField(TEXT("previousValue"), PreviousStructured);
@@ -1652,10 +1654,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		// Self-inverse: the same handler with the value this call replaced, in
 		// the structured form the setter takes back. Addressed by the resolved
 		// object path rather than by target/playerIndex, so the undo cannot land
-		// on a different instance.
+		// on a different instance, and a keyed path by the index it resolved
+		// to, since this write may have changed the key.
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("objectPath"), Description);
-		Payload->SetStringField(TEXT("propertyName"), ResolvedName);
+		Payload->SetStringField(TEXT("propertyName"), PathInfo.bUsedKeySelector ? PathInfo.IndexedPath : ResolvedName);
 		Payload->SetField(TEXT("value"), PreviousStructured);
 		Payload->SetBoolField(TEXT("postEditChange"), bPostEditChange);
 		MCPSetRollback(Result, TEXT("set_object_property"), Payload);

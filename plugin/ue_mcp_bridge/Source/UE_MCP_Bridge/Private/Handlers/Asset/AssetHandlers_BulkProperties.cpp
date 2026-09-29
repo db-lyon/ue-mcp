@@ -42,6 +42,9 @@ namespace
 	struct FPreparedPropertyWrite
 	{
 		FString PropertyName;
+		/** PropertyName with every [Field=Value] selector replaced by the index
+		 *  preflight matched. Empty when the path selected nothing by key. */
+		FString IndexedPath;
 		TSharedPtr<FJsonValue> RequestedValue;
 		TSharedPtr<FJsonValue> PreviousValue;
 		FString PreviousText;
@@ -50,6 +53,12 @@ namespace
 		FString Error;
 		bool bApplied = false;
 		bool bChanged = false;
+
+		/** The path the apply pass and the rollback address. Keys are matched
+		 *  once, in preflight, against the asset as it was before the batch:
+		 *  an earlier property in the same item may rewrite the very key a
+		 *  later one selects by. */
+		const FString& WritePath() const { return IndexedPath.IsEmpty() ? PropertyName : IndexedPath; }
 	};
 
 	struct FPreparedAssetWrite
@@ -71,6 +80,7 @@ namespace
 	{
 		TSharedPtr<FJsonObject> Readback = MakeShared<FJsonObject>();
 		Readback->SetStringField(TEXT("propertyName"), Prepared.PropertyName);
+		if (!Prepared.IndexedPath.IsEmpty()) Readback->SetStringField(TEXT("indexedPath"), Prepared.IndexedPath);
 		Readback->SetBoolField(TEXT("ok"), Prepared.Error.IsEmpty());
 		if (!Prepared.Error.IsEmpty())
 		{
@@ -236,13 +246,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 				void* ValueAddress = nullptr;
 				UObject* LeafOwner = nullptr;
 				FString ResolveError;
-				if (!MCPJsonProperty::ResolveDottedPath(PreparedAsset.Asset, Pair.Key, Property, ValueAddress, LeafOwner, ResolveError))
+				MCPJsonProperty::FResolvedPathInfo PathInfo;
+				if (!MCPJsonProperty::ResolveDottedPath(PreparedAsset.Asset, Pair.Key, Property, ValueAddress, LeafOwner, ResolveError, &PathInfo))
 				{
 					PreparedProperty.Error = FString::Printf(
 						TEXT("Preflight failed for '%s.%s': %s"), *AssetPath, *Pair.Key, *ResolveError);
 				}
 				else
 				{
+					if (PathInfo.bUsedKeySelector) PreparedProperty.IndexedPath = PathInfo.IndexedPath;
 					// Dry-fit the value against a scratch copy of the property so a
 					// bad payload is caught without touching the live asset.
 					void* TemporaryValue = FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment());
@@ -394,7 +406,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 			void* ValueAddress = nullptr;
 			UObject* LeafOwner = nullptr;
 			FString ResolveError;
-			if (!MCPJsonProperty::ResolveDottedPath(PreparedAsset.Asset, PreparedProperty.PropertyName, Property, ValueAddress, LeafOwner, ResolveError))
+			if (!MCPJsonProperty::ResolveDottedPath(PreparedAsset.Asset, PreparedProperty.WritePath(), Property, ValueAddress, LeafOwner, ResolveError))
 			{
 				PreparedProperty.Error = FString::Printf(TEXT("Apply failed after preflight for '%s.%s': %s"),
 					*PreparedAsset.AssetPath, *PreparedProperty.PropertyName, *ResolveError);
@@ -426,7 +438,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 					if (PreparedProperty.bChanged) ++UpdatedPropertyCount;
 					// Only properties that actually landed belong in the rollback
 					// payload; replaying a value we never wrote would corrupt state.
-					RollbackProperties->SetField(PreparedProperty.PropertyName, PreparedProperty.PreviousValue);
+					RollbackProperties->SetField(PreparedProperty.WritePath(), PreparedProperty.PreviousValue);
 					PropertyResults.Add(MakeShared<FJsonValueObject>(MakePropertyReadback(
 						PreparedProperty, FMCPJsonSerializer::SerializeValue(ValueAddress, Property), ActualText)));
 					continue;

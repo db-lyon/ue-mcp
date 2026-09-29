@@ -1458,10 +1458,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	void* PropertyValue = nullptr;
 	UObject* LeafOwner = nullptr;
 	FString ResolvePropertyErr;
-	if (!MCPJsonProperty::ResolveDottedPath(Asset, PropertyName, Property, PropertyValue, LeafOwner, ResolvePropertyErr))
+	MCPJsonProperty::FResolvedPathInfo PathInfo;
+	if (!MCPJsonProperty::ResolveDottedPath(Asset, PropertyName, Property, PropertyValue, LeafOwner, ResolvePropertyErr, &PathInfo))
 	{
 		return MCPError(ResolvePropertyErr);
 	}
+	// A keyed path is replayed by the index it resolved to: the write may
+	// change the key itself, and a flow rolls back in reverse order, so the
+	// array is back to the shape it had right after this write when the
+	// inverse runs.
+	const FString RollbackPropertyName = PathInfo.bUsedKeySelector ? PathInfo.IndexedPath : PropertyName;
 
 	// A skinned mesh's mesh pointer goes through the engine setter (#1099).
 	if (MCPSkinnedAsset::IsMeshProperty(Property))
@@ -1488,6 +1494,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 		MeshResult->SetStringField(TEXT("resolvedPath"), Asset->GetPathName());
 		MeshResult->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
+		if (PathInfo.bUsedKeySelector) MeshResult->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
 		MeshResult->SetStringField(TEXT("type"), Property->GetCPPType());
 		if (bSaveMesh) EditorSetPropertyPersist(Asset, AssetPath, MeshResult);
 		else MeshResult->SetBoolField(TEXT("saved"), false);
@@ -1497,7 +1504,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("objectPath"), AssetPath);
-		Payload->SetStringField(TEXT("propertyName"), PropertyName);
+		Payload->SetStringField(TEXT("propertyName"), RollbackPropertyName);
 		Payload->SetStringField(TEXT("value"), PreviousMesh.IsEmpty() ? FString(TEXT("None")) : PreviousMesh);
 		Payload->SetBoolField(TEXT("save"), bSaveMesh);
 		MCPSetRollback(MeshResult, TEXT("set_property"), Payload);
@@ -1597,6 +1604,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("resolvedPath"), Asset->GetPathName());
 	Result->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("type"), Property->GetCPPType());
 	// previousValue and value are BOTH structured, and set_object_property
 	// reports the same pair in the same form. A caller that reads them off one
@@ -1618,12 +1626,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	{
 		// Self-inverse: the same handler with the value this call replaced, in
 		// the structured form the setter takes back. Addressed with the path the
-		// caller used, which has just been proved to resolve to this object
-		// under these same rules, and with the same save flag so the undo
-		// persists exactly as far as the write did.
+		// caller used (its indexed form when it selected by key), which has just
+		// been proved to resolve to this object under these same rules, and with
+		// the same save flag so the undo persists exactly as far as the write did.
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("objectPath"), AssetPath);
-		Payload->SetStringField(TEXT("propertyName"), PropertyName);
+		Payload->SetStringField(TEXT("propertyName"), RollbackPropertyName);
 		Payload->SetField(TEXT("value"), PreviousStructured);
 		Payload->SetBoolField(TEXT("save"), bSave);
 		MCPSetRollback(Result, TEXT("set_property"), Payload);
@@ -1695,7 +1703,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetProperty(const TSharedPtr<FJsonObject
 	void* ValuePtr = nullptr;
 	UObject* LeafOwner = nullptr;
 	FString ResolvePropertyErr;
-	if (!MCPJsonProperty::ResolveDottedPath(Object, PropertyName, Property, ValuePtr, LeafOwner, ResolvePropertyErr))
+	MCPJsonProperty::FResolvedPathInfo PathInfo;
+	if (!MCPJsonProperty::ResolveDottedPath(Object, PropertyName, Property, ValuePtr, LeafOwner, ResolvePropertyErr, &PathInfo))
 	{
 		return MCPError(ResolvePropertyErr);
 	}
@@ -1706,6 +1715,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetProperty(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 	Result->SetStringField(TEXT("className"), Object->GetClass()->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("leafPropertyName"), Property->GetName());
 	Result->SetStringField(TEXT("type"), Property->GetCPPType());
 	Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, Property));
