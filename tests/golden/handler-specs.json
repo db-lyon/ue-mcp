@@ -23430,6 +23430,13 @@
           "description": "Case-insensitive substring filter on row names"
         },
         {
+          "name": "columns",
+          "type": "array",
+          "required": false,
+          "description": "Row-struct fields to return; each row keeps Name and these fields, and an unknown name is refused with the valid list",
+          "items": "string"
+        },
+        {
           "name": "outputPath",
           "type": "string",
           "required": false,

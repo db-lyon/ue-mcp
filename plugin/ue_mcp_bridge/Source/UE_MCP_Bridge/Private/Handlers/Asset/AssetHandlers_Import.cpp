@@ -27,6 +27,7 @@
 #include "Curves/SimpleCurve.h"
 #include "Engine/CurveTable.h"
 #include "Engine/DataTable.h"
+#include "DataTableUtils.h"
 #include "Engine/Texture2D.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
@@ -2178,6 +2179,17 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 	// rows to a file under the shared dump convention (HandlerUtils.h) and
 	// the response carries only where they went and how much was written.
 	const FString OutputPath = OptionalString(Params, TEXT("outputPath"));
+	// One field across hundreds of rows is a common ask, and every row of a
+	// wide table inline overflows the response even after rowFilter. columns
+	// narrows each row to its Name and the named fields. Read here so every
+	// parameter is read before anything can fail (#1057); the names are
+	// checked against the row struct once the table has loaded.
+	const bool bHasColumns = HasParam(Params, TEXT("columns"));
+	const TArray<TSharedPtr<FJsonValue>>* ColumnsJson = nullptr;
+	if (bHasColumns && !(TryGetArrayParam(Params, TEXT("columns"), ColumnsJson) && ColumnsJson))
+	{
+		return MCPError(TEXT("'columns' must be an array of row-struct field names"));
+	}
 
 	FString AssetPath;
 	UDataTable* DataTable = nullptr;
@@ -2190,6 +2202,39 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 		return MCPError(TEXT("DataTable has no row struct"));
 	}
 
+	// A column is matched the way the table importer matches a header, by the
+	// field's internal or display name, and the key kept is the one the JSON
+	// export writes, so a user-defined struct's friendly names work as typed.
+	TArray<FString> ColumnKeys;
+	if (bHasColumns)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *ColumnsJson)
+		{
+			FString Column;
+			if (!Value.IsValid() || !Value->TryGetString(Column) || Column.IsEmpty())
+			{
+				return MCPError(TEXT("'columns' must be an array of non-empty field names"));
+			}
+			const FProperty* Match = nullptr;
+			for (TFieldIterator<FProperty> It(RowStruct); It && !Match; ++It)
+			{
+				if (DataTableUtils::GetPropertyImportNames(*It).Contains(Column)) Match = *It;
+			}
+			if (!Match)
+			{
+				TArray<FString> ExportNames;
+				for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+				{
+					ExportNames.Add(DataTableUtils::GetPropertyExportName(*It));
+				}
+				return MCPError(FString::Printf(
+					TEXT("Unknown column '%s' in 'columns'. Row struct %s has these fields: %s"),
+					*Column, *RowStruct->GetName(), *FString::Join(ExportNames, TEXT(", "))));
+			}
+			ColumnKeys.AddUnique(DataTableUtils::GetPropertyExportName(Match));
+		}
+	}
+
 	// Export the table as JSON for reliable serialization, then parse it
 	FString JsonString = DataTable->GetTableAsJSON(EDataTableExportFlags::UseJsonObjectsForStructs);
 
@@ -2198,6 +2243,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 	TArray<TSharedPtr<FJsonValue>> ParsedRows;
 	TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(JsonString);
 	const bool bParsed = FJsonSerializer::Deserialize(JsonReader, ParsedRows);
+	if (!bParsed && bHasColumns)
+	{
+		// The raw-export fallback below has no rows to narrow.
+		return MCPError(
+			TEXT("The DataTable's JSON export could not be parsed, so 'columns' cannot be applied. ")
+			TEXT("Call read_datatable without columns to get the raw export as rawJson."));
+	}
 	if (bParsed)
 	{
 		// Apply row filter if specified
@@ -2218,6 +2270,30 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 				}
 			}
 			ParsedRows = MoveTemp(FilteredRows);
+		}
+
+		// Project after the filter, so only the rows that are going out are
+		// rebuilt. Name stays first; the fields follow in the order asked for.
+		if (bHasColumns)
+		{
+			for (TSharedPtr<FJsonValue>& RowValue : ParsedRows)
+			{
+				if (!RowValue.IsValid() || RowValue->Type != EJson::Object) continue;
+				const TSharedPtr<FJsonObject>& RowObj = RowValue->AsObject();
+				TSharedPtr<FJsonObject> Projected = MakeShared<FJsonObject>();
+				if (TSharedPtr<FJsonValue> Name = RowObj->TryGetField(TEXT("Name")))
+				{
+					Projected->SetField(TEXT("Name"), Name);
+				}
+				for (const FString& Key : ColumnKeys)
+				{
+					if (TSharedPtr<FJsonValue> Cell = RowObj->TryGetField(Key))
+					{
+						Projected->SetField(Key, Cell);
+					}
+				}
+				RowValue = MakeShared<FJsonValueObject>(Projected);
+			}
 		}
 	}
 	const bool bFiltered = bParsed && !RowFilter.IsEmpty();
@@ -2256,6 +2332,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 		{
 			Result->SetNumberField(TEXT("filteredCount"), ParsedRows.Num());
 		}
+		if (bHasColumns)
+		{
+			Result->SetArrayField(TEXT("columns"), MCPStringListToJson(ColumnKeys));
+		}
 		Result->SetStringField(TEXT("outputPath"), ResolvedPath);
 		Result->SetNumberField(TEXT("rowCount"), ParsedRows.Num());
 		Result->SetNumberField(TEXT("bytes"), static_cast<double>(IFileManager::Get().FileSize(*ResolvedPath)));
@@ -2281,6 +2361,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowStruct"), RowStruct->GetName());
 	Result->SetNumberField(TEXT("totalRowCount"), DataTable->GetRowMap().Num());
+	if (bHasColumns)
+	{
+		Result->SetArrayField(TEXT("columns"), MCPStringListToJson(ColumnKeys));
+	}
 
 	// Also list the row names
 	TArray<TSharedPtr<FJsonValue>> RowNames;

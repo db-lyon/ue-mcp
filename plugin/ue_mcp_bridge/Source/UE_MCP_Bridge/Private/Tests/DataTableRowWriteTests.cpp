@@ -1,6 +1,7 @@
 // Coverage for the DataTable row write path and the JSON property setter it
 // runs on, for the three data-loss bugs they carried (#928, #929, #935), and
-// for read_datatable's outputPath form, which writes the rows to a file.
+// for read_datatable's outputPath form, which writes the rows to a file, and
+// its columns form, which narrows each row to the fields that were asked for.
 //
 // run_automation_tests dispatches every EditorContext/EngineFilter test in the
 // process when it is called without a filter, against whatever project the
@@ -113,13 +114,16 @@ bool ResponseSucceeded(const TSharedPtr<FJsonValue>& Response, FString& OutError
 }
 
 /** Params for asset(read_datatable) against a transient table. An empty
- *  filter or path leaves that param out, which is the inline, unfiltered read. */
-TSharedPtr<FJsonObject> MakeDataTableReadParams(const UDataTable* Table, const FString& RowFilter, const FString& OutputPath)
+ *  filter or path leaves that param out, which is the inline, unfiltered read,
+ *  and a null Columns leaves the rows whole. */
+TSharedPtr<FJsonObject> MakeDataTableReadParams(
+	const UDataTable* Table, const FString& RowFilter, const FString& OutputPath, const TArray<FString>* Columns = nullptr)
 {
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	Params->SetStringField(TEXT("assetPath"), Table->GetPathName());
 	if (!RowFilter.IsEmpty()) Params->SetStringField(TEXT("rowFilter"), RowFilter);
 	if (!OutputPath.IsEmpty()) Params->SetStringField(TEXT("outputPath"), OutputPath);
+	if (Columns) Params->SetArrayField(TEXT("columns"), MCPStringListToJson(*Columns));
 	return Params;
 }
 
@@ -1207,6 +1211,169 @@ bool FDataTableEmptyReferenceSpellingsTest::RunTest(const FString& Parameters)
 		Row = FindReferenceRow(Table, EmptyRefRowName);
 		if (!TestNotNull(TEXT("the row survived the refused write"), Row)) return false;
 		TestEqual(TEXT("the refused write left the plain value alone"), Row->Count, 3);
+	}
+	return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// read_datatable with columns returns each row as its Name plus the named
+// fields, composes with rowFilter and outputPath, and refuses a name the row
+// struct does not have with the list of the names it does. Without columns
+// the rows come back whole, as they always did.
+// ─────────────────────────────────────────────────────────────────────────────
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDataTableReadColumnsTest,
+	"UE.MCP.Asset.DataTable.ReadColumnsProjectsRows",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDataTableReadColumnsTest::RunTest(const FString& Parameters)
+{
+	// The reference row struct: five fields beside the row name, so a
+	// projection to one of them has something to leave out.
+	const FName TableName(*FString::Printf(TEXT("DT_UEMCP_Columns_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	UDataTable* Table = NewObject<UDataTable>(GetTransientPackage(), TableName);
+	if (!TestNotNull(TEXT("transient DataTable was created"), Table)) return false;
+	const FTransientDataTableScope TableScope(Table);
+	Table->RowStruct = FUEMCPDataTableReferenceRow::StaticStruct();
+	{
+		FUEMCPDataTableReferenceRow Row;
+		Row.Count = 1;
+		Table->AddRow(FName(TEXT("AlphaOne")), Row);
+		Row.Count = 2;
+		Table->AddRow(FName(TEXT("AlphaTwo")), Row);
+		Row.Count = 3;
+		Table->AddRow(FName(TEXT("Beta")), Row);
+	}
+
+	FMCPHandlerRegistry Registry;
+	FAssetHandlers::RegisterHandlers(Registry);
+	if (!TestTrue(
+			TEXT("the handler resolves the transient table by path"),
+			MCPLoadAssetObject(Table->GetPathName()) == Table))
+	{
+		return false;
+	}
+
+	const FString DumpFolder = FString::Printf(
+		TEXT("UE_MCP/AutomationTests/ReadDataTableColumns_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	const FString DumpDirectory = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), DumpFolder));
+	ON_SCOPE_EXIT
+	{
+		IFileManager::Get().DeleteDirectory(*DumpDirectory, false, true);
+	};
+
+	auto Read = [&Registry, Table](const FString& RowFilter, const FString& OutputPath, const TArray<FString>* Columns)
+	{
+		return Registry.ExecuteHandler(TEXT("read_datatable"), MakeDataTableReadParams(Table, RowFilter, OutputPath, Columns));
+	};
+
+	/** Count keyed by Name, so the assertions do not depend on row order. */
+	auto CountsByName = [](const TArray<TSharedPtr<FJsonValue>>& Rows)
+	{
+		TMap<FString, int32> Out;
+		for (const TSharedPtr<FJsonValue>& RowValue : Rows)
+		{
+			const TSharedPtr<FJsonObject> Row = RowValue->AsObject();
+			FString Name;
+			int32 Count = -1;
+			Row->TryGetStringField(TEXT("Name"), Name);
+			Row->TryGetNumberField(TEXT("Count"), Count);
+			Out.Add(Name, Count);
+		}
+		return Out;
+	};
+
+	// ── Without columns every field of every row comes back, and nothing is
+	// echoed that was not asked for.
+	{
+		FString Error;
+		const TSharedPtr<FJsonValue> Response = Read(FString(), FString(), nullptr);
+		if (!TestTrue(FString::Printf(TEXT("the plain read succeeded (%s)"), *Error), ResponseSucceeded(Response, Error))) return false;
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!TestTrue(TEXT("the plain read returns rows"), Response->AsObject()->TryGetArrayField(TEXT("rows"), Rows))) return false;
+		TestEqual(TEXT("the plain read returns every row"), Rows->Num(), 3);
+		const TSharedPtr<FJsonObject> FirstRow = (*Rows)[0]->AsObject();
+		TestTrue(TEXT("a plain row carries the fields a projection would drop"),
+			FirstRow->HasField(TEXT("Name")) && FirstRow->HasField(TEXT("Icon")) && FirstRow->HasField(TEXT("Count")));
+		TestFalse(TEXT("no columns are echoed when none were asked for"), Response->AsObject()->HasField(TEXT("columns")));
+	}
+
+	// ── columns keeps Name and the named field on the rows the filter kept,
+	// and the rest of the response is what the inline read always carried.
+	const TArray<FString> CountOnly = { TEXT("Count") };
+	TArray<TSharedPtr<FJsonValue>> InlineRows;
+	{
+		FString Error;
+		const TSharedPtr<FJsonValue> Response = Read(TEXT("alpha"), FString(), &CountOnly);
+		if (!TestTrue(FString::Printf(TEXT("the projected read succeeded (%s)"), *Error), ResponseSucceeded(Response, Error))) return false;
+		const TSharedPtr<FJsonObject> Obj = Response->AsObject();
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!TestTrue(TEXT("the projected read returns rows"), Obj->TryGetArrayField(TEXT("rows"), Rows))) return false;
+		TestEqual(TEXT("rowFilter still applies under columns"), Rows->Num(), 2);
+		for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+		{
+			const TSharedPtr<FJsonObject> Row = RowValue->AsObject();
+			TestEqual(TEXT("a projected row holds exactly Name and the named field"), Row->Values.Num(), 2);
+			TestTrue(TEXT("a projected row keeps its Name"), Row->HasField(TEXT("Name")));
+			TestTrue(TEXT("a projected row keeps the named field"), Row->HasField(TEXT("Count")));
+			TestFalse(TEXT("a field that was not named is gone"), Row->HasField(TEXT("Icon")));
+		}
+		const TMap<FString, int32> Counts = CountsByName(*Rows);
+		TestEqual(TEXT("AlphaOne keeps its value through the projection"), Counts.FindRef(TEXT("AlphaOne")), 1);
+		TestEqual(TEXT("AlphaTwo keeps its value through the projection"), Counts.FindRef(TEXT("AlphaTwo")), 2);
+
+		const TArray<TSharedPtr<FJsonValue>>* Echoed = nullptr;
+		if (TestTrue(TEXT("the response echoes the resolved columns"), Obj->TryGetArrayField(TEXT("columns"), Echoed)))
+		{
+			TestEqual(TEXT("one column was resolved"), Echoed->Num(), 1);
+			TestEqual(TEXT("under the key the export writes"), (*Echoed)[0]->AsString(), FString(TEXT("Count")));
+		}
+		int32 FilteredCount = -1;
+		Obj->TryGetNumberField(TEXT("filteredCount"), FilteredCount);
+		TestEqual(TEXT("filteredCount still counts the rows after the filter"), FilteredCount, 2);
+		int32 TotalRowCount = -1;
+		Obj->TryGetNumberField(TEXT("totalRowCount"), TotalRowCount);
+		TestEqual(TEXT("totalRowCount still counts the whole table"), TotalRowCount, 3);
+		TestTrue(TEXT("the inline read still lists rowNames"), Obj->HasField(TEXT("rowNames")));
+		InlineRows = *Rows;
+	}
+
+	// ── With outputPath the file holds the projected rows, not the whole ones.
+	{
+		const FString Requested = DumpFolder / TEXT("columns.json");
+		FString Error;
+		const TSharedPtr<FJsonValue> Response = Read(TEXT("alpha"), Requested, &CountOnly);
+		if (!TestTrue(FString::Printf(TEXT("the projected read to a file succeeded (%s)"), *Error), ResponseSucceeded(Response, Error))) return false;
+		const TSharedPtr<FJsonObject> Obj = Response->AsObject();
+		TestFalse(TEXT("the rows do not come back inline"), Obj->HasField(TEXT("rows")));
+		TestTrue(TEXT("the file response echoes the columns too"), Obj->HasField(TEXT("columns")));
+
+		FString OutputPath;
+		Obj->TryGetStringField(TEXT("outputPath"), OutputPath);
+		FString Text;
+		if (TestTrue(FString::Printf(TEXT("the file can be read back (%s)"), *OutputPath), FFileHelper::LoadFileToString(Text, *OutputPath)))
+		{
+			TArray<TSharedPtr<FJsonValue>> FileRows;
+			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Text);
+			if (TestTrue(TEXT("the file holds a JSON array"), FJsonSerializer::Deserialize(Reader, FileRows)))
+			{
+				TestEqual(
+					TEXT("the file holds the projected rows the inline read returned"),
+					CondenseDataTableRows(FileRows),
+					CondenseDataTableRows(InlineRows));
+			}
+		}
+	}
+
+	// ── A name the row struct does not have is refused, the error names it
+	// and lists the fields that would have been accepted.
+	{
+		const TArray<FString> Unknown = { TEXT("Count"), TEXT("NoSuchColumn") };
+		FString Error;
+		TestFalse(TEXT("an unknown column is refused"), ResponseSucceeded(Read(FString(), FString(), &Unknown), Error));
+		TestTrue(TEXT("the error names the column"), Error.Contains(TEXT("NoSuchColumn")));
+		TestTrue(TEXT("and lists the row struct's fields"), Error.Contains(TEXT("Icon")) && Error.Contains(TEXT("Count")));
 	}
 	return true;
 }

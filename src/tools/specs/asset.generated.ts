@@ -4134,6 +4134,13 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Case-insensitive substring filter on row names"
       },
       {
+        "name": "columns",
+        "type": "array",
+        "required": false,
+        "description": "Row-struct fields to return; each row keeps Name and these fields, and an unknown name is refused with the valid list",
+        "items": "string"
+      },
+      {
         "name": "outputPath",
         "type": "string",
         "required": false,
@@ -5588,7 +5595,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   read_asset_properties: "Params: assetPath (or path), propertyName?, includeValues?, valueFormat?, expandDepth?, expandExternal?, maxExpandedObjects?",
   read_cloth_data: "Params: skeletalMeshPath (or assetPath)",
   read_curvetable: "Params: assetPath (or path), rowFilter?",
-  read_datatable: "Params: assetPath (or path), rowFilter?, outputPath?",
+  read_datatable: "Params: assetPath (or path), rowFilter?, columns?, outputPath?",
   read_import_sources: "Params: assetPath (or path)",
   read_skeletal_mesh_build_settings: "Params: assetPath, lodIndex?, allLods?",
   read_skeletal_mesh_skin_weights: "Params: assetPath, vertexIndices, lodIndex?, profileName?",
@@ -5673,6 +5680,7 @@ export const schema: Record<string, z.ZodType> = {
   clearColor: z.record(z.unknown()).optional().describe("Linear clear color {r, g, b, a} (default transparent)"),
   clearNavCollision: z.boolean().optional().describe("Remove the mesh's NavCollision"),
   clothingAsset: z.string().optional().describe("Clothing asset by name (optional when the mesh has one) (bind_cloth_to_section). Only the clothing asset with this name (set_cloth_config). Refuse unless the section is bound to this clothing asset (unbind_cloth_from_section)"),
+  columns: z.array(z.string()).optional().describe("Row-struct fields to return; each row keeps Name and these fields, and an unknown name is refused with the valid list"),
   combineMeshes: z.boolean().optional().describe("Combine every mesh in the file into one (default false)"),
   compressionSettings: z.string().optional().describe("Compression setting such as Default, Normalmap, Grayscale, HDR or BC7, applied to the imported texture (import_texture). Default, Normalmap, Grayscale, Displacementmap, VectorDisplacementmap, HDR, EditorIcon, Alpha, DistanceFieldFont, HDR_Compressed or BC7 (set_texture_settings)"),
   configType: z.string().optional().describe("Only configs whose class or key contains this"),
