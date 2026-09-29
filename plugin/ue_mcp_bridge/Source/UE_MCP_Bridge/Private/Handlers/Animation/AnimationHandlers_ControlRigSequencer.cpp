@@ -117,6 +117,9 @@ namespace
 		TArray<int32> IntAfter;
 		TArray<FString> ChangedChannels;
 		FString PropagationMode;
+		// The operation this write belongs to. Operations are keyed one after
+		// another, so the inverse undoes them last-first.
+		int32 OperationIndex = 0;
 	};
 
 	struct FControlRigLivePoseValue
@@ -1144,6 +1147,18 @@ namespace
 		return Result;
 	}
 
+	/** Prepare and key each operation in turn, so operation N is sampled only
+	 *  after operations 0..N-1 have been keyed. Stops at the first failure. */
+	template <typename FPrepareFn, typename FKeyFn>
+	bool ControlRigEditsKeyInCallOrder(int32 OperationCount, FPrepareFn&& Prepare, FKeyFn&& Key)
+	{
+		for (int32 OperationIndex = 0; OperationIndex < OperationCount; ++OperationIndex)
+		{
+			if (!Prepare(OperationIndex) || !Key(OperationIndex)) return false;
+		}
+		return true;
+	}
+
 	bool ControlRigSequencerTransformMatches(
 		const FTransform& Expected,
 		const FTransform& Actual,
@@ -1748,6 +1763,75 @@ bool FUEMCPControlRigLivePosePropagationTest::RunTest(const FString& Parameters)
 	const FTransform UntouchedAfter = UntouchedBefore;
 	TestTrue(TEXT("An unlisted control remains unchanged outside propagation"),
 		UntouchedAfter.Equals(UntouchedBefore, 0.0));
+	return true;
+}
+
+// Two component-space offsets in one apply_control_rig_edits call, on a parent
+// and its child, must land exactly as they do in two separate calls. Every
+// operation used to be sampled before any was keyed, so the child's offset was
+// computed from its pose under the unmoved parent and keyed under the moved
+// one: the child kept its old component-space pose and the parent's edit had
+// no visible effect. The rig here is two controls; keying a component-space
+// transform stores it relative to the parent's current pose, which is what
+// BatchSetControlTransforms does for EControlRigTransformSpace::Global.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUEMCPControlRigBatchedOffsetsComposeTest,
+	"UE.MCP.Animation.ControlRig.BatchedOffsetsComposeLikeSequentialCalls",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUEMCPControlRigBatchedOffsetsComposeTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+	struct FTwoControlRig
+	{
+		FTransform Parent = FTransform(FQuat(FVector::UpVector, FMath::DegreesToRadians(30.0)), FVector(0.0, 20.0, 140.0));
+		FTransform ChildLocal = FTransform(FQuat(FVector::RightVector, FMath::DegreesToRadians(-15.0)), FVector(55.0, 0.0, 0.0));
+		FTransform ChildGlobal() const { return ChildLocal * Parent; }
+	};
+
+	// The reported pair: upper arm roll -10, then hand roll 70, both in component space.
+	FControlRigTransformPatch Rolls[2];
+	Rolls[0].bRotation = true;
+	Rolls[0].Rotation = FRotator(0.0, 0.0, -10.0).Quaternion();
+	Rolls[1].bRotation = true;
+	Rolls[1].Rotation = FRotator(0.0, 0.0, 70.0).Quaternion();
+
+	auto Run = [&Rolls](FTwoControlRig& Rig, int32 FirstOperation, int32 OperationCount)
+	{
+		FTransform Prepared;
+		return ControlRigEditsKeyInCallOrder(OperationCount,
+			[&](int32 Index)
+			{
+				const bool bParent = FirstOperation + Index == 0;
+				Prepared = ControlRigSequencerApplyOffset(
+					bParent ? Rig.Parent : Rig.ChildGlobal(), Rolls[FirstOperation + Index], 1.0, EControlRigTransformSpace::Global);
+				return true;
+			},
+			[&](int32 Index)
+			{
+				if (FirstOperation + Index == 0) Rig.Parent = Prepared;
+				else Rig.ChildLocal = Prepared.GetRelativeTransform(Rig.Parent);
+				return true;
+			});
+	};
+
+	const FTwoControlRig Original;
+	FTwoControlRig Sequential;
+	TestTrue(TEXT("The parent offset keys on its own"), Run(Sequential, 0, 1));
+	TestTrue(TEXT("The child offset keys on its own"), Run(Sequential, 1, 1));
+	FTwoControlRig Batched;
+	TestTrue(TEXT("Both offsets key in one batch"), Run(Batched, 0, 2));
+
+	TestTrue(TEXT("The batched parent matches the sequential parent"),
+		Batched.Parent.Equals(Sequential.Parent, 1e-4));
+	TestTrue(TEXT("The batched child matches the sequential child"),
+		Batched.ChildGlobal().Equals(Sequential.ChildGlobal(), 1e-4));
+
+	// What the stale sample produced: the child's offset from its pre-edit pose.
+	const FTransform StaleChild = ControlRigSequencerApplyOffset(
+		Original.ChildGlobal(), Rolls[1], 1.0, EControlRigTransformSpace::Global);
+	TestTrue(TEXT("The parent's offset reaches the child"),
+		ControlRigSequencerRotationErrorDegrees(Batched.ChildGlobal().GetRotation(), StaleChild.GetRotation()) > 1.0);
 	return true;
 }
 #endif
@@ -3861,13 +3945,40 @@ namespace
 		return !bApplyFailed;
 	}
 
-	/** Key every prepared write in one transaction, verify the contacts, and save.
-	 *  On any failure the transaction is undone and the refusal returned. */
-	TSharedPtr<FJsonValue> ControlRigEditsCommit(FControlRigEditsPlan& Plan)
+	/** One operation, dispatched to its preparation. The validation pass and the
+	 *  commit both come through here, so both prepare an operation the same way. */
+	TSharedPtr<FJsonValue> ControlRigEditsPrepareOperation(
+		FControlRigEditsPlan& Plan, const TArray<TSharedPtr<FJsonValue>>& Operations, int32 OperationIndex)
+	{
+		const TSharedPtr<FJsonObject> Operation = Operations[OperationIndex].IsValid()
+			? Operations[OperationIndex]->AsObject() : nullptr;
+		if (!Operation.IsValid()) return MCPError(FString::Printf(TEXT("operations[%d] must be an object"), OperationIndex));
+		FString Op;
+		if (!Operation->TryGetStringField(TEXT("op"), Op) || Op.IsEmpty())
+			return MCPError(FString::Printf(TEXT("operations[%d].op is required"), OperationIndex));
+		Op.ToLowerInline();
+		return Op == TEXT("propagate_pose")
+			? ControlRigEditsPreparePropagatePose(Plan, Operation, OperationIndex)
+			: ControlRigEditsPrepareControlOperation(Plan, Operation, OperationIndex, Op);
+	}
+
+	/** Key the operations in call order in one transaction, verify the contacts,
+	 *  and save. On any failure the transaction is undone and the refusal returned.
+	 *
+	 *  Each operation is prepared again just before it is keyed. The validation
+	 *  pass sampled every operation against the pose before the call, and a
+	 *  component-space write is relative to its parents: an offset on a child,
+	 *  computed from that stale sample, pinned the child to where it stood before
+	 *  an earlier operation in the same call moved its parent, so the parent's
+	 *  edit had no visible effect. Sampling each operation after the ones before
+	 *  it have landed makes one call compose exactly as the same operations sent
+	 *  as separate calls. Plan.Prepared and Plan.PreparedContacts are replaced
+	 *  with what was actually keyed. */
+	TSharedPtr<FJsonValue> ControlRigEditsCommit(FControlRigEditsPlan& Plan, const TArray<TSharedPtr<FJsonValue>>& Operations)
 	{
 		FControlRigSequenceSession& Session = Plan.Session;
-		// All controls, frames and payloads have been resolved and sampled. Only now
-		// do we create keys in the LevelSequence.
+		TArray<FControlRigPreparedWrite> Keyed;
+		TArray<FControlRigPreparedContactQA> KeyedContacts;
 		bool bApplyFailed = false;
 		FString ApplyError;
 		{
@@ -3875,19 +3986,41 @@ namespace
 			Session.Sequence->Modify();
 			Session.MovieScene->Modify();
 			Session.Section->Modify();
-			for (const FControlRigPreparedWrite& Write : Plan.Prepared)
-			{
-				if (!ControlRigEditsApplyWrite(Session, Write, ApplyError))
+			// ponytail: every operation is sampled twice, once to validate the whole batch and once here; reuse the validation sample for the operations before the first keyed write if sampling cost shows up.
+			TOptional<FControlRigEditsPlan> Step;
+			bApplyFailed = !ControlRigEditsKeyInCallOrder(Operations.Num(),
+				[&](int32 OperationIndex)
 				{
-					bApplyFailed = true;
-					break;
-				}
-			}
-
-			if (!bApplyFailed)
-			{
-				bApplyFailed = !ControlRigEditsVerifyContacts(Session, Plan.PreparedContacts, ApplyError);
-			}
+					Step.Emplace(Session);
+					Step->RangeStart = Plan.RangeStart;
+					Step->RangeEndExclusive = Plan.RangeEndExclusive;
+					const TSharedPtr<FJsonValue> Refusal = ControlRigEditsPrepareOperation(*Step, Operations, OperationIndex);
+					if (!Refusal) return true;
+					const TSharedPtr<FJsonObject> RefusalObject = Refusal->AsObject();
+					if (!RefusalObject.IsValid() || !RefusalObject->TryGetStringField(TEXT("error"), ApplyError))
+					{
+						ApplyError = FString::Printf(
+							TEXT("operations[%d] could not be prepared after the operations before it were keyed"), OperationIndex);
+					}
+					return false;
+				},
+				[&](int32 OperationIndex)
+				{
+					bool bKeyed = true;
+					for (FControlRigPreparedWrite& Write : Step->Prepared)
+					{
+						Write.OperationIndex = OperationIndex;
+						if (!ControlRigEditsApplyWrite(Session, Write, ApplyError))
+						{
+							bKeyed = false;
+							break;
+						}
+					}
+					bKeyed = bKeyed && ControlRigEditsVerifyContacts(Session, Step->PreparedContacts, ApplyError);
+					Keyed.Append(MoveTemp(Step->Prepared));
+					KeyedContacts.Append(MoveTemp(Step->PreparedContacts));
+					return bKeyed;
+				});
 		}
 		if (bApplyFailed)
 		{
@@ -3898,6 +4031,8 @@ namespace
 			}
 			return MCPError(ApplyError);
 		}
+		Plan.Prepared = MoveTemp(Keyed);
+		Plan.PreparedContacts = MoveTemp(KeyedContacts);
 		Session.Sequence->MarkPackageDirty();
 		FString SequenceSaveError;
 		if (!SaveAssetPackageChecked(Session.Sequence, SequenceSaveError))
@@ -4003,14 +4138,26 @@ namespace
 	/** The inverse is this same action replaying the values sampled before the
 	 *  writes landed. Every prepared write, including the FK chain and stabilizer
 	 *  writes a contact_lock adds, carries its own before-state, so the operations
-	 *  cover exactly what was keyed. */
+	 *  cover exactly what was keyed.
+	 *
+	 *  Each operation was sampled after the ones before it landed, so the inverse
+	 *  undoes them last-first: a component-space restore is relative to the parent
+	 *  pose, which must still be the one it was sampled against. The writes within
+	 *  one operation keep their order, since they were sampled from one pose. */
 	void ControlRigEditsAttachInverse(const TSharedPtr<FJsonObject>& Result, const FControlRigEditsPlan& Plan)
 	{
 		const FControlRigSequenceSession& Session = Plan.Session;
 		const TArray<FControlRigPreparedWrite>& Prepared = Plan.Prepared;
 		TArray<TSharedPtr<FJsonValue>> InverseOperations;
+		int32 InsertAt = 0;
+		int32 InsertingOperation = INDEX_NONE;
 		for (const FControlRigPreparedWrite& Write : Prepared)
 		{
+			if (Write.OperationIndex != InsertingOperation)
+			{
+				InsertingOperation = Write.OperationIndex;
+				InsertAt = 0;
+			}
 			const FString ControlString = Write.Control.ToString();
 			if (Write.ValueType == EControlRigPreparedValueType::Transform)
 			{
@@ -4057,7 +4204,7 @@ namespace
 				Operation->SetStringField(TEXT("space"),
 					Write.Space == EControlRigTransformSpace::Global ? TEXT("component") : TEXT("local"));
 				Operation->SetArrayField(TEXT("keys"), Keys);
-				InverseOperations.Add(MakeShared<FJsonValueObject>(Operation));
+				InverseOperations.Insert(MakeShared<FJsonValueObject>(Operation), InsertAt++);
 				continue;
 			}
 
@@ -4101,7 +4248,7 @@ namespace
 				{
 					Operation->SetNumberField(TEXT("value"), DistinctValues[Group]);
 				}
-				InverseOperations.Add(MakeShared<FJsonValueObject>(Operation));
+				InverseOperations.Insert(MakeShared<FJsonValueObject>(Operation), InsertAt++);
 			}
 		}
 
@@ -4160,22 +4307,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 	FControlRigEditsPlan Plan(Session);
 	ControlRigSequencerDisplayRange(Session.MovieScene, Plan.RangeStart, Plan.RangeEndExclusive);
 
+	// Validate the whole batch, including overlapping writes, before any key lands.
 	for (int32 OperationIndex = 0; OperationIndex < Operations->Num(); ++OperationIndex)
 	{
-		const TSharedPtr<FJsonObject> Operation = (*Operations)[OperationIndex].IsValid()
-			? (*Operations)[OperationIndex]->AsObject() : nullptr;
-		if (!Operation.IsValid()) return MCPError(FString::Printf(TEXT("operations[%d] must be an object"), OperationIndex));
-		FString Op;
-		if (!Operation->TryGetStringField(TEXT("op"), Op) || Op.IsEmpty())
-			return MCPError(FString::Printf(TEXT("operations[%d].op is required"), OperationIndex));
-		Op.ToLowerInline();
-		const TSharedPtr<FJsonValue> Refusal = Op == TEXT("propagate_pose")
-			? ControlRigEditsPreparePropagatePose(Plan, Operation, OperationIndex)
-			: ControlRigEditsPrepareControlOperation(Plan, Operation, OperationIndex, Op);
-		if (Refusal) return Refusal;
+		if (auto Refusal = ControlRigEditsPrepareOperation(Plan, *Operations, OperationIndex)) return Refusal;
 	}
 
-	if (auto Refusal = ControlRigEditsCommit(Plan)) return Refusal;
+	if (auto Refusal = ControlRigEditsCommit(Plan, *Operations)) return Refusal;
 
 	TSharedPtr<FJsonObject> Result = ControlRigEditsBuildResult(Plan, Operations->Num());
 	ControlRigEditsAttachInverse(Result, Plan);

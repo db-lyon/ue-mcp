@@ -46,6 +46,8 @@ const SYNONYM_GROUPS: string[][] = [
   ["run", "invoke", "call", "fire", "trigger", "execute"],
   ["preview", "thumbnail", "lit"],
   ["config", "setting", "property", "param", "parameter"],
+  // A struct field is a property to reflection, and asset(set_property) is how one is written.
+  ["field", "property"],
   ["nudge", "clockwise", "counterclockwise", "viewpoint"],
 ];
 

@@ -148,6 +148,32 @@ describe("animation Control Rig edit workflow", () => {
     expect(animationTool.actions.contact_lock).toBeUndefined();
   });
 
+  it("keys batched operations in call order, each sampled after the ones before it landed", () => {
+    const source = readHandlerFile("AnimationHandlers_ControlRigSequencer.cpp");
+    const commit = source.slice(
+      source.indexOf("TSharedPtr<FJsonValue> ControlRigEditsCommit("),
+      source.indexOf("TSharedPtr<FJsonObject> ControlRigEditsBuildResult("),
+    );
+
+    // A child's component-space offset batched after its parent's was sampled
+    // before the parent was keyed, which erased the parent's edit. The commit
+    // re-prepares each operation through the ordering seam the native
+    // UE.MCP.Animation.ControlRig.BatchedOffsetsComposeLikeSequentialCalls test drives.
+    expect(commit).toContain("ControlRigEditsKeyInCallOrder(Operations.Num(),");
+    expect(commit.indexOf("ControlRigEditsPrepareOperation(*Step, Operations, OperationIndex)")).toBeGreaterThan(
+      commit.indexOf("FScopedTransaction"),
+    );
+    expect(commit.indexOf("ControlRigEditsApplyWrite(Session, Write, ApplyError)")).toBeGreaterThan(
+      commit.indexOf("ControlRigEditsPrepareOperation(*Step, Operations, OperationIndex)"),
+    );
+    expect(commit).not.toContain("for (const FControlRigPreparedWrite& Write : Plan.Prepared)");
+    expect(source).toContain('"UE.MCP.Animation.ControlRig.BatchedOffsetsComposeLikeSequentialCalls"');
+
+    // Operations are undone last-first, so each restore meets the parent pose it was sampled under.
+    expect(source).toContain("InverseOperations.Insert(MakeShared<FJsonValueObject>(Operation), InsertAt++)");
+    expect(source).not.toContain("InverseOperations.Add(");
+  });
+
   it("makes partial IK retarget mappings explicit in batch results", () => {
     const source = readHandlerFile("AnimationHandlers_StateMachine.cpp");
 

@@ -81,6 +81,12 @@ describe("searchToolGraph", () => {
       expect(ids("add keyframe sequencer", 5)).toContain("editor.set_sequence_keyframes");
     });
 
+    it("ranks asset.set_property first for an unsaved nested struct field write", () => {
+      // The execute_python gate shows the top five. This intent used to surface
+      // only UserDefinedStruct schema editors, so the agent fell back to Python.
+      expect(ids("set nested struct field in data asset array without saving", 5)[0]).toBe("asset.set_property");
+    });
+
     it("still surfaces distinct Epic actions when they are the best match", () => {
       expect(ids("replace widget with template", 2)).toEqual([
         "widget.epic_replace_widget_with_template",

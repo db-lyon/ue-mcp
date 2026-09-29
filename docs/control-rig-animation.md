@@ -330,6 +330,12 @@ transform first. The rules are:
 - Apply related controls and scalar switches in one
   `apply_control_rig_edits` call. The batch is prevalidated, transacted,
   read back, and undone if application or readback fails.
+- Operations in one call are keyed in order, and each is sampled after the
+  ones before it have landed, so a batch composes exactly like the same
+  operations sent as separate calls. A component-space `offset` on a child
+  after one on its parent adds to the parent's edit. Order matters for the
+  same reason: put the parent first when the child's offset should ride on
+  it. The rollback undoes the operations last-first.
 
 Read the same frames again after applying. Check both local continuity and the
 global/component anatomical targets before baking.

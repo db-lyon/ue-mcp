@@ -1033,7 +1033,19 @@ namespace MCPJsonProperty
 				int32 ClosePos;
 				if (Token.FindChar(TEXT(']'), ClosePos) && ClosePos > BracketPos)
 				{
-					Index = FCString::Atoi(*Token.Mid(BracketPos + 1, ClosePos - BracketPos - 1));
+					// Atoi reads "x", "" and "1.5" as a number, and nothing after
+					// the "]" was read at all, so "Items[x]" and "Items[1][2]"
+					// both used to land on a real element instead of failing.
+					const FString IndexText = Token.Mid(BracketPos + 1, ClosePos - BracketPos - 1).TrimStartAndEnd();
+					const FString Digits = IndexText.StartsWith(TEXT("-")) ? IndexText.Mid(1) : IndexText;
+					bool bWholeNumber = !Digits.IsEmpty();
+					for (const TCHAR Char : Digits) bWholeNumber = bWholeNumber && FChar::IsDigit(Char);
+					if (!bWholeNumber || ClosePos != Token.Len() - 1)
+					{
+						OutError = FString::Printf(TEXT("'%s' in '%s' is not a valid index; use one whole-number index per segment, e.g. Items[3].Field"), *PathToken, *DottedName);
+						return false;
+					}
+					Index = FCString::Atoi(*IndexText);
 					Token = Token.Left(BracketPos);
 				}
 			}

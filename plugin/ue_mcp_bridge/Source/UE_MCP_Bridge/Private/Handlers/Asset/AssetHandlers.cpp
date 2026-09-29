@@ -4617,11 +4617,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 		PrevStructured = FMCPJsonSerializer::SerializeValue(ValuePtr, FinalProp);
 	}
 
+	// Modify() records nothing without an open transaction, so an in-memory
+	// preview written with save=false could not be taken back with Ctrl+Z.
+	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "SetAssetProperty", "Set asset property"));
 	Asset->Modify();
 	if (LeafOwner && LeafOwner != Asset) LeafOwner->Modify();
 	FString SetErr;
 	if (!MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, ValueField, SetErr))
 	{
+		Transaction.Cancel();
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
 	}
 
@@ -4660,6 +4664,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 	{
 		Payload->SetStringField(TEXT("value"), PrevValue);
 	}
+	// The inverse of an unsaved preview must not write the package to disk.
+	Payload->SetBoolField(TEXT("save"), bSave);
 	MCPSetRollback(Result, TEXT("set_asset_property"), Payload);
 	return MCPResult(Result);
 }
@@ -4809,6 +4815,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
 	Payload->SetStringField(TEXT("propertyName"), PropertyName);
 	Payload->SetField(TEXT("value"), PreviousValue);
+	Payload->SetBoolField(TEXT("save"), bSave);
 	MCPSetRollback(Result, TEXT("set_asset_property"), Payload);
 	return MCPResult(Result);
 }
