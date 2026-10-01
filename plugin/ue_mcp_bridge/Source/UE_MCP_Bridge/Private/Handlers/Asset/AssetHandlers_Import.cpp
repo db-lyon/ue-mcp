@@ -3657,7 +3657,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 
 
 // ---------------------------------------------------------------------------
-// export_asset - Export an asset to disk (e.g. Texture2D → PNG, StaticMesh → FBX)
+// export_asset - Export an asset to disk (DataTable → JSON/CSV, Texture2D → PNG, etc.)
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>& Params)
 {
@@ -3686,6 +3686,25 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 		AbsOutputPath = FPaths::Combine(FPaths::ProjectDir(), AbsOutputPath);
 	}
 
+	// CompositeDataTable derives from DataTable; its merged rows use the same
+	// serializers. Neither table class needs a registered UExporter.
+	UDataTable* DataTable = Cast<UDataTable>(Asset);
+	FString TableFormat;
+	if (DataTable)
+	{
+		if (!DataTable->GetRowStruct()) return MCPError(TEXT("DataTable has no row struct"));
+		TableFormat = OptionalString(Params, TEXT("format")).ToLower();
+		if (TableFormat.IsEmpty())
+		{
+			TableFormat = FPaths::GetExtension(AbsOutputPath).Equals(TEXT("csv"), ESearchCase::IgnoreCase)
+				? TEXT("csv") : TEXT("json");
+		}
+		if (TableFormat != TEXT("json") && TableFormat != TEXT("csv"))
+		{
+			return MCPError(TEXT("DataTable export format must be 'json' or 'csv'"));
+		}
+	}
+
 	// Whether the output file was already there decides whether this call
 	// created one or overwrote one. bReplaceIdentical below is true, so
 	// reporting "created" unconditionally would call every overwrite a create.
@@ -3699,19 +3718,34 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 		PlatformFile.CreateDirectoryTree(*OutputDir);
 	}
 
-	// Use UE's AssetExportTask - same as unreal.AssetExportTask in Python
-	UAssetExportTask* ExportTask = NewObject<UAssetExportTask>();
-	ExportTask->Object = Asset;
-	ExportTask->Filename = AbsOutputPath;
-	ExportTask->bAutomated = true;
-	ExportTask->bPrompt = false;
-	ExportTask->bReplaceIdentical = true;
-
-	bool bSuccess = UExporter::RunAssetExportTask(ExportTask);
-
-	if (!bSuccess)
+	if (DataTable)
 	{
-		return MCPError(FString::Printf(TEXT("Export failed for '%s' to '%s'. The asset type may not have a registered exporter."), *AssetPath, *AbsOutputPath));
+		// Match DataTableFunctionLibrary's file exports, including structured
+		// JSON for nested structs and UTF-8 without a BOM.
+		const FString Contents = TableFormat == TEXT("csv")
+			? DataTable->GetTableAsCSV()
+			: DataTable->GetTableAsJSON(EDataTableExportFlags::UseJsonObjectsForStructs);
+		if (!FFileHelper::SaveStringToFile(Contents, *AbsOutputPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to write DataTable export for '%s' to '%s'"), *AssetPath, *AbsOutputPath));
+		}
+	}
+	else
+	{
+		// Use UE's AssetExportTask - same as unreal.AssetExportTask in Python
+		UAssetExportTask* ExportTask = NewObject<UAssetExportTask>();
+		ExportTask->Object = Asset;
+		ExportTask->Filename = AbsOutputPath;
+		ExportTask->bAutomated = true;
+		ExportTask->bPrompt = false;
+		ExportTask->bReplaceIdentical = true;
+
+		bool bSuccess = UExporter::RunAssetExportTask(ExportTask);
+
+		if (!bSuccess)
+		{
+			return MCPError(FString::Printf(TEXT("Export failed for '%s' to '%s'. The asset type may not have a registered exporter."), *AssetPath, *AbsOutputPath));
+		}
 	}
 
 	auto Result = MCPSuccess();
@@ -3720,6 +3754,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("outputPath"), AbsOutputPath);
 	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
+	if (DataTable)
+	{
+		Result->SetStringField(TEXT("format"), TableFormat);
+		Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
+		Result->SetNumberField(TEXT("bytes"), IFileManager::Get().FileSize(*AbsOutputPath));
+	}
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
 		TEXT("An export writes an output artifact rather than changing project state. Nothing in the project moved, and ")

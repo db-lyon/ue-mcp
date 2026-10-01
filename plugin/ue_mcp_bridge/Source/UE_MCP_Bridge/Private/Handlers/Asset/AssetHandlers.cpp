@@ -877,6 +877,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("export_asset"), &ExportAsset, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to export")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("File to write; a relative path resolves against the project directory")),
+		MCPParam::Optional(TEXT("format"), EType::String, TEXT("DataTable/CompositeDataTable: json | csv (default: .json/.csv extension, otherwise json); other assets use their registered exporter")),
 	});
 
 	// StringTable handlers

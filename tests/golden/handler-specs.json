@@ -13034,6 +13034,12 @@
           "type": "string",
           "required": true,
           "description": "File to write; a relative path resolves against the project directory"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "description": "DataTable/CompositeDataTable: json | csv (default: .json/.csv extension, otherwise json); other assets use their registered exporter"
         }
       ]
     },
