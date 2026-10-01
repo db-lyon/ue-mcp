@@ -16,7 +16,7 @@ export interface ToolSearchHit {
 
 type SearchableTool = {
   name: string;
-  actions?: Record<string, { description?: string; bridge?: string }>;
+  actions?: Record<string, { description?: string; bridge?: string; effect?: string }>;
 };
 
 // Task-verb / noun synonyms. When a query contains the KEY (or any value), the
@@ -49,25 +49,58 @@ const SYNONYM_GROUPS: string[][] = [
   ["nudge", "clockwise", "counterclockwise", "viewpoint"],
 ];
 
-// Words too common/short to discriminate. "a"/"an"/"as" as substrings match
-// almost every action name, so they must not contribute to scoring.
+// Words too common to discriminate between actions, so they must not
+// contribute to scoring (or to the adjacent-word pairs built from it).
 const STOPWORDS = new Set([
   "a", "an", "as", "at", "be", "by", "do", "for", "from", "in", "into", "is", "it",
   "its", "of", "on", "or", "the", "to", "up", "via", "with", "and", "that", "this",
   "my", "me", "i", "we", "you", "want", "need", "make", "get", "set", "new", "some",
+  "each", "every", "all", "any", "several",
 ]);
 
-function meaningfulTerms(rawTerms: string[]): string[] {
-  return rawTerms.filter((t) => t.length >= 3 && !STOPWORDS.has(t));
+// A task summary says what the caller wants done to what. An action's effect
+// answers the first half, so a read-only ask demotes the actions that mutate.
+const READ_VERBS = new Set(["read", "get", "list", "inspect", "check", "dump", "show", "find", "query", "which", "what"]);
+const MUTATE_VERBS = new Set([
+  "set", "add", "create", "delete", "remove", "write", "modify", "change", "rename",
+  "spawn", "import", "move", "apply", "assign", "update", "replace", "fix", "make",
+]);
+const MUTATE_PENALTY = 3;
+
+// Descriptions are long free text, so their hits grow with length, not with
+// relevance. Capped, a verbose action cannot outvote a name that says the word.
+const TEXT_HIT_CAP = 3;
+const PHRASE_HIT = 3;
+// A query word naming the tool itself ("material parameter") outweighs incidental description text.
+const TOOL_NAME_HIT = 2;
+const PHRASE_HIT_CAP = 6;
+
+/** Fold plurals together so "properties" meets "property". Both sides use it. */
+function stem(w: string): string {
+  return w.replace(/ies$/, "y").replace(/(ss|x)es$/, "$1").replace(/([^s])s$/, "$1");
 }
 
-function expandTerms(rawTerms: string[]): Set<string> {
-  const out = new Set<string>(rawTerms);
-  for (const term of rawTerms) {
-    for (const group of SYNONYM_GROUPS) {
-      if (group.some((g) => term.includes(g) || g.includes(term))) {
-        for (const g of group) out.add(g);
-      }
+/**
+ * The meaningful words of a text, in order, stemmed. Split on anything that is
+ * not a letter or digit, so punctuation ("class,") and underscores never glue
+ * words together, and match on whole words, never substrings: "movement" is not
+ * "move", "count" is not in "account", "order" is not in "reorder".
+ */
+function wordsOf(text: string): string[] {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !STOPWORDS.has(t)).map(stem);
+}
+
+const pairsOf = (words: string[]): Set<string> =>
+  new Set(words.slice(1).map((w, i) => `${words[i]} ${w}`));
+
+const STEMMED_GROUPS = SYNONYM_GROUPS.map((g) => new Set(g.map(stem)));
+
+/** The query words plus every member of a synonym group one of them belongs to. */
+function expandTerms(words: string[]): Set<string> {
+  const out = new Set<string>(words);
+  for (const w of words) {
+    for (const group of STEMMED_GROUPS) {
+      if (group.has(w)) for (const g of group) out.add(g);
     }
   }
   return out;
@@ -84,9 +117,13 @@ const EPIC_HITS_PER_TOOL = 2;
 export function searchToolGraph(tools: SearchableTool[], query: string, limit = 20): ToolSearchHit[] {
   const q = (query ?? "").toLowerCase().trim();
   if (!q) return [];
-  const rawTerms = meaningfulTerms(q.split(/\s+/).filter(Boolean));
-  if (rawTerms.length === 0) return [];
-  const terms = expandTerms(rawTerms);
+  const queryWords = wordsOf(q);
+  if (queryWords.length === 0) return [];
+  const terms = expandTerms(queryWords);
+  const queryPairs = pairsOf(queryWords);
+  const queryPhrase = ` ${queryWords.join(" ")} `;
+  const verbs = q.split(/[^a-z0-9]+/);
+  const readOnlyAsk = verbs.some((v) => READ_VERBS.has(v)) && !verbs.some((v) => MUTATE_VERBS.has(v));
 
   // The live graph, not the pristine declaration: discovery has to see the
   // Epic and plugin actions the server actually advertises, and with one graph
@@ -97,15 +134,25 @@ export function searchToolGraph(tools: SearchableTool[], query: string, limit = 
     for (const [actionName, spec] of Object.entries(tool.actions ?? {})) {
       if (DEPRIORITIZE.has(actionName)) continue;
       const desc = spec?.description ?? "";
-      const nameL = actionName.toLowerCase();
-      const hay = `${tool.name} ${nameL} ${desc}`.toLowerCase();
-      let score = 0;
+      const nameWords = wordsOf(actionName);
+      const descWords = wordsOf(desc);
+      const nameSet = new Set(nameWords);
+      const toolSet = new Set(wordsOf(tool.name));
+      const textSet = new Set(descWords);
+      let nameHits = 0;
+      let textHits = 0;
       for (const t of terms) {
-        if (!t) continue;
-        if (nameL.includes(t)) score += 3; // action-name hit weighs most
-        else if (hay.includes(t)) score += 1;
+        if (nameSet.has(t)) nameHits += 3; // action-name hit weighs most
+        else if (toolSet.has(t)) nameHits += TOOL_NAME_HIT; // the tool is half the address ("material.list_parameters")
+        else if (textSet.has(t)) textHits += 1;
       }
-      if (hay.includes(q)) score += 3; // whole-query phrase bonus
+      // Two query words side by side in the name or description is a phrase
+      // ("movement component"), far stronger than the two words apart.
+      let phraseHits = 0;
+      for (const p of [...pairsOf(nameWords), ...pairsOf(descWords)]) if (queryPairs.has(p)) phraseHits += PHRASE_HIT;
+      let score = nameHits + Math.min(textHits, TEXT_HIT_CAP) + Math.min(phraseHits, PHRASE_HIT_CAP);
+      if (` ${[...wordsOf(tool.name), ...nameWords, ...descWords].join(" ")} `.includes(queryPhrase)) score += 3; // whole-query phrase bonus
+      if (readOnlyAsk && spec?.effect === "mutate") score -= MUTATE_PENALTY;
       if (score <= 0) continue;
 
       // Collapse aliases that route to the same bridge handler (e.g.

@@ -69,6 +69,71 @@ describe("searchToolGraph", () => {
     expect(hits.map((hit) => hit.action)).toEqual(["epic_import_a", "epic_import_b", "load_clip", "epic_import_c"]);
   });
 
+  describe("ranking signals", () => {
+    const bp = (actions: Record<string, { description: string; effect: string }>) => [{ name: "blueprint", actions }];
+
+    it("matches whole words, so 'movement' is not 'move' and 'count' is not 'account'", () => {
+      const graph = bp({
+        reorder_enum_values: { description: "Reorder enum values.", effect: "mutate" },
+        manage_account: { description: "Manage the account.", effect: "mutate" },
+      });
+      expect(searchToolGraph(graph, "movement component")).toEqual([]);
+      expect(searchToolGraph(graph, "count")).toEqual([]);
+    });
+
+    it("demotes mutating actions when the ask only reads", () => {
+      const graph = bp({
+        edit_widget_tree: { description: "Edit it.", effect: "mutate" },
+        show_widget_tree: { description: "Show it.", effect: "read" },
+      });
+      expect(searchToolGraph(graph, "check widget tree").map((h) => h.action)).toEqual(["show_widget_tree", "edit_widget_tree"]);
+      // An ask that also writes keeps both on equal footing, in declaration order.
+      expect(searchToolGraph(graph, "check then add widget tree").map((h) => h.action)).toEqual(["edit_widget_tree", "show_widget_tree"]);
+    });
+  });
+
+  describe("gate candidates for reading a component off a Blueprint", () => {
+    // What the execute_python gate lists: the top five with a score of at least 4.
+    const gateCandidates = (summary: string) =>
+      searchToolGraph(ALL_TOOLS, summary, 5).filter((h) => h.score >= 4).map((h) => `${h.tool}.${h.action}`);
+
+    const ask = {
+      exact:
+        "Read each vehicle Blueprint CDO's movement component class, automatic gears, wheel count and NetworkPhysicsSettings component",
+      movement: "read the movement component on a Blueprint",
+      inherited: "read inherited component properties on several Blueprints",
+      structField: "check a component's struct field on a Blueprint class default",
+    };
+
+    it.each(Object.entries(ask))("lists read_component_properties for: %s", (_name, summary) => {
+      expect(gateCandidates(summary)).toContain("blueprint.read_component_properties");
+    });
+
+    it("does not let incidental words pull in enum/struct reorder or mass config", () => {
+      const listed = gateCandidates(ask.exact);
+      expect(listed).not.toContain("blueprint.reorder_enum_values");
+      expect(listed).not.toContain("blueprint.reorder_struct_fields");
+      expect(listed).not.toContain("gameplay.read_mass_entity_config");
+    });
+
+    it("does not surface read_component_properties for unrelated tasks", () => {
+      const reorder = gateCandidates("reorder the values of a user defined enum");
+      expect(reorder).toContain("blueprint.reorder_enum_values");
+      expect(reorder).not.toContain("blueprint.read_component_properties");
+      expect(gateCandidates("capture a screenshot of the viewport")).not.toContain("blueprint.read_component_properties");
+    });
+
+    it("says which components the two readers cover, and that struct fields come back", () => {
+      const actions = ALL_TOOLS.find((t) => t.name === "blueprint")!.actions;
+      for (const name of ["read_component_properties", "get_component_property"]) {
+        const text = actions[name].description!;
+        expect(text, name).toMatch(/inherited/);
+        expect(text, name).toMatch(/native C\+\+ default-subobject/);
+        expect(text, name).toMatch(/struct field/);
+      }
+    });
+  });
+
   describe("against the shipped graph", () => {
     it("keeps first-party actions on the default page for broad queries", () => {
       expect(firstParty("create widget").length).toBeGreaterThanOrEqual(15);
