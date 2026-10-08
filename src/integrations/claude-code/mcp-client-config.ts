@@ -116,6 +116,27 @@ export function detectMcpClients(projectDir: string): McpClient[] {
   return clients;
 }
 
+/** Whether a client's config has a ue-mcp entry, and the version it pins. */
+export function readUeMcpEntry(client: Pick<McpClient, "configPath" | "format">): { configured: boolean; pinned: string | null } {
+  try {
+    const raw = fs.readFileSync(client.configPath, "utf-8");
+    if (client.format === "json") {
+      const entry = JSON.parse(raw)?.mcpServers?.["ue-mcp"];
+      const args: string[] = Array.isArray(entry?.args) ? entry.args.map(String) : [];
+      return { configured: !!entry, pinned: pinnedVersionOf(args) };
+    }
+    const lines = raw.split(/\r?\n/);
+    const start = lines.findIndex((l) => l.trim() === "[mcp_servers.ue-mcp]");
+    if (start < 0) return { configured: false, pinned: null };
+    const end = lines.findIndex((l, i) => i > start && /^\s*\[/.test(l));
+    const table = lines.slice(start, end < 0 ? undefined : end).join("\n");
+    const args = /args\s*=\s*\[([^\]]*)\]/.exec(table)?.[1] ?? "";
+    return { configured: true, pinned: pinnedVersionOf(args.split(",").map((a) => a.trim().replace(/^"|"$/g, ""))) };
+  } catch {
+    return { configured: false, pinned: null };
+  }
+}
+
 export function writeMcpConfig(client: McpClient, uprojectPath: string, launch: ServerLaunch = {}): void {
   if (client.format === "toml") {
     writeCodexMcpConfig(client.configPath, uprojectPath, launch);
