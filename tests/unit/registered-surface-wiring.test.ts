@@ -95,6 +95,15 @@ describe("a method the plugin did not register", () => {
     expect(level.description).not.toMatch(/^get_outliner\(/m);
   }, 60_000);
 
+  it("leaves the flat flow tool flat when the list arrives", async () => {
+    const { tools } = await client.listTools();
+    const flow = tools.find((t) => t.name === "flow")!;
+    const props = flow.inputSchema.properties as Record<string, unknown>;
+    expect(props.flowName).toBeDefined();
+    expect(props.args).toBeUndefined();
+    expect(flow.description).toContain("Actions:\n- run:");
+  }, 60_000);
+
   it("is refused by name without a round trip", async () => {
     const before = seen.length;
     const res = await client.callTool({ name: "level", arguments: { action: "get_outliner", args: { limit: 1 } } });

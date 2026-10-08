@@ -201,6 +201,8 @@ async function main() {
   // single-editor schema is byte-for-byte what it was before sessions existed.
   // Adding or dropping a session re-advertises.
   const registeredTools = new Map<string, ReturnType<typeof server.tool>>();
+  // Tools registered as action + args. The flow tool is registered flat and stays flat.
+  const envelopeTools = new Set<string>();
   const targetable: ToolDef[] = [...advertisedTools];
   let targetingSignature = "";
   const syncEditorTargeting = (): void => {
@@ -228,7 +230,7 @@ async function main() {
   // has published its method list.
   const advertisedHave = () => registeredUnion(sessions.list().map((s) => s.bridge));
   const descriptionFor = (tool: ToolDef): string =>
-    usesArgsEnvelope(tool) && contextStrategy === "full" ? fullSurfaceDescription(tool) : tool.description;
+    envelopeTools.has(tool.name) && contextStrategy === "full" ? fullSurfaceDescription(tool) : tool.description;
   function advertise(tool: ToolDef, have = advertisedHave()): void {
     const registration = registeredTools.get(tool.name);
     if (!registration) return;
@@ -239,7 +241,7 @@ async function main() {
     }
     if (!registration.enabled) registration.enable();
     const description = descriptionFor(view);
-    if (usesArgsEnvelope(tool)) {
+    if (envelopeTools.has(tool.name)) {
       // The SDK rebuilds a stripping object from the raw shape; put the
       // pass-through one back so a flat call still reaches validation.
       registration.update({ description, paramsSchema: envelopeShape(view) });
@@ -269,6 +271,7 @@ async function main() {
     // Advertised as `action` + `args` (#1172); the flat shape stays the
     // validation contract, applied in dispatch instead of by the SDK.
     const envelope = usesArgsEnvelope(tool);
+    if (envelope) envelopeTools.add(tool.name);
     const description = descriptionFor(tool);
     const callback = (callArgs: Record<string, unknown>, extra: CallExtra) =>
       dispatchCategoryCall(deps, tool, envelope, callArgs, extra);
