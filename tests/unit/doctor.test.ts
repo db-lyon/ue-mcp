@@ -142,6 +142,21 @@ describe("parseServerInvocation", () => {
 });
 
 describe("formatDoctor verdict", () => {
+  it("flags a pinned client config that does not match the bridge plugin", () => {
+    const out = stripAnsi(formatDoctor(baseReport({
+      pinnedConfigs: [{ config: "C:/proj/Vale/.mcp.json", version: "0.2.9" }],
+    })));
+    expect(out).not.toContain("Everything aligned");
+    expect(out).toContain("pins ue-mcp@0.2.9 but the bridge plugin is 0.3.0");
+  });
+
+  it("accepts a pin that matches the bridge plugin", () => {
+    const out = stripAnsi(formatDoctor(baseReport({
+      pinnedConfigs: [{ config: "C:/proj/Vale/.mcp.json", version: "0.3.0" }],
+    })));
+    expect(out).not.toContain("pins ue-mcp@");
+  });
+
   it("reports aligned when global, npx, and the target server are all latest", () => {
     const out = stripAnsi(formatDoctor(baseReport({
       runningServers: [{ pid: 1, version: "1.0.78", script: "x", project: "C:/proj/Vale", servesTarget: true }],

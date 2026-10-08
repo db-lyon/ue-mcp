@@ -11,8 +11,32 @@ export type McpClientConfigFormat = "json" | "toml";
  */
 export const UE_MCP_LAUNCH = "npx -y ue-mcp@latest";
 
-export function ueMcpServerArgs(uprojectPath: string): string[] {
-  return ["-y", "ue-mcp@latest", toMcpPath(uprojectPath)];
+/**
+ * How a written entry launches the server. `pin` names an exact version, so the
+ * server and the bridge it was installed with move together; unset means
+ * `@latest`. `command` replaces `npx`, for a GUI client that started before
+ * Node was on its PATH.
+ */
+export interface ServerLaunch {
+  pin?: string | null;
+  command?: string | null;
+}
+
+export function ueMcpPackageSpec(launch: ServerLaunch = {}): string {
+  return `ue-mcp@${launch.pin ?? "latest"}`;
+}
+
+export function ueMcpServerArgs(uprojectPath: string, launch: ServerLaunch = {}): string[] {
+  return ["-y", ueMcpPackageSpec(launch), toMcpPath(uprojectPath)];
+}
+
+/** The version a launch spec pins, or null for `@latest`, a tag, or no spec. */
+export function pinnedVersionOf(args: readonly string[]): string | null {
+  for (const a of args) {
+    const m = /^ue-mcp@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(a);
+    if (m) return m[1];
+  }
+  return null;
 }
 
 export interface McpClient {
@@ -92,15 +116,15 @@ export function detectMcpClients(projectDir: string): McpClient[] {
   return clients;
 }
 
-export function writeMcpConfig(client: McpClient, uprojectPath: string): void {
+export function writeMcpConfig(client: McpClient, uprojectPath: string, launch: ServerLaunch = {}): void {
   if (client.format === "toml") {
-    writeCodexMcpConfig(client.configPath, uprojectPath);
+    writeCodexMcpConfig(client.configPath, uprojectPath, launch);
   } else {
-    writeJsonMcpConfig(client.configPath, uprojectPath);
+    writeJsonMcpConfig(client.configPath, uprojectPath, launch);
   }
 }
 
-export function writeJsonMcpConfig(configPath: string, uprojectPath: string): void {
+export function writeJsonMcpConfig(configPath: string, uprojectPath: string, launch: ServerLaunch = {}): void {
   let existing: Record<string, unknown> = {};
   if (fs.existsSync(configPath)) {
     try {
@@ -112,8 +136,8 @@ export function writeJsonMcpConfig(configPath: string, uprojectPath: string): vo
 
   const mcpServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
   mcpServers["ue-mcp"] = {
-    command: "npx",
-    args: ueMcpServerArgs(uprojectPath),
+    command: launch.command ?? "npx",
+    args: ueMcpServerArgs(uprojectPath, launch),
   };
   existing.mcpServers = mcpServers;
 
@@ -122,23 +146,23 @@ export function writeJsonMcpConfig(configPath: string, uprojectPath: string): vo
   fs.writeFileSync(configPath, JSON.stringify(existing, null, 2));
 }
 
-export function writeCodexMcpConfig(configPath: string, uprojectPath: string): void {
+export function writeCodexMcpConfig(configPath: string, uprojectPath: string, launch: ServerLaunch = {}): void {
   const existing = fs.existsSync(configPath)
     ? fs.readFileSync(configPath, "utf-8")
     : "";
-  const next = upsertCodexMcpServer(existing, uprojectPath);
+  const next = upsertCodexMcpServer(existing, uprojectPath, launch);
 
   const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configPath, next, "utf-8");
 }
 
-export function upsertCodexMcpServer(existingToml: string, uprojectPath: string): string {
+export function upsertCodexMcpServer(existingToml: string, uprojectPath: string, launch: ServerLaunch = {}): string {
   const withoutExisting = removeTomlTable(existingToml, "mcp_servers.ue-mcp").trimEnd();
   const block = [
     "[mcp_servers.ue-mcp]",
-    'command = "npx"',
-    `args = [${ueMcpServerArgs(uprojectPath).map(tomlString).join(", ")}]`,
+    `command = ${tomlString(launch.command ?? "npx")}`,
+    `args = [${ueMcpServerArgs(uprojectPath, launch).map(tomlString).join(", ")}]`,
     `cwd = ${tomlString(toMcpPath(getProjectDir(uprojectPath)))}`,
     "enabled = true",
   ].join("\n");

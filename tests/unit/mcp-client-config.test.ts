@@ -9,6 +9,8 @@ import {
   writeMcpConfig,
   writeCodexMcpConfig,
   writeJsonMcpConfig,
+  pinnedVersionOf,
+  ueMcpServerArgs,
 } from "../../src/integrations/claude-code/mcp-client-config.js";
 import { findBareNpxConfigs } from "../../src/cli/doctor.js";
 
@@ -153,5 +155,30 @@ describe("Codex MCP client config", () => {
     expect(result).toContain('args = ["-y", "ue-mcp@latest", "M:/PerforceWorkspace/Territory/Territory.uproject"]');
     expect(result).toContain('cwd = "M:/PerforceWorkspace/Territory"');
     expect(result).toContain("enabled = true");
+  });
+});
+
+describe("version pinning", () => {
+  it("pins the package spec and leaves @latest as the default", () => {
+    expect(ueMcpServerArgs("C:/G/G.uproject")).toEqual(["-y", "ue-mcp@latest", "C:/G/G.uproject"]);
+    expect(ueMcpServerArgs("C:/G/G.uproject", { pin: "1.3.10-beta.16" })).toEqual(["-y", "ue-mcp@1.3.10-beta.16", "C:/G/G.uproject"]);
+  });
+
+  it("reads back an exact pin and nothing else", () => {
+    expect(pinnedVersionOf(["-y", "ue-mcp@1.2.3", "x"])).toBe("1.2.3");
+    expect(pinnedVersionOf(["-y", "ue-mcp@1.2.3-rc.1"])).toBe("1.2.3-rc.1");
+    expect(pinnedVersionOf(["-y", "ue-mcp@latest"])).toBeNull();
+    expect(pinnedVersionOf(["-y", "ue-mcp@beta"])).toBeNull();
+  });
+
+  it("writes the pin and an absolute command into both formats", () => {
+    const json = path.join(tmpRoot, "p", ".mcp.json");
+    writeJsonMcpConfig(json, "C:/G/G.uproject", { pin: "1.2.3", command: "C:/node/npx.cmd" });
+    expect(JSON.parse(fs.readFileSync(json, "utf-8")).mcpServers["ue-mcp"]).toEqual({
+      command: "C:/node/npx.cmd",
+      args: ["-y", "ue-mcp@1.2.3", "C:/G/G.uproject"],
+    });
+    const toml = upsertCodexMcpServer("", "C:/G/G.uproject", { pin: "1.2.3" });
+    expect(toml).toContain('args = ["-y", "ue-mcp@1.2.3", "C:/G/G.uproject"]');
   });
 });

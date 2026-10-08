@@ -13,7 +13,7 @@ import { execSync } from "node:child_process";
 
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { isNewer } from "../core/version-check.js";
-import { UE_MCP_LAUNCH } from "../integrations/claude-code/mcp-client-config.js";
+import { UE_MCP_LAUNCH, pinnedVersionOf } from "../integrations/claude-code/mcp-client-config.js";
 import { packageVersion } from "../core/package-root.js";
 import { findUProject, isUProjectPath, projectDirOf } from "../config/uproject-path.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
@@ -39,6 +39,8 @@ export interface DoctorReport {
   targetProjectDir: string | null;   // dir of the .uproject doctor is reporting for
   bridgePlugin: { version: string | null; project: string; pluginDir?: string | null; installKind?: InstallKind | null } | null;
   bareNpxConfigs: string[];       // .mcp.json paths using bare `npx ue-mcp`
+  /** .mcp.json entries pinned to an exact version, which must match the bridge. */
+  pinnedConfigs?: Array<{ config: string; version: string }>;
 }
 
 function safeExec(cmd: string): string | null {
@@ -258,6 +260,26 @@ export function findBareNpxConfigs(cwd: string): string[] {
   return hits;
 }
 
+/** .mcp.json files from cwd up whose ue-mcp entry pins an exact version. */
+export function findPinnedConfigs(cwd: string): Array<{ config: string; version: string }> {
+  const hits: Array<{ config: string; version: string }> = [];
+  let dir = path.resolve(cwd);
+  for (let i = 0; i < 4; i++) {
+    const cfg = path.join(dir, ".mcp.json");
+    try {
+      const parsed = JSON.parse(fs.readFileSync(cfg, "utf-8"));
+      const entry = parsed?.mcpServers?.["ue-mcp"];
+      const args: string[] = Array.isArray(entry?.args) ? entry.args.map((a: unknown) => String(a)) : [];
+      const version = pinnedVersionOf(args);
+      if (version) hits.push({ config: cfg, version });
+    } catch { /* absent or malformed */ }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return hits;
+}
+
 export function collectDoctor(projectArg?: string, cwd: string = process.cwd()): DoctorReport {
   const global = npmGlobal();
   const shadow = findLocalShadow(cwd);
@@ -288,6 +310,7 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
       ? { ...(bridgePluginVersion(projectArg, cwd) ?? { version: null }), project: uproject }
       : null,
     bareNpxConfigs: findBareNpxConfigs(cwd),
+    pinnedConfigs: findPinnedConfigs(cwd),
   };
 }
 
@@ -381,6 +404,12 @@ export function formatDoctor(d: DoctorReport): string {
       `npm global is ${d.npmGlobal.version}, latest is ${latest}. The running server is fine, but the next launch via bare \`npx ue-mcp\` would be stale. ` +
       `Run \`ue-mcp update\` (or npm i -g ue-mcp@latest).`,
     );
+  }
+  for (const pin of d.pinnedConfigs ?? []) {
+    const bridge = d.bridgePlugin?.version;
+    if (!bridge || bridge === pin.version) continue;
+    const rel = path.relative(process.cwd(), pin.config).replace(/\\/g, "/") || pin.config;
+    problems.push(`${rel} pins ue-mcp@${pin.version} but the bridge plugin is ${bridge}. Run \`ue-mcp update\` so both move together.`);
   }
   for (const cfg of d.bareNpxConfigs) {
     const rel = path.relative(process.cwd(), cfg).replace(/\\/g, "/") || cfg;
