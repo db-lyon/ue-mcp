@@ -271,6 +271,15 @@ export interface BridgeTarget {
 }
 
 /** Minimal interface for tool handlers - enables mocking in tests. */
+/** One change in whether the socket to the editor is open. */
+export interface BridgeConnectionChange {
+  connected: boolean;
+  port: number;
+  /** Why it closed, as the close event or the teardown said. */
+  detail?: string;
+  at: number;
+}
+
 export interface IBridge {
   readonly isConnected: boolean;
   /** #821: what the connected bridge reported at handshake, when there is one. */
@@ -318,6 +327,28 @@ export class EditorBridge implements IBridge {
   onRegisteredActionsChanged(listener: (actions: readonly string[] | null) => void): () => void {
     this.registeredListeners.add(listener);
     return () => this.registeredListeners.delete(listener);
+  }
+
+  private connectedState = false;
+  private readonly connectionListeners = new Set<(change: BridgeConnectionChange) => void>();
+
+  /** Called when the socket opens or is lost. Returns the unsubscribe. */
+  onConnectionChanged(listener: (change: BridgeConnectionChange) => void): () => void {
+    this.connectionListeners.add(listener);
+    return () => this.connectionListeners.delete(listener);
+  }
+
+  private setConnected(connected: boolean, detail?: string): void {
+    if (connected === this.connectedState) return;
+    this.connectedState = connected;
+    const change: BridgeConnectionChange = { connected, port: this.port, detail, at: Date.now() };
+    for (const listener of this.connectionListeners) {
+      try {
+        listener(change);
+      } catch (e) {
+        warn("bridge", "connection listener failed", e);
+      }
+    }
   }
 
   private setRegistered(actions: readonly string[] | null): void {
@@ -606,7 +637,10 @@ export class EditorBridge implements IBridge {
         // client running against an older plugin can only report the symptom.
         // Bounded by the caller's own connect budget: a bridge that will not
         // answer this is not one worth waiting past that for.
-        this.handshake(ws, timeoutMs).then(() => resolve(), () => resolve());
+        this.handshake(ws, timeoutMs).then(
+          () => { this.setConnected(true); resolve(); },
+          () => { this.setConnected(true); resolve(); },
+        );
       });
 
       ws.on("error", (err) => {
@@ -634,6 +668,21 @@ export class EditorBridge implements IBridge {
         (e) => { debug("bridge", "reconnect attempt failed (will retry)", e); },
       );
     }, intervalMs);
+  }
+
+  /**
+   * Try to connect now instead of at the next tick. Called when an editor
+   * publishes its instance record, so reattach does not wait out the interval.
+   */
+  pokeReconnect(): Promise<boolean> {
+    if (this.isConnected) return Promise.resolve(true);
+    return this.ensureConnected().then(
+      () => true,
+      (e) => {
+        debug("bridge", "reconnect poke failed", e);
+        return false;
+      },
+    );
   }
 
   stopReconnecting(): void {
@@ -722,6 +771,7 @@ export class EditorBridge implements IBridge {
     this.ws = null;
     this.capabilities = null;
     if (!ws) return;
+    this.setConnected(false, reason);
     if (opts?.graceful) ws.close();
     else ws.terminate();
   }
@@ -904,6 +954,7 @@ export class EditorBridge implements IBridge {
       this.pending.clear();
       this.ws = null;
       this.capabilities = null;
+      this.setConnected(false, detail);
     });
 
     ws.on("error", (err) => {
