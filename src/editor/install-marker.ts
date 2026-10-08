@@ -105,7 +105,7 @@ export function resolvePluginDir(
   isAlive: (pid: number) => boolean = isPidAlive,
 ): ResolvedPluginDir | null {
   const record = findLiveInstanceRecord(projectDir, isAlive);
-  const recorded = record ? recordedPluginDir(record.recordPath) : null;
+  const recorded = record?.pluginDir ?? null;
   if (recorded && hasDescriptor(recorded)) return { dir: path.resolve(recorded), source: "instance-record" };
 
   const fallback = defaultPluginDir(projectDir);
@@ -113,15 +113,6 @@ export function resolvePluginDir(
 
   const found = scanForDescriptor(path.join(projectDir, "Plugins"), SCAN_DEPTH);
   return found ? { dir: found, source: "scan" } : null;
-}
-
-function recordedPluginDir(recordPath: string): string | null {
-  try {
-    const v = (JSON.parse(fs.readFileSync(recordPath, "utf-8")) as { pluginDir?: unknown }).pluginDir;
-    return typeof v === "string" && v.length > 0 ? v : null;
-  } catch {
-    return null;
-  }
 }
 
 function hasDescriptor(dir: string): boolean {
