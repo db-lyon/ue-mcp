@@ -55,6 +55,7 @@ const PER_SESSION: Record<string, string> = {
   "editor/install-marker.ts": "Reads and writes one project's plugin install marker and resolves where that project's plugin lives.",
   "editor/bridge-binaries.ts": "Installs prebuilt binaries into one project's plugin directory.",
   "cli/init-core.ts": "Plans and applies setup for the one project it is handed.",
+  "cli/status.ts": "Reports the install and editor state of the one project it is handed.",
   "editor/bridge-freshness.ts": "Compares deployed against compiled inside one project.",
   "codeintel/content-index.ts": "Walks ONE project's Content tree through that project's own mount table.",
   "editor/install-check.ts": "Answers whether ONE project can build and load the bridge, from that project's descriptor, plugin directory and engine.",
