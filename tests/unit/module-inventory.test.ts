@@ -63,6 +63,8 @@ const PER_SESSION: Record<string, string> = {
   "surface/registered-surface.ts": "Withholds what one editor's plugin did not register, read off that session's own bridge.",
   "dispatch/locking.ts": "The lock registry lives in the addressed editor's bridge, under that session's owner id.",
   "index.ts": "Wires the registry, the per-session loads and the MCP server together.",
+  "server/runtime.ts": "Owns the session registry, each session's load, guards and bridge, and the targeting baked into the tool graph.",
+  "server/mcp-server.ts": "Dispatches each MCP connection's calls through the runtime's sessions.",
   "sessions/session-load.ts": "One tool graph, task registry and guard pipeline per editor, built from that editor's own project.",
   "dispatch/server-dispatch.ts": "Routes each call to the editor it addressed and runs it through that editor's registry and guard.",
   "cli/hook-handler.ts": "Runs against the project the hook payload named.",
