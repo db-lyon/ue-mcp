@@ -1,4 +1,5 @@
 #include "PCGHandlers.h"
+#include "PCGHandlers_Internal.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
@@ -84,19 +85,6 @@ namespace
 			static_cast<UObject*>(Settings)->PostEditChangeProperty(Event);
 		}
 		if (Notified.Num() == 0) Settings->PostEditChange();
-	}
-
-	// #213: locate a node by name within a graph, including Input/Output specials.
-	static UPCGNode* FindPCGNodeByName(UPCGGraph* Graph, const FString& Name)
-	{
-		if (!Graph || Name.IsEmpty()) return nullptr;
-		for (UPCGNode* Node : Graph->GetNodes())
-		{
-			if (Node && Node->GetName() == Name) return Node;
-		}
-		if (UPCGNode* In = Graph->GetInputNode(); In && In->GetName() == Name) return In;
-		if (UPCGNode* Out = Graph->GetOutputNode(); Out && Out->GetName() == Name) return Out;
-		return nullptr;
 	}
 
 	// An instanced subobject (a spawner's mesh selector) belongs to the settings
@@ -868,60 +856,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
 	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
-	// Find source and target nodes
-	UPCGNode* SourceNode = nullptr;
-	UPCGNode* TargetNode = nullptr;
-	const auto& Nodes = Graph->GetNodes();
-	for (UPCGNode* Node : Nodes)
-	{
-		if (!Node) continue;
-		if (Node->GetName() == SourceNodeName)
-		{
-			SourceNode = Node;
-		}
-		if (Node->GetName() == TargetNodeName)
-		{
-			TargetNode = Node;
-		}
-	}
-
-	// Also check the input and output nodes
-	if (!SourceNode && Graph->GetInputNode() && Graph->GetInputNode()->GetName() == SourceNodeName)
-	{
-		SourceNode = Graph->GetInputNode();
-	}
-	if (!TargetNode && Graph->GetOutputNode() && Graph->GetOutputNode()->GetName() == TargetNodeName)
-	{
-		TargetNode = Graph->GetOutputNode();
-	}
-
-	// #239: callers commonly try "Input"/"Output" - point them at the actual
-	// implicit node names (DefaultInputNode/DefaultOutputNode) which are now
-	// surfaced by read_pcg_graph.
-	auto ImplicitHint = [&](const FString& Name) -> FString
-	{
-		if (Name.Equals(TEXT("Input"), ESearchCase::IgnoreCase) ||
-			Name.Equals(TEXT("InputNode"), ESearchCase::IgnoreCase) ||
-			Name.Equals(TEXT("GraphInput"), ESearchCase::IgnoreCase))
-		{
-			return Graph->GetInputNode() ? FString::Printf(TEXT(" - did you mean '%s'?"), *Graph->GetInputNode()->GetName()) : FString();
-		}
-		if (Name.Equals(TEXT("Output"), ESearchCase::IgnoreCase) ||
-			Name.Equals(TEXT("OutputNode"), ESearchCase::IgnoreCase) ||
-			Name.Equals(TEXT("GraphOutput"), ESearchCase::IgnoreCase))
-		{
-			return Graph->GetOutputNode() ? FString::Printf(TEXT(" - did you mean '%s'?"), *Graph->GetOutputNode()->GetName()) : FString();
-		}
-		return FString();
-	};
-	if (!SourceNode)
-	{
-		return MCPError(FString::Printf(TEXT("Source node not found: %s%s"), *SourceNodeName, *ImplicitHint(SourceNodeName)));
-	}
-	if (!TargetNode)
-	{
-		return MCPError(FString::Printf(TEXT("Target node not found: %s%s"), *TargetNodeName, *ImplicitHint(TargetNodeName)));
-	}
+	UPCGNode* SourceNode = MCPPCG::FindNode(Graph, SourceNodeName);
+	if (!SourceNode) return MCPPCG::NodeNotFoundError(Graph, SourceNodeName, TEXT("Source node"));
+	UPCGNode* TargetNode = MCPPCG::FindNode(Graph, TargetNodeName);
+	if (!TargetNode) return MCPPCG::NodeNotFoundError(Graph, TargetNodeName, TEXT("Target node"));
 
 	// UE 5.7: Pin and edge APIs refactored; use Graph->AddEdge() with node+label
 	// Resolve the pin labels to use for the connection
@@ -1089,24 +1027,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
 	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
-	UPCGNode* SourceNode = nullptr;
-	UPCGNode* TargetNode = nullptr;
-	for (UPCGNode* Node : Graph->GetNodes())
-	{
-		if (!Node) continue;
-		if (Node->GetName() == SourceNodeName) SourceNode = Node;
-		if (Node->GetName() == TargetNodeName) TargetNode = Node;
-	}
-	if (!SourceNode && Graph->GetInputNode() && Graph->GetInputNode()->GetName() == SourceNodeName)
-	{
-		SourceNode = Graph->GetInputNode();
-	}
-	if (!TargetNode && Graph->GetOutputNode() && Graph->GetOutputNode()->GetName() == TargetNodeName)
-	{
-		TargetNode = Graph->GetOutputNode();
-	}
-	if (!SourceNode) return MCPError(FString::Printf(TEXT("Source node not found: %s"), *SourceNodeName));
-	if (!TargetNode) return MCPError(FString::Printf(TEXT("Target node not found: %s"), *TargetNodeName));
+	UPCGNode* SourceNode = MCPPCG::FindNode(Graph, SourceNodeName);
+	if (!SourceNode) return MCPPCG::NodeNotFoundError(Graph, SourceNodeName, TEXT("Source node"));
+	UPCGNode* TargetNode = MCPPCG::FindNode(Graph, TargetNodeName);
+	if (!TargetNode) return MCPPCG::NodeNotFoundError(Graph, TargetNodeName, TEXT("Target node"));
 
 	if (auto Blocked = MCPAssetWriteBlockedError(Graph, AssetPath, TEXT("disconnect nodes in this PCG graph"))) return Blocked;
 	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "DisconnectPCGNodes", "Disconnect PCG Nodes"));
@@ -1224,16 +1148,12 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
 	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
-	// Find the node by name
-	UPCGNode* FoundNode = nullptr;
-	const auto& Nodes = Graph->GetNodes();
-	for (UPCGNode* Node : Nodes)
+	UPCGNode* FoundNode = MCPPCG::FindNode(Graph, NodeName);
+	if (MCPPCG::IsGraphIONode(Graph, FoundNode))
 	{
-		if (Node && Node->GetName() == NodeName)
-		{
-			FoundNode = Node;
-			break;
-		}
+		return MCPError(FString::Printf(
+			TEXT("'%s' is this graph's %s node, which the graph owns and cannot be removed. Disconnect its edges with disconnect_nodes, or edit its pins with set_node_settings (Pins)."),
+			*NodeName, FoundNode == Graph->GetInputNode() ? TEXT("input") : TEXT("output")));
 	}
 
 	if (!FoundNode)
@@ -1359,22 +1279,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
 	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
-	// Find the node by name
-	UPCGNode* FoundNode = nullptr;
-	const auto& Nodes = Graph->GetNodes();
-	for (UPCGNode* Node : Nodes)
-	{
-		if (Node && Node->GetName() == NodeName)
-		{
-			FoundNode = Node;
-			break;
-		}
-	}
-
-	if (!FoundNode)
-	{
-		return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeName));
-	}
+	UPCGNode* FoundNode = MCPPCG::FindNode(Graph, NodeName);
+	if (!FoundNode) return MCPPCG::NodeNotFoundError(Graph, NodeName);
 
 	// Get the settings object from the node
 	UPCGSettings* Settings = const_cast<UPCGSettings*>(FoundNode->GetSettings());
@@ -1514,6 +1420,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 			ErrorArray.Add(MakeShared<FJsonValueString>(Err));
 		}
 		Result->SetArrayField(TEXT("errors"), ErrorArray);
+		// A failure always carries its reason in 'error', not only in the array (#1324).
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("%d of %d propert(ies) on '%s' were not set: %s"),
+			Errors.Num(), PropertiesToSet.Num(), *NodeName, *FString::Join(Errors, TEXT("; "))));
 	}
 	Result->SetBoolField(TEXT("success"), Errors.Num() == 0);
 
@@ -1766,32 +1675,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonO
 	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
 	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
-	// Find the node by name
-	UPCGNode* FoundNode = nullptr;
-	const auto& Nodes = Graph->GetNodes();
-	for (UPCGNode* Node : Nodes)
-	{
-		if (Node && Node->GetName() == NodeName)
-		{
-			FoundNode = Node;
-			break;
-		}
-	}
-
-	// Also check input/output nodes
-	if (!FoundNode && Graph->GetInputNode() && Graph->GetInputNode()->GetName() == NodeName)
-	{
-		FoundNode = Graph->GetInputNode();
-	}
-	if (!FoundNode && Graph->GetOutputNode() && Graph->GetOutputNode()->GetName() == NodeName)
-	{
-		FoundNode = Graph->GetOutputNode();
-	}
-
-	if (!FoundNode)
-	{
-		return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeName));
-	}
+	UPCGNode* FoundNode = MCPPCG::FindNode(Graph, NodeName);
+	if (!FoundNode) return MCPPCG::NodeNotFoundError(Graph, NodeName);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("nodeName"), FoundNode->GetName());
@@ -2031,16 +1916,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	UPCGGraph* Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
 	if (!Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
 
-	UPCGNode* FoundNode = nullptr;
-	for (UPCGNode* Node : Graph->GetNodes())
-	{
-		if (Node && Node->GetName() == NodeName)
-		{
-			FoundNode = Node;
-			break;
-		}
-	}
-	if (!FoundNode) return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeName));
+	UPCGNode* FoundNode = MCPPCG::FindNode(Graph, NodeName);
+	if (!FoundNode) return MCPPCG::NodeNotFoundError(Graph, NodeName);
 
 	UPCGStaticMeshSpawnerSettings* SpawnerSettings = Cast<UPCGStaticMeshSpawnerSettings>(const_cast<UPCGSettings*>(FoundNode->GetSettings()));
 	if (!SpawnerSettings)
@@ -2698,7 +2575,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 		auto Resolve = [&](const FString& Name) -> UPCGNode*
 		{
 			if (UPCGNode** Found = ByLocalName.Find(Name); Found && *Found) return *Found;
-			return FindPCGNodeByName(Graph, Name);
+			return MCPPCG::FindNode(Graph, Name);
 		};
 
 		auto FirstOutputPin = [](UPCGNode* N) -> FName
@@ -3004,11 +2881,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::UnwrapInstanceNodes(const TSharedPtr<FJsonO
 	TArray<UPCGNode*> Targets;
 	if (!OnlyNode.IsEmpty())
 	{
-		UPCGNode* Node = FindPCGNodeByName(Graph, OnlyNode);
-		if (!Node)
-		{
-			return MCPError(FString::Printf(TEXT("Node not found: %s"), *OnlyNode));
-		}
+		UPCGNode* Node = MCPPCG::FindNode(Graph, OnlyNode);
+		if (!Node) return MCPPCG::NodeNotFoundError(Graph, OnlyNode);
 		Targets.Add(Node);
 	}
 	else
