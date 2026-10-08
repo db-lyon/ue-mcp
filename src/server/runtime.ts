@@ -19,6 +19,7 @@ import {
   removeMigrateTarget,
 } from "../surface/target-params.js";
 import type { ToolContext, ToolDef } from "../core/types.js";
+import { dispatchCategoryCall, type DispatchDeps, type ToolResult } from "../dispatch/server-dispatch.js";
 import { DialogGuard, guardFor, sessionGuardDeps } from "../editor/dialog-guard.js";
 import { info, warn, error } from "../core/log.js";
 import { GuardRegistry } from "../flow/guard.js";
@@ -61,6 +62,11 @@ export interface Runtime {
   connectBridges(): Promise<void>;
   /** One startup line naming the tool, task and plugin counts. */
   logSummary(): void;
+  /**
+   * Run one category action in process, through the same dispatch as an MCP
+   * call: routing, guards, locking. There is no person on it, so it never elicits.
+   */
+  callAction(category: string, action: string, args?: Record<string, unknown>): Promise<ToolResult>;
 }
 
 /**
@@ -285,6 +291,19 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
         }
         session.bridge.startReconnecting();
       }
+    },
+    callAction(category, action, args = {}) {
+      const tool = advertisedTools.find((t) => t.name === category);
+      if (!tool) return Promise.reject(new Error(`unknown category '${category}'`));
+      const deps: DispatchDeps = {
+        sessions,
+        loads,
+        lockingCfg,
+        dialogGuardFor,
+        elicit: () => undefined,
+        client: () => undefined,
+      };
+      return dispatchCategoryCall(deps, tool, false, { ...args, action }, {});
     },
     logSummary() {
       const disabled = primaryLoad.surface.disabled;

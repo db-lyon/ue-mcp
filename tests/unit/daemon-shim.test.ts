@@ -142,6 +142,21 @@ describe("the daemon path", () => {
     expect(health.editors[0].connected).toBe(true);
   });
 
+  it("refuses a request from a foreign origin or host, token or not", async () => {
+    const d = discovery();
+    const auth = { authorization: `Bearer ${d.token}` };
+    const base = `http://127.0.0.1:${d.port}/v1/health`;
+    expect((await fetch(base, { headers: { ...auth, origin: "https://evil.example" } })).status).toBe(401);
+    expect((await fetch(base, { headers: { ...auth, origin: `http://127.0.0.1:${d.port}` } })).status).toBe(200);
+  });
+
+  it("serves the project's flows", async () => {
+    const d = discovery();
+    const res = await fetch(`http://127.0.0.1:${d.port}/v1/flows`, { headers: { authorization: `Bearer ${d.token}` } });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(await res.json())).toContain("niagara_fire");
+  });
+
   it("dispatches a call through the daemon to the editor", async () => {
     const before = seen.length;
     const res = await viaShim.callTool({ name: "level", arguments: { action: "get_outliner", args: {} } });

@@ -34,6 +34,8 @@ import {
 import { EventLog } from "./events.js";
 import { ExpectedDisconnect, settleAndClassify, type DisconnectCause } from "./disconnect.js";
 import { WebSocketServerTransport } from "./ws-transport.js";
+import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
+import { subscribeFlowEvents } from "../flow/events.js";
 
 const DEFAULT_IDLE_MS = 30 * 60_000;
 
@@ -145,6 +147,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     }
   };
 
+  // Flow progress joins the same resumable stream the UI reads.
+  const unsubscribeFlows = subscribeFlowEvents((e) => {
+    events.publish(`flow.${e.type}`, { ...(e as unknown as Record<string, unknown>) });
+  });
+
   for (const s of rt.sessions.list()) follow(s);
   rt.onSurfaceChanged(() => {
     for (const s of rt.sessions.list()) follow(s);
@@ -177,7 +184,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
 
   // ── HTTP ────────────────────────────────────────────────────────
   const sse = new Set<http.ServerResponse>();
+  // A page served from somewhere else must not drive the editor, even holding a token.
+  const originAllowed = (req: http.IncomingMessage): boolean => {
+    const origin = req.headers.origin;
+    if (origin === undefined) return true;
+    return origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
+  };
   const authorized = (req: http.IncomingMessage): boolean => {
+    if (!hostIsAllowed(req) || !originAllowed(req)) return false;
     const header = req.headers.authorization;
     if (header === `Bearer ${token}`) return true;
     // EventSource cannot set headers; the stream alone also takes the token as a query.
@@ -200,6 +214,37 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const editors = (): EditorState[] => rt.sessions.list().map((s) => states.get(s) ?? {
     name: s.name, connected: s.bridge.isConnected, port: s.bridge.port, pid: null, lastDisconnect: null,
   });
+
+  // ── Editor operations ───────────────────────────────────────────
+  // The daemon owns these, so it can say beforehand why the editor is about to
+  // go away and the disconnect is classified as that rather than guessed.
+  const editorOp = async (op: string): Promise<Record<string, unknown>> => {
+    const text = (r: { content?: Array<{ text?: string }> }) => r.content?.map((c) => c.text ?? "").join("\n") ?? "";
+    const step = async (category: string, action: string) => {
+      events.publish("editor.operation", { op, step: `${category}.${action}`, phase: "started" });
+      const result = await rt.callAction(category, action);
+      events.publish("editor.operation", { op, step: `${category}.${action}`, phase: result.isError ? "failed" : "done" });
+      return { step: `${category}.${action}`, ok: !result.isError, result: text(result) };
+    };
+    if (op === "start") return { op, steps: [await step("editor", "start_editor")] };
+    if (op === "stop") return { op, steps: [await step("editor", "stop_editor")] };
+    if (op === "restart") {
+      expected.expect("restarting");
+      return { op, steps: [await step("editor", "restart_editor")] };
+    }
+    expected.expect("rebuild");
+    const steps = [await step("editor", "stop_editor")];
+    const built = await step("project", "build");
+    steps.push(built);
+    // A failed build leaves the editor down rather than relaunching the old binary.
+    if (built.ok) steps.push(await step("editor", "start_editor"));
+    else expected.clear();
+    return { op, steps };
+  };
+
+  const json = (res: http.ServerResponse, status: number, body: unknown): void => {
+    res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
+  };
 
   let closing: Promise<void> | null = null;
   const httpServer = http.createServer((req, res) => {
@@ -237,6 +282,22 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     if (req.method === "POST" && url.pathname === "/v1/handoff") {
       res.writeHead(202).end();
       void handoff();
+      return;
+    }
+    const op = /^\/v1\/editor\/(start|stop|restart|rebuild)$/.exec(url.pathname);
+    if (req.method === "POST" && op) {
+      editorOp(op[1]).then(
+        (result) => json(res, 200, result),
+        (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }),
+      );
+      return;
+    }
+    if (url.pathname === "/v1/flows" || url.pathname.startsWith("/v1/flows/")) {
+      const sub = url.pathname.slice("/v1".length).replace(/\/+$/, "");
+      handleFlowRoute(rt.flowTool, rt.baseCtx, req, res, sub, url).then(
+        (handled) => { if (!handled) res.writeHead(404).end(); },
+        (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }),
+      );
       return;
     }
     res.writeHead(404).end();
@@ -285,6 +346,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       info("daemon", `stopping: ${reason}`);
       events.publish("daemon.stopping", { reason });
       clearInterval(idleTimer);
+      unsubscribeFlows();
       for (const w of watchers) w.close();
       if (opts.publish !== false) removeDiscovery(projectDir);
       for (const res of sse) res.end();
