@@ -4829,11 +4829,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 		PrevStructured = FMCPJsonSerializer::SerializeValue(ValuePtr, FinalProp);
 	}
 
+	// Modify() records nothing without an open transaction, so an in-memory
+	// preview written with save=false could not be taken back with Ctrl+Z.
+	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "SetAssetProperty", "Set asset property"));
 	Asset->Modify();
 	if (LeafOwner && LeafOwner != Asset) LeafOwner->Modify();
 	FString SetErr;
 	if (!MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, ValueField, SetErr))
 	{
+		Transaction.Cancel();
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
 	}
 
@@ -4877,6 +4881,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 	{
 		Payload->SetStringField(TEXT("value"), PrevValue);
 	}
+	// The inverse of an unsaved preview must not write the package to disk.
+	Payload->SetBoolField(TEXT("save"), bSave);
 	MCPSetRollback(Result, TEXT("set_asset_property"), Payload);
 	return MCPResult(Result);
 }
@@ -4980,6 +4986,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 		DestroyStagedElements();
 		return MCPError(FString::Printf(TEXT("Failed to serialize the previous value of '%s'"), *PropertyName));
 	}
+	// Display JSON (notably FTransform) is not the setter's reflected format.
+	// UE export text replays through MCPPropertyText, including nested TMaps (#820).
+	FString PreviousText;
+	ArrayProp->ExportText_Direct(PreviousText, ValuePtr, ValuePtr, LeafOwner, PPF_None);
 
 	FScriptArrayHelper ArrayHelper(ArrayProp, ValuePtr);
 	const int32 PreviousNum = ArrayHelper.Num();
@@ -5027,7 +5037,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
 	Payload->SetStringField(TEXT("propertyName"), PathInfo.bUsedKeySelector ? PathInfo.IndexedPath : PropertyName);
-	Payload->SetField(TEXT("value"), PreviousValue);
+	Payload->SetStringField(TEXT("value"), PreviousText);
+	Payload->SetBoolField(TEXT("save"), bSave);
 	MCPSetRollback(Result, TEXT("set_asset_property"), Payload);
 	return MCPResult(Result);
 }
