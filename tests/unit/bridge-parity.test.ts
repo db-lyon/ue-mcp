@@ -12,7 +12,7 @@
  * old plugin that publishes no list being reported as having nothing missing.
  */
 import { describe, it, expect } from "vitest";
-import { checkBridgeParity, deployedPlugin, unadvertisedMethods } from "../../src/bridge/bridge-parity.js";
+import { checkBridgeParity, deployedPlugin, freshnessWarning, pluginStaleness, unadvertisedMethods } from "../../src/bridge/bridge-parity.js";
 import type { ToolDef } from "../../src/core/types.js";
 import { categoryTool, bp } from "../../src/surface/category-tool.js";
 import type { BridgeCapabilities } from "../../src/bridge/bridge.js";
@@ -129,5 +129,28 @@ describe("comparing the surface against the plugin that answered", () => {
     // TypeScript that will expose it. Available, and not part of the warning.
     expect(unadvertisedMethods(graph(), caps(["alpha_list", "alpha_save", "beta_read", "spare_handler"])))
       .toEqual(["spare_handler"]);
+  });
+});
+
+describe("parity is the primary staleness verdict", () => {
+  it("answers from parity when the plugin published a list", () => {
+    const parity = checkBridgeParity(graph(), caps(["alpha_list", "alpha_save", "beta_read"]));
+    expect(pluginStaleness(parity, { checked: true, stale: true })).toEqual({ stale: false, source: "parity" });
+    const missing = checkBridgeParity(graph(), caps(["alpha_list"]));
+    expect(pluginStaleness(missing, { checked: true, stale: false })).toEqual({ stale: true, source: "parity" });
+  });
+
+  it("falls back to build timestamps without a list", () => {
+    const parity = checkBridgeParity(graph(), caps(undefined));
+    expect(pluginStaleness(parity, { checked: true, stale: true })).toEqual({ stale: true, source: "build-timestamps" });
+    expect(pluginStaleness(parity, { checked: false, stale: false })).toEqual({});
+  });
+
+  it("rewords a timestamp warning that parity contradicts", () => {
+    const clean = checkBridgeParity(graph(), caps(["alpha_list", "alpha_save", "beta_read"]));
+    expect(freshnessWarning(clean, "will answer Unknown method")).toContain("no call will answer 'Unknown method'");
+    const missing = checkBridgeParity(graph(), caps(["alpha_list"]));
+    expect(freshnessWarning(missing, "original")).toBe("original");
+    expect(freshnessWarning(clean, undefined)).toBeUndefined();
   });
 });

@@ -187,3 +187,33 @@ export function unadvertisedMethods(
   }
   return registered.filter((m) => !advertised.has(m)).sort();
 }
+
+/** Where a staleness verdict came from. */
+export type StalenessSource = "parity" | "build-timestamps";
+
+/**
+ * The primary staleness verdict (6.4): the running plugin's handler list when
+ * it published one, the build timestamps only when it did not.
+ */
+export function pluginStaleness(
+  parity: BridgeParity,
+  freshness: { checked: boolean; stale: boolean },
+): { stale?: boolean; source?: StalenessSource } {
+  if (parity.checked) return { stale: parity.missing.length > 0, source: "parity" };
+  if (freshness.checked) return { stale: freshness.stale, source: "build-timestamps" };
+  return {};
+}
+
+/**
+ * The build-timestamp warning, reworded when parity has already shown every
+ * advertised method is registered, so the two never contradict each other.
+ */
+export function freshnessWarning(parity: BridgeParity, message: string | undefined): string | undefined {
+  if (!message) return undefined;
+  if (!parity.checked || parity.missing.length > 0) return message;
+  return (
+    "The compiled bridge is older than its source, but the running plugin registers every method this "
+    + "server advertises, so no call will answer 'Unknown method'. Handlers changed since the last build "
+    + "still behave as that build did; rebuild to pick the changes up."
+  );
+}

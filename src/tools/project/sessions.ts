@@ -1,5 +1,5 @@
 import { checkPluginFreshness } from "../../editor/bridge-freshness.js";
-import { checkBridgeParity, deployedPlugin, recordedPluginSpecs } from "../../bridge/bridge-parity.js";
+import { checkBridgeParity, deployedPlugin, freshnessWarning, pluginStaleness, recordedPluginSpecs } from "../../bridge/bridge-parity.js";
 import * as fs from "node:fs";
 import { deploy, deploySummary, attach, attachSummary } from "../../editor/deployer.js";
 import { collapsingEnvWarnings } from "../../config/session-env.js";
@@ -11,6 +11,7 @@ import { readLogState, readEngineSnapshot } from "../../editor/engine-observer.j
 import { switchProject, isTargetDiverged } from "../../sessions/project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../../config/project.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
+import type { EditorSession } from "../../sessions/session.js";
 import { toolGraphOf } from "../../surface/target-params.js";
 import { startProgress } from "../../cli/ui/progress.js";
 
@@ -35,12 +36,32 @@ export function envWarningsFor(ctx: ToolContext): string[] | undefined {
   return lines.length > 0 ? lines : undefined;
 }
 
+/** One editor's staleness for list_editors, parity first. */
+function sessionStaleness(ctx: ToolContext, s: EditorSession): Record<string, unknown> {
+  let graph;
+  try {
+    graph = ctx.getToolGraph?.(s);
+  } catch {
+    graph = undefined;
+  }
+  const parity = checkBridgeParity(graph ?? [], s.bridge.capabilities);
+  const freshness = s.project.projectPath
+    ? checkPluginFreshness(s.project.projectPath)
+    : { checked: false, stale: false };
+  const verdict = pluginStaleness(graph ? parity : { ...parity, checked: false }, freshness);
+  return {
+    pluginStale: verdict.stale || undefined,
+    pluginStaleSource: verdict.stale ? verdict.source : undefined,
+    pluginBuildStale: freshness.stale || undefined,
+  };
+}
+
 /** Editor sessions: status, the project this session drives, and the editors the server holds. */
 export const sessionActions: Record<string, ActionSpec> = {
   get_status: {
     kind: "handler",
     effect: "read",
-    description: "Check server mode and editor connection. pluginBuildStale reports the compiled bridge being older than its source, read from disk. deployedPlugin is what the binary that answered says about itself: when it was built, and how many methods this server advertises that it does not register, which is what 'Unknown method' on a real action means. answeringPid is the editor process the bridge is connected to; projectEditors and projectEditorsWarning appear when several editor processes (headless included) hold the project, and every response then carries the answering pid. Params: none (#785, #1002, #1021, #1150)",
+    description: "Check server mode and editor connection. pluginStale is the primary staleness verdict: from the running plugin's own handler list when it published one (pluginStaleSource 'parity'), else from build timestamps ('build-timestamps'). pluginBuildStale reports the compiled bridge being older than its source, read from disk. deployedPlugin is what the binary that answered says about itself: when it was built, and how many methods this server advertises that it does not register, which is what 'Unknown method' on a real action means. answeringPid is the editor process the bridge is connected to; projectEditors and projectEditorsWarning appear when several editor processes (headless included) hold the project, and every response then carries the answering pid. Params: none (#785, #1002, #1021, #1150)",
     handler: async (ctx) => {
       const flows = ctx.getFlows?.() ?? [];
       const bridgeApiVersion = ctx.project.projectDir
@@ -97,19 +118,19 @@ export const sessionActions: Record<string, ActionSpec> = {
       const answeringPid = connectedEditorOf(ctx.bridge)?.pid ?? null;
       const holders = await detectProjectHolders(ctx.project.projectDir, ctx.project.projectPath, answeringPid);
 
+      const stale = pluginStaleness(parity, freshness);
       return {
         engine: offlineEngine ?? undefined,
-        pluginBuildStale: freshness.checked ? freshness.stale : undefined,
-        pluginBuildWarning: freshness.stale ? freshness.message : undefined,
-        // Absent when there is nothing to say, so a healthy session's status
-        // is exactly what it was. Present, it names methods that will come
-        // back "Unknown method" before one is called.
+        // Parity first (6.4): read from the running binary's handler list.
+        // The build timestamps below are the fallback when no list was published.
+        pluginStale: stale.stale,
+        pluginStaleSource: stale.source,
         // What the binary that ANSWERED says about itself, as opposed to
-        // pluginBuildStale and bridgeApiVersion above, which are read off
-        // the source and the header on disk. architecture.md already draws
-        // that line; this is the running-binary side of it, in one place
-        // rather than as more sibling flags.
+        // pluginBuildStale and bridgeApiVersion, which are read off the
+        // source and the header on disk.
         deployedPlugin: deployedPlugin(ctx.bridge.capabilities, parity, undefined, recordedPluginSpecs(toolGraphOf(ctx))),
+        pluginBuildStale: freshness.checked ? freshness.stale : undefined,
+        pluginBuildWarning: freshness.stale ? freshnessWarning(parity, freshness.message) : undefined,
         mode: ctx.bridge.isConnected ? "live" : "disconnected",
         editorConnected: ctx.bridge.isConnected,
         answeringPid: answeringPid ?? undefined,
@@ -242,9 +263,7 @@ export const sessionActions: Record<string, ActionSpec> = {
             // The session's own host, so a project pointed elsewhere by
             // `bridge.host` is probed where it actually lives (#817).
             bridgeReachable: await isBridgeReachable(s.bridge.port, s.bridge.host),
-            pluginBuildStale: s.project.projectPath
-              ? (checkPluginFreshness(s.project.projectPath).stale || undefined)
-              : undefined,
+            ...sessionStaleness(ctx, s),
           };
         }),
       );
