@@ -53,6 +53,10 @@ export interface BridgeInstanceRecord {
   /** "listening" or "bind-failed". A bind-failed record names no reachable port. */
   state: string | null;
   startedAt: string | null;
+  /** Where the running bridge plugin loaded from. Null on plugins that predate the field. */
+  pluginDir: string | null;
+  installKind: "source" | "binary" | null;
+  pluginVersion: string | null;
   recordPath: string;
   writtenAtMs: number;
 }
@@ -91,6 +95,9 @@ export function readBridgeInstanceRecords(projectDir: string): BridgeInstanceRec
         instanceId: typeof parsed.instanceId === "string" ? parsed.instanceId : null,
         state: typeof parsed.state === "string" ? parsed.state : null,
         startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : null,
+        pluginDir: typeof parsed.pluginDir === "string" && parsed.pluginDir !== "" ? parsed.pluginDir : null,
+        installKind: parsed.installKind === "source" || parsed.installKind === "binary" ? parsed.installKind : null,
+        pluginVersion: typeof parsed.pluginVersion === "string" && parsed.pluginVersion !== "" ? parsed.pluginVersion : null,
         recordPath,
         writtenAtMs: stat.mtimeMs,
       });

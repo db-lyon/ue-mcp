@@ -11,6 +11,7 @@
 #include "HAL/PlatformProcess.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Interfaces/IPluginManager.h"
 
 #include "MCPSocketPlatform.h"
 
@@ -88,6 +89,18 @@ TSharedPtr<FJsonObject> FMCPBridgeStateFiles::LoadJson(const FString& FilePath)
 	return Parsed;
 }
 
+FString FMCPBridgeStateFiles::InstallKindFor(const FString& PluginDir)
+{
+	const TSharedPtr<FJsonObject> Marker = LoadJson(FPaths::Combine(PluginDir, TEXT(".ue-mcp-install.json")));
+	FString Kind;
+	if (Marker.IsValid() && Marker->TryGetStringField(TEXT("kind"), Kind)
+		&& (Kind == TEXT("source") || Kind == TEXT("binary")))
+	{
+		return Kind;
+	}
+	return FPaths::DirectoryExists(FPaths::Combine(PluginDir, TEXT("Source"))) ? TEXT("source") : TEXT("binary");
+}
+
 FString FMCPBridgeStateFiles::RecordPath(const FString& InInstancesDir, uint32 Pid)
 {
 	return FPaths::Combine(InInstancesDir, FString::Printf(TEXT("%u.json"), Pid));
@@ -105,6 +118,9 @@ bool FMCPBridgeStateFiles::WriteInstanceRecord(const FString& InInstancesDir, co
 	Obj->SetNumberField(TEXT("protocolVersion"), Record.ProtocolVersion);
 	Obj->SetNumberField(TEXT("handlerApiVersion"), Record.HandlerApiVersion);
 	Obj->SetStringField(TEXT("state"), Record.State);
+	Obj->SetStringField(TEXT("pluginDir"), Record.PluginDir);
+	Obj->SetStringField(TEXT("installKind"), Record.InstallKind);
+	Obj->SetStringField(TEXT("pluginVersion"), Record.PluginVersion);
 
 	const FString FilePath = RecordPath(InInstancesDir, Record.Pid);
 	if (!PublishJson(FilePath, Obj))
@@ -146,6 +162,9 @@ bool FMCPBridgeStateFiles::ReadInstanceRecord(const FString& FilePath, FMCPInsta
 	Parsed->TryGetStringField(TEXT("startedAt"), OutRecord.StartedAtUtc);
 	Parsed->TryGetStringField(TEXT("engineVersion"), OutRecord.EngineVersion);
 	Parsed->TryGetStringField(TEXT("state"), OutRecord.State);
+	Parsed->TryGetStringField(TEXT("pluginDir"), OutRecord.PluginDir);
+	Parsed->TryGetStringField(TEXT("installKind"), OutRecord.InstallKind);
+	Parsed->TryGetStringField(TEXT("pluginVersion"), OutRecord.PluginVersion);
 
 	// A record with no pid names no process, so nothing about it can be
 	// verified and nothing about it can be safely reaped either.
@@ -520,6 +539,16 @@ void FMCPBridgeServer::WriteInstanceRecord(const FString& State, int32 PortValue
 	Record.ProtocolVersion = UEMCP_BRIDGE_PROTOCOL_VERSION;
 	Record.HandlerApiVersion = UEMCP_BRIDGE_API_VERSION;
 	Record.State = State;
+
+	// Where this plugin loaded from, so a client never assumes Plugins/UE_MCP_Bridge.
+	if (const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UE_MCP_Bridge")))
+	{
+		FString PluginDir = FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir());
+		FPaths::NormalizeDirectoryName(PluginDir);
+		Record.PluginDir = PluginDir;
+		Record.InstallKind = FMCPBridgeStateFiles::InstallKindFor(PluginDir);
+		Record.PluginVersion = Plugin->GetDescriptor().VersionName;
+	}
 
 	if (FMCPBridgeStateFiles::WriteInstanceRecord(FMCPBridgeStateFiles::InstancesDir(), Record))
 	{
