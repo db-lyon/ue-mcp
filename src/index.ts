@@ -26,6 +26,7 @@ import { resolveLockingConfig } from "./dispatch/locking.js";
 import { collapsingEnvWarnings } from "./config/session-env.js";
 import { checkPluginFreshness } from "./editor/bridge-freshness.js";
 import { unionSurface } from "./sessions/session-surface.js";
+import { registeredUnion, withholdFromTool } from "./surface/registered-surface.js";
 import { packageVersion } from "./core/package-root.js";
 import { findCliCommand, runCliCommand } from "./cli/cli-commands.js";
 import { SessionLoads } from "./sessions/session-load.js";
@@ -200,6 +201,8 @@ async function main() {
   // single-editor schema is byte-for-byte what it was before sessions existed.
   // Adding or dropping a session re-advertises.
   const registeredTools = new Map<string, ReturnType<typeof server.tool>>();
+  // Tools registered as action + args. The flow tool is registered flat and stays flat.
+  const envelopeTools = new Set<string>();
   const targetable: ToolDef[] = [...advertisedTools];
   let targetingSignature = "";
   const syncEditorTargeting = (): void => {
@@ -218,17 +221,48 @@ async function main() {
         removeEditorTarget(tool);
         removeMigrateTarget(tool);
       }
-      const registration = registeredTools.get(tool.name);
-      if (!registration) continue;
-      if (usesArgsEnvelope(tool)) {
-        // The SDK rebuilds a stripping object from the raw shape; put the
-        // pass-through one back so a flat call still reaches validation.
-        registration.update({ paramsSchema: envelopeShape(tool) });
-        registration.inputSchema = envelopeInputSchema(tool);
-      } else {
-        registration.update({ paramsSchema: tool.schema });
-      }
+      advertise(tool);
     }
+  };
+
+  // What the running plugins registered (6.4). A bridge action none of them
+  // has is withheld from tools/list; nothing is withheld until each editor
+  // has published its method list.
+  const advertisedHave = () => registeredUnion(sessions.list().map((s) => s.bridge));
+  const descriptionFor = (tool: ToolDef): string =>
+    envelopeTools.has(tool.name) && contextStrategy === "full" ? fullSurfaceDescription(tool) : tool.description;
+  function advertise(tool: ToolDef, have = advertisedHave()): void {
+    const registration = registeredTools.get(tool.name);
+    if (!registration) return;
+    const view = withholdFromTool(tool, have);
+    if (!view) {
+      if (registration.enabled) registration.disable();
+      return;
+    }
+    if (!registration.enabled) registration.enable();
+    const description = descriptionFor(view);
+    if (envelopeTools.has(tool.name)) {
+      // The SDK rebuilds a stripping object from the raw shape; put the
+      // pass-through one back so a flat call still reaches validation.
+      registration.update({ description, paramsSchema: envelopeShape(view) });
+      registration.inputSchema = envelopeInputSchema(view);
+    } else {
+      registration.update({ description, paramsSchema: view.schema });
+    }
+  }
+  let parityKey = "";
+  const syncParity = (): void => {
+    const have = advertisedHave();
+    const key = have ? [...have].sort().join(",") : "";
+    if (key === parityKey) return;
+    parityKey = key;
+    for (const tool of targetable) advertise(tool, have);
+  };
+  const watched = new WeakSet<EditorSession>();
+  const watchParity = (session: EditorSession): void => {
+    if (watched.has(session)) return;
+    watched.add(session);
+    session.bridge.onRegisteredActionsChanged(() => syncParity());
   };
 
   // ── Category tools, dispatched through each session's task registry ──
@@ -237,7 +271,8 @@ async function main() {
     // Advertised as `action` + `args` (#1172); the flat shape stays the
     // validation contract, applied in dispatch instead of by the SDK.
     const envelope = usesArgsEnvelope(tool);
-    const description = envelope && contextStrategy === "full" ? fullSurfaceDescription(tool) : tool.description;
+    if (envelope) envelopeTools.add(tool.name);
+    const description = descriptionFor(tool);
     const callback = (callArgs: Record<string, unknown>, extra: CallExtra) =>
       dispatchCategoryCall(deps, tool, envelope, callArgs, extra);
     const registration = envelope
@@ -266,8 +301,13 @@ async function main() {
   registeredTools.set(flowTool.name, flowRegistration);
 
   // Re-advertise whenever the session set changes, and take the first pass now.
-  sessions.onCountChanged = () => syncEditorTargeting();
+  sessions.onCountChanged = () => {
+    for (const s of sessions.list()) watchParity(s);
+    syncEditorTargeting();
+    syncParity();
+  };
   syncEditorTargeting();
+  for (const s of sessions.list()) watchParity(s);
 
   // ── Optional HTTP surface for flow.run (#144) ───────────────────
   // Opt-in via `ue-mcp.http`; binds to 127.0.0.1 only.

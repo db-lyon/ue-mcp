@@ -29,6 +29,7 @@ import { trySelectEngine } from "./engine-root.js";
 import { ProjectContext } from "../config/project.js";
 import { packageRoot } from "../core/package-root.js";
 import { isUProjectPath } from "../config/uproject-path.js";
+import { defaultPluginDir, installKindOf, resolvePluginDir, type InstallKind } from "./install-marker.js";
 
 /**
  * Whether the project declares native modules of its own.
@@ -289,6 +290,8 @@ export interface InstallReport {
   };
   bridge: {
     deployed: boolean;
+    pluginDir: string | null;
+    installKind: InstallKind | null;
     enabledInUproject: boolean;
     packagedVersion: string | null;
     installedVersion: string | null;
@@ -344,8 +347,11 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
   const context = new ProjectContext();
   context.setProject(resolved);
 
-  const deployedPluginDir = path.join(path.dirname(resolved), "Plugins", "UE_MCP_Bridge");
+  const located = resolvePluginDir(path.dirname(resolved));
+  const deployedPluginDir = located?.dir ?? defaultPluginDir(path.dirname(resolved));
   const deployed = fs.existsSync(deployedPluginDir);
+  const installKind: InstallKind | null = deployed ? installKindOf(deployedPluginDir) : null;
+  const binary = installKind === "binary";
   const installedVersion = deployed ? readUpluginVersion(deployedPluginDir) : null;
   const packagedVersion = readUpluginVersion(packagedPluginDir());
   const versionMatch =
@@ -370,7 +376,9 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
   // "Never compiled" and "compiled but out of date" are different problems with
   // different fixes, and checkPluginFreshness already separates them: it
   // reports stale with no binaryPath for the first and with one for the second.
-  const compiled = Boolean(freshness.binaryPath);
+  const compiled = binary
+    ? fs.existsSync(path.join(deployedPluginDir, "Binaries"))
+    : Boolean(freshness.binaryPath);
 
   const problems: InstallProblem[] = [];
 
@@ -382,7 +390,8 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
     });
   }
 
-  if (!toolchain.present) {
+  // Prebuilt binaries need no compiler.
+  if (!toolchain.present && !binary) {
     problems.push({
       code: "no_toolchain",
       what: "No C++ toolchain was found on this machine, so the bridge plugin cannot be compiled here.",
@@ -408,7 +417,9 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
       problems.push({
         code: "bridge_version_mismatch",
         what: `The installed plugin is v${installedVersion} and this package ships v${packagedVersion}.`,
-        fix: `Run 'npx ue-mcp deploy ${resolved}' to sync the source, then rebuild.`,
+        fix: binary
+          ? `Run 'npx ue-mcp update ${resolved}' to fetch matching binaries.`
+          : `Run 'npx ue-mcp deploy ${resolved}' to sync the source, then rebuild.`,
       });
     }
     if (!compiled) {
@@ -452,6 +463,8 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
     },
     bridge: {
       deployed,
+      pluginDir: deployed ? deployedPluginDir : null,
+      installKind,
       enabledInUproject: shape.bridgeEnabled,
       packagedVersion,
       installedVersion,

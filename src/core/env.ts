@@ -78,6 +78,8 @@ export const ENV_VARS = {
   publishToken: "UE_MCP_PUBLISH_TOKEN",
   /** minServerVersion written into a new plugin scaffold. Unset means this version. */
   pluginMinServer: "UE_MCP_PLUGIN_MIN_SERVER",
+  /** Prebuilt bridge binaries: a plugin directory, a .zip, a directory of archives, or a URL base. */
+  binaries: "UE_MCP_BINARIES",
   /** `1` skips the npm registry check for a newer release. */
   disableUpdateCheck: "UE_MCP_DISABLE_UPDATE_CHECK",
   /** Path of the cached update-check result. */

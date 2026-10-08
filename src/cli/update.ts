@@ -10,6 +10,7 @@ import { UE_MCP_LAUNCH } from "../integrations/claude-code/mcp-client-config.js"
 import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "../core/version-check.js";
 import { packageModulePath, packageRoot, packageVersion } from "../core/package-root.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
+import { installKindOf, resolvePluginDir } from "../editor/install-marker.js";
 import { RESET, BOLD, RED, DIM, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
 
 /** The version behind the `latest` dist-tag, which is the stable line. */
@@ -134,6 +135,23 @@ async function update(argv: string[]) {
     } catch {
       fail(`Could not update the local copy. Remove node_modules/ue-mcp manually, or pin .mcp.json to \`${UE_MCP_LAUNCH}\`.`);
     }
+  }
+
+  // 3. A binary install gets binaries for the new version, never source, and
+  //    its pinned client configs move with it. There is nothing to build.
+  const located = uproject ? resolvePluginDir(path.dirname(uproject)) : null;
+  if (uproject && shouldDeploy && located && installKindOf(located.dir) === "binary") {
+    console.log("");
+    step("Binary install: fetching prebuilt bridge binaries for this version...");
+    console.log("");
+    if (!runSelfCommand("init --yes --install=binary", projectArg)) {
+      fail("Fetching binaries failed. Close the editor if it is running, then run `ue-mcp update` again.");
+      process.exit(1);
+    }
+    console.log(formatDoctor(collectDoctor(projectArg)));
+    console.log(`  ${BOLD}Next:${RESET} restart the editor, then quit your MCP client and relaunch it.`);
+    console.log("");
+    return;
   }
 
   // 3. Deploy the bridge plugin sources into the project.

@@ -50,6 +50,15 @@ struct FMCPInstanceRecord
 
 	/** "listening" or "bind-failed". */
 	FString State;
+
+	/** Absolute directory of the loaded bridge plugin, forward slashes. */
+	FString PluginDir;
+
+	/** "source" or "binary", from the install marker when there is one. */
+	FString InstallKind;
+
+	/** The loaded plugin descriptor's VersionName. */
+	FString PluginVersion;
 };
 
 class FMCPBridgeStateFiles
@@ -86,6 +95,12 @@ public:
 
 	/** Parse a JSON object off disk, or null when it is absent or malformed. */
 	static TSharedPtr<FJsonObject> LoadJson(const FString& FilePath);
+
+	/**
+	 * "source" or "binary" for a plugin directory. The install marker's `kind`
+	 * wins; without one, a Source tree means source.
+	 */
+	static FString InstallKindFor(const FString& PluginDir);
 
 	/** <InstancesDir>/<Pid>.json. */
 	static FString RecordPath(const FString& InInstancesDir, uint32 Pid);

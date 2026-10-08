@@ -18,6 +18,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "init", summary: "Set up ue-mcp in a project", load: () => import("./init.js") },
   { name: "update", summary: "Update the deployed bridge and the server", load: () => import("./update.js") },
   { name: "doctor", summary: "Report what is installed and running", load: () => import("./doctor.js") },
+  { name: "status", summary: "Report one project's install and editor state (--json)", load: () => import("./status.js") },
   { name: "deploy", summary: "Deploy the bridge plugin into a project", load: () => import("./deploy-cli.js") },
   { name: "hook", summary: "Claude Code hook handler", load: () => import("./hook-handler.js") },
   { name: "uninstall-hooks", summary: "Remove a project's installed hooks", load: () => import("./uninstall-hooks.js") },

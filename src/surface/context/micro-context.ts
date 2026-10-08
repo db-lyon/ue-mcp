@@ -11,6 +11,7 @@
  * route.
  */
 import { z } from "zod";
+import { registeredMethodsOf, withholdFromTool, withholdUnregistered } from "../registered-surface.js";
 import type { ActionSpec, ToolDef } from "../../core/types.js";
 import { categoryTool } from "../category-tool.js";
 import { stripAction } from "../routing-params.js";
@@ -101,11 +102,11 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
       kind: "handler",
       effect: "read",
       description: "Find actions by keyword or intent; returns category.signature lines. Params: query, limit? (default 20)",
-      handler: async (_ctx, p) => {
+      handler: async (ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
         if (!query.trim()) throw new Error("Provide a query to search for actions.");
         const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 100) : 20;
-        const results = discoveryResults(tools, query, limit);
+        const results = discoveryResults(withholdUnregistered(tools, registeredMethodsOf(ctx?.bridge)), query, limit);
         return { query, count: results.length, results };
       },
     },
@@ -113,19 +114,24 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
       kind: "handler",
       effect: "read",
       description: "List every category with a one-line summary.",
-      handler: async () => ({
-        count: summaries.length,
-        categories: summaries,
+      handler: async (ctx) => {
+        const visible = new Set(withholdUnregistered(tools, registeredMethodsOf(ctx?.bridge)).map((t) => t.name));
+        const categories = summaries.filter((s) => visible.has(s.category));
+        return {
+        count: categories.length,
+        categories,
         next: 'tools(action="describe", category="<name>"), then tools(action="call", category, method, args)',
-      }),
+      };
+      },
     },
     describe: {
       kind: "handler",
       effect: "read",
       description: "A category's action signatures a page at a time, or one action's parameter schema. Params: category, method?, offset?",
-      handler: async (_ctx, p) => {
+      handler: async (ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
-        const tool = byName.get(category);
+        const declared = byName.get(category);
+        const tool = declared && withholdFromTool(declared, registeredMethodsOf(ctx?.bridge));
         if (!tool) {
           return { error: `Unknown category "${category}".`, categories: summaries.map((s) => s.category) };
         }

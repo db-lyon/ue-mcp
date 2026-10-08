@@ -7,6 +7,7 @@ import {
   bridgeLockfilePath,
   isPidAlive,
   lockfileIsFromThisLaunch,
+  readBridgeInstanceRecords,
   readBridgeLockfileIn,
   resolveBridgeTarget,
 } from "../../src/bridge/editor-target.js";
@@ -197,6 +198,44 @@ describe("resolveBridgeTarget instance-record fallback (#934)", () => {
     expect(target.ok).toBe(true);
     if (!target.ok) return;
     expect(target.port).toBe(51999);
+  });
+});
+
+describe("readBridgeInstanceRecords install fields", () => {
+  function writeRecord(projectDir: string, contents: Record<string, unknown>): void {
+    const file = path.join(bridgeInstancesDir(projectDir), `${contents.pid}.json`);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(contents));
+  }
+
+  it("reads where the plugin loaded from, its install kind and version", () => {
+    const projectDir = makeProjectDir();
+    writeRecord(projectDir, {
+      pid: 7, port: 50001, state: "listening",
+      pluginDir: "C:/Projects/Game/Plugins/UE_MCP_Bridge", installKind: "binary", pluginVersion: "1.3.10",
+    });
+    const [record] = readBridgeInstanceRecords(projectDir);
+    expect(record.pluginDir).toBe("C:/Projects/Game/Plugins/UE_MCP_Bridge");
+    expect(record.installKind).toBe("binary");
+    expect(record.pluginVersion).toBe("1.3.10");
+  });
+
+  it("reports null for a plugin that predates the fields", () => {
+    const projectDir = makeProjectDir();
+    writeRecord(projectDir, { pid: 8, port: 50002, state: "listening" });
+    const [record] = readBridgeInstanceRecords(projectDir);
+    expect(record.pluginDir).toBeNull();
+    expect(record.installKind).toBeNull();
+    expect(record.pluginVersion).toBeNull();
+  });
+
+  it("rejects an install kind it does not know and empty strings", () => {
+    const projectDir = makeProjectDir();
+    writeRecord(projectDir, { pid: 9, port: 50003, pluginDir: "", installKind: "prebuilt", pluginVersion: 3 });
+    const [record] = readBridgeInstanceRecords(projectDir);
+    expect(record.pluginDir).toBeNull();
+    expect(record.installKind).toBeNull();
+    expect(record.pluginVersion).toBeNull();
   });
 });
 

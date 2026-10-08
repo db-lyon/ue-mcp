@@ -43,7 +43,9 @@ async function deployCmd(argv: string[]) {
     process.exit(1);
   }
 
-  if (result.cppPluginDeployed) {
+  if (result.skipped) {
+    ok(`Plugin left untouched: ${result.skipped}. Run \`ue-mcp update\` for new binaries.`);
+  } else if (result.cppPluginDeployed) {
     ok("Plugin sources updated - rebuild required");
   } else {
     ok("Plugin already up to date");

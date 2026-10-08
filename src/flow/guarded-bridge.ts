@@ -74,6 +74,10 @@ abstract class ForwardingBridge implements IBridge {
     return this.inner.capabilities;
   }
 
+  get registeredActions(): IBridge["registeredActions"] {
+    return this.inner.registeredActions;
+  }
+
   connect(timeoutMs?: number): Promise<void> {
     return this.inner.connect(timeoutMs);
   }
