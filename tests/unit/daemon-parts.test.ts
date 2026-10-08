@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { classifyDisconnect, ExpectedDisconnect } from "../../src/daemon/disconnect.js";
+import { classifyDisconnect, ExpectedDisconnect, settleAndClassify } from "../../src/daemon/disconnect.js";
 import { EventLog } from "../../src/daemon/events.js";
 import { isOlder } from "../../src/daemon/daemon.js";
 import { discoveryPath, readDiscovery, readLiveDiscovery, removeDiscovery, writeDiscovery } from "../../src/daemon/discovery.js";
@@ -33,6 +33,19 @@ describe("classifyDisconnect", () => {
   it("tells a crash from a clean exit by the record the bridge leaves behind", () => {
     expect(classifyDisconnect({ record, expected: null, isAlive: () => false, recordExists: () => true })).toBe("crashed");
     expect(classifyDisconnect({ record, expected: null, isAlive: () => false, recordExists: () => false })).toBe("closed");
+  });
+
+  it("waits for a cleanly closing editor to exit before calling it closed", async () => {
+    // A clean shutdown drops the socket seconds before the process goes.
+    let polls = 0;
+    const isAlive = () => ++polls < 4;
+    const cause = await settleAndClassify({ record, expected: null, isAlive, recordExists: () => false }, 5000, 5);
+    expect(cause).toBe("closed");
+    expect(polls).toBeGreaterThanOrEqual(4);
+  });
+
+  it("says unknown when the editor outlives the wait", async () => {
+    expect(await settleAndClassify({ record, expected: null, isAlive: () => true }, 20, 5)).toBe("unknown");
   });
 
   it("forgets an announcement after its window", () => {

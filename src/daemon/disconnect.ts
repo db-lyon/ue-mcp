@@ -31,6 +31,25 @@ export function classifyDisconnect(e: DisconnectEvidence): DisconnectCause {
   return exists ? "crashed" : "closed";
 }
 
+/**
+ * Classify once the evidence has settled. An editor closes its socket before
+ * its process exits (a clean shutdown takes seconds), so judging at once would
+ * call every clean exit `unknown`. Waits for the process to go, up to `maxMs`.
+ */
+export async function settleAndClassify(
+  e: DisconnectEvidence,
+  maxMs = 60_000,
+  pollMs = 250,
+): Promise<DisconnectCause> {
+  if (e.expected || !e.record) return classifyDisconnect(e);
+  const alive = e.isAlive ?? isPidAlive;
+  const deadline = Date.now() + maxMs;
+  while (alive(e.record.pid) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+  return classifyDisconnect(e);
+}
+
 /** An announced restart or rebuild, valid for a window so a stale one cannot mislabel a later crash. */
 export class ExpectedDisconnect {
   private current: { cause: "restarting" | "rebuild"; until: number } | null = null;

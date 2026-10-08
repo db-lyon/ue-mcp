@@ -32,12 +32,10 @@ import {
   type DaemonDiscovery,
 } from "./discovery.js";
 import { EventLog } from "./events.js";
-import { ExpectedDisconnect, classifyDisconnect, type DisconnectCause } from "./disconnect.js";
+import { ExpectedDisconnect, settleAndClassify, type DisconnectCause } from "./disconnect.js";
 import { WebSocketServerTransport } from "./ws-transport.js";
 
 const DEFAULT_IDLE_MS = 30 * 60_000;
-/** Time for a dying editor's process to actually exit before the cause is judged. */
-const CLASSIFY_DELAY_MS = 1500;
 
 export interface EditorState {
   name: string;
@@ -116,11 +114,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       state.connected = false;
       const record = records.get(session) ?? null;
       const announced = expected.get();
-      setTimeout(() => {
-        const cause = classifyDisconnect({ record, expected: announced });
+      void settleAndClassify({ record, expected: announced }).then((cause) => {
         state.lastDisconnect = { cause, detail: change.detail, at: new Date().toISOString() };
         events.publish("editor.disconnected", { editor: session.name, cause, detail: change.detail ?? null, pid: record?.pid ?? null });
-      }, CLASSIFY_DELAY_MS).unref();
+      });
     });
 
     // Reattach as soon as an editor publishes its record, not at the next tick.
