@@ -14,6 +14,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { packageRoot } from "../core/package-root.js";
+import { installKindOf, resolvePluginDir } from "./install-marker.js";
 
 
 export interface PluginFreshness {
@@ -145,9 +146,13 @@ function computePluginFreshness(uprojectPath: string | null): PluginFreshness {
     return { checked: false, stale: false, reason: "no project loaded" };
   }
   try {
-    const deployedPluginDir = path.join(path.dirname(uprojectPath), "Plugins", "UE_MCP_Bridge");
-    if (!fs.existsSync(deployedPluginDir)) {
+    const deployedPluginDir = resolvePluginDir(path.dirname(uprojectPath))?.dir;
+    if (!deployedPluginDir) {
       return { checked: false, stale: false, reason: "bridge plugin is not deployed to this project" };
+    }
+    // Prebuilt binaries have no source to be behind; bridge parity covers them.
+    if (installKindOf(deployedPluginDir) === "binary") {
+      return { checked: false, stale: false, reason: "binary install: source timestamps do not apply" };
     }
 
     const binary = findCompiledBinary(deployedPluginDir);

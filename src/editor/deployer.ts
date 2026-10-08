@@ -3,12 +3,29 @@ import * as path from "node:path";
 import type { ProjectContext } from "../config/project.js";
 import { warn } from "../core/log.js";
 import { UPluginSchema } from "../surface/schemas.js";
-import { packageRoot } from "../core/package-root.js";
+import { engineLookupFor, trySelectEngine } from "./engine-root.js";
+import { packageRoot, packageVersion } from "../core/package-root.js";
+import {
+  BRIDGE_PLUGIN_NAME,
+  INSTALL_MARKER_NAME,
+  defaultPluginDir,
+  engineMajorMinor,
+  installKindOf,
+  resolvePluginDir,
+  unrealPlatform,
+  writeInstallMarker,
+  type InstallKind,
+} from "./install-marker.js";
 
 export interface DeployResult {
   pythonPluginEnabled: boolean;
   cppPluginDeployed: boolean;
   cppPluginEnabled: boolean;
+  pluginDir?: string;
+  /** How the plugin is installed after this call. */
+  installKind?: InstallKind;
+  /** Set when source was not written, with the reason. */
+  skipped?: string;
   error?: string;
 }
 
@@ -19,6 +36,10 @@ export interface AttachResult {
   packagedVersion: string | null;
   installedVersion: string | null;
   versionMatch: boolean | null;
+  pluginDir: string | null;
+  /** Where pluginDir came from: a live editor's record, the default path, or a scan. */
+  pluginDirSource: "instance-record" | "default" | "scan" | null;
+  installKind: InstallKind | null;
   error?: string;
 }
 
@@ -38,8 +59,24 @@ export function deploy(context: ProjectContext): DeployResult {
   };
 
   try {
+    const projectDir = path.dirname(context.projectPath!);
+    const pluginDir = resolvePluginDir(projectDir)?.dir ?? defaultPluginDir(projectDir);
+    result.pluginDir = pluginDir;
+    if (installKindOf(pluginDir) === "binary") {
+      // Source newer than the binaries makes the next launch a rebuild prompt.
+      result.installKind = "binary";
+      result.skipped = "binary install: plugin source is never written over prebuilt binaries";
+    } else {
+      result.cppPluginDeployed = deployPluginTree(path.join(packageRoot(), "plugin", "ue_mcp_bridge"), pluginDir);
+      writeInstallMarker(pluginDir, {
+        kind: "source",
+        engine: projectEngineVersion(context),
+        platform: unrealPlatform(),
+        version: packageVersion(),
+      });
+      result.installKind = "source";
+    }
     result.pythonPluginEnabled = ensurePythonPlugin(context.projectPath!);
-    result.cppPluginDeployed = deployCppPlugin(context.projectPath!);
     result.cppPluginEnabled = ensureCppPluginEnabled(context.projectPath!);
   } catch (e) {
     result.error = e instanceof Error ? e.message : String(e);
@@ -48,9 +85,22 @@ export function deploy(context: ProjectContext): DeployResult {
   return result;
 }
 
+/** Engine major.minor the project builds against, or its raw association. */
+export function projectEngineVersion(context: ProjectContext): string | null {
+  const assoc = context.engineAssociation;
+  if (assoc && /^\d+\.\d+$/.test(assoc)) return assoc;
+  try {
+    const engine = trySelectEngine(engineLookupFor(context.projectPath, assoc, context.config.editor), "engineRoot");
+    return engineMajorMinor(engine?.engineRoot) ?? assoc;
+  } catch {
+    return assoc;
+  }
+}
+
 export function deploySummary(r: DeployResult): string {
   if (r.error) return `Bridge deployment failed: ${r.error}`;
   const changes: string[] = [];
+  if (r.skipped) changes.push(`left plugin untouched (${r.skipped})`);
   if (r.pythonPluginEnabled) changes.push("enabled PythonScriptPlugin");
   if (r.cppPluginDeployed) changes.push("deployed C++ bridge plugin");
   if (r.cppPluginEnabled) changes.push("enabled UE_MCP_Bridge in .uproject");
@@ -88,18 +138,23 @@ export function attach(context: ProjectContext): AttachResult {
     packagedVersion: null,
     installedVersion: null,
     versionMatch: null,
+    pluginDir: null,
+    pluginDirSource: null,
+    installKind: null,
   };
 
   try {
     const uprojectPath = context.projectPath!;
     const projectDir = path.dirname(uprojectPath);
+    const resolved = resolvePluginDir(projectDir);
     const installedUplugin = path.join(
-      projectDir,
-      "Plugins",
-      "UE_MCP_Bridge",
-      "UE_MCP_Bridge.uplugin",
+      resolved?.dir ?? defaultPluginDir(projectDir),
+      `${BRIDGE_PLUGIN_NAME}.uplugin`,
     );
 
+    result.pluginDir = resolved?.dir ?? null;
+    result.pluginDirSource = resolved?.source ?? null;
+    result.installKind = resolved ? installKindOf(resolved.dir) : null;
     result.cppPluginPresent = fs.existsSync(installedUplugin);
     result.installedVersion = readUpluginVersion(installedUplugin);
     result.packagedVersion = readUpluginVersion(packagedUpluginPath());
@@ -131,8 +186,9 @@ export function attachSummary(r: AttachResult): string {
       `UE_MCP_Bridge plugin NOT installed - run \`ue-mcp init <uproject>\` to deploy (packaged v${r.packagedVersion ?? "?"})`,
     );
   } else if (r.versionMatch === false) {
+    const fix = r.installKind === "binary" ? "ue-mcp update <uproject>" : "ue-mcp deploy <uproject>";
     notes.push(
-      `bridge version mismatch - installed v${r.installedVersion}, packaged v${r.packagedVersion}. Source left untouched; run \`ue-mcp deploy <uproject>\` to upgrade.`,
+      `bridge version mismatch - installed v${r.installedVersion}, packaged v${r.packagedVersion}. Plugin left untouched; run \`${fix}\` to upgrade.`,
     );
   } else if (r.versionMatch === true) {
     notes.push(`bridge v${r.installedVersion} present (source untouched)`);
@@ -214,7 +270,7 @@ export function staleDeployedEntries(
  *
  * Exported with both directories as arguments so the whole step, including the
  * Build.cs touch that a new source file depends on, can be driven against real
- * directories. deployCppPlugin resolves the authored tree relative to this
+ * directories. deploy() resolves the authored tree relative to this
  * module, which no test can redirect.
  */
 export function deployPluginTree(sourcePluginDir: string, targetPluginDir: string): boolean {
@@ -229,7 +285,8 @@ export function deployPluginTree(sourcePluginDir: string, targetPluginDir: strin
 
   // Build outputs live in the deployed tree, not the source tree, so they are
   // never copied and never pruned.
-  const artifactDirs = new Set(["Binaries", "Intermediate", "Saved"]);
+  // The install marker is written by deploy() itself, so it is kept the same way.
+  const artifactDirs = new Set(["Binaries", "Intermediate", "Saved", INSTALL_MARKER_NAME]);
 
   // Windows and macOS keep the ORIGINAL casing of a file that already exists
   // when it is rewritten, so `ue_mcp_bridge.uplugin` copied over a deployed
@@ -322,14 +379,6 @@ export function deployPluginTree(sourcePluginDir: string, targetPluginDir: strin
     touchBuildRules(targetPluginDir, newSourceFiles);
   }
   return anyDeployed;
-}
-
-function deployCppPlugin(uprojectPath: string): boolean {
-  const projectDir = path.dirname(uprojectPath);
-  return deployPluginTree(
-    path.join(packageRoot(), "plugin", "ue_mcp_bridge"),
-    path.join(projectDir, "Plugins", "UE_MCP_Bridge"),
-  );
 }
 
 /**
