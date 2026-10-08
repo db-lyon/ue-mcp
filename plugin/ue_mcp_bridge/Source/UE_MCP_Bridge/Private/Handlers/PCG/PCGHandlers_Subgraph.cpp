@@ -1,4 +1,5 @@
 #include "PCGHandlers.h"
+#include "PCGHandlers_Internal.h"
 #include "HandlerUtils.h"
 #include "HandlerPackageSave.h"
 #include "HandlerJsonProperty.h"
@@ -27,11 +28,8 @@ namespace
 
 		Out.Graph = LoadAssetByPath<UPCGGraph>(AssetPath);
 		if (!Out.Graph) return MCPAssetLoadError(AssetPath, TEXT("PCGGraph"));
-		for (UPCGNode* Node : Out.Graph->GetNodes())
-		{
-			if (Node && Node->GetName() == NodeName) { Out.Node = Node; break; }
-		}
-		if (!Out.Node) return MCPError(FString::Printf(TEXT("Node not found: %s. read_graph lists the node names."), *NodeName));
+		Out.Node = MCPPCG::FindNode(Out.Graph, NodeName);
+		if (!Out.Node) return MCPPCG::NodeNotFoundError(Out.Graph, NodeName);
 		Out.Settings = Cast<UPCGSubgraphSettings>(const_cast<UPCGSettings*>(Out.Node->GetSettings()));
 		if (!Out.Settings)
 		{
