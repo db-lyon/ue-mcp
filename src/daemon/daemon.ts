@@ -26,26 +26,25 @@ import { createMcpServer } from "../server/mcp-server.js";
 import {
   DAEMON_API_VERSION,
   newToken,
+  projectKey,
   readLiveDiscovery,
   removeDiscovery,
   writeDiscovery,
   type DaemonDiscovery,
 } from "./discovery.js";
 import { EventLog } from "./events.js";
-import { ExpectedDisconnect, settleAndClassify, type DisconnectCause } from "./disconnect.js";
+import { ExpectedDisconnect, settleAndClassify } from "./disconnect.js";
 import { WebSocketServerTransport } from "./ws-transport.js";
 import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
+import { userDir } from "../core/user-dir.js";
+import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus } from "./extension-api.js";
+import { loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
+import { UiBundleStore, contentType } from "./ui-bundles.js";
 import { subscribeFlowEvents } from "../flow/events.js";
 
 const DEFAULT_IDLE_MS = 30 * 60_000;
 
-export interface EditorState {
-  name: string;
-  connected: boolean;
-  port: number;
-  pid: number | null;
-  lastDisconnect: { cause: DisconnectCause; detail?: string; at: string } | null;
-}
+export type EditorState = EditorStatus;
 
 export interface Daemon {
   port: number;
@@ -58,6 +57,8 @@ export interface Daemon {
   clientCount(): number;
   /** Requests received and not yet answered, across all MCP sessions. */
   inflight(): number;
+  extensions: LoadedExtension[];
+  ui: UiBundleStore;
   close(): Promise<void>;
 }
 
@@ -69,6 +70,10 @@ export interface DaemonOptions {
   port?: number;
   /** Skip writing the discovery file, for tests that run several daemons. */
   publish?: boolean;
+  /** Where extensions are loaded from. Defaults to extensionsDir(). */
+  extensionsDir?: string;
+  /** Where UI bundles are kept. Defaults to uiStoreDir(). */
+  uiDir?: string;
 }
 
 export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
@@ -190,16 +195,22 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     if (origin === undefined) return true;
     return origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
   };
+  const cookieToken = (req: http.IncomingMessage): string | null => {
+    const m = /(?:^|;\s*)ue_mcp_token=([0-9a-f]+)/.exec(req.headers.cookie ?? "");
+    return m ? m[1] : null;
+  };
   const authorized = (req: http.IncomingMessage): boolean => {
     if (!hostIsAllowed(req) || !originAllowed(req)) return false;
     const header = req.headers.authorization;
     if (header === `Bearer ${token}`) return true;
+    // The served page authenticates by cookie, set once from ?token= on /ui.
+    if (cookieToken(req) === token) return true;
     // EventSource cannot set headers; the stream alone also takes the token as a query.
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     return url.pathname === "/v1/events" && url.searchParams.get("token") === token;
   };
 
-  const health = () => ({
+  const health = (): DaemonHealth => ({
     ok: true,
     pid: process.pid,
     version: packageVersion(),
@@ -210,6 +221,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     clients,
     inflight: inflight(),
     lastEventId: events.lastId,
+    extensions: extensions.map((x) => ({ name: x.name, version: x.version })),
+    ui: ui.active()?.manifest.version ?? null,
   });
   const editors = (): EditorState[] => rt.sessions.list().map((s) => states.get(s) ?? {
     name: s.name, connected: s.bridge.isConnected, port: s.bridge.port, pid: null, lastDisconnect: null,
@@ -242,12 +255,73 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     return { op, steps };
   };
 
+  // ── UI bundles and extensions ───────────────────────────────────
+  const ui = new UiBundleStore(DAEMON_API_VERSION, opts.uiDir);
+  const extensions: LoadedExtension[] = await loadExtensions((name, routes, setBusy): DaemonExtensionApi => ({
+    apiVersion: EXTENSION_API_VERSION,
+    version: packageVersion(),
+    projectDir,
+    dataDir: (() => {
+      const dir = path.join(userDir(), "data", projectKey(projectDir), name);
+      fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    })(),
+    events: {
+      publish: (type, data) => events.publish(`${name}.${type}`, data),
+      subscribe: (listener) => events.subscribe(listener),
+      since: (lastId) => events.since(lastId),
+    },
+    route: (method, routePath, handler) => {
+      routes.push({ method, path: routePath, handler });
+    },
+    callAction: async (category, action, args) => {
+      const r = await rt.callAction(category, action, args);
+      return { isError: !!r.isError, content: r.content };
+    },
+    editors: () => editors(),
+    editorOperation: (op) => editorOp(op),
+    setBusy,
+    ui: {
+      trustKey: (pem) => ui.trustKey(pem),
+      install: (dir) => ui.install(dir),
+      active: () => ui.active()?.manifest ?? null,
+    },
+    log: {
+      info: (message) => info(`ext:${name}`, message),
+      warn: (message, detail) => warn(`ext:${name}`, message, detail),
+    },
+  }), opts.extensionsDir);
+
+  const readBody = (req: http.IncomingMessage): Promise<unknown> => new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf-8").trim();
+      if (!raw) return resolve(undefined);
+      try {
+        resolve(JSON.parse(raw));
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on("error", reject);
+  });
+
   const json = (res: http.ServerResponse, status: number, body: unknown): void => {
     res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
   };
 
   let closing: Promise<void> | null = null;
   const httpServer = http.createServer((req, res) => {
+    const first = new URL(req.url ?? "/", "http://127.0.0.1");
+    if (req.method === "GET" && (first.pathname === "/ui" || first.pathname === "/ui/") && first.searchParams.get("token") === token
+      && hostIsAllowed(req)) {
+      res.writeHead(302, {
+        "set-cookie": `ue_mcp_token=${token}; HttpOnly; SameSite=Strict; Path=/`,
+        location: "/ui/",
+      }).end();
+      return;
+    }
     if (!authorized(req)) {
       res.writeHead(401).end();
       return;
@@ -292,6 +366,43 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       );
       return;
     }
+    if (req.method === "GET" && (url.pathname === "/ui" || url.pathname.startsWith("/ui/"))) {
+      const file = ui.resolve(url.pathname);
+      if (!file) {
+        const none = ui.active() === null;
+        res.writeHead(none ? 503 : 404, { "content-type": "text/plain; charset=utf-8" })
+          .end(none ? "No client UI is installed for this daemon." : "Not found.");
+        return;
+      }
+      res.writeHead(200, {
+        "content-type": contentType(file),
+        "cache-control": "no-cache",
+        "x-content-type-options": "nosniff",
+      });
+      fs.createReadStream(file).pipe(res);
+      return;
+    }
+    if (url.pathname.startsWith("/v1/ext/")) {
+      const hit = matchRoute(extensions, req.method ?? "GET", url.pathname);
+      if (!hit) {
+        res.writeHead(404).end();
+        return;
+      }
+      readBody(req)
+        .then((body) => hit.route.handler({
+          method: req.method ?? "GET",
+          path: url.pathname.slice(`/v1/ext/${hit.ext.name}`.length) || "/",
+          params: hit.params,
+          query: Object.fromEntries(url.searchParams),
+          headers: req.headers,
+          body,
+        }))
+        .then((out) => {
+          const n = normalizeResponse(out ?? undefined);
+          res.writeHead(n.status, n.headers).end(n.body);
+        }, (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
+      return;
+    }
     if (url.pathname === "/v1/flows" || url.pathname.startsWith("/v1/flows/")) {
       const sub = url.pathname.slice("/v1".length).replace(/\/+$/, "");
       handleFlowRoute(rt.flowTool, rt.baseCtx, req, res, sub, url).then(
@@ -324,7 +435,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   function touch(): void {
     lastActive = Date.now();
   }
-  const busy = (): boolean => clients > 0 || sse.size > 0 || editors().some((e) => e.connected);
+  const busy = (): boolean => clients > 0 || sse.size > 0 || editors().some((e) => e.connected) || extensions.some((x) => x.busy());
   const idleTimer = setInterval(() => {
     if (busy()) {
       touch();
@@ -347,6 +458,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       events.publish("daemon.stopping", { reason });
       clearInterval(idleTimer);
       unsubscribeFlows();
+      for (const x of extensions) await Promise.resolve(x.dispose?.()).catch((e) => warn("extension", `${x.name} dispose failed`, e));
       for (const w of watchers) w.close();
       if (opts.publish !== false) removeDiscovery(projectDir);
       for (const res of sse) res.end();
@@ -383,6 +495,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     editors,
     clientCount: () => clients,
     inflight,
+    extensions,
+    ui,
     close: () => shutdown("closed"),
   };
 }

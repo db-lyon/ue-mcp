@@ -119,6 +119,10 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
+  "daemon/ui-bundles.ts": "Verifies, stores and resolves signed UI bundles kept per user. No editor is involved.",
+  "daemon/extensions.ts": "Loads extensions from the user's extensions directory and matches their routes. No editor is involved.",
+  "daemon/extension-api.ts": "The extension contract's types. A leaf with no state.",
+  "daemon-api.ts": "The public ue-mcp/daemon entry point: re-exports types and helpers.",
   "daemon/disconnect.ts": "Classifies a disconnect from the evidence it is handed. Pure logic.",
   "daemon/events.ts": "A numbered, bounded event log. No editor is involved.",
   "daemon/ws-transport.ts": "MCP's transport over one WebSocket. No editor is involved.",

@@ -54,6 +54,8 @@ export const ENV_VARS = {
   daemonDir: "UE_MCP_DAEMON_DIR",
   /** How long a daemon with no editor, client or stream attached waits before exiting, in milliseconds. */
   daemonIdleMs: "UE_MCP_DAEMON_IDLE_MS",
+  /** Directory daemon extensions are loaded from. Unset means ~/.ue-mcp/extensions. */
+  extensionsDir: "UE_MCP_EXTENSIONS_DIR",
 
   // ── Flow HTTP surface ──────────────────────────────────────────────
   /** Bearer token for the flow HTTP server, over a freshly generated one. */

@@ -1,10 +1,11 @@
 /**
- * `ue-mcp daemon <run|start|stop|status> [project] [--json]`
+ * `ue-mcp daemon <run|start|stop|status|open> [project] [--json] [--browser]`
  *
  * run     the daemon in the foreground (what start launches)
  * start   a detached daemon for the project, if none is running
  * stop    ask the project's daemon to exit
  * status  the project's daemon: discovery record and health
+ * open    the UI URL (with --browser, open it)
  */
 import * as path from "node:path";
 import { findUProject } from "../config/uproject-path.js";
@@ -13,15 +14,24 @@ import { runDaemon } from "../daemon/daemon.js";
 import { ensureDaemon } from "../daemon/shim.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { fail, ok } from "./ui/ansi.js";
+import { spawn } from "node:child_process";
 
-const USAGE = "usage: ue-mcp daemon <run|start|stop|status> [project] [--json]";
+function openUrl(url: string): void {
+  const [cmd, args] = process.platform === "win32"
+    ? ["cmd", ["/c", "start", "", url]]
+    : process.platform === "darwin" ? ["open", [url]] : ["xdg-open", [url]];
+  spawn(cmd, args as string[], { detached: true, stdio: "ignore" }).unref();
+}
+
+const USAGE = "usage: ue-mcp daemon <run|start|stop|status|open> [project] [--json] [--browser]";
 
 export async function run(argv: string[]): Promise<number | void> {
   const json = argv.includes("--json");
   const out = (v: unknown): void => {
     process.stdout.write(JSON.stringify(v, null, 2) + "\n");
   };
-  const [sub, ...rest] = argv.filter((a) => a !== "--json");
+  const browser = argv.includes("--browser");
+  const [sub, ...rest] = argv.filter((a) => a !== "--json" && a !== "--browser");
   let target: { projectPath?: string; rest: string[] };
   try {
     target = takeEditorTarget(rest);
@@ -35,7 +45,7 @@ export async function run(argv: string[]): Promise<number | void> {
     const found = findUProject(process.cwd());
     if (found) projects.push(found);
   }
-  if (!sub || !["run", "start", "stop", "status"].includes(sub)) {
+  if (!sub || !["run", "start", "stop", "status", "open"].includes(sub)) {
     fail(USAGE);
     return 2;
   }
@@ -51,6 +61,15 @@ export async function run(argv: string[]): Promise<number | void> {
     const d = await ensureDaemon(projects[0]);
     if (json) out({ ok: true, pid: d.pid, port: d.port, version: d.version });
     else ok(`daemon ${d.version} running (pid ${d.pid}, port ${d.port})`);
+    return 0;
+  }
+
+  if (sub === "open") {
+    const live = await ensureDaemon(projects[0]);
+    const url = `http://127.0.0.1:${live.port}/ui/?token=${live.token}`;
+    if (json) out({ ok: true, url });
+    else console.log(url);
+    if (browser) openUrl(url);
     return 0;
   }
 
