@@ -293,7 +293,8 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
       }
     },
     callAction(category, action, args = {}) {
-      const tool = advertisedTools.find((t) => t.name === category);
+      // The full graph, not the advertised one: in micro mode only the gateway is advertised.
+      const tool = primaryLoad.surface.tools.find((t) => t.name === category);
       if (!tool) return Promise.reject(new Error(`unknown category '${category}'`));
       const deps: DispatchDeps = {
         sessions,
