@@ -65,6 +65,10 @@ const PER_SESSION: Record<string, string> = {
   "index.ts": "Wires the registry, the per-session loads and the MCP server together.",
   "server/runtime.ts": "Owns the session registry, each session's load, guards and bridge, and the targeting baked into the tool graph.",
   "server/mcp-server.ts": "Dispatches each MCP connection's calls through the runtime's sessions.",
+  "daemon/daemon.ts": "One daemon per project root: it owns that project's runtime and follows each of its editors.",
+  "daemon/discovery.ts": "Publishes and reads the discovery record of one project root's daemon.",
+  "daemon/shim.ts": "Relays one MCP client to the daemon of the project it was started for.",
+  "cli/daemon-cli.ts": "Runs, starts, stops or reports the daemon of the project it is handed.",
   "sessions/session-load.ts": "One tool graph, task registry and guard pipeline per editor, built from that editor's own project.",
   "dispatch/server-dispatch.ts": "Routes each call to the editor it addressed and runs it through that editor's registry and guard.",
   "cli/hook-handler.ts": "Runs against the project the hook payload named.",
@@ -115,6 +119,9 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
+  "daemon/disconnect.ts": "Classifies a disconnect from the evidence it is handed. Pure logic.",
+  "daemon/events.ts": "A numbered, bounded event log. No editor is involved.",
+  "daemon/ws-transport.ts": "MCP's transport over one WebSocket. No editor is involved.",
   "surface/action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
   "surface/action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",
   "surface/routing-params.ts": "The dispatcher's parameter names and the helper that strips `action`. A leaf with no imports and no state.",
