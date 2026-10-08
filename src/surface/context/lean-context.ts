@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ActionSpec, ToolDef } from "../../core/types.js";
 import { actionEnum, categoryTool } from "../category-tool.js";
 import { actionSchema } from "../action-schema.js";
+import { registeredMethodsOf, withholdFromTool, withholdUnregistered } from "../registered-surface.js";
 import { searchToolGraph } from "./tool-search.js";
 import { actionSignature } from "../action-signature.js";
 import { readEnv } from "../../core/env.js";
@@ -117,7 +118,7 @@ function leanTool(tool: ToolDef): ToolDef {
       kind: "handler",
       effect: "read",
       description: `Signatures of the ${tool.name} category's actions, a page at a time. Params: offset?`,
-      handler: async (_ctx, p) => describeCategory(tool, readOffset(p)),
+      handler: async (ctx, p) => describeCategory(withholdFromTool(tool, registeredMethodsOf(ctx?.bridge)) ?? tool, readOffset(p)),
     };
   }
 
@@ -161,13 +162,13 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
       kind: "handler",
       effect: "read",
       description: "Rank actions across every category by keyword; returns signatures. Params: query, limit? (default 20)",
-      handler: async (_ctx, p) => {
+      handler: async (ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
         const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 100) : 20;
         if (!query.trim()) {
           return { error: 'Provide a "query" string, e.g. catalog(action="search", query="spawn actor").' };
         }
-        const results = discoveryResults(tools, query, limit);
+        const results = discoveryResults(withholdUnregistered(tools, registeredMethodsOf(ctx?.bridge)), query, limit);
         return { query, count: results.length, results };
       },
     },
@@ -175,9 +176,10 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
       kind: "handler",
       effect: "read",
       description: "A category's action signatures a page at a time, or one action's parameter schema. Params: category, method?, offset?",
-      handler: async (_ctx, p) => {
+      handler: async (ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
-        const tool = byName.get(category);
+        const declared = byName.get(category);
+        const tool = declared && withholdFromTool(declared, registeredMethodsOf(ctx?.bridge));
         if (!tool) {
           return { error: `Unknown category "${category}". Use catalog(action="list_categories").`, categories: summaries.map((s) => s.category) };
         }

@@ -275,6 +275,12 @@ export interface IBridge {
   readonly isConnected: boolean;
   /** #821: what the connected bridge reported at handshake, when there is one. */
   readonly capabilities?: BridgeCapabilities | null;
+  /**
+   * The methods the last plugin to answer the handshake registered, or null
+   * when none published a list. Kept across a disconnect so an editor restart
+   * does not re-advertise what it lacks.
+   */
+  readonly registeredActions?: readonly string[] | null;
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   connect(timeoutMs?: number): Promise<void>;
   /**
@@ -300,6 +306,34 @@ export class EditorBridge implements IBridge {
    * disconnected or awaiting its handshake. `legacy` marks an unanswered handshake.
    */
   public capabilities: BridgeCapabilities | null = null;
+
+  private registered: readonly string[] | null = null;
+  private readonly registeredListeners = new Set<(actions: readonly string[] | null) => void>();
+
+  get registeredActions(): readonly string[] | null {
+    return this.registered;
+  }
+
+  /** Called whenever registeredActions changes. Returns the unsubscribe. */
+  onRegisteredActionsChanged(listener: (actions: readonly string[] | null) => void): () => void {
+    this.registeredListeners.add(listener);
+    return () => this.registeredListeners.delete(listener);
+  }
+
+  private setRegistered(actions: readonly string[] | null): void {
+    const same = actions === this.registered
+      || (actions !== null && this.registered !== null && actions.length === this.registered.length
+        && actions.every((a, i) => a === this.registered![i]));
+    if (same) return;
+    this.registered = actions;
+    for (const listener of this.registeredListeners) {
+      try {
+        listener(actions);
+      } catch (e) {
+        warn("bridge", "registered-actions listener failed", e);
+      }
+    }
+  }
 
   // How this.port was decided. Precedence for the *preferred* port (the one
   // used when no editor lockfile is present) is explicit > env > config >
@@ -437,6 +471,8 @@ export class EditorBridge implements IBridge {
     const resolved = path.resolve(uprojectPath);
     const previous = this.projectPathForLockfile;
     this.closeSocket(`Bridge retargeted to ${resolved}`);
+    // Another project's plugin says nothing about this one's.
+    this.setRegistered(null);
     this.projectPathForLockfile = resolved;
     this.unverifiedPin = false;
 
@@ -720,7 +756,7 @@ export class EditorBridge implements IBridge {
         resolve({ ...LEGACY_CAPABILITIES });
       };
 
-      const finish = (capabilities: BridgeCapabilities): void => {
+      const finish = (capabilities: BridgeCapabilities, timedOut = false): void => {
         if (settled) return;
         settled = true;
         detach();
@@ -731,6 +767,12 @@ export class EditorBridge implements IBridge {
           return;
         }
         this.capabilities = capabilities;
+        // A timed-out handshake is no evidence either way, so it keeps the list.
+        if (!timedOut) {
+          this.setRegistered(Array.isArray(capabilities.actions) && capabilities.actions.length > 0
+            ? [...capabilities.actions].sort()
+            : null);
+        }
 
         const mismatch = describeProtocolMismatch(capabilities);
         if (mismatch) {
@@ -763,7 +805,7 @@ export class EditorBridge implements IBridge {
         });
       };
 
-      const timer = setTimeout(() => finish({ ...LEGACY_CAPABILITIES }), timeoutMs);
+      const timer = setTimeout(() => finish({ ...LEGACY_CAPABILITIES }, true), timeoutMs);
 
       ws.on("message", onMessage);
       ws.on("close", onClose);

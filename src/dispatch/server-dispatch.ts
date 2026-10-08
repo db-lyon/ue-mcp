@@ -32,6 +32,7 @@ import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "../surface/action-schema.js";
+import { withheldTarget } from "../surface/registered-surface.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
@@ -269,6 +270,10 @@ export async function dispatchCategoryCall(
   if (!sessionRegistry.listRegistered().includes(taskName)) {
     return errorResult("NOT_FOUND", unknownActionMessage(action, tool.name, Object.keys(tool.actions)));
   }
+
+  // Withheld from the surface because the running plugin lacks its method (6.4).
+  const withheld = withheldTarget(sessionLoad.registryTools, effectiveTask, session.bridge);
+  if (withheld) return errorResult("NOT_FOUND", withheld);
 
   const served = attribution(sessions, session);
   try {

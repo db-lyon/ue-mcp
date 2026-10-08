@@ -277,6 +277,30 @@ describe("bridge capability handshake", () => {
     }
   });
 
+  it("keeps the registered method list across a disconnect and drops it on retarget", async () => {
+    const server = await withBridgeServer(() => {}, { ...DEFAULT_CAPABILITIES, actions: ["b_method", "a_method"] });
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
+    const bridge = new EditorBridge("127.0.0.1", server.port);
+    const seen: Array<readonly string[] | null> = [];
+    bridge.onRegisteredActionsChanged((actions) => seen.push(actions));
+
+    try {
+      await bridge.connect(1000);
+      expect(bridge.registeredActions).toEqual(["a_method", "b_method"]);
+      bridge.disconnect();
+      expect(bridge.registeredActions).toEqual(["a_method", "b_method"]);
+      await bridge.connect(1000);
+      // Same list again: no second notification.
+      expect(seen).toHaveLength(1);
+      bridge.retargetProject(path.join(os.tmpdir(), "elsewhere", "Other.uproject"));
+      expect(bridge.registeredActions).toBeNull();
+      expect(seen).toEqual([["a_method", "b_method"], null]);
+    } finally {
+      bridge.disconnect();
+      await server.close();
+    }
+  });
+
   it("keeps A's metadata absent until B answers its handshake", async () => {
     const held = holdHandshake();
     const serverA = await withBridgeServer(() => {});

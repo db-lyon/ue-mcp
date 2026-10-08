@@ -60,6 +60,7 @@ const PER_SESSION: Record<string, string> = {
   "codeintel/content-index.ts": "Walks ONE project's Content tree through that project's own mount table.",
   "editor/install-check.ts": "Answers whether ONE project can build and load the bridge, from that project's descriptor, plugin directory and engine.",
   "surface/epic-surface.ts": "Applies one project's nativeTools config to its own graph.",
+  "surface/registered-surface.ts": "Withholds what one editor's plugin did not register, read off that session's own bridge.",
   "dispatch/locking.ts": "The lock registry lives in the addressed editor's bridge, under that session's owner id.",
   "index.ts": "Wires the registry, the per-session loads and the MCP server together.",
   "sessions/session-load.ts": "One tool graph, task registry and guard pipeline per editor, built from that editor's own project.",

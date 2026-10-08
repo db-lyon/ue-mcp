@@ -3,7 +3,7 @@ import { actionSchema, resolveActionRef, suggestActions } from "../../surface/ac
 import { availabilityReport } from "../../dispatch/offline.js";
 import { getWorkarounds } from "../../dispatch/workaround-tracker.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
-import { toolGraphOf } from "../../surface/target-params.js";
+import { visibleToolGraphOf } from "../../surface/registered-surface.js";
 
 /** Surface introspection: search, describe and list what this server can serve. */
 export const surfaceActions: Record<string, ActionSpec> = {
@@ -15,7 +15,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
       const query = (p.query as string) ?? "";
       if (!query.trim()) throw new Error("Missing 'query'");
       const limit = (p.limit as number) ?? 20;
-      const results = searchToolGraph(toolGraphOf(_ctx), query, limit);
+      const results = searchToolGraph(visibleToolGraphOf(_ctx), query, limit);
       return {
         query,
         resultCount: results.length,
@@ -42,7 +42,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
       + "harness that gates writes reads it from here. "
       + "Params: name (required), category? (return every action of one category instead of one action)",
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
-      const graph = toolGraphOf(ctx);
+      const graph = visibleToolGraphOf(ctx);
 
       const category = (p.category as string | undefined)?.trim();
       if (category) {
@@ -102,7 +102,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
       + "what keeps working once the editor is stopped for a rebuild. "
       + "Params: category?, includeNames? (default false), state? (available|blocked|all, default available)",
     handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
-      const graph = toolGraphOf(ctx);
+      const graph = visibleToolGraphOf(ctx);
 
       const category = (p.category as string | undefined)?.trim();
       if (category && !graph.some((t) => t.name === category.toLowerCase())) {
@@ -138,7 +138,7 @@ export const surfaceActions: Record<string, ActionSpec> = {
     description: "Measurement for #704: reads this session's execute_python calls and, for each, runs its taskSummary back through search_tools to flag calls that OVERLAPPED an existing dedicated action ('you used Python for X, but tool Y does X'). Returns totalCalls, overlapping[] and an overlapRate. Params: none (#704)",
     handler: async (ctx) => {
       const entries = getWorkarounds(ctx);
-      const graph = toolGraphOf(ctx);
+      const graph = visibleToolGraphOf(ctx);
       const overlapping: Array<{ taskSummary: string; suggestion: ToolSearchHit; codeSnippet: string }> = [];
       for (const e of entries) {
         const q = (e.taskSummary ?? "").trim();
