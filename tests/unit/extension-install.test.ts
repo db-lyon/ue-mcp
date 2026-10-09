@@ -67,3 +67,28 @@ describe("installExtension", () => {
     await expect(installExtension(future.zip, { root })).rejects.toThrow(/needs extension API 99\.\.99/);
   });
 });
+
+describe("installing from a release manifest", () => {
+  it("follows the manifest to the archive and checks its hash", async () => {
+    const http = await import("node:http");
+    const v = zipExtension("0.4.0");
+    let good = true;
+    const server = http.createServer((req, res) => {
+      if (req.url === "/latest.json") {
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ url: "studio.zip", sha256: good ? v.sha256 : "f".repeat(64) }));
+      } else if (req.url === "/studio.zip") {
+        res.writeHead(200).end(fs.readFileSync(v.zip));
+      } else res.writeHead(404).end();
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    try {
+      const root = path.join(dir, "extensions");
+      expect(await installExtension(`${base}/latest.json`, { root })).toMatchObject({ name: "studio", version: "0.4.0" });
+      good = false;
+      await expect(installExtension(`${base}/latest.json`, { root })).rejects.toThrow(/does not match the expected SHA-256/);
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+  });
+});

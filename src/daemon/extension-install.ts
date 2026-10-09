@@ -50,6 +50,16 @@ export async function installExtension(
   source: string,
   opts: { sha256?: string | null; root?: string } = {},
 ): Promise<InstalledExtension> {
+  // A release manifest names the archive and its hash: { "url": "...", "sha256": "..." }.
+  if (/^https?:\/\/.*\.json(\?.*)?$/i.test(source)) {
+    const res = await fetch(source);
+    if (!res.ok) throw new Error(`manifest download failed (${res.status} ${res.statusText}): ${source}`);
+    const manifest = (await res.json()) as { url?: unknown; sha256?: unknown };
+    if (typeof manifest.url !== "string" || typeof manifest.sha256 !== "string") {
+      throw new Error(`${source} is not an extension manifest (needs url and sha256)`);
+    }
+    return installExtension(new URL(manifest.url, source).href, { ...opts, sha256: manifest.sha256 });
+  }
   const isUrl = /^https?:\/\//i.test(source);
   if (isUrl && !opts.sha256) throw new Error("a URL needs --sha256: an extension runs inside the daemon, so it is never installed unverified");
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-ext-"));
