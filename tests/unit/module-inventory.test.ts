@@ -98,7 +98,8 @@ const PER_SESSION: Record<string, string> = {
 
   "flow/context.ts": "Carries the session a flow step runs in.",
   "flow/flow-tool.ts": "Resolves the registry and config of the addressed editor.",
-  "flow/editor-loss.ts": "Follows the connection of the one session's bridge a flow runs against.",
+  "flow/editor-op-task.ts": "Restarts or rebuilds the editor of the session a flow runs in.",
+  "flow/editor-loss.ts":"Follows the connection of the one session's bridge a flow runs against.",
   "flow/registry.ts": "One task registry per session, built from that project's graph.",
   "flow/task-factory.ts": "Builds tasks that dispatch on the context's session bridge.",
   "flow/run-action.ts": "Runs one action on the context's session bridge, for tasks and category handlers alike.",
