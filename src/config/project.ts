@@ -78,6 +78,10 @@ export interface UeMcpConfig {
    *  UE_MCP_SERVER_MODE wins. See src/daemon/server-mode.ts. */
   server?: {
     mode?: "daemon" | "in-process";
+    /** Daemon only: how long a call waits for an editor that went away. Default 60; 0 fails at once. */
+    waitForEditorSeconds?: number;
+    /** Daemon only: open the client UI in the system browser when the editor crashes. Default false. */
+    openBrowserOnCrash?: boolean;
   };
   /** Play In Editor. `allowIgnoreBlueprintErrors` pre-authorizes
    *  editor(play_in_editor_ignore_blueprint_errors) so it stops asking for

@@ -128,6 +128,8 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "daemon-api.ts": "The public ue-mcp/daemon entry point: re-exports types and helpers.",
   "daemon/disconnect.ts": "Classifies a disconnect from the evidence it is handed. Pure logic.",
   "daemon/events.ts": "A numbered, bounded event log. No editor is involved.",
+  "daemon/activity.ts": "Reads an MCP tools/call into a category and action. Pure logic.",
+  "core/open-url.ts": "Opens a URL in the system browser. No editor is involved.",
   "daemon/ws-transport.ts": "MCP's transport over one WebSocket. No editor is involved.",
   "surface/action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
   "surface/action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",

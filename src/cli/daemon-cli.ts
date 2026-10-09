@@ -14,14 +14,7 @@ import { runDaemon } from "../daemon/daemon.js";
 import { ensureDaemon } from "../daemon/shim.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { fail, ok } from "./ui/ansi.js";
-import { spawn } from "node:child_process";
-
-function openUrl(url: string): void {
-  const [cmd, args] = process.platform === "win32"
-    ? ["cmd", ["/c", "start", "", url]]
-    : process.platform === "darwin" ? ["open", [url]] : ["xdg-open", [url]];
-  spawn(cmd, args as string[], { detached: true, stdio: "ignore" }).unref();
-}
+import { openUrl } from "../core/open-url.js";
 
 const USAGE = "usage: ue-mcp daemon <run|start|stop|status|open> [project] [--json] [--browser]";
 

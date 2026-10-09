@@ -93,6 +93,10 @@ export const UeMcpConfigSchema = z
     server: z
       .object({
         mode: z.enum(["daemon", "in-process"]).optional(),
+        // Daemon only: how long a call waits for an editor that went away. 0 fails at once.
+        waitForEditorSeconds: z.number().min(0).optional(),
+        // Daemon only: open the client UI in the system browser when the editor crashes.
+        openBrowserOnCrash: z.boolean().optional(),
       })
       .optional(),
     // Play In Editor. `allowIgnoreBlueprintErrors` pre-authorizes

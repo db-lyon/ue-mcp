@@ -164,6 +164,26 @@ describe("the daemon path", () => {
     expect(seen.slice(before)).toContain("get_world_outliner");
   }, 30_000);
 
+  it("publishes the call in the activity feed, attributed to the MCP client", async () => {
+    const d = discovery();
+    const auth = { authorization: `Bearer ${d.token}` };
+    const start = (await (await fetch(`http://127.0.0.1:${d.port}/v1/health`, { headers: auth })).json()).lastEventId as number;
+    await viaShim.callTool({ name: "level", arguments: { action: "get_outliner", args: {} } });
+    const ctl = new AbortController();
+    const res = await fetch(`http://127.0.0.1:${d.port}/v1/events`, { headers: { ...auth, "last-event-id": String(start) }, signal: ctl.signal });
+    const reader = res.body!.getReader();
+    let body = "";
+    const deadline = Date.now() + 10_000;
+    while (!body.includes("call.finished") && Date.now() < deadline) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      body += new TextDecoder().decode(chunk.value);
+    }
+    ctl.abort();
+    expect(body).toMatch(/event: call\.started\ndata: .*"client":"shim".*"category":"level","action":"get_outliner"/);
+    expect(body).toMatch(/event: call\.finished\ndata: .*"client":"shim".*"ok":true/);
+  }, 30_000);
+
   it("streams the editor going away with its cause, resumable by id", async () => {
     const d = discovery();
     const auth = { authorization: `Bearer ${d.token}` };
