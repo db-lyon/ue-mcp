@@ -157,6 +157,8 @@ The tag name still has to match the version exactly: `gh release create v1.2.0-b
 
 Prerelease notes stay incremental: the `1.2.0-beta.3` page says what changed since `beta.2`. Stable notes are cumulative, because the betas never took the "Latest" badge and everything they shipped is invisible from the `1.2.0` page otherwise. `npm run release:notes -- --version 1.2.0 --notes-file <what landed since the last beta> --out /tmp/v1.2.0.md` builds that union: it reads every published prerelease of the same `X.Y.Z` in semver order, merges their bodies section by section, folds bullets that repeat or cite the same issue number, and unions the headlines back off the `landing/headline` commit statuses. It prints what it merged, what it deduped and any headline item it had to drop for the six-item cap, then runs its own output through `scripts/release-headline.mjs` so the file cannot fail the publish gate later. Reread the summary paragraph before you create the draft, since it may have come from a beta. A stable release with no prereleases passes its notes file straight through.
 
+When `main` has moved past the beta being promoted, cut the stable from the beta's commit instead: `git branch release/X.Y.Z vX.Y.Z-beta.N`, bump to `X.Y.Z` with `npm run generate:metadata` on that branch, create the draft (`gh release create vX.Y.Z --draft --notes-file ...`), then push the branch. CI publishes from `release/*` exactly as from `main`. Create the draft before the push: the publish job waits only about a minute for it.
+
 ## Issue handling
 
 - **Never close an issue without shipping code that resolves it.** Not "out of scope for this patch", not "prerequisite shipped", not "follow-up". Issues close only when the fix ships.
