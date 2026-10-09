@@ -9,6 +9,7 @@ import { apply, plan } from "../../src/cli/init-core.js";
 import { collectStatus } from "../../src/cli/status.js";
 import { packageVersion } from "../../src/core/package-root.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
+import { restoreEnv } from "../helpers/env.js";
 
 let fixture: ProjectFixture;
 let savedEnv: NodeJS.ProcessEnv;
@@ -22,7 +23,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  process.env = savedEnv;
+  restoreEnv(savedEnv);
   fixture.cleanup();
 });
 
