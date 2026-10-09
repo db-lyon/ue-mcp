@@ -70,6 +70,7 @@ const PER_SESSION: Record<string, string> = {
   "daemon/discovery.ts": "Publishes and reads the discovery record of one project root's daemon.",
   "daemon/server-mode.ts": "Reads how the one project it is handed is served, from that project's config.",
   "daemon/shim.ts": "Relays one MCP client to the daemon of the project it was started for.",
+  "cli/extension-cli.ts": "Installs extensions and restarts the daemon of the project it is handed.",
   "cli/daemon-cli.ts": "Runs, starts, stops or reports the daemon of the project it is handed.",
   "sessions/session-load.ts": "One tool graph, task registry and guard pipeline per editor, built from that editor's own project.",
   "dispatch/server-dispatch.ts": "Routes each call to the editor it addressed and runs it through that editor's registry and guard.",
@@ -121,6 +122,7 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
+  "daemon/extension-install.ts": "Installs an extension into the user's extensions directory. No editor is involved.",
   "daemon/ui-bundles.ts": "Verifies, stores and resolves signed UI bundles kept per user. No editor is involved.",
   "daemon/extensions.ts": "Loads extensions from the user's extensions directory and matches their routes. No editor is involved.",
   "daemon/extension-api.ts": "The extension contract's types. A leaf with no state.",
