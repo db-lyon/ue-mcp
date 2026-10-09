@@ -241,6 +241,20 @@ ue-mcp:
 
 Or per session, without editing the file: `UE_MCP_CONTEXT_STRATEGY=full` (the env var wins over the config value). Anything other than `full` or `lean` resolves to `micro`. Restart your MCP client (`/mcp` in Claude Code) after changing the strategy.
 
+## The daemon
+
+With one project, `npx ue-mcp <uproject>` relays to that project's daemon: one background process per project that holds the editor connection. Your MCP client stays connected through an editor restart, a crash or a rebuild, and calls made while the editor is down get the offline actions or wait for it to return. The daemon starts on first use, reattaches within a second of the editor coming back, and exits after 30 minutes with no editor, client or UI attached.
+
+Set `server.mode: in-process` in `ue-mcp.yml`, or `UE_MCP_SERVER_MODE=in-process` for one launch, to run the server inside the process your client launched instead. Several projects, or none, always run in process. If the daemon cannot start, the server runs in process and says so in its log.
+
+| Command | What it does |
+|---|---|
+| `npx ue-mcp daemon status` | The daemon's pid, port and version, its editors, and why each one last disconnected (`closed`, `crashed`, `restarting`, `rebuild` or `unknown`). `--json` for a machine. |
+| `npx ue-mcp daemon start` / `stop` | Start one for the project, or ask it to exit. |
+| `npx ue-mcp daemon open` | Print the URL of the client UI it serves, if one is installed. `--browser` opens it. |
+
+The daemon listens on 127.0.0.1 only, and every request needs the token in `~/.ue-mcp/daemons/<key>.json`, which only your user can read.
+
 ## Bridge Connection
 
 The C++ plugin listens on a **per-project WebSocket port** derived from a hash of the project root path (in the IANA ephemeral range `49152-65535`). Deriving the port from the path means two checkouts of the same project - or several unrelated projects - on one machine each get a stable, launch-order-independent port, so their MCP clients never collide on a single fixed number. The Node client and the C++ bridge compute the identical value independently, and the bridge also publishes the actual bound port to `<project>/Saved/UE_MCP_Bridge/port.json` as the authoritative source (if the port is already taken, the bridge probes upward and the lockfile records where it really landed). The legacy fixed port `9877` remains the fallback when no project root is known. The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
@@ -361,6 +375,8 @@ The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if mi
 | `npx ue-mcp plugin uninstall <name>` | Inverse of install. |
 | `npx ue-mcp plugin create <name>` | Scaffold a new plugin package. See [Plugins](plugins.md). |
 | `npx ue-mcp context [full\|lean\|micro]` | Read or set the [context strategy](#context-strategy-full-lean-micro) in `ue-mcp.yml`. No argument prints the current strategy. |
+| `npx ue-mcp daemon <status\|start\|stop\|open>` | Inspect or control the project's [daemon](#the-daemon). |
+| `npx ue-mcp status [--json]` | The project's install and editor state, read-only. |
 
 Every subcommand above also accepts `--editor <name-or-path>` to pick which of several editors it acts on. See [Several Editors From One Server](#several-editors-from-one-server).
 
