@@ -112,6 +112,15 @@ describe("extensions", () => {
   }, 60_000);
 });
 
+describe("install state", () => {
+  it("reports the project the way ue-mcp status --json does", async () => {
+    const res = await (await fetch(`${base}/v1/install`, { headers: auth })).json();
+    expect(res.project.name).toBe("Ext");
+    expect(res.plugin.deployed).toBe(false);
+    expect(res.problems.map((p: { code: string }) => p.code)).toContain("bridge_not_deployed");
+  }, 60_000);
+});
+
 describe("UI bundles", () => {
   it("says no client is installed until one is", async () => {
     expect((await fetch(`${base}/ui/`, { headers: auth })).status).toBe(503);

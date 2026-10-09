@@ -7,6 +7,7 @@
  * discovery file:
  *   GET  /v1/health     what the daemon is and what it is attached to
  *   GET  /v1/events     server-sent events, resumable by Last-Event-ID
+ *   GET  /v1/install    the project's install state, as `ue-mcp status --json` reports it
  *   POST /v1/shutdown   exit now
  *   POST /v1/handoff    exit once no call is in flight (a newer daemon is taking over)
  *   WS   /v1/mcp        one MCP session per socket
@@ -40,6 +41,7 @@ import { userDir } from "../core/user-dir.js";
 import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus } from "./extension-api.js";
 import { loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { UiBundleStore, contentType } from "./ui-bundles.js";
+import { collectStatus } from "../cli/status.js";
 import { subscribeFlowEvents } from "../flow/events.js";
 
 const DEFAULT_IDLE_MS = 30 * 60_000;
@@ -346,6 +348,15 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         sse.delete(res);
         touch();
       });
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/v1/install") {
+      // The same read-only report as `ue-mcp status --json`.
+      try {
+        json(res, 200, collectStatus(rt.project.projectPath ?? opts.projects[0]));
+      } catch (e) {
+        json(res, 500, { error: e instanceof Error ? e.message : String(e) });
+      }
       return;
     }
     if (req.method === "POST" && url.pathname === "/v1/shutdown") {
