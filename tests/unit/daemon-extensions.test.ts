@@ -113,6 +113,16 @@ describe("extensions", () => {
   }, 60_000);
 });
 
+describe("updates", () => {
+  it("refuses to apply an update to a project with no bridge, and says why", async () => {
+    const before = daemon.events.lastId;
+    const res = await fetch(`${base}/v1/update/apply`, { method: "POST", headers: auth });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toMatch(/not installed/);
+    expect(daemon.events.since(before).events.map((e) => e.type)).toContain("update.failed");
+  });
+});
+
 describe("install state", () => {
   it("reports the project the way ue-mcp status --json does", async () => {
     const res = await (await fetch(`${base}/v1/install`, { headers: auth })).json();
