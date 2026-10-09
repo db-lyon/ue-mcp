@@ -40,6 +40,12 @@ beforeAll(async () => {
   process.env.UE_MCP_CONFIG_DIR = path.join(sandbox, "config");
   process.env.HOME = sandbox;
   process.env.USERPROFILE = sandbox;
+  // Named explicitly: HOME does not reach os.homedir() once an earlier file replaced process.env.
+  process.env.UE_MCP_AUTH_DIR = path.join(sandbox, ".ue-mcp");
+  fs.mkdirSync(path.join(sandbox, ".ue-mcp"), { recursive: true });
+  fs.writeFileSync(path.join(sandbox, ".ue-mcp", "registry.json"), JSON.stringify({
+    token: "uemcp_test", login: "someone", registry: "https://plugins.ue-mcp.com", authorized_at: "now",
+  }));
 
   const projectDir = path.join(sandbox, "Ext");
   fs.mkdirSync(path.join(projectDir, "Content"), { recursive: true });
@@ -58,6 +64,10 @@ beforeAll(async () => {
       api.ui.trustKey(${JSON.stringify(publicPem)});
       api.route("GET", "/hello", () => ({ body: { editors: api.editors().length, dataDir: api.dataDir } }));
       api.route("GET", "/items/:id", (req) => ({ body: { id: req.params.id } }));
+      api.route("GET", "/account", async () => {
+        const a = await api.registryAccount();
+        return { body: a ? { login: a.login, hasToken: a.token.length > 0 } : null };
+      });
       api.route("POST", "/status", async () => {
         const r = await api.callAction("project", "get_status");
         api.events.publish("checked", { isError: r.isError });
@@ -105,12 +115,27 @@ describe("extensions", () => {
     expect((await fetch(`${base}/v1/ext/sample/hello`)).status).toBe(401);
   });
 
+  it("reads the ue-mcp account this machine signed in with", async () => {
+    const res = await (await fetch(`${base}/v1/ext/sample/account`, { headers: auth })).json();
+    expect(res).toEqual({ login: "someone", hasToken: true });
+  });
+
   it("runs actions in process and publishes namespaced events", async () => {
     const before = daemon.events.lastId;
     const res = await (await fetch(`${base}/v1/ext/sample/status`, { method: "POST", headers: auth })).json();
     expect(res.isError).toBe(false);
     expect(daemon.events.since(before).events.map((e) => e.type)).toContain("sample.checked");
   }, 60_000);
+});
+
+describe("updates", () => {
+  it("refuses to apply an update to a project with no bridge, and says why", async () => {
+    const before = daemon.events.lastId;
+    const res = await fetch(`${base}/v1/update/apply`, { method: "POST", headers: auth });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toMatch(/not installed/);
+    expect(daemon.events.since(before).events.map((e) => e.type)).toContain("update.failed");
+  });
 });
 
 describe("install state", () => {

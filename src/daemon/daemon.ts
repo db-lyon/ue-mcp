@@ -8,6 +8,8 @@
  *   GET  /v1/health     what the daemon is and what it is attached to
  *   GET  /v1/events     server-sent events, resumable by Last-Event-ID
  *   GET  /v1/install    the project's install state, as `ue-mcp status --json` reports it
+ *   GET  /v1/update     the newest release for the install's channel, and whether it has binaries for this engine
+ *   POST /v1/update/apply  install it, now or when the editor exits
  *   POST /v1/shutdown   exit now
  *   POST /v1/handoff    exit once no call is in flight (a newer daemon is taking over)
  *   WS   /v1/mcp        one MCP session per socket
@@ -40,10 +42,13 @@ import { describeToolCall, resultError, type CallLabel } from "./activity.js";
 import { openUrl } from "../core/open-url.js";
 import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
 import { userDir } from "../core/user-dir.js";
+import { readRegistryAuth } from "../extensions/registry-auth.js";
 import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus } from "./extension-api.js";
 import { loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { UiBundleStore, contentType } from "./ui-bundles.js";
 import { collectStatus } from "../cli/status.js";
+import { resolvePluginDir } from "../editor/install-marker.js";
+import { applyUpdate, checkForUpdate, readPendingUpdate, repinClientConfigs, settlePendingUpdate } from "../editor/bridge-update.js";
 import { subscribeFlowEvents } from "../flow/events.js";
 
 const DEFAULT_IDLE_MS = 30 * 60_000;
@@ -136,6 +141,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         if (cause === "crashed" && rt.project.config.server?.openBrowserOnCrash) {
           openUrl(`http://127.0.0.1:${port}/ui/?token=${token}`);
         }
+        // The editor is gone: renamed-aside DLLs can go, and a staged update can swap in.
+        if ((cause === "closed" || cause === "crashed") && dir) settleUpdate(dir);
       });
     });
 
@@ -163,6 +170,39 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       if (await session.bridge.pokeReconnect()) return;
     }
   };
+
+  // ── Updates ─────────────────────────────────────────────────────
+  const settleUpdate = (dir: string): void => {
+    const pluginDir = resolvePluginDir(dir)?.dir;
+    if (!pluginDir) return;
+    const pending = readPendingUpdate(pluginDir);
+    if (!pending) return;
+    try {
+      if (settlePendingUpdate(pluginDir, false) && pending.state === "staged") {
+        const repinned = repinClientConfigs(rt.project.projectPath ?? opts.projects[0], pending.version);
+        events.publish("update.applied", { version: pending.version, state: "applied", repinned });
+      }
+    } catch (e) {
+      events.publish("update.failed", { version: pending.version, error: e instanceof Error ? e.message : String(e) });
+    }
+  };
+  settleUpdate(projectDir);
+
+  // Look for a newer release now and then, never in the first minute (tests and short runs finish first).
+  let announced: string | null = null;
+  const lookForUpdate = (): void => {
+    void checkForUpdate(rt.project.projectPath ?? opts.projects[0]).then((check) => {
+      if (check.target && check.target !== announced) {
+        announced = check.target;
+        events.publish("update.available", { ...check });
+      }
+    });
+  };
+  const updateTimers: NodeJS.Timeout[] = [];
+  if (readEnv("disableUpdateCheck") !== "1") {
+    updateTimers.push(setTimeout(lookForUpdate, 60_000), setInterval(lookForUpdate, 6 * 60 * 60_000));
+    for (const t of updateTimers) t.unref();
+  }
 
   // Flow progress joins the same resumable stream the UI reads.
   const unsubscribeFlows = subscribeFlowEvents((e) => {
@@ -325,6 +365,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       install: (dir) => ui.install(dir),
       active: () => ui.active()?.manifest ?? null,
     },
+    registryAccount: async () => {
+      const auth = await readRegistryAuth();
+      return auth ? { login: auth.login, token: auth.token, registry: auth.registry } : null;
+    },
     log: {
       info: (message) => info(`ext:${name}`, message),
       warn: (message, detail) => warn(`ext:${name}`, message, detail),
@@ -385,6 +429,25 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         sse.delete(res);
         touch();
       });
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/v1/update") {
+      checkForUpdate(rt.project.projectPath ?? opts.projects[0]).then((check) => json(res, 200, check));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/v1/update/apply") {
+      readBody(req)
+        .then((body) => {
+          const b = (body ?? {}) as { version?: unknown; binaries?: unknown };
+          const editorRunning = editors().some((e) => e.connected) || findLiveInstanceRecord(projectDir) !== null;
+          return applyUpdate(rt.project.projectPath ?? opts.projects[0], {
+            version: typeof b.version === "string" ? b.version : undefined,
+            binaries: typeof b.binaries === "string" ? b.binaries : null,
+            editorRunning,
+            onEvent: (type, data) => events.publish(type, data),
+          });
+        })
+        .then((result) => json(res, result.ok ? 200 : 500, result), (e) => json(res, 400, { error: e instanceof Error ? e.message : String(e) }));
       return;
     }
     if (req.method === "GET" && url.pathname === "/v1/install") {
@@ -505,6 +568,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       info("daemon", `stopping: ${reason}`);
       events.publish("daemon.stopping", { reason });
       clearInterval(idleTimer);
+      for (const t of updateTimers) clearTimeout(t);
       unsubscribeFlows();
       for (const x of extensions) await Promise.resolve(x.dispose?.()).catch((e) => warn("extension", `${x.name} dispose failed`, e));
       for (const w of watchers) w.close();

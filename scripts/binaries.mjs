@@ -66,7 +66,7 @@ function manifestName() {
 
 /** bsdtar writes zip from the extension; on Windows it is named by path because Git Bash puts GNU tar first. */
 function zipDir(parent, folder, zipPath) {
-  const tar = process.platform === "win32" ? path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
+  const tar = process.platform === "win32" ? path.join(process.env.SystemRoot ?? process.env.SYSTEMROOT ?? "C:\\Windows", "System32", "tar.exe") : "tar";
   fs.rmSync(zipPath, { force: true });
   execFileSync(tar, ["-a", "-c", "-f", zipPath, "-C", parent, folder], { stdio: "inherit" });
 }

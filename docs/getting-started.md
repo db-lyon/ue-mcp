@@ -139,7 +139,9 @@ ue-mcp update                  # update npm package, deploy plugin, rebuild edit
 
 The editor half is a C++ plugin that has to be recompiled, and `update` does that too. Run it outside the project directory and only the npm package updates, which it says. With the editor open it deploys and skips the build; close the editor and run `ue-mcp build`.
 
-A binary install updates to binaries for the new version instead, with nothing to build, and rewrites pinned client configs to match.
+A binary install updates to binaries for the new version instead, with nothing to build, checked against the release's manifest. The editor can stay open: on Windows the new binaries take the old ones' place and load on the next editor start; elsewhere they wait until the editor exits and swap in then. Pinned client configs move to the new version either way.
+
+The daemon checks for a newer release on your channel (stable, or the prerelease you are on) and reports it at `GET /v1/update`; `POST /v1/update/apply` installs it the same way. `UE_MCP_DISABLE_UPDATE_CHECK=1` turns the check off.
 
 Then quit your MCP client and relaunch so it picks up the new server, and restart the editor so the rebuilt plugin loads.
 
@@ -152,6 +154,12 @@ ue-mcp doctor
 ```
 
 It prints every version source - registry latest, npm global, the running server(s), the deployed bridge plugin - and, crucially, flags a project-local `node_modules/ue-mcp` that **shadows** the global install. With `ue-mcp` pinned in a project's `package.json`, `npx ue-mcp` runs the local copy, so global updates do nothing. `doctor` surfaces that one-line root cause (and suggests pinning `.mcp.json` to `npx -y ue-mcp@latest` so the server self-heals on each launch). `ue-mcp update --build` aligns a stale local copy automatically. It also flags a `.mcp.json` pinned to a version other than the installed bridge plugin's.
+
+After removing the bridge or a project, MCP client configs can be left pointing at it. `doctor` names every such entry, in the project's configs and the machine-wide ones (Claude Desktop, Claude Code global, Codex), and `ue-mcp doctor --fix` removes exactly those entries:
+
+```bash
+ue-mcp doctor --fix
+```
 
 ## Building the project
 

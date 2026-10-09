@@ -117,24 +117,62 @@ export function detectMcpClients(projectDir: string): McpClient[] {
 }
 
 /** Whether a client's config has a ue-mcp entry, and the version it pins. */
-export function readUeMcpEntry(client: Pick<McpClient, "configPath" | "format">): { configured: boolean; pinned: string | null } {
+export interface UeMcpEntry {
+  configured: boolean;
+  /** The exact version the entry pins, or null for @latest or no entry. */
+  pinned: string | null;
+  /** The command the entry launches with, when it has one. */
+  command: string | null;
+  /** The .uproject the entry serves, when it names one. */
+  project: string | null;
+}
+
+const NO_ENTRY: UeMcpEntry = { configured: false, pinned: null, command: null, project: null };
+
+function entryFromArgs(command: string | null, args: string[]): UeMcpEntry {
+  const project = [...args].reverse().find((a) => /\.uproject$/i.test(a)) ?? null;
+  return { configured: true, pinned: pinnedVersionOf(args), command, project };
+}
+
+/** The ue-mcp entry in a client's config: whether there is one, its pin, command and project. */
+export function readUeMcpEntry(client: Pick<McpClient, "configPath" | "format">): UeMcpEntry {
   try {
     const raw = fs.readFileSync(client.configPath, "utf-8");
     if (client.format === "json") {
       const entry = JSON.parse(raw)?.mcpServers?.["ue-mcp"];
-      const args: string[] = Array.isArray(entry?.args) ? entry.args.map(String) : [];
-      return { configured: !!entry, pinned: pinnedVersionOf(args) };
+      if (!entry) return NO_ENTRY;
+      const args: string[] = Array.isArray(entry.args) ? entry.args.map(String) : [];
+      return entryFromArgs(typeof entry.command === "string" ? entry.command : null, args);
     }
     const lines = raw.split(/\r?\n/);
     const start = lines.findIndex((l) => l.trim() === "[mcp_servers.ue-mcp]");
-    if (start < 0) return { configured: false, pinned: null };
+    if (start < 0) return NO_ENTRY;
     const end = lines.findIndex((l, i) => i > start && /^\s*\[/.test(l));
     const table = lines.slice(start, end < 0 ? undefined : end).join("\n");
-    const args = /args\s*=\s*\[([^\]]*)\]/.exec(table)?.[1] ?? "";
-    return { configured: true, pinned: pinnedVersionOf(args.split(",").map((a) => a.trim().replace(/^"|"$/g, ""))) };
+    const unquote = (a: string) => a.trim().replace(/^"|"$/g, "").replace(/\\\\/g, "\\");
+    const args = (/args\s*=\s*\[([^\]]*)\]/.exec(table)?.[1] ?? "").split(",").map(unquote).filter(Boolean);
+    const command = /command\s*=\s*"([^"]*)"/.exec(table)?.[1] ?? null;
+    return entryFromArgs(command ? unquote(command) : null, args);
   } catch {
-    return { configured: false, pinned: null };
+    return NO_ENTRY;
   }
+}
+
+/** Remove the ue-mcp entry from a client's config, leaving everything else. True when one was removed. */
+export function removeUeMcpEntry(client: Pick<McpClient, "configPath" | "format">): boolean {
+  if (!fs.existsSync(client.configPath)) return false;
+  const raw = fs.readFileSync(client.configPath, "utf-8");
+  if (client.format === "toml") {
+    const next = removeTomlTable(raw, "mcp_servers.ue-mcp").trimEnd();
+    if (next === raw.trimEnd()) return false;
+    fs.writeFileSync(client.configPath, next ? `${next}\n` : "");
+    return true;
+  }
+  const parsed = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
+  if (!parsed.mcpServers || !("ue-mcp" in parsed.mcpServers)) return false;
+  delete parsed.mcpServers["ue-mcp"];
+  fs.writeFileSync(client.configPath, JSON.stringify(parsed, null, 2));
+  return true;
 }
 
 export function writeMcpConfig(client: McpClient, uprojectPath: string, launch: ServerLaunch = {}): void {

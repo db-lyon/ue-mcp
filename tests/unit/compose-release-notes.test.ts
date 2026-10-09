@@ -46,6 +46,13 @@ describe("prerelease ordering", () => {
     ]);
   });
 
+  it("leaves the experimental line out of a stable cut", () => {
+    expect(prereleaseTagsFor("1.3.10", ["v1.3.10-beta.1", "v1.3.10-experimental.1", "v1.3.10-beta.2"])).toEqual([
+      "v1.3.10-beta.1",
+      "v1.3.10-beta.2",
+    ]);
+  });
+
   it("returns nothing when the version never had a prerelease", () => {
     expect(prereleaseTagsFor("1.1.44", ["v1.1.43", "v1.1.44", "v1.2.0-beta"])).toEqual([]);
   });

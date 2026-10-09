@@ -148,6 +148,8 @@ export function prereleaseTagsFor(version, tags) {
       continue;
     }
     if (parsed.prerelease === null) continue;
+    // The experimental line ships from its own branch and never reaches a stable cut.
+    if (String(parsed.prerelease).split(".")[0] === "experimental") continue;
     if (
       parsed.major !== target.major ||
       parsed.minor !== target.minor ||

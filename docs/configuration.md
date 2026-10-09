@@ -265,6 +265,18 @@ ue-mcp:
 
 A call that still cannot reach the editor says why it last went away. The daemon's event stream (`GET /v1/events`) carries `call.started` and `call.finished` for every MCP call from every client, named by the client, with the category, action, duration and outcome.
 
+### Updates through the daemon
+
+A minute after it starts, and every six hours, the daemon looks for a newer release on the install's channel and publishes `update.available` on its event stream. `GET /v1/update` reports the target version and, for a binary install, whether that release ships binaries for the project's engine and platform. `POST /v1/update/apply` (optional body `{ "version": "x.y.z" }`) installs it:
+
+| Install | Editor down | Editor running |
+|---|---|---|
+| Binary, Windows | Swapped in now | Each loaded file renamed aside and replaced; the new bridge loads on the next start, and the renamed files are removed once the editor exits |
+| Binary, Mac and Linux | Swapped in now | Staged beside the plugin and swapped in when the editor exits |
+| Source | Deployed; builds on the next restart | Deployed; builds on the next restart |
+
+Each step is reported as `update.staged`, `update.applied` or `update.failed`. A downloaded archive is installed only when the release manifest lists it with a matching SHA-256, and source is never written over a binary install. `UE_MCP_DISABLE_UPDATE_CHECK=1` turns the periodic check off.
+
 ## Bridge Connection
 
 The C++ plugin listens on a **per-project WebSocket port** derived from a hash of the project root path (in the IANA ephemeral range `49152-65535`). Deriving the port from the path means two checkouts of the same project - or several unrelated projects - on one machine each get a stable, launch-order-independent port, so their MCP clients never collide on a single fixed number. The Node client and the C++ bridge compute the identical value independently, and the bridge also publishes the actual bound port to `<project>/Saved/UE_MCP_Bridge/port.json` as the authoritative source (if the port is already taken, the bridge probes upward and the lockfile records where it really landed). The legacy fixed port `9877` remains the fallback when no project root is known. The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
@@ -372,7 +384,8 @@ The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if mi
 | Command | Description |
 |---------|-------------|
 | `npx ue-mcp init` | Interactive setup wizard. Deploys the C++ bridge plugin, writes MCP client configs, scaffolds `ue-mcp.yml`, optionally installs Claude Code skills + feedback prompt hook, optionally runs the GitHub OAuth device flow. Migrates any legacy `.ue-mcp.json` / `ue-mcp.local.yml` it finds. |
-| `npx ue-mcp update` | Install the latest version, redeploy the plugin sources and rebuild the editor. Skips the build while the editor is running. `--no-build` stops after the deploy, `--no-deploy` updates the npm package only. |
+| `npx ue-mcp update` | Install the latest version, redeploy the plugin sources and rebuild the editor. Skips the build while the editor is running. `--no-build` stops after the deploy, `--no-deploy` updates the npm package only. A binary install gets verified binaries instead, with the editor open or closed. |
+| `npx ue-mcp doctor [--fix]` | Report every version source and install problem. `--fix` removes MCP client entries that point at a project which no longer exists or has no bridge. |
 | `npx ue-mcp deploy` | Copy the C++ bridge plugin sources into the project. Use after `ue-mcp update` or to force a redeploy. |
 | `npx ue-mcp build` | Build the project C++ code using Unreal Build Tool. Stop the editor first. |
 | `npx ue-mcp auth` | Run the GitHub device flow standalone so `feedback(submit)` can author issues as your real GitHub user. Same step that lives inside `init`; use this if you skipped it at init time. |
