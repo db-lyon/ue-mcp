@@ -39,6 +39,10 @@ beforeAll(async () => {
   process.env.UE_MCP_CONFIG_DIR = path.join(sandbox, "config");
   process.env.HOME = sandbox;
   process.env.USERPROFILE = sandbox;
+  fs.mkdirSync(path.join(sandbox, ".ue-mcp"), { recursive: true });
+  fs.writeFileSync(path.join(sandbox, ".ue-mcp", "registry.json"), JSON.stringify({
+    token: "uemcp_test", login: "someone", registry: "https://plugins.ue-mcp.com", authorized_at: "now",
+  }));
 
   const projectDir = path.join(sandbox, "Ext");
   fs.mkdirSync(path.join(projectDir, "Content"), { recursive: true });
@@ -57,6 +61,10 @@ beforeAll(async () => {
       api.ui.trustKey(${JSON.stringify(publicPem)});
       api.route("GET", "/hello", () => ({ body: { editors: api.editors().length, dataDir: api.dataDir } }));
       api.route("GET", "/items/:id", (req) => ({ body: { id: req.params.id } }));
+      api.route("GET", "/account", async () => {
+        const a = await api.registryAccount();
+        return { body: a ? { login: a.login, hasToken: a.token.length > 0 } : null };
+      });
       api.route("POST", "/status", async () => {
         const r = await api.callAction("project", "get_status");
         api.events.publish("checked", { isError: r.isError });
@@ -102,6 +110,11 @@ describe("extensions", () => {
     expect(await (await fetch(`${base}/v1/ext/sample/items/42`, { headers: auth })).json()).toEqual({ id: "42" });
     expect((await fetch(`${base}/v1/ext/sample/nope`, { headers: auth })).status).toBe(404);
     expect((await fetch(`${base}/v1/ext/sample/hello`)).status).toBe(401);
+  });
+
+  it("reads the ue-mcp account this machine signed in with", async () => {
+    const res = await (await fetch(`${base}/v1/ext/sample/account`, { headers: auth })).json();
+    expect(res).toEqual({ login: "someone", hasToken: true });
   });
 
   it("runs actions in process and publishes namespaced events", async () => {

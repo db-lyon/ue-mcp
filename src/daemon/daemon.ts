@@ -38,6 +38,7 @@ import { ExpectedDisconnect, settleAndClassify } from "./disconnect.js";
 import { WebSocketServerTransport } from "./ws-transport.js";
 import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
 import { userDir } from "../core/user-dir.js";
+import { readRegistryAuth } from "../extensions/registry-auth.js";
 import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus } from "./extension-api.js";
 import { loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { UiBundleStore, contentType } from "./ui-bundles.js";
@@ -287,6 +288,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       trustKey: (pem) => ui.trustKey(pem),
       install: (dir) => ui.install(dir),
       active: () => ui.active()?.manifest ?? null,
+    },
+    registryAccount: async () => {
+      const auth = await readRegistryAuth();
+      return auth ? { login: auth.login, token: auth.token, registry: auth.registry } : null;
     },
     log: {
       info: (message) => info(`ext:${name}`, message),
