@@ -67,6 +67,7 @@ function hermeticEnv(sandbox, strategy) {
     HOME: sandbox,
     USERPROFILE: sandbox,
     UE_MCP_HOST: "127.0.0.1",
+    UE_MCP_SERVER_MODE: "in-process",
     UE_MCP_PORT: "1",
     UE_MCP_GLOBAL_CONFIG: path.join(sandbox, "global-config.yml"),
     UE_MCP_USER_STATE: path.join(sandbox, "state.json"),

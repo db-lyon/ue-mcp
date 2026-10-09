@@ -113,6 +113,8 @@ function recordingEnv(sandbox: string, host: string, port: number): NodeJS.Proce
   env.HOME = sandbox;
   env.USERPROFILE = sandbox;
   env.UE_MCP_HOST = host;
+  // The in-process server; tests/unit/daemon-shim.test.ts proves the daemon path advertises the same.
+  env.UE_MCP_SERVER_MODE = "in-process";
   env.UE_MCP_PORT = String(port);
   env.UE_MCP_GLOBAL_CONFIG = path.join(sandbox, "global-config.yml");
   env.UE_MCP_USER_STATE = path.join(sandbox, "state.json");

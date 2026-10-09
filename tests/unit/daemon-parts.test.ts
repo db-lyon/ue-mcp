@@ -9,6 +9,7 @@ import * as path from "node:path";
 import { classifyDisconnect, ExpectedDisconnect, settleAndClassify } from "../../src/daemon/disconnect.js";
 import { EventLog } from "../../src/daemon/events.js";
 import { isOlder } from "../../src/daemon/daemon.js";
+import { resolveServerMode } from "../../src/daemon/server-mode.js";
 import { discoveryPath, readDiscovery, readLiveDiscovery, removeDiscovery, writeDiscovery } from "../../src/daemon/discovery.js";
 import { normalizeProjectRoot } from "../../src/bridge/port.js";
 import type { BridgeInstanceRecord } from "../../src/bridge/editor-target.js";
@@ -126,5 +127,39 @@ describe("discovery", () => {
     expect(fs.existsSync(discoveryPath(project))).toBe(true);
     removeDiscovery(project);
     expect(fs.existsSync(discoveryPath(project))).toBe(false);
+  });
+});
+
+describe("resolveServerMode", () => {
+  const cfg = (mode?: string) => () => ({ server: mode ? { mode } : undefined });
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env.UE_MCP_SERVER_MODE;
+    delete process.env.UE_MCP_SERVER_MODE;
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.UE_MCP_SERVER_MODE;
+    else process.env.UE_MCP_SERVER_MODE = saved;
+  });
+
+  it("defaults to the daemon for one project", () => {
+    expect(resolveServerMode(["/p/P.uproject"], cfg())).toEqual({ mode: "daemon", reason: "default" });
+  });
+
+  it("follows ue-mcp.yml, and the environment over it", () => {
+    expect(resolveServerMode(["/p/P.uproject"], cfg("in-process")).mode).toBe("in-process");
+    process.env.UE_MCP_SERVER_MODE = "daemon";
+    expect(resolveServerMode(["/p/P.uproject"], cfg("in-process"))).toEqual({ mode: "daemon", reason: "UE_MCP_SERVER_MODE" });
+  });
+
+  it("runs in process for several projects or none, whatever is configured", () => {
+    process.env.UE_MCP_SERVER_MODE = "daemon";
+    expect(resolveServerMode(["/a/A.uproject", "/b/B.uproject"], cfg("daemon")).mode).toBe("in-process");
+    expect(resolveServerMode([], cfg("daemon")).mode).toBe("in-process");
+  });
+
+  it("names a value it does not understand instead of acting on it", () => {
+    process.env.UE_MCP_SERVER_MODE = "yes";
+    expect(resolveServerMode(["/p/P.uproject"], cfg()).reason).toMatch(/'yes' is not daemon or in-process/);
   });
 });

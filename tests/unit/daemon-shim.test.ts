@@ -103,8 +103,8 @@ beforeAll(async () => {
   for (const k of Object.keys(env)) if (k.startsWith("UE_MCP_") && !keep.includes(k)) delete env[k];
 
   [viaShim, inProcess] = await Promise.all([
-    connectClient("shim", { UE_MCP_DAEMON: "1" }),
-    connectClient("in-process", {}),
+    connectClient("shim", {}),
+    connectClient("in-process", { UE_MCP_SERVER_MODE: "in-process" }),
   ]);
 }, 240_000);
 

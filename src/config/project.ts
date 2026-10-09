@@ -74,6 +74,11 @@ export interface UeMcpConfig {
   context?: {
     strategy?: "full" | "lean" | "micro";
   };
+  /** How `ue-mcp <uproject>` serves: `daemon` (default) or `in-process`.
+   *  UE_MCP_SERVER_MODE wins. See src/daemon/server-mode.ts. */
+  server?: {
+    mode?: "daemon" | "in-process";
+  };
   /** Play In Editor. `allowIgnoreBlueprintErrors` pre-authorizes
    *  editor(play_in_editor_ignore_blueprint_errors) so it stops asking for
    *  per-launch approval. Off by default. */

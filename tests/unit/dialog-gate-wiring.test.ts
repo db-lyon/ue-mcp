@@ -155,6 +155,7 @@ beforeAll(async () => {
     ...(process.env as Record<string, string>),
     UE_MCP_PORT: String(bridge.port),
     UE_MCP_HOST: "127.0.0.1",
+    UE_MCP_SERVER_MODE: "in-process",
     // Named explicitly: the harness advertises no elicitation, so the default
     // would be defer, and auto is the mode that hands back the press calls.
     UE_MCP_DIALOG_MODE: "auto",
@@ -165,7 +166,7 @@ beforeAll(async () => {
     UE_MCP_CONTEXT_STRATEGY: "full",
   };
   for (const k of Object.keys(env)) {
-    if (k.startsWith("UE_MCP_") && !["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_DIALOG_MODE", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY"].includes(k)) {
+    if (k.startsWith("UE_MCP_") && !["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_SERVER_MODE", "UE_MCP_DIALOG_MODE", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY"].includes(k)) {
       delete env[k];
     }
   }
@@ -325,6 +326,7 @@ describe("micro mode can still answer its own dialog", () => {
     microSandbox = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-gate-micro-"));
     const uproject = writeFixtureProject(microSandbox);
     const env: Record<string, string> = {
+      UE_MCP_SERVER_MODE: "in-process",
       ...(process.env as Record<string, string>),
       UE_MCP_PORT: String(bridge.port),
       UE_MCP_HOST: "127.0.0.1",
@@ -407,6 +409,7 @@ describe("interactive mode, end to end, with a client that can be asked", () => 
     liveSandbox = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-gate-interactive-"));
     const uproject = writeFixtureProject(liveSandbox);
     const env: Record<string, string> = {
+      UE_MCP_SERVER_MODE: "in-process",
       ...(process.env as Record<string, string>),
       UE_MCP_PORT: String(bridge.port),
       UE_MCP_HOST: "127.0.0.1",
@@ -538,6 +541,7 @@ describe("the blocked-editor stamp", () => {
           args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
           cwd: REPO_ROOT,
           env: {
+            UE_MCP_SERVER_MODE: "in-process",
             ...(process.env as Record<string, string>),
             UE_MCP_PORT: String(clearBridge.port),
             UE_MCP_HOST: "127.0.0.1",
@@ -585,6 +589,7 @@ describe("the preflight, on a guard that knows nothing yet", () => {
           args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
           cwd: REPO_ROOT,
           env: {
+            UE_MCP_SERVER_MODE: "in-process",
             ...(process.env as Record<string, string>),
             UE_MCP_PORT: String(coldBridge.port),
             UE_MCP_HOST: "127.0.0.1",
@@ -649,6 +654,7 @@ describe("answering a dialog does not answer the next one for you", () => {
           args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
           cwd: REPO_ROOT,
           env: {
+            UE_MCP_SERVER_MODE: "in-process",
             ...(process.env as Record<string, string>),
             UE_MCP_PORT: String(b.port),
             UE_MCP_HOST: "127.0.0.1",
@@ -709,6 +715,7 @@ describe("a tool call is the agent, so interactive refuses it the button", () =>
           args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
           cwd: REPO_ROOT,
           env: {
+            UE_MCP_SERVER_MODE: "in-process",
             ...(process.env as Record<string, string>),
             UE_MCP_PORT: String(b.port),
             UE_MCP_HOST: "127.0.0.1",

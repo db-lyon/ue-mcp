@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { error } from "./core/log.js";
-import { readEnv } from "./core/env.js";
+import { error, info, warn } from "./core/log.js";
+import { resolveServerMode } from "./daemon/server-mode.js";
 import { startVersionCheck } from "./core/version-check.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
 import { packageVersion } from "./core/package-root.js";
@@ -16,6 +16,8 @@ async function main() {
   startVersionCheck(packageVersion());
 
   // #817: every positional argument is a project with its own session.
+  const serving = resolveServerMode(projectArgs());
+  if (serving.mode === "in-process") info("server", `serving in process (${serving.reason})`);
   const rt = await createRuntime(projectArgs());
   const { server } = createMcpServer(rt);
 
@@ -42,9 +44,20 @@ async function main() {
 const command = findCliCommand(process.argv[2]);
 if (command) {
   void runCliCommand(command, process.argv.slice(3));
-} else if (readEnv("daemon") === "1" && projectArgs().length === 1) {
-  // Opt-in: relay to the project's daemon instead of serving in process.
-  void import("./daemon/shim.js").then((m) => m.runShim(projectArgs()[0])).catch((e) => {
+} else if (resolveServerMode(projectArgs()).mode === "daemon") {
+  // Relay to the project's daemon, which owns the editor connection and
+  // outlives editor restarts. A daemon that cannot be started falls back to
+  // in process, so a client is never left without a server.
+  void import("./daemon/shim.js").then(async (m) => {
+    try {
+      await m.ensureDaemon(projectArgs()[0]);
+    } catch (e) {
+      warn("shim", "daemon unavailable; serving in process", e);
+      await main();
+      return;
+    }
+    await m.runShim(projectArgs()[0]);
+  }).catch((e) => {
     error("shim", "Fatal error", e);
     process.exit(1);
   });

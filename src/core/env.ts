@@ -48,8 +48,8 @@ export const ENV_VARS = {
   paramEcho: "UE_MCP_PARAM_ECHO",
 
   // ── Daemon ─────────────────────────────────────────────────────────
-  /** `1` makes `ue-mcp <uproject>` a stdio shim to the project's daemon instead of an in-process server. */
-  daemon: "UE_MCP_DAEMON",
+  /** daemon or in-process; wins over `server.mode` in ue-mcp.yml. Unset means daemon. */
+  serverMode: "UE_MCP_SERVER_MODE",
   /** Directory of daemon discovery files. Unset means ~/.ue-mcp/daemons. */
   daemonDir: "UE_MCP_DAEMON_DIR",
   /** How long a daemon with no editor, client or stream attached waits before exiting, in milliseconds. */
