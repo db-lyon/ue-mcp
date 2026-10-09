@@ -11,6 +11,7 @@ import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "../
 import { packageModulePath, packageRoot, packageVersion } from "../core/package-root.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { installKindOf, resolvePluginDir } from "../editor/install-marker.js";
+import { applyUpdate, repinClientConfigs } from "../editor/bridge-update.js";
 import { RESET, BOLD, RED, DIM, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
 
 /** The version behind the `latest` dist-tag, which is the stable line. */
@@ -76,6 +77,32 @@ async function update(argv: string[]) {
   const shouldDeploy = !!uproject && !args.includes("--no-deploy");
   // --build and --deploy are the old opt-ins, now the default; still accepted.
   let shouldBuild = shouldDeploy && !args.includes("--no-build");
+
+  // Run by the updated package itself: install its own version of the bridge.
+  if (args.includes("--apply-only")) {
+    if (!uproject) {
+      fail("No .uproject here.");
+      process.exit(1);
+    }
+    const binIdx = args.indexOf("--binaries");
+    const result = await applyUpdate(uproject, {
+      editorRunning: await editorRunningFor(uproject),
+      binaries: binIdx >= 0 ? args[binIdx + 1] : null,
+    });
+    if (!result.ok) {
+      fail(result.error ?? "update failed");
+      process.exit(1);
+    }
+    const said = {
+      applied: `Bridge ${result.version} installed`,
+      staged: `Bridge ${result.version} staged; it replaces the running one when the editor exits`,
+      rebuild: `Bridge ${result.version} source deployed; it builds on the next restart`,
+      unchanged: `Bridge already at ${result.version}`,
+    }[result.state];
+    ok(said);
+    for (const config of result.repinned) ok(`Pinned ${config} to ue-mcp@${result.version}`);
+    return;
+  }
 
   console.log("");
   console.log(`  ${BOLD}${CYAN}UE-MCP Update${RESET}`);
@@ -144,12 +171,13 @@ async function update(argv: string[]) {
     console.log("");
     step("Binary install: fetching prebuilt bridge binaries for this version...");
     console.log("");
-    if (!runSelfCommand("init --yes --install=binary", projectArg)) {
-      fail("Fetching binaries failed. Close the editor if it is running, then run `ue-mcp update` again.");
+    // The updated package applies its own version, so the binaries match the server that ships them.
+    if (!runSelfCommand("update --apply-only", projectArg)) {
+      fail("Fetching binaries failed. See the message above, then run `ue-mcp update` again.");
       process.exit(1);
     }
     console.log(formatDoctor(collectDoctor(projectArg)));
-    console.log(`  ${BOLD}Next:${RESET} restart the editor, then quit your MCP client and relaunch it.`);
+    console.log(`  ${BOLD}Next:${RESET} restart the editor to load the new bridge, then quit your MCP client and relaunch it.`);
     console.log("");
     return;
   }
@@ -167,6 +195,7 @@ async function update(argv: string[]) {
       fail("Deploy failed. Run `ue-mcp deploy` manually.");
       process.exit(1);
     }
+    for (const config of repinClientConfigs(uproject, aligned)) ok(`Pinned ${config} to ue-mcp@${aligned}`);
   } else {
     console.log("");
     console.log(`  ${YELLOW}Skipped the plugin (--no-deploy). The editor still runs the old one until \`ue-mcp deploy\` and \`ue-mcp build\`.${RESET}`);

@@ -33,7 +33,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  process.env = savedEnv;
+  for (const k of Object.keys(process.env)) if (!(k in savedEnv)) delete process.env[k];
+  Object.assign(process.env, savedEnv);
   fixture.cleanup();
 });
 

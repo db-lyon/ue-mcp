@@ -95,7 +95,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await daemon?.close();
-  process.env = savedEnv;
+  for (const k of Object.keys(process.env)) if (!(k in savedEnv)) delete process.env[k];
+  Object.assign(process.env, savedEnv);
   fs.rmSync(sandbox, { recursive: true, force: true });
 });
 
@@ -125,6 +126,16 @@ describe("extensions", () => {
     expect(res.isError).toBe(false);
     expect(daemon.events.since(before).events.map((e) => e.type)).toContain("sample.checked");
   }, 60_000);
+});
+
+describe("updates", () => {
+  it("refuses to apply an update to a project with no bridge, and says why", async () => {
+    const before = daemon.events.lastId;
+    const res = await fetch(`${base}/v1/update/apply`, { method: "POST", headers: auth });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toMatch(/not installed/);
+    expect(daemon.events.since(before).events.map((e) => e.type)).toContain("update.failed");
+  });
 });
 
 describe("install state", () => {
