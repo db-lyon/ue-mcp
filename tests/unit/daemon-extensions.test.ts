@@ -39,6 +39,8 @@ beforeAll(async () => {
   process.env.UE_MCP_CONFIG_DIR = path.join(sandbox, "config");
   process.env.HOME = sandbox;
   process.env.USERPROFILE = sandbox;
+  // Named explicitly: HOME does not reach os.homedir() once an earlier file replaced process.env.
+  process.env.UE_MCP_AUTH_DIR = path.join(sandbox, ".ue-mcp");
   fs.mkdirSync(path.join(sandbox, ".ue-mcp"), { recursive: true });
   fs.writeFileSync(path.join(sandbox, ".ue-mcp", "registry.json"), JSON.stringify({
     token: "uemcp_test", login: "someone", registry: "https://plugins.ue-mcp.com", authorized_at: "now",
