@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'release/**']
 
 # Prevent two concurrent publish/docs runs from racing on the same main.
 # Do not cancel in-progress publishes - canceling mid-npm-publish leaves
@@ -122,7 +122,8 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A release/X.Y.Z branch publishes a stable cut from a beta's commit while main moves on.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     permissions:
       contents: write   # for git tag push and gh-release
       id-token: write   # for npm provenance
