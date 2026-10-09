@@ -104,7 +104,7 @@ describe("downloads are checked against the release manifest", () => {
     files.clear();
     const src = prebuilt(path.join(fixture.root, "zipsrc"));
     const zip = path.join(fixture.root, binaryArchiveName(target));
-    const tar = process.platform === "win32" ? path.join(process.env.SystemRoot ?? "C:\Windows", "System32", "tar.exe") : "tar";
+    const tar = process.platform === "win32" ? path.join(process.env.SystemRoot ?? process.env.SYSTEMROOT ?? "C:\\Windows", "System32", "tar.exe") : "tar";
     execFileSync(tar, ["-a", "-c", "-f", zip, "-C", src, "UE_MCP_Bridge"]);
     const bytes = fs.readFileSync(zip);
     const sha = crypto.createHash("sha256").update(bytes).digest("hex");
