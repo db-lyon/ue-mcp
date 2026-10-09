@@ -252,6 +252,7 @@ Set `server.mode: in-process` in `ue-mcp.yml`, or `UE_MCP_SERVER_MODE=in-process
 | `npx ue-mcp daemon status` | The daemon's pid, port and version, its editors, and why each one last disconnected (`closed`, `crashed`, `restarting`, `rebuild` or `unknown`). `--json` for a machine. |
 | `npx ue-mcp daemon start` / `stop` | Start one for the project, or ask it to exit. |
 | `npx ue-mcp daemon open` | Print the URL of the client UI it serves, if one is installed. `--browser` opens it. |
+| `npx ue-mcp extension install <zip\|url> --sha256 <hex>` | Install a daemon extension into `~/.ue-mcp/extensions/` and restart the project's daemon to load it. A URL needs its SHA-256. `extension remove <name>` and `extension list` manage them. |
 
 The daemon listens on 127.0.0.1 only, and every request needs the token in `~/.ue-mcp/daemons/<key>.json`, which only your user can read.
 
