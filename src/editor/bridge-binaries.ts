@@ -6,6 +6,7 @@
  * a plugin directory with no Source tree. It is staged beside the target and
  * swapped in by rename, so a failed download never leaves half a plugin.
  */
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -25,6 +26,16 @@ export const DEFAULT_BINARIES_BASE = "https://github.com/db-lyon/ue-mcp/releases
 
 export function binaryArchiveName(t: BinaryTarget): string {
   return `${BRIDGE_PLUGIN_NAME}-${t.version}-UE${t.engine}-${t.platform}.zip`;
+}
+
+/** The release asset listing every archive's SHA-256, beside the archives. */
+export function binaryManifestName(version: string): string {
+  return `${BRIDGE_PLUGIN_NAME}-${version}-manifest.json`;
+}
+
+export interface BinaryManifest {
+  version: string;
+  assets: Array<{ engine: string; platform: string; file: string; sha256: string; size: number }>;
 }
 
 export function binaryArchiveUrl(t: BinaryTarget, base: string = DEFAULT_BINARIES_BASE): string {
@@ -66,10 +77,32 @@ function pluginRootIn(dir: string): string | null {
   return fs.existsSync(path.join(nested, descriptor)) ? nested : null;
 }
 
-async function download(url: string, dest: string): Promise<void> {
+async function download(url: string, dest: string, t: BinaryTarget): Promise<void> {
   const res = await fetch(url);
+  if (res.status === 404) {
+    throw new Error(`no prebuilt bridge for UE ${t.engine} ${t.platform} in ue-mcp ${t.version} (${url}). Build from source with a C++ toolchain, or use a release that ships one.`);
+  }
   if (!res.ok) throw new Error(`download failed (${res.status} ${res.statusText}): ${url}`);
   fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+}
+
+/**
+ * Check a downloaded archive against the manifest published beside it. A
+ * download is never installed unverified: no manifest, no entry, or a
+ * different hash all refuse.
+ */
+export async function verifyDownload(zipUrl: string, zipPath: string, t: BinaryTarget): Promise<void> {
+  const manifestUrl = zipUrl.replace(/[^/]+$/, binaryManifestName(t.version));
+  const res = await fetch(manifestUrl);
+  if (!res.ok) throw new Error(`no binary manifest at ${manifestUrl} (${res.status}); refusing to install unverified binaries`);
+  const manifest = (await res.json()) as BinaryManifest;
+  const name = zipUrl.split("/").pop() ?? "";
+  const entry = manifest.assets?.find((a) => a.file === name);
+  if (!entry) throw new Error(`${name} is not in ${manifestUrl}; refusing to install unverified binaries`);
+  const actual = crypto.createHash("sha256").update(fs.readFileSync(zipPath)).digest("hex");
+  if (actual !== entry.sha256.toLowerCase()) {
+    throw new Error(`${name} does not match its manifest hash (expected ${entry.sha256}, got ${actual}); refusing to install it`);
+  }
 }
 
 /**
@@ -111,7 +144,10 @@ export async function installBinaryPlugin(
       extracted = source.path;
     } else {
       const zip = source.kind === "zip" ? source.path : path.join(work, binaryArchiveName(t));
-      if (source.kind === "url") await download(source.url, zip);
+      if (source.kind === "url") {
+        await download(source.url, zip, t);
+        await verifyDownload(source.url, zip, t);
+      }
       extracted = path.join(work, "x");
       extractZip(zip, extracted);
     }
