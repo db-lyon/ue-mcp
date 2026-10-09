@@ -19,7 +19,7 @@ import {
   type ReleaseFetcher,
 } from "../../src/editor/bridge-update.js";
 import { binaryArchiveName, binaryManifestName } from "../../src/editor/bridge-binaries.js";
-import { readInstallMarker, writeInstallMarker } from "../../src/editor/install-marker.js";
+import { readInstallMarker, unrealPlatform, writeInstallMarker } from "../../src/editor/install-marker.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
 
 const tar = process.platform === "win32"
@@ -67,7 +67,7 @@ describe("checkForUpdate", () => {
 
   it("offers the newest stable to a stable install, with binaries for its engine", async () => {
     const { uproject } = binaryProject("1.0.0");
-    const file = binaryArchiveName({ version: "1.1.0", engine: "5.7", platform: "Win64" });
+    const file = binaryArchiveName({ version: "1.1.0", engine: "5.7", platform: unrealPlatform() });
     const check = await checkForUpdate(uproject, releases({ latest: "1.1.0", beta: "1.2.0-beta.1" }, [file]));
     expect(check).toMatchObject({ channel: "latest", latest: "1.1.0", target: "1.1.0", binaries: { available: true, file } });
     expect(check.installed).toMatchObject({ kind: "binary", version: "1.0.0", engine: "5.7" });
