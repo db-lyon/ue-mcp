@@ -112,7 +112,7 @@ export async function verifyDownload(zipUrl: string, zipPath: string, t: BinaryT
 function extractZip(zip: string, into: string): void {
   fs.mkdirSync(into, { recursive: true });
   const tar = process.platform === "win32"
-    ? path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe")
+    ? path.join(process.env.SystemRoot ?? process.env.SYSTEMROOT ?? "C:\\Windows", "System32", "tar.exe")
     : "tar";
   try {
     execFileSync(tar, ["-xf", zip, "-C", into], { stdio: ["ignore", "ignore", "pipe"] });
@@ -127,16 +127,23 @@ export interface BinaryInstallResult {
   marker: InstallMarker;
 }
 
+export interface StagedBinaries {
+  /** A complete plugin tree beside the target, marker written, ready to swap in. */
+  staging: string;
+  from: string;
+  marker: InstallMarker;
+}
+
 /**
- * Install prebuilt binaries for `t` into `targetPluginDir`, replacing whatever
- * is there, and write the `binary` marker. Throws with the source named when
- * the binaries cannot be fetched or do not hold a plugin for this platform.
+ * Fetch, verify and unpack the binaries for `t` into a staging directory on the
+ * target's volume, so the swap that follows is a rename. Throws with the source
+ * named when they cannot be fetched or hold no plugin for this platform.
  */
-export async function installBinaryPlugin(
+export async function stageBinaryPlugin(
   targetPluginDir: string,
   t: BinaryTarget,
   source: BinarySource = resolveBinarySource(t),
-): Promise<BinaryInstallResult> {
+): Promise<StagedBinaries> {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-bin-"));
   try {
     let extracted: string;
@@ -159,7 +166,6 @@ export async function installBinaryPlugin(
       throw new Error(`${describeBinarySource(source)} has no Binaries/${t.platform}; it was built for another platform`);
     }
 
-    // Stage on the target's volume so the swap is a rename, not a copy.
     const staging = `${targetPluginDir}.staging-${process.pid}`;
     fs.rmSync(staging, { recursive: true, force: true });
     fs.cpSync(root, staging, { recursive: true });
@@ -167,16 +173,28 @@ export async function installBinaryPlugin(
     fs.rmSync(path.join(staging, "Intermediate"), { recursive: true, force: true });
     const marker: InstallMarker = { kind: "binary", engine: t.engine, platform: t.platform, version: t.version };
     writeInstallMarker(staging, marker);
-
-    swapIn(staging, targetPluginDir);
-    return { pluginDir: targetPluginDir, from: describeBinarySource(source), marker };
+    return { staging, from: describeBinarySource(source), marker };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
 }
 
+/**
+ * Install prebuilt binaries for `t` into `targetPluginDir`, replacing whatever
+ * is there, and write the `binary` marker.
+ */
+export async function installBinaryPlugin(
+  targetPluginDir: string,
+  t: BinaryTarget,
+  source: BinarySource = resolveBinarySource(t),
+): Promise<BinaryInstallResult> {
+  const staged = await stageBinaryPlugin(targetPluginDir, t, source);
+  swapIn(staged.staging, targetPluginDir);
+  return { pluginDir: targetPluginDir, from: staged.from, marker: staged.marker };
+}
+
 /** Replace `target` with `staging`. A loaded plugin DLL makes the first rename fail. */
-function swapIn(staging: string, target: string): void {
+export function swapIn(staging: string, target: string): void {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const old = `${target}.old-${process.pid}`;
   const hadTarget = fs.existsSync(target);

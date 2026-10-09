@@ -54,6 +54,7 @@ const PER_SESSION: Record<string, string> = {
   "editor/deployer.ts": "Attaches and deploys the bridge into one project.",
   "editor/install-marker.ts": "Reads and writes one project's plugin install marker and resolves where that project's plugin lives.",
   "editor/bridge-binaries.ts": "Installs prebuilt binaries into one project's plugin directory.",
+  "editor/bridge-update.ts": "Checks for and applies an update to the bridge installed in one project.",
   "cli/init-core.ts": "Plans and applies setup for the one project it is handed.",
   "cli/status.ts": "Reports the install and editor state of the one project it is handed.",
   "editor/bridge-freshness.ts": "Compares deployed against compiled inside one project.",
