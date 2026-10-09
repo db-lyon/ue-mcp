@@ -19,6 +19,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { printServerLogsOnFailure } from "../helpers/server-log.js";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -142,6 +143,13 @@ function writeFixtureProject(dir: string): string {
   return uproject;
 }
 
+const serverLogs: string[] = [];
+function serverLog(file: string): string {
+  serverLogs.push(file);
+  return file;
+}
+printServerLogsOnFailure(() => serverLogs, () => ({ seen: bridge?.seen.slice(-40) }));
+
 let bridge: StubBridge;
 let client: Client;
 let sandbox: string;
@@ -178,7 +186,7 @@ beforeAll(async () => {
       args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
       cwd: REPO_ROOT,
       env,
-      stderr: fs.openSync(path.join(sandbox, "server.log"), "a"),
+      stderr: fs.openSync(serverLog(path.join(sandbox, "server.log")), "a"),
     }),
   );
 }, 180_000);
@@ -326,8 +334,8 @@ describe("micro mode can still answer its own dialog", () => {
     microSandbox = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-gate-micro-"));
     const uproject = writeFixtureProject(microSandbox);
     const env: Record<string, string> = {
-      UE_MCP_SERVER_MODE: "in-process",
       ...(process.env as Record<string, string>),
+      UE_MCP_SERVER_MODE: "in-process",
       UE_MCP_PORT: String(bridge.port),
       UE_MCP_HOST: "127.0.0.1",
       UE_MCP_DIALOG_MODE: "auto",
@@ -342,7 +350,7 @@ describe("micro mode can still answer its own dialog", () => {
         args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
         cwd: REPO_ROOT,
         env,
-        stderr: fs.openSync(path.join(microSandbox, "server.log"), "a"),
+        stderr: fs.openSync(serverLog(path.join(microSandbox, "server.log")), "a"),
       }),
     );
   }, 180_000);
@@ -409,8 +417,8 @@ describe("interactive mode, end to end, with a client that can be asked", () => 
     liveSandbox = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-gate-interactive-"));
     const uproject = writeFixtureProject(liveSandbox);
     const env: Record<string, string> = {
-      UE_MCP_SERVER_MODE: "in-process",
       ...(process.env as Record<string, string>),
+      UE_MCP_SERVER_MODE: "in-process",
       UE_MCP_PORT: String(bridge.port),
       UE_MCP_HOST: "127.0.0.1",
       // NOT pinned. The default must resolve to interactive because the client
@@ -444,7 +452,7 @@ describe("interactive mode, end to end, with a client that can be asked", () => 
         args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
         cwd: REPO_ROOT,
         env,
-        stderr: fs.openSync(path.join(liveSandbox, "server.log"), "a"),
+        stderr: fs.openSync(serverLog(path.join(liveSandbox, "server.log")), "a"),
       }),
     );
   }, 180_000);
@@ -541,8 +549,8 @@ describe("the blocked-editor stamp", () => {
           args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
           cwd: REPO_ROOT,
           env: {
-            UE_MCP_SERVER_MODE: "in-process",
             ...(process.env as Record<string, string>),
+            UE_MCP_SERVER_MODE: "in-process",
             UE_MCP_PORT: String(clearBridge.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_DIALOG_MODE: "auto",
@@ -550,7 +558,7 @@ describe("the blocked-editor stamp", () => {
             UE_MCP_CONFIG_DIR: path.join(sandbox2, "config"),
             UE_MCP_CONTEXT_STRATEGY: "full",
           },
-          stderr: fs.openSync(path.join(sandbox2, "server.log"), "a"),
+          stderr: fs.openSync(serverLog(path.join(sandbox2, "server.log")), "a"),
         }),
       );
       const res = await c.callTool({ name: "project", arguments: { action: "get_status" } });
@@ -589,8 +597,8 @@ describe("the preflight, on a guard that knows nothing yet", () => {
           args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
           cwd: REPO_ROOT,
           env: {
-            UE_MCP_SERVER_MODE: "in-process",
             ...(process.env as Record<string, string>),
+            UE_MCP_SERVER_MODE: "in-process",
             UE_MCP_PORT: String(coldBridge.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_DIALOG_MODE: "auto",
@@ -598,7 +606,7 @@ describe("the preflight, on a guard that knows nothing yet", () => {
             UE_MCP_CONFIG_DIR: path.join(sandbox3, "config"),
             UE_MCP_CONTEXT_STRATEGY: "full",
           },
-          stderr: fs.openSync(path.join(sandbox3, "server.log"), "a"),
+          stderr: fs.openSync(serverLog(path.join(sandbox3, "server.log")), "a"),
         }),
       );
 
@@ -654,8 +662,8 @@ describe("answering a dialog does not answer the next one for you", () => {
           args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
           cwd: REPO_ROOT,
           env: {
-            UE_MCP_SERVER_MODE: "in-process",
             ...(process.env as Record<string, string>),
+            UE_MCP_SERVER_MODE: "in-process",
             UE_MCP_PORT: String(b.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_STATE_DIR: path.join(sandbox4, "state"),
@@ -667,7 +675,7 @@ describe("answering a dialog does not answer the next one for you", () => {
             // possible and "no form was raised" still asserts something.
             UE_MCP_DIALOG_MODE: "auto",
           },
-          stderr: fs.openSync(path.join(sandbox4, "server.log"), "a"),
+          stderr: fs.openSync(serverLog(path.join(sandbox4, "server.log")), "a"),
         }),
       );
 
@@ -715,8 +723,8 @@ describe("a tool call is the agent, so interactive refuses it the button", () =>
           args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
           cwd: REPO_ROOT,
           env: {
-            UE_MCP_SERVER_MODE: "in-process",
             ...(process.env as Record<string, string>),
+            UE_MCP_SERVER_MODE: "in-process",
             UE_MCP_PORT: String(b.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_STATE_DIR: path.join(sandbox, "state"),
@@ -724,7 +732,7 @@ describe("a tool call is the agent, so interactive refuses it the button", () =>
             UE_MCP_CONTEXT_STRATEGY: "full",
             UE_MCP_DIALOG_MODE: "interactive",
           },
-          stderr: fs.openSync(path.join(sandbox, "server.log"), "a"),
+          stderr: fs.openSync(serverLog(path.join(sandbox, "server.log")), "a"),
         }),
       );
 

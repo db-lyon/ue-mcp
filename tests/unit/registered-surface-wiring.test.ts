@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ALL_TOOLS } from "../../src/tools.js";
+import { printServerLogsOnFailure } from "../helpers/server-log.js";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MISSING = "get_world_outliner";
@@ -85,6 +86,8 @@ afterAll(async () => {
   await new Promise<void>((resolve) => wss?.close(() => resolve()));
   fs.rmSync(sandbox, { recursive: true, force: true });
 });
+
+printServerLogsOnFailure(() => (sandbox ? [path.join(sandbox, "server.log")] : []), () => ({ seen }));
 
 describe("a method the plugin did not register", () => {
   it("is not advertised in tools/list", async () => {
