@@ -100,6 +100,8 @@ const PER_SESSION: Record<string, string> = {
 
   "flow/context.ts": "Carries the session a flow step runs in.",
   "flow/flow-tool.ts": "Resolves the registry and config of the addressed editor.",
+  "flow/editor-op-task.ts": "Restarts or rebuilds the editor of the session a flow runs in.",
+  "flow/editor-loss.ts":"Follows the connection of the one session's bridge a flow runs against.",
   "flow/registry.ts": "One task registry per session, built from that project's graph.",
   "flow/task-factory.ts": "Builds tasks that dispatch on the context's session bridge.",
   "flow/run-action.ts": "Runs one action on the context's session bridge, for tasks and category handlers alike.",
@@ -129,6 +131,8 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "daemon-api.ts": "The public ue-mcp/daemon entry point: re-exports types and helpers.",
   "daemon/disconnect.ts": "Classifies a disconnect from the evidence it is handed. Pure logic.",
   "daemon/events.ts": "A numbered, bounded event log. No editor is involved.",
+  "daemon/activity.ts": "Reads an MCP tools/call into a category and action. Pure logic.",
+  "core/open-url.ts": "Opens a URL in the system browser. No editor is involved.",
   "daemon/ws-transport.ts": "MCP's transport over one WebSocket. No editor is involved.",
   "surface/action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
   "surface/action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",

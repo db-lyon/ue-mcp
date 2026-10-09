@@ -12,6 +12,7 @@ import * as path from "node:path";
 import { startDaemon, type Daemon } from "../../src/daemon/daemon.js";
 import { signBundle } from "../../src/daemon/ui-bundles.js";
 import { DAEMON_API_VERSION } from "../../src/daemon/discovery.js";
+import { restoreEnv } from "../helpers/env.js";
 
 let sandbox: string;
 let daemon: Daemon;
@@ -95,8 +96,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await daemon?.close();
-  for (const k of Object.keys(process.env)) if (!(k in savedEnv)) delete process.env[k];
-  Object.assign(process.env, savedEnv);
+  restoreEnv(savedEnv);
   fs.rmSync(sandbox, { recursive: true, force: true });
 });
 

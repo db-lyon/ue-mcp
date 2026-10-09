@@ -14,6 +14,9 @@ export class WebSocketServerTransport implements Transport {
   /** Requests received and not yet answered. */
   readonly open = new Set<string | number>();
 
+  /** Sees every message in each direction, for the activity feed. Never alters one. */
+  observe?: (direction: "in" | "out", message: JSONRPCMessage) => void;
+
   constructor(private readonly ws: WebSocket) {}
 
   async start(): Promise<void> {
@@ -26,6 +29,7 @@ export class WebSocketServerTransport implements Transport {
         return;
       }
       if ("id" in message && "method" in message) this.open.add(message.id as string | number);
+      this.observe?.("in", message);
       this.onmessage?.(message);
     });
     this.ws.on("close", () => this.onclose?.());
@@ -34,6 +38,7 @@ export class WebSocketServerTransport implements Transport {
 
   async send(message: JSONRPCMessage): Promise<void> {
     if ("id" in message && ("result" in message || "error" in message)) this.open.delete(message.id as string | number);
+    this.observe?.("out", message);
     if (this.ws.readyState !== WebSocket.OPEN) return;
     await new Promise<void>((resolve, reject) => this.ws.send(JSON.stringify(message), (e) => (e ? reject(e) : resolve())));
   }

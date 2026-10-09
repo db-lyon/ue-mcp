@@ -38,6 +38,8 @@ import {
 import { EventLog } from "./events.js";
 import { ExpectedDisconnect, settleAndClassify } from "./disconnect.js";
 import { WebSocketServerTransport } from "./ws-transport.js";
+import { describeToolCall, resultError, type CallLabel } from "./activity.js";
+import { openUrl } from "../core/open-url.js";
 import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
 import { userDir } from "../core/user-dir.js";
 import { readRegistryAuth } from "../extensions/registry-auth.js";
@@ -50,6 +52,7 @@ import { applyUpdate, checkForUpdate, readPendingUpdate, repinClientConfigs, set
 import { subscribeFlowEvents } from "../flow/events.js";
 
 const DEFAULT_IDLE_MS = 30 * 60_000;
+const DEFAULT_WAIT_FOR_EDITOR_SECONDS = 60;
 
 export type EditorState = EditorStatus;
 
@@ -91,6 +94,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const token = newToken();
   const startedAt = new Date().toISOString();
   const idleMs = opts.idleMs ?? (Number(readEnv("daemonIdleMs")) || DEFAULT_IDLE_MS);
+  const waitForEditorMs = (rt.project.config.server?.waitForEditorSeconds ?? DEFAULT_WAIT_FOR_EDITOR_SECONDS) * 1000;
 
   // ── Editor attachment ───────────────────────────────────────────
   const states = new Map<EditorSession, EditorState>();
@@ -108,6 +112,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     };
     states.set(session, state);
     const dir = session.project.projectDir;
+    // The daemon outlives editors, so a call waits a while for one that went away.
+    session.bridge.reattachWaitMs = waitForEditorMs;
 
     session.bridge.onConnectionChanged((change) => {
       state.port = change.port;
@@ -130,7 +136,11 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       const announced = expected.get();
       void settleAndClassify({ record, expected: announced }).then((cause) => {
         state.lastDisconnect = { cause, detail: change.detail, at: new Date().toISOString() };
+        session.bridge.lastDisconnectCause = cause;
         events.publish("editor.disconnected", { editor: session.name, cause, detail: change.detail ?? null, pid: record?.pid ?? null });
+        if (cause === "crashed" && rt.project.config.server?.openBrowserOnCrash) {
+          openUrl(`http://127.0.0.1:${port}/ui/?token=${token}`);
+        }
         // The editor is gone: renamed-aside DLLs can go, and a staged update can swap in.
         if ((cause === "closed" || cause === "crashed") && dir) settleUpdate(dir);
       });
@@ -211,18 +221,43 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
 
   wss.on("connection", (ws, req) => {
     clients += 1;
-    const clientName = String(req.headers["x-ue-mcp-client"] ?? "unknown");
+    const header = String(req.headers["x-ue-mcp-client"] ?? "unknown");
     const transport = new WebSocketServerTransport(ws);
     transports.add(transport);
     const { server, dispose } = createMcpServer(rt);
-    events.publish("client.connected", { client: clientName, clients });
+    // The MCP client's own name once it has introduced itself, else what the shim said.
+    const client = (): string => server.server.getClientVersion()?.name ?? header;
+
+    // Every call, attributed by client, for the activity feed.
+    const started = new Map<string | number, { at: number; label: CallLabel }>();
+    transport.observe = (direction, message) => {
+      if (direction === "in" && "method" in message && message.method === "initialize") {
+        const info = (message.params as { clientInfo?: { name?: string; version?: string } } | undefined)?.clientInfo;
+        events.publish("client.connected", { client: info?.name ?? header, version: info?.version ?? null, clients });
+      } else if (direction === "in" && "method" in message && message.method === "tools/call" && "id" in message) {
+        const label = describeToolCall(message.params);
+        started.set(message.id as string | number, { at: Date.now(), label });
+        events.publish("call.started", { client: client(), ...label });
+      } else if (direction === "out" && "id" in message && started.has(message.id as string | number)) {
+        const call = started.get(message.id as string | number)!;
+        started.delete(message.id as string | number);
+        const error = "error" in message ? message.error.message : resultError("result" in message ? message.result : undefined);
+        events.publish("call.finished", {
+          client: client(),
+          ...call.label,
+          durationMs: Date.now() - call.at,
+          ok: error === undefined,
+          ...(error !== undefined ? { error } : {}),
+        });
+      }
+    };
     void server.connect(transport);
     ws.on("close", () => {
       clients -= 1;
       transports.delete(transport);
       dispose();
       void server.close().catch(() => {});
-      events.publish("client.disconnected", { client: clientName, clients });
+      events.publish("client.disconnected", { client: client(), clients });
       touch();
     });
   });
@@ -296,6 +331,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     else expected.clear();
     return { op, steps };
   };
+  // Flow tasks editor.restart and editor.rebuild go through the same announced operations.
+  rt.sessions.editorOperation = async (op) => (await editorOp(op)) as { steps: Array<{ step: string; ok: boolean; result: string }> };
 
   // ── UI bundles and extensions ───────────────────────────────────
   const ui = new UiBundleStore(DAEMON_API_VERSION, opts.uiDir);

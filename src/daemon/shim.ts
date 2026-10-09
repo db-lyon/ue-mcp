@@ -67,6 +67,10 @@ export async function runShim(uproject: string): Promise<void> {
   let swallow: string | number | null = null;
   let closed = false;
 
+  /** The MCP client's own name once it has sent initialize, so the daemon's activity feed names it. */
+  const clientName = (): string =>
+    ((initialize as { params?: { clientInfo?: { name?: string } } } | null)?.params?.clientInfo?.name) ?? "stdio-shim";
+
   const toDaemon = (m: JSONRPCMessage): void => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
     else queue.push(m);
@@ -87,7 +91,7 @@ export async function runShim(uproject: string): Promise<void> {
   const connect = async (replay: boolean): Promise<void> => {
     const d = await ensureDaemon(uproject);
     const socket = new WebSocket(`ws://127.0.0.1:${d.port}/v1/mcp`, {
-      headers: { authorization: `Bearer ${d.token}`, "x-ue-mcp-client": "stdio-shim" },
+      headers: { authorization: `Bearer ${d.token}`, "x-ue-mcp-client": clientName() },
     });
     await new Promise<void>((resolve, reject) => {
       socket.once("open", () => resolve());

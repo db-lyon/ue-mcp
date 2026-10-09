@@ -160,6 +160,12 @@ export class SessionRegistry {
    * project's flows and plugin tasks inside itself (D1).
    */
   prepareSession?: (session: EditorSession) => Promise<void>;
+  /**
+   * Restart or rebuild the editor through the daemon, which announces the
+   * operation first so the disconnect it causes is classified as such. Set by
+   * the daemon; absent in process.
+   */
+  editorOperation?: (op: "restart" | "rebuild") => Promise<{ steps: Array<{ step: string; ok: boolean; result: string }> }>;
   /** Held while a compound edit is mid-flight, so observers see one change. */
   private suppressNotify = false;
 

@@ -354,6 +354,37 @@ Requires `@db-lyon/flowkit` 0.17.2 or newer. 0.17.1 unwound a failed child's rec
 
 Conventions for handlers - natural keys, the `onConflict: skip|update|error` option, and rollback record shape - live in [docs/handler-conventions.md](handler-conventions.md).
 
+## When the Editor Goes Away (`on_editor_loss`)
+
+An editor can crash, be closed or restart while a flow runs. Once it has dropped during a run, no further step starts until it is back (up to `editor_loss_timeout_seconds`, default 300). A step that failed while the editor dropped has an **unknown** outcome: when the editor returns, a read-only step is run again as its own verification, and any other step stays unknown. Then the flow's policy decides:
+
+```yaml
+flows:
+  bake_lighting:
+    on_editor_loss: resume           # resume (default) | rollback | fail
+    editor_loss_timeout_seconds: 600
+    steps: { ... }
+```
+
+| Policy | What happens to the step the editor dropped during |
+|---|---|
+| `resume` | The run carries on. The step is reported with `data.editorLoss.outcome: unknown`; read the state back before relying on it. |
+| `rollback` | The step fails and the run unwinds as [`rollback_on_failure`](#rollback-on-failure) does, unless the caller passed `rollback_on_failure` itself. With the [git snapshot](#git-snapshot-safety-net) on, it is restored while the editor is still away, so the editor never holds stale copies. |
+| `fail` | The step fails and the run stops. |
+
+A rollback step that hits a drop waits for the editor and runs once more. The run result carries `editorLoss`: each event with the step, its outcome, the cause (`crashed`, `closed`, `restarting`, `rebuild` or `unknown` under the daemon) and how long it waited, plus the completed steps whose results said they were unsaved when the editor went away, which a crash loses.
+
+To restart or rebuild on purpose, use the built-in tasks:
+
+```yaml
+steps:
+  1: { task: shell, options: { command: "git apply my-change.patch" } }
+  2: { task: editor.rebuild }        # stop, build, start; leaves the editor down if the build fails
+  3: { task: level.get_outliner }
+```
+
+`editor.restart` and `editor.rebuild` go through the daemon when it is serving, so the disconnect they cause is reported as `restarting` or `rebuild` rather than a crash.
+
 ## Git Snapshot Safety Net
 
 Per-handler rollback covers in-memory state (selection, PIE, unsaved actors). For anything that touched disk (new `.uasset` files, modified `.ini` config, deleted packages), enable the opt-in git snapshot. On flow start the runner snapshots `Content/` and `Config/` into a shadow bare git repo, and on failure runs `git read-tree --reset -u` to restore, then asks the editor to reload affected packages.

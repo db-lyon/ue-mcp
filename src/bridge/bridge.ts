@@ -692,9 +692,55 @@ export class EditorBridge implements IBridge {
     }
   }
 
+  /**
+   * How long a call made while the editor is away waits for it to come back.
+   * 0, the default, fails at once; the daemon sets it, since it outlives editors.
+   */
+  reattachWaitMs = 0;
+
+  /** Why the editor last went away, when something has classified it (the daemon does). */
+  lastDisconnectCause: string | null = null;
+
+  /** Resolves true once connected, false after `timeoutMs`. Tries to connect every second meanwhile. */
+  async waitForConnection(timeoutMs: number): Promise<boolean> {
+    if (this.isConnected) return true;
+    const deadline = Date.now() + timeoutMs;
+    return new Promise<boolean>((resolve) => {
+      let done = false;
+      const finish = (ok: boolean): void => {
+        if (done) return;
+        done = true;
+        clearInterval(timer);
+        unsubscribe();
+        resolve(ok);
+      };
+      const unsubscribe = this.onConnectionChanged((c) => {
+        if (c.connected) finish(true);
+      });
+      const timer = setInterval(() => {
+        if (this.isConnected) return finish(true);
+        if (Date.now() >= deadline) return finish(false);
+        void this.pokeReconnect();
+      }, Math.min(1000, Math.max(50, timeoutMs)));
+    });
+  }
+
+  private withCause(e: unknown, waitedMs = 0): unknown {
+    if (!this.lastDisconnectCause && waitedMs === 0) return e;
+    const base = e instanceof Error ? e.message : String(e);
+    const waited = waitedMs > 0 ? ` Waited ${Math.round(waitedMs / 1000)}s for it to come back.` : "";
+    const cause = this.lastDisconnectCause ? ` The editor last went away: ${this.lastDisconnectCause}.` : "";
+    return new McpError(ErrorCode.NOT_CONNECTED, `${base}${cause}${waited}`);
+  }
+
   async call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown> {
     if (!this.isConnected) {
-      await this.ensureConnected();
+      try {
+        await this.ensureConnected();
+      } catch (e) {
+        if (this.reattachWaitMs <= 0) throw this.withCause(e);
+        if (!(await this.waitForConnection(this.reattachWaitMs))) throw this.withCause(e, this.reattachWaitMs);
+      }
     }
 
     const id = String(++this.idCounter);

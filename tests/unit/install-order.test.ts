@@ -13,6 +13,7 @@ import { readInstallMarker, unrealPlatform } from "../../src/editor/install-mark
 import { packageVersion } from "../../src/core/package-root.js";
 import type { ProbeHooks } from "../../src/editor/install-check.js";
 import { ProjectFixture } from "../helpers/project-fixture.js";
+import { restoreEnv } from "../helpers/env.js";
 
 const WITH_TOOLCHAIN: ProbeHooks = { platform: "linux", env: {}, exists: () => true, run: () => "clang version 18" };
 const NO_TOOLCHAIN: ProbeHooks = { platform: "linux", env: {}, exists: () => false, run: () => null };
@@ -33,8 +34,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const k of Object.keys(process.env)) if (!(k in savedEnv)) delete process.env[k];
-  Object.assign(process.env, savedEnv);
+  restoreEnv(savedEnv);
   fixture.cleanup();
 });
 
