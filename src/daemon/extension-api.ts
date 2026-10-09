@@ -80,6 +80,12 @@ export interface DaemonExtensionApi {
     active(): UiManifest | null;
   };
 
+  /**
+   * The ue-mcp account this machine signed in with (`ue-mcp login`), or null.
+   * The token authenticates the user to ue-mcp services; never log or display it.
+   */
+  registryAccount(): Promise<{ login: string; token: string; registry: string } | null>;
+
   log: {
     info(message: string): void;
     warn(message: string, detail?: unknown): void;
