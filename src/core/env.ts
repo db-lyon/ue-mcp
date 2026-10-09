@@ -47,6 +47,16 @@ export const ENV_VARS = {
   /** Set on a launched editor so the bridge echoes the parameters it received. */
   paramEcho: "UE_MCP_PARAM_ECHO",
 
+  // ── Daemon ─────────────────────────────────────────────────────────
+  /** daemon or in-process; wins over `server.mode` in ue-mcp.yml. Unset means daemon. */
+  serverMode: "UE_MCP_SERVER_MODE",
+  /** Directory of daemon discovery files. Unset means ~/.ue-mcp/daemons. */
+  daemonDir: "UE_MCP_DAEMON_DIR",
+  /** How long a daemon with no editor, client or stream attached waits before exiting, in milliseconds. */
+  daemonIdleMs: "UE_MCP_DAEMON_IDLE_MS",
+  /** Directory daemon extensions are loaded from. Unset means ~/.ue-mcp/extensions. */
+  extensionsDir: "UE_MCP_EXTENSIONS_DIR",
+
   // ── Flow HTTP surface ──────────────────────────────────────────────
   /** Bearer token for the flow HTTP server, over a freshly generated one. */
   httpToken: "UE_MCP_HTTP_TOKEN",

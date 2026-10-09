@@ -35,6 +35,7 @@ it("retries failed guard construction before publishing a runtime editor", async
       Object.entries(process.env).filter(([key, value]) => !key.startsWith("UE_MCP_") && value !== undefined),
     ) as Record<string, string>;
     env.UE_MCP_HOST = "127.0.0.1";
+    env.UE_MCP_SERVER_MODE = "in-process";
     env.UE_MCP_STATE_DIR = path.join(dir, "state");
     env.UE_MCP_CONFIG_DIR = path.join(dir, "config");
     // Calls the category tools directly, which micro (the default) does not advertise.

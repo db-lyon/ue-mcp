@@ -14,6 +14,10 @@
       "types": "./dist/guard-task.d.ts",
       "default": "./dist/guard-task.js"
     },
+    "./daemon": {
+      "types": "./dist/daemon-api.d.ts",
+      "default": "./dist/daemon-api.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {

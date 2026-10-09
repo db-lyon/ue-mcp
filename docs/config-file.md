@@ -16,6 +16,7 @@ ue-mcp:            # project-level server config (detailed below)
   nativeTools: { enabled: true, exclude: [animation] }
   http: { enabled: false }
   context: { strategy: micro }  # micro (default) | lean | full
+  server: { mode: daemon }      # daemon (default) | in-process
 
 tasks: {}          # custom flow-engine task definitions
 flows: {}          # custom multi-step flows
@@ -76,6 +77,7 @@ Nothing stops you putting `context.strategy` in the tracked `ue-mcp.yml` as a pr
 | `http` | `object` | `undefined` (HTTP server off) | Optional REST surface for the flow engine. Object with `enabled` (bool), `port` (default `7723`), `host` (default `127.0.0.1`). When `enabled: true`, the MCP server also serves `GET /flows`, `GET /flows/<name>/plan`, `POST /flows/<name>/run`, and the Server-Sent Events stream at `GET /flows/events` (live per-step lifecycle events; see [Live Observation](flows.md#live-observation-sse)) over HTTP so external tools can drive and observe flows without an MCP client. |
 | `pie` | `object` | `{ allowIgnoreBlueprintErrors: false }` | Play In Editor policy. `allowIgnoreBlueprintErrors` (bool, default `false`) pre-authorizes `editor(action="play_in_editor_ignore_blueprint_errors")`, the one action that starts PIE with the editor's unresolved-Blueprint-error prompt suppressed. Left off, every such launch blocks on an MCP approval prompt the user has to answer. Turning it on means PIE runs whatever bytecode the errored Blueprints last compiled to, without asking, so it belongs in the untracked `ue-mcp.local.yml` unless the whole team wants it. |
 | `context` | `object` | `{ strategy: micro }` | Context-seeding strategy. `strategy: micro` (default) collapses everything behind one gateway tool (<!-- tax:micro -->~2.1k<!-- /tax --> tokens); `lean` keeps the category tools and action names with signatures on demand (<!-- tax:lean -->~19k<!-- /tax -->); `full` lists one signature per action inline (<!-- tax:full -->~51k<!-- /tax -->). See [Context strategy](configuration.md#context-strategy-full-lean-micro). |
+| `server` | `object` | `{ mode: daemon }` | How `ue-mcp <uproject>` serves. `mode: daemon` (default) relays to the project's daemon, one background process per project that owns the editor connection and survives editor restarts. `in-process` runs the whole server inside the process your MCP client launched. `UE_MCP_SERVER_MODE` wins over it. Several projects, or none, always run in process. See [The daemon](configuration.md#the-daemon). |
 
 !!! info "Config vs. machine state - two homes under `~/.ue-mcp/`"
     - `~/.ue-mcp/config.yml` - your per-user **config** layer (see [Config layering](#config-layering)). Hand-edited. Personal defaults applied across every project.

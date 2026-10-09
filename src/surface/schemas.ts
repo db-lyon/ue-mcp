@@ -87,6 +87,14 @@ export const UeMcpConfigSchema = z
         strategy: z.enum(["full", "lean", "micro"]).optional(),
       })
       .optional(),
+    // How `ue-mcp <uproject>` serves: `daemon` (default) relays to the
+    // project's daemon, `in-process` runs the server in the launched process.
+    // UE_MCP_SERVER_MODE wins. See src/daemon/server-mode.ts.
+    server: z
+      .object({
+        mode: z.enum(["daemon", "in-process"]).optional(),
+      })
+      .optional(),
     // Play In Editor. `allowIgnoreBlueprintErrors` pre-authorizes
     // editor(play_in_editor_ignore_blueprint_errors), the one action that
     // suppresses the editor's unresolved-Blueprint-error prompt. Off by

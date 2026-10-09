@@ -84,12 +84,12 @@ describe("one product, one version", () => {
     // The bug this catches was a hardcoded "0.6.4" that survived nine minor
     // releases, so asserting the value is not enough: assert that no literal
     // version is written at the construction site at all.
-    const src = read("src/index.ts");
+    const src = read("src/server/mcp-server.ts");
     const ctor = src.match(/new McpServer\(\s*\{[^}]*\}/s)?.[0] ?? "";
-    expect(ctor, "could not find the McpServer construction in src/index.ts").not.toBe("");
+    expect(ctor, "could not find the McpServer construction in src/server/mcp-server.ts").not.toBe("");
     expect(
       /version:\s*["'`]\d/.test(ctor),
-      "src/index.ts writes a literal version into the McpServer options. It must read "
+      "src/server/mcp-server.ts writes a literal version into the McpServer options. It must read "
         + "package.json, or it will freeze at whatever was true the day it was typed.",
     ).toBe(false);
     expect(/version:\s*packageVersion\(\)/.test(ctor)).toBe(true);
