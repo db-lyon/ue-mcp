@@ -38,6 +38,8 @@ The merge style follows the commit count, and writing five commits only to squas
 
 **Hard rule: patch-level bumps only.** Version bumps in this repo are always `X.Y.Z → X.Y.(Z+1)`. Never increment major or minor without explicit sign-off. This holds even for genuinely large features - the answer is still a patch bump, and if you think otherwise, ask first.
 
+- A signed-off major or minor version goes on its own line in `.github/version-signoff`, in the same commit as the bump. The `version-delta` gate allows exactly the versions listed there.
+
 - Bump `package.json` version.
 - Commit and push. **Do not create git tags.** CI detects the version bump on `main` and publishes to npm + creates the GitHub release automatically.
 

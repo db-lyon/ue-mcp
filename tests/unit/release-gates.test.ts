@@ -154,3 +154,15 @@ describe("docs-freshness exemption", () => {
     expect(docsExemptionReason(null)).toBeNull();
   });
 });
+
+describe("an owner sign-off", () => {
+  it("allows a minor move to exactly the version named", () => {
+    expect(versionDeltaProblem("1.3.10-beta.16", "1.4.0-beta.1", ["1.4.0-beta.1"])).toBeNull();
+  });
+  it("does not cover any other version", () => {
+    expect(versionDeltaProblem("1.3.10-beta.16", "1.4.0-beta.2", ["1.4.0-beta.1"])).toMatch(/MINOR/);
+  });
+  it("never allows a move backwards", () => {
+    expect(versionDeltaProblem("1.4.0", "1.3.11", ["1.3.11"])).not.toBeNull();
+  });
+});
