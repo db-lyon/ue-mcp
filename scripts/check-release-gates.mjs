@@ -43,27 +43,34 @@ export function parseVersion(raw) {
  * move, and the patch must not go backwards. A prerelease on the same X.Y.Z is
  * allowed, because that is how a beta is cut.
  *
+ * A major or minor move is allowed only when `signedOff` names the exact
+ * target version, which is the owner's sign-off committed in
+ * .github/version-signoff.
+ *
  * Returns null when the move is fine, or a sentence saying what is wrong.
  */
-export function versionDeltaProblem(fromRaw, toRaw) {
+export function versionDeltaProblem(fromRaw, toRaw, signedOff = []) {
   const from = parseVersion(fromRaw);
   const to = parseVersion(toRaw);
   if (!to) return `'${toRaw}' is not a version this project can publish.`;
   if (!from) return null; // Nothing to compare against, so nothing to refuse.
   if (from.raw === to.raw) return null;
 
+  const forward = to.major > from.major || (to.major === from.major && to.minor > from.minor);
+  if (forward && signedOff.includes(to.raw)) return null;
+
   if (to.major !== from.major) {
     return (
       `Version went from ${from.raw} to ${to.raw}, which moves the MAJOR. `
       + "Bumps in this repo are patch-only unless the owner says otherwise, so this needs "
-      + "their sign-off rather than a merge."
+      + "their sign-off: the exact version on its own line in .github/version-signoff."
     );
   }
   if (to.minor !== from.minor) {
     return (
       `Version went from ${from.raw} to ${to.raw}, which moves the MINOR. `
       + "Bumps in this repo are patch-only unless the owner says otherwise, so this needs "
-      + "their sign-off rather than a merge."
+      + "their sign-off: the exact version on its own line in .github/version-signoff."
     );
   }
   if (to.patch < from.patch) {
@@ -149,6 +156,16 @@ function versionAt(ref) {
   }
 }
 
+/** Versions the owner signed off on for a major or minor move, one per line. */
+function readSignoff() {
+  try {
+    return fs.readFileSync(path.join(REPO, ".github", "version-signoff"), "utf8")
+      .split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  } catch {
+    return [];
+  }
+}
+
 function checkVersionDelta() {
   const here = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8")).version;
   const base = baselineRef();
@@ -160,7 +177,7 @@ function checkVersionDelta() {
     console.error("    On a pull request this means the checkout had no history: set fetch-depth: 0.");
     return 1;
   }
-  const problem = versionDeltaProblem(there, here);
+  const problem = versionDeltaProblem(there, here, readSignoff());
   if (problem) {
     console.error(`version-delta   - ${problem}`);
     return 1;

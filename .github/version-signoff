@@ -1,0 +1,3 @@
+# Versions the owner signed off on for a major or minor move, one per line.
+# check-release-gates.mjs reads this; a version not listed stays patch-only.
+1.4.0-beta.1
