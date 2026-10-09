@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ALL_TOOLS } from "../../src/tools.js";
+import { printServerLogsOnFailure } from "../helpers/server-log.js";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MISSING = "get_world_outliner";
@@ -56,12 +57,13 @@ beforeAll(async () => {
   const uproject = path.join(projectDir, "Withheld.uproject");
   fs.writeFileSync(uproject, JSON.stringify({ FileVersion: 3, EngineAssociation: "5.8", Modules: [] }));
 
-  const keep = ["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_SERVER_MODE", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY"];
+  const keep = ["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_SERVER_MODE", "UE_MCP_DISABLE_UPDATE_CHECK", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY"];
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     UE_MCP_PORT: String(port),
     UE_MCP_HOST: "127.0.0.1",
     UE_MCP_SERVER_MODE: "in-process",
+    UE_MCP_DISABLE_UPDATE_CHECK: "1",
     UE_MCP_STATE_DIR: path.join(sandbox, "state"),
     UE_MCP_CONFIG_DIR: path.join(sandbox, "config"),
     UE_MCP_CONTEXT_STRATEGY: "full",
@@ -85,6 +87,8 @@ afterAll(async () => {
   await new Promise<void>((resolve) => wss?.close(() => resolve()));
   fs.rmSync(sandbox, { recursive: true, force: true });
 });
+
+printServerLogsOnFailure(() => (sandbox ? [path.join(sandbox, "server.log")] : []), () => ({ seen }));
 
 describe("a method the plugin did not register", () => {
   it("is not advertised in tools/list", async () => {
