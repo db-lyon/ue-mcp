@@ -177,3 +177,4 @@ bench/
 
 # Engine symbol index cache for the live tests (rebuilt on demand).
 .engine-index-cache/
+dist-binaries/
