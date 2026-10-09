@@ -88,7 +88,7 @@ beforeAll(async () => {
   uproject = path.join(projectDir, "Daemoned.uproject");
   fs.writeFileSync(uproject, JSON.stringify({ FileVersion: 3, EngineAssociation: "5.8", Modules: [] }));
 
-  const keep = ["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY", "UE_MCP_DAEMON_DIR", "UE_MCP_DAEMON_IDLE_MS"];
+  const keep = ["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY", "UE_MCP_DAEMON_DIR", "UE_MCP_DAEMON_IDLE_MS", "UE_MCP_DISABLE_UPDATE_CHECK"];
   env = {
     ...(process.env as Record<string, string>),
     UE_MCP_PORT: String(port),
@@ -97,6 +97,7 @@ beforeAll(async () => {
     UE_MCP_CONFIG_DIR: path.join(sandbox, "config"),
     UE_MCP_CONTEXT_STRATEGY: "full",
     UE_MCP_DAEMON_DIR: daemonDir,
+    UE_MCP_DISABLE_UPDATE_CHECK: "1",
     // A backstop: a daemon this file leaves behind exits on its own.
     UE_MCP_DAEMON_IDLE_MS: "20000",
   };

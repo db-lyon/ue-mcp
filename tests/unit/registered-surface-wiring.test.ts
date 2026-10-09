@@ -57,12 +57,13 @@ beforeAll(async () => {
   const uproject = path.join(projectDir, "Withheld.uproject");
   fs.writeFileSync(uproject, JSON.stringify({ FileVersion: 3, EngineAssociation: "5.8", Modules: [] }));
 
-  const keep = ["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_SERVER_MODE", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY"];
+  const keep = ["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_SERVER_MODE", "UE_MCP_DISABLE_UPDATE_CHECK", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY"];
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     UE_MCP_PORT: String(port),
     UE_MCP_HOST: "127.0.0.1",
     UE_MCP_SERVER_MODE: "in-process",
+    UE_MCP_DISABLE_UPDATE_CHECK: "1",
     UE_MCP_STATE_DIR: path.join(sandbox, "state"),
     UE_MCP_CONFIG_DIR: path.join(sandbox, "config"),
     UE_MCP_CONTEXT_STRATEGY: "full",

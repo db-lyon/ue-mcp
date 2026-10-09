@@ -164,6 +164,7 @@ beforeAll(async () => {
     UE_MCP_PORT: String(bridge.port),
     UE_MCP_HOST: "127.0.0.1",
     UE_MCP_SERVER_MODE: "in-process",
+    UE_MCP_DISABLE_UPDATE_CHECK: "1",
     // Named explicitly: the harness advertises no elicitation, so the default
     // would be defer, and auto is the mode that hands back the press calls.
     UE_MCP_DIALOG_MODE: "auto",
@@ -174,7 +175,7 @@ beforeAll(async () => {
     UE_MCP_CONTEXT_STRATEGY: "full",
   };
   for (const k of Object.keys(env)) {
-    if (k.startsWith("UE_MCP_") && !["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_SERVER_MODE", "UE_MCP_DIALOG_MODE", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY"].includes(k)) {
+    if (k.startsWith("UE_MCP_") && !["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_SERVER_MODE", "UE_MCP_DISABLE_UPDATE_CHECK", "UE_MCP_DIALOG_MODE", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY"].includes(k)) {
       delete env[k];
     }
   }
@@ -336,6 +337,7 @@ describe("micro mode can still answer its own dialog", () => {
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
       UE_MCP_SERVER_MODE: "in-process",
+      UE_MCP_DISABLE_UPDATE_CHECK: "1",
       UE_MCP_PORT: String(bridge.port),
       UE_MCP_HOST: "127.0.0.1",
       UE_MCP_DIALOG_MODE: "auto",
@@ -419,6 +421,7 @@ describe("interactive mode, end to end, with a client that can be asked", () => 
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
       UE_MCP_SERVER_MODE: "in-process",
+      UE_MCP_DISABLE_UPDATE_CHECK: "1",
       UE_MCP_PORT: String(bridge.port),
       UE_MCP_HOST: "127.0.0.1",
       // NOT pinned. The default must resolve to interactive because the client
@@ -551,6 +554,7 @@ describe("the blocked-editor stamp", () => {
           env: {
             ...(process.env as Record<string, string>),
             UE_MCP_SERVER_MODE: "in-process",
+            UE_MCP_DISABLE_UPDATE_CHECK: "1",
             UE_MCP_PORT: String(clearBridge.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_DIALOG_MODE: "auto",
@@ -599,6 +603,7 @@ describe("the preflight, on a guard that knows nothing yet", () => {
           env: {
             ...(process.env as Record<string, string>),
             UE_MCP_SERVER_MODE: "in-process",
+            UE_MCP_DISABLE_UPDATE_CHECK: "1",
             UE_MCP_PORT: String(coldBridge.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_DIALOG_MODE: "auto",
@@ -664,6 +669,7 @@ describe("answering a dialog does not answer the next one for you", () => {
           env: {
             ...(process.env as Record<string, string>),
             UE_MCP_SERVER_MODE: "in-process",
+            UE_MCP_DISABLE_UPDATE_CHECK: "1",
             UE_MCP_PORT: String(b.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_STATE_DIR: path.join(sandbox4, "state"),
@@ -725,6 +731,7 @@ describe("a tool call is the agent, so interactive refuses it the button", () =>
           env: {
             ...(process.env as Record<string, string>),
             UE_MCP_SERVER_MODE: "in-process",
+            UE_MCP_DISABLE_UPDATE_CHECK: "1",
             UE_MCP_PORT: String(b.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_STATE_DIR: path.join(sandbox, "state"),
