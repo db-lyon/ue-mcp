@@ -13,7 +13,7 @@ import { execSync } from "node:child_process";
 
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { isNewer } from "../core/version-check.js";
-import { UE_MCP_LAUNCH, pinnedVersionOf } from "../integrations/claude-code/mcp-client-config.js";
+import { UE_MCP_LAUNCH, detectMcpClients, pinnedVersionOf, readUeMcpEntry, removeUeMcpEntry } from "../integrations/claude-code/mcp-client-config.js";
 import { packageVersion } from "../core/package-root.js";
 import { findUProject, isUProjectPath, projectDirOf } from "../config/uproject-path.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
@@ -41,6 +41,45 @@ export interface DoctorReport {
   bareNpxConfigs: string[];       // .mcp.json paths using bare `npx ue-mcp`
   /** .mcp.json entries pinned to an exact version, which must match the bridge. */
   pinnedConfigs?: Array<{ config: string; version: string }>;
+  /** Client configs whose ue-mcp entry serves a project that is gone or has no bridge. */
+  deadClientEntries?: DeadClientEntry[];
+}
+
+export interface DeadClientEntry {
+  client: string;
+  config: string;
+  project: string;
+  reason: "project missing" | "no bridge installed";
+}
+
+/**
+ * Client configs (this project's and the machine-wide ones) whose ue-mcp entry
+ * points at a .uproject that no longer exists or no longer has the bridge.
+ * An entry that names no project is not judged.
+ */
+export function findDeadClientEntries(projectDir: string): DeadClientEntry[] {
+  const dead: DeadClientEntry[] = [];
+  for (const client of detectMcpClients(projectDir)) {
+    const entry = readUeMcpEntry(client);
+    if (!entry.configured || !entry.project) continue;
+    const project = path.resolve(entry.project);
+    if (!fs.existsSync(project)) {
+      dead.push({ client: client.name, config: client.configPath, project, reason: "project missing" });
+    } else if (!resolvePluginDir(path.dirname(project))) {
+      dead.push({ client: client.name, config: client.configPath, project, reason: "no bridge installed" });
+    }
+  }
+  return dead;
+}
+
+/** Remove exactly the given dead entries. Returns the configs changed. */
+export function removeDeadClientEntries(projectDir: string, dead: DeadClientEntry[]): string[] {
+  const changed: string[] = [];
+  for (const client of detectMcpClients(projectDir)) {
+    if (!dead.some((d) => d.config === client.configPath)) continue;
+    if (removeUeMcpEntry(client)) changed.push(client.configPath);
+  }
+  return changed;
 }
 
 function safeExec(cmd: string): string | null {
@@ -311,6 +350,7 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
       : null,
     bareNpxConfigs: findBareNpxConfigs(cwd),
     pinnedConfigs: findPinnedConfigs(cwd),
+    deadClientEntries: findDeadClientEntries(targetProjectDir ?? cwd),
   };
 }
 
@@ -411,6 +451,10 @@ export function formatDoctor(d: DoctorReport): string {
     const rel = path.relative(process.cwd(), pin.config).replace(/\\/g, "/") || pin.config;
     problems.push(`${rel} pins ue-mcp@${pin.version} but the bridge plugin is ${bridge}. Run \`ue-mcp update\` so both move together.`);
   }
+  for (const dead of d.deadClientEntries ?? []) {
+    const what = dead.reason === "project missing" ? "no longer exists" : "has no bridge installed";
+    problems.push(`${dead.client} (${dead.config}) serves ${dead.project}, which ${what}. Run \`ue-mcp doctor --fix\` to remove the entry.`);
+  }
   for (const cfg of d.bareNpxConfigs) {
     const rel = path.relative(process.cwd(), cfg).replace(/\\/g, "/") || cfg;
     problems.push(`${rel} launches with bare \`npx ue-mcp\`. Use \`${UE_MCP_LAUNCH}\` so the server self-heals to latest on each launch.`);
@@ -452,5 +496,11 @@ export async function run(argv: string[]): Promise<number | void> {
     process.exit(1);
   }
   const projectArg = target.projectPath ?? target.rest.find((a) => !a.startsWith("-"));
-  console.log(formatDoctor(collectDoctor(projectArg)));
+  const report = collectDoctor(projectArg);
+  console.log(formatDoctor(report));
+  if (target.rest.includes("--fix") && (report.deadClientEntries ?? []).length > 0) {
+    const changed = removeDeadClientEntries(report.targetProjectDir ?? process.cwd(), report.deadClientEntries ?? []);
+    for (const config of changed) console.log(`  ${GREEN}Removed the ue-mcp entry from ${config}${RESET}`);
+    console.log("");
+  }
 }
