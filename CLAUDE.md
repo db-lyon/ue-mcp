@@ -122,9 +122,16 @@ CI **gates the publish job** on a single pre-staged input: the draft GitHub rele
    gh release create vX.Y.Z --draft --notes-file /path/to/local-notes.md
    ```
 
-3. **Bump `package.json` version, commit, push.** That's it - CI takes over.
+3. **Build and attach the prebuilt bridge binaries** (machines without a C++ toolchain install these). On a machine with the engines installed, after the version bump is committed locally (with `npm run generate:metadata`, which stamps it into the plugin descriptor the binaries carry) and before it is pushed:
+   ```bash
+   npm run binaries:build      # RunUAT BuildPlugin per installed engine -> dist-binaries/
+   npm run binaries:upload     # zips + manifest onto the draft release; refuses a published one
+   ```
+   `--engines 5.7,5.8` narrows the build; `UE_MCP_BINARY_ENGINES="5.4=D:/UE_5.4;5.5=..."` names engines outside the launcher's location. An engine without a build here is an engine whose binary install fails with a plain "no prebuilt bridge for UE x.y" until one is uploaded.
 
-4. **CI validates → publishes → promotes.** If the headline frontmatter is missing or malformed, the publish job fails with a pointer to the offending item *before* npm publish runs. On success, the published release page shows the body with frontmatter stripped, and the `landing/headline` commit status is posted automatically.
+4. **Push the version bump.** That's it - CI takes over.
+
+5. **CI validates → publishes → promotes.** If the headline frontmatter is missing or malformed, the publish job fails with a pointer to the offending item *before* npm publish runs. On success, the published release page shows the body with frontmatter stripped, and the `landing/headline` commit status is posted automatically.
 
 Release notes structure (below the frontmatter): **`## Features` / `## Fixes` / `## Mentions` / `## Contributions`**, in that order. Read `docs/release-notes-style.md` before writing any of it. The rules that get broken most:
 

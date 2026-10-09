@@ -56,6 +56,8 @@
   "scripts": {
     "up": "node scripts/run.js",
     "build": "node scripts/build.js",
+    "binaries:build": "node scripts/binaries.mjs build",
+    "binaries:upload": "node scripts/binaries.mjs upload",
     "up:build": "node scripts/build-and-run.js",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
