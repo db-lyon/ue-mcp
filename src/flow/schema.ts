@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EngineConfigSchema } from "@db-lyon/flowkit";
+import { EngineConfigSchema, FlowDefinitionSchema } from "@db-lyon/flowkit";
 import { GuardsSchema } from "./guard-schema.js";
 
 /**
@@ -50,7 +50,14 @@ export const PluginEntrySchema = z.object({
 
 export type PluginEntry = z.infer<typeof PluginEntrySchema>;
 
+/** flowkit's flow definition plus what ue-mcp adds to it. See flow/editor-loss.ts. */
+export const UeMcpFlowDefinitionSchema = FlowDefinitionSchema.extend({
+  on_editor_loss: z.enum(["resume", "rollback", "fail"]).optional(),
+  editor_loss_timeout_seconds: z.number().positive().optional(),
+});
+
 export const FlowConfigSchema = EngineConfigSchema.extend({
+  flows: z.record(UeMcpFlowDefinitionSchema).default({}),
   "ue-mcp": FlowVersionSchema.optional(),
   project: FlowProjectSchema,
   git_snapshot: GitSnapshotSchema,

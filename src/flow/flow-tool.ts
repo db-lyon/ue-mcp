@@ -30,6 +30,14 @@ import {
   trimError,
 } from "./events.js";
 import { unappliedRollbackCall } from "./handler-outcome.js";
+import {
+  DEFAULT_EDITOR_LOSS_TIMEOUT_MS,
+  EditorLossGuard,
+  type ConnectionSource,
+  type EditorLossPolicy,
+  type EditorLossReport,
+} from "./editor-loss.js";
+import { taskEffect } from "../surface/action-effects.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -184,11 +192,67 @@ async function runFlow(
   // emit carries this id so SSE subscribers can filter to a specific
   // run; the response includes it so callers can correlate.
   const runId = nextRunId();
-  const runner = makeRunner(registry, config, ctx, runId, flowName);
-  const result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure });
+  const def = (config.flows as Record<string, { on_editor_loss?: EditorLossPolicy; editor_loss_timeout_seconds?: number }>)[flowName];
+  const policy: EditorLossPolicy = def?.on_editor_loss ?? "resume";
+  const snapshot: SnapshotHolder = {};
+  const guard = makeLossGuard(ctx, policy, def?.editor_loss_timeout_seconds, snapshot);
+  const runner = makeRunner(guard ? guard.wrap(registry) : registry, config, ctx, runId, flowName, snapshot, guard);
+  try {
+    // Under on_editor_loss: rollback a failed run unwinds, unless the caller said otherwise.
+    const rollback = rollback_on_failure ?? (policy === "rollback" ? true : undefined);
+    const result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure: rollback });
+    const formatted = formatFlowResult(result);
+    const loss = guard?.report();
+    if (loss) formatted.summary = `${formatted.summary as string}\n\n${describeEditorLoss(loss)}`;
+    return { ...formatted, editorLoss: loss, runId };
+  } finally {
+    guard?.dispose();
+  }
+}
 
-  const formatted = formatFlowResult(result);
-  return { ...formatted, runId };
+/** The git snapshot of the run in progress, shared with the editor-loss guard. */
+interface SnapshotHolder {
+  current?: Snapshot;
+}
+
+function makeLossGuard(
+  ctx: ToolContext,
+  policy: EditorLossPolicy,
+  timeoutSeconds: number | undefined,
+  snapshot: SnapshotHolder,
+): EditorLossGuard | undefined {
+  const source = ctx.session?.bridge as unknown as ConnectionSource | undefined;
+  if (typeof source?.onConnectionChanged !== "function" || typeof source.waitForConnection !== "function") return undefined;
+  const graph = (ctx as FlowContext).getToolGraph?.() ?? ctx.session?.toolGraph;
+  return new EditorLossGuard(source, {
+    policy,
+    timeoutMs: timeoutSeconds ? timeoutSeconds * 1000 : DEFAULT_EDITOR_LOSS_TIMEOUT_MS,
+    isReadOnly: (taskName) => taskEffect(taskName, graph).effect === "read",
+    // Filesystem only, and only while the editor is away, so it never holds stale copies.
+    restoreWhileDown: () => {
+      if (!snapshot.current) return false;
+      try {
+        restoreSnapshot(snapshot.current);
+        snapshot.current = undefined;
+        return true;
+      } catch (e) {
+        console.error(`[ue-mcp] git snapshot restore failed: ${(e as Error).message}`);
+        return false;
+      }
+    },
+  });
+}
+
+function describeEditorLoss(loss: EditorLossReport): string {
+  const lines = [`  Editor loss (on_editor_loss: ${loss.policy}):`];
+  for (const e of loss.events) {
+    lines.push(`      ${e.step}: ${e.outcome}${e.cause ? ` (${e.cause})` : ""}, waited ${Math.round(e.waitedMs / 1000)}s`);
+  }
+  if (loss.unsavedBeforeLoss.length > 0) {
+    lines.push(`      Not saved when the editor went away, so lost if it crashed: ${loss.unsavedBeforeLoss.join(", ")}`);
+  }
+  if (loss.snapshotRestoredWhileDown) lines.push("      Git snapshot restored while the editor was away.");
+  return lines.join("\n");
 }
 
 function makeRunner(
@@ -197,6 +261,8 @@ function makeRunner(
   ctx: ToolContext,
   runId: string,
   flowName: string,
+  snapshot: SnapshotHolder = {},
+  guard?: EditorLossGuard,
 ): FlowRunner {
   // The whole context, not two fields of it. Rebuilding it field-by-field
   // dropped `elicit`, `getFlows`, `getPlugins` and now the editor session, so
@@ -209,7 +275,6 @@ function makeRunner(
   // Handler-level rollbacks cover in-memory state (selection, PIE, unsaved
   // actors); the snapshot covers anything that touched disk.
   const snapCfg = config.git_snapshot;
-  let activeSnapshot: Snapshot | undefined;
   let flowFailed = false;
   const snapshotEnabled = !!(snapCfg?.enabled && ctx.project.projectDir);
 
@@ -233,7 +298,7 @@ function makeRunner(
         : snapshotDir;
       pruneOldSnapshots(absSnap, (snapCfg!.max_age_hours ?? 24) * 3_600_000);
       try {
-        activeSnapshot = takeSnapshot(
+        snapshot.current = takeSnapshot(
           projectDir,
           snapCfg!.paths ?? ["Content", "Config"],
           snapshotDir,
@@ -254,6 +319,7 @@ function makeRunner(
       });
     },
     afterStep: async (step: PlanStep, result: FlowStepResult) => {
+      guard?.stepCompleted(step.name, result.result?.data);
       emitFlowEvent({
         type: "step_completed",
         runId,
@@ -278,6 +344,7 @@ function makeRunner(
       // so the run_completed event is the last thing observers see.
       if (snapshotEnabled) {
         flowFailed = !result.success;
+        const activeSnapshot = snapshot.current;
         if (activeSnapshot && flowFailed) {
           try {
             const { changedPaths } = restoreSnapshot(activeSnapshot);
