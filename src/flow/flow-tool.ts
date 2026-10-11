@@ -94,7 +94,9 @@ export function createFlowTool(
       kind: "handler",
       effect: "read",
       description:
-        "Show a flow's execution plan without running a step of it. Params: flowName. Returns the ordered plan.",
+        "Show a flow's execution plan without running a step of it. Params: flowName. Returns the ordered plan, "
+        + "and the flow as declared under definition: its description and each step's task or nested flow, "
+        + "options and conditions, with ${steps.N...} references left unresolved.",
       handler: async (ctx, params) => planFlow(registryFor(ctx), configFor(ctx), ctx, params),
     },
     list: {
@@ -173,7 +175,11 @@ async function planFlow(
   // Plan mode short-circuits inside the runner before any hooks fire,
   // so the runId placeholder we pass here is never observed.
   const runner = makeRunner(registry, config, ctx, nextRunId(), flowName);
-  return runner.run({ flowName, plan: true });
+  const planned = await runner.run({ flowName, plan: true });
+  // The plan names each step's task; the definition carries what a reader needs to see how the
+  // steps connect, which is the options and the ${steps.N...} references between them.
+  const def = (config.flows as Record<string, FlowDefinition | undefined>)[flowName];
+  return def ? { ...planned, definition: { description: def.description, steps: def.steps } } : planned;
 }
 
 async function runFlow(
