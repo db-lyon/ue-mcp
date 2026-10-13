@@ -96,21 +96,45 @@ export async function installExtension(
     const target = path.join(root, name);
     const staging = `${target}.staging-${process.pid}`;
     fs.mkdirSync(root, { recursive: true });
-    fs.rmSync(staging, { recursive: true, force: true });
+    sweepLeftovers(root, name);
     fs.cpSync(pkgDir, staging, { recursive: true });
     const old = `${target}.old-${process.pid}`;
     const had = fs.existsSync(target);
-    if (had) fs.renameSync(target, old);
     try {
-      fs.renameSync(staging, target);
-    } catch (e) {
-      if (had) fs.renameSync(old, target);
-      throw e;
+      if (had) fs.renameSync(target, old);
+      try {
+        fs.renameSync(staging, target);
+      } catch (e) {
+        if (had) fs.renameSync(old, target);
+        throw e;
+      }
+    } finally {
+      // The new copy is in place or the old one is back; either way the spare goes, and
+      // one that cannot go yet (a file still open) is swept by the next install.
+      removeQuietly(staging);
+      if (had) removeQuietly(old);
     }
-    if (had) fs.rmSync(old, { recursive: true, force: true });
     return { name, version: pkg.version ?? "0.0.0", dir: target, sha256 };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
+function removeQuietly(dir: string): void {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // Still open somewhere; sweepLeftovers takes it next time.
+  }
+}
+
+/** The copies earlier installs of `name` left beside it: <name>.staging-<pid> and <name>.old-<pid>. */
+export function sweepLeftovers(root: string, name: string): void {
+  if (!fs.existsSync(root)) return;
+  // Names are letters, digits and dashes (checked on install), so they need no escaping here.
+  const spare = new RegExp(`^${name}\\.(staging|old)-\\d+$`);
+  for (const e of fs.readdirSync(root, { withFileTypes: true })) {
+    if (e.isDirectory() && spare.test(e.name)) removeQuietly(path.join(root, e.name));
   }
 }
 

@@ -55,6 +55,13 @@ function readPackages(root: string): ExtensionPackage[] {
       };
       const ext = pkg.ueMcpExtension;
       if (!ext?.name || !pkg.main) continue;
+      // An extension lives in the folder named for it. Anything else is a copy an
+      // interrupted install left (<name>.staging-<pid>, <name>.old-<pid>), and
+      // loading it would run a second, older copy of the extension beside the first.
+      if (e.name !== ext.name) {
+        warn("extension", `skipping ${dir}: it holds ${ext.name}, which loads from ${path.join(root, ext.name)}`);
+        continue;
+      }
       const min = ext.api?.min ?? 1;
       const max = ext.api?.max ?? min;
       if (EXTENSION_API_VERSION < min || EXTENSION_API_VERSION > max) {

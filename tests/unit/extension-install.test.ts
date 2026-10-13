@@ -9,6 +9,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { installExtension, removeExtension } from "../../src/daemon/extension-install.js";
+import { loadExtensions } from "../../src/daemon/extensions.js";
 
 let dir: string;
 const tar = process.platform === "win32" ? path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
@@ -65,6 +66,26 @@ describe("installExtension", () => {
     await expect(installExtension(none.zip, { root })).rejects.toThrow(/not a ue-mcp extension/);
     const future = zipExtension("0.3.0", { ueMcpExtension: { name: "studio", api: { min: 99, max: 99 } } });
     await expect(installExtension(future.zip, { root })).rejects.toThrow(/needs extension API 99\.\.99/);
+  });
+});
+
+describe("copies an interrupted install leaves", () => {
+  it("are swept by the next install, so only the extension's own folder remains", async () => {
+    const root = path.join(dir, "extensions");
+    const v1 = zipExtension("0.1.0");
+    await installExtension(v1.zip, { root });
+    for (const spare of ["studio.old-64024", "studio.staging-64024"]) fs.cpSync(path.join(root, "studio"), path.join(root, spare), { recursive: true });
+    fs.mkdirSync(path.join(root, "studio-other.old-1"), { recursive: true });
+    await installExtension(zipExtension("0.2.0").zip, { root });
+    expect(fs.readdirSync(root).sort()).toEqual(["studio", "studio-other.old-1"]);
+  });
+
+  it("are never loaded beside the extension", async () => {
+    const root = path.join(dir, "extensions");
+    await installExtension(zipExtension("0.2.0").zip, { root });
+    fs.cpSync(path.join(root, "studio"), path.join(root, "studio.old-64024"), { recursive: true });
+    const loaded = await loadExtensions((name) => ({ name }) as never, root);
+    expect(loaded.map((e) => `${e.name} ${e.version}`)).toEqual(["studio 0.2.0"]);
   });
 });
 
