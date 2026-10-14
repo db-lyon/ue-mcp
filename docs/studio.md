@@ -10,7 +10,7 @@ Studio comes in three parts:
 
 Studio runs in a separate process from the editor, so the chat keeps working while the editor is busy. A long generation or a blocking call shows as "Editor busy" with a timer and a Stop button instead of freezing the chat.
 
-<img src="images/studio-own-window.webp" alt="Unreal Editor on the left and Studio in its own window on the right, with a session list and a chat where the agent answered from ue-mcp calls" style="max-width:100%">
+<img src="images/studio-own-window.webp" alt="Unreal Editor on the left and Studio in its own window on the right, with a session list and a chat listing the lights in the open level and how bright each one is" style="max-width:100%">
 
 ## Prerequisites
 
@@ -70,7 +70,7 @@ Pick a model in the chat box, or in **Settings > General > Model**. Each vendor 
 | OpenAI | **ChatGPT** | Yes |
 | Google | None | Yes |
 
-<img src="images/studio-settings-sign-in.webp" alt="Studio settings showing the model picker, the ChatGPT and Claude subscription sign-ins, and the API keys list" style="max-width:100%">
+<img src="images/studio-settings-sign-in.webp" alt="Studio settings showing updates, the appearance themes, the model picker, the ChatGPT and Claude subscription sign-ins, and the API keys list" style="max-width:100%">
 
 - **ChatGPT.** You approve the sign-in in your browser, and OpenAI models run on your ChatGPT plan's limits.
 - **Claude subscription.** Experimental, and used at your own risk under Anthropic's terms. It runs Claude models on your Claude plan's limits. On first use Studio downloads the Claude runtime the Claude Agent SDK needs from npm, and keeps its login and runtime in Studio's own folder, apart from any other Claude install on the machine.
@@ -100,14 +100,16 @@ Studio opens in its own window. The window stays above the editor while either i
 
 **Dock in editor**, in Studio's header or in the **UE-MCP Studio** tab, shows Studio in that tab instead, beside Details by default. Docked, it is still its own process, held over the tab: it moves, resizes, floats and hides with the tab like any other panel. **Open as window** brings it back out. The choice is kept per project. When the tab is part of your saved editor layout, Studio appears in it on editor start.
 
-<img src="images/studio-docked-chat.webp" alt="Studio docked in the UE-MCP Studio editor tab beside the viewport, Outliner and Details panels" style="max-width:100%">
+<img src="images/studio-docked-chat.webp" alt="Studio docked in the UE-MCP Studio editor tab beside the viewport, Outliner and Details panels, with a session list and a table of the materials in a folder and the actors that use them" style="max-width:100%">
 
 ### Ask Studio from the editor
 
 - **Ctrl+Alt+Space**, or **Ctrl+Alt+right-click** over the level viewport or a graph, opens a one-line prompt at the cursor that starts a new Studio session. It carries what is under the cursor as context. The shortcut can be changed in **Editor Preferences > Keyboard Shortcuts** under **Ask Studio**.
 - **Chat about this**, in the context menu of selected actors or assets, opens the same prompt with them as context.
 
-<img src="images/studio-ask-prompt.webp" alt="The Ask Studio prompt over the level viewport with a reply about the landscape under the cursor, and the Continue this thread and Close buttons" style="max-width:100%">
+<img src="images/studio-ask-prompt.webp" alt="The Ask Studio prompt over a selected actor in the level viewport, with a reply explaining why its material looks washed out, and the Continue this thread and Close buttons" style="max-width:100%">
+
+<img src="images/studio-ask-graph.webp" alt="The Ask Studio prompt over a Transform Points node in a PCG graph, with a reply about the rotation range of the points it outputs, and the Continue this thread and Close buttons" style="max-width:100%">
 
 The prompt shows the reply, with **Stop** and **Continue this thread**, which opens the session in Studio.
 
