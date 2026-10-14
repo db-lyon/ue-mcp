@@ -52,6 +52,7 @@ And a **plugin system** that lets npm packages inject new actions into the exist
 ## Navigation
 
 - **[Getting Started](getting-started.md)** - Zero-to-running walkthrough for first-time users
+- **[UE-MCP Studio](studio.md)** - The in-editor agent: install from Fab, first start, sign-in, approvals, updates and uninstall
 - **[Architecture](architecture.md)** - How the TypeScript server, C++ plugin, and editor fit together
 - **[Tool Reference](tool-reference.md)** - All <!-- count:tools -->26<!-- /count --> tools with every action and its parameters
 - **[Native Control Rig Animation](control-rig-animation.md)** - Agent workflow for rig discovery, anatomical solving, quaternion keys, baking, and deterministic V&V
