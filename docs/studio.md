@@ -23,7 +23,7 @@ Studio's own setup does not compile anything: Fab supplies the Studio plugin alr
 ## Install from Fab
 
 1. Add **UE-MCP Studio** to your library on Fab.
-2. In the Epic Games Launcher, install it to your Unreal Engine 5.7 or 5.8. The Launcher puts it in the engine, under `Engine\Plugins\Fab`.
+2. In the Epic Games Launcher, install it to your Unreal Engine 5.7 or 5.8 from your Fab Library.
 3. Open your project, then enable **UE-MCP Studio** in **Edit > Plugins** and restart the editor when asked.
 4. Open Studio with the **Studio** toolbar button or **Tools > UE-MCP Studio**. The console command `Studio.Open` does the same.
 
@@ -31,7 +31,7 @@ Studio's own setup does not compile anything: Fab supplies the Studio plugin alr
 
 ### Consent
 
-The first time you open Studio, the **UE-MCP Studio** tab asks **Allow Studio to install its parts?** Nothing is downloaded or installed until you choose **Allow**. **Not now** closes the tab and records nothing, so the next open asks again.
+The first time you open Studio, the **UE-MCP Studio** tab asks **Allow Studio to install its parts?** Nothing is downloaded or installed until you choose **Allow**. **Not now** closes the tab and records nothing, so Studio asks again the next time you open it.
 
 The prompt lists each part and the folder it goes to:
 
@@ -103,7 +103,7 @@ The prompt shows the reply, with **Stop** and **Continue this thread**, which op
 
 ## Updates
 
-- **The editor plugin** installed from Fab updates through your Fab Library in the Epic Games Launcher. Studio never replaces a plugin installed from Fab. When a Studio release needs a newer plugin, Studio says so.
+- **The editor plugin** installed from Fab updates through your Fab Library in the Epic Games Launcher. The plugin records at startup that it is the Fab build, in `<YourProject>/Saved/UE_MCP_Studio/plugin.json`, and Studio never replaces a plugin that reports itself as the Fab build. When a Studio release needs a newer plugin, Studio says so and points you to the Fab Library.
 - **Studio and ue-mcp** update in the app. **Settings > General > Updates** lists Studio, the editor plugin and ue-mcp with the installed and latest versions, and **Update** installs what is ready. The plugin also checks for a newer Studio extension each time the editor starts.
 - An update that restarts ue-mcp or the editor waits until no turn is running. **Restart now** installs it at once and stops the turn.
 - The **Channel** setting picks **Stable** or **Beta**. Beta also takes prereleases, for testing.
@@ -116,8 +116,8 @@ The prompt shows the reply, with **Stop** and **Continue this thread**, which op
     npx ue-mcp daemon stop
     ```
 
-2. Close the editor. Disable **UE-MCP Studio** in **Edit > Plugins** for one project, or remove it from your engine in the Epic Games Launcher, which deletes it from `Engine\Plugins\Fab`.
-3. Delete `<YourProject>/Plugins/UE_MCP_Bridge`, and remove the `UE_MCP_Bridge` and `UE_MCP_Studio` entries from the `Plugins` list in your `.uproject`. Delete `ue-mcp.yml` from the project folder if you do not use ue-mcp otherwise.
+2. Disable **UE-MCP Studio** in **Edit > Plugins** for each project that uses it, then close the editor. To remove the plugin from your engine, remove it through your Fab Library in the Epic Games Launcher.
+3. Delete `<YourProject>/Plugins/UE_MCP_Bridge` and `<YourProject>/Saved/UE_MCP_Studio`, and remove the `UE_MCP_Bridge` and `UE_MCP_Studio` entries from the `Plugins` list in your `.uproject`. Delete `ue-mcp.yml` from the project folder if you do not use ue-mcp otherwise.
 4. Delete Studio's per-user folders:
     - `%USERPROFILE%\.ue-mcp\extensions\studio`: the Studio extension.
     - `%USERPROFILE%\.ue-mcp\studio`: the window app, sign-ins, API keys, the update channel and the consent record.
