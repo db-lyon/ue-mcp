@@ -24,8 +24,8 @@ The `niagara` tool covers systems, emitters, modules, renderers, and HLSL author
 
 ## Module inputs + static switches (v0.7.14)
 
-- `niagara(action="list_module_inputs", systemPath, emitterName?, stackContext?)` - walks every module in the ParticleSpawn / ParticleUpdate / EmitterSpawn / EmitterUpdate script stacks, reports input + output pins (name, type, default, linked-state).
-- `niagara(action="set_module_input", systemPath, moduleName, inputName, value, emitterName?, stackContext?)` - writes a literal default on the module's function-call input pin. **Limitation:** inputs already overridden via the stack editor's override-map node aren't touched by this path. Clear the override in-editor if the write doesn't take effect.
+- `niagara(action="list_module_inputs", systemPath, emitterName?, emitterIndex?, stackContext?, moduleName?)` - lists each module's settable inputs (name, qualifiedName, type, settable flag). `inputs` are the override-map inputs; compile-time switches and enums come back separately under `switchPins`. **Current values are not returned**: NiagaraEditor does not export the reader, so only names and types are readable.
+- `niagara(action="set_module_input", systemPath, moduleName, inputName, value, emitterName?, emitterIndex?, stackContext?)` - writes through the stack override map when the input is bound there, otherwise the pin default, and reports which in `writePath`. **Limitation:** the override-map path cannot read the previous value, so it offers no rollback; set the value again to undo.
 - `niagara(action="list_static_switches", systemPath, moduleName?, emitterName?, stackContext?)` - uses `UNiagaraGraph::FindStaticSwitchInputs` on each module's function script, cross-referenced against pins on the calling node.
 - `niagara(action="set_static_switch", systemPath, moduleName, switchName, value, emitterName?, stackContext?)` - format the `value` per the switch type: `"true"`/`"false"` for bool, integer literal for int/byte/enum.
 

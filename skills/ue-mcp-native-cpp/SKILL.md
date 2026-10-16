@@ -47,4 +47,4 @@ Once a class is compiled and registered, you can typically:
 
 - `asset(action="read_properties", assetPath=...)` or `reflection(action="reflect_class", className=...)` to verify UE sees the UCLASS.
 - `blueprint(action="create", parentClass="/Script/<Module>.<Class>")` to subclass it from a Blueprint.
-- `level(action="place_actor", className=...)` to drop an instance into the level.
+- `level(action="place_actor", actorClass=...)` to drop an instance into the level.

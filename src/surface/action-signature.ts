@@ -309,3 +309,19 @@ export function actionSignature(tool: ToolDef, action: string, options: Signatur
   }
   return out;
 }
+
+/**
+ * Every parameter name one action's signature accepts, aliases included, so a
+ * check can hold documentation to the same surface `describe` advertises.
+ */
+export function actionParamNames(tool: ToolDef, action: string): string[] {
+  const spec = tool.actions[action];
+  if (!spec) return [];
+  const names = new Set<string>();
+  const addLabel = (label: string): void => { for (const n of label.split("|")) names.add(n); };
+  for (const item of signatureItems(tool, action, spec)) {
+    if (item.kind === "param") addLabel(item.param.label);
+    else for (const b of item.branches) for (const p of b) addLabel(p.label);
+  }
+  return [...names];
+}

@@ -12,11 +12,13 @@ import { ALL_TOOLS } from "../../src/tools.js";
 import { createFlowTool } from "../../src/flow/flow-tool.js";
 import { flowCategoryForCheck } from "../../src/flow/flow-surface.js";
 import { buildMicroGateway } from "../../src/surface/context/micro-context.js";
+import { actionParamNames } from "../../src/surface/action-signature.js";
 import type { FlowConfig } from "../../src/flow/schema.js";
 import {
   CORE_OWNER,
   checkSkills,
   extractActionReferences,
+  extractCallReferences,
   installCoreSkills,
   installSkillSet,
   installedSkillName,
@@ -233,6 +235,33 @@ describe("checking skills", () => {
     ).toEqual(["asset.list", "niagara.create"]);
   });
 
+  it("pulls the parameter names a call passes, args={...} keys included", () => {
+    expect(
+      extractCallReferences('asset(action="list", directory="/Game/x", recursive=true) and level(action="get", args={limit: 5, filter: {a: 1}})'),
+    ).toEqual([
+      { ref: "asset.list", params: ["directory", "recursive"] },
+      { ref: "level.get", params: ["limit", "filter"] },
+    ]);
+  });
+
+  it("keeps a second action= as a parameter, and checks micro args against the target", () => {
+    expect(extractCallReferences('project(action="describe_action", action="x")')).toEqual([
+      { ref: "project.describe_action", params: ["action"] },
+    ]);
+    expect(extractCallReferences('tools(action="call", category="level", method="get_outliner", args={limit: 5})')).toEqual([
+      { ref: "tools.call", params: ["category", "method", "args"] },
+      { ref: "level.get_outliner", params: ["limit"] },
+    ]);
+  });
+
+  it("reports a parameter the action does not take", () => {
+    const root = path.join(tmp, "check");
+    writeSkill(root, "x", 'asset(action="list", directory="/Game", recurse=true)\n');
+    const r = checkSkills(root, known, { paramsOf: (ref) => (ref === "asset.list" ? ["directory", "recursive"] : undefined) });
+    expect(r.problems.map((p) => p.detail)).toEqual(["passes 'recurse' to 'asset.list', which takes no such parameter."]);
+    expect(r.problems[0].didYouMean).toContain("recursive");
+  });
+
   it("reports a dead action with the closest real one", () => {
     const root = path.join(tmp, "check");
     writeSkill(root, "x", 'asset(action="lst")\n');
@@ -267,17 +296,21 @@ describe("the shipped skills teach calls that exist", () => {
     expect(Object.keys(flowCategoryForCheck().actions).sort()).toEqual(Object.keys(flowTool.actions).sort());
   });
 
-  it("resolves every action referenced by every packaged skill", () => {
+  it("resolves every action and parameter referenced by every packaged skill", () => {
     const known = new Set<string>();
+    const params = new Map<string, string[]>();
     for (const tool of [...ALL_TOOLS, flowCategoryForCheck(), buildMicroGateway(ALL_TOOLS)]) {
-      for (const action of Object.keys(tool.actions)) known.add(`${tool.name}.${action}`);
+      for (const action of Object.keys(tool.actions)) {
+        known.add(`${tool.name}.${action}`);
+        params.set(`${tool.name}.${action}`, actionParamNames(tool, action));
+      }
     }
-    const r = checkSkills(packagedSkillsRoot(), known);
+    const r = checkSkills(packagedSkillsRoot(), known, { paramsOf: (ref) => params.get(ref) });
     expect(r.checked.length).toBeGreaterThan(0);
     const rendered = r.problems.map(
       (p) => `  ${p.skill}: ${p.detail}${p.didYouMean?.length ? ` closest: ${p.didYouMean.join(", ")}` : ""}`,
     );
-    expect(rendered, "Packaged skills name actions that do not exist:\n" + rendered.join("\n")).toEqual([]);
+    expect(rendered, "Packaged skills name actions or parameters that do not exist:\n" + rendered.join("\n")).toEqual([]);
     expect(r.unverified).toEqual([]);
   });
 });

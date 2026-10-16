@@ -50,6 +50,7 @@ import { readPluginsList, type PluginEntry } from "../extensions/plugins-list.js
 import { prefixedActionName } from "../extensions/manifest.js";
 import { flowCategoryForCheck } from "../flow/flow-surface.js";
 import { buildMicroGateway } from "../surface/context/micro-context.js";
+import { actionParamNames } from "../surface/action-signature.js";
 import {
   checkSkills,
   conflictMessages,
@@ -470,9 +471,13 @@ function cmdCheckSkills(args: string[]): void {
   if (listSkills(root).length === 0) fail(`no skills/<name>/SKILL.md under ${dir}`);
 
   const known = new Set<string>();
+  const coreParams = new Map<string, string[]>();
   // The micro gateway is advertised too (the default strategy), so a skill may teach it.
   for (const tool of [...ALL_TOOLS, flowCategoryForCheck(), buildMicroGateway(ALL_TOOLS)]) {
-    for (const action of Object.keys(tool.actions)) known.add(`${tool.name}.${action}`);
+    for (const action of Object.keys(tool.actions)) {
+      known.add(`${tool.name}.${action}`);
+      coreParams.set(`${tool.name}.${action}`, actionParamNames(tool, action));
+    }
   }
   try {
     const { manifest } = loadManifest(dir);
@@ -487,7 +492,7 @@ function cmdCheckSkills(args: string[]): void {
   }
 
   // The installer sets a plugin skill's name, so the directory need not match it.
-  const result = checkSkills(root, known, { requireNameMatch: false });
+  const result = checkSkills(root, known, { requireNameMatch: false, paramsOf: (ref) => coreParams.get(ref) });
   for (const p of result.problems) {
     console.log(`  ${p.skill}: ${p.detail}${p.didYouMean?.length ? ` Closest: ${p.didYouMean.join(", ")}` : ""}`);
   }

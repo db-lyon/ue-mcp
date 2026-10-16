@@ -317,18 +317,102 @@ export interface SkillCheckResult {
   unverified: string[];
 }
 
+/** One `category(action="name", key=...)` call a skill body teaches. */
+export interface SkillCallReference {
+  ref: string;
+  /** The parameter names the call passes, `args={...}` keys included. */
+  params: string[];
+}
+
+const CALL_START = /\b([a-z][a-z0-9_]*)\s*\(\s*action\s*[=:]\s*["']([A-Za-z0-9_]+)["']/g;
+
 /**
- * Every `category(action="name")` a skill body teaches. Code fences count: a
- * dead call in a code block is the one most likely to be copied verbatim.
+ * Every `category(action="name", ...)` call in a skill body, with the
+ * parameter names it passes. Code fences count: a dead call in a code block is
+ * the one most likely to be copied verbatim.
  */
-export function extractActionReferences(body: string): string[] {
-  const found = new Set<string>();
-  for (const m of body.matchAll(
-    /\b([a-z][a-z0-9_]*)\s*\(\s*action\s*[=:]\s*["']([A-Za-z0-9_]+)["']/g,
-  )) {
-    found.add(`${m[1]}.${m[2]}`);
+export function extractCallReferences(body: string): SkillCallReference[] {
+  const calls: SkillCallReference[] = [];
+  for (const m of body.matchAll(CALL_START)) {
+    const inner = balancedBody(body, body.indexOf("(", m.index));
+    const entries = inner === undefined ? [] : topLevelEntries(inner);
+    // The first `action` routes the call; a second one is a parameter mistake.
+    entries.splice(entries.findIndex(([k]) => k === "action"), 1);
+    const ref = `${m[1]}.${m[2]}`;
+    const value = (key: string): string | undefined => entries.find(([k]) => k === key)?.[1];
+    const argKeys = (): string[] => {
+      const args = value("args");
+      const nested = args?.startsWith("{") ? balancedBody(args, 0) : undefined;
+      return nested === undefined ? [] : topLevelEntries(nested).map(([k]) => k);
+    };
+    if (ref === "tools.call") {
+      // The micro gateway forwards `args` to category.method: check them there.
+      calls.push({ ref, params: entries.map(([k]) => k) });
+      const category = unquote(value("category"));
+      const method = unquote(value("method"));
+      if (category && method) calls.push({ ref: `${category}.${method}`, params: argKeys() });
+      continue;
+    }
+    calls.push({ ref, params: entries.flatMap(([k]) => (k === "args" ? argKeys() : [k])) });
   }
-  return [...found].sort();
+  return calls;
+}
+
+function unquote(v: string | undefined): string | undefined {
+  return /^["']([A-Za-z0-9_]+)["']$/.exec(v ?? "")?.[1];
+}
+
+/** Every `category(action="name")` a skill body teaches, deduplicated. */
+export function extractActionReferences(body: string): string[] {
+  return [...new Set(extractCallReferences(body).map((c) => c.ref))].sort();
+}
+
+/** The text between the bracket at `open` and its partner, or undefined. */
+function balancedBody(text: string, open: number): string | undefined {
+  let depth = 0;
+  let quote = "";
+  for (let i = open; i < text.length && i < open + 2000; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch) && --depth === 0) return text.slice(open + 1, i);
+  }
+  return undefined;
+}
+
+/** The `key=value` / `key: value` pairs at depth zero. */
+function topLevelEntries(inner: string): [string, string][] {
+  const entries: [string, string][] = [];
+  let depth = 0;
+  let quote = "";
+  let start = 0;
+  const take = (segment: string): void => {
+    const k = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*[=:]\s*([\s\S]*)$/.exec(segment);
+    // A signature-style bare name (`systemPath, emitterName?`) names a parameter too.
+    const bare = /^\s*([A-Za-z_][A-Za-z0-9_]*)\??\s*$/.exec(segment);
+    if (k) entries.push([k[1], k[2].trim()]);
+    else if (bare) entries.push([bare[1], ""]);
+  };
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (quote) {
+      if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch)) depth--;
+    else if (ch === "," && depth === 0) {
+      take(inner.slice(start, i));
+      start = i + 1;
+    }
+  }
+  take(inner.slice(start));
+  return entries;
 }
 
 /**
@@ -340,7 +424,11 @@ export function extractActionReferences(body: string): string[] {
 export function checkSkills(
   root: string,
   known: ReadonlySet<string>,
-  opts: { requireNameMatch?: boolean } = {},
+  opts: {
+    requireNameMatch?: boolean;
+    /** The parameter names `category.action` accepts; undefined skips the check. */
+    paramsOf?: (ref: string) => readonly string[] | undefined;
+  } = {},
 ): SkillCheckResult {
   const categories = new Set([...known].map((a) => a.slice(0, a.indexOf("."))));
   const result: SkillCheckResult = { checked: listSkills(root), problems: [], unverified: [] };
@@ -361,6 +449,19 @@ export function checkSkills(
         skill,
         detail: `frontmatter name '${frontmatter.name}' does not match the directory '${skill}'.`,
       });
+    }
+    for (const call of extractCallReferences(text)) {
+      if (!known.has(call.ref)) continue;
+      const accepted = opts.paramsOf?.(call.ref);
+      if (!accepted) continue;
+      for (const param of call.params) {
+        if (accepted.includes(param)) continue;
+        result.problems.push({
+          skill,
+          detail: `passes '${param}' to '${call.ref}', which takes no such parameter.`,
+          didYouMean: nearestActions(param, [...accepted]),
+        });
+      }
     }
     for (const ref of extractActionReferences(text)) {
       if (known.has(ref)) continue;
