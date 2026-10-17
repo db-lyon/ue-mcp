@@ -26,7 +26,7 @@ beforeAll(async () => {
   sb = new Sandbox();
   // The npm registry, the plugin registry and the binaries host, all one local fake.
   fake = await FakeHttp.start((req) => {
-    if (req.url === "/ue-mcp") return { json: { "dist-tags": { latest: "99.0.0" } } };
+    if (req.url === "/ue-mcp") return { json: { "dist-tags": { latest: "99.0.0", beta: "99.1.0-beta.1" } } };
     if (req.url === `/v99.0.0/UE_MCP_Bridge-99.0.0-manifest.json`) {
       return { json: { assets: [{ file: `UE_MCP_Bridge-99.0.0-UE5.6-${PLATFORM}.zip`, sha256: "0".repeat(64) }] } };
     }
@@ -213,6 +213,14 @@ describe("bridge updates", () => {
     });
     expect(check.body.error).toBeUndefined();
     expect(fake.requests.map((r) => r.url)).toEqual(expect.arrayContaining(["/ue-mcp", "/v99.0.0/UE_MCP_Bridge-99.0.0-manifest.json"]));
+  });
+
+  it("follows the channel the caller names, and refuses one that is not a dist-tag", async () => {
+    covers("daemon.update");
+    const beta = await call(d, "GET", "/v1/update?channel=beta");
+    expect(beta.status).toBe(200);
+    expect(beta.body).toMatchObject({ channel: "beta", latest: "99.1.0-beta.1", target: "99.1.0-beta.1" });
+    expect((await call(d, "GET", "/v1/update?channel=..%2Fx")).status).toBe(400);
   });
 
   it("applies an update from given binaries while no editor runs, and says so on the stream", async () => {

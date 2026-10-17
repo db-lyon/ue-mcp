@@ -504,7 +504,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       return;
     }
     if (req.method === "GET" && url.pathname === "/v1/update") {
-      checkForUpdate(rt.project.projectPath ?? opts.projects[0]).then((check) => json(res, 200, check));
+      // ?channel=beta follows that npm dist-tag instead of the one the installed version implies.
+      const channel = url.searchParams.get("channel");
+      if (channel !== null && !/^[A-Za-z][0-9A-Za-z._-]{0,31}$/.test(channel)) return json(res, 400, { error: "channel is an npm dist-tag such as latest or beta" });
+      checkForUpdate(rt.project.projectPath ?? opts.projects[0], undefined, channel ?? undefined).then((check) => json(res, 200, check));
       return;
     }
     if (req.method === "POST" && url.pathname === "/v1/update/apply") {

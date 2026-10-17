@@ -1552,6 +1552,11 @@
         {
           "suite": "integration",
           "file": "tests/integration/daemon-http.test.ts",
+          "test": "follows the channel the caller names, and refuses one that is not a dist-tag"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/daemon-http.test.ts",
           "test": "reports the newest release for the install's channel from the registry"
         }
       ]

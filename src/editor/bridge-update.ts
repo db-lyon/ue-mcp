@@ -99,10 +99,15 @@ async function newestOnChannel(channel: string, fetcher: ReleaseFetcher): Promis
   return stable && isNewer(stable, onChannel) ? stable : onChannel;
 }
 
-/** Compare the installed bridge against the newest release for its channel. Never throws. */
+/**
+ * Compare the installed bridge against the newest release for its channel. Never throws.
+ * `channel` overrides the one the installed version implies; a prerelease channel then
+ * also moves a stable install onto it, since the caller chose that channel.
+ */
 export async function checkForUpdate(
   uprojectPath: string,
   fetcher: ReleaseFetcher = fetch as unknown as ReleaseFetcher,
+  channel?: string,
 ): Promise<UpdateCheck> {
   const projectDir = path.dirname(path.resolve(uprojectPath));
   const located = resolvePluginDir(projectDir);
@@ -127,7 +132,7 @@ export async function checkForUpdate(
       platform: unrealPlatform(),
     },
     server: packageVersion(),
-    channel: distTagForVersion(version ?? packageVersion()),
+    channel: channel || distTagForVersion(version ?? packageVersion()),
     latest: null,
     target: null,
     binaries: null,
@@ -135,7 +140,8 @@ export async function checkForUpdate(
   try {
     check.latest = await newestOnChannel(check.channel, fetcher);
     const from = version ?? packageVersion();
-    check.target = check.latest ? resolveUpdateTarget(from, check.latest) : null;
+    const optedIn = !!channel && channel !== "latest";
+    check.target = !check.latest ? null : optedIn ? (isNewer(check.latest, from) ? check.latest : null) : resolveUpdateTarget(from, check.latest);
     if (check.target && check.installed.kind === "binary" && engine) {
       const t: BinaryTarget = { version: check.target, engine, platform: check.installed.platform };
       const manifestUrl = `${binariesBase().replace(/\/+$/, "")}/v${check.target}/${binaryManifestName(check.target)}`;

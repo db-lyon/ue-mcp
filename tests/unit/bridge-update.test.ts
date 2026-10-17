@@ -79,6 +79,19 @@ describe("checkForUpdate", () => {
     expect((await checkForUpdate(uproject, releases({ latest: "1.2.0", beta: "1.2.0-beta.1" }, []))).target).toBe("1.2.0");
   });
 
+  it("moves a stable install onto a prerelease channel only when that channel is asked for", async () => {
+    const { uproject } = binaryProject("1.4.7");
+    const tags = { latest: "1.4.7", beta: "1.4.8-beta.2" };
+    expect((await checkForUpdate(uproject, releases(tags, []))).target).toBeNull();
+    expect(await checkForUpdate(uproject, releases(tags, []), "beta")).toMatchObject({ channel: "beta", latest: "1.4.8-beta.2", target: "1.4.8-beta.2" });
+    expect((await checkForUpdate(uproject, releases(tags, []), "latest")).target).toBeNull();
+  });
+
+  it("never moves a beta install back when the stable channel is asked for", async () => {
+    const { uproject } = binaryProject("1.4.8-beta.2");
+    expect((await checkForUpdate(uproject, releases({ latest: "1.4.7", beta: "1.4.8-beta.2" }, []), "latest")).target).toBeNull();
+  });
+
   it("says when a release has no binaries for this engine, and nothing when up to date", async () => {
     const { uproject } = binaryProject("1.0.0");
     expect((await checkForUpdate(uproject, releases({ latest: "1.1.0" }, ["other.zip"]))).binaries?.available).toBe(false);
