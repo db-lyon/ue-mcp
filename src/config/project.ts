@@ -55,6 +55,11 @@ export interface UeMcpConfig {
      *  -RenderOffScreen so no editor window appears on screen. A per-call
      *  `window` parameter overrides it. */
     window?: "normal" | "offscreen";
+    /** Whether that editor may open an IDE: `allow`, or `none`, which passes
+     *  -MCPNoIde so the bridge stops it opening one and hides the Live Coding
+     *  console after each compile. Unset = `none` for an offscreen editor and
+     *  `allow` otherwise. A per-call `ide` parameter overrides it. */
+    ide?: "allow" | "none";
     /** Extra editor command-line arguments, appended after the offscreen
      *  switch. A string is split on whitespace with double quotes grouping; a
      *  list is taken item by item. Per-call `extraArgs` follow these. */

@@ -24,6 +24,28 @@ export function resolveWindowMode(
   return perCall ?? config ?? "normal";
 }
 
+/** `allow` lets the editor open an IDE as it always has; `none` passes
+ *  -MCPNoIde, which tells the bridge to stop the editor opening one and to
+ *  hide the Live Coding console after each compile. */
+export type EditorIdeMode = "allow" | "none";
+
+/** The bridge switch an `ide: none` launch passes. */
+const NO_IDE_SWITCH = "-MCPNoIde";
+
+/**
+ * Whether a launch may open an IDE: the per-call parameter, then the
+ * project's `editor.ide` in ue-mcp.yml, then the window mode's default. An
+ * offscreen editor has nobody at the screen to use an IDE, so it defaults to
+ * `none`; a normal one keeps today's behaviour.
+ */
+export function resolveIdeMode(
+  perCall: EditorIdeMode | undefined,
+  config: EditorIdeMode | undefined,
+  windowMode: EditorWindowMode,
+): EditorIdeMode {
+  return perCall ?? config ?? (windowMode === "offscreen" ? "none" : "allow");
+}
+
 /** The pieces of a command line, and whether a double quote was left open. */
 function tokenize(text: string, keepQuotes: boolean): { args: string[]; unmatched: boolean } {
   const args: string[] = [];
@@ -55,17 +77,18 @@ function tokenize(text: string, keepQuotes: boolean): { args: string[]; unmatche
 /**
  * Why a launch must not go ahead on the project's config, or null.
  *
- * A malformed `editor.window` or `editor.extraArgs` is dropped from the config
- * like any other bad key, and a launch that carried on would quietly start a
- * different editor from the one asked for: on screen instead of offscreen, or
- * without its switches. So those two refuse the launch instead, naming what to
- * fix. Other rejections of the `editor` key do not stop a launch.
+ * A malformed `editor.window`, `editor.ide` or `editor.extraArgs` is dropped
+ * from the config like any other bad key, and a launch that carried on would
+ * quietly start a different editor from the one asked for: on screen instead
+ * of offscreen, free to open an IDE, or without its switches. So those three
+ * refuse the launch instead, naming what to fix. Other rejections of the
+ * `editor` key do not stop a launch.
  */
 export function launchConfigRefusal(rejections: UeMcpConfigRejection[]): string | null {
   const problems = rejections
     .filter((r) => r.key === "editor")
     .flatMap((r) => r.issues)
-    .filter((i) => /^(window|extraArgs)(\.|$)/.test(i.path))
+    .filter((i) => /^(window|ide|extraArgs)(\.|$)/.test(i.path))
     .map((i) => `editor.${i.path}: ${i.message}`);
   if (problems.length === 0) return null;
   return (
@@ -95,19 +118,21 @@ export function splitEditorArgs(text: string, opts: { keepQuotes?: boolean } = {
 
 /**
  * The editor's arguments: the project, the offscreen switch when asked for,
- * the project's configured extras, then the call's own.
+ * the no-IDE switch when asked for, the project's configured extras, then the
+ * call's own.
  *
  * A configured string is split the same way a per-call one is; a configured
  * list is taken item by item, unsplit. Each list item is one argument of a
  * POSIX argv, and one piece of the Windows command line exactly as written.
- * Normal with no extras is exactly [projectPath], which is what every launch
- * did before this existed. `keepQuotes` is for the Windows command line; see
- * splitEditorArgs.
+ * Normal with the IDE allowed and no extras is exactly [projectPath], which is
+ * what every launch did before this existed. `keepQuotes` is for the Windows
+ * command line; see splitEditorArgs.
  */
 export function buildEditorLaunchArgs(
   projectPath: string,
   opts: {
     window: EditorWindowMode;
+    ide: EditorIdeMode;
     configExtraArgs?: string | string[];
     extraArgs?: string;
     keepQuotes?: boolean;
@@ -116,6 +141,7 @@ export function buildEditorLaunchArgs(
   const split = { keepQuotes: opts.keepQuotes };
   const args = [projectPath];
   if (opts.window === "offscreen") args.push("-RenderOffScreen");
+  if (opts.ide === "none") args.push(NO_IDE_SWITCH);
   const configured = opts.configExtraArgs;
   if (typeof configured === "string") {
     try {
@@ -153,6 +179,15 @@ export function renderWindowsCommandLine(args: string[]): string {
  */
 export function hasOffscreenSwitch(args: string[]): boolean {
   return args.some((arg) => /^[-/]renderoffscreen$/i.test(arg));
+}
+
+/**
+ * Whether any of these pieces is the -MCPNoIde switch, matched the way the
+ * bridge reads it: a `-` or `/` prefix, the name case-insensitively and
+ * exactly, and nothing quoted. See hasOffscreenSwitch.
+ */
+export function hasNoIdeSwitch(args: string[]): boolean {
+  return args.some((arg) => /^[-/]mcpnoide$/i.test(arg));
 }
 
 /**

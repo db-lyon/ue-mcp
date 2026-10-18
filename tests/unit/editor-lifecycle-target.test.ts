@@ -468,6 +468,15 @@ describe("the launch shape start_editor spawns", () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
+  it("refuses editor.ide: None from ue-mcp.yml, naming the file and the key, and spawns nothing", async () => {
+    const { project } = configuredProject("ue-mcp:\n  editor:\n    ide: None\n");
+    const result = await startEditor(project, 1);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("ue-mcp.yml");
+    expect(result.message).toContain("editor.ide");
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
   it("reports offscreen when the switch came in through extraArgs with the default mode", async () => {
     const { project } = configuredProject(null);
     const result = await startEditor(project, 1, undefined, { extraArgs: "-RenderOffScreen" });
@@ -505,8 +514,23 @@ describe("the launch shape start_editor spawns", () => {
 
   it("launches config window: offscreen with the call's extras after the switch", async () => {
     const { project, projectPath } = configuredProject("ue-mcp:\n  editor:\n    window: offscreen\n");
-    await startEditor(project, 1, undefined, { extraArgs: '-log -ExecCmds="stat fps"' });
-    expectLaunched(projectPath, ["-RenderOffScreen", "-log", EXEC_CMDS]);
+    const result = await startEditor(project, 1, undefined, { extraArgs: '-log -ExecCmds="stat fps"' });
+    expectLaunched(projectPath, ["-RenderOffScreen", "-MCPNoIde", "-log", EXEC_CMDS]);
+    expect(result.ide).toBe("none");
+  });
+
+  it("lets a per-call ide: allow keep the IDE on a configured offscreen editor", async () => {
+    const { project, projectPath } = configuredProject("ue-mcp:\n  editor:\n    window: offscreen\n");
+    const result = await startEditor(project, 1, undefined, { ide: "allow" });
+    expectLaunched(projectPath, ["-RenderOffScreen"]);
+    expect(result.ide).toBe("allow");
+  });
+
+  it("reports ide none when the switch came in through extraArgs on a normal editor", async () => {
+    const { project, projectPath } = configuredProject(null);
+    const result = await startEditor(project, 1, undefined, { extraArgs: "-MCPNoIde" });
+    expectLaunched(projectPath, ["-MCPNoIde"]);
+    expect(result.ide).toBe("none");
   });
 
   it("lets a per-call window: normal beat a configured offscreen", async () => {
@@ -514,6 +538,7 @@ describe("the launch shape start_editor spawns", () => {
     const result = await startEditor(project, 1, undefined, { window: "normal" });
     expectLaunched(projectPath, []);
     expect(result.window).toBe("normal");
+    expect(result.ide).toBe("allow");
   });
 
   it("spawns nothing for a per-call extraArgs with an unmatched quote", async () => {
@@ -544,7 +569,24 @@ describe("the launch shape start_editor spawns", () => {
     });
     try {
       await restartEditor(project, undefined, undefined, { window: "offscreen" });
-      expectLaunched(projectPath, ["-RenderOffScreen"]);
+      expectLaunched(projectPath, ["-RenderOffScreen", "-MCPNoIde"]);
+    } finally {
+      vi.mocked(observer.readLogState).mockImplementation(actual.readLogState);
+    }
+  });
+
+  it("restartEditor passes -MCPNoIde for ide: none and reports it", async () => {
+    const { project, projectPath } = configuredProject(null);
+    const actual = await vi.importActual<typeof import("../../src/editor/engine-observer.js")>("../../src/editor/engine-observer.js");
+    vi.mocked(observer.readLogState).mockReturnValue({
+      logPath: null, secondsSinceWrite: 0, phase: "crashed", blocking: false, missingModules: [], exiting: false,
+      lastLine: null, tail: [], errors: [], warnings: [],
+    });
+    try {
+      const result = await restartEditor(project, undefined, undefined, { ide: "none" });
+      expectLaunched(projectPath, ["-MCPNoIde"]);
+      expect(result.window).toBe("normal");
+      expect(result.ide).toBe("none");
     } finally {
       vi.mocked(observer.readLogState).mockImplementation(actual.readLogState);
     }

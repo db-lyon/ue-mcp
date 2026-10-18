@@ -5,10 +5,13 @@ import { bridgeReplyAccepted, callBridgeOnce, type BridgeReply } from "../bridge
 import { readUeMcpConfig, ueMcpConfigRejections, type ProjectContext } from "../config/project.js";
 import {
   buildEditorLaunchArgs,
+  hasNoIdeSwitch,
   hasOffscreenSwitch,
   launchConfigRefusal,
   renderWindowsCommandLine,
+  resolveIdeMode,
   resolveWindowMode,
+  type EditorIdeMode,
   type EditorWindowMode,
 } from "./launch-args.js";
 import { EngineResolutionError, engineLookupFor, selectEngine, trySelectEngine } from "./engine-root.js";
@@ -510,6 +513,9 @@ export interface StartEditorResult {
   /** The window mode the launched editor runs in, read from its final arguments
    *  (extraArgs can carry -RenderOffScreen too). Set once something was launched. */
   window?: EditorWindowMode;
+  /** Whether the launched editor may open an IDE, read from its final
+   *  arguments (extraArgs can carry -MCPNoIde too). Set once something was launched. */
+  ide?: EditorIdeMode;
 }
 
 export async function startEditor(
@@ -542,6 +548,13 @@ export async function startEditor(
      * -RenderOffScreen, so no editor window appears on screen.
      */
     window?: EditorWindowMode;
+
+    /**
+     * Whether the editor may open an IDE. Resolved against the project's
+     * `editor.ide` in ue-mcp.yml, then `none` for an offscreen editor and
+     * `allow` otherwise. `none` passes -MCPNoIde to the bridge.
+     */
+    ide?: EditorIdeMode;
 
     /** Extra command-line arguments for the editor, appended after the
      *  project's `editor.extraArgs` from ue-mcp.yml. */
@@ -624,8 +637,10 @@ export async function startEditor(
   const onWindows = process.platform === "win32";
   let launchArgs: string[];
   try {
+    const windowMode = resolveWindowMode(opts.window, project.config.editor?.window);
     launchArgs = buildEditorLaunchArgs(project.projectPath, {
-      window: resolveWindowMode(opts.window, project.config.editor?.window),
+      window: windowMode,
+      ide: resolveIdeMode(opts.ide, project.config.editor?.ide, windowMode),
       configExtraArgs: project.config.editor?.extraArgs,
       extraArgs: opts.extraArgs,
       keepQuotes: onWindows,
@@ -639,6 +654,7 @@ export async function startEditor(
   // The mode the editor will actually run in: extraArgs can carry the switch
   // on a launch whose window mode is normal.
   const window: EditorWindowMode = hasOffscreenSwitch(launchArgs) ? "offscreen" : "normal";
+  const ide: EditorIdeMode = hasNoIdeSwitch(launchArgs) ? "none" : "allow";
 
   try {
     // Recorded before the spawn so the wait can tell the lockfile this editor
@@ -667,6 +683,7 @@ export async function startEditor(
         timeline: result.timeline,
         elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
         window,
+        ide,
         ...(result.state ? { state: result.state } : {}),
       };
     }
@@ -677,12 +694,14 @@ export async function startEditor(
       timeline: result.timeline,
       elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
       window,
+      ide,
     };
   } catch (error) {
     return {
       success: false,
       message: `Failed to launch editor: ${error instanceof Error ? error.message : String(error)}`,
       window,
+      ide,
     };
   }
 }
@@ -1053,6 +1072,8 @@ export interface RestartEditorResult {
   elapsedSeconds?: number;
   /** The window mode the start half used. */
   window?: EditorWindowMode;
+  /** Whether the editor the start half launched may open an IDE. */
+  ide?: EditorIdeMode;
 }
 
 
@@ -1420,7 +1441,7 @@ export async function restartEditor(
   project: ProjectContext,
   bridge?: { connect: (timeoutMs?: number) => Promise<void> } & ConnectedEditorSource,
   openDisplay?: (title: string) => ProgressDisplay,
-  opts: { window?: EditorWindowMode; extraArgs?: string } = {},
+  opts: { window?: EditorWindowMode; ide?: EditorIdeMode; extraArgs?: string } = {},
 ): Promise<RestartEditorResult> {
   // Same rule as start and stop: without a loaded project there is no editor
   // this is about, and the machine-wide answer is somebody else's editor (#819).
@@ -1441,6 +1462,7 @@ export async function restartEditor(
   const startResult = await startEditor(project, undefined, undefined, {
     openDisplay,
     window: opts.window,
+    ide: opts.ide,
     extraArgs: opts.extraArgs,
   });
   const stopped = stopResult.stopped ? { stopped: stopResult.stopped } : {};

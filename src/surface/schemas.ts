@@ -57,6 +57,10 @@ export const UeMcpConfigSchema = z
         // `normal` (default) or `offscreen` (-RenderOffScreen, no editor window
         // on screen). A per-call `window` parameter overrides it.
         window: z.enum(["normal", "offscreen"]).optional(),
+        // `allow` or `none` (-MCPNoIde: the bridge stops the editor opening an
+        // IDE). Unset follows the window mode: offscreen means none. A
+        // per-call `ide` parameter overrides it.
+        ide: z.enum(["allow", "none"]).optional(),
         // Extra editor command-line arguments: a string split on whitespace
         // with double quotes grouping, or a list taken item by item.
         extraArgs: z.union([z.string(), z.array(z.string())]).optional(),

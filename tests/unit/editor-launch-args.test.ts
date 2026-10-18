@@ -8,8 +8,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildEditorLaunchArgs,
+  hasNoIdeSwitch,
   isOffscreenCommandLine,
   renderWindowsCommandLine,
+  resolveIdeMode,
   resolveWindowMode,
   splitEditorArgs,
 } from "../../src/editor/launch-args.js";
@@ -22,6 +24,27 @@ describe("resolveWindowMode", () => {
     expect(resolveWindowMode(undefined, "normal")).toBe("normal");
     expect(resolveWindowMode("offscreen", "normal")).toBe("offscreen");
     expect(resolveWindowMode("normal", "offscreen")).toBe("normal");
+  });
+});
+
+describe("resolveIdeMode", () => {
+  it("defaults to none for an offscreen editor and allow for a normal one", () => {
+    expect(resolveIdeMode(undefined, undefined, "offscreen")).toBe("none");
+    expect(resolveIdeMode(undefined, undefined, "normal")).toBe("allow");
+  });
+
+  it("prefers the project config over the window mode's default", () => {
+    expect(resolveIdeMode(undefined, "allow", "offscreen")).toBe("allow");
+    expect(resolveIdeMode(undefined, "none", "normal")).toBe("none");
+  });
+
+  it("prefers the per-call value over the project config", () => {
+    expect(resolveIdeMode("allow", "none", "offscreen")).toBe("allow");
+    expect(resolveIdeMode("none", "allow", "normal")).toBe("none");
+  });
+
+  it("lets a per-call allow override an offscreen editor's default", () => {
+    expect(resolveIdeMode("allow", undefined, "offscreen")).toBe("allow");
   });
 });
 
@@ -59,26 +82,57 @@ describe("splitEditorArgs", () => {
 
 describe("buildEditorLaunchArgs", () => {
   it("is exactly the project path for a normal launch with no extras", () => {
-    expect(buildEditorLaunchArgs("C:/P/P.uproject", { window: "normal" })).toEqual(["C:/P/P.uproject"]);
-    expect(buildEditorLaunchArgs("C:/P/P.uproject", { window: "normal", configExtraArgs: "", extraArgs: "  " }))
+    expect(buildEditorLaunchArgs("C:/P/P.uproject", { window: "normal", ide: "allow" })).toEqual(["C:/P/P.uproject"]);
+    expect(buildEditorLaunchArgs("C:/P/P.uproject", { window: "normal", ide: "allow", configExtraArgs: "", extraArgs: "  " }))
       .toEqual(["C:/P/P.uproject"]);
   });
 
   it("puts the offscreen switch straight after the project", () => {
-    expect(buildEditorLaunchArgs("C:/P/P.uproject", { window: "offscreen" }))
+    expect(buildEditorLaunchArgs("C:/P/P.uproject", { window: "offscreen", ide: "allow" }))
       .toEqual(["C:/P/P.uproject", "-RenderOffScreen"]);
   });
 
   it("splits a configured string and keeps a configured list item by item", () => {
-    expect(buildEditorLaunchArgs("P", { window: "normal", configExtraArgs: '-x "y z"' }))
+    expect(buildEditorLaunchArgs("P", { window: "normal", ide: "allow", configExtraArgs: '-x "y z"' }))
       .toEqual(["P", "-x", "y z"]);
-    expect(buildEditorLaunchArgs("P", { window: "normal", configExtraArgs: ["-a b", "c"] }))
+    expect(buildEditorLaunchArgs("P", { window: "normal", ide: "allow", configExtraArgs: ["-a b", "c"] }))
       .toEqual(["P", "-a b", "c"]);
   });
 
   it("puts configured extras before per-call extras, after the offscreen switch", () => {
-    expect(buildEditorLaunchArgs("P", { window: "offscreen", configExtraArgs: ["-cfg"], extraArgs: "-call 1" }))
+    expect(buildEditorLaunchArgs("P", { window: "offscreen", ide: "allow", configExtraArgs: ["-cfg"], extraArgs: "-call 1" }))
       .toEqual(["P", "-RenderOffScreen", "-cfg", "-call", "1"]);
+  });
+
+  it("adds nothing for ide allow", () => {
+    expect(buildEditorLaunchArgs("P", { window: "normal", ide: "allow" })).toEqual(["P"]);
+    expect(buildEditorLaunchArgs("P", { window: "offscreen", ide: "allow" })).toEqual(["P", "-RenderOffScreen"]);
+  });
+
+  it("puts -MCPNoIde after the offscreen switch and before every extra argument", () => {
+    expect(buildEditorLaunchArgs("P", { window: "offscreen", ide: "none", configExtraArgs: ["-cfg"], extraArgs: "-call 1" }))
+      .toEqual(["P", "-RenderOffScreen", "-MCPNoIde", "-cfg", "-call", "1"]);
+    expect(buildEditorLaunchArgs("P", { window: "normal", ide: "none", configExtraArgs: "-cfg" }))
+      .toEqual(["P", "-MCPNoIde", "-cfg"]);
+  });
+});
+
+describe("hasNoIdeSwitch", () => {
+  it("finds the switch an ide none launch adds", () => {
+    expect(hasNoIdeSwitch(buildEditorLaunchArgs("P", { window: "normal", ide: "none" }))).toBe(true);
+    expect(hasNoIdeSwitch(buildEditorLaunchArgs("P", { window: "offscreen", ide: "allow" }))).toBe(false);
+  });
+
+  it("finds it when extraArgs carries it on an ide allow launch", () => {
+    expect(hasNoIdeSwitch(buildEditorLaunchArgs("P", { window: "normal", ide: "allow", extraArgs: "-log /mcpnoide" }))).toBe(true);
+    expect(hasNoIdeSwitch(buildEditorLaunchArgs("P", { window: "normal", ide: "allow", configExtraArgs: ["-MCPNOIDE"] }))).toBe(true);
+  });
+
+  it("refuses a switch with a value, a longer name, or quotes around it", () => {
+    expect(hasNoIdeSwitch(["P", "-MCPNoIde=1"])).toBe(false);
+    expect(hasNoIdeSwitch(["P", "-MCPNoIdeX"])).toBe(false);
+    expect(hasNoIdeSwitch(["P", "--MCPNoIde"])).toBe(false);
+    expect(hasNoIdeSwitch(["P", '"-MCPNoIde"'])).toBe(false);
   });
 });
 
@@ -98,12 +152,17 @@ describe("the Windows command line", () => {
   });
 
   it("renders -ExecCmds=\"stat fps\" unchanged inside the line", () => {
-    const args = buildEditorLaunchArgs("C:/P/P.uproject", { window: "offscreen", extraArgs: '-ExecCmds="stat fps"', keepQuotes: true });
+    const args = buildEditorLaunchArgs("C:/P/P.uproject", { window: "offscreen", ide: "allow", extraArgs: '-ExecCmds="stat fps"', keepQuotes: true });
     expect(renderWindowsCommandLine(args)).toBe('"C:/P/P.uproject" -RenderOffScreen -ExecCmds="stat fps"');
   });
 
+  it("holds -MCPNoIde between the offscreen switch and the extras", () => {
+    const args = buildEditorLaunchArgs("C:/P/P.uproject", { window: "offscreen", ide: "none", extraArgs: '-ExecCmds="stat fps"', keepQuotes: true });
+    expect(renderWindowsCommandLine(args)).toBe('"C:/P/P.uproject" -RenderOffScreen -MCPNoIde -ExecCmds="stat fps"');
+  });
+
   it("keeps the backslashes of a quoted path", () => {
-    const args = buildEditorLaunchArgs("C:/P/P.uproject", { window: "normal", extraArgs: '-abslog="C:\\a b\\x.log"', keepQuotes: true });
+    const args = buildEditorLaunchArgs("C:/P/P.uproject", { window: "normal", ide: "allow", extraArgs: '-abslog="C:\\a b\\x.log"', keepQuotes: true });
     expect(renderWindowsCommandLine(args)).toBe('"C:/P/P.uproject" -abslog="C:\\a b\\x.log"');
   });
 
@@ -112,12 +171,12 @@ describe("the Windows command line", () => {
   });
 
   it("passes a configured list item through as written, quotes included", () => {
-    const args = buildEditorLaunchArgs("P", { window: "normal", configExtraArgs: ['-ExecCmds="stat fps"', "-log"], keepQuotes: true });
+    const args = buildEditorLaunchArgs("P", { window: "normal", ide: "allow", configExtraArgs: ['-ExecCmds="stat fps"', "-log"], keepQuotes: true });
     expect(renderWindowsCommandLine(args)).toBe('"P" -ExecCmds="stat fps" -log');
   });
 
   it("still strips the quotes for the POSIX argv", () => {
-    expect(buildEditorLaunchArgs("P", { window: "normal", extraArgs: '-ExecCmds="stat fps"' }))
+    expect(buildEditorLaunchArgs("P", { window: "normal", ide: "allow", extraArgs: '-ExecCmds="stat fps"' }))
       .toEqual(["P", "-ExecCmds=stat fps"]);
   });
 });
@@ -170,6 +229,14 @@ describe("the editor config schema", () => {
   it("refuses a mode it does not know", () => {
     const parsed = UeMcpConfigSchema.safeParse({ editor: { window: "hidden" } });
     expect(parsed.success).toBe(false);
+  });
+
+  it("accepts both ide modes and refuses any other spelling", () => {
+    for (const ide of ["allow", "none"] as const) {
+      expect(UeMcpConfigSchema.safeParse({ editor: { ide } }).success, ide).toBe(true);
+    }
+    expect(UeMcpConfigSchema.safeParse({ editor: { ide: "None" } }).success).toBe(false);
+    expect(UeMcpConfigSchema.safeParse({ editor: { ide: false } }).success).toBe(false);
   });
 
   it("refuses extraArgs of the wrong shape", () => {

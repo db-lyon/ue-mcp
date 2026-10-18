@@ -49,17 +49,19 @@ export const editorTool: ToolDef = categoryTool(
     start_editor: {
       kind: "handler",
       effect: "mutate",
-      description: "Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. An editor already running for this project is reported as a failure, because this call launched nothing, with alreadyRunning=true, bridgeReady, and the port it published, so a caller can tell \"there was nothing to do\" from \"the launch broke\" without parsing the sentence. A flow step that expects that outcome sets ignore_failure: true on itself rather than asking this action to call a non-launch a launch. dialogPolicy answers startup prompts before they can wedge the game thread, which is how the post-crash \"Restore Packages\" modal used to stall a launch (#968). Params: timeout? (seconds, default 300), dialogPolicy? (\"pattern=response;pattern=response\", responses as set_dialog_policy takes them), window? (normal (default) or offscreen, which passes -RenderOffScreen so no editor window appears), extraArgs? (extra editor command-line arguments, appended after editor.extraArgs from ue-mcp.yml)",
+      description: "Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. An editor already running for this project is reported as a failure, because this call launched nothing, with alreadyRunning=true, bridgeReady, and the port it published, so a caller can tell \"there was nothing to do\" from \"the launch broke\" without parsing the sentence. A flow step that expects that outcome sets ignore_failure: true on itself rather than asking this action to call a non-launch a launch. dialogPolicy answers startup prompts before they can wedge the game thread, which is how the post-crash \"Restore Packages\" modal used to stall a launch (#968). Params: timeout? (seconds, default 300), dialogPolicy? (\"pattern=response;pattern=response\", responses as set_dialog_policy takes them), window? (normal (default) or offscreen, which passes -RenderOffScreen so no editor window appears), ide? (allow or none; none stops the editor opening an IDE and hides the Live Coding console after each compile; defaults to editor.ide from ue-mcp.yml, then none for an offscreen editor and allow otherwise), extraArgs? (extra editor command-line arguments, appended after editor.extraArgs from ue-mcp.yml)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const timeout = typeof p?.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
         const dialogPolicy = typeof p?.dialogPolicy === "string" && p.dialogPolicy.trim() !== "" ? p.dialogPolicy.trim() : undefined;
         const paramEcho = p?.paramEcho === true;
         const window = p?.window === "normal" || p?.window === "offscreen" ? p.window : undefined;
+        const ide = p?.ide === "allow" || p?.ide === "none" ? p.ide : undefined;
         const extraArgs = typeof p?.extraArgs === "string" && p.extraArgs.trim() !== "" ? p.extraArgs.trim() : undefined;
         const result = await startEditor(ctx.project, timeout, ctx.onProgress, {
           dialogPolicy,
           paramEcho,
           window,
+          ide,
           extraArgs,
           openDisplay: startProgress,
         });
@@ -129,11 +131,12 @@ export const editorTool: ToolDef = categoryTool(
     restart_editor: {
       kind: "handler",
       effect: "mutate",
-      description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action. Params: window? (normal or offscreen; defaults to editor.window from ue-mcp.yml, then normal, not to the mode of the editor being stopped), extraArgs? (extra editor command-line arguments, appended after editor.extraArgs from ue-mcp.yml)",
+      description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action. Params: window? (normal or offscreen; defaults to editor.window from ue-mcp.yml, then normal, not to the mode of the editor being stopped), ide? (allow or none; none stops the editor opening an IDE and hides the Live Coding console after each compile; defaults to editor.ide from ue-mcp.yml, then none for an offscreen editor and allow otherwise), extraArgs? (extra editor command-line arguments, appended after editor.extraArgs from ue-mcp.yml)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const window = p?.window === "normal" || p?.window === "offscreen" ? p.window : undefined;
+        const ide = p?.ide === "allow" || p?.ide === "none" ? p.ide : undefined;
         const extraArgs = typeof p?.extraArgs === "string" && p.extraArgs.trim() !== "" ? p.extraArgs.trim() : undefined;
-        return restartEditor(ctx.project, ctx.bridge, startProgress, { window, extraArgs });
+        return restartEditor(ctx.project, ctx.bridge, startProgress, { window, ide, extraArgs });
       },
     },
     build_project: buildProjectAction,
@@ -512,6 +515,7 @@ export const editorTool: ToolDef = categoryTool(
     dialogPolicy: z.string().optional().describe("start_editor: semicolon-separated pattern=response pairs armed before the bridge is listening, so a prompt raised during startup is answered from the first frame (e.g. \"Restore=no\"). Same effect as set_dialog_policy and the same warning: an armed pattern presses the button, so the user never sees that prompt. Responses are the ones set_dialog_policy takes (#968)"),
     paramEcho: z.boolean().optional().describe("start_editor: arm the bridge parameter echo for the launched editor. It is read at startup, so it cannot be turned on over the socket afterwards. The live tests' leak assertions skip without it"),
     window: z.enum(["normal", "offscreen"]).optional().describe("start_editor/restart_editor: normal (default) shows the editor; offscreen launches it with -RenderOffScreen, so no editor window appears on screen. Overrides editor.window in ue-mcp.yml"),
+    ide: z.enum(["allow", "none"]).optional().describe("start_editor/restart_editor: allow lets the editor open an IDE; none passes -MCPNoIde, so the editor opens no IDE and hides the Live Coding console after each compile. Overrides editor.ide in ue-mcp.yml; unset, an offscreen editor gets none and a normal one allow"),
     requireClean: z.boolean().optional().describe("request_editor_shutdown: refuse to close while any content or map package is dirty (default true)"),
     endPIE: z.boolean().optional().describe("request_editor_shutdown: end an active PIE/SIE session before closing (default true); false refuses to close while play is running"),
     waitForAssetRegistry: z.boolean().optional().describe("play_in_editor / play_in_editor_ignore_blueprint_errors start: block until AssetRegistry finishes the initial scan (default true)"),

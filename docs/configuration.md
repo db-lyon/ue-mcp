@@ -328,13 +328,18 @@ Consequence worth knowing: if an editor is killed rather than closed, its lockfi
 
 ### Editor window mode
 
-`editor(start_editor)` and `editor(restart_editor)` take `window`, one of `normal` (default) and `offscreen`, and `extraArgs`, a string of extra editor command-line arguments.
+`editor(start_editor)` and `editor(restart_editor)` take `window`, one of `normal` (default) and `offscreen`, `ide`, one of `allow` and `none`, and `extraArgs`, a string of extra editor command-line arguments.
 
 - **`normal`** launches the editor as Unreal does on its own.
 - **`offscreen`** launches it with `-RenderOffScreen`. No editor window of any kind appears on screen, and the splash is skipped. Dialogs are invisible too but still block; see [An offscreen editor is stuck on a dialog nobody can see](troubleshooting.md#an-offscreen-editor-is-stuck-on-a-dialog-nobody-can-see).
+- **`ide`** says whether the editor may open an IDE. `allow` leaves it as Unreal does on its own; `none` passes `-MCPNoIde` to the bridge, after `-RenderOffScreen` and before every extra argument.
 - **`extraArgs`** is split on whitespace, and double quotes group words that contain spaces. An unmatched quote is an error naming the input. On Windows each piece reaches Unreal exactly as typed, quotes included, so `-ExecCmds="stat fps"` works: Unreal reads the raw command line and ignores a switch inside quotes. Elsewhere the quotes are removed and each piece is one argument.
 
-Both can also be set under `editor:` in `ue-mcp.yml` (see [the `ue-mcp:` block reference](config-file.md#ue-mcp-block-reference)), where `extraArgs` may be a list of strings. The per-call `window` wins over `editor.window`, which wins over `normal`. Extra arguments from the config come first and the per-call ones follow. `restart_editor` applies the same rules.
+All three can also be set under `editor:` in `ue-mcp.yml` (see [the `ue-mcp:` block reference](config-file.md#ue-mcp-block-reference)), where `extraArgs` may be a list of strings. The per-call `window` wins over `editor.window`, which wins over `normal`. The per-call `ide` wins over `editor.ide`, which wins over the window mode's default. Extra arguments from the config come first and the per-call ones follow. `restart_editor` applies the same rules.
+
+An offscreen editor defaults to `ide: none`, and a normal one to `allow`. With `none` the bridge sets Unreal's built-in "None" source code accessor for the session, in memory only, so nothing opens an IDE and your editor preferences are unchanged. A Live Coding compile still runs, and its console is hidden when the compile finishes, so it can show while compiling.
+
+Pass `ide: allow` to get the IDE on an offscreen editor. An `extraArgs` that adds `-MCPNoIde` counts as `none`, and the result of `start_editor` and `restart_editor` reports `ide` beside `window`.
 
 ```yaml
 ue-mcp:
@@ -440,9 +445,9 @@ The server can manage the editor process:
 
 | Command | Description |
 |---------|-------------|
-| `editor(action="start_editor")` | Launch UE with the current project. Takes `window` and `extraArgs`, see [Editor window mode](#editor-window-mode) |
+| `editor(action="start_editor")` | Launch UE with the current project. Takes `window`, `ide` and `extraArgs`, see [Editor window mode](#editor-window-mode) |
 | `editor(action="stop_editor")` | Gracefully stop the editor |
-| `editor(action="restart_editor")` | Stop and relaunch. Takes the same `window` and `extraArgs` |
+| `editor(action="restart_editor")` | Stop and relaunch. Takes the same `window`, `ide` and `extraArgs` |
 | `editor(action="build_project")` | Build the project C++ code via UBT |
 | `project(action="build")` | The same build, with `configuration`, `platform` and `clean` parameters |
 
