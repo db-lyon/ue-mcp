@@ -7,10 +7,12 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/RunnableThread.h"
 #include "HAL/FileManager.h"
+#include "Misc/CommandLine.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/DateTime.h"
 #include "Misc/FeedbackContext.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/SlowTask.h"
 #include "Misc/SlowTaskStack.h"
@@ -451,6 +453,7 @@ TSharedPtr<FJsonObject> FMCPEngineStatus::Snapshot() const
 	Out->SetNumberField(TEXT("pid"), (double)FPlatformProcess::GetCurrentProcessId());
 	Out->SetNumberField(TEXT("uptimeSeconds"), Now - InstallSeconds);
 	Out->SetNumberField(TEXT("modulesLoaded"), ModulesLoaded);
+	Out->SetBoolField(TEXT("renderOffScreen"), IsRenderOffScreen());
 
 	// The single most useful number here: how long the game thread has gone
 	// without reaching any of the capture hooks. Everything below is as old as
@@ -531,6 +534,14 @@ TSharedPtr<FJsonObject> FMCPEngineStatus::Snapshot() const
 	}
 
 	return Out;
+}
+
+bool FMCPEngineStatus::IsRenderOffScreen()
+{
+	// The command line does not change once the engine is up, and the snapshot
+	// asks on every write from the writer thread, so it is parsed once.
+	static const bool bRenderOffScreen = FParse::Param(FCommandLine::Get(), TEXT("RenderOffScreen"));
+	return bRenderOffScreen;
 }
 
 FString FMCPEngineStatus::StatusDir()

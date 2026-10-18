@@ -2,10 +2,13 @@
 #include "Modules/ModuleManager.h"
 #include "BridgeServer.h"
 #include "EngineStatusHooks.h"
+#include "MCPBackgroundThrottle.h"
 #include "MCPEngineStatus.h"
 #include "Handlers/Dialog/DialogHandlers.h"
+#include "CoreGlobals.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
+#include "Editor/EditorPerformanceSettings.h"
 #include "HAL/PlatformMisc.h"
 #include "Misc/CommandLine.h"
 #include "Misc/ConfigCacheIni.h"
@@ -48,6 +51,68 @@ namespace
 			return FromCommandLine;
 		}
 		return FPlatformMisc::GetEnvironmentVariable(TEXT("UE_MCP_DIALOG_POLICY"));
+	}
+
+	const TCHAR* const ThrottleConfigSection = TEXT("/Script/UnrealEd.EditorPerformanceSettings");
+	const TCHAR* const ThrottleConfigKey = TEXT("bThrottleCPUWhenNotForeground");
+
+	/**
+	 * An editor launched with -RenderOffScreen has no OS window, so it never
+	 * holds focus, and "Use Less CPU when in Background" holds it at a few
+	 * frames per second and stops its viewports rendering. Nobody can bring it
+	 * to the foreground, so the throttle is turned off for this process only:
+	 * the default object is changed in memory and the bridge never saves it.
+	 * Other editor code saves these settings whole, into the per-user ini every
+	 * project on this engine version shares, so the value read here is kept
+	 * and RestoreBackgroundThrottleIfSaved puts it back at shutdown.
+	 *
+	 * @param OutUserValue The throttle value as read from config, set only when this returns true.
+	 * @return True when this session turned the throttle off.
+	 */
+	bool DisableBackgroundThrottleWhenOffScreen(bool& OutUserValue)
+	{
+		if (!FMCPEngineStatus::IsRenderOffScreen())
+		{
+			return false;
+		}
+		UEditorPerformanceSettings* Settings = GetMutableDefault<UEditorPerformanceSettings>();
+		OutUserValue = Settings->bThrottleCPUWhenNotForeground;
+		Settings->bThrottleCPUWhenNotForeground = false;
+		UE_LOG(LogMCPBridge, Log,
+			TEXT("[UE-MCP] -RenderOffScreen: background CPU throttling is off for this session (it was %s). The bridge changes it in memory only and never saves it; if something else saves it, the bridge restores your value at shutdown."),
+			OutUserValue ? TEXT("on") : TEXT("off"));
+		return true;
+	}
+
+	/**
+	 * The other half of DisableBackgroundThrottleWhenOffScreen: when something
+	 * saved the session's false over the user's true, write true back and
+	 * flush the editor settings ini.
+	 */
+	void RestoreBackgroundThrottleIfSaved(bool bTurnedOff, bool bUserValue)
+	{
+		if (!bTurnedOff)
+		{
+			return;
+		}
+		if (!GConfig)
+		{
+			UE_LOG(LogMCPBridge, Warning,
+				TEXT("[UE-MCP] Could not check the saved background CPU throttle setting at shutdown: the config system is already gone."));
+			return;
+		}
+		bool bConfigValue = true;
+		const bool bConfigHoldsFalse =
+			GConfig->GetBool(ThrottleConfigSection, ThrottleConfigKey, bConfigValue, GEditorSettingsIni) && !bConfigValue;
+		if (!MCPShouldRestoreThrottle(bTurnedOff, bUserValue, bConfigHoldsFalse))
+		{
+			return;
+		}
+		GConfig->SetBool(ThrottleConfigSection, ThrottleConfigKey, true, GEditorSettingsIni);
+		GConfig->Flush(false, GEditorSettingsIni);
+		UE_LOG(LogMCPBridge, Log,
+			TEXT("[UE-MCP] Something saved this offscreen session's background CPU throttle (off) to %s; the bridge never saves it and restored your value (on)."),
+			*GEditorSettingsIni);
 	}
 
 	void ApplyConfiguredDialogPolicies(FMCPHandlerRegistry& Registry)
@@ -123,6 +188,8 @@ void FUE_MCP_BridgeModule::StartupModule()
 		UE_LOG(LogMCPBridge, Display, TEXT("[UE-MCP] Running a commandlet: the bridge server, status hooks and dialog hook are not started."));
 		return;
 	}
+
+	bThrottleTurnedOff = DisableBackgroundThrottleWhenOffScreen(bThrottleUserValue);
 
 	// Create and start bridge server. The base port is derived per-worktree
 	// from the project root path, unless something pins it: -MCPPort,
@@ -213,6 +280,8 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	RestoreBackgroundThrottleIfSaved(bThrottleTurnedOff, bThrottleUserValue);
+
 	if (G_EditorReadyTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(G_EditorReadyTicker);
