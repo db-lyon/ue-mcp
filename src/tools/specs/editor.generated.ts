@@ -1547,7 +1547,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "extraArgs",
         "type": "string",
         "required": false,
-        "description": "Extra command-line arguments, appended verbatim"
+        "description": "Extra command-line arguments. launch_standalone_game appends the string as given. start_editor and restart_editor split it on whitespace, double quotes grouping, and pass each piece to the editor as typed, quotes included."
       }
     ],
     "contractExempt": "launches a game process"
@@ -3712,7 +3712,7 @@ export const schema: Record<string, z.ZodType> = {
   ev100: z.number().optional().describe("Fixed EV100 to pin the viewport to; implies fixed exposure"),
   exactClass: z.boolean().optional().describe("Match className exactly instead of including subclasses (default false)"),
   excludeTail: z.boolean().optional().describe("Drop events buffered before the trace started (default false)"),
-  extraArgs: z.string().optional().describe("Extra command-line arguments, appended verbatim"),
+  extraArgs: z.string().optional().describe("Extra command-line arguments. launch_standalone_game appends the string as given. start_editor and restart_editor split it on whitespace, double quotes grouping, and pass each piece to the editor as typed, quotes included."),
   factor: z.number().optional().describe("Time-scale factor, greater than 0 (e.g. 500)"),
   farClip: z.number().optional().describe("Far clip plane override"),
   file: z.string().optional().describe(".utrace path to write, absolute or relative (default a timestamped file under <Project>/Saved/Profiling)"),

@@ -20166,7 +20166,7 @@
           "name": "extraArgs",
           "type": "string",
           "required": false,
-          "description": "Extra command-line arguments, appended verbatim"
+          "description": "Extra command-line arguments. launch_standalone_game appends the string as given. start_editor and restart_editor split it on whitespace, double quotes grouping, and pass each piece to the editor as typed, quotes included."
         }
       ],
       "contractExempt": "launches a game process"
