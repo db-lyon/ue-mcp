@@ -430,7 +430,13 @@ TSharedPtr<FJsonValue> FProjectHandlers::LiveCodingStatus(const TSharedPtr<FJson
 	if (Live)
 	{
 		Result->SetBoolField(TEXT("enabledByDefault"), Live->IsEnabledByDefault());
-		Result->SetBoolField(TEXT("enabledForSession"), Live->IsEnabledForSession());
+		const bool bNoIde = FMCPEngineStatus::IsNoIde();
+		Result->SetBoolField(TEXT("enabledForSession"),
+			MCPReportsLiveCodingEnabledForSession(bNoIde, Live->HasStarted(), Live->IsEnabledForSession()));
+		if (bNoIde)
+		{
+			Result->SetBoolField(TEXT("consoleHiddenByNoIde"), true);
+		}
 		Result->SetBoolField(TEXT("canEnableForSession"), Live->CanEnableForSession());
 		Result->SetBoolField(TEXT("started"), Live->HasStarted());
 		Result->SetBoolField(TEXT("compiling"), Live->IsCompiling());

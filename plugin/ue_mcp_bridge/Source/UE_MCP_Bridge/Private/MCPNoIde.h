@@ -63,3 +63,19 @@ inline bool MCPHotReloadUsesLiveCodingModule(bool bNoIde, bool bHasStarted, bool
 {
 	return bEnabledForSession || (bNoIde && bHasStarted);
 }
+
+/**
+ * The enabledForSession that live_coding_status reports. With -MCPNoIde a
+ * started Live Coding the bridge has hidden can still compile, since the next
+ * compile enables it for the session again, so it reports as enabled. Without
+ * the switch this is exactly the module's own answer.
+ *
+ * @param bNoIde The editor was launched with -MCPNoIde.
+ * @param bHasStarted Live Coding has started in this session.
+ * @param bEnabledForSession Live Coding is enabled for the session now.
+ * @return The value live_coding_status reports as enabledForSession.
+ */
+inline bool MCPReportsLiveCodingEnabledForSession(bool bNoIde, bool bHasStarted, bool bEnabledForSession)
+{
+	return bEnabledForSession || (bNoIde && bHasStarted);
+}

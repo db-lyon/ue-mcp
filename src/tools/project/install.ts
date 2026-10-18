@@ -70,7 +70,7 @@ export const installActions: Record<string, ActionSpec> = {
     timeoutMs: 300_000,
   },
   live_coding_status: specBp("read", 
-    "Report Live Coding availability/state (available, started, enabledForSession, compiling). Helps choose between live_coding_compile and build_project.",
+    "Report Live Coding availability/state (available, started, enabledForSession, compiling). Helps choose between live_coding_compile and build_project. With -MCPNoIde (an offscreen editor's default) the console stays hidden between compiles; enabledForSession still reports whether Live Coding can compile, and consoleHiddenByNoIde is true.",
     "live_coding_status",
   ),
 };

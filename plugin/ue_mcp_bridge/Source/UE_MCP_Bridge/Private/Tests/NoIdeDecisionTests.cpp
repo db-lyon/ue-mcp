@@ -50,14 +50,15 @@ bool FMCPNoIdeDecisionsTest::RunTest(const FString& Parameters)
 		bool bEnabledForSession;
 		bool bEnableBeforeNewClass;
 		bool bHotReloadUsesModule;
+		bool bReportsEnabledForSession;
 	};
 	const FLiveCodingStateCase StateCases[] = {
-		{ TEXT("no-IDE, started and hidden: enable before a new class, hot_reload uses the module"), true, true, false, true, true },
-		{ TEXT("no-IDE, started and enabled: nothing to enable, hot_reload uses the module"), true, true, true, false, true },
-		{ TEXT("no-IDE, not started: nothing to enable, hot_reload falls back to the console command"), true, false, false, false, false },
-		{ TEXT("without the switch, started and not enabled: as today, no enable and the fallback"), false, true, false, false, false },
-		{ TEXT("without the switch, started and enabled: as today, the module"), false, true, true, false, true },
-		{ TEXT("without the switch, not started: as today, the fallback"), false, false, false, false, false },
+		{ TEXT("no-IDE, started and hidden: enable before a new class, hot_reload uses the module, status reports enabled"), true, true, false, true, true, true },
+		{ TEXT("no-IDE, started and enabled: nothing to enable, hot_reload uses the module, status reports enabled"), true, true, true, false, true, true },
+		{ TEXT("no-IDE, not started: nothing to enable, hot_reload falls back to the console command, status reports not enabled"), true, false, false, false, false, false },
+		{ TEXT("without the switch, started and not enabled: as today, no enable, the fallback and not enabled"), false, true, false, false, false, false },
+		{ TEXT("without the switch, started and enabled: as today, the module and enabled"), false, true, true, false, true, true },
+		{ TEXT("without the switch, not started: as today, the fallback and not enabled"), false, false, false, false, false, false },
 	};
 	for (const FLiveCodingStateCase& Case : StateCases)
 	{
@@ -67,6 +68,9 @@ bool FMCPNoIdeDecisionsTest::RunTest(const FString& Parameters)
 		TestEqual(FString::Printf(TEXT("hot_reload path: %s"), Case.What),
 			MCPHotReloadUsesLiveCodingModule(Case.bNoIde, Case.bHasStarted, Case.bEnabledForSession),
 			Case.bHotReloadUsesModule);
+		TestEqual(FString::Printf(TEXT("live_coding_status enabledForSession: %s"), Case.What),
+			MCPReportsLiveCodingEnabledForSession(Case.bNoIde, Case.bHasStarted, Case.bEnabledForSession),
+			Case.bReportsEnabledForSession);
 	}
 	return true;
 }

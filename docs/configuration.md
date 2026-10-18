@@ -337,7 +337,7 @@ Consequence worth knowing: if an editor is killed rather than closed, its lockfi
 
 All three can also be set under `editor:` in `ue-mcp.yml` (see [the `ue-mcp:` block reference](config-file.md#ue-mcp-block-reference)), where `extraArgs` may be a list of strings. The per-call `window` wins over `editor.window`, which wins over `normal`. The per-call `ide` wins over `editor.ide`, which wins over the window mode's default. Extra arguments from the config come first and the per-call ones follow. `restart_editor` applies the same rules.
 
-An offscreen editor defaults to `ide: none`, and a normal one to `allow`. With `none` the bridge sets Unreal's built-in "None" source code accessor for the session, in memory only, so nothing opens an IDE and your editor preferences are unchanged. A Live Coding compile still runs, and its console is hidden when the compile finishes, so it can show while compiling.
+An offscreen editor defaults to `ide: none`, and a normal one to `allow`. With `none` the bridge sets Unreal's built-in "None" source code accessor for the session, in memory only, so nothing opens an IDE and your editor preferences are unchanged. A Live Coding compile still runs, and its console is hidden when the compile finishes, so it can show while compiling. Between compiles `project(live_coding_status)` still reports Live Coding as usable (`enabledForSession: true` once it has started) and adds `consoleHiddenByNoIde: true`.
 
 Pass `ide: allow` to get the IDE on an offscreen editor. An `extraArgs` that adds `-MCPNoIde` counts as `none`, and the result of `start_editor` and `restart_editor` reports `ide` beside `window`.
 
