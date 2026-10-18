@@ -21,6 +21,8 @@
 #include "Modules/ModuleManager.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/ARFilter.h"
+#include "MCPEngineStatus.h"
+#include "MCPNoIde.h"
 #if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
 #endif
@@ -409,7 +411,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::HotReload(const TSharedPtr<FJsonObject>&
 {
 #if PLATFORM_WINDOWS
 	ILiveCodingModule* LiveCoding = FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
-	if (LiveCoding && LiveCoding->IsEnabledForSession())
+	// -MCPNoIde leaves Live Coding started but not enabled for the session
+	// after each compile, to hide its console; it still compiles through the
+	// module. Without the switch this is exactly IsEnabledForSession().
+	if (LiveCoding && MCPHotReloadUsesLiveCodingModule(
+			FMCPEngineStatus::IsNoIde(), LiveCoding->HasStarted(), LiveCoding->IsEnabledForSession()))
 	{
 		if (LiveCoding->IsCompiling())
 		{

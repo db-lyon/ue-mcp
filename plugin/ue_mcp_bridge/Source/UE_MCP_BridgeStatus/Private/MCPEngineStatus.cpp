@@ -544,6 +544,12 @@ bool FMCPEngineStatus::IsRenderOffScreen()
 	return bRenderOffScreen;
 }
 
+bool FMCPEngineStatus::IsNoIde()
+{
+	static const bool bNoIde = FParse::Param(FCommandLine::Get(), TEXT("MCPNoIde"));
+	return bNoIde;
+}
+
 FString FMCPEngineStatus::StatusDir()
 {
 	return UEMCP::BridgeStateDir();
