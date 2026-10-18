@@ -334,6 +334,8 @@ The plugin reads `bridge.port` from the same layered files as the client: `~/.ue
 
 If an editor is killed rather than closed, its lockfile stays behind and `stop_editor` reports the stale PID. Delete `<project>/Saved/UE_MCP_Bridge/port.json` to clear it.
 
+`launch_standalone_game` from an offscreen editor launches the game offscreen too: the bridge adds `-RenderOffScreen` to the game's command line unless `extraArgs` already holds it, and the result reports `renderOffScreen`.
+
 ### Bridge state files
 
 The plugin keeps these under `<project>/Saved/UE_MCP_Bridge/`, each published by rename so a reader never sees a half-written file.
