@@ -7,6 +7,7 @@
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
 #include "HandlerSceneCapture.h"
+#include "Handlers/Editor/HandlerWindowPick.h"
 #include "Handlers/Level/LevelHandlers.h"
 #include "Handlers/HandlerEditorState.h"
 #include "Misc/PackageName.h"
@@ -2991,16 +2992,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		}
 		else
 		{
-			CaptureWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
-			if (!CaptureWindow.IsValid())
-			{
-				TArray<TSharedRef<SWindow>> VisibleWindows;
-				FSlateApplication::Get().GetAllVisibleWindowsOrdered(VisibleWindows);
-				if (VisibleWindows.Num() > 0)
-				{
-					CaptureWindow = VisibleWindows.Last();
-				}
-			}
+			TArray<TSharedRef<SWindow>> VisibleWindows;
+			FSlateApplication::Get().GetAllVisibleWindowsOrdered(VisibleWindows);
+			CaptureWindow = MCPPickCaptureWindow(
+				FSlateApplication::Get().GetActiveTopLevelWindow(),
+				VisibleWindows,
+				FGlobalTabmanager::Get()->GetRootWindow());
 		}
 		if (!CaptureWindow.IsValid())
 		{
