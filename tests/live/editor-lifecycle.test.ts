@@ -15,6 +15,7 @@
  * tests/ue_mcp when it ends, pass or fail.
  */
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -78,12 +79,13 @@ async function stopEditor(): Promise<Json> {
   return body(await server.call("editor", { action: "stop_editor" }));
 }
 
-async function startEditor(): Promise<LiveCallResult> {
+async function startEditor(launch: { window?: "normal" | "offscreen"; extraArgs?: string } = {}): Promise<LiveCallResult> {
   return server.call("editor", {
     action: "start_editor",
     timeout: START_TIMEOUT_S,
     dialogPolicy: DIALOG_POLICY,
     timeoutMs: START_TIMEOUT_S * 1000,
+    ...launch,
   });
 }
 
@@ -126,6 +128,46 @@ function crashReportersWatching(editorPid: number): number[] {
     if (watched && Number(watched[1]) === editorPid) pids.push(Number(pid));
   }
   return pids;
+}
+
+/** The visible top-level windows a process owns, as "hwnd title" lines. Windows only. */
+function visibleWindowsOf(pid: number): string[] {
+  const script = [
+    "Add-Type -TypeDefinition @'",
+    "using System;",
+    "using System.Collections.Generic;",
+    "using System.Runtime.InteropServices;",
+    "using System.Text;",
+    "public static class UeMcpVisibleWindows {",
+    "  public delegate bool EnumProc(IntPtr h, IntPtr l);",
+    '  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);',
+    '  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);',
+    '  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);',
+    '  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);',
+    "  public static List<string> Of(uint owner) {",
+    "    var found = new List<string>();",
+    "    EnumWindows((h, l) => {",
+    "      uint p;",
+    "      GetWindowThreadProcessId(h, out p);",
+    "      if (p == owner && IsWindowVisible(h)) {",
+    "        var title = new StringBuilder(256);",
+    "        GetWindowText(h, title, 256);",
+    '        found.Add(h.ToInt64() + " " + title);',
+    "      }",
+    "      return true;",
+    "    }, IntPtr.Zero);",
+    "    return found;",
+    "  }",
+    "}",
+    "'@",
+    `[UeMcpVisibleWindows]::Of(${pid}) | ForEach-Object { $_ }`,
+  ].join("\n");
+  const out = execFileSync(
+    "powershell",
+    ["-NoProfile", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
+    { encoding: "utf8" },
+  );
+  return out.split(/\r?\n/).filter((line) => line.trim() !== "");
 }
 
 /** The game module's editor DLL, which every link of the project rewrites. */
@@ -199,6 +241,56 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
     const again = body(await startEditor());
     expect(again.success).toBe(false);
     expect(again.alreadyRunning).toBe(true);
+  }, START_TIMEOUT_S * 1000 * 2);
+
+  it("start_editor window=offscreen brings up an editor with no visible window and the background throttle off", async () => {
+    const previous = await runningEditor();
+    if (previous) {
+      await stopEditor();
+      await waitFor(`editor pid ${previous.pid} to exit`, () => !isPidAlive(previous.pid), 180_000);
+    }
+
+    // A quoted path with a space in extraArgs: the editor only writes its log
+    // there if the quotes reached it as typed and the value stayed whole.
+    const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "ue mcp live "));
+    const logFile = path.join(logDir, "offscreen.log");
+    let screenshot: string | undefined;
+    try {
+      const started = await startEditor({ window: "offscreen", extraArgs: `-abslog="${logFile}"` });
+      const result = body(started);
+      expect(started.isError, started.text).toBe(false);
+      expect(result.success, JSON.stringify(result)).toBe(true);
+      expect(result.window, JSON.stringify(result)).toBe("offscreen");
+      expect(fs.existsSync(logFile) && fs.statSync(logFile).size > 0, `editor log at ${logFile}`).toBe(true);
+      const now = await runningEditor();
+      expect(now).toBeTruthy();
+      if (previous) expect(now!.pid).not.toBe(previous.pid);
+
+      if (WINDOWS) expect(visibleWindowsOf(now!.pid)).toEqual([]);
+
+      const state = body(await server.call("editor", { action: "get_engine_state" }));
+      expect(state.window, JSON.stringify(state)).toEqual({ mode: "offscreen", source: "bridge" });
+
+      const shot = body(
+        await server.call("editor", { action: "capture_screenshot", target: "editor", filename: "lifecycle-offscreen.png" }),
+      );
+      expect(shot.success, JSON.stringify(shot)).toBe(true);
+      const file = String(shot.filename);
+      screenshot = file;
+      // The renderer writes the file after the call returns.
+      await waitFor(`the editor capture at ${file}`, () => fs.existsSync(file) && fs.statSync(file).size > 0, 60_000);
+
+      const timing = body(await server.call("editor", { action: "get_frame_timing" }));
+      expect(timing.throttleCPUWhenNotForeground, JSON.stringify(timing)).toBe(false);
+    } finally {
+      if (screenshot) fs.rmSync(screenshot, { force: true });
+      // Back to the default launch, the editor every other case leaves.
+      const offscreen = await runningEditor();
+      await stopEditor();
+      if (offscreen) await waitFor(`editor pid ${offscreen.pid} to exit`, () => !isPidAlive(offscreen.pid), 180_000);
+      fs.rmSync(logDir, { recursive: true, force: true });
+      await startEditor();
+    }
   }, START_TIMEOUT_S * 1000 * 2);
 
   it.skipIf(!WINDOWS)(
