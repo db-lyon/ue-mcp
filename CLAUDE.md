@@ -48,7 +48,7 @@ The merge style follows the commit count, and writing five commits only to squas
 - TS: `npx tsc --noEmit` for type-checking, `npx tsc` for emit. Build output goes to `dist/`.
 - UE C++: `npm run build`. This calls `scripts/build.js`, which always builds the `ue_mcpEditor` target against `tests/ue_mcp/ue_mcp.uproject` and nothing else.
 - Test builds pass `-NoEngineChanges`, so Unreal aborts with the offending file list if the build would overwrite anything already in the engine tree. Set `UE_MCP_ALLOW_TEST_ENGINE_CHANGES=true` only to bootstrap engine outputs in an engine you are willing to have written to.
-- Optional: `UE_MCP_TEST_ENGINE_ROOT` pins the engine to build and run with, and `UE_MCP_PROTECTED_ENGINE_ROOTS` is a deny list of roots the scripts refuse to touch at all. The deny list outranks every other setting, including the opt-in above.
+- Optional: `UE_MCP_TEST_ENGINE_ROOT` (or, after it, `UE_ROOT`) pins the engine to build and run with, and `UE_MCP_PROTECTED_ENGINE_ROOTS` is a deny list of roots the scripts refuse to touch at all. The deny list outranks every other setting, including the opt-in above.
 - `npm run up:build` stops the editor, builds, and relaunches. Use when iterating live.
 - The deployer (`scripts/deploy.mjs`) syncs `plugin/` → `tests/ue_mcp/Plugins/UE_MCP_Bridge/`. Neither `npm run up` nor `npm run build` runs it, so run it after plugin source edits and before building.
 
