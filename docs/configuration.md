@@ -351,6 +351,8 @@ An offscreen editor keeps a normal frame rate. The bridge turns off the editor's
 
 `capture_screenshot target=window` skips popup windows (tooltips, menus, notifications). It captures the active window when that is a normal window, else the topmost visible normal window, else the root window when it is visible.
 
+`launch_standalone_game` from an offscreen editor launches the game offscreen too: the bridge adds `-RenderOffScreen` to the game's command line unless `extraArgs` already holds it, and the result reports `renderOffScreen`.
+
 ### Bridge state files
 
 The bridge keeps two records under `<project>/Saved/UE_MCP_Bridge/`. Both are published by rename, so a client polling them never reads a half-written file.
