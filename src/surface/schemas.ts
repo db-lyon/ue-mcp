@@ -54,6 +54,12 @@ export const UeMcpConfigSchema = z
       .object({
         path: z.string().optional(),
         buildToolPath: z.string().optional(),
+        // `normal` (default) or `offscreen` (-RenderOffScreen, no editor window
+        // on screen). A per-call `window` parameter overrides it.
+        window: z.enum(["normal", "offscreen"]).optional(),
+        // Extra editor command-line arguments: a string split on whitespace
+        // with double quotes grouping, or a list taken item by item.
+        extraArgs: z.union([z.string(), z.array(z.string())]).optional(),
       })
       .optional(),
     // Per-project equivalent of UE_MCP_ENV (#817): which `ue-mcp.<env>.yml`

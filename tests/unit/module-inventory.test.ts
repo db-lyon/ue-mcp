@@ -138,6 +138,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "daemon/activity.ts": "Reads an MCP tools/call into a category and action. Pure logic.",
   "core/open-url.ts": "Opens a URL in the system browser. No editor is involved.",
   "core/spawn-outside-tree.ts": "Starts a process through a trampoline that exits. Pure process plumbing over its arguments.",
+  "editor/launch-args.ts": "Pure launch-argument rules: window-mode precedence, extraArgs splitting and argv building for whatever project it is handed.",
   "daemon/ws-transport.ts": "MCP's transport over one WebSocket. No editor is involved.",
   "surface/action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
   "surface/action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",
