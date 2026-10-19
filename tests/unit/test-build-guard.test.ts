@@ -180,3 +180,63 @@ describe("UE-MCP test engine build guard", () => {
     expect(plan.buildArgs).toContain("-NoEngineChanges");
   });
 });
+
+describe("UE_ROOT", () => {
+  it("selects the engine named by UE_ROOT", () => {
+    const engineRoot = createFakeEngine("ue-root-only");
+    const engine = resolveTestEngine({ UE_ROOT: engineRoot });
+
+    expect(engine.engineRoot).toBe(engineRoot);
+    expect(engine.engineRootSource).toBe("UE_ROOT");
+  });
+
+  it("prefers UE_MCP_TEST_ENGINE_ROOT over UE_ROOT", () => {
+    const pinnedRoot = createFakeEngine("ue-root-pinned");
+    const ueRoot = createFakeEngine("ue-root-env");
+    const engine = resolveTestEngine({
+      UE_MCP_TEST_ENGINE_ROOT: pinnedRoot,
+      UE_ROOT: ueRoot,
+    });
+
+    expect(engine.engineRoot).toBe(pinnedRoot);
+    expect(engine.engineRootSource).toBe("UE_MCP_TEST_ENGINE_ROOT");
+  });
+
+  it("prefers UE_ROOT over UE_BUILD_TOOL_PATH", () => {
+    const ueRoot = createFakeEngine("ue-root-wins");
+    const buildToolRoot = createFakeEngine("build-tool-loses");
+    const engine = resolveTestEngine({
+      UE_ROOT: ueRoot,
+      UE_BUILD_TOOL_PATH: engineExecutables(buildToolRoot).buildTool,
+    });
+
+    expect(engine.engineRoot).toBe(ueRoot);
+    expect(engine.engineRootSource).toBe("UE_ROOT");
+  });
+
+  it("fails loudly when UE_ROOT has no build tool, without falling back", () => {
+    const fallbackRoot = createFakeEngine("ue-root-fallback");
+    expect(() => resolveTestEngine({
+      UE_ROOT: path.join(temporaryRoot, "missing-ue-root"),
+      UE_BUILD_TOOL_PATH: engineExecutables(fallbackRoot).buildTool,
+    })).toThrow("UE_ROOT does not point at a usable Unreal engine");
+  });
+
+  it("rejects a UE_ROOT inside a protected root", () => {
+    const protectedRoot = path.join(temporaryRoot, "protected-ue-root");
+    fs.mkdirSync(protectedRoot);
+    const engineRoot = createFakeEngine(path.join("protected-ue-root", "engine"));
+
+    expect(() => resolveTestEngine({
+      UE_ROOT: engineRoot,
+      UE_MCP_PROTECTED_ENGINE_ROOTS: protectedRoot,
+    })).toThrow("UE_MCP_PROTECTED_ENGINE_ROOTS");
+  });
+
+  it("keeps -NoEngineChanges on a plan built from UE_ROOT", () => {
+    const engineRoot = createFakeEngine("ue-root-plan");
+    const plan = createTestBuildPlan({ UE_ROOT: engineRoot });
+
+    expect(plan.buildArgs.filter((argument: string) => argument === "-NoEngineChanges")).toHaveLength(1);
+  });
+});
