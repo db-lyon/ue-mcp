@@ -66,14 +66,17 @@ Pick a model in the chat box, or in **Settings > General > Model**. Each vendor 
 
 | Vendor | Sign-in | API key |
 |---|---|---|
-| Anthropic | None | Yes |
+| Anthropic | **Claude subscription** | Yes |
 | OpenAI | **ChatGPT** | Yes |
 | Google | None | Yes |
 
+<img src="images/studio-settings-sign-in.webp" alt="Studio settings showing updates, the appearance themes, the model picker, the ChatGPT and Claude subscription sign-ins, and the API keys list" style="max-width:100%">
+
 - **ChatGPT.** You approve the sign-in in your browser, and OpenAI models run on your ChatGPT plan's limits.
+- **Claude subscription.** Claude models run on your Claude plan's limits, through Anthropic's Claude runtime from the Claude Agent SDK. On first use Studio downloads the runtime unmodified from npm and checks its hash. **Sign in** runs the runtime's own sign-in, which opens Anthropic's sign-in page in your browser and completes on its own. If no browser opens, Studio shows the runtime's sign-in command to run in a terminal. The runtime keeps the login itself, in `%USERPROFILE%\.ue-mcp\studio\claude`, apart from any other Claude install on the machine. Studio never sees your Claude credentials. **Sign out** runs the runtime's own sign-out.
 - **API keys.** Paste a key under **Settings > General > API keys**. A model runs on your key only when no sign-in runs it. Keys are kept on this machine, in `%USERPROFILE%\.ue-mcp\studio\keys`, and every project uses them.
 
-Sign-in tokens are kept in `%USERPROFILE%\.ue-mcp\studio` and shared by every project.
+Sign-ins are kept in `%USERPROFILE%\.ue-mcp\studio` and shared by every project.
 
 ## Commands and edits
 
