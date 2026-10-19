@@ -66,14 +66,11 @@ Pick a model in the chat box, or in **Settings > General > Model**. Each vendor 
 
 | Vendor | Sign-in | API key |
 |---|---|---|
-| Anthropic | **Claude subscription** (experimental) | Yes |
+| Anthropic | None | Yes |
 | OpenAI | **ChatGPT** | Yes |
 | Google | None | Yes |
 
-<img src="images/studio-settings-sign-in.webp" alt="Studio settings showing updates, the appearance themes, the model picker, the ChatGPT and Claude subscription sign-ins, and the API keys list" style="max-width:100%">
-
 - **ChatGPT.** You approve the sign-in in your browser, and OpenAI models run on your ChatGPT plan's limits.
-- **Claude subscription.** Experimental, and used at your own risk under Anthropic's terms. It runs Claude models on your Claude plan's limits. On first use Studio downloads the Claude runtime the Claude Agent SDK needs from npm, and keeps its login and runtime in Studio's own folder, apart from any other Claude install on the machine.
 - **API keys.** Paste a key under **Settings > General > API keys**. A model runs on your key only when no sign-in runs it. Keys are kept on this machine, in `%USERPROFILE%\.ue-mcp\studio\keys`, and every project uses them.
 
 Sign-in tokens are kept in `%USERPROFILE%\.ue-mcp\studio` and shared by every project.
