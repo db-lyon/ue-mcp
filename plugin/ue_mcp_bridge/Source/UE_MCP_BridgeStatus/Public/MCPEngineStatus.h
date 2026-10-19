@@ -61,6 +61,20 @@ public:
 	TSharedPtr<FJsonObject> Snapshot() const;
 
 	/**
+	 * Whether this editor was launched with -RenderOffScreen: it has no OS
+	 * windows, so it never holds focus and nothing is drawn to the screen.
+	 * Published as `renderOffScreen` in the snapshot.
+	 */
+	static bool IsRenderOffScreen();
+
+	/**
+	 * Whether this editor was launched with -MCPNoIde: no source file or
+	 * solution opens in an IDE, and the Live Coding console is hidden again
+	 * after every compile.
+	 */
+	static bool IsNoIde();
+
+	/**
 	 * The modal blocking the editor right now, read off the snapshot rather
 	 * than by walking Slate, so it is safe on the socket thread. The snapshot
 	 * is refreshed from the modal-loop tick, which is the one tick that keeps

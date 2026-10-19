@@ -46,6 +46,8 @@
 #include "EditorHandlers.h"
 
 #include "HandlerUtils.h"
+#include "Handlers/Editor/HandlerStandaloneArgs.h"
+#include "MCPEngineStatus.h"
 
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
@@ -60,6 +62,7 @@
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/DateTime.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/StringBuilder.h"
 #include "ProfilingDebugging/MiscTrace.h"
@@ -1548,8 +1551,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::LaunchStandaloneGame(const TSharedPtr<FJ
 		Args += FString::Printf(TEXT(" -trace=%s -tracefile=\"%s\""), *Channels, *TraceFile);
 	}
 
+	// An offscreen editor has no screen to show a game window on either, so
+	// the game inherits -RenderOffScreen unless the caller already passed it.
 	const FString ExtraArgs = OptionalString(Params, TEXT("extraArgs"));
-	if (!ExtraArgs.IsEmpty()) Args += TEXT(" ") + ExtraArgs;
+	Args = MCPStandaloneGameArgs(Args, ExtraArgs, FMCPEngineStatus::IsRenderOffScreen());
+	const bool bGameOffScreen = FParse::Param(*Args, TEXT("RenderOffScreen"));
 
 	uint32 ProcessId = 0;
 	FProcHandle Handle = FPlatformProcess::CreateProc(
@@ -1582,6 +1588,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::LaunchStandaloneGame(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("executablePath"), ExePath);
 	Result->SetStringField(TEXT("commandLine"), State.CommandLine);
 	Result->SetStringField(TEXT("projectPath"), ProjectPath);
+	Result->SetBoolField(TEXT("renderOffScreen"), bGameOffScreen);
 	if (!MapName.IsEmpty()) Result->SetStringField(TEXT("mapName"), MapName);
 	if (!Channels.IsEmpty()) Result->SetStringField(TEXT("channels"), Channels);
 	if (!TraceFile.IsEmpty())

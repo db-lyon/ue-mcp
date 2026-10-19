@@ -41,4 +41,17 @@ describe("spawnOutsideTree (#1274)", () => {
     expect(JSON.parse(fs.readFileSync(out, "utf-8"))).toEqual(tricky);
     fs.rmSync(dir, { recursive: true, force: true });
   }, 15_000);
+
+  // The editor's line is built by hand on Windows so each piece keeps its
+  // quotes; quoting it again would hide every switch inside quotes from Unreal.
+  it.runIf(process.platform === "win32")("hands a verbatim command line to the process it starts", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp outside tree "));
+    const out = path.join(dir, "args.json");
+    const script = path.join(dir, "argv.js");
+    fs.writeFileSync(script, `require("fs").writeFileSync(${JSON.stringify(out)}, JSON.stringify(process.argv.slice(2)))`);
+    spawnOutsideTree(process.execPath, [`"${script}" -ExecCmds="stat fps" -x`], { windowsVerbatimArguments: true });
+    for (let i = 0; i < 100 && !fs.existsSync(out); i++) await new Promise((r) => setTimeout(r, 50));
+    expect(JSON.parse(fs.readFileSync(out, "utf-8"))).toEqual(["-ExecCmds=stat fps", "-x"]);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 15_000);
 });

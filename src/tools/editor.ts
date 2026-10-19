@@ -8,6 +8,7 @@ import { buildProjectAction } from "./project/install.js";
 import { startProgress } from "../cli/ui/progress.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../editor/engine-observer.js";
+import { windowModeOf } from "../editor/launch-args.js";
 import { progressRenderingNote } from "../dispatch/client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../dispatch/workaround-tracker.js";
 import { searchToolGraph } from "../surface/context/tool-search.js";
@@ -48,14 +49,20 @@ export const editorTool: ToolDef = categoryTool(
     start_editor: {
       kind: "handler",
       effect: "mutate",
-      description: "Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. An editor already running for this project is reported as a failure, because this call launched nothing, with alreadyRunning=true, bridgeReady, and the port it published, so a caller can tell \"there was nothing to do\" from \"the launch broke\" without parsing the sentence. A flow step that expects that outcome sets ignore_failure: true on itself rather than asking this action to call a non-launch a launch. dialogPolicy answers startup prompts before they can wedge the game thread, which is how the post-crash \"Restore Packages\" modal used to stall a launch (#968). Params: timeout? (seconds, default 300), dialogPolicy? (\"pattern=response;pattern=response\", responses as set_dialog_policy takes them)",
+      description: "Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. An editor already running for this project is reported as a failure, because this call launched nothing, with alreadyRunning=true, bridgeReady, and the port it published, so a caller can tell \"there was nothing to do\" from \"the launch broke\" without parsing the sentence. A flow step that expects that outcome sets ignore_failure: true on itself rather than asking this action to call a non-launch a launch. dialogPolicy answers startup prompts before they can wedge the game thread, which is how the post-crash \"Restore Packages\" modal used to stall a launch (#968). Params: timeout? (seconds, default 300), dialogPolicy? (\"pattern=response;pattern=response\", responses as set_dialog_policy takes them), window? (normal (default) or offscreen, which passes -RenderOffScreen so no editor window appears), ide? (allow or none; none stops the editor opening an IDE and hides the Live Coding console after each compile; defaults to editor.ide from ue-mcp.yml, then none for an offscreen editor and allow otherwise), extraArgs? (extra editor command-line arguments, appended after editor.extraArgs from ue-mcp.yml)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const timeout = typeof p?.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
         const dialogPolicy = typeof p?.dialogPolicy === "string" && p.dialogPolicy.trim() !== "" ? p.dialogPolicy.trim() : undefined;
         const paramEcho = p?.paramEcho === true;
+        const window = p?.window === "normal" || p?.window === "offscreen" ? p.window : undefined;
+        const ide = p?.ide === "allow" || p?.ide === "none" ? p.ide : undefined;
+        const extraArgs = typeof p?.extraArgs === "string" && p.extraArgs.trim() !== "" ? p.extraArgs.trim() : undefined;
         const result = await startEditor(ctx.project, timeout, ctx.onProgress, {
           dialogPolicy,
           paramEcho,
+          window,
+          ide,
+          extraArgs,
           openDisplay: startProgress,
         });
 
@@ -105,7 +112,12 @@ export const editorTool: ToolDef = categoryTool(
         }
         // An editor served that snapshot, so it exists. Reporting running:false
         // alongside it is the report contradicting itself (#965).
-        return live ? withBridgeSnapshot(state, live) : state;
+        const merged = live ? withBridgeSnapshot(state, live) : state;
+        // The running editor's own field is the fact; the process command line
+        // answers when the plugin predates it or the snapshot on disk belongs
+        // to an editor that is gone. Omitted when neither can say.
+        const window = windowModeOf(merged);
+        return window ? { ...merged, window } : merged;
       },
     },
     stop_editor: {
@@ -119,9 +131,12 @@ export const editorTool: ToolDef = categoryTool(
     restart_editor: {
       kind: "handler",
       effect: "mutate",
-      description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action. Params: none",
-      handler: async (ctx: ToolContext) => {
-        return restartEditor(ctx.project, ctx.bridge, startProgress);
+      description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action. Params: window? (normal or offscreen; defaults to editor.window from ue-mcp.yml, then normal, not to the mode of the editor being stopped), ide? (allow or none; none stops the editor opening an IDE and hides the Live Coding console after each compile; defaults to editor.ide from ue-mcp.yml, then none for an offscreen editor and allow otherwise), extraArgs? (extra editor command-line arguments, appended after editor.extraArgs from ue-mcp.yml)",
+      handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
+        const window = p?.window === "normal" || p?.window === "offscreen" ? p.window : undefined;
+        const ide = p?.ide === "allow" || p?.ide === "none" ? p.ide : undefined;
+        const extraArgs = typeof p?.extraArgs === "string" && p.extraArgs.trim() !== "" ? p.extraArgs.trim() : undefined;
+        return restartEditor(ctx.project, ctx.bridge, startProgress, { window, ide, extraArgs });
       },
     },
     build_project: buildProjectAction,
@@ -383,7 +398,7 @@ export const editorTool: ToolDef = categoryTool(
     add_trace_bookmark: specBp("mutate", "Drop a named marker on the Insights timeline. Reports recorded=false with the reason when no trace is running or the Bookmark channel is off, instead of returning a success for an event that was dropped. Deliberately NOT idempotent: a bookmark is a point event, so two calls write two markers and the response says so.", "add_trace_bookmark"),
     get_frame_timing: specBp("read", "Frame timings WITH A VERDICT: gameThreadMs, renderThreadMs, rhiThreadMs, swapBufferMs, per-thread wait time, frameMs and fps, and GPU min/avg/max drained from the RHI's own history, then bound = gpu | cpu-game | cpu-render | cpu-rhi | balanced | unknown with the arithmetic that produced it spelled out in verdict. Says unknown when the RHI published no GPU timing rather than guessing. warnings[] names the conditions that make the numbers meaningless and the exact call that fixes each, including the unfocused-editor CPU throttle, which is a plain UPROPERTY and is therefore REPORTED here with its objectPath for editor(set_property) instead of getting a typed setter that would duplicate a working path. sampleWindow states what was actually measured: a handler runs inside one tick and cannot advance frames to build a window.", "get_frame_timing"),
     trigger_hitch: specBp("mutate", "Stall the game thread for a known number of milliseconds, so hitch-detection logic can be tested against a hitch whose size is known in advance. Brackets the stall with a trace region and a bookmark so it is findable in the capture. Capped at 5000ms because this blocks the same thread the bridge answers on. Sleeping consumes no CPU, so it reads as a long frame rather than as game-thread work. No inverse: time does not come back.", "trigger_hitch"),
-    launch_standalone: specBp("mutate", "Launch the project as a separate -game process, optionally tracing, so frame times come from a real game process rather than from the editor. Passing channels (or traceFile) adds -trace and -tracefile, and the response carries the .utrace path plus the UnrealInsights command that opens it. Idempotent: a bridge-launched run that is still alive is reported as alreadyRunning rather than joined by a second. The process is detached and its output is not read; poll get_standalone_status. Rollback: stop_standalone.", "launch_standalone_game"),
+    launch_standalone: specBp("mutate", "Launch the project as a separate -game process, optionally tracing, so frame times come from a real game process rather than from the editor. Passing channels (or traceFile) adds -trace and -tracefile, and the response carries the .utrace path plus the UnrealInsights command that opens it. Idempotent: a bridge-launched run that is still alive is reported as alreadyRunning rather than joined by a second. When the editor runs offscreen, the game is launched offscreen too. The process is detached and its output is not read; poll get_standalone_status. Rollback: stop_standalone.", "launch_standalone_game"),
     get_standalone_status: specBp("read", "Is the bridge-launched standalone run still alive: running, processId, commandLine, uptimeSeconds, the exit code once it has ended, and its .utrace path with the command that opens it. Only reports runs this bridge started; one launched another way is not tracked.", "get_standalone_status"),
     stop_standalone: specBp("mutate", "Terminate the standalone run this bridge launched, killing its process tree so nothing is left holding the .utrace open. Stopping when nothing is running reports wasRunning=false rather than erroring. Termination is not a graceful quit and the response says what that costs. No inverse: relaunching is a new run.", "stop_standalone_game"),
     set_realtime: specBp("mutate", "Toggle realtime update on the level editor viewports so the editor-world sim (Niagara, anims) ticks - otherwise capture_scene_png renders an unticked, empty sim (#537).", "set_realtime"),
@@ -499,6 +514,8 @@ export const editorTool: ToolDef = categoryTool(
     probeWindows: z.boolean().optional().describe("get_engine_state: also enumerate native windows to catch pre-Slate dialogs (default true, costs ~2s)"),
     dialogPolicy: z.string().optional().describe("start_editor: semicolon-separated pattern=response pairs armed before the bridge is listening, so a prompt raised during startup is answered from the first frame (e.g. \"Restore=no\"). Same effect as set_dialog_policy and the same warning: an armed pattern presses the button, so the user never sees that prompt. Responses are the ones set_dialog_policy takes (#968)"),
     paramEcho: z.boolean().optional().describe("start_editor: arm the bridge parameter echo for the launched editor. It is read at startup, so it cannot be turned on over the socket afterwards. The live tests' leak assertions skip without it"),
+    window: z.enum(["normal", "offscreen"]).optional().describe("start_editor/restart_editor: normal (default) shows the editor; offscreen launches it with -RenderOffScreen, so no editor window appears on screen. Overrides editor.window in ue-mcp.yml"),
+    ide: z.enum(["allow", "none"]).optional().describe("start_editor/restart_editor: allow lets the editor open an IDE; none passes -MCPNoIde, so the editor opens no IDE and hides the Live Coding console after each compile. Overrides editor.ide in ue-mcp.yml; unset, an offscreen editor gets none and a normal one allow"),
     requireClean: z.boolean().optional().describe("request_editor_shutdown: refuse to close while any content or map package is dirty (default true)"),
     endPIE: z.boolean().optional().describe("request_editor_shutdown: end an active PIE/SIE session before closing (default true); false refuses to close while play is running"),
     waitForAssetRegistry: z.boolean().optional().describe("play_in_editor / play_in_editor_ignore_blueprint_errors start: block until AssetRegistry finishes the initial scan (default true)"),

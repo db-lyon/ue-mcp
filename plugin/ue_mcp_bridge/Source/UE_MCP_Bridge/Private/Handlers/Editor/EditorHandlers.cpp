@@ -6,6 +6,7 @@
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
 #include "HandlerSceneCapture.h"
+#include "Handlers/Editor/HandlerWindowPick.h"
 #include "Handlers/Level/LevelHandlers.h"
 #include "Handlers/HandlerEditorState.h"
 #include "Misc/PackageName.h"
@@ -530,7 +531,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("windowed"), EType::Boolean, TEXT("Run windowed rather than fullscreen (default true)")),
 		MCPParam::Optional(TEXT("resX"), EType::Number, TEXT("Window width (default 1280)")),
 		MCPParam::Optional(TEXT("resY"), EType::Number, TEXT("Window height (default 720)")),
-		MCPParam::Optional(TEXT("extraArgs"), EType::String, TEXT("Extra command-line arguments, appended verbatim")),
+		MCPParam::Optional(TEXT("extraArgs"), EType::String, TEXT("Extra command-line arguments. launch_standalone_game appends the string as given. start_editor and restart_editor split it on whitespace, double quotes grouping, and pass each piece to the editor as typed, quotes included.")),
 	}, MCPSpec::ContractExempt(TEXT("launches a game process")));
 	Registry.RegisterHandler(TEXT("get_standalone_status"), &GetStandaloneStatus, NoParams);
 	Registry.RegisterHandler(TEXT("stop_standalone_game"), &StopStandaloneGame, NoParams,
@@ -2860,16 +2861,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		}
 		else
 		{
-			CaptureWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
-			if (!CaptureWindow.IsValid())
-			{
-				TArray<TSharedRef<SWindow>> VisibleWindows;
-				FSlateApplication::Get().GetAllVisibleWindowsOrdered(VisibleWindows);
-				if (VisibleWindows.Num() > 0)
-				{
-					CaptureWindow = VisibleWindows.Last();
-				}
-			}
+			TArray<TSharedRef<SWindow>> VisibleWindows;
+			FSlateApplication::Get().GetAllVisibleWindowsOrdered(VisibleWindows);
+			CaptureWindow = MCPPickCaptureWindow(
+				FSlateApplication::Get().GetActiveTopLevelWindow(),
+				VisibleWindows,
+				FGlobalTabmanager::Get()->GetRootWindow());
 		}
 		if (!CaptureWindow.IsValid())
 		{

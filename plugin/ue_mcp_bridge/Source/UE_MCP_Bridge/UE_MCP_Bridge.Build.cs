@@ -111,6 +111,9 @@ public class UE_MCP_Bridge : ModuleRules
 				"PythonScriptPlugin",
 				"Sequencer",
 				"Settings",
+				// ISourceCodeAccessModule::SetAccessor, which -MCPNoIde uses to
+				// select the engine's None accessor so no IDE opens.
+				"SourceCodeAccess",
 				"SkeletalMeshEditor",
 				"SkeletalMeshDescription",
 				"Slate",

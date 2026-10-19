@@ -2593,6 +2593,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "capture_screenshot with target=window writes a PNG to the given path"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-lifecycle.test.ts",
+          "test": "start_editor window=offscreen brings up an editor with no visible window and the background throttle off"
         }
       ]
     },
@@ -7499,6 +7504,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "get_editor_performance_stats and get_frame_timing report a live process and an advancing frame"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-lifecycle.test.ts",
+          "test": "start_editor window=offscreen brings up an editor with no visible window and the background throttle off"
         }
       ]
     },
@@ -11148,6 +11158,11 @@
           "suite": "live",
           "file": "tests/live/editor-lifecycle.test.ts",
           "test": "start_editor returns only once the editor answers, as a new process"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-lifecycle.test.ts",
+          "test": "start_editor window=offscreen brings up an editor with no visible window and the background throttle off"
         },
         {
           "suite": "live",
@@ -16160,6 +16175,11 @@
           "suite": "live",
           "file": "tests/live/editor-lifecycle.test.ts",
           "test": "start_editor returns only once the editor answers, as a new process"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-lifecycle.test.ts",
+          "test": "start_editor window=offscreen brings up an editor with no visible window and the background throttle off"
         },
         {
           "suite": "live",

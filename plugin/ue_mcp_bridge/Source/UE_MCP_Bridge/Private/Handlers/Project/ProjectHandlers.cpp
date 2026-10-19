@@ -15,6 +15,8 @@
 #include "GameProjectUtils.h"
 #include "GameProjectGenerationModule.h"
 #include "ModuleDescriptor.h" // FModuleContextInfo + EHostType
+#include "MCPEngineStatus.h"
+#include "MCPNoIde.h"
 
 // Live Coding - Win64 only, guarded by PLATFORM_WINDOWS
 #if PLATFORM_WINDOWS
@@ -223,6 +225,22 @@ TSharedPtr<FJsonValue> FProjectHandlers::CreateCppClass(const TSharedPtr<FJsonOb
 	GameProjectUtils::EReloadStatus OutReload = GameProjectUtils::EReloadStatus::NotReloaded;
 	const FNewClassInfo ParentInfo(ParentClass);
 
+#if PLATFORM_WINDOWS
+	// -MCPNoIde hides the Live Coding console by disabling Live Coding for the
+	// session after each compile, and AddCodeToProject compiles a new class
+	// through Live Coding only while it is enabled for the session. Enabling it
+	// again keeps the new class on Live Coding instead of the classic hot
+	// reload; the bridge hides the console once the compile is over.
+	if (ILiveCodingModule* LiveCoding = FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME))
+	{
+		if (MCPShouldEnableLiveCodingBeforeNewClass(
+				FMCPEngineStatus::IsNoIde(), LiveCoding->HasStarted(), LiveCoding->IsEnabledForSession()))
+		{
+			LiveCoding->EnableForSession(true);
+		}
+	}
+#endif
+
 	const GameProjectUtils::EAddCodeToProjectResult ResultCode =
 		GameProjectUtils::AddCodeToProject(
 			ClassName,
@@ -412,7 +430,13 @@ TSharedPtr<FJsonValue> FProjectHandlers::LiveCodingStatus(const TSharedPtr<FJson
 	if (Live)
 	{
 		Result->SetBoolField(TEXT("enabledByDefault"), Live->IsEnabledByDefault());
-		Result->SetBoolField(TEXT("enabledForSession"), Live->IsEnabledForSession());
+		const bool bNoIde = FMCPEngineStatus::IsNoIde();
+		Result->SetBoolField(TEXT("enabledForSession"),
+			MCPReportsLiveCodingEnabledForSession(bNoIde, Live->HasStarted(), Live->IsEnabledForSession()));
+		if (bNoIde)
+		{
+			Result->SetBoolField(TEXT("consoleHiddenByNoIde"), true);
+		}
 		Result->SetBoolField(TEXT("canEnableForSession"), Live->CanEnableForSession());
 		Result->SetBoolField(TEXT("started"), Live->HasStarted());
 		Result->SetBoolField(TEXT("compiling"), Live->IsCompiling());

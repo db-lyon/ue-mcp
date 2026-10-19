@@ -111,6 +111,24 @@ The call is not stuck; it returns as soon as the editor is ready, and the number
 
 Nothing is wrong on the ue-mcp side and there is nothing to fix in your setup: other MCP clients render the same stream normally. When ue-mcp detects an affected Claude Code version, `start_editor` says so in its result rather than leaving the call looking hung, and the phase timeline it returns is exactly what you would have watched live.
 
+### An offscreen editor is stuck on a dialog nobody can see
+
+**Symptom:** an editor started with `window: "offscreen"` stops answering. Calls time out or are refused, `start_editor` waits out its timeout, and there is nothing on screen to look at.
+
+`-RenderOffScreen` puts no window on screen, dialogs included, but a dialog still blocks the game thread until something presses a button. The usual ones:
+
+- **GameFeatureData** asks "Add entry to PrimaryAssetTypesToScan?" the first time it loads.
+- **Save Content** at shutdown, when packages are unsaved.
+- **Restore Packages** after a crash.
+
+`editor(get_engine_state)` shows the blocking dialog in `snapshot.modal`, and `editor(list_dialogs)` lists it with its buttons. Answer it with `editor(respond_to_dialog)`. A prompt you know a launch will raise can be armed on the launch itself, before the bridge is listening:
+
+```
+editor(action="start_editor", window="offscreen", dialogPolicy="Restore=no")
+```
+
+`respond_to_dialog` is accepted only in the `auto` dialog mode; in `interactive` the question comes to you as a form, and in `defer` it waits for a person at the editor's window, which an offscreen editor does not have. See [Dialog handling mode](configuration.md#dialog-handling-mode).
+
 ### Connection drops / reconnecting
 
 The MCP server auto-reconnects every 15 seconds. If the editor is restarted, the connection will restore automatically.

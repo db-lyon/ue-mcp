@@ -2,10 +2,21 @@
 #include "Modules/ModuleManager.h"
 #include "BridgeServer.h"
 #include "EngineStatusHooks.h"
+#include "MCPBackgroundThrottle.h"
 #include "MCPEngineStatus.h"
+#include "MCPNoIde.h"
 #include "Handlers/Dialog/DialogHandlers.h"
+#include "ISourceCodeAccessModule.h"
+#include "ISourceCodeAccessor.h"
+#include "UObject/Class.h"
+#include "UObject/UnrealType.h"
+#if PLATFORM_WINDOWS
+#include "ILiveCodingModule.h"
+#endif
+#include "CoreGlobals.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
+#include "Editor/EditorPerformanceSettings.h"
 #include "HAL/PlatformMisc.h"
 #include "Misc/CommandLine.h"
 #include "Misc/ConfigCacheIni.h"
@@ -19,6 +30,8 @@ IMPLEMENT_MODULE(FUE_MCP_BridgeModule, UE_MCP_Bridge)
 static TSharedPtr<FMCPBridgeServer> G_BridgeServer;
 // The editor-ready poll; removed in ShutdownModule if the editor never became ready.
 static FTSTicker::FDelegateHandle G_EditorReadyTicker;
+// -MCPNoIde: hides the Live Coding console after each compile; removed in ShutdownModule.
+static FTSTicker::FDelegateHandle G_LiveCodingHideTicker;
 
 namespace
 {
@@ -48,6 +61,157 @@ namespace
 			return FromCommandLine;
 		}
 		return FPlatformMisc::GetEnvironmentVariable(TEXT("UE_MCP_DIALOG_POLICY"));
+	}
+
+	const TCHAR* const ThrottleConfigSection = TEXT("/Script/UnrealEd.EditorPerformanceSettings");
+	const TCHAR* const ThrottleConfigKey = TEXT("bThrottleCPUWhenNotForeground");
+
+	/**
+	 * An editor launched with -RenderOffScreen has no OS window, so it never
+	 * holds focus, and "Use Less CPU when in Background" holds it at a few
+	 * frames per second and stops its viewports rendering. Nobody can bring it
+	 * to the foreground, so the throttle is turned off for this process only:
+	 * the default object is changed in memory and the bridge never saves it.
+	 * Other editor code saves these settings whole, into the per-user ini every
+	 * project on this engine version shares, so the value read here is kept
+	 * and RestoreBackgroundThrottleIfSaved puts it back at shutdown.
+	 *
+	 * @param OutUserValue The throttle value as read from config, set only when this returns true.
+	 * @return True when this session turned the throttle off.
+	 */
+	bool DisableBackgroundThrottleWhenOffScreen(bool& OutUserValue)
+	{
+		if (!FMCPEngineStatus::IsRenderOffScreen())
+		{
+			return false;
+		}
+		UEditorPerformanceSettings* Settings = GetMutableDefault<UEditorPerformanceSettings>();
+		OutUserValue = Settings->bThrottleCPUWhenNotForeground;
+		Settings->bThrottleCPUWhenNotForeground = false;
+		UE_LOG(LogMCPBridge, Log,
+			TEXT("[UE-MCP] -RenderOffScreen: background CPU throttling is off for this session (it was %s). The bridge changes it in memory only and never saves it; if something else saves it, the bridge restores your value at shutdown."),
+			OutUserValue ? TEXT("on") : TEXT("off"));
+		return true;
+	}
+
+	/**
+	 * The other half of DisableBackgroundThrottleWhenOffScreen: when something
+	 * saved the session's false over the user's true, write true back and
+	 * flush the editor settings ini.
+	 */
+	void RestoreBackgroundThrottleIfSaved(bool bTurnedOff, bool bUserValue)
+	{
+		if (!bTurnedOff)
+		{
+			return;
+		}
+		if (!GConfig)
+		{
+			UE_LOG(LogMCPBridge, Warning,
+				TEXT("[UE-MCP] Could not check the saved background CPU throttle setting at shutdown: the config system is already gone."));
+			return;
+		}
+		bool bConfigValue = true;
+		const bool bConfigHoldsFalse =
+			GConfig->GetBool(ThrottleConfigSection, ThrottleConfigKey, bConfigValue, GEditorSettingsIni) && !bConfigValue;
+		if (!MCPShouldRestoreThrottle(bTurnedOff, bUserValue, bConfigHoldsFalse))
+		{
+			return;
+		}
+		GConfig->SetBool(ThrottleConfigSection, ThrottleConfigKey, true, GEditorSettingsIni);
+		GConfig->Flush(false, GEditorSettingsIni);
+		UE_LOG(LogMCPBridge, Log,
+			TEXT("[UE-MCP] Something saved this offscreen session's background CPU throttle (off) to %s; the bridge never saves it and restored your value (on)."),
+			*GEditorSettingsIni);
+	}
+
+	const TCHAR* const NoSourceCodeAccessor = TEXT("None");
+
+	/**
+	 * An editor launched with -MCPNoIde opens no source file or solution in an
+	 * IDE. Every open goes through the source-code accessor, and the engine's
+	 * built-in accessor named None opens nothing, so the bridge selects it.
+	 * The source-code access module re-reads the saved preference whenever an
+	 * accessor registers, so the preference is set to None on the settings
+	 * default object as well (its header is private, hence the reflection).
+	 * Both changes are in memory only; the bridge never saves them.
+	 */
+	void UseNoSourceCodeAccessorWhenNoIde()
+	{
+		if (!FMCPEngineStatus::IsNoIde())
+		{
+			return;
+		}
+
+		UClass* SettingsClass = FindObject<UClass>(nullptr, TEXT("/Script/SourceCodeAccess.SourceCodeAccessSettings"));
+		FStrProperty* PreferredProperty = SettingsClass
+			? FindFProperty<FStrProperty>(SettingsClass, TEXT("PreferredAccessor"))
+			: nullptr;
+		if (PreferredProperty)
+		{
+			PreferredProperty->SetPropertyValue_InContainer(SettingsClass->GetDefaultObject(), FString(NoSourceCodeAccessor));
+		}
+		else
+		{
+			UE_LOG(LogMCPBridge, Warning,
+				TEXT("[UE-MCP] -MCPNoIde: could not find SourceCodeAccessSettings.PreferredAccessor, so an accessor that registers later (a code-access plugin enabled mid-session) can still open an IDE."));
+		}
+
+		ISourceCodeAccessModule& SourceCodeAccess = FModuleManager::LoadModuleChecked<ISourceCodeAccessModule>(TEXT("SourceCodeAccess"));
+		SourceCodeAccess.SetAccessor(FName(NoSourceCodeAccessor));
+		const FName Selected = SourceCodeAccess.GetAccessor().GetFName();
+		if (Selected == FName(NoSourceCodeAccessor))
+		{
+			UE_LOG(LogMCPBridge, Log,
+				TEXT("[UE-MCP] -MCPNoIde: the source code accessor is None for this session, so no IDE opens. The bridge changes it in memory only and never saves it."));
+		}
+		else
+		{
+			UE_LOG(LogMCPBridge, Warning,
+				TEXT("[UE-MCP] -MCPNoIde: could not select the None source code accessor; '%s' is still selected and may open an IDE."),
+				*Selected.ToString());
+		}
+	}
+
+#if PLATFORM_WINDOWS
+	/** Live Coding was compiling on the previous tick of the hide ticker. */
+	bool bLiveCodingWasCompiling = false;
+
+	/**
+	 * Every Live Coding compile shows its console, whoever starts it, and the
+	 * only public way to hide it is to disable Live Coding for the session,
+	 * which leaves it running. The next compile enables it and shows the
+	 * console again until this hides it.
+	 */
+	bool HideLiveCodingConsoleWhenIdle(float /*DeltaTime*/)
+	{
+		ILiveCodingModule* LiveCoding = FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
+		if (!LiveCoding)
+		{
+			return true;
+		}
+		const bool bIsCompiling = LiveCoding->IsCompiling();
+		if (MCPShouldHideLiveCodingConsole(
+				FMCPEngineStatus::IsNoIde(), LiveCoding->IsEnabledForSession(), bLiveCodingWasCompiling, bIsCompiling))
+		{
+			LiveCoding->EnableForSession(false);
+			UE_LOG(LogMCPBridge, Log,
+				TEXT("[UE-MCP] -MCPNoIde: hid the Live Coding console. Live Coding keeps running; the next compile shows the console until it ends."));
+		}
+		bLiveCodingWasCompiling = bIsCompiling;
+		return true;
+	}
+#endif
+
+	void StartHidingLiveCodingConsoleWhenNoIde()
+	{
+#if PLATFORM_WINDOWS
+		if (FMCPEngineStatus::IsNoIde())
+		{
+			G_LiveCodingHideTicker = FTSTicker::GetCoreTicker().AddTicker(
+				FTickerDelegate::CreateStatic(&HideLiveCodingConsoleWhenIdle));
+		}
+#endif
 	}
 
 	void ApplyConfiguredDialogPolicies(FMCPHandlerRegistry& Registry)
@@ -123,6 +287,10 @@ void FUE_MCP_BridgeModule::StartupModule()
 		UE_LOG(LogMCPBridge, Display, TEXT("[UE-MCP] Running a commandlet: the bridge server, status hooks and dialog hook are not started."));
 		return;
 	}
+
+	bThrottleTurnedOff = DisableBackgroundThrottleWhenOffScreen(bThrottleUserValue);
+	UseNoSourceCodeAccessorWhenNoIde();
+	StartHidingLiveCodingConsoleWhenNoIde();
 
 	// Create and start bridge server. The base port is derived per-worktree
 	// from the project root path, unless something pins it: -MCPPort,
@@ -213,10 +381,17 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	RestoreBackgroundThrottleIfSaved(bThrottleTurnedOff, bThrottleUserValue);
+
 	if (G_EditorReadyTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(G_EditorReadyTicker);
 		G_EditorReadyTicker.Reset();
+	}
+	if (G_LiveCodingHideTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(G_LiveCodingHideTicker);
+		G_LiveCodingHideTicker.Reset();
 	}
 	FDialogHandlers::RemoveDialogHook();
 	// The snapshot itself outlives this module (its own module owns it and

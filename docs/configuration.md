@@ -326,6 +326,38 @@ Two things to know about a pinned port:
 
 Consequence worth knowing: if an editor is killed rather than closed, its lockfile stays behind and `stop_editor` reports the stale PID it names. Delete `<project>/Saved/UE_MCP_Bridge/port.json` to clear it.
 
+### Editor window mode
+
+`editor(start_editor)` and `editor(restart_editor)` take `window`, one of `normal` (default) and `offscreen`, `ide`, one of `allow` and `none`, and `extraArgs`, a string of extra editor command-line arguments.
+
+- **`normal`** launches the editor as Unreal does on its own.
+- **`offscreen`** launches it with `-RenderOffScreen`. No editor window of any kind appears on screen, and the splash is skipped. Dialogs are invisible too but still block; see [An offscreen editor is stuck on a dialog nobody can see](troubleshooting.md#an-offscreen-editor-is-stuck-on-a-dialog-nobody-can-see).
+- **`ide`** says whether the editor may open an IDE. `allow` leaves it as Unreal does on its own; `none` passes `-MCPNoIde` to the bridge, after `-RenderOffScreen` and before every extra argument.
+- **`extraArgs`** is split on whitespace, and double quotes group words that contain spaces. An unmatched quote is an error naming the input. On Windows each piece reaches Unreal exactly as typed, quotes included, so `-ExecCmds="stat fps"` works: Unreal reads the raw command line and ignores a switch inside quotes. Elsewhere the quotes are removed and each piece is one argument.
+
+All three can also be set under `editor:` in `ue-mcp.yml` (see [the `ue-mcp:` block reference](config-file.md#ue-mcp-block-reference)), where `extraArgs` may be a list of strings. The per-call `window` wins over `editor.window`, which wins over `normal`. The per-call `ide` wins over `editor.ide`, which wins over the window mode's default. Extra arguments from the config come first and the per-call ones follow. `restart_editor` applies the same rules.
+
+An offscreen editor defaults to `ide: none`, and a normal one to `allow`. With `none` the bridge sets Unreal's built-in "None" source code accessor for the session, in memory only, so nothing opens an IDE and your editor preferences are unchanged. A Live Coding compile still runs, and its console is hidden when the compile finishes, so it can show while compiling. Between compiles `project(live_coding_status)` still reports Live Coding as usable (`enabledForSession: true` once it has started) and adds `consoleHiddenByNoIde: true`.
+
+Pass `ide: allow` to get the IDE on an offscreen editor. An `extraArgs` that adds `-MCPNoIde` counts as `none`, and the result of `start_editor` and `restart_editor` reports `ide` beside `window`.
+
+```yaml
+ue-mcp:
+  version: 1
+  editor:
+    window: offscreen
+    extraArgs:
+      - -Log
+```
+
+An `extraArgs` that adds `-RenderOffScreen` makes the editor offscreen too, and it is reported as such. `editor(get_engine_state)` carries `window: { mode, source }`: `source` is `bridge` only when a running editor reported it, never from the status file of an editor that has since exited, and `commandLine` when it was read from the editor process's command line, which works while the bridge is down. The field is left out when there is no editor to ask.
+
+An offscreen editor keeps a normal frame rate. The bridge turns off the editor's background CPU throttle (`bThrottleCPUWhenNotForeground`) in memory only when the editor runs offscreen, and never saves it, so `capture_screenshot target=editor` still writes pixels and your editor preferences are unchanged.
+
+`capture_screenshot target=window` skips popup windows (tooltips, menus, notifications). It captures the active window when that is a normal window, else the topmost visible normal window, else the root window when it is visible.
+
+`launch_standalone_game` from an offscreen editor launches the game offscreen too: the bridge adds `-RenderOffScreen` to the game's command line unless `extraArgs` already holds it, and the result reports `renderOffScreen`.
+
 ### Bridge state files
 
 The bridge keeps two records under `<project>/Saved/UE_MCP_Bridge/`. Both are published by rename, so a client polling them never reads a half-written file.
@@ -413,9 +445,9 @@ The server can manage the editor process:
 
 | Command | Description |
 |---------|-------------|
-| `editor(action="start_editor")` | Launch UE with the current project |
+| `editor(action="start_editor")` | Launch UE with the current project. Takes `window`, `ide` and `extraArgs`, see [Editor window mode](#editor-window-mode) |
 | `editor(action="stop_editor")` | Gracefully stop the editor |
-| `editor(action="restart_editor")` | Stop and relaunch |
+| `editor(action="restart_editor")` | Stop and relaunch. Takes the same `window`, `ide` and `extraArgs` |
 | `editor(action="build_project")` | Build the project C++ code via UBT |
 | `project(action="build")` | The same build, with `configuration`, `platform` and `clean` parameters |
 

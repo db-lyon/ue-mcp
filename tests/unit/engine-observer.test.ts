@@ -7,7 +7,9 @@ import {
   readEngineSnapshot,
   withBridgeSnapshot,
   type EngineState,
+  type EditorProcess,
 } from "../../src/editor/engine-observer.js";
+import { windowModeOf } from "../../src/editor/launch-args.js";
 
 const temporaryRoots: string[] = [];
 
@@ -259,5 +261,75 @@ describe("withBridgeSnapshot", () => {
     const merged = withBridgeSnapshot(blindState({ processProbeFailed: false }), { phase: "ready" });
     expect(merged.running).toBe(true);
     expect(merged.summary).toContain("did not find it");
+  });
+});
+
+describe("windowModeOf", () => {
+  const proc = (commandLine: string, pid = 4242): EditorProcess => ({
+    pid,
+    commandLine,
+    projectPath: "C:/P/P.uproject",
+    headless: false,
+    responding: true,
+    windowTitle: null,
+  });
+  /** A snapshot the running editor served over its bridge. */
+  const served = (snapshot: unknown, processes: EditorProcess[]) =>
+    windowModeOf({ snapshot, processes, snapshotSource: "bridge" });
+  /** A snapshot read from status.json on disk, which outlives its editor. */
+  const onDisk = (snapshot: unknown, processes: EditorProcess[]) =>
+    windowModeOf({ snapshot, processes, snapshotSource: "status.json" });
+
+  it("takes the bridge's field over a command line that disagrees", () => {
+    expect(served({ renderOffScreen: true }, [proc("UnrealEditor.exe P.uproject")]))
+      .toEqual({ mode: "offscreen", source: "bridge" });
+    expect(served({ renderOffScreen: false }, [proc("UnrealEditor.exe -RenderOffScreen P.uproject")]))
+      .toEqual({ mode: "normal", source: "bridge" });
+  });
+
+  it("takes a status.json field whose pid is a live editor of the project", () => {
+    expect(onDisk({ pid: 4242, renderOffScreen: true }, [proc("UnrealEditor.exe P.uproject")]))
+      .toEqual({ mode: "offscreen", source: "bridge" });
+  });
+
+  it("falls back to the command line, both ways", () => {
+    expect(served({}, [proc("UnrealEditor.exe -RenderOffScreen P.uproject")]))
+      .toEqual({ mode: "offscreen", source: "commandLine" });
+    expect(served({}, [proc("UnrealEditor.exe P.uproject")]))
+      .toEqual({ mode: "normal", source: "commandLine" });
+  });
+
+  it("reads a snapshot without the field as no answer and falls back", () => {
+    expect(served({ phase: "ready", gameThreadTicking: true }, [proc("UnrealEditor.exe -RenderOffScreen P.uproject")]))
+      .toEqual({ mode: "offscreen", source: "commandLine" });
+    // A field of the wrong type is not an answer either.
+    expect(served({ renderOffScreen: "yes" }, [proc("UnrealEditor.exe P.uproject")]))
+      .toEqual({ mode: "normal", source: "commandLine" });
+  });
+
+  it("is null with no process and no snapshot field", () => {
+    expect(served(null, [])).toBeNull();
+    expect(served(undefined, [])).toBeNull();
+    expect(served({}, [])).toBeNull();
+    expect(served("not a snapshot", [])).toBeNull();
+  });
+
+  // status.json stays on disk after its editor is gone, so its field speaks
+  // for that editor only while that editor is still running.
+  it("gives no mode for a stale status.json snapshot with no editor running", () => {
+    expect(onDisk({ pid: 1111, renderOffScreen: true }, [])).toBeNull();
+    expect(onDisk({ renderOffScreen: true }, [])).toBeNull();
+  });
+
+  it("reads a different live editor's command line over a stale snapshot", () => {
+    expect(onDisk({ pid: 1111, renderOffScreen: true }, [proc("UnrealEditor.exe P.uproject", 2222)]))
+      .toEqual({ mode: "normal", source: "commandLine" });
+  });
+
+  it("reads the command line of the process the snapshot names when two are running", () => {
+    const processes = [proc("UnrealEditor.exe P.uproject", 1111), proc("UnrealEditor.exe P.uproject -RenderOffScreen", 2222)];
+    expect(onDisk({ pid: 2222 }, processes)).toEqual({ mode: "offscreen", source: "commandLine" });
+    expect(onDisk({ pid: 1111 }, processes)).toEqual({ mode: "normal", source: "commandLine" });
+    expect(onDisk({}, processes)).toEqual({ mode: "normal", source: "commandLine" });
   });
 });
