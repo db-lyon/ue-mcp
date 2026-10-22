@@ -2150,10 +2150,32 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 	FRotator LookAt = FRotationMatrix::MakeFromX(Direction).Rotator();
 	const double Roll = OptionalNumber(Params, TEXT("roll"), 0.0);
 	LookAt.Roll = Roll;
-	Actor->SetActorRotation(LookAt);
+
+	// The same as move_actor: an editor aim is undoable and dirties the actor's package, so a plain
+	// save persists it. Without Modify() the rotation looked done but level(save) skipped the actor.
+	const bool bEditorWorld = !World->IsGameWorld();
+	{
+		const FScopedTransaction Transaction(FText::FromString(TEXT("Aim Actor")), bEditorWorld);
+		if (bEditorWorld)
+		{
+			Actor->Modify();
+			if (Actor->GetRootComponent()) Actor->GetRootComponent()->Modify();
+		}
+		Actor->SetActorRotation(LookAt);
+		if (bEditorWorld)
+		{
+			Actor->MarkPackageDirty();
+		}
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	if (bEditorWorld)
+	{
+		UPackage* ActorPackage = Actor->GetPackage();
+		Result->SetBoolField(TEXT("packageDirty"), ActorPackage && ActorPackage->IsDirty());
+		if (ActorPackage) Result->SetStringField(TEXT("package"), ActorPackage->GetName());
+	}
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Actor->GetActorRotation()));
@@ -2167,6 +2189,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRotation));
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 
+	// Last, as in move_actor: OnActorMoved listeners (PCG, splines) see the new rotation.
+	if (bEditorWorld)
+	{
+		Actor->PostEditMove(true);
+		MCPNotifyEditorMove(Actor);
+	}
 	return MCPResult(Result);
 }
 
