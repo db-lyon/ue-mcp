@@ -15,6 +15,9 @@
 #include "Engine/EngineTypes.h"
 #include "Engine/HitResult.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
+#include "ScopedTransaction.h"
+#include "UObject/Package.h"
+#include "WorldPartition/HLOD/HLODActor.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -292,9 +295,32 @@ TSharedPtr<FJsonValue> FLevelHandlers::SnapActorToFloor(const TSharedPtr<FJsonOb
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(MCPSnapToFloor), /*bTraceComplex*/ true);
 	Query.AddIgnoredActor(Actor);
 
+	// A World Partition HLOD actor stands in for cells that are not loaded. Its
+	// mesh is a simplified copy that sits above the real ground, so landing on it
+	// leaves the actor floating once the cell streams in. Skip each one and trace
+	// again, and say which were skipped.
+	constexpr int32 MaxStandIns = 16;
+	TArray<TSharedPtr<FJsonValue>> SkippedHlod;
 	FHitResult Hit;
-	if (!World->LineTraceSingleByChannel(Hit, Top, End, ECC_Visibility, Query))
+	bool bHit = false;
+	for (int32 Attempt = 0; Attempt <= MaxStandIns; ++Attempt)
 	{
+		bHit = World->LineTraceSingleByChannel(Hit, Top, End, ECC_Visibility, Query);
+		AActor* HitActor = bHit ? Hit.GetActor() : nullptr;
+		if (!HitActor || !HitActor->IsA<AWorldPartitionHLOD>()) break;
+		SkippedHlod.Add(MakeShared<FJsonValueString>(HitActor->GetPathName()));
+		Query.AddIgnoredActor(HitActor);
+		bHit = false;
+	}
+	if (!bHit)
+	{
+		if (SkippedHlod.Num() > 0)
+		{
+			return MCPError(FString::Printf(
+				TEXT("Only World Partition HLOD stand-ins lie within %.1f cm below '%s', so the real ground there is in a cell that is not loaded. ")
+				TEXT("Snapping onto an HLOD mesh would leave the actor floating once the cell streams in. Load the cell with level(load_actor_descs) and snap again."),
+				MaxDistance, *ActorLabel));
+		}
 		return MCPError(FString::Printf(TEXT("No floor hit within %.1f cm below '%s'"), MaxDistance, *ActorLabel));
 	}
 
@@ -303,12 +329,28 @@ TSharedPtr<FJsonValue> FLevelHandlers::SnapActorToFloor(const TSharedPtr<FJsonOb
 	const double DeltaZ = (Hit.ImpactPoint.Z + Offset) - BoundsBottomZ;
 	const FVector NewLoc = ActorLoc + FVector(0, 0, DeltaZ);
 
+	// The same as move_actor: an editor snap is undoable and dirties the actor's package.
 	const FVector PrevLoc = ActorLoc;
-	Actor->Modify();
-	Actor->SetActorLocation(NewLoc, /*bSweep*/ false, /*OutSweepHitResult*/ nullptr, ETeleportType::TeleportPhysics);
+	const bool bEditorWorld = !World->IsGameWorld();
+	{
+		const FScopedTransaction Transaction(FText::FromString(TEXT("Snap Actor To Floor")), bEditorWorld);
+		Actor->Modify();
+		Actor->SetActorLocation(NewLoc, /*bSweep*/ false, /*OutSweepHitResult*/ nullptr, ETeleportType::TeleportPhysics);
+		if (bEditorWorld) Actor->MarkPackageDirty();
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	if (bEditorWorld)
+	{
+		UPackage* ActorPackage = Actor->GetPackage();
+		Result->SetBoolField(TEXT("packageDirty"), ActorPackage && ActorPackage->IsDirty());
+		if (ActorPackage) Result->SetStringField(TEXT("package"), ActorPackage->GetName());
+	}
+	if (SkippedHlod.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("skippedHlodActors"), SkippedHlod);
+	}
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetObjectField(TEXT("from"), MCPVec3ToJsonObject(PrevLoc));
@@ -323,5 +365,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::SnapActorToFloor(const TSharedPtr<FJsonOb
 	TSharedPtr<FJsonObject> Loc = MCPVec3ToJsonObject(PrevLoc);
 	Payload->SetObjectField(TEXT("location"), Loc);
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
+
+	// Last, as in move_actor: OnActorMoved listeners (PCG, splines) see the move.
+	if (bEditorWorld)
+	{
+		Actor->PostEditMove(true);
+		MCPNotifyEditorMove(Actor);
+	}
 	return MCPResult(Result);
 }
