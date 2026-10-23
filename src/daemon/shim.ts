@@ -109,6 +109,7 @@ export async function runShim(uproject: string): Promise<void> {
     ws?.close();
     process.exit(0);
   };
+  process.stdin.once("end", () => void stdio.close());
 
   const connect = async (replay: boolean): Promise<void> => {
     const d = await ensureDaemon(uproject);
