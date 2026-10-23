@@ -444,6 +444,17 @@ void FAssetGeometryHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// (npm run specs:record, then npm run specs:generate), and each alias is
 	// resolved to its parameter by the registry before the handler runs.
 	using EType = EMCPParamType;
+	Registry.RegisterHandlerWithTimeout(TEXT("get_static_mesh_geometry"), &GetStaticMeshGeometry, 300.0f, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path; keep the same path on every snapshot page")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("geometrySource"), EType::String, TEXT("sourceModel reads the authored MeshDescription; renderData reads built LOD buffers, including Nanite fallback geometry")).Enum({ TEXT("sourceModel"), TEXT("renderData") }),
+		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("Source model or render LOD index (default 0)")),
+		MCPParam::Optional(TEXT("elementType"), EType::String, TEXT("Element table to page (default triangles); read all three tables for a complete capture")).Enum({ TEXT("vertices"), TEXT("corners"), TEXT("triangles") }),
+		MCPParam::Optional(TEXT("elementOffset"), EType::Integer, TEXT("Offset in the selected table, not an element ID (default 0)")).Range(0, 1000000),
+		MCPParam::Optional(TEXT("pageSize"), EType::Integer, TEXT("Maximum elements per page (default 256, maximum 512)")).Range(1, 512),
+		MCPParam::Optional(TEXT("snapshotId"), EType::String, TEXT("ID from the first response; required for continuation. Omit at offset 0 to capture current data. Cached pages never re-read the asset.")),
+		MCPParam::Optional(TEXT("dumpToFile"), EType::Boolean, TEXT("Stream the complete snapshot to a JSON file instead of a page (default false); omit elementType, elementOffset and pageSize")),
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("New .json destination for dumpToFile; relative paths stay under Saved/. Defaults to Saved/UE_MCP/MeshGeometry/<snapshotId>.json. Existing destinations are always refused.")),
+	});
 	Registry.RegisterHandler(TEXT("get_mesh_geometry"), &GetMeshGeometry, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("lodIndex"), EType::Integer, TEXT("LOD to read (default 0)")),

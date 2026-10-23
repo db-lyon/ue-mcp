@@ -13,8 +13,10 @@
  * a new read surface has no reason to touch it. The actions still live under
  * the `asset` category on the wire, which is what a caller sees.
  *
- * Everything here reads the engine's own render data (FStaticMeshLODResources /
- * FSkeletalMeshLODRenderData). It deliberately does NOT go through
+ * The legacy geometry and measurement actions read the engine's render data
+ * (FStaticMeshLODResources / FSkeletalMeshLODRenderData). The static-mesh capture
+ * also offers authored MeshDescription data with explicit source selection.
+ * These actions deliberately do NOT go through
  * UKismetProceduralMeshLibrary::GetSectionFromStaticMesh, which is the python
  * workaround this replaces: that route makes the ProceduralMeshComponent plugin
  * a hidden runtime dependency of reading a vertex.
@@ -25,6 +27,9 @@ public:
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
 private:
+	/** Immutable, bounded source-model or render-data pages with every standard corner attribute. */
+	static TSharedPtr<FJsonValue> GetStaticMeshGeometry(const TSharedPtr<FJsonObject>& Params);
+
 	/** Per-section positions / UVs / normals / triangle indices for one LOD. */
 	static TSharedPtr<FJsonValue> GetMeshGeometry(const TSharedPtr<FJsonObject>& Params);
 

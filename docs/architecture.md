@@ -200,7 +200,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 
 ### Handler Categories
 
-34 C++ handler groups are registered in `HandlerCatalog.cpp`. Together they expose <!-- count:actions -->2040+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
+34 C++ handler groups are registered in `HandlerCatalog.cpp`. Together they expose <!-- count:actions -->2041+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
 
 | Handler group | Coverage |
 |---------|----------|
