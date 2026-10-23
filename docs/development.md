@@ -145,6 +145,20 @@ bounds and collision body setup in a disposable editor world, then restores
 the original editor world. Run it through the automation harness against
 `tests/ue_mcp/ue_mcp.uproject` after deploying and rebuilding the plugin.
 
+### Landscape height read regression
+
+`npm run test:automation -- --filter UE.MCP.Landscape.HeightRead` checks that
+`landscape(get_height_region)` returns the expected heights without dirtying a
+clean landscape package or clearing an existing dirty flag. It covers merged
+and selected edit-layer reads in a disposable world and restores the original
+editor world without saving any package. Run it against `tests/ue_mcp` after
+deploying and rebuilding the plugin.
+
+The shared region-height reader also serves point, normal, slope, terrain
+analysis, heightmap export and geo-projection height queries. Height writes use
+their own edit interface and retain normal package dirtying. This regression
+does not cover the separate legacy `landscape(sample)` or weight-data readers.
+
 ### Smoke Tests
 
 Smoke tests run against a **live editor** and verify tool functionality end-to-end.
