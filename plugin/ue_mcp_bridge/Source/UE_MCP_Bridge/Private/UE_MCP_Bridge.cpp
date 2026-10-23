@@ -2,6 +2,7 @@
 #include "Modules/ModuleManager.h"
 #include "BridgeServer.h"
 #include "EngineStatusHooks.h"
+#include "HandlerSceneCaptureJob.h"
 #include "MCPEngineStatus.h"
 #include "Handlers/Dialog/DialogHandlers.h"
 #include "Handlers/PIE/PIEHandlers.h"
@@ -218,6 +219,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	UEMCP::SceneCapture::ShutdownWarmCapture();
 	if (G_EditorReadyTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(G_EditorReadyTicker);

@@ -7449,11 +7449,35 @@
         {
           "name": "outputPath",
           "type": "string",
-          "required": true,
-          "description": "Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png",
+          "required": false,
+          "description": "Absolute or project-relative PNG path to write; required when starting a capture",
           "aliases": [
             "filename"
           ]
+        },
+        {
+          "name": "captureId",
+          "type": "string",
+          "required": false,
+          "description": "Query the latest warm capture instead of starting one; outputPath must be omitted"
+        },
+        {
+          "name": "cancel",
+          "type": "boolean",
+          "required": false,
+          "description": "With captureId, cancel an active warm capture and release its transient resources (default false)"
+        },
+        {
+          "name": "warmupFrames",
+          "type": "number",
+          "required": false,
+          "description": "0 (default) keeps synchronous capture; 1-240 starts a tick-driven normal-streaming capture and returns captureId"
+        },
+        {
+          "name": "warmupTimeoutSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)"
         },
         {
           "name": "location",
