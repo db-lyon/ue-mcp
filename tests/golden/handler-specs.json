@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1143,
+  "handlerCount": 1144,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -18231,6 +18231,81 @@
           "type": "integer",
           "required": false,
           "description": "Source model (LOD) to read (default 0)"
+        }
+      ]
+    },
+    "get_static_mesh_geometry": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StaticMesh asset path; keep the same path on every snapshot page",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "geometrySource",
+          "type": "string",
+          "required": true,
+          "description": "sourceModel reads the authored MeshDescription; renderData reads built LOD buffers, including Nanite fallback geometry",
+          "enum": [
+            "sourceModel",
+            "renderData"
+          ]
+        },
+        {
+          "name": "lodIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Source model or render LOD index (default 0)"
+        },
+        {
+          "name": "elementType",
+          "type": "string",
+          "required": false,
+          "description": "Element table to page (default triangles); read all three tables for a complete capture",
+          "enum": [
+            "vertices",
+            "corners",
+            "triangles"
+          ]
+        },
+        {
+          "name": "elementOffset",
+          "type": "integer",
+          "required": false,
+          "description": "Offset in the selected table, not an element ID (default 0)",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false,
+          "description": "Maximum elements per page (default 256, maximum 512)",
+          "minimum": 1,
+          "maximum": 512
+        },
+        {
+          "name": "snapshotId",
+          "type": "string",
+          "required": false,
+          "description": "ID from the first response; required for continuation. Omit at offset 0 to capture current data. Cached pages never re-read the asset."
+        },
+        {
+          "name": "dumpToFile",
+          "type": "boolean",
+          "required": false,
+          "description": "Stream the complete snapshot to a JSON file instead of a page (default false); omit elementType, elementOffset and pageSize"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "New .json destination for dumpToFile; relative paths stay under Saved/. Defaults to Saved/UE_MCP/MeshGeometry/<snapshotId>.json. Existing destinations are always refused."
         }
       ]
     },
