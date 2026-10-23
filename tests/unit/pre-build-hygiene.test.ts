@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -212,5 +213,13 @@ describe("the test project builds as unity", () => {
     const call = script.indexOf("ensureTestBuildConfiguration(projectRoot)");
     expect(call).toBeGreaterThan(-1);
     expect(call).toBeLessThan(script.indexOf("Starting build..."));
+  });
+});
+
+describe("the build script itself", () => {
+  it("parses, so npm run build can start at all", () => {
+    const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const r = spawnSync(process.execPath, ["--check", path.join(REPO, "scripts", "build.js")], { encoding: "utf8" });
+    expect(r.status, r.stderr).toBe(0);
   });
 });

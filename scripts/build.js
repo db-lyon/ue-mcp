@@ -107,7 +107,7 @@ async function main() {
   });
 
   if (ensureTestBuildConfiguration(projectRoot)) {
-    log('Wrote the test project's BuildConfiguration.xml: unity build, no adaptive working set.', 'yellow');
+    log("Wrote the test project's BuildConfiguration.xml: unity build, no adaptive working set.", 'yellow');
   }
 
   log('Starting build...');
