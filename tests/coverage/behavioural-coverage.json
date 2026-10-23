@@ -2568,6 +2568,21 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/editor-warm-capture.test.ts",
+          "test": "refuses invalid bounds and incompatible force-loading before starting"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-warm-capture.test.ts",
+          "test": "refuses overlapping jobs and cancels without exporting; repeated cancellation is stable"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-warm-capture.test.ts",
+          "test": "writes the final PNG after exactly the requested warm frames and reports its camera"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/spatial-communication.test.ts",
           "test": "pairs a PNG with the actual scene-capture camera rather than the editor viewport"
         },
