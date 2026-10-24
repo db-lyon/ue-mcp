@@ -120,6 +120,13 @@ public:
 	// Execute a handler
 	TSharedPtr<FJsonValue> ExecuteHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params);
 
+	// The registry whose ExecuteHandler is running on this thread, or nullptr
+	// outside one. execute_batch dispatches its steps through this, so a batch
+	// runs over whichever registry dispatched the batch itself: the bridge
+	// server's, or the one an automation test built. Nothing is recorded at
+	// registration time, so no test registry can repoint the live server.
+	static FMCPHandlerRegistry* Executing();
+
 	// Check if handler exists
 	bool HasHandler(const FString& MethodName) const;
 

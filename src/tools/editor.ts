@@ -17,6 +17,7 @@ import { absentToolset, registeredMethodsOf } from "../surface/registered-surfac
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
+import { batchAction, batchSchema } from "./editor/batch.js";
 import { checkpointActions, checkpointSchema } from "./checkpoints.js";
 
 /**
@@ -480,6 +481,7 @@ export const editorTool: ToolDef = categoryTool(
           : result;
       },
     },
+    batch: batchAction,
     ...checkpointActions,
     ...epicActions,
   },
@@ -489,6 +491,7 @@ export const editorTool: ToolDef = categoryTool(
     // registration. A key listed again below is shared with hand-written
     // actions, and holds the same type as the generated one.
     ...specSchema,
+    ...batchSchema,
     code: z.string().optional(),
     captureLog: z.boolean().optional().describe("execute_python/run_python_file: false drops everything the script logged except its error entries, which are always kept. logChars and logEntryCount still report what was there (#995)"),
     maxLogChars: z.number().optional().describe("execute_python/run_python_file: keep only the last N characters of logged output, dropping whole entries from the front. Reported as logTruncated (#995)"),

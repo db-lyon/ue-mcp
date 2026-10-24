@@ -111,6 +111,9 @@ const KNOWN_ORPHANS: Record<string, string> = {
   release_lock: "as above.",
   release_session_locks: "called on session teardown, not by a caller.",
   execute_python: "editor(execute_python) wraps this with the workaround tracker and the search gate.",
+  execute_batch:
+    "editor(batch) is a TS handler that prepares every step as a direct call before sending the list, "
+    + "so it calls this from code rather than declaring it as an action's bridge.",
   pie_start_ignoring_blueprint_errors:
     "editor(play_in_editor_ignore_blueprint_errors) calls it only after its approval gate, so no action "
     + "declares it and play_in_editor's pie_control never reads an authorization (#1057).",

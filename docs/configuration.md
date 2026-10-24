@@ -94,6 +94,35 @@ npx ue-mcp feedback list --editor Beta
 
 The name is the one `project(action="list_editors")` reports, read back from the argv in your MCP client config, so a name means the same editor on the command line that it means in a tool call. Without the flag every subcommand behaves exactly as it did: positional path first, then the project in the current directory.
 
+### Several Agents On One Editor
+
+Since 1.4 every MCP client of a project talks to one daemon, and the daemon to one editor, so two or three agent sessions on the same project share one bridge. The bridge runs handlers one at a time on the game thread: a single call is never torn. A multi-step edit is several calls, though, and another session's call lands between any two of them. Add a variable, add a node, connect the pins, and a rename from the other session between the second and third step leaves the third aimed at an asset that no longer exists under that name.
+
+Two tools cover this, and they compose.
+
+**`editor(action="batch")`** sends several actions to the editor as ONE bridge call, and the plugin runs every step inside one game-thread job. Nothing from any other connection runs between two steps, because nothing else runs on the game thread until the job returns.
+
+```
+editor(action="batch", args={
+  transactionDescription: "Wire OnOpen",
+  ops: [
+    { category: "blueprint", method: "add_variable", args: { assetPath: "/Game/BP_Door", name: "IsOpen", varType: "bool" } },
+    { category: "blueprint", method: "add_node",     args: { assetPath: "/Game/BP_Door", nodeClass: "VariableSet", nodeParams: { variableName: "IsOpen" } } },
+    { category: "blueprint", method: "connect_pins", args: { assetPath: "/Game/BP_Door", sourceNodeId: "<event node>", sourcePin: "then", targetNodeId: "<set node>", targetPin: "execute" } }
+  ]
+})
+```
+
+- Every step is prepared exactly as a direct call to that action would be, before anything is sent: paths repaired, the category's own parameter folding, the action's declared contract. A batch with one bad step is refused whole, naming the step.
+- A step must be an action the editor runs. An action served by the server process (`start_editor`, `execute_python`, flows, another batch), the asset lock actions, the undo and transaction actions, and the dialog actions are refused with the reason.
+- The steps share one editor transaction, so whatever they changed that is transactional is one Undo entry named by `transactionDescription`.
+- `onError: stop` (the default) ends the batch at the first failing step. `onError: continue` runs every step and reports each verdict.
+- **There is no rollback.** The editor has no reliable inverse for every action, so a failing step leaves the steps before it applied. The result says exactly what ran: `completedCalls`, `failedIndex`, and `results[i].success` with each step's own answer, including any rollback descriptor that step reports for itself.
+- The wait is the sum of what each step would get alone, or the batch's own `timeoutMs`. A batch that outlives the wait keeps running on the game thread, and the error reports how many steps had finished and which one was under way.
+- The batch goes through dispatch as one action: the dialog guard checks it once, a write guard scoped to mutations or to writes sees every step's method and paths, and with locking on the locks taken are the union of every step's asset paths, held for the whole job.
+
+**Per-asset locking** is the complement for calls that cannot be batched, and for a human and an agent on one editor. With `locking.enabled: true` in `ue-mcp.yml` every mutating call leases each asset path it names before it runs and releases it after; a call against an asset another session holds is refused with the retryable `ASSET_LOCKED` error naming the holder and when the lease frees. It is opt-in because it adds two bridge round-trips per mutating call, and it only covers calls that name an asset path. The explicit `asset(lock)`, `asset(unlock)`, `asset(unlock_all)` and `asset(list_locks)` actions work whether or not it is on. See the [`locking` key](config-file.md#ue-mcp-block-reference).
+
 ## Project Configuration (`ue-mcp.yml`)
 
 Project config lives in `ue-mcp.yml` next to your `.uproject`, tracked in git so every collaborator shares the same surface. `npx ue-mcp init` scaffolds and maintains it.

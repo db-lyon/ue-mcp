@@ -8,9 +8,9 @@
 <img width="1354" height="586" alt="{6F52BA62-D736-454E-AD30-A1C98F9EEBAA}" src="https://github.com/user-attachments/assets/9380e080-c608-4609-ba21-90e6b0a3ba7f" />
 
 
-**Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->2108+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
+**Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->2109+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
 
-That total is <!-- count:ownActions -->1278+<!-- /count --> actions of ue-mcp's own plus Epic's entire native AI Toolset Registry: on UE 5.8+ its <!-- count:nativeToolActions -->830<!-- /count --> official Unreal tools are called in-process and surfaced as `epic_*` actions in the matching category, Sequencer in `animation`, PCG in `pcg`, static meshes in `asset`.
+That total is <!-- count:ownActions -->1279+<!-- /count --> actions of ue-mcp's own plus Epic's entire native AI Toolset Registry: on UE 5.8+ its <!-- count:nativeToolActions -->830<!-- /count --> official Unreal tools are called in-process and surfaced as `epic_*` actions in the matching category, Sequencer in `animation`, PCG in `pcg`, static meshes in `asset`.
 
 ```mermaid
 flowchart LR
@@ -142,7 +142,7 @@ flows:
 flow(action="run", flowName="build_and_check")
 ```
 
-Every one of the <!-- count:actions -->2108+<!-- /count --> actions is also a flow task. Flows support step references, retries, rollback, custom tasks in your own `.js`/`.ts`, and shell steps. See [Flows](https://ue-mcp.com/docs/flows/).
+Every one of the <!-- count:actions -->2109+<!-- /count --> actions is also a flow task. Flows support step references, retries, rollback, custom tasks in your own `.js`/`.ts`, and shell steps. See [Flows](https://ue-mcp.com/docs/flows/).
 
 ## Plugins
 
@@ -175,6 +175,7 @@ An agent with write access to your project is a real risk, so the bridge is buil
 - **Source control guard** - writes to checked-in assets can be gated on source control state instead of silently overwriting.
 - **Flow rollback** - handlers report `created`/`existed`/`updated` and flows can snapshot git state before a run, so a failed multi-step flow doesn't leave debris.
 - **Idempotency by convention** - re-running an action that already applied is a no-op rather than a duplicate.
+- **Atomic batches** - `editor(batch)` sends several actions to the editor as one game-thread job, so a second agent on the same editor cannot slip a call between the steps of a multi-step edit. One Undo entry, no rollback: the result says exactly which steps ran.
 
 Details: [Guards](https://ue-mcp.com/docs/plugins-guards/) and [Handler Conventions](https://ue-mcp.com/docs/handler-conventions/).
 
