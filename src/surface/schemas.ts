@@ -119,9 +119,10 @@ export const UeMcpConfigSchema = z
     // tracked ue-mcp.yml. See plugin-groups.ts.
     pluginConfig: z
       .record(
+        z.string(),
         z
           .object({
-            groups: z.record(z.boolean()).optional(),
+            groups: z.record(z.string(), z.boolean()).optional(),
           })
           .passthrough(),
       )

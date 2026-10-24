@@ -11,7 +11,7 @@ import { specBp, schema as specSchema } from "./specs/asset.generated.js";
 
 /** The generated array-of-objects schema with each element refusing undeclared keys. */
 function strictItems(generated: z.ZodType | undefined): z.ZodType {
-  const array = (generated as z.ZodOptional<z.ZodArray<z.AnyZodObject>>).unwrap();
+  const array = (generated as z.ZodOptional<z.ZodArray<z.ZodObject>>).unwrap();
   return z.array(array.element.strict()).optional().describe(generated?.description ?? "");
 }
 import { specBp as gameplaySpecBp, schema as gameplaySpecSchema } from "./specs/gameplay.generated.js";
@@ -468,7 +468,7 @@ export const assetTool: ToolDef = categoryTool(
     renames: strictItems(specSchema.renames),
     // Three handlers share this key with three element shapes, and one key has
     // one type, so each element's fields are checked by its handler.
-    items: z.array(z.record(z.unknown())).min(1).max(500).optional().describe("Batch entries (max 500): import_texture_batch takes {filePath, packagePath?, name?, replaceExisting?, preset?, settings?}; bulk_set_properties takes {assetPath, properties}; bulk_upsert_data_assets takes {name, packagePath, className, properties?}"),
+    items: z.array(z.record(z.string(), z.unknown())).min(1).max(500).optional().describe("Batch entries (max 500): import_texture_batch takes {filePath, packagePath?, name?, replaceExisting?, preset?, settings?}; bulk_set_properties takes {assetPath, properties}; bulk_upsert_data_assets takes {name, packagePath, className, properties?}"),
     expandDepth: z.number().int().min(0).max(5).optional().describe("read_properties / get_properties: inline owned subobjects to this depth, 0-5 (default 0) (#755)"),
     maxExpandedObjects: z.number().int().positive().optional().describe("read_properties / get_properties: cap on expanded objects (default 64) (#755)"),
     lodIndex: z.number().int().min(0).optional().describe("get_mesh_geometry / measure_mesh_geometry: which LOD to read (default 0). mesh_boolean: which LOD of each input mesh to read (default 0). skeletal and static mesh build-setting and skin-weight actions: which source LOD to target (default 0). UV actions: which LOD to act on (default 0). bind_cloth_to_section / unbind_cloth_from_section: the mesh LOD holding the section (required)"),
@@ -478,7 +478,7 @@ export const assetTool: ToolDef = categoryTool(
     // handler checks them, before anything is written.
     edits: z.array(z.object({
       vertexIndex: z.number().int().min(0),
-      influences: z.array(z.record(z.unknown())).min(1).max(64),
+      influences: z.array(z.record(z.string(), z.unknown())).min(1).max(64),
     })).min(1).max(256).optional().describe("set_skeletal_mesh_skin_weights: selected source vertices and their complete replacement influences, each {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}"),
     // The IMC actions dispatch to gameplay handlers, so their keys come from
     // that spec. `key` is also the StringTable entry key, so it names both.

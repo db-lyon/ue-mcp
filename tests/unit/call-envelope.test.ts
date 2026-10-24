@@ -39,7 +39,7 @@ function editorTool(): ToolDef {
     invoke_function: bp("unknown", "Call. Params: functionName, args?", "invoke_function"),
   }, {
     functionName: z.string().optional(),
-    args: z.record(z.unknown()).optional(),
+    args: z.record(z.string(), z.unknown()).optional(),
   });
 }
 

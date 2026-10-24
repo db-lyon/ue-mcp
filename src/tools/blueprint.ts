@@ -160,9 +160,9 @@ export const blueprintTool: ToolDef = categoryTool(
     ...specSchema,
     assetPath: z.string().optional().describe("Blueprint asset path. Read/graph actions also accept a World/umap path (e.g. /Game/Maps/SomeLevel), resolved to that map's level script Blueprint (#942)"),
     parentClass: z.string().optional().describe("create / author / reparent: the parent class. export_batch: only Blueprints deriving from this class (#1166)"),
-    components: z.array(z.record(z.unknown())).optional().describe("author: [{componentClass, componentName?, parentComponent?, childActorClass?}] (#607)"),
-    variables: z.array(z.record(z.unknown())).optional().describe("author: [{name, varType}] (#607)"),
-    functions: z.array(z.record(z.unknown())).optional().describe("author: [{functionName}] (#607)"),
+    components: z.array(z.record(z.string(), z.unknown())).optional().describe("author: [{componentClass, componentName?, parentComponent?, childActorClass?}] (#607)"),
+    variables: z.array(z.record(z.string(), z.unknown())).optional().describe("author: [{name, varType}] (#607)"),
+    functions: z.array(z.record(z.string(), z.unknown())).optional().describe("author: [{functionName}] (#607)"),
     compile: z.boolean().optional().describe("author: compile after authoring (default true) (#607)"),
     // Spec'd keys declared again only to keep the bounds a spec cannot state.
     // The spec's type is the same, which the handler-specs unit test holds.

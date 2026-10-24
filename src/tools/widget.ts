@@ -115,7 +115,7 @@ export const widgetTool: ToolDef = categoryTool(
     // transport does not strip them before the normalizer can fold them in.
     path: z.string().optional().describe("Legacy alias for assetPath. Use assetPath (#798)"),
     widgetBlueprintPath: z.string().optional().describe("Alias for assetPath. Use assetPath (#798)"),
-    widgetBlueprint: z.union([z.string(), z.record(z.unknown())]).optional().describe("Alias for assetPath, also accepted as the engine's {refPath} object reference. Use assetPath (#798)"),
+    widgetBlueprint: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("Alias for assetPath, also accepted as the engine's {refPath} object reference. Use assetPath (#798)"),
     widgetDisplayName: z.string().optional().describe("Alias for widgetName. Use widgetName (#798)"),
     parentWidget: z.string().optional().describe("Alias for parentWidgetName. Use parentWidgetName (#798)"),
   },

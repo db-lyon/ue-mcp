@@ -56,9 +56,9 @@ export const actions: Record<string, ActionSpec> = {
 
 /** The parameters those actions accept, declared so the MCP layer stops stripping them. */
 export const schema: Record<string, z.ZodType> = {
-  base_class: z.union([z.string(), z.record(z.unknown())]).optional().describe("Represents a reference to a UObject or UClass."),
+  base_class: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("Represents a reference to a UObject or UClass."),
   class_name: z.string().optional(),
-  instance: z.union([z.string(), z.record(z.unknown())]).optional().describe("Represents a reference to a UObject or UClass."),
+  instance: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("Represents a reference to a UObject or UClass."),
   properties: z.array(z.unknown()).optional(),
   values: z.string().optional(),
 };

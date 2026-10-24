@@ -125,18 +125,21 @@ export interface ActionSchema {
 /* ── zod introspection ─────────────────────────────────────────────── */
 
 interface ZodDef {
-  typeName?: string;
+  type?: string;
   innerType?: z.ZodTypeAny;
-  schema?: z.ZodTypeAny;
-  type?: z.ZodTypeAny;
+  in?: z.ZodTypeAny;
+  out?: z.ZodTypeAny;
+  element?: z.ZodTypeAny;
+  entries?: Record<string, unknown>;
   values?: unknown[];
   options?: z.ZodTypeAny[];
-  defaultValue?: () => unknown;
+  discriminator?: string;
+  defaultValue?: unknown;
   valueType?: z.ZodTypeAny;
 }
 
 function defOf(schema: z.ZodTypeAny): ZodDef {
-  return (schema as unknown as { _def: ZodDef })._def ?? {};
+  return (schema as unknown as { _zod?: { def?: ZodDef } })._zod?.def ?? {};
 }
 
 /**
@@ -159,16 +162,22 @@ function unwrap(schema: z.ZodTypeAny): {
   // cycle would otherwise hang the server rather than fail a call.
   for (let i = 0; i < 16; i++) {
     const def = defOf(cur);
-    const name = def.typeName;
-    if (name === "ZodOptional" || name === "ZodNullable") {
+    const name = def.type;
+    let next: z.ZodTypeAny | undefined;
+    if (name === "optional" || name === "nullable") {
       optional = true;
-    } else if (name === "ZodDefault") {
+      next = def.innerType;
+    } else if (name === "default" || name === "prefault") {
       optional = true;
-      if (dflt === undefined && typeof def.defaultValue === "function") dflt = def.defaultValue();
-    } else if (name !== "ZodEffects" && name !== "ZodBranded" && name !== "ZodReadonly") {
+      if (dflt === undefined) dflt = def.defaultValue;
+      next = def.innerType;
+    } else if (name === "readonly") {
+      next = def.innerType;
+    } else if (name === "pipe") {
+      next = def.in && defOf(def.in).type === "transform" ? def.out : def.in;
+    } else {
       break;
     }
-    const next = def.innerType ?? def.schema;
     if (!next) break;
     cur = next;
     description = description ?? cur.description;
@@ -179,27 +188,27 @@ function unwrap(schema: z.ZodTypeAny): {
 /** A short, agent-readable name for a zod type. */
 function typeName(schema: z.ZodTypeAny): string {
   const def = defOf(schema);
-  switch (def.typeName) {
-    case "ZodString": return "string";
-    case "ZodNumber": return ((def as { checks?: Array<{ kind: string }> }).checks)?.some((c) => c.kind === "int") ? "integer" : "number";
-    case "ZodBoolean": return "boolean";
-    case "ZodUnknown": case "ZodAny": return "any";
-    case "ZodEnum": return "enum";
-    case "ZodLiteral": return "literal";
-    case "ZodRecord": return "object";
-    case "ZodObject": return "object";
-    case "ZodArray": {
-      const el = def.type;
+  switch (def.type) {
+    case "string": return "string";
+    case "number": return (schema as z.ZodNumber).isInt ? "integer" : "number";
+    case "boolean": return "boolean";
+    case "unknown": case "any": return "any";
+    case "enum": return "enum";
+    case "literal": return "literal";
+    case "record": return "object";
+    case "object": return "object";
+    case "array": {
+      const el = def.element;
       return el ? `${typeName(unwrap(el).inner)}[]` : "array";
     }
-    case "ZodUnion": {
+    case "union": {
+      // Every option of a tagged union is an object; `discriminator` says which field picks it.
+      if (def.discriminator) return "object";
       const opts = def.options ?? [];
       const names = [...new Set(opts.map((o) => typeName(unwrap(o).inner)))];
       return names.join("|") || "union";
     }
-    // Every option of a tagged union is an object; `discriminator` says which field picks it.
-    case "ZodDiscriminatedUnion": return "object";
-    default: return def.typeName ? def.typeName.replace(/^Zod/, "").toLowerCase() : "unknown";
+    default: return def.type ?? "unknown";
   }
 }
 
@@ -233,15 +242,15 @@ function specParamTypeName(param: ParamSpec): string {
 /** Allowed values for an enum, or a union made entirely of string literals. */
 function enumValues(schema: z.ZodTypeAny): string[] | undefined {
   const def = defOf(schema);
-  if (def.typeName === "ZodEnum" && Array.isArray(def.values)) {
-    return def.values.map((v) => String(v));
+  if (def.type === "enum" && def.entries) {
+    return Object.values(def.entries).map((v) => String(v));
   }
-  if (def.typeName === "ZodUnion" && Array.isArray(def.options)) {
+  if (def.type === "union" && !def.discriminator && Array.isArray(def.options)) {
     const literals: string[] = [];
     for (const opt of def.options) {
       const od = defOf(unwrap(opt).inner);
-      if (od.typeName !== "ZodLiteral") return undefined;
-      literals.push(String((od as unknown as { value: unknown }).value));
+      if (od.type !== "literal" || od.values?.length !== 1) return undefined;
+      literals.push(String(od.values[0]));
     }
     return literals.length > 0 ? literals : undefined;
   }
@@ -251,9 +260,10 @@ function enumValues(schema: z.ZodTypeAny): string[] | undefined {
 function numberBounds(schema: z.ZodTypeAny): { minimum?: number; maximum?: number } {
   if (!(schema instanceof z.ZodNumber)) return {};
   const out: { minimum?: number; maximum?: number } = {};
-  for (const check of schema._def.checks) {
-    if (check.kind === "min") out.minimum = check.value;
-    if (check.kind === "max") out.maximum = check.value;
+  for (const check of schema._zod.def.checks ?? []) {
+    const cd = check._zod.def as { check: string; value?: number; inclusive?: boolean };
+    if (cd.check === "greater_than") out.minimum = cd.value;
+    if (cd.check === "less_than") out.maximum = cd.value;
   }
   return out;
 }
@@ -273,13 +283,12 @@ function valueSchema(schema: z.ZodTypeAny, depth = 0): ValueSchema {
       [name, valueSchema(child as z.ZodTypeAny, depth + 1)],
     ));
   } else if (inner instanceof z.ZodArray) {
-    result.items = valueSchema(inner.element, depth + 1);
+    result.items = valueSchema(inner.element as z.ZodTypeAny, depth + 1);
   } else if (inner instanceof z.ZodRecord) {
-    result.items = valueSchema(inner.valueSchema, depth + 1);
+    result.items = valueSchema(inner.valueType as z.ZodTypeAny, depth + 1);
   } else if (inner instanceof z.ZodUnion) {
-    result.variants = inner.options.map((option: z.ZodTypeAny) => valueSchema(option, depth + 1));
-  } else if (inner instanceof z.ZodDiscriminatedUnion) {
-    result.discriminator = inner.discriminator;
+    const def = defOf(inner);
+    if (def.discriminator) result.discriminator = def.discriminator;
     result.variants = (inner.options as z.ZodTypeAny[]).map((option) => valueSchema(option, depth + 1));
   }
   return result;

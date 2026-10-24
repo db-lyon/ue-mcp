@@ -15,6 +15,7 @@ import type { ToolDef, ToolContext, ActionSpec } from "../core/types.js";
 import { actionEnum } from "../surface/category-tool.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { nearestActions } from "../surface/action-schema.js";
+import { unknownRecord } from "../surface/context/call-envelope.js";
 import {
   takeSnapshot,
   restoreSnapshot,
@@ -133,7 +134,7 @@ export function createFlowTool(
       action: actionEnum(Object.keys(actions) as [string, ...string[]]),
       flowName: z.string().optional().describe("Flow name from ue-mcp.yml"),
       skip: z.array(z.string()).optional().describe("run: step names or numbers to skip"),
-      params: z.record(z.unknown()).optional().describe("run: runtime options merged into every step's options (highest priority)"),
+      params: unknownRecord().optional().describe("run: runtime options merged into every step's options (highest priority)"),
       rollback_on_failure: z.boolean().optional().describe("run: invoke inverse tasks in reverse order on failure"),
     },
     actions,

@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
 import { composeServerInstructions } from "../surface/context/instructions.js";
 import { fullSurfaceDescription } from "../surface/context/lean-context.js";
-import { envelopeInputSchema, envelopeShape, usesArgsEnvelope } from "../surface/context/call-envelope.js";
+import { envelopeInputSchema, envelopeShape, strippingInputSchema, usesArgsEnvelope } from "../surface/context/call-envelope.js";
 import type { ToolDef } from "../core/types.js";
 import { withholdFromTool } from "../surface/registered-surface.js";
 import { packageVersion } from "../core/package-root.js";
@@ -95,6 +95,7 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
       registration.inputSchema = envelopeInputSchema(view);
     } else {
       registration.update({ description, paramsSchema: view.schema });
+      registration.inputSchema = strippingInputSchema(view.schema);
     }
   }
 
@@ -112,17 +113,17 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
     };
     const registration = envelope
       ? server.registerTool(tool.name, { description, inputSchema: envelopeInputSchema(tool) }, callback as never)
-      : server.tool(tool.name, description, shape, callback as never);
+      : server.registerTool(tool.name, { description, inputSchema: strippingInputSchema(shape) }, callback as never);
     registeredTools.set(tool.name, registration);
   }
 
   // ── Flow tool ────────────────────────────────────────────────────
   const flowTool = rt.flowTool;
   const flowShape: Record<string, z.ZodType> = { ...flowTool.schema };
-  const flowRegistration = server.tool(flowTool.name, flowTool.description, flowShape, (rawParams) => {
+  const flowRegistration = server.registerTool(flowTool.name, { description: flowTool.description, inputSchema: strippingInputSchema(flowShape) }, ((rawParams: Record<string, unknown>) => {
     claimElicit();
     return withNotice(dispatchFlowCall(deps, flowTool, rt.baseCtx, rawParams)) as never;
-  });
+  }) as never);
   registeredTools.set(flowTool.name, flowRegistration);
 
   // Re-advertise whenever targeting or what the plugins registered changes.

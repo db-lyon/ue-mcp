@@ -104,14 +104,14 @@ export const actions: Record<string, ActionSpec> = {
 
 /** The parameters those actions accept, declared so the MCP layer stops stripping them. */
 export const schema: Record<string, z.ZodType> = {
-  actor: z.union([z.string(), z.record(z.unknown())]).optional().describe("The target actor."),
+  actor: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("The target actor."),
   assetName: z.string().optional().describe("The file name for the new asset, e.g. \"GCN_CharacterDeath\"."),
   bIsActor: z.boolean().optional().describe("If true, creates a GameplayCueNotify_Actor (spawned actor in the world). If false, creates a GameplayCueNotify_Static (instant effect, no spawned actor)."),
   className: z.string().optional().describe("The UClass name to look up, e.g. \"UMyHealthSet\". Raises a script error if the class is not found or is not an AttributeSet subclass."),
   comment: z.string().optional().describe("An optional developer comment describing the cue's purpose."),
   cueTag: z.string().optional().describe("The fully-qualified tag to add. Must begin with \"GameplayCue.\" (e.g. \"GameplayCue.Character.Death\")."),
-  location: z.record(z.unknown()).optional().describe("World-space location parameter passed to the cue."),
-  normal: z.record(z.unknown()).optional().describe("World-space direction parameter passed to the cue."),
+  location: z.record(z.string(), z.unknown()).optional().describe("World-space location parameter passed to the cue."),
+  normal: z.record(z.string(), z.unknown()).optional().describe("World-space direction parameter passed to the cue."),
   normalizedMagnitude: z.number().optional().describe("A normalized (0.0-1.0) magnitude value passed to the cue."),
   packagePath: z.string().optional().describe("The content browser folder for the asset, e.g. \"/Game/Effects/Cues\"."),
   parentTag: z.string().optional().describe("If non-empty, only notifies whose cue tag descends from this tag are returned. Pass an empty string to return all notify assets in the project."),

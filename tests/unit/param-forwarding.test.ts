@@ -135,21 +135,22 @@ describe("parameters the editor never read", () => {
 
 /* ── the surface ─────────────────────────────────────────────────────── */
 
-interface ZodDef { typeName?: string; innerType?: z.ZodTypeAny; schema?: z.ZodTypeAny; values?: unknown[]; options?: z.ZodTypeAny[]; value?: unknown }
+interface ZodDef { type?: string; innerType?: z.ZodTypeAny; in?: z.ZodTypeAny; entries?: Record<string, unknown>; values?: unknown[]; options?: z.ZodTypeAny[] }
 
 /** A value of the declared type, so a mapper that coerces or maps over it does not throw. */
 function sample(schema: z.ZodTypeAny | undefined): unknown {
-  const def = (schema as unknown as { _def?: ZodDef })?._def ?? {};
-  switch (def.typeName) {
-    case "ZodOptional": case "ZodNullable": case "ZodDefault": case "ZodEffects": case "ZodBranded": case "ZodReadonly":
-      return sample(def.innerType ?? def.schema);
-    case "ZodNumber": return 1;
-    case "ZodBoolean": return true;
-    case "ZodArray": return [];
-    case "ZodObject": case "ZodRecord": return {};
-    case "ZodEnum": return def.values?.[0];
-    case "ZodLiteral": return def.value;
-    case "ZodUnion": return sample(def.options?.[0]);
+  const def = (schema as unknown as { _zod?: { def?: ZodDef } })?._zod?.def ?? {};
+  switch (def.type) {
+    case "optional": case "nullable": case "default": case "prefault": case "readonly":
+      return sample(def.innerType);
+    case "pipe": return sample(def.in);
+    case "number": return 1;
+    case "boolean": return true;
+    case "array": return [];
+    case "object": case "record": return {};
+    case "enum": return Object.values(def.entries ?? {})[0];
+    case "literal": return def.values?.[0];
+    case "union": return sample(def.options?.[0]);
     default: return "/Game/Probe/Probe";
   }
 }

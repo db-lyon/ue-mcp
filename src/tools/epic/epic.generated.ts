@@ -58,7 +58,7 @@ export const actions: Record<string, ActionSpec> = {
 export const schema: Record<string, z.ZodType> = {
   assetName: z.string().optional().describe("The name of the skill to create i.e. MySkill."),
   description: z.string().optional().describe("The brief description of the skill."),
-  details: z.record(z.unknown()).optional().describe("Detailed information about how to use the skill."),
+  details: z.record(z.string(), z.unknown()).optional().describe("Detailed information about how to use the skill."),
   folderPath: z.string().optional().describe("The folder in which to create the skill. i.e. /Game/Skills/."),
   script: z.string().optional(),
   skillPath: z.string().optional().describe("The full path to the skill to modify i.e. /Game/Skills/MySkill.MySkill_C."),

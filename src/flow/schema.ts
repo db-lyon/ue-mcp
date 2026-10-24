@@ -63,7 +63,7 @@ export const UeMcpFlowDefinitionSchema = FlowDefinitionSchema.extend({
 });
 
 export const FlowConfigSchema = EngineConfigSchema.extend({
-  flows: z.record(UeMcpFlowDefinitionSchema).default({}),
+  flows: z.record(z.string(), UeMcpFlowDefinitionSchema).default({}),
   "ue-mcp": FlowVersionSchema.optional(),
   project: FlowProjectSchema,
   git_snapshot: GitSnapshotSchema,

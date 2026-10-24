@@ -46,15 +46,15 @@ export function cloneToolGraph(tools: ToolDef[]): ToolDef[] {
  * The action names an `action` schema advertises.
  *
  * `actionEnum` wraps the enum in a union with a bare string, so reading
- * `_def.values` off it finds nothing. Callers that want the list (the golden
+ * `_zod.def.entries` off it finds nothing. Callers that want the list (the golden
  * recorder, plugin injection tests, anything reporting the surface) go
  * through here rather than reaching into a shape that has already moved once.
  */
 export function actionEnumValues(schema: z.ZodType): string[] {
-  const def = (schema as unknown as { _def?: { typeName?: string; values?: unknown; options?: z.ZodTypeAny[] } })._def;
+  const def = (schema as unknown as { _zod?: { def?: { type?: string; entries?: Record<string, unknown>; options?: z.ZodTypeAny[] } } })._zod?.def;
   if (!def) return [];
-  if (def.typeName === "ZodEnum" && Array.isArray(def.values)) return def.values.map(String);
-  if (def.typeName === "ZodUnion" && Array.isArray(def.options)) {
+  if (def.type === "enum" && def.entries) return Object.values(def.entries).map(String);
+  if (def.type === "union" && Array.isArray(def.options)) {
     for (const option of def.options) {
       const values = actionEnumValues(option);
       if (values.length > 0) return values;
@@ -144,7 +144,8 @@ function routingSchema(actionNames: [string, ...string[]]): Record<string, z.Zod
 function boundLimit(limit: z.ZodType | undefined): z.ZodType | undefined {
   if (!(limit instanceof z.ZodOptional)) return limit;
   const inner = limit.unwrap();
-  if (!(inner instanceof z.ZodNumber) || inner.minValue !== null) return limit;
+  if (!(inner instanceof z.ZodNumber)) return limit;
+  if ((inner._zod.def.checks ?? []).some((c) => c._zod.def.check === "greater_than")) return limit;
   const bounded = inner.positive().optional();
   return limit.description === undefined ? bounded : bounded.describe(limit.description);
 }

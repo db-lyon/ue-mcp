@@ -150,7 +150,7 @@ export const schema: Record<string, z.ZodType> = {
   limit: z.number().int().optional().describe("Rows to return (default 200, max 5000); matchedCount counts them all"),
   metadataKey: z.string().optional().describe("Match actors whose Datasmith metadata has this key"),
   metadataValue: z.string().optional().describe("With metadataKey, match only this value"),
-  options: z.record(z.unknown()).optional().describe("{dotted.option.path: value} on DatasmithImportOptions, e.g. {\"BaseOptions.bIncludeLight\": false, \"BaseOptions.SceneHandling\": \"AssetsOnly\"}; datasmith(inspect) lists them (datasmith_import). {dotted.option.path: value} applied before the reimport (datasmith_reimport)"),
+  options: z.record(z.string(), z.unknown()).optional().describe("{dotted.option.path: value} on DatasmithImportOptions, e.g. {\"BaseOptions.bIncludeLight\": false, \"BaseOptions.SceneHandling\": \"AssetsOnly\"}; datasmith(inspect) lists them (datasmith_import). {dotted.option.path: value} applied before the reimport (datasmith_reimport)"),
   respawnDeleted: z.boolean().optional().describe("Respawn scene actors that were deleted from the level (default false)"),
   sceneAssetPath: z.string().optional().describe("The DatasmithScene asset to reimport"),
   syncActors: z.boolean().optional().describe("Update the scene's actors in the level from the new source (default true)"),

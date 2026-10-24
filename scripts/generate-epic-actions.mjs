@@ -153,12 +153,12 @@ function zodFor(kinds) {
     // An asset reference is accepted as a plain content path and wrapped into
     // the engine's `{refPath}` shape on the way out, which is what makes an
     // Epic action take a path the same way a native one does.
-    case "assetRef": return "z.union([z.string(), z.record(z.unknown())])";
+    case "assetRef": return "z.union([z.string(), z.record(z.string(), z.unknown())])";
     case "string": return "z.string()";
     case "number": case "integer": return "z.number()";
     case "boolean": return "z.boolean()";
     case "array": return "z.array(z.unknown())";
-    case "object": return "z.record(z.unknown())";
+    case "object": return "z.record(z.string(), z.unknown())";
     default: return "z.unknown()";
   }
 }

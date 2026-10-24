@@ -375,7 +375,7 @@ export const schema: Record<string, z.ZodType> = {
   objectType: z.string().optional().describe("Object-type channel name, e.g. WorldStatic, Pawn, ECC_GameTraceChannel1"),
   pieInstance: z.number().optional().describe("PIE world instance (0 = server/primary); omit for the primary world"),
   profileName: z.string().optional().describe("Collision profile (preset) name"),
-  responses: z.record(z.unknown()).optional().describe("Per-channel responses, {channelName: Block | Overlap | Ignore}"),
+  responses: z.record(z.string(), z.unknown()).optional().describe("Per-channel responses, {channelName: Block | Overlap | Ignore}"),
   responseToAllChannels: z.string().optional().describe("Block | Overlap | Ignore, applied to every channel before the per-channel responses"),
   simulate: z.boolean().optional().describe("Turn physics simulation on or off"),
   vector: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Alias for impulse"),

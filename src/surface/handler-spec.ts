@@ -490,7 +490,7 @@ const ZOD_BASE: Record<ParamType, () => z.ZodTypeAny> = {
   number: () => z.number(),
   integer: () => z.number().int(),
   boolean: () => z.boolean(),
-  object: () => z.record(z.unknown()),
+  object: () => z.record(z.string(), z.unknown()),
   array: () => z.array(z.unknown()),
   vec3: () => z.object({ x: z.number(), y: z.number(), z: z.number() }),
   rotator: () => z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }),
@@ -502,7 +502,8 @@ const ZOD_BASE: Record<ParamType, () => z.ZodTypeAny> = {
 // JSON Schema converter emit `$ref` pointers, which a client can fail to resolve.
 // Every member is concrete, never z.unknown(), which converts to `{}` (#811).
 const argScalar = () => z.union([z.string(), z.number(), z.boolean(), z.null()]);
-const argStruct = () => z.object({}).passthrough();
+// `additionalProperties: true`, since zod 4 writes `{}`, the empty schema #811 is about.
+const argStruct = () => z.object({}).passthrough().meta({ additionalProperties: true });
 const argValue = () => z.union([argScalar(), argStruct(), z.array(z.union([argScalar(), argStruct(), z.array(argScalar())]))]);
 
 const FORM_ZOD: Record<ValueForm, () => z.ZodTypeAny> = {
@@ -533,7 +534,7 @@ function formsZod(name: string, forms: readonly ValueForm[]): z.ZodTypeAny {
   if (forms.length === 1) return FORM_ZOD[forms[0]]();
   const message = formsMessage(name, forms);
   return z.union(forms.map((f) => FORM_ZOD[f]()) as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]], {
-    errorMap: () => ({ message }),
+    error: message,
   });
 }
 
@@ -581,7 +582,7 @@ function oneOfZod(oneOf: ParamOneOf, opts: ZodOptions): z.ZodTypeAny {
   );
   return z.discriminatedUnion(
     oneOf.key,
-    variants as unknown as [z.ZodDiscriminatedUnionOption<string>, ...z.ZodDiscriminatedUnionOption<string>[]],
+    variants as unknown as [z.ZodObject, ...z.ZodObject[]],
   );
 }
 
@@ -615,51 +616,50 @@ export function paramZod(param: ParamSpec, opts: ZodOptions = {}): z.ZodTypeAny 
  */
 export function zodSignature(schema: z.ZodTypeAny, opts: { rules?: boolean } = {}): string {
   const sig = (inner: z.ZodTypeAny): string => zodSignature(inner, opts);
-  const def = schema._def as { typeName?: string; checks?: Array<{ kind: string }> };
-  switch (def.typeName) {
-    case "ZodOptional":
+  const def = schema._zod.def as { type: string; discriminator?: string };
+  switch (def.type) {
+    case "optional":
       return `${sig((schema as z.ZodOptional<z.ZodTypeAny>).unwrap())}?`;
-    case "ZodNullable":
+    case "nullable":
       return `${sig((schema as z.ZodNullable<z.ZodTypeAny>).unwrap())}|null`;
-    case "ZodEffects": {
-      const effect = schema as z.ZodEffects<z.ZodTypeAny>;
-      return effect._def.effect.type === "refinement" ? sig(effect.innerType()) : "ZodEffects";
-    }
-    case "ZodString":
+    case "pipe":
+      return "ZodEffects";
+    case "string":
       return "string";
-    case "ZodNumber": {
-      const checks = (def.checks ?? []) as Array<{ kind: string; value?: number }>;
-      const range = checks.filter((c) => c.kind === "min" || c.kind === "max").map((c) => `${c.kind}=${c.value}`);
-      const kind = checks.some((c) => c.kind === "int") ? "integer" : "number";
+    case "number": {
+      const range = ((schema as z.ZodNumber)._zod.def.checks ?? [])
+        .map((c) => c._zod.def as { check: string; value?: number })
+        .filter((c) => c.check === "greater_than" || c.check === "less_than")
+        .map((c) => `${c.check === "greater_than" ? "min" : "max"}=${c.value}`);
+      const kind = (schema as z.ZodNumber).isInt ? "integer" : "number";
       return opts.rules && range.length ? `${kind}[${range.join(",")}]` : kind;
     }
-    case "ZodEnum":
-      return opts.rules ? `enum<${(schema as z.ZodEnum<[string, ...string[]]>).options.join("|")}>` : "string";
-    case "ZodBoolean":
+    case "enum":
+      return opts.rules ? `enum<${(schema as z.ZodEnum).options.join("|")}>` : "string";
+    case "boolean":
       return "boolean";
-    case "ZodUnknown":
-    case "ZodAny":
+    case "unknown":
+    case "any":
       return "any";
-    case "ZodArray":
+    case "array":
       return `array<${sig((schema as z.ZodArray<z.ZodTypeAny>).element)}>`;
-    case "ZodRecord":
-      return `record<${sig((schema as z.ZodRecord).valueSchema)}>`;
-    case "ZodObject": {
-      const shape = (schema as z.ZodObject<z.ZodRawShape>).shape;
-      return `{${Object.keys(shape).sort().map((k) => `${k}:${sig(shape[k])}`).join(",")}}`;
+    case "record":
+      return `record<${sig((schema as z.ZodRecord).valueType as z.ZodTypeAny)}>`;
+    case "object": {
+      const shape = (schema as z.ZodObject).shape;
+      return `{${Object.keys(shape).sort().map((k) => `${k}:${sig(shape[k] as z.ZodTypeAny)}`).join(",")}}`;
     }
-    case "ZodUnion":
-      return (schema as z.ZodUnion<[z.ZodTypeAny, ...z.ZodTypeAny[]]>).options.map(sig).join("|");
-    case "ZodDiscriminatedUnion": {
-      const tagged = schema as z.ZodDiscriminatedUnion<string, z.ZodDiscriminatedUnionOption<string>[]>;
-      return `oneOf<${tagged.discriminator}>(${tagged.options.map((o) => sig(o)).join("|")})`;
+    case "union": {
+      const options = (schema as z.ZodUnion).options as readonly z.ZodTypeAny[];
+      if (def.discriminator !== undefined) return `oneOf<${def.discriminator}>(${options.map((o) => sig(o)).join("|")})`;
+      return options.map(sig).join("|");
     }
-    case "ZodNull":
+    case "null":
       return "null";
-    case "ZodLiteral":
-      return `literal<${JSON.stringify((schema as z.ZodLiteral<unknown>).value)}>`;
+    case "literal":
+      return `literal<${JSON.stringify((schema as z.ZodLiteral).value)}>`;
     default:
-      return def.typeName ?? "unknown";
+      return def.type ?? "unknown";
   }
 }
 
