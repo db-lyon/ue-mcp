@@ -5,3 +5,7 @@
 # hook sees neither in full. This is the last gate before the work leaves the
 # machine, and it is a few seconds.
 node scripts/lint-prose.mjs || exit 1
+
+# Git LFS uploads the objects a push references; without it the remote gets pointers only.
+command -v git-lfs >/dev/null 2>&1 || { echo >&2 "git-lfs not found on PATH; this repository stores .uasset and .umap files in LFS."; exit 2; }
+git lfs pre-push "$@"
