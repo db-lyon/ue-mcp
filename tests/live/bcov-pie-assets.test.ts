@@ -263,6 +263,55 @@ describe("draft checks without saving", () => {
   }, 30_000);
 });
 
+describe("manual runs", () => {
+  const MANUAL = `${DIR}/TS_BCovManualRun`;
+  const steps = [
+    { instruction: "Look up", expect: { value: "BaseEyeHeight", op: "gt", target: 0 } },
+    { instruction: "The door looks right", judge: "manual" },
+    { instruction: "The cube is there", expect: { value: CUBE, op: "exists" } },
+    { instruction: "The sound plays", judge: "manual" },
+  ];
+  const isPlaying = async () => body(await callBridge(bridge, "pie_control", { pieAction: "status" })).isPlaying === true;
+
+  it("script_run mode=manual starts no PIE, takes verdicts in any order and writes results.json", async () => {
+    await call("pie_script_create", { name: "TS_BCovManualRun", package_path: DIR, steps });
+    const started = await call("pie_script_run", { script: MANUAL, mode: "manual", start_pie: true });
+    const runId = String(started.run_id);
+    expect(started).toMatchObject({ mode: "manual", state: "awaiting_verdict", pie_started: false });
+    expect(started.recording_id).toBeUndefined();
+    expect(await isPlaying()).toBe(false);
+    const first = started.steps as Json[];
+    expect(first.map((s) => s.status)).toEqual(["pending", "awaiting_verdict", "pending", "awaiting_verdict"]);
+    expect((started.awaiting as Json[]).map((a) => a.index)).toEqual([1, 3]);
+    expect(started.summary).toMatchObject({ unchecked: 2, pending: 2, awaiting: 2 });
+
+    // The last manual step first, then the other.
+    expect((await call("pie_script_verdict", { run_id: runId, step: 3, verdict: "fail", note: "silent" })).state).toBe("awaiting_verdict");
+    expect(await refused("pie_script_verdict", { run_id: runId, step: 0, verdict: "pass" })).toMatch(/auto step/);
+    const done = await call("pie_script_verdict", { run_id: runId, step: 1, verdict: "pass" });
+    expect(done.state).toBe("finished");
+
+    const results = await call("pie_script_results", { run_id: runId });
+    expect(results).toMatchObject({ mode: "manual", state: "finished", stop_reason: "all manual steps settled" });
+    expect(results.summary).toMatchObject({ passed: 1, failed: 1, unchecked: 2, pending: 0 });
+    expect((results.steps as Json[]).map((s) => s.status)).toEqual(["pending", "passed", "pending", "failed"]);
+    const status = await call("pie_script_status", { run_id: runId });
+    const events = status.events as Json[];
+    expect(events.length).toBeGreaterThan(3);
+    expect(events.every((e) => (e.data as Json).mode === "manual")).toBe(true);
+    expect(events.filter((e) => e.type === "awaiting_verdict").map((e) => (e.data as Json).blocking)).toEqual([false]);
+    expect(await isPlaying()).toBe(false);
+
+    // A full run of the same script is its own run, with none of those verdicts.
+    const full = await call("pie_script_run", { script: MANUAL, record: false });
+    expect(full).toMatchObject({ mode: "full", state: "armed" });
+    expect(full.run_id).not.toBe(runId);
+    expect((full.steps as Json[]).every((s) => s.status === "pending" && s.verdict_source === undefined)).toBe(true);
+    expect(full.summary).toMatchObject({ unchecked: 0, passed: 0, failed: 0 });
+    await call("pie_script_stop", { run_id: full.run_id, reason: "test" });
+  }, 60_000);
+});
+
 describe("scenarios", () => {
   it("scenario_validate accepts a well-formed scenario and names each problem in a broken one", async () => {
     const good = await call("pie_scenario_validate", {

@@ -181,6 +181,8 @@ namespace MCPPIE
 		// Manual steps settled by a person (action, elicitation) and by an agent.
 		int32 HumanVerdicts = 0;
 		int32 AgentVerdicts = 0;
+		// Manual runs: auto steps nothing observed, so they stay pending and are counted here instead.
+		int32 Unchecked = 0;
 	};
 
 	struct FScriptRun
@@ -200,6 +202,9 @@ namespace MCPPIE
 		bool bBlockOnManual = true;
 		int32 DefaultWithinMs = 5000;
 		bool bReplay = false;
+		// mode manual: no PIE, observer or recording; every manual step awaits its verdict at once.
+		bool bManualMode = false;
+		double ManualStartSeconds = 0.0;
 		double TimeScale = 1.0;
 		double ReplayOffsetMs = 0.0;
 		TArray<FScriptStepRun> Steps;
@@ -226,6 +231,12 @@ namespace MCPPIE
 	using FScriptValueReader = TFunctionRef<bool(const FScriptExpect&, double&)>;
 
 	void InitScriptRun(FScriptRun& Run, const TArray<FScriptStepDef>& Steps);
+	// full or manual.
+	FString ScriptRunModeToString(const FScriptRun& Run);
+	// A manual run: every manual step starts and awaits its verdict, auto steps stay pending.
+	void StartScriptManualSteps(FScriptRun& Run);
+	// A manual run is done once every manual step has its verdict.
+	bool AreScriptManualStepsSettled(const FScriptRun& Run);
 	void AddScriptEvent(FScriptRun& Run, const FString& Type, int32 Step, const TSharedPtr<FJsonObject>& Data);
 	// Sequential mode: steps start in order; a running auto step holds the run.
 	void AdvanceScriptRun(FScriptRun& Run, double NowMs, int64 Frame, FScriptValueReader Reader);
@@ -264,6 +275,7 @@ namespace MCPPIE
 		bool bBlockOnManual = true;
 		int32 ClientId = 0;
 		int32 PIEInstance = INDEX_NONE;
+		bool bManualMode = false;
 	};
 
 	struct FScriptReplayConfig

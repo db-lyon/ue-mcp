@@ -504,4 +504,73 @@ bool FPIEScriptAgentVerdictTest::RunTest(const FString& /*Parameters*/)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPIEScriptManualModeTest,
+	"UE.MCP.PIE.Script.ManualMode",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPIEScriptManualModeTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MCPPIEScriptTests;
+
+	FScriptRun Run;
+	Run.RunId = TEXT("script_manual_test");
+	Run.bManualMode = true;
+	Run.bBlockOnManual = false;
+	InitScriptRun(Run, {
+		AutoStep(MakeExpect(EScriptExpectOp::Gt, TEXT("Health"), true, 0.0)),
+		ManualStep(TEXT("The door looks right")),
+		AutoStep(MakeExpect(EScriptExpectOp::Decreasing, TEXT("Ammo"))),
+		ManualStep(TEXT("The sound plays")),
+	});
+	AddScriptEvent(Run, TEXT("run_started"), -1, nullptr);
+	StartScriptManualSteps(Run);
+
+	TestTrue(TEXT("awaiting at once"), Run.State == EScriptRunState::AwaitingVerdict);
+	TestTrue(TEXT("both manual steps await"), ScriptAwaitingSteps(Run) == TArray<int32>({ 1, 3 }));
+	TestTrue(TEXT("auto steps stay pending"), Run.Steps[0].Status == EScriptStepStatus::Pending && Run.Steps[2].Status == EScriptStepStatus::Pending);
+	FScriptSummary S = SummarizeScriptRun(Run);
+	TestEqual(TEXT("auto steps unchecked"), S.Unchecked, 2);
+	TestEqual(TEXT("unchecked are not pending"), S.Pending, 2);
+	TestEqual(TEXT("awaiting"), S.Awaiting, 2);
+	TestEqual(TEXT("one non-blocking announcement"), CountEvents(Run, TEXT("awaiting_verdict")), 1);
+	bool bAllCarryMode = true;
+	for (const FScriptEvent& E : Run.Events)
+	{
+		FString Mode;
+		bAllCarryMode &= E.Data.IsValid() && E.Data->TryGetStringField(TEXT("mode"), Mode) && Mode == TEXT("manual");
+	}
+	TestTrue(TEXT("every event carries mode"), bAllCarryMode);
+
+	// Verdicts in any order: the last step first.
+	bool bUnchanged = false;
+	FString Err;
+	TestTrue(TEXT("last step first"), ApplyScriptVerdict(Run, 3, TEXT("fail"), TEXT("silent"), TEXT("human"), FScriptVerdictEvidence(), bUnchanged, Err));
+	TestFalse(TEXT("not settled yet"), AreScriptManualStepsSettled(Run));
+	TestFalse(TEXT("an auto step takes no verdict"), ApplyScriptVerdict(Run, 0, TEXT("pass"), FString(), TEXT("human"), FScriptVerdictEvidence(), bUnchanged, Err));
+	TestTrue(TEXT("then the first"), ApplyScriptVerdict(Run, 1, TEXT("pass"), FString(), TEXT("human"), FScriptVerdictEvidence(), bUnchanged, Err));
+	TestTrue(TEXT("settled once every manual step has a verdict"), AreScriptManualStepsSettled(Run));
+	S = SummarizeScriptRun(Run);
+	TestEqual(TEXT("passed"), S.Passed, 1);
+	TestEqual(TEXT("failed"), S.Failed, 1);
+	TestEqual(TEXT("still unchecked"), S.Unchecked, 2);
+	TestEqual(TEXT("nothing pending"), S.Pending, 0);
+
+	// results.json says manual, and reads back as manual.
+	Run.State = EScriptRunState::Finished;
+	const TSharedRef<FJsonObject> Json = ScriptRunToResultsJson(Run);
+	TestEqual(TEXT("results mode"), Json->GetStringField(TEXT("mode")), FString(TEXT("manual")));
+	TestEqual(TEXT("summary unchecked"), Json->GetObjectField(TEXT("summary"))->GetNumberField(TEXT("unchecked")), 2.0);
+	FScriptRun Back;
+	TestTrue(TEXT("parses back"), ScriptRunFromResultsJson(Json, Back, Err));
+	TestTrue(TEXT("mode round trips"), Back.bManualMode);
+
+	// A full run of the same steps starts clean.
+	FScriptRun Full;
+	InitScriptRun(Full, { ManualStep(TEXT("The door looks right")) });
+	TestTrue(TEXT("full run has no verdict"), Full.Steps[0].Status == EScriptStepStatus::Pending && Full.Steps[0].VerdictSource.IsEmpty());
+	TestEqual(TEXT("full run mode"), ScriptRunModeToString(Full), FString(TEXT("full")));
+	return true;
+}
+
 #endif

@@ -36,6 +36,7 @@ Params:
 | `record` | boolean | `true` | Arm the recorder. `false` makes the run not replayable. |
 | `start_pie` | boolean | `false` | Start PIE when it is not running. |
 | `block_on_manual` | boolean | `true` | Hold at a manual step, or a block of consecutive manual steps, until each has a verdict. |
+| `mode` | `full` \| `manual` | `full` | `manual` starts no PIE, observer or recording (section 1.8). |
 | `default_within_ms` | integer | the script's, or `5000` | Window for an auto step without `within_ms`. |
 | `pie_instance` | integer | the active PIE world | PIE world to observe. |
 | `client_id` | integer | `0` | Local player in that world. |
@@ -169,6 +170,19 @@ Params: `run_id?` (default: the last run) or `results_path?`, `time_scale?` (def
 
 Refused while PIE is running, and for a source run made with `record=false`. Starts PIE, replays the source run's recording with the same observation profile, and evaluates every auto step again in its recorded window. Answers like `script_run`, with a new `run_id`, plus `replay_of`, `pie_started`, `auto_stop_pie` and `time_scale`. That run's events carry `replayOf`, and its results carry `replay_of` and the per-step comparison of section 4.
 
+### 1.8 Manual runs
+
+`script_run` with `mode: "manual"` judges a script by its manual steps alone, with no PIE.
+
+- Nothing is armed: no PIE is started, and no observer or recording runs. `start_pie`, `record`, `block_on_manual`, `pie_instance` and `client_id` have no effect. The answer has no `recording_id` and no `observation_run_id`, and `pie_started` is `false`.
+- Every manual step is `awaiting_verdict` from the start, announced by one `awaiting_verdict` event with `blocking: false`, and takes its verdict in any order. Auto steps stay `pending` and count in `summary.unchecked`, not in `pending`.
+- `pie(verdict)` works as on a full run. The run finishes with `stop_reason` `all manual steps settled` once every manual step has a verdict (`no manual steps` at once for a script with none), and `script_stop` ends it early.
+- It writes `results.json` as a full run does, with `mode: "manual"`. Times are wall milliseconds from the start of the run.
+- `script_replay` refuses it, as a run with no recording.
+- A full run started later on the same script is a separate run with its own id, and its manual steps start without a verdict.
+
+Every run's answer, `results.json` and every event's `data` carry `mode`: `full` or `manual`. Every `summary` carries `unchecked`, 0 on a full run.
+
 ### 1.7 wait
 
 With `wait: true`, `script_run`, `script_replay` and `script_status` hold the answer and return it merged with the run's final status and a `wait` object:
@@ -265,6 +279,7 @@ Every step put to a form is never put to a form again in the same run, whatever 
 | `atMs` | number | The event's `at_ms`: game milliseconds from the observer's first frame. `0` on `run_started`, which comes before it. |
 | `seq` | integer | The editor's number for the event, increasing within the run. |
 | `replayOf` | string? | For a replay run, the source run id. |
+| `mode` | `"full"` \| `"manual"` | The run's mode (section 1.8). |
 
 ### Step object
 
@@ -294,7 +309,7 @@ Fields the event itself does not carry are filled from the status the server rea
 | `script.step_failed` | `step` |
 | `script.verdict_requested` | `awaiting: Array<{ index: integer, instruction: string }>` |
 | `script.verdict` | `step` |
-| `script.run_finished` | `summary: { total, passed, failed, skipped, pending, awaiting?, humanVerdicts?, agentVerdicts?, regressions? }` (integers), `state?: "finished" \| "stopped"`, `resultsPath?: string` |
+| `script.run_finished` | `summary: { total, passed, failed, skipped, pending, awaiting?, humanVerdicts?, agentVerdicts?, unchecked?, regressions? }` (integers), `state?: "finished" \| "stopped"`, `resultsPath?: string` |
 
 ### Examples
 
@@ -414,13 +429,14 @@ Written to `<Project>/Saved/MCPObservations/<run_id>/results.json`, beside the o
 | `profile` | string | Empty when the run has none. |
 | `started_at`, `ended_at` | ISO 8601 string | The observer's first frame, and the end. |
 | `state` | `finished` \| `stopped` | |
+| `mode` | `full` \| `manual` | Section 1.8. |
 | `stop_reason` | string | `all steps settled`, `PIE ended`, `observation ended`, or the `script_stop` reason (default `stopped`). |
 | `block_on_manual` | boolean | `false` on a replay. |
 | `default_within_ms` | integer | |
 | `observation_run_id`, `output_dir`, `results_path` | string | Absolute paths. |
 | `recording_id`, `recording_dir` | string? | Absent with `record=false`. The source run's on a replay. |
 | `replay_of`, `time_scale`, `replay_offset_ms` | string?, number?, number? | Replay runs only. `replay_offset_ms` is the recording's settle time. |
-| `summary` | `{ total, passed, failed, skipped, pending, awaiting, human_verdicts, agent_verdicts, regressions? }` | Integers. `pending` includes awaiting steps. `human_verdicts` and `agent_verdicts` count settled manual steps by who judged them. `regressions` on a replay only. |
+| `summary` | `{ total, passed, failed, skipped, pending, awaiting, human_verdicts, agent_verdicts, unchecked, regressions? }` | Integers. `pending` includes awaiting steps. `unchecked` counts a manual run's auto steps. `human_verdicts` and `agent_verdicts` count settled manual steps by who judged them. `regressions` on a replay only. |
 | `steps[].status` | step status | `pending` or `awaiting_verdict` only on a run that ended before they settled. |
 | `steps[].within_ms` | integer | The effective window. |
 | `steps[].started_at_ms`, `ended_at_ms` | number? | Game ms from the observer's first frame. Absent until set. |

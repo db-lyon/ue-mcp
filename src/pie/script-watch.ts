@@ -378,6 +378,7 @@ export function mapBridgeEvent(e: BridgeScriptEvent, w: { runId: string; script:
     atMs: typeof e.at_ms === "number" ? e.at_ms : 0,
     seq: e.seq,
     ...(typeof data.replay_of === "string" ? { replayOf: data.replay_of } : w.replayOf ? { replayOf: w.replayOf } : {}),
+    ...(data.mode === "manual" || data.mode === "full" ? { mode: data.mode as "full" | "manual" } : {}),
   };
   const resultsPath = typeof data.results_path === "string" ? data.results_path : typeof status?.results_path === "string" ? status.results_path : undefined;
   const stepIndex = typeof e.step === "number" ? e.step : typeof e.step === "object" && typeof e.step?.index === "number" ? e.step.index : typeof data.index === "number" ? data.index : -1;
@@ -432,6 +433,7 @@ export function mapBridgeEvent(e: BridgeScriptEvent, w: { runId: string; script:
         ...(s?.regressions !== undefined ? { regressions: Number(s.regressions) } : {}),
         ...(raw(s, "human_verdicts", "humanVerdicts") !== undefined ? { humanVerdicts: Number(raw(s, "human_verdicts", "humanVerdicts")) } : {}),
         ...(raw(s, "agent_verdicts", "agentVerdicts") !== undefined ? { agentVerdicts: Number(raw(s, "agent_verdicts", "agentVerdicts")) } : {}),
+        ...(raw(s, "unchecked", "unchecked") !== undefined ? { unchecked: Number(raw(s, "unchecked", "unchecked")) } : {}),
       };
       const state = typeof data.state === "string" ? data.state : status?.state && TERMINAL.has(status.state) ? status.state : undefined;
       return { ...base, type: "run_finished", summary, ...(state ? { state } : {}), ...(resultsPath ? { resultsPath } : {}) };

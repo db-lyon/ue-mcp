@@ -115,6 +115,7 @@ pie(action="script_run", script="/Game/PIEStudio/Scripts/DoorOpens", start_pie=t
 | `record` | `true` | Arm the recorder too, so the run can be replayed. With `record=false` the run has no recording and cannot be replayed. |
 | `start_pie` | `false` | Start PIE when it is not running. Otherwise the run waits for the next PIE session. |
 | `block_on_manual` | `true` | Hold the run at a manual step until it has a verdict. Consecutive manual steps are put up together and the run holds until each has one. `false` starts each manual step and moves on. |
+| `mode` | `full` | `manual` judges the script by its manual steps with no PIE. See [Manual runs](#manual-runs). |
 | `default_within_ms` | the script's, or `5000` | The window for an auto step that names none. |
 | `pie_instance` | the active PIE world | Which PIE world to observe. |
 | `client_id` | `0` | Which local player in that world. |
@@ -173,6 +174,14 @@ The editor holds one run in memory: the active one, or the last one to end. An o
 A run finishes with `stop_reason` `all steps settled` once every step has passed, failed or been skipped. It also finishes when PIE ends (`PIE ended`) or the observation ends (`observation ended`). An auto step still running then fails with `run ended before the step settled (<reason>)`. Pending steps stay `pending` and manual steps without a verdict stay `awaiting_verdict`.
 
 `script_stop` (`run_id?`, `reason?`) ends the active run the same way with state `stopped` and `stop_reason` set to `reason` (default `stopped`), writes `results.json`, and answers with the run's fields, `stopped: true` and `changed: true`. A `run_id` that is not the active run is refused. With no active run the answer has `success: false`, `alreadyStopped: true`, and the last run's `run_id`, `state` and `results_path`.
+
+## Manual runs
+
+```text
+pie(action="script_run", script="/Game/PIEStudio/Scripts/DoorOpens", mode="manual")
+```
+
+A manual run starts no PIE, observer or recording. Every manual step awaits its verdict from the start and takes it in any order through `verdict`; auto steps stay `pending` and the summary counts them under `unchecked`. The run finishes once every manual step has a verdict, and writes `results.json` with `mode: "manual"`. A full run started later on the same script is a new run with no verdicts. Answers, `results.json` and every event carry `mode`.
 
 ## Manual steps and verdicts
 

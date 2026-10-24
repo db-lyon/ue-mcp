@@ -696,7 +696,36 @@ namespace MCPPIE
 		E.AtMs = Run.NowMs;
 		E.WallTime = ScriptNowIso();
 		E.Data = Data.IsValid() ? Data : MakeShared<FJsonObject>();
+		E.Data->SetStringField(TEXT("mode"), ScriptRunModeToString(Run));
 		Run.Events.Add(MoveTemp(E));
+	}
+
+	FString ScriptRunModeToString(const FScriptRun& Run)
+	{
+		return Run.bManualMode ? TEXT("manual") : TEXT("full");
+	}
+
+	void StartScriptManualSteps(FScriptRun& Run)
+	{
+		TArray<int32> Manual;
+		for (int32 I = 0; I < Run.Steps.Num(); ++I)
+		{
+			if (Run.Steps[I].Def.Judge != EScriptJudge::Manual || Run.Steps[I].Status != EScriptStepStatus::Pending) continue;
+			ScriptStartStep(Run, I);
+			Manual.Add(I);
+		}
+		if (Manual.Num() > 0) ScriptAnnounceAwaiting(Run, Manual, false);
+		Run.CurrentStep = Manual.Num() > 0 ? Manual[0] : Run.Steps.Num();
+		Run.State = Manual.Num() > 0 ? EScriptRunState::AwaitingVerdict : EScriptRunState::Running;
+	}
+
+	bool AreScriptManualStepsSettled(const FScriptRun& Run)
+	{
+		for (const FScriptStepRun& S : Run.Steps)
+		{
+			if (S.Def.Judge == EScriptJudge::Manual && !IsScriptStepSettled(S.Status)) return false;
+		}
+		return true;
 	}
 
 	void AdvanceScriptRun(FScriptRun& Run, double NowMs, int64 Frame, FScriptValueReader Reader)
@@ -907,7 +936,10 @@ namespace MCPPIE
 			case EScriptStepStatus::Failed: S.Failed++; break;
 			case EScriptStepStatus::Skipped: S.Skipped++; break;
 			case EScriptStepStatus::AwaitingVerdict: S.Awaiting++; S.Pending++; break;
-			default: S.Pending++; break;
+			default:
+				if (Run.bManualMode && St.Def.Judge == EScriptJudge::Auto) S.Unchecked++;
+				else S.Pending++;
+				break;
 			}
 			if (St.bRegression) S.Regressions++;
 			if (St.Def.Judge == EScriptJudge::Manual && IsScriptStepSettled(St.Status))
@@ -940,6 +972,7 @@ namespace MCPPIE
 		O->SetNumberField(TEXT("awaiting"), Summary.Awaiting);
 		O->SetNumberField(TEXT("human_verdicts"), Summary.HumanVerdicts);
 		O->SetNumberField(TEXT("agent_verdicts"), Summary.AgentVerdicts);
+		O->SetNumberField(TEXT("unchecked"), Summary.Unchecked);
 		if (bReplay) O->SetNumberField(TEXT("regressions"), Summary.Regressions);
 		return O;
 	}
@@ -1009,6 +1042,7 @@ namespace MCPPIE
 		O->SetStringField(TEXT("started_at"), Run.StartedAt);
 		O->SetStringField(TEXT("ended_at"), Run.EndedAt);
 		O->SetStringField(TEXT("state"), ScriptRunStateToString(Run.State));
+		O->SetStringField(TEXT("mode"), ScriptRunModeToString(Run));
 		if (!Run.StopReason.IsEmpty()) O->SetStringField(TEXT("stop_reason"), Run.StopReason);
 		O->SetBoolField(TEXT("block_on_manual"), Run.bBlockOnManual);
 		O->SetNumberField(TEXT("default_within_ms"), Run.DefaultWithinMs);
@@ -1062,6 +1096,8 @@ namespace MCPPIE
 		if (Obj->TryGetStringField(TEXT("state"), State)) ParseScriptRunState(State, Out.State);
 		Obj->TryGetStringField(TEXT("stop_reason"), Out.StopReason);
 		Obj->TryGetBoolField(TEXT("block_on_manual"), Out.bBlockOnManual);
+		FString Mode;
+		Out.bManualMode = Obj->TryGetStringField(TEXT("mode"), Mode) && Mode == TEXT("manual");
 		Obj->TryGetNumberField(TEXT("default_within_ms"), Out.DefaultWithinMs);
 		Obj->TryGetStringField(TEXT("observation_run_id"), Out.ObservationRunId);
 		Obj->TryGetStringField(TEXT("output_dir"), Out.OutputDir);
@@ -1305,6 +1341,38 @@ namespace MCPPIE
 		NewRun.ResultsPath = NewRun.OutputDir / TEXT("results.json");
 		InitScriptRun(NewRun, Cfg.Script.Steps);
 
+		if (Cfg.bManualMode)
+		{
+			// Nothing is observed or recorded, and PIE is left as it is: the verdicts are the run.
+			NewRun.bManualMode = true;
+			NewRun.bBlockOnManual = false;
+			NewRun.ObservationRunId.Reset();
+			NewRun.ManualStartSeconds = FPlatformTime::Seconds();
+			NewRun.StartedAt = ScriptNowIso();
+			NewRun.bClockStarted = true;
+			NewRun.State = EScriptRunState::Armed;
+			Run = MoveTemp(NewRun);
+			bHasRun = true;
+
+			TSharedRef<FJsonObject> D = MakeShared<FJsonObject>();
+			D->SetStringField(TEXT("script"), Run.ScriptPath);
+			D->SetStringField(TEXT("script_name"), Run.ScriptName);
+			D->SetNumberField(TEXT("steps"), Run.Steps.Num());
+			AddScriptEvent(Run, TEXT("run_started"), -1, D);
+			StartScriptManualSteps(Run);
+			if (AreScriptManualStepsSettled(Run))
+			{
+				Finish(EScriptRunState::Finished, TEXT("no manual steps"));
+			}
+			else
+			{
+				WriteResults();
+			}
+			OutMessage = FString::Printf(TEXT("Manual script run %s: %d steps awaiting a verdict, no PIE"), *Run.RunId, ScriptAwaitingSteps(Run).Num());
+			UE_LOG(LogMCPPIE, Log, TEXT("[PIE-SCRIPT] %s"), *OutMessage);
+			return true;
+		}
+
 		FObserverArmConfig ObsCfg;
 		ObsCfg.ProfilePath = Cfg.Script.Profile;
 		ObsCfg.RunId = NewRun.RunId;
@@ -1514,9 +1582,18 @@ namespace MCPPIE
 			OutError = TEXT("No script run to give a verdict on");
 			return false;
 		}
+		if (Run.bManualMode && IsActive())
+		{
+			Run.NowMs = (FPlatformTime::Seconds() - Run.ManualStartSeconds) * 1000.0;
+		}
 		if (!ApplyScriptVerdict(Run, Step, InVerdict, Note, Source, Evidence, bOutUnchanged, OutError)) return false;
 		if (bOutUnchanged) return true;
-		if (IsActive())
+		if (Run.bManualMode)
+		{
+			if (IsActive() && AreScriptManualStepsSettled(Run)) Finish(EScriptRunState::Finished, TEXT("all manual steps settled"));
+			else WriteResults();
+		}
+		else if (IsActive())
 		{
 			if (Run.State != EScriptRunState::Armed) AdvanceNow();
 		}
@@ -1563,7 +1640,8 @@ namespace MCPPIE
 
 	void FPIEScriptRunner::OnEndPIE(bool /*bIsSimulating*/)
 	{
-		if (IsActive())
+		// A manual run does not watch PIE, so PIE ending does not end it.
+		if (IsActive() && !Run.bManualMode)
 		{
 			Finish(EScriptRunState::Finished, TEXT("PIE ended"));
 		}
@@ -1574,7 +1652,14 @@ namespace MCPPIE
 		if (!IsActive()) return;
 		SettleUnfinishedScriptSteps(Run, FString::Printf(TEXT("run ended before the step settled (%s)"), *Reason));
 
-		FPIEObserver::Get().StopRun(Run.ObservationRunId);
+		if (Run.bManualMode)
+		{
+			Run.NowMs = (FPlatformTime::Seconds() - Run.ManualStartSeconds) * 1000.0;
+		}
+		else
+		{
+			FPIEObserver::Get().StopRun(Run.ObservationRunId);
+		}
 
 		if (Run.bOwnsRecorder)
 		{

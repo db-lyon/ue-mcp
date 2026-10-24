@@ -64,7 +64,7 @@ export const pieTool: ToolDef = categoryTool(
     script_delete:        specBp("mutate", "Delete a test script (confirm=true).", "pie_script_delete"),
     script_list:          specBp("read", "List test scripts.", "pie_script_list"),
     script_run: {
-      ...specBp("mutate", "Run a test script in PIE: arms the observer and, unless record=false, the recorder; evaluates auto steps live and marks each pass or fail; waits on manual steps for verdicts, asked through an elicitation form when the client supports one, otherwise through verdict. Writes results.json beside the observation. wait=true returns once the run finishes.", "pie_script_run"),
+      ...specBp("mutate", "Run a test script in PIE: arms the observer and, unless record=false, the recorder; mode=manual instead starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once; evaluates auto steps live and marks each pass or fail; waits on manual steps for verdicts, asked through an elicitation form when the client supports one, otherwise through verdict. Writes results.json beside the observation. wait=true returns once the run finishes.", "pie_script_run"),
       followUp: scriptRunFollowUp,
     },
     script_status: {

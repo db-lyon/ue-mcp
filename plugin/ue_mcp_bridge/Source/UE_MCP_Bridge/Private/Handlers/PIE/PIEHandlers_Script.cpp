@@ -123,10 +123,11 @@ namespace
 		R->SetStringField(TEXT("script"), Run.ScriptPath);
 		R->SetStringField(TEXT("script_name"), Run.ScriptName);
 		R->SetStringField(TEXT("state"), ScriptRunStateToString(Run.State));
+		R->SetStringField(TEXT("mode"), ScriptRunModeToString(Run));
 		R->SetNumberField(TEXT("current_step"), Run.CurrentStep);
 		R->SetStringField(TEXT("output_dir"), Run.OutputDir);
 		R->SetStringField(TEXT("results_path"), Run.ResultsPath);
-		R->SetStringField(TEXT("observation_run_id"), Run.ObservationRunId);
+		if (!Run.ObservationRunId.IsEmpty()) R->SetStringField(TEXT("observation_run_id"), Run.ObservationRunId);
 		if (!Run.RecordingId.IsEmpty()) R->SetStringField(TEXT("recording_id"), Run.RecordingId);
 		if (Run.bReplay) R->SetStringField(TEXT("replay_of"), Run.ReplayOf);
 		R->SetNumberField(TEXT("elapsed_ms"), Run.NowMs);
@@ -222,6 +223,8 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("record"), EType::Boolean, TEXT("Record input so pie_script_replay can rerun it (default true)")),
 		MCPParam::Optional(TEXT("start_pie"), EType::Boolean, TEXT("Start PIE when it is not running (default false)")),
 		MCPParam::Optional(TEXT("block_on_manual"), EType::Boolean, TEXT("Hold the run at each manual block until every step in it has a verdict (default true)")),
+		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("full (default) plays the script in PIE; manual starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once")).Enum({
+			TEXT("full"), TEXT("manual") }),
 		MCPParam::Optional(TEXT("default_within_ms"), EType::Integer, TEXT("Default auto-step window in game ms; overrides the script's (default 5000)")).Min(1),
 		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, PieInstanceDoc).Min(0),
 		MCPParam::Optional(TEXT("client_id"), EType::Integer, ClientIdDoc).Min(0),
@@ -554,7 +557,10 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptRun(const TSharedPtr<FJsonObject>&
 	int32 DefaultWithinMs = 0;
 	const bool bHasWithin = TryGetNumberParam(Params, TEXT("default_within_ms"), DefaultWithinMs);
 	const int32 ClientId = OptionalInt(Params, TEXT("client_id"), 0);
+	const FString Mode = OptionalString(Params, TEXT("mode"), TEXT("full")).ToLower();
 	if (!bPIEInstanceOk) return MCPError(PIEInstanceError);
+	if (Mode != TEXT("full") && Mode != TEXT("manual")) return MCPError(FString::Printf(TEXT("mode must be full or manual, got '%s'"), *Mode));
+	const bool bManual = Mode == TEXT("manual");
 
 	if (ScriptPath.IsEmpty() == !bHasSteps)
 	{
@@ -580,8 +586,9 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptRun(const TSharedPtr<FJsonObject>&
 	if (!Name.IsEmpty()) Cfg.Script.Name = Name;
 	if (bHasProfile) Cfg.Script.Profile = Profile;
 	if (bHasWithin) Cfg.Script.DefaultWithinMs = DefaultWithinMs;
-	Cfg.bRecord = bRecord;
-	Cfg.bStartPIE = bStartPIE;
+	Cfg.bManualMode = bManual;
+	Cfg.bRecord = bRecord && !bManual;
+	Cfg.bStartPIE = bStartPIE && !bManual;
 	Cfg.bBlockOnManual = bBlockOnManual;
 	Cfg.ClientId = ClientId;
 	Cfg.PIEInstance = PIEInstance;

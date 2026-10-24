@@ -63,6 +63,8 @@ export interface ScriptSummary {
   /** Manual steps settled by a person, and by an agent. */
   humanVerdicts?: number;
   agentVerdicts?: number;
+  /** Manual runs: auto steps nothing observed. */
+  unchecked?: number;
 }
 
 interface ScriptEventBase {
@@ -77,6 +79,8 @@ interface ScriptEventBase {
   seq: number;
   /** For a replay run, the run it replays. */
   replayOf?: string;
+  /** full, or manual for a run with no PIE where only the manual steps are judged. */
+  mode?: "full" | "manual";
 }
 
 export type ScriptEvent =
