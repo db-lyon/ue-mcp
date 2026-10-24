@@ -45,7 +45,10 @@ Every stored UV channel is returned. Source colors preserve the float RGBA
 attribute without clamping, and presence does not prove the artist painted it.
 Render colors preserve stored RGBA8 bytes normalized by 255 without sRGB
 conversion. An absent render color buffer produces `color: null` and
-`metadata.hasColorAttribute: false`, rather than invented white colors. No
+`metadata.hasColorAttribute: false`, rather than invented white colors.
+`metadata.renderColorVertexCount` reports the native render color buffer's
+vertex count, including zero. It is `null` for `sourceModel` captures, which do
+not inspect a render buffer. No
 position welding, corner merging, winding reversal or attribute synthesis occurs.
 
 `metadata.groups` describes source polygon groups or render sections. Source

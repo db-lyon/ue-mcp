@@ -64,6 +64,7 @@ struct FSnapshot
 	int32 LodIndex = 0;
 	int32 UVChannels = 0;
 	bool bHasColors = false;
+	int64 RenderColorVertexCount = -1;
 	TArray<FVertex> Vertices;
 	TArray<FCorner> Corners;
 	TArray<FTriangle> Triangles;
@@ -220,7 +221,8 @@ TSharedPtr<FJsonValue> CaptureRender(const UStaticMesh* Mesh, FSnapshot& Out, TA
 	if (!FitsBudget(Count, Count, IndexCount / 3) || LOD.Sections.Num() > MaxMetadataEntries) return BudgetError();
 	Out.UVChannels = Attributes.GetNumTexCoords();
 	if (Out.UVChannels > MaxUVChannels) return Error(TEXT("uv_limit"), TEXT("More than 8 render UV channels are unsupported. No channels were truncated."));
-	Out.bHasColors = Colors.GetNumVertices() != 0;
+	Out.RenderColorVertexCount = Colors.GetNumVertices();
+	Out.bHasColors = Out.RenderColorVertexCount != 0;
 	if ((Count && (!Positions.GetVertexData() || Attributes.GetNumVertices() != Count || !Attributes.GetTangentData()
 		|| (Out.UVChannels && !Attributes.GetTexCoordData())))
 		|| (Out.bHasColors && (Colors.GetNumVertices() != Count || !Colors.GetVertexData()))
@@ -308,6 +310,9 @@ TSharedPtr<FJsonValue> Capture(const UStaticMesh* Mesh, FSnapshot& Out)
 		: Mesh->HasValidNaniteData() ? TEXT("naniteFallbackRenderLOD") : TEXT("renderLOD"));
 	Metadata->SetStringField(TEXT("colorEncoding"), Out.Source == TEXT("sourceModel") ? TEXT("linearFloatRGBA") : TEXT("normalizedStoredRGBA8"));
 	Metadata->SetBoolField(TEXT("hasColorAttribute"), Out.bHasColors);
+	if (Out.Source == TEXT("renderData"))
+		Metadata->SetNumberField(TEXT("renderColorVertexCount"), Out.RenderColorVertexCount);
+	else Metadata->SetField(TEXT("renderColorVertexCount"), MakeShared<FJsonValueNull>());
 	Metadata->SetBoolField(TEXT("naniteEnabled"), MCPGetNaniteSettings(Mesh).bEnabled);
 	Metadata->SetBoolField(TEXT("hasNaniteData"), Mesh->HasValidNaniteData());
 	Metadata->SetNumberField(TEXT("sourceModelCount"), Mesh->GetNumSourceModels());

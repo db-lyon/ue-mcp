@@ -112,6 +112,7 @@ bool FStaticMeshInspectionSourceTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("page is bounded"), First->GetArrayField(TEXT("elements")).Num(), 1);
 	TestEqual(TEXT("continuation offset"), First->GetIntegerField(TEXT("nextOffset")), 1);
 	TestTrue(TEXT("fresh capture says current state checked"), First->GetBoolField(TEXT("currentAssetStateChecked")));
+	TestTrue(TEXT("source capture does not invent a render color count"), First->GetObjectField(TEXT("metadata"))->HasTypedField<EJson::Null>(TEXT("renderColorVertexCount")));
 	const auto& Group = First->GetObjectField(TEXT("metadata"))->GetArrayField(TEXT("groups"))[0]->AsObject();
 	TestEqual(TEXT("group zero resolves to material one"), Group->GetArrayField(TEXT("materialSlotMatches"))[0]->AsNumber(), 1.0);
 	Request->SetStringField(TEXT("snapshotId"), First->GetStringField(TEXT("snapshotId")));
@@ -170,6 +171,7 @@ bool FStaticMeshInspectionRenderTest::RunTest(const FString& Parameters)
 	auto First = InspectionCall(Registry, Request);
 	if (!First || !TestTrue(TEXT("render capture succeeds"), First->GetBoolField(TEXT("success")))) return false;
 	TestEqual(TEXT("render count differs from source"), First->GetIntegerField(TEXT("triangleCount")), 1);
+	TestEqual(TEXT("actual stored render color vertex count"), First->GetObjectField(TEXT("metadata"))->GetIntegerField(TEXT("renderColorVertexCount")), 3);
 	const auto& Corner = First->GetArrayField(TEXT("elements"))[0]->AsObject();
 	TestEqual(TEXT("render UV channel 1"), Corner->GetArrayField(TEXT("uvs"))[1]->AsObject()->GetNumberField(TEXT("v")), 4.0);
 	TestTrue(TEXT("raw color bytes normalized without sRGB conversion"), FMath::IsNearlyEqual(Corner->GetObjectField(TEXT("color"))->GetNumberField(TEXT("r")), 64.0 / 255.0, 0.000001));
@@ -224,6 +226,7 @@ bool FStaticMeshInspectionRenderTest::RunTest(const FString& Parameters)
 	auto NoColors = InspectionCall(Registry, Request);
 	TestTrue(TEXT("missing render colors explicitly null"), NoColors->GetArrayField(TEXT("elements"))[0]->AsObject()->HasTypedField<EJson::Null>(TEXT("color")));
 	TestFalse(TEXT("missing colors not claimed available"), NoColors->GetObjectField(TEXT("metadata"))->GetBoolField(TEXT("hasColorAttribute")));
+	TestEqual(TEXT("absent render color buffer reports an actual zero count"), NoColors->GetObjectField(TEXT("metadata"))->GetIntegerField(TEXT("renderColorVertexCount")), 0);
 	Mesh->GetRenderData()->LODResources[0].VertexBuffers.StaticMeshVertexBuffer.Init(0, 2);
 	TestEqual(TEXT("missing required CPU buffer refused"), InspectionCall(Registry, Request)->GetStringField(TEXT("reason")), FString(TEXT("cpu_data_unavailable")));
 	TestFalse(TEXT("render inspections never dirty the package"), Mesh->GetOutermost()->IsDirty());
