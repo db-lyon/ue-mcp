@@ -18,7 +18,7 @@ import { resolveTestEngine } from "./build-utils.js";
 import { TEST_EDITOR_ARGS } from "./test-editor-args.mjs";
 import {
   KIND_FLAGS, EDITOR_PEAK_MB, KEEP_IN_SHARD, liveFiles, planShards, mirror, buildOutputFilter, timingFromReports, overBudget, slowest,
-  headlessShardCount, headroomMB, editorFits, splitAtDeath,
+  headlessShardCount, headroomMB, editorFits, splitAtDeath, undeployedSources,
 } from "./live-shards.mjs";
 
 const READY_TIMEOUT_S = 300;
@@ -318,6 +318,18 @@ export async function runSharded(opts) {
   const binary = path.join(baseDir, "Plugins", "UE_MCP_Bridge", "Binaries", "Win64", "UnrealEditor-UE_MCP_Bridge.dll");
   if (process.platform === "win32" && !fs.existsSync(binary)) {
     throw new Error(`No built bridge at ${binary}. Run node scripts/deploy.mjs and npm run build first.`);
+  }
+  // A bridge built from older source than the deployed copy makes the run test
+  // stale code, and the Live Coding test then compiles the difference, which
+  // reads as a slow action against its budget.
+  const undeployed = undeployedSources(path.join(repoRoot, "plugin", "ue_mcp_bridge", "Source"), path.join(baseDir, "Plugins", "UE_MCP_Bridge", "Source"));
+  if (undeployed.length > 0) {
+    throw new Error(`tests/ue_mcp has an older bridge than plugin/ (${undeployed.slice(0, 3).join(", ")}${undeployed.length > 3 ? ` and ${undeployed.length - 3} more` : ""}). Run node scripts/deploy.mjs and npm run build first.`);
+  }
+  const { checkPluginFreshness } = await tsImport("../src/editor/bridge-freshness.ts", import.meta.url);
+  const freshness = checkPluginFreshness(path.join(baseDir, "ue_mcp.uproject"));
+  if (freshness.stale) {
+    throw new Error(`The tests/ue_mcp bridge binary is older than its source (${path.basename(freshness.newestSourcePath ?? "")} changed after the build). Run npm run build first.`);
   }
   const engine = resolveTestEngine();
   const editorExe = opts.exeKind === "cmd"

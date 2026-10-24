@@ -8,7 +8,7 @@ import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   balance, buildOutputFilter, editorFits, headlessShardCount, liveFiles, mirror, overBudget, planShards, readKind,
-  splitAtDeath, timingFromReports,
+  splitAtDeath, timingFromReports, undeployedSources,
 } from "../../scripts/live-shards.mjs";
 import { liveShardProjectDir, LIVE_SHARD_ROOT } from "../../scripts/bridge-target.mjs";
 
@@ -144,5 +144,29 @@ describe("an editor that dies mid-run", () => {
     const { culprit, unrun } = splitAtDeath(["a", "b", "c", "d", "e"], results, 20);
     expect(culprit).toBe("b");
     expect(unrun).toEqual(["c", "d", "e"]);
+  });
+});
+
+describe("the deployed bridge check", () => {
+  it("names the source files whose deployed copy is missing or differs, and nothing else", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "undeployed-"));
+    try {
+      const src = path.join(root, "src");
+      const dst = path.join(root, "dst");
+      for (const [rel, text] of [["A.cpp", "a"], ["Sub/B.h", "b"], ["Sub/C.h", "c"]]) {
+        fs.mkdirSync(path.dirname(path.join(src, rel)), { recursive: true });
+        fs.writeFileSync(path.join(src, rel), text);
+      }
+      fs.mkdirSync(path.join(dst, "Sub"), { recursive: true });
+      fs.writeFileSync(path.join(dst, "A.cpp"), "a");
+      fs.writeFileSync(path.join(dst, "Sub", "B.h"), "changed");
+      fs.writeFileSync(path.join(dst, "Extra.cpp"), "only deployed");
+      expect(undeployedSources(src, dst).sort()).toEqual(["Sub/B.h", "Sub/C.h"]);
+      fs.writeFileSync(path.join(dst, "Sub", "B.h"), "b");
+      fs.writeFileSync(path.join(dst, "Sub", "C.h"), "c");
+      expect(undeployedSources(src, dst)).toEqual([]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

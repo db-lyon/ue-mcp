@@ -255,3 +255,28 @@ export function splitAtDeath(files, results, diedAtMs) {
   }
   return { culprit, unrun };
 }
+
+/** Source files under `src` whose deployed copy under `dst` is missing or differs, relative to `src`. */
+export function undeployedSources(src, dst) {
+  const out = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      const rel = path.relative(src, full);
+      const deployed = path.join(dst, rel);
+      if (!fs.existsSync(deployed) || !fs.readFileSync(full).equals(fs.readFileSync(deployed))) out.push(rel.split(path.sep).join("/"));
+    }
+  };
+  walk(src);
+  return out;
+}
