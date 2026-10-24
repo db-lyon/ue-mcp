@@ -758,6 +758,16 @@
         {
           "suite": "integration",
           "file": "tests/integration/plugin-cli.test.ts",
+          "test": "deletes the whole plugin folder and its .uproject entry, keeping the file's formatting, and says what it removed"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/plugin-cli.test.ts",
+          "test": "refuses while an editor has the project open, and touches nothing"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/plugin-cli.test.ts",
           "test": "uninstall leaves everything in place when npm uninstall fails"
         },
         {

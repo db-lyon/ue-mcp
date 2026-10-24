@@ -4,7 +4,7 @@
  * while more than one exists.
  */
 
-import { editorOwnsProject, listEditorProcesses, sameProjectFile, type EditorProcess } from "./engine-observer.js";
+import { editorOwnsProject, listEditorProcesses, probeEditorProcessList, sameProjectFile, type EditorProcess } from "./engine-observer.js";
 import { isPidAlive, readBridgeInstanceRecords } from "../bridge/editor-target.js";
 
 export interface ProjectHolder {
@@ -133,4 +133,22 @@ export function contestedProject(projectPath: string | null | undefined): Projec
   if (!projectPath) return null;
   const key = keyOf(projectPath);
   return key === undefined ? null : lastSeen.get(key) ?? null;
+}
+
+/**
+ * The editors that have `projectPath` open, for an operation that must not
+ * run under one (deleting a plugin's files, editing its .uproject). The
+ * process table decides; when it cannot be read, the project's live bridge
+ * instance records stand in, and `checked` says the table was not read.
+ */
+export async function editorsHoldingProject(
+  projectDir: string,
+  projectPath: string,
+  deps: HolderProbeDeps & { probe?: () => Promise<{ processes: EditorProcess[]; failed: boolean }> } = {},
+): Promise<{ pids: number[]; checked: boolean }> {
+  const probe = await (deps.probe ?? probeEditorProcessList)();
+  if (!probe.failed) {
+    return { pids: probe.processes.filter((p) => editorOwnsProject(p, projectPath)).map((p) => p.pid), checked: true };
+  }
+  return { pids: (deps.readRecordPids ?? liveRecordPids)(projectDir), checked: false };
 }

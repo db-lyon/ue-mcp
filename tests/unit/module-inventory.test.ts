@@ -193,6 +193,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "core/log.ts": "Process-wide stderr logging.",
   "core/user-dir.ts": "Where per-user state lives. A leaf with no state.",
   "config/uproject-path.ts": "Pure path handling for a .uproject or the directory holding one.",
+  "config/uproject-plugins.ts": "Pure text edit of a .uproject Plugins array; the caller names the file.",
   "core/package-root.ts": "Where this installed package lives and its version; one answer per process.",
   "core/version-check.ts": "One npm check per process; the upgrade notice is emitted once.",
   "init.ts": "The ue-mcp-init bin: hands argv to cli/init.ts.",

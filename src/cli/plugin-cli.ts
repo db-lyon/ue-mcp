@@ -72,6 +72,8 @@ import { registryBase } from "../extensions/registry-catalog.js";
 import { isSuperseded, supersededByName, supersededMessage } from "../extensions/superseded.js";
 import { chooseListing, derivedListingFields, listingDiff } from "../extensions/publish-listing.js";
 import { findUProject, projectDirOf } from "../config/uproject-path.js";
+import { removeUProjectPluginEntry, uprojectListsPlugin } from "../config/uproject-plugins.js";
+import { editorsHoldingProject } from "../editor/project-holders.js";
 
 const RESTART_NOTE =
   "Injected actions appear on the next server start. Restart your MCP client (or `ue-mcp restart`).";
@@ -457,31 +459,67 @@ function printInstallSummary(name: string, manifest: PluginManifest): void {
   note(RESTART_NOTE);
 }
 
-function cmdUninstall(args: string[], editor: string | undefined): void {
+async function cmdUninstall(args: string[], editor: string | undefined): Promise<void> {
   const name = args.shift();
   if (!name) fail("usage: ue-mcp plugin uninstall <name>");
   const proj = findProjectDir(projectStartDir(editor));
 
+  // The UE plugin the package deployed: from the install record, or, for a
+  // superseded plugin installed before the record existed, from its entry.
+  const nativeState = readNativeModulesState(proj.projectDir);
+  const uePluginName = nativeState[name]?.uePluginName ?? supersededByName(name)?.[1].uePluginName;
+  const uproject = findUProject(proj.projectDir);
+  const pluginDir = uePluginName ? path.join(proj.projectDir, "Plugins", uePluginName) : null;
+  const pluginDirExists = pluginDir !== null && fs.existsSync(pluginDir);
+  const uprojectText = uproject && uePluginName ? fs.readFileSync(uproject, "utf-8") : null;
+  const listed = uprojectText !== null && uePluginName ? uprojectListsPlugin(uprojectText, uePluginName) : false;
+
+  // An open editor holds the plugin's DLLs and rewrites the .uproject on save,
+  // so nothing is touched while one has the project open.
+  if (uproject && (pluginDirExists || listed)) {
+    const holders = await editorsHoldingProject(proj.projectDir, uproject);
+    if (holders.pids.length > 0) {
+      fail(
+        `an editor has ${path.basename(uproject)} open (pid ${holders.pids.join(", ")}). ` +
+        `Close it, then run \`ue-mcp plugin remove ${name}\` again. Nothing was removed.`,
+      );
+    }
+  }
+
   // npm goes first: when it fails, the project is left exactly as it was.
   runNpm(["uninstall", name], proj.projectDir);
+  const removed: string[] = [`package ${name}`];
 
-  const nativeState = readNativeModulesState(proj.projectDir);
   if (nativeState[name]) {
+    undeployNativeModule(proj.projectDir, name);
+  }
+  if (pluginDir && pluginDirExists) {
+    const rel = path.relative(proj.projectDir, pluginDir).split(path.sep).join("/");
     try {
-      const removed = undeployNativeModule(proj.projectDir, name);
-      note(`removed ${removed} native module file(s) for ${name}`);
+      fs.rmSync(pluginDir, { recursive: true, force: true, maxRetries: 3 });
     } catch (e) {
-      note(`WARNING: could not fully clean up native module for ${name}: ${(e as Error).message}. ` +
-        `Close the editor if it's running and remove leftover files under Plugins/${nativeState[name].uePluginName}/ manually.`);
+      fail(`could not delete ${rel}: ${(e as Error).message}. Close anything holding files in it and run \`ue-mcp plugin remove ${name}\` again.`);
+    }
+    removed.push(`${rel}/ (source, Binaries and Intermediate)`);
+  }
+  if (uproject && uprojectText !== null && uePluginName && listed) {
+    const edited = removeUProjectPluginEntry(uprojectText, uePluginName);
+    if (edited.removed > 0) {
+      fs.writeFileSync(uproject, edited.text);
+      removed.push(`the ${uePluginName} entry in ${path.basename(uproject)}`);
     }
   }
 
   const removedSkills = removeSkillSet(proj.projectDir, name);
-  if (removedSkills.length > 0) note(`removed skills: ${removedSkills.join(", ")}`);
+  if (removedSkills.length > 0) removed.push(`skills ${removedSkills.join(", ")}`);
 
-  const list = readPluginsList(proj.configPath).filter((p) => p.name !== name);
-  writePluginsList(proj.configPath, list);
-  note(`removed ${name}`);
+  const list = readPluginsList(proj.configPath);
+  if (list.some((p) => p.name === name)) {
+    writePluginsList(proj.configPath, list.filter((p) => p.name !== name));
+    removed.push(`the ${name} entry in ${path.basename(proj.configPath)}`);
+  }
+  note(`removed ${name}:`);
+  for (const r of removed) note(`  ${r}`);
   note(RESTART_NOTE);
 }
 
@@ -1144,7 +1182,7 @@ export async function run(argv: string[]): Promise<number | void> {
   switch (sub) {
     case "install": cmdInstall(args, editor); break;
     case "uninstall":
-    case "remove": cmdUninstall(args, editor); break;
+    case "remove": await cmdUninstall(args, editor); break;
     case "list":
     case "ls": cmdList(editor); break;
     case "update":
