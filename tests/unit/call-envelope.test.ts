@@ -84,7 +84,7 @@ describe("which tools take the envelope", () => {
 
   it("advertises action and args, plus the editor target only while it is injected", () => {
     const tool = levelTool();
-    const keys = (t: ToolDef) => Object.keys((envelopeInputSchema(t) as z.AnyZodObject).shape);
+    const keys = (t: ToolDef) => Object.keys((envelopeInputSchema(t) as z.ZodObject).shape);
     expect(keys(tool)).toEqual(["action", "args"]);
     injectEditorTarget(tool, ["A", "B"]);
     expect(keys(tool)).toEqual(["action", "args", "editor"]);
@@ -122,7 +122,7 @@ describe("validation stays server-side, with the same refusal", () => {
 
   it("still accepts a flat call through the advertised schema", async () => {
     const tool = levelTool();
-    const parsed = (envelopeInputSchema(tool) as z.AnyZodObject).safeParse({ action: "place_actor", actorClass: "A" });
+    const parsed = (envelopeInputSchema(tool) as z.ZodObject).safeParse({ action: "place_actor", actorClass: "A" });
     expect(parsed.success && parsed.data.actorClass).toBe("A");
   });
 
