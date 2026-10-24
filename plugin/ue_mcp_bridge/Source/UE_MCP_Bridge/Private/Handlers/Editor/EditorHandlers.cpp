@@ -2066,6 +2066,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetConfig(const TSharedPtr<FJsonObject>&
 	FString ConfigDir = FPaths::ProjectConfigDir();
 	FString IniPath = FPaths::Combine(ConfigDir, ConfigName);
 
+	// A file only this call loads is dropped from the config cache again when it
+	// returns: a cached file is written back when the editor exits, which
+	// recreates an ini deleted after the call and rewrites one edited since.
+	const bool bWasCached = GConfig->FindConfigFile(IniPath) != nullptr;
+	if (!bWasCached && FPaths::FileExists(IniPath)) GConfig->LoadFile(IniPath);
+	ON_SCOPE_EXIT
+	{
+		if (!bWasCached) GConfig->Flush(true, IniPath);
+	};
+
 	// Capture previous value for rollback and idempotency
 	FString PrevValue;
 	bool bHadPrev = GConfig->GetString(*Section, *Key, PrevValue, IniPath);
