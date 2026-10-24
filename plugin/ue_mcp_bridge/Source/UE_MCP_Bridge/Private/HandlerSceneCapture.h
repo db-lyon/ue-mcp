@@ -70,7 +70,7 @@ namespace UEMCP::SceneCapture
 			int32 Width, int32 Height, float FovDegrees, FString& OutError)
 		{
 			World = InWorld;
-			if (!World) { OutError = TEXT("World not available"); return false; }
+			if (!World.IsValid()) { OutError = TEXT("World not available"); return false; }
 
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.ObjectFlags |= RF_Transient;
@@ -80,39 +80,39 @@ namespace UEMCP::SceneCapture
 			SpawnParams.bCreateActorPackage = false;
 #endif
 			Actor = World->SpawnActor<ASceneCapture2D>(ASceneCapture2D::StaticClass(), Location, Rotation, SpawnParams);
-			if (!Actor) { OutError = TEXT("Failed to spawn SceneCapture2D actor"); return false; }
+			if (!Actor.IsValid()) { OutError = TEXT("Failed to spawn SceneCapture2D actor"); return false; }
 			Actor->SetActorHiddenInGame(true);
 
 			Comp = Actor->GetCaptureComponent2D();
-			if (!Comp) { OutError = TEXT("SceneCapture2D has no capture component"); return false; }
+			if (!Comp.IsValid()) { OutError = TEXT("SceneCapture2D has no capture component"); return false; }
 			Comp->FOVAngle = FovDegrees;
 			Comp->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 			Comp->bCaptureEveryFrame = false;
 			Comp->bCaptureOnMovement = false;
 
 			Target = UKismetRenderingLibrary::CreateRenderTarget2D(
-				World, Width, Height, ETextureRenderTargetFormat::RTF_RGBA8_SRGB, FLinearColor::Black, false);
-			if (!Target) { OutError = TEXT("Failed to create RenderTarget2D"); return false; }
-			Comp->TextureTarget = Target;
+				World.Get(), Width, Height, ETextureRenderTargetFormat::RTF_RGBA8_SRGB, FLinearColor::Black, false);
+			if (!Target.IsValid()) { OutError = TEXT("Failed to create RenderTarget2D"); return false; }
+			Comp->TextureTarget = Target.Get();
 			return true;
 		}
 
 		void SetView(const FVector& Location, const FRotator& Rotation, float FovDegrees)
 		{
-			if (!IsValid(Actor) || !Comp) return;
+			if (!Actor.IsValid() || !Comp.IsValid()) return;
 			Actor->SetActorLocationAndRotation(Location, Rotation);
 			Comp->FOVAngle = FovDegrees;
 		}
 
-		/** bFullyLoadTextures streams every texture in and captures twice, so
-		 *  mips that arrive after the first pass are in the second (#662). */
+		/** The legacy option drains requested streaming work and captures twice.
+		 *  StreamAllResources does not force every texture's highest mip resident. */
 		void Capture(bool bFullyLoadTextures)
 		{
-			if (!Comp) return;
+			if (!Comp.IsValid()) return;
 			// Components created or moved this frame (BeginPlay attachments,
 			// skinned poses) reach the renderer at end of frame; push them now
 			// so the capture sees the same scene the game viewport does (#1203).
-			if (World) World->SendAllEndOfFrameUpdates();
+			if (World.IsValid()) World->SendAllEndOfFrameUpdates();
 			if (bFullyLoadTextures)
 			{
 				IStreamingManager::Get().StreamAllResources(0.0f);
@@ -129,7 +129,7 @@ namespace UEMCP::SceneCapture
 		bool ExportPng(const FString& AbsPath, int64& OutSizeBytes, FString& OutError)
 		{
 			OutSizeBytes = -1;
-			if (!Target) { OutError = TEXT("No render target to export"); return false; }
+			if (!Target.IsValid()) { OutError = TEXT("No render target to export"); return false; }
 			FTextureRenderTargetResource* Resource = Target->GameThread_GetRenderTargetResource();
 			TArray<FColor> Pixels;
 			if (!Resource || !Resource->ReadPixels(Pixels) || Pixels.Num() != Target->SizeX * Target->SizeY)
@@ -163,12 +163,14 @@ namespace UEMCP::SceneCapture
 			return true;
 		}
 
-		USceneCaptureComponent2D* GetComponent() const { return Comp; }
-		UTextureRenderTarget2D* GetTarget() const { return Target; }
+		USceneCaptureComponent2D* GetComponent() const { return Comp.Get(); }
+		UTextureRenderTarget2D* GetTarget() const { return Target.Get(); }
+		bool IsValid() const { return World.IsValid() && Actor.IsValid() && Comp.IsValid() && Target.IsValid(); }
 
 		void Destroy()
 		{
-			if (IsValid(Actor) && World)
+			if (Target.IsValid()) UKismetRenderingLibrary::ReleaseRenderTarget2D(Target.Get());
+			if (Actor.IsValid() && World.IsValid())
 			{
 				// The component holds the only reference keeping the target alive.
 				if (USceneCaptureComponent2D* Dying = Actor->GetCaptureComponent2D())
@@ -176,7 +178,7 @@ namespace UEMCP::SceneCapture
 					Dying->TextureTarget = nullptr;
 				}
 				// Never part of the map, so removal must not dirty the package.
-				World->DestroyActor(Actor, /*bNetForce*/ false, /*bShouldModifyLevel*/ false);
+				World->DestroyActor(Actor.Get(), /*bNetForce*/ false, /*bShouldModifyLevel*/ false);
 			}
 			Actor = nullptr;
 			Comp = nullptr;
@@ -184,9 +186,11 @@ namespace UEMCP::SceneCapture
 		}
 
 	private:
-		UWorld* World = nullptr;
-		ASceneCapture2D* Actor = nullptr;
-		USceneCaptureComponent2D* Comp = nullptr;
-		UTextureRenderTarget2D* Target = nullptr;
+		// A warm capture spans ticks. The world owns the actor, which owns the
+		// component/target; weak handles must not keep an unloaded world alive.
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ASceneCapture2D> Actor;
+		TWeakObjectPtr<USceneCaptureComponent2D> Comp;
+		TWeakObjectPtr<UTextureRenderTarget2D> Target;
 	};
 }

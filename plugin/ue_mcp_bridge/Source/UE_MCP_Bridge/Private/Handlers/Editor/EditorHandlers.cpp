@@ -6,6 +6,7 @@
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
 #include "HandlerSceneCapture.h"
+#include "HandlerSceneCaptureJob.h"
 #include "Handlers/Level/LevelHandlers.h"
 #include "Handlers/HandlerEditorState.h"
 #include "Misc/PackageName.h"
@@ -770,7 +771,11 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		PieInstanceParam(),
 	});
 	Registry.RegisterHandler(TEXT("capture_scene_png"), &CaptureScenePng, {
-		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png")).Alias(TEXT("filename")),
+		MCPParam::Optional(TEXT("outputPath"), EType::String, TEXT("Absolute or project-relative PNG path to write; required when starting a capture")).Alias(TEXT("filename")),
+		MCPParam::Optional(TEXT("captureId"), EType::String, TEXT("Query the latest warm capture instead of starting one; outputPath must be omitted")),
+		MCPParam::Optional(TEXT("cancel"), EType::Boolean, TEXT("With captureId, cancel an active warm capture and release its transient resources (default false)")),
+		MCPParam::Optional(TEXT("warmupFrames"), EType::Number, TEXT("0 (default) keeps synchronous capture; 1-240 starts a tick-driven normal-streaming capture and returns captureId")),
+		MCPParam::Optional(TEXT("warmupTimeoutSeconds"), EType::Number, TEXT("Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)")),
 		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("Camera location")),
 		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("Camera rotation")),
 		MCPParam::Optional(TEXT("focusActorLabel"), EType::String, TEXT("Frame the camera on this actor's bounds")),
@@ -4462,6 +4467,22 @@ TSharedPtr<FJsonValue> FEditorHandlers::CheckForCrashes(const TSharedPtr<FJsonOb
 }
 TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonObject>& Params)
 {
+	const FString CaptureId = OptionalString(Params, TEXT("captureId"));
+	const bool bCancel = OptionalBool(Params, TEXT("cancel"), false);
+	if (!CaptureId.IsEmpty())
+	{
+		if (!OptionalString(Params, TEXT("outputPath")).IsEmpty()) return MCPError(TEXT("Use either outputPath to start a capture or captureId to query/cancel one"));
+		return UEMCP::SceneCapture::ReadWarmCapture(CaptureId, bCancel);
+	}
+	if (bCancel) return MCPError(TEXT("cancel requires captureId"));
+	const double WarmupFrames = OptionalNumber(Params, TEXT("warmupFrames"), 0);
+	const double WarmupTimeout = OptionalNumber(Params, TEXT("warmupTimeoutSeconds"), 60);
+	if (!FMath::IsFinite(WarmupFrames) || WarmupFrames < 0 || WarmupFrames > 240 || FMath::FloorToDouble(WarmupFrames) != WarmupFrames)
+		return MCPError(TEXT("warmupFrames must be an integer from 0 to 240"));
+	if (!FMath::IsFinite(WarmupTimeout) || WarmupTimeout < 1 || WarmupTimeout > 120)
+		return MCPError(TEXT("warmupTimeoutSeconds must be finite and between 1 and 120"));
+	if (WarmupFrames > 0 && OptionalBool(Params, TEXT("fullyLoadTextures"), false))
+		return MCPError(TEXT("Warm captures use normal camera streaming; omit fullyLoadTextures or set it to false"));
 	// #599: allow capturing the PIE world (not just the editor world) so a
 	// framed shot reflects the running game.
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
@@ -4532,6 +4553,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 		FocusMetadata->SetObjectField(TEXT("directionWorld"), MCPVec3ToJsonObject(Dir));
 	}
 	if (Location.ContainsNaN() || Rotation.ContainsNaN()) return MCPError(TEXT("Capture camera location and rotation must be finite"));
+	if (WarmupFrames > 0)
+	{
+		return UEMCP::SceneCapture::StartWarmCapture(World, Location, Rotation, Width, Height, CaptureFov,
+			static_cast<int32>(WarmupFrames), WarmupTimeout, OutputPath, FocusMetadata);
+	}
 
 	// #966: a capture must leave the level exactly as it found it. Sweep any
 	// capture actors earlier builds saved into the map, then capture through a
@@ -4544,8 +4570,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	USceneCaptureComponent2D* Comp = Rig.GetComponent();
 	UTextureRenderTarget2D* RT = Rig.GetTarget();
 
-	// #662: force-stream textures so the capture is a complete, resident frame
-	// rather than the unloaded-texture checker or a stale cached image.
+	// Preserve the legacy streaming drain and double capture. This is not a
+	// guarantee that every visible texture has its highest mip resident.
 	const bool bFullyLoadTextures = OptionalBool(Params, TEXT("fullyLoadTextures"), true);
 	Rig.Capture(bFullyLoadTextures);
 

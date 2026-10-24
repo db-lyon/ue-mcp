@@ -200,11 +200,35 @@ export const handlerSpecs: HandlerSpecs = {
       {
         "name": "outputPath",
         "type": "string",
-        "required": true,
-        "description": "Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png",
+        "required": false,
+        "description": "Absolute or project-relative PNG path to write; required when starting a capture",
         "aliases": [
           "filename"
         ]
+      },
+      {
+        "name": "captureId",
+        "type": "string",
+        "required": false,
+        "description": "Query the latest warm capture instead of starting one; outputPath must be omitted"
+      },
+      {
+        "name": "cancel",
+        "type": "boolean",
+        "required": false,
+        "description": "With captureId, cancel an active warm capture and release its transient resources (default false)"
+      },
+      {
+        "name": "warmupFrames",
+        "type": "number",
+        "required": false,
+        "description": "0 (default) keeps synchronous capture; 1-240 starts a tick-driven normal-streaming capture and returns captureId"
+      },
+      {
+        "name": "warmupTimeoutSeconds",
+        "type": "number",
+        "required": false,
+        "description": "Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)"
       },
       {
         "name": "location",
@@ -3530,7 +3554,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   build_hlod: "Params: none",
   build_lighting: "Params: quality?",
   cancel_editor_transaction: "Params: index?",
-  capture_scene_png: "Params: outputPath (or filename), location?, rotation?, focusActorLabel?, focusActorPath?, focusDirection?, focusMargin?, world?, pieInstance?, width?, height?, fov?, fullyLoadTextures?",
+  capture_scene_png: "Params: outputPath? (or filename), captureId?, cancel?, warmupFrames?, warmupTimeoutSeconds?, location?, rotation?, focusActorLabel?, focusActorPath?, focusDirection?, focusMargin?, world?, pieInstance?, width?, height?, fov?, fullyLoadTextures?",
   capture_screenshot: "Params: filename (or outputPath), target?, pieInstance?, worldPath?",
   check_for_crashes: "Params: none",
   clear_dialog_policy: "Params: pattern?",
@@ -3670,6 +3694,8 @@ export const schema: Record<string, z.ZodType> = {
   cameraActorLabel: z.string().optional().describe("Camera actor to bind a CameraCut section to (add_sequence_section). Camera actor to render through instead of the camera cuts (render_sequence_frames)"),
   cameraActorPath: z.string().optional().describe("Full object path of the camera actor. Wins over cameraActorLabel (add_sequence_section). Full object path of that camera actor. Wins over cameraActorLabel (render_sequence_frames)"),
   cameraSpeed: z.number().optional().describe("Viewport camera speed, greater than 0"),
+  cancel: z.boolean().optional().describe("With captureId, cancel an active warm capture and release its transient resources (default false)"),
+  captureId: z.string().optional().describe("Query the latest warm capture instead of starting one; outputPath must be omitted"),
   captureLog: z.boolean().optional().describe("false drops everything the script logged except its errors (default true)"),
   category: z.string().optional().describe("Case-insensitive substring the log category must contain (get_output_log). Settings category, e.g. Engine (open_settings)"),
   centerNewWindow: z.boolean().optional().describe("Center new PIE windows; false places them at newWindowPosition"),
@@ -3792,7 +3818,7 @@ export const schema: Record<string, z.ZodType> = {
   orthoZoom: z.number().optional().describe("Orthographic zoom, within the engine's own limits"),
   outerPath: z.string().optional().describe("Only objects somewhere under this outer, such as one level or world"),
   outputDir: z.string().optional().describe("Absolute or project-relative directory for the frames (default Saved/SequenceFrames/<sequence>)"),
-  outputPath: z.string().optional().describe("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png (capture_scene_png). Alias for filename (capture_screenshot)"),
+  outputPath: z.string().optional().describe("Absolute or project-relative PNG path to write; required when starting a capture (capture_scene_png). Alias for filename (capture_screenshot)"),
   packagePath: z.string().optional().describe("Destination folder (default /Game/Cinematics)"),
   parameterType: z.string().optional().describe("scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"),
   path: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_keyframes, set_sequence_playback_range). Alias for assetPath (add_sequence_track, get_sequence_info, open_asset). Alias for objectPath (describe_object, get_property, set_property). Alias for filePath (run_python_file)"),
@@ -3861,6 +3887,8 @@ export const schema: Record<string, z.ZodType> = {
   viewportIndex: z.number().optional().describe("Level viewport to act on (default the active one)"),
   viewportType: z.string().optional().describe("Perspective | Top | Bottom | Left | Right | Front | Back | OrthoFreelook"),
   waitForAssetRegistry: z.boolean().optional().describe("start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)"),
+  warmupFrames: z.number().optional().describe("0 (default) keeps synchronous capture; 1-240 starts a tick-driven normal-streaming capture and returns captureId"),
+  warmupTimeoutSeconds: z.number().optional().describe("Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)"),
   width: z.number().optional().describe("Capture width in pixels (default 1280) (capture_scene_png). Viewport width to read x against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Frame width in pixels (default 1280) (render_sequence_frames)"),
   windowed: z.boolean().optional().describe("Run windowed rather than fullscreen (default true)"),
   windowId: z.number().int().optional().describe("Window to close, by the id list_windows reported (close_window). Describe only this window, by the id list_windows or list_dialogs reported (list_windows). Window to press a button on, by the id list_windows reported (press_window_button)"),

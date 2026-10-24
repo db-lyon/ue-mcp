@@ -131,6 +131,33 @@ measurements of this capture, not a claim that its lighting or pose was suitable
 to the editor viewport, not this separate SceneCapture2D. Do not use the live
 viewport's pixel hit test to locate a point in a headless capture.
 
+For an offscreen camera that needs streaming and temporal warmup, start a bounded
+capture with `warmupFrames` (1-240). For example:
+
+```json
+{"action":"capture_scene_png","outputPath":"Saved/Screenshots/warmed.png","location":{"x":0,"y":0,"z":200},"rotation":{"pitch":-15,"yaw":0,"roll":0},"width":1920,"height":1080,"fov":60,"warmupFrames":24,"warmupTimeoutSeconds":60}
+```
+
+The first response is `status: "warming"`, `complete: false`, with a `captureId`.
+Call the same action with only that ID to read progress; add `cancel: true` to
+cancel. Only the latest job is retained, and an overlapping start is refused.
+Use the PNG only when `status: "completed"` and `fileWritten: true`.
+`warmupFramesRendered` counts completed warm captures on distinct engine frames;
+the exported frame is a separate final capture after them. Timeouts (1-120
+seconds) are checked between frames and before export; an individual render,
+readback or file write cannot be interrupted by this deadline.
+
+Each warm frame submits the capture camera location, render width and FOV to
+normal streaming with boost 1, without forcing residency or changing viewport,
+background-throttle or streaming settings. Existing global streaming budgets and
+settings still apply. Each contribution expires after 0.001 seconds of streaming
+time even if no other viewport submits a view. `streamingEnabled` and `textureStreamingEnabled` report
+the observed settings; `textureResidencyVerified: false` means completion is not
+evidence that every texture reached its highest mip. Omit `fullyLoadTextures`
+(or set it to false) for this mode. Cancellation, timeout, world cleanup and
+module shutdown release the transient actor, render target and callbacks.
+Omitting `warmupFrames` or setting it to zero keeps the immediate capture API.
+
 A spatial change is only done when someone can see that it is done. Read the
 returned transform, and for anything a human will look at, capture an image.
 
