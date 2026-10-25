@@ -293,6 +293,32 @@ One id is listed once. A project copy wins over the packaged one, and `.claude/s
 
 **Action effects.** `GET /v1/actions?categories=a,b` returns `{ actions }`, one entry per enabled action: `category`, `action`, `effect` (`read`, `mutate` or `unknown`) and `effectSource` (`declared` on the action, `inferred` from the name for a plugin action whose manifest gave none, `undeclared` when nothing claims it), read from the graph the server dispatches, plugin actions included. `destructive` says the action destroys or overwrites something it cannot give back. An action can declare it; otherwise a `mutate` or `unknown` action is destructive when its name leads with `delete`, `remove`, `clear`, `discard`, `revert`, `reset`, `purge`, `wipe`, `destroy`, `drop`, `overwrite`, `replace`, `restore` or `uninstall` (after an `epic_`, `bulk_` or `batch_` prefix), and a read never is. `destructiveSource` says which: `declared`, `lexicon` or `none`. The verb list is a fallback, so an action it misjudges declares the answer instead. An unknown category answers 400.
 
+### Context measurements
+
+A client that measures which context strategy costs least writes the result in one shared format, so measurements from different clients and models can be compared. `ue-mcp/daemon` exports the `ContextMeasurement` type, `parseContextMeasurement(value)` (returns `{ ok: true, value }` or `{ ok: false, errors }`, every problem named by its path) and `scopeBucket(categoryCount)`. The package ships the same shape as a JSON Schema at `ue-mcp/schemas/context-measurement.schema.json` for tools that are not TypeScript.
+
+```json
+{
+  "version": 1,
+  "measuredAt": "2026-10-25T12:30:00Z",
+  "ueMcpVersion": "1.4.11",
+  "client": { "name": "my-client", "version": "0.2.0" },
+  "runs": [
+    {
+      "model": { "vendor": "anthropic", "model": "claude-opus-5-5" },
+      "scope": "1-3",
+      "strategy": "micro",
+      "seedTokens": 2207,
+      "tasks": [
+        { "id": "place-light", "totalTokens": 18000, "modelCalls": 6, "discoveryCalls": 2, "passed": true }
+      ]
+    }
+  ]
+}
+```
+
+One run is one model, one strategy and one scope over a set of tasks. `scope` buckets how many categories the context was narrowed to: `1-3`, `4-8` or `9+`, as `scopeBucket` computes it. `seedTokens` is the projection's estimate for that strategy and scope (`GET /v1/context/projection`). Per task, `totalTokens` counts everything the task spent, `modelCalls` the model requests, `discoveryCalls` the tool calls that only searched or described the surface, and `passed` whether it did what it was asked. A task keeps its `id` across runs so runs can be compared. Keys outside the format are refused.
+
 ### Updates through the daemon
 
 A minute after it starts, and every six hours, the daemon looks for a newer release on the install's channel and publishes `update.available` on its event stream. `GET /v1/update` reports the target version and, for a binary install, whether that release ships binaries for the project's engine and platform. `POST /v1/update/apply` (optional body `{ "version": "x.y.z" }`) installs it:

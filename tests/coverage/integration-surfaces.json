@@ -592,6 +592,11 @@
       "summary": "the ue-mcp/daemon export resolves for daemon extensions"
     },
     {
+      "id": "exports.context-measurement",
+      "group": "daemon",
+      "summary": "the built package exports parseContextMeasurement and scopeBucket from ue-mcp/daemon and ships schemas/context-measurement.schema.json"
+    },
+    {
       "id": "plugin.load.inject",
       "group": "plugins",
       "summary": "a project plugin's inject tasks appear as actions on the target category and run"

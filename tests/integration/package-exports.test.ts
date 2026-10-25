@@ -38,6 +38,7 @@ beforeAll(() => {
   fs.copyFileSync(path.join(REPO_ROOT, "package.json"), path.join(pkg, "package.json"));
   link(path.join(REPO_ROOT, "plugin"), path.join(pkg, "plugin"));
   link(path.join(REPO_ROOT, "skills"), path.join(pkg, "skills"));
+  link(path.join(REPO_ROOT, "schemas"), path.join(pkg, "schemas"));
   // The package's own dependencies, where an install would have put them.
   link(path.join(REPO_ROOT, "node_modules"), path.join(pkg, "node_modules"));
   distEntry = path.join(pkg, "dist", "index.js");
@@ -45,7 +46,7 @@ beforeAll(() => {
 
 afterAll(() => {
   // Unlink the links first, so removing the sandbox can never reach into the repo.
-  for (const name of ["plugin", "skills", "node_modules"]) {
+  for (const name of ["plugin", "skills", "schemas", "node_modules"]) {
     try { fs.unlinkSync(path.join(pkg, name)); } catch { /* never made */ }
   }
   sb.cleanup();
@@ -175,6 +176,28 @@ console.log(JSON.stringify({ exports: Object.keys(daemon).sort(), api: daemon.EX
     expect(typeof out.api).toBe("number");
     expect(out.good).toBe("probe");
     expect(out.tampered).toMatch(/does not match its hash/);
+  });
+});
+
+describe("the context measurement format", () => {
+  it("ships its validator in ue-mcp/daemon and its JSON Schema as a package file", () => {
+    covers("exports.context-measurement");
+    const files = (JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8")) as { files: string[] }).files;
+    expect(files).toContain("schemas");
+    const consumer = sb.path("global", "measurement.mjs");
+    fs.writeFileSync(
+      consumer,
+      `import { parseContextMeasurement, scopeBucket } from "ue-mcp/daemon";
+import schema from "ue-mcp/schemas/context-measurement.schema.json" with { type: "json" };
+const doc = { version: 1, measuredAt: "2026-10-25T00:00:00Z", ueMcpVersion: "1.0.0", runs: [
+  { model: { vendor: "v", model: "m" }, scope: scopeBucket(5), strategy: "lean", seedTokens: 10, tasks: [] },
+] };
+console.log(JSON.stringify({ ok: parseContextMeasurement(doc).ok, bad: parseContextMeasurement({ version: 2 }).ok, title: schema.title, scope: doc.runs[0].scope }));
+`,
+    );
+    const r = spawnSync(process.execPath, [consumer], { cwd: sb.path("global"), encoding: "utf8", windowsHide: true });
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout.trim())).toEqual({ ok: true, bad: false, title: "ue-mcp context measurement", scope: "4-8" });
   });
 });
 
