@@ -153,6 +153,7 @@ export const EDITOR_BOUND_LOCAL_ACTIONS: Record<string, string> = {
   "niagara.batch": "Runs a sequence of bridge calls against one Niagara system.",
   "pcg.wait_for_generation": "Polls the get_pcg_generation_state bridge method until a generation ends.",
   "editor.execute_python": "Runs Python inside the editor process.",
+  "editor.batch": "Sends its steps to the editor as one execute_batch bridge call, which runs them in one game-thread job.",
   "editor.play_in_editor_ignore_blueprint_errors": "Starts Play In Editor through the pie_start_ignoring_blueprint_errors bridge method.",
   "editor.request_editor_shutdown": "Asks the running editor to shut itself down over the bridge.",
 };

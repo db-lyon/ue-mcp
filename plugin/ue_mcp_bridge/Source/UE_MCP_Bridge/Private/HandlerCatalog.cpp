@@ -37,6 +37,7 @@
 #include "Handlers/Datasmith/DatasmithHandlers.h"
 #include "Handlers/MetaHuman/MetaHumanHandlers.h"
 #include "Handlers/Lock/LockHandlers.h"
+#include "Handlers/Batch/BatchHandlers.h"
 #include "Handlers/Diff/DiffHandlers.h"
 #include "Handlers/SourceControl/SourceControlHandlers.h"
 #include "Handlers/PIE/PIEHandlers.h"
@@ -85,4 +86,5 @@ void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 	FCheckpointHandlers::RegisterHandlers(Registry);
 	FSourceControlHandlers::RegisterHandlers(Registry);
 	FPIEHandlers::RegisterHandlers(Registry);
+	FBatchHandlers::RegisterHandlers(Registry);
 }

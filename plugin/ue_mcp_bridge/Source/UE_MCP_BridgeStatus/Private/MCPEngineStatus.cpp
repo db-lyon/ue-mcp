@@ -306,6 +306,27 @@ void FMCPEngineStatus::NoteHandlerEnd(const FString& Method)
 	}
 }
 
+void FMCPEngineStatus::NoteBatchProgress(int32 CompletedCalls, int32 RequestedCalls, const FString& CurrentMethod)
+{
+	FScopeLock Lock(&Mutex);
+	if (BatchRequestedCalls == 0)
+	{
+		BatchStartSeconds = FPlatformTime::Seconds();
+	}
+	BatchCompletedCalls = CompletedCalls;
+	BatchRequestedCalls = RequestedCalls;
+	BatchCurrentMethod = CurrentMethod;
+}
+
+void FMCPEngineStatus::ClearBatchProgress()
+{
+	FScopeLock Lock(&Mutex);
+	BatchCompletedCalls = 0;
+	BatchRequestedCalls = 0;
+	BatchCurrentMethod.Empty();
+	BatchStartSeconds = 0.0;
+}
+
 void FMCPEngineStatus::CaptureNow()
 {
 	if (!IsInGameThread() || !bInstalled)
@@ -529,6 +550,20 @@ TSharedPtr<FJsonObject> FMCPEngineStatus::Snapshot() const
 	else
 	{
 		Out->SetField(TEXT("handler"), MakeShared<FJsonValueNull>());
+	}
+
+	// Present only while execute_batch is running, which is when a caller that
+	// stopped waiting needs it. completedCalls is also the index of the call
+	// under way, so currentIndex spells that out rather than leaving it implied.
+	if (BatchRequestedCalls > 0)
+	{
+		TSharedPtr<FJsonObject> Batch = MakeShared<FJsonObject>();
+		Batch->SetNumberField(TEXT("completedCalls"), BatchCompletedCalls);
+		Batch->SetNumberField(TEXT("requestedCalls"), BatchRequestedCalls);
+		Batch->SetNumberField(TEXT("currentIndex"), BatchCompletedCalls);
+		Batch->SetStringField(TEXT("currentMethod"), BatchCurrentMethod);
+		Batch->SetNumberField(TEXT("elapsedSeconds"), Now - BatchStartSeconds);
+		Out->SetObjectField(TEXT("batch"), Batch);
 	}
 
 	return Out;

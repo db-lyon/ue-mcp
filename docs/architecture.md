@@ -200,7 +200,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 
 ### Handler Categories
 
-34 C++ handler groups are registered in `HandlerCatalog.cpp`. Together they expose <!-- count:actions -->2108+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
+34 C++ handler groups are registered in `HandlerCatalog.cpp`. Together they expose <!-- count:actions -->2109+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
 
 | Handler group | Coverage |
 |---------|----------|
@@ -229,6 +229,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 | EpicHandlers | Epic 5.8 native toolset surfacing |
 | FabHandlers | Fab owned-library import |
 | LockHandlers | Per-asset exclusive locks for concurrent agents (acquire/release/list, TTL-leased) |
+| BatchHandlers | `execute_batch`: several registered handlers run back to back as one game-thread job inside one editor transaction, so no other session's call lands between them |
 | DiffHandlers | Semantic Blueprint and asset diffing |
 | ProjectHandlers | Project info, world subsystem queries |
 | DemoHandlers | Neon Shrine demo builder |

@@ -150,6 +150,8 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "surface/routing-params.ts": "The dispatcher's parameter names and the helper that strips `action`. A leaf with no imports and no state.",
   "surface/action-effects.ts": "Indexes whichever tool graph the caller hands it, one index per graph; an action's effect does not change with the editor it runs in.",
   "dispatch/lock-owner.ts": "The process-wide fallback lock owner id. A session mints its own through this and holds it itself.",
+  "dispatch/lock-actions.ts": "The names of the lock-management actions; a declaration shared by the locking gate and the batch action.",
+  "dispatch/batch-steps.ts": "Reads the steps off a batch call's parameters for the gates; pure over its arguments.",
   "dispatch/offline.ts": "Classifies whichever tool graph it is handed as offline or editor-bound, and builds the editor-down message from a context handed to it; holds nothing per editor.",
   "surface/action-schema.ts": "Derives one action's parameter schema from whichever tool graph it is handed; holds nothing of its own.",
   "surface/action-signature.ts": "Renders one action's compact signature from whichever tool graph it is handed; its cache is keyed by the action object, never by editor.",

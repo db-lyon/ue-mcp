@@ -86,6 +86,15 @@ public:
 	void NoteHandlerBegin(const FString& Method);
 	void NoteHandlerEnd(const FString& Method);
 
+	/**
+	 * Called by execute_batch before each of its calls, so a batch that outlives
+	 * its caller's wait can still say how far it got: the snapshot a timeout
+	 * carries reports completedCalls, requestedCalls and the call under way.
+	 * ClearBatchProgress drops it when the batch returns.
+	 */
+	void NoteBatchProgress(int32 CompletedCalls, int32 RequestedCalls, const FString& CurrentMethod);
+	void ClearBatchProgress();
+
 	/** Refresh the snapshot. Game thread only; no-op elsewhere. */
 	void CaptureNow();
 
@@ -177,6 +186,12 @@ private:
 
 	FString HandlerMethod;
 	double HandlerStartSeconds = 0.0;
+
+	// The batch in flight, if any: zero RequestedCalls means none.
+	int32 BatchCompletedCalls = 0;
+	int32 BatchRequestedCalls = 0;
+	FString BatchCurrentMethod;
+	double BatchStartSeconds = 0.0;
 
 	// Startup runs before there is a tick loop to stall, so "the game thread
 	// has not ticked for 40 seconds" is true and useless until the engine loop
