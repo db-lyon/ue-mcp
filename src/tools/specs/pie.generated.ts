@@ -1637,6 +1637,30 @@ export const handlerSpecs: HandlerSpecs = {
     ],
     "contractExempt": "Arms the observer and recorder and can start PIE"
   },
+  "pie_script_runs": {
+    "category": "pie",
+    "params": [
+      {
+        "name": "script",
+        "type": "string",
+        "required": false,
+        "description": "Test script asset path: only that script's runs"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Most runs, newest first (default 50)",
+        "minimum": 1
+      },
+      {
+        "name": "include_steps",
+        "type": "boolean",
+        "required": false,
+        "description": "Each run's per-step results (default true)"
+      }
+    ]
+  },
   "pie_script_status": {
     "category": "pie",
     "params": [
@@ -2128,6 +2152,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_script_replay: "Params: run_id?, results_path?, time_scale?, auto_stop_pie?, pie_instance?, client_id?, wait?, timeout_seconds?",
   pie_script_results: "Params: run_id?, results_path?",
   pie_script_run: "Params: script OR steps, name?, profile?, record?, start_pie?, block_on_manual?, mode?, default_within_ms?, pie_instance?, client_id?, wait?, timeout_seconds?",
+  pie_script_runs: "Params: script?, limit?, include_steps?",
   pie_script_status: "Params: run_id?, since_seq?, wait?, timeout_seconds?",
   pie_script_stop: "Params: run_id?, reason?",
   pie_script_update: "Params: path, steps?, description?, profile?, default_within_ms?, manual_only?",
@@ -2182,10 +2207,11 @@ export const schema: Record<string, z.ZodType> = {
   fixed_timestep: z.boolean().optional().describe("Fixed 1/pin_fps delta during replay (default false)"),
   hz: z.number().optional().describe("Playback rate (default 60)"),
   id: z.string().optional().describe("Recording id (default: a timestamp) (pie_record_arm). Recording id (pie_record_delete, pie_record_read)"),
+  include_steps: z.boolean().optional().describe("Each run's per-step results (default true)"),
   include_values: z.boolean().optional().describe("series: include the downsampled values (default false)"),
   injection_id: z.string().optional().describe("Caller-chosen hold id (minted when absent) (pie_inject_input_start). Hold or tape id to stop (pie_inject_input_stop). Caller-chosen tape id (minted when absent) (pie_inject_input_tape). Hold id from inject_input_start (pie_inject_input_update). Alias for request_id (pie_remote_result)"),
   label: z.string().optional().describe("Marker label"),
-  limit: z.number().int().min(1).optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most entries per list (default 400) (pie_script_values)"),
+  limit: z.number().int().min(1).optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most runs, newest first (default 50) (pie_script_runs). Most entries per list (default 400) (pie_script_values)"),
   manual_only: z.boolean().optional().describe("Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"),
   max_errors: z.number().int().min(0).optional().describe("no-errors predicate threshold (default 0) (pie_scenario_scaffold). Most errors logged during the run (default 0) (pie_test_scaffold)"),
   max_points: z.number().int().min(1).optional().describe("series: most values per channel (default 500)"),
@@ -2222,7 +2248,7 @@ export const schema: Record<string, z.ZodType> = {
   sample_hz: z.number().int().min(1).optional().describe("Sample rate (default 60) (pie_observe_arm, pie_record_arm). Inline steps: sample rate (default 60) (pie_replay_arm, pie_replay_run)"),
   scenario: z.record(z.string(), z.unknown()).optional().describe("Inline scenario object (pie_scenario_validate). Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[], forbid[], window_ms}]}; see docs/pie.md (pie_uat_run)"),
   scenario_path: z.string().optional().describe("Path to a scenario.json"),
-  script: z.string().optional().describe("Test script asset path"),
+  script: z.string().optional().describe("Test script asset path (pie_script_run). Test script asset path: only that script's runs (pie_script_runs)"),
   sequence_path: z.string().optional().describe("Explicit sequence.json path"),
   session: z.string().optional().describe("Session id under Saved/MCPSessions (default: the live or most recent session)"),
   session_dir: z.string().optional().describe("Absolute session folder, overriding session"),

@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1206,
+  "handlerCount": 1207,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -25752,6 +25752,30 @@
         }
       ],
       "contractExempt": "Arms the observer and recorder and can start PIE"
+    },
+    "pie_script_runs": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "script",
+          "type": "string",
+          "required": false,
+          "description": "Test script asset path: only that script's runs"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most runs, newest first (default 50)",
+          "minimum": 1
+        },
+        {
+          "name": "include_steps",
+          "type": "boolean",
+          "required": false,
+          "description": "Each run's per-step results (default true)"
+        }
+      ]
     },
     "pie_script_status": {
       "category": "pie",

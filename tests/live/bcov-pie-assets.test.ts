@@ -310,6 +310,70 @@ describe("manual runs", () => {
     expect(full.summary).toMatchObject({ unchecked: 0, passed: 0, failed: 0 });
     await call("pie_script_stop", { run_id: full.run_id, reason: "test" });
   }, 60_000);
+
+  it("script_runs lists a script's runs newest first with their steps, and script_list names each script's last run", async () => {
+    const LISTED = `${DIR}/TS_BCovRunList`;
+    const NEVER = `${DIR}/TS_BCovRunListNever`;
+    const checks = [
+      { instruction: "The door opens", judge: "manual" },
+      { instruction: "The light is on", judge: "manual" },
+    ];
+    await call("pie_script_create", { name: "TS_BCovRunList", package_path: DIR, steps: checks, manual_only: true });
+    await call("pie_script_create", { name: "TS_BCovRunListNever", package_path: DIR, steps: checks, manual_only: true });
+
+    // Two finished runs, then one left awaiting its verdicts.
+    const first = String((await call("pie_script_run", { script: LISTED, mode: "manual" })).run_id);
+    await call("pie_script_verdict", { run_id: first, step: 0, verdict: "pass" });
+    expect((await call("pie_script_verdict", { run_id: first, step: 1, verdict: "pass" })).state).toBe("finished");
+    const second = String((await call("pie_script_run", { script: LISTED, mode: "manual" })).run_id);
+    await call("pie_script_verdict", { run_id: second, step: 0, verdict: "fail", note: "stuck" });
+    expect((await call("pie_script_verdict", { run_id: second, step: 1, verdict: "skip" })).state).toBe("finished");
+    const live = String((await call("pie_script_run", { script: LISTED, mode: "manual" })).run_id);
+
+    try {
+      const listed = await call("pie_script_runs", { script: `${LISTED}.TS_BCovRunList` });
+      expect(listed.script).toBe(LISTED);
+      const runs = listed.runs as Json[];
+      expect(runs.every((r) => String(r.script).startsWith(LISTED))).toBe(true);
+      expect(runs.slice(0, 3).map((r) => r.run_id)).toEqual([live, second, first]);
+      expect(listed.total).toBeGreaterThanOrEqual(3);
+      expect(runs[0]).toMatchObject({ state: "awaiting_verdict", mode: "manual", live: true, script_name: "TS_BCovRunList" });
+      expect(runs[1]).toMatchObject({ state: "finished", live: false, summary: { failed: 1, skipped: 1, passed: 0 } });
+      expect(runs[2]).toMatchObject({ state: "finished", live: false, summary: { passed: 2, failed: 0 } });
+      expect((runs[1].steps as Json[]).map((s) => [s.index, s.status, s.note ?? null])).toEqual([[0, "failed", "stuck"], [1, "skipped", null]]);
+      expect((runs[0].steps as Json[]).map((s) => s.status)).toEqual(["awaiting_verdict", "awaiting_verdict"]);
+      for (const r of runs.slice(1, 3)) {
+        expect(String(r.results_path)).toMatch(/results\.json$/);
+        expect(String(r.started_at) <= String(r.ended_at)).toBe(true);
+        // The path it names is the run script_results reads.
+        expect((await call("pie_script_results", { results_path: r.results_path })).run_id).toBe(r.run_id);
+      }
+
+      const one = await call("pie_script_runs", { script: LISTED, limit: 1, include_steps: false });
+      expect((one.runs as Json[]).map((r) => r.run_id)).toEqual([live]);
+      expect((one.runs as Json[])[0].steps).toBeUndefined();
+      expect(one.count).toBe(1);
+
+      // Unfiltered, other scripts' runs are listed too, still newest first.
+      const all = (await call("pie_script_runs", { limit: 200, include_steps: false })).runs as Json[];
+      expect(all[0].run_id).toBe(live);
+      const starts = all.map((r) => String(r.started_at ?? ""));
+      expect(starts.filter((s) => s !== "")).toEqual([...starts.filter((s) => s !== "")].sort().reverse());
+      expect((await call("pie_script_runs", { script: NEVER })).runs).toEqual([]);
+
+      const scripts = (await call("pie_script_list", { directory: DIR })).scripts as Json[];
+      const last = scripts.find((s) => s.path === LISTED)?.last_run as Json;
+      expect(last).toMatchObject({ run_id: live, state: "awaiting_verdict", live: true });
+      expect(last.steps).toBeUndefined();
+      expect(scripts.find((s) => s.path === NEVER)?.last_run).toBeNull();
+    } finally {
+      await call("pie_script_stop", { run_id: live, reason: "test" });
+    }
+
+    // Stopped, the run reads from its results.json and is still the script's last run.
+    const after = (await call("pie_script_list", { directory: DIR })).scripts as Json[];
+    expect(after.find((s) => s.path === LISTED)?.last_run).toMatchObject({ run_id: live, state: "stopped", live: false });
+  }, 60_000);
 });
 
 describe("scenarios", () => {

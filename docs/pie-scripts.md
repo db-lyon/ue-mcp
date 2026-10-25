@@ -84,7 +84,7 @@ Scripts are data assets, saved under `/Game/PIEStudio/Scripts` unless you give a
 | `script_validate` | `steps`, `profile?`, `manual_only?`. The checks `script_create` runs, without saving: `valid`, `errors` in the refusal's shape, `summary` and the parsed `steps`. |
 | `script_values` | `target?`, `profile?`, `limit?` (default 400). What a script can name in the open level: `pawn` (`class`, `source`, `components`), `values` (`path`, `kind` number, integer, boolean or enum, `type`, and an enum's `values`), `actors`, `spawned_classes`, `widgets`, `profile_values`, and with `target` a `target` object (`found`, `class`, `is_player_pawn`, `actors` of that class). |
 | `script_delete` | `path`, `confirm=true` |
-| `script_list` | `directory?` (default `/Game`). Returns `scripts` (`path`, `object_path`, `name`) and `count`. |
+| `script_list` | `directory?` (default `/Game`). Returns `scripts` (`path`, `object_path`, `name`, `last_run`) and `count`. `last_run` is the script's newest run as [`script_runs`](#listing-runs) lists it, without its steps, or `null` when it never ran. |
 
 A profile that does not exist is refused. `steps` must hold at least one step.
 
@@ -348,6 +348,10 @@ The step records `verdict_source: "agent"` and the evidence in `results.json`, o
 | `steps[].agent_judgeable` | Manual steps: whether an agent verdict is accepted. |
 | `steps[].arrange`, `act` | The step's arrange and act entries, as written. Absent when it has none. |
 | `steps[].act_result` | Steps with `arrange` or `act`: what they did and how long it took ([Arrange and act](#arrange-and-act)). |
+
+### Listing runs
+
+`script_runs` (`script?`, `limit?` default 50, `include_steps?` default true) lists script runs newest first: the active run, built from memory with `live: true`, then every `results.json` under `<Project>/Saved/MCPObservations`. `script` takes an asset or object path and keeps that script's runs. Each run carries `run_id`, `script`, `script_name`, `state`, `mode`, `started_at`, `ended_at`, `stop_reason`, `summary`, `results_path`, `live`, and its `steps` as `results.json` has them. The answer adds `count`, `total` (runs that matched before `limit`) and `observations_dir`.
 
 ## Replay regression
 

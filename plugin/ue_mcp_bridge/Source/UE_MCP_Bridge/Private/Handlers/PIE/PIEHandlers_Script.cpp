@@ -11,6 +11,7 @@
 #include "Handlers/PIE/PIESequenceFormat.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
+#include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 
@@ -159,6 +160,78 @@ namespace
 		R->SetNumberField(TEXT("last_seq"), Run.NextSeq - 1);
 		R->SetObjectField(TEXT("summary"), ScriptSummaryToJson(SummarizeScriptRun(Run), Run.bReplay));
 	}
+
+	// One run as script_runs lists it, and script_list's last_run without the steps: its results.json minus the events.
+	TSharedRef<FJsonObject> ScriptRunListRow(const TSharedPtr<FJsonObject>& Results, const FString& ResultsPath, bool bLive, bool bSteps)
+	{
+		TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
+		static const TCHAR* const Fields[] = {
+			TEXT("run_id"), TEXT("script"), TEXT("script_name"), TEXT("state"), TEXT("mode"), TEXT("started_at"),
+			TEXT("ended_at"), TEXT("stop_reason"), TEXT("replay_of"), TEXT("recording_id"), TEXT("observation_run_id") };
+		for (const TCHAR* Field : Fields)
+		{
+			FString Value;
+			if (Results->TryGetStringField(Field, Value) && !Value.IsEmpty()) Row->SetStringField(Field, Value);
+		}
+		const TSharedPtr<FJsonObject>* Summary = nullptr;
+		if (Results->TryGetObjectField(TEXT("summary"), Summary)) Row->SetObjectField(TEXT("summary"), *Summary);
+		Row->SetStringField(TEXT("results_path"), ResultsPath);
+		Row->SetBoolField(TEXT("live"), bLive);
+		const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
+		if (bSteps && Results->TryGetArrayField(TEXT("steps"), Steps)) Row->SetArrayField(TEXT("steps"), *Steps);
+		return Row;
+	}
+
+	struct FScriptRunListEntry
+	{
+		// The script's package path, empty for an inline run.
+		FString Script;
+		FString StartedAt;
+		FDateTime Written;
+		TSharedRef<FJsonObject> Row;
+	};
+
+	// Every script run the editor knows, newest first: the one it holds while it is active,
+	// then each results.json under Saved/MCPObservations.
+	TArray<FScriptRunListEntry> ListScriptRunEntries(bool bSteps)
+	{
+		TArray<FScriptRunListEntry> Out;
+		TSet<FString> Seen;
+		auto Add = [&Out, &Seen, bSteps](const TSharedPtr<FJsonObject>& Results, const FString& ResultsPath, bool bLive, const FDateTime& Written)
+		{
+			FString RunId, Script, StartedAt;
+			if (!Results.IsValid() || !Results->TryGetStringField(TEXT("run_id"), RunId) || RunId.IsEmpty() || Seen.Contains(RunId)) return;
+			Seen.Add(RunId);
+			Results->TryGetStringField(TEXT("script"), Script);
+			Results->TryGetStringField(TEXT("started_at"), StartedAt);
+			Out.Add({ Script.IsEmpty() ? FString() : FPackageName::ObjectPathToPackageName(Script), StartedAt, Written,
+				ScriptRunListRow(Results, ResultsPath, bLive, bSteps) });
+		};
+		const FPIEScriptRunner& Runner = FPIEScriptRunner::Get();
+		const FScriptRun* Held = Runner.GetRun();
+		if (Held && Runner.IsActive())
+		{
+			Add(ScriptRunToResultsJson(*Held), Held->ResultsPath, true, FDateTime::UtcNow());
+		}
+		const FString Root = DefaultScriptObservationsRoot();
+		TArray<FString> Dirs;
+		IFileManager::Get().FindFiles(Dirs, *(Root / TEXT("*")), false, true);
+		for (const FString& Dir : Dirs)
+		{
+			const FString Path = Root / Dir / TEXT("results.json");
+			// An observation with no script run has no results.json.
+			const FDateTime Written = IFileManager::Get().GetTimeStamp(*Path);
+			if (Written == FDateTime::MinValue()) continue;
+			Add(LoadJsonFile(Path), Path, false, Written);
+		}
+		Out.StableSort([](const FScriptRunListEntry& A, const FScriptRunListEntry& B)
+		{
+			// started_at is ISO 8601 UTC, so it orders as text; a run that never started orders by its file.
+			if (A.StartedAt != B.StartedAt) return A.StartedAt > B.StartedAt;
+			return A.Written > B.Written;
+		});
+		return Out;
+	}
 }
 
 void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
@@ -257,6 +330,11 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("pie_script_results"), &PieScriptResults, {
 		MCPParam::Optional(TEXT("run_id"), EType::String, RunIdDoc),
 		MCPParam::Optional(TEXT("results_path"), EType::String, TEXT("results.json path, instead of a run id")),
+	});
+	Registry.RegisterHandler(TEXT("pie_script_runs"), &PieScriptRuns, {
+		MCPParam::Optional(TEXT("script"), EType::String, TEXT("Test script asset path: only that script's runs")),
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Most runs, newest first (default 50)")).Min(1),
+		MCPParam::Optional(TEXT("include_steps"), EType::Boolean, TEXT("Each run's per-step results (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("pie_script_replay"), &PieScriptReplay, {
 		MCPParam::Optional(TEXT("run_id"), EType::String, TEXT("Finished run to replay (default the last run)")),
@@ -520,6 +598,13 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptList(const TSharedPtr<FJsonObject>
 	TArray<FAssetData> Assets;
 	ARM.Get().GetAssetsByClass(UMCPPIETestScript::StaticClass()->GetClassPathName(), Assets, true);
 
+	// Each script's newest run, from the list script_runs answers with.
+	TMap<FString, TSharedRef<FJsonObject>> LastRuns;
+	for (const FScriptRunListEntry& E : ListScriptRunEntries(false))
+	{
+		if (!E.Script.IsEmpty() && !LastRuns.Contains(E.Script)) LastRuns.Add(E.Script, E.Row);
+	}
+
 	TArray<TSharedPtr<FJsonValue>> Items;
 	for (const FAssetData& A : Assets)
 	{
@@ -529,6 +614,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptList(const TSharedPtr<FJsonObject>
 		Item->SetStringField(TEXT("path"), PackageName);
 		Item->SetStringField(TEXT("object_path"), A.GetObjectPathString());
 		Item->SetStringField(TEXT("name"), A.AssetName.ToString());
+		if (const TSharedRef<FJsonObject>* Last = LastRuns.Find(PackageName)) Item->SetObjectField(TEXT("last_run"), *Last);
+		else Item->SetField(TEXT("last_run"), MakeShared<FJsonValueNull>());
 		Items.Add(MakeShared<FJsonValueObject>(Item));
 	}
 
@@ -872,6 +959,33 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptResults(const TSharedPtr<FJsonObje
 	Obj->SetBoolField(TEXT("live"), false);
 	Obj->SetStringField(TEXT("results_path"), ResultsPath);
 	return MCPResult(Obj);
+}
+
+TSharedPtr<FJsonValue> FPIEHandlers::PieScriptRuns(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+	const FString Script = OptionalString(Params, TEXT("script"));
+	const int32 Limit = OptionalInt(Params, TEXT("limit"), 50);
+	const bool bSteps = OptionalBool(Params, TEXT("include_steps"), true);
+	if (Limit < 1) return MCPError(TEXT("limit must be at least 1"));
+	const FString Wanted = Script.IsEmpty() ? FString() : FPackageName::ObjectPathToPackageName(Script);
+
+	TArray<TSharedPtr<FJsonValue>> Runs;
+	int32 Total = 0;
+	for (const FScriptRunListEntry& E : ListScriptRunEntries(bSteps))
+	{
+		if (!Wanted.IsEmpty() && E.Script != Wanted) continue;
+		++Total;
+		if (Runs.Num() < Limit) Runs.Add(MakeShared<FJsonValueObject>(E.Row));
+	}
+
+	auto Result = MCPSuccess();
+	if (!Wanted.IsEmpty()) Result->SetStringField(TEXT("script"), Wanted);
+	Result->SetArrayField(TEXT("runs"), Runs);
+	Result->SetNumberField(TEXT("count"), Runs.Num());
+	Result->SetNumberField(TEXT("total"), Total);
+	Result->SetStringField(TEXT("observations_dir"), DefaultScriptObservationsRoot());
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPIEHandlers::PieScriptReplay(const TSharedPtr<FJsonObject>& Params)

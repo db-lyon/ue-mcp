@@ -62,7 +62,7 @@ export const pieTool: ToolDef = categoryTool(
     script_validate:      specBp("read", "Check steps the way script_create does without saving anything: valid, and errors [{step, field, message, candidates}] for every step the observer could not check.", "pie_script_validate"),
     script_values:        specBp("read", "What a script can name in the open level: the player pawn's readable value paths with kind and type, level actors, classes the game mode spawns, Widget Blueprints and the profile's tracked values. target adds which actors are of that class and whether it is the player pawn.", "pie_script_values"),
     script_delete:        { ...specBp("mutate", "Delete a test script (confirm=true).", "pie_script_delete"), destructive: true },
-    script_list:          specBp("read", "List test scripts.", "pie_script_list"),
+    script_list:          specBp("read", "List test scripts, each with last_run: its newest run's run_id, state, started_at, ended_at, summary and results_path, or null.", "pie_script_list"),
     script_run: {
       ...specBp("mutate", "Run a test script in PIE: arms the observer and, unless record=false, the recorder; mode=manual instead starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once; evaluates auto steps live and marks each pass or fail; waits on manual steps for verdicts, asked through an elicitation form when the client supports one, otherwise through verdict. Writes results.json beside the observation. wait=true returns once the run finishes.", "pie_script_run"),
       followUp: scriptRunFollowUp,
@@ -74,6 +74,7 @@ export const pieTool: ToolDef = categoryTool(
     script_stop:          specBp("mutate", "End a script run now; unsettled steps stay pending and results.json is written.", "pie_script_stop"),
     verdict:              specBp("mutate", "Record a manual step's verdict: pass, fail or skip, with a note. source=agent marks the calling agent's own judgement and needs evidence {note, captures?}; a step with agent_judgeable=false takes only a person's verdict.", "pie_script_verdict"),
     script_results:       specBp("read", "Read a finished run's results.json.", "pie_script_results"),
+    script_runs:          specBp("read", "List script runs newest first, the active one included: run_id, script, started_at, ended_at, state, summary, per-step results and results_path. script narrows to one script's runs.", "pie_script_runs"),
     script_replay: {
       ...specBp("mutate", "Replay a finished run's recording and re-evaluate its auto steps at their recorded offsets; manual steps keep their verdicts. Reports regressions.", "pie_script_replay"),
       followUp: scriptRunFollowUp,
