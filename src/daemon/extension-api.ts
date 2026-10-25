@@ -9,6 +9,9 @@ import type { DaemonEvent } from "./events.js";
 import type { UiManifest } from "./ui-bundles.js";
 import type { ModelProvider } from "../flow/model-provider.js";
 import type { ChangesResult, CheckpointResult, CheckpointState, RestoreResult } from "../checkpoints/service.js";
+import type { DaemonSkill } from "../extensions/skills-list.js";
+
+export type { DaemonSkill, DaemonSkillOwner, ShadowedSkill, ProjectSkillFolder } from "../extensions/skills-list.js";
 
 export type { ChangeEntry, CheckpointInfo, ChangesResult, CheckpointResult, CheckpointState, RestoreRefusal, RestoreResult } from "../checkpoints/service.js";
 
@@ -138,6 +141,7 @@ export interface DaemonExtensionApi {
    *   "checkpoints"              `checkpoints` drives each session's shadow history, and
    *                              checkpoint.created, checkpoint.restored, checkpoints.toggled and
    *                              checkpoints.cleared are on the event stream (API 3)
+   *   "skills"                   `skills.list` lists ue-mcp's packaged skills and the project's own
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
@@ -167,6 +171,17 @@ export interface DaemonExtensionApi {
     changes(from: string, to?: string, opts?: { editor?: string }): Promise<ChangesResult>;
     restore(checkpoint: string, opts?: { paths?: string[]; force?: boolean; editor?: string }): Promise<RestoreResult>;
     clear(opts?: { editor?: string }): Promise<{ editor: string; cleared: true }>;
+  };
+
+  /**
+   * Every skill a client of this project can load (feature "skills"), the
+   * same list as GET /v1/skills: ue-mcp's packaged skills and every skill
+   * directory under the project's .claude/skills and .agents/skills, one
+   * entry per id, with owner and location. A project copy hides the packaged
+   * one of the same id and names it in `shadows`.
+   */
+  skills?: {
+    list(): DaemonSkill[];
   };
 
   editors(): EditorStatus[];
@@ -231,6 +246,6 @@ export interface DaemonHealth {
   extensions: Array<{ name: string; version: string }>;
   /** Version of the UI bundle being served, or null. */
   ui: string | null;
-  /** What the HTTP API offers beyond apiVersion, for feature detection ("checkpoints"). Absent on a daemon older than the field. */
+  /** What the HTTP API offers beyond apiVersion, for feature detection ("checkpoints", "skills"). Absent on a daemon older than the field. */
   features?: readonly string[];
 }

@@ -13,6 +13,7 @@
  *   POST /v1/shutdown   exit now
  *   POST /v1/handoff    exit once no call is in flight (a newer daemon is taking over)
  *   /v1/checkpoints     checkpoints per editor session, see checkpoint-routes.ts
+ *   GET  /v1/skills     every skill a client of this project can load, see skills-list.ts
  *   WS   /v1/mcp        one MCP session per socket
  */
 import * as fs from "node:fs";
@@ -52,10 +53,10 @@ import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type
 import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 
 /** What this daemon's extension API offers beyond its version number. */
-export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "events.dialog", "events.script", "models.provider", "modes"];
+export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "events.dialog", "events.script", "models.provider", "modes", "skills"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints"];
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "skills"];
 import { loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { UiBundleStore, contentType } from "./ui-bundles.js";
 import { collectStatus } from "../cli/status.js";
@@ -69,6 +70,7 @@ import { pluginRoutes } from "./plugin-routes.js";
 import { releaseStartLock, waitForStartTurn } from "./start-lock.js";
 import { checkpointRoute } from "./checkpoint-routes.js";
 import { checkpointsFor, subscribeCheckpointEvents } from "../checkpoints/service.js";
+import { listDaemonSkills } from "../extensions/skills-list.js";
 
 const DEFAULT_IDLE_MS = 30 * 60_000;
 const DEFAULT_WAIT_FOR_EDITOR_SECONDS = 60;
@@ -438,6 +440,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     models: {
       register: (provider) => registerModelProvider(provider),
     },
+    skills: {
+      list: () => listDaemonSkills(projectDir),
+    },
     editors: () => editors(),
     editorOperation: (op) => editorOp(op),
     setBusy,
@@ -569,6 +574,14 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       // The same read-only report as `ue-mcp status --json`.
       try {
         json(res, 200, collectStatus(rt.project.projectPath ?? opts.projects[0]));
+      } catch (e) {
+        json(res, 500, { error: e instanceof Error ? e.message : String(e) });
+      }
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/v1/skills") {
+      try {
+        json(res, 200, { skills: listDaemonSkills(projectDir) });
       } catch (e) {
         json(res, 500, { error: e instanceof Error ? e.message : String(e) });
       }

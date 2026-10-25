@@ -269,6 +269,22 @@ A call that still cannot reach the editor says why it last went away. The daemon
 
 The daemon also manages the project's plugins over HTTP, for clients such as an in-editor panel. `GET /v1/plugins` lists the plugins `ue-mcp.yml` declares with their version, status and categories, and `GET /v1/plugins/catalog` lists the registry's published plugins. `POST /v1/plugins/install` (`{ name, version? }`), `POST /v1/plugins/update` (`{ name? }`) and `POST /v1/plugins/uninstall` (`{ name }`) run the same `ue-mcp plugin` commands, one at a time, and publish `plugins.changed` on the event stream. A change takes effect when the server restarts.
 
+### What a client can read from the daemon
+
+These routes serve a client that builds its own agent context, such as an in-editor panel. Each is also on the extension API, and `/v1/health` lists its feature name under `features` (an extension reads `api.features`).
+
+| Route | Extension API | Feature | Answers |
+|---|---|---|---|
+| `GET /v1/skills` | `api.skills.list()` | `skills` | Every skill a client of this project can load |
+
+**Skills.** `GET /v1/skills` returns `{ skills }`: ue-mcp's packaged skills and every skill directory under the project's `.claude/skills` and `.agents/skills`. Each entry has its `id` (the directory name; a plugin's skills are installed as `<namespace>-<skill>`), `name` and `description` from the frontmatter, the absolute `dir`, the other `files` in it, the `body` without frontmatter, the parsed `frontmatter`, `tokens` (SKILL.md characters / 4, rounded up), `location` (`packaged` or `project`) with the project `folder`, and `owner`:
+
+- `{ kind: "ue-mcp", version }` for a packaged skill, or a project copy `.ue-mcp/skills.json` records as ue-mcp's own.
+- `{ kind: "plugin", package, version }` for a copy recorded under a plugin package. `version` is the installed package's, or `null` when it cannot be found.
+- `{ kind: "project" }` for anything else, and for everything in `.agents/skills`.
+
+One id is listed once. A project copy wins over the packaged one, and `.claude/skills` over `.agents/skills`; the winner lists what it hides in `shadows`. A SKILL.md whose frontmatter does not parse is still listed, with the reason in `problems`.
+
 ### Updates through the daemon
 
 A minute after it starts, and every six hours, the daemon looks for a newer release on the install's channel and publishes `update.available` on its event stream. `GET /v1/update` reports the target version and, for a binary install, whether that release ships binaries for the project's engine and platform. `POST /v1/update/apply` (optional body `{ "version": "x.y.z" }`) installs it:

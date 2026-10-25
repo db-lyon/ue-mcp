@@ -103,6 +103,7 @@ const PER_SESSION: Record<string, string> = {
   "cli/feedback-cli.ts": "Scopes the deferred queue and the feedback mode with --editor.",
   "cli/dialog-cli.ts": "Scopes the dialog handling mode with --editor, one editor at a time.",
   "extensions/skills.ts": "Installs, removes and checks agent skills inside one project directory, recording which package owns each.",
+  "extensions/skills-list.ts": "Lists the skills one project directory can load, reading that project's ownership record.",
 
   "flow/context.ts": "Carries the session a flow step runs in.",
   "flow/flow-tool.ts": "Resolves the registry and config of the addressed editor.",
