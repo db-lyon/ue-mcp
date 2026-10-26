@@ -11335,6 +11335,11 @@
         {
           "suite": "live",
           "file": "tests/live/editor-lifecycle.test.ts",
+          "test": "advertises the same epic_* actions after the editor restarts (#1538)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-lifecycle.test.ts",
           "test": "build_project names a locked output and the process holding it, then builds once it is released"
         },
         {
@@ -17623,6 +17628,11 @@
       "registeredIn": "EditorHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/editor-lifecycle.test.ts",
+          "test": "advertises the same epic_* actions after the editor restarts (#1538)"
+        },
         {
           "suite": "live",
           "file": "tests/live/editor-lifecycle.test.ts",
