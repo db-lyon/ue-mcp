@@ -10,6 +10,7 @@
 #include "Handlers/PIE/PIERemotePlayers.h"
 #include "Handlers/PIE/PIELog.h"
 #include "MCPPIERemoteControl.h"
+#include "HandlerWorld.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "HAL/FileManager.h"
@@ -776,6 +777,7 @@ namespace MCPPIE
 		Def.AssetPath = AssetPath;
 		Def.Description = Asset->Description;
 		Def.Profile = Asset->Profile;
+		Def.Map = Asset->Map;
 		Def.DefaultWithinMs = Asset->DefaultWithinMs > 0 ? Asset->DefaultWithinMs : 5000;
 		ScriptStepsFromAsset(Asset, Def.Steps);
 		return Def;
@@ -1279,6 +1281,7 @@ namespace MCPPIE
 		O->SetStringField(TEXT("script_name"), Run.ScriptName);
 		if (!Run.Description.IsEmpty()) O->SetStringField(TEXT("description"), Run.Description);
 		O->SetStringField(TEXT("profile"), Run.Profile);
+		if (!Run.Map.IsEmpty()) O->SetStringField(TEXT("map"), Run.Map);
 		O->SetStringField(TEXT("started_at"), Run.StartedAt);
 		O->SetStringField(TEXT("ended_at"), Run.EndedAt);
 		O->SetStringField(TEXT("state"), ScriptRunStateToString(Run.State));
@@ -1330,6 +1333,7 @@ namespace MCPPIE
 		Obj->TryGetStringField(TEXT("script_name"), Out.ScriptName);
 		Obj->TryGetStringField(TEXT("description"), Out.Description);
 		Obj->TryGetStringField(TEXT("profile"), Out.Profile);
+		Obj->TryGetStringField(TEXT("map"), Out.Map);
 		Obj->TryGetStringField(TEXT("started_at"), Out.StartedAt);
 		Obj->TryGetStringField(TEXT("ended_at"), Out.EndedAt);
 		FString State;
@@ -1411,6 +1415,7 @@ namespace MCPPIE
 		OutReplay.ScriptName = Source.ScriptName;
 		OutReplay.Description = Source.Description;
 		OutReplay.Profile = Source.Profile;
+		OutReplay.Map = Source.Map;
 		OutReplay.DefaultWithinMs = Source.DefaultWithinMs;
 		OutReplay.bBlockOnManual = false;
 
@@ -1732,6 +1737,7 @@ namespace MCPPIE
 		NewRun.ScriptName = Cfg.Script.Name.IsEmpty() ? FString(TEXT("inline")) : Cfg.Script.Name;
 		NewRun.Description = Cfg.Script.Description;
 		NewRun.Profile = Cfg.Script.Profile;
+		NewRun.Map = Cfg.Script.Map;
 		NewRun.DefaultWithinMs = Cfg.Script.DefaultWithinMs > 0 ? Cfg.Script.DefaultWithinMs : 5000;
 		NewRun.bBlockOnManual = Cfg.bBlockOnManual;
 		NewRun.ObservationRunId = NewRun.RunId;
@@ -1769,6 +1775,13 @@ namespace MCPPIE
 			OutMessage = FString::Printf(TEXT("Manual script run %s: %d steps awaiting a verdict, no PIE"), *Run.RunId, ScriptAwaitingSteps(Run).Num());
 			UE_LOG(LogMCPPIE, Log, TEXT("[PIE-SCRIPT] %s"), *OutMessage);
 			return true;
+		}
+
+		// Open the script's level before anything arms, so a refusal leaves nothing behind.
+		if (!Cfg.Script.Map.IsEmpty() && !MCPLoadMapIfNeeded(Cfg.Script.Map, OutError))
+		{
+			OutError = FString::Printf(TEXT("Script %s plays in %s: %s"), *NewRun.ScriptName, *Cfg.Script.Map, *OutError);
+			return false;
 		}
 
 		FObserverArmConfig ObsCfg;
@@ -1902,6 +1915,12 @@ namespace MCPPIE
 		NewRun.ResultsPath = NewRun.OutputDir / TEXT("results.json");
 		NewRun.RecordingId = Source.RecordingId;
 		NewRun.RecordingDir = RecDir;
+
+		if (!Source.Map.IsEmpty() && !MCPLoadMapIfNeeded(Source.Map, OutError))
+		{
+			OutError = FString::Printf(TEXT("Run %s played in %s: %s"), *Source.RunId, *Source.Map, *OutError);
+			return false;
+		}
 
 		TArray<FScriptStepDef> Defs;
 		for (const FScriptStepRun& S : NewRun.Steps) Defs.Add(S.Def);

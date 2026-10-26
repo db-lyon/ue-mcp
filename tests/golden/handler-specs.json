@@ -25506,6 +25506,12 @@
           "description": "Observation profile asset path"
         },
         {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open"
+        },
+        {
           "name": "default_within_ms",
           "type": "integer",
           "required": false,
@@ -25674,6 +25680,12 @@
           "type": "string",
           "required": false,
           "description": "Observation profile asset path; overrides the script's"
+        },
+        {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is"
         },
         {
           "name": "record",
@@ -25854,6 +25866,12 @@
           "description": "Observation profile asset path; empty clears it"
         },
         {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level the script plays in; empty clears it"
+        },
+        {
           "name": "default_within_ms",
           "type": "integer",
           "required": false,
@@ -25883,6 +25901,12 @@
           "type": "string",
           "required": false,
           "description": "Observation profile asset path the script would use"
+        },
+        {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level the script would play in"
         },
         {
           "name": "manual_only",

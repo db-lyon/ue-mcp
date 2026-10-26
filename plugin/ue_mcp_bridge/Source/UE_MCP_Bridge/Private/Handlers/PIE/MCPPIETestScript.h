@@ -101,6 +101,10 @@ public:
 		meta=(ToolTip="Observation profile asset path. Optional: the values the steps reference are observed without one."))
 	FString Profile;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, AssetRegistrySearchable, Category="Script",
+		meta=(ToolTip="Level the script plays in, e.g. /Game/Maps/L_Arena. Optional: a run opens it before PIE; empty plays whatever level is open."))
+	FString Map;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Script",
 		meta=(TitleProperty="Instruction", ToolTip="Steps, run in order."))
 	TArray<FMCPPIETestStep> Steps;

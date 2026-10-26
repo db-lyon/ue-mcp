@@ -1390,6 +1390,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Observation profile asset path"
       },
       {
+        "name": "map",
+        "type": "string",
+        "required": false,
+        "description": "Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open"
+      },
+      {
         "name": "default_within_ms",
         "type": "integer",
         "required": false,
@@ -1558,6 +1564,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Observation profile asset path; overrides the script's"
+      },
+      {
+        "name": "map",
+        "type": "string",
+        "required": false,
+        "description": "Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is"
       },
       {
         "name": "record",
@@ -1738,6 +1750,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Observation profile asset path; empty clears it"
       },
       {
+        "name": "map",
+        "type": "string",
+        "required": false,
+        "description": "Level the script plays in; empty clears it"
+      },
+      {
         "name": "default_within_ms",
         "type": "integer",
         "required": false,
@@ -1767,6 +1785,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Observation profile asset path the script would use"
+      },
+      {
+        "name": "map",
+        "type": "string",
+        "required": false,
+        "description": "Level the script would play in"
       },
       {
         "name": "manual_only",
@@ -2145,18 +2169,18 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_replay_stop: "Params: none",
   pie_scenario_scaffold: "Params: recording_id?, recording_dir?, name?, max_errors?",
   pie_scenario_validate: "Params: scenario_path OR scenario",
-  pie_script_create: "Params: name, package_path?, steps, description?, profile?, default_within_ms?, manual_only?, onConflict?",
+  pie_script_create: "Params: name, package_path?, steps, description?, profile?, map?, default_within_ms?, manual_only?, onConflict?",
   pie_script_delete: "Params: path, confirm?",
   pie_script_list: "Params: directory?",
   pie_script_read: "Params: path",
   pie_script_replay: "Params: run_id?, results_path?, time_scale?, auto_stop_pie?, pie_instance?, client_id?, wait?, timeout_seconds?",
   pie_script_results: "Params: run_id?, results_path?",
-  pie_script_run: "Params: script OR steps, name?, profile?, record?, start_pie?, block_on_manual?, mode?, default_within_ms?, pie_instance?, client_id?, wait?, timeout_seconds?",
+  pie_script_run: "Params: script OR steps, name?, profile?, map?, record?, start_pie?, block_on_manual?, mode?, default_within_ms?, pie_instance?, client_id?, wait?, timeout_seconds?",
   pie_script_runs: "Params: script?, limit?, include_steps?",
   pie_script_status: "Params: run_id?, since_seq?, wait?, timeout_seconds?",
   pie_script_stop: "Params: run_id?, reason?",
-  pie_script_update: "Params: path, steps?, description?, profile?, default_within_ms?, manual_only?",
-  pie_script_validate: "Params: steps, profile?, manual_only?",
+  pie_script_update: "Params: path, steps?, description?, profile?, map?, default_within_ms?, manual_only?",
+  pie_script_validate: "Params: steps, profile?, map?, manual_only?",
   pie_script_values: "Params: target?, profile?, limit?",
   pie_script_verdict: "Params: step, verdict, note?, run_id?, source?, evidence?",
   pie_session_errors: "Params: session?, session_dir?, min_verbosity?",
@@ -2213,6 +2237,7 @@ export const schema: Record<string, z.ZodType> = {
   label: z.string().optional().describe("Marker label"),
   limit: z.number().int().min(1).optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most runs, newest first (default 50) (pie_script_runs). Most entries per list (default 400) (pie_script_values)"),
   manual_only: z.boolean().optional().describe("Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"),
+  map: z.string().optional().describe("Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open (pie_script_create). Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is (pie_script_run). Level the script plays in; empty clears it (pie_script_update). Level the script would play in (pie_script_validate)"),
   max_errors: z.number().int().min(0).optional().describe("no-errors predicate threshold (default 0) (pie_scenario_scaffold). Most errors logged during the run (default 0) (pie_test_scaffold)"),
   max_points: z.number().int().min(1).optional().describe("series: most values per channel (default 500)"),
   max_position_drift_cm: z.number().optional().describe("Most position drift allowed (default 10)"),

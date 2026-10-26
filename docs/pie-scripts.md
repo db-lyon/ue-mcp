@@ -74,23 +74,23 @@ A step can set up and drive what it then checks, so a script runs end to end wit
 
 ## Storing scripts
 
-Scripts are data assets, saved under `/Game/PIEStudio/Scripts` unless you give another package path. A script holds `steps`, an optional `description`, an optional `profile` (the observation profile asset the run arms) and `default_within_ms`.
+Scripts are data assets, saved under `/Game/PIEStudio/Scripts` unless you give another package path. A script holds `steps`, an optional `description`, an optional `profile` (the observation profile asset the run arms), an optional `map` (the level it plays in) and `default_within_ms`.
 
 | Action | Params |
 |---|---|
-| `script_create` | `name`, `steps`, `package_path?`, `description?`, `profile?`, `default_within_ms?` (default 5000), `manual_only?` (default `false`), `onConflict?` (`skip` (default), `update`, `replace` or `error`) |
-| `script_read` | `path`. Returns `path`, `name`, `description`, `profile`, `default_within_ms`, `manual_only`, `steps` and `step_count`. |
-| `script_update` | `path`, and any of `steps`, `description`, `profile` (empty clears it), `default_within_ms`, `manual_only` |
-| `script_validate` | `steps`, `profile?`, `manual_only?`. The checks `script_create` runs, without saving: `valid`, `errors` in the refusal's shape, `summary` and the parsed `steps`. |
+| `script_create` | `name`, `steps`, `package_path?`, `description?`, `profile?`, `map?`, `default_within_ms?` (default 5000), `manual_only?` (default `false`), `onConflict?` (`skip` (default), `update`, `replace` or `error`) |
+| `script_read` | `path`. Returns `path`, `name`, `description`, `profile`, `map`, `default_within_ms`, `manual_only`, `steps` and `step_count`. |
+| `script_update` | `path`, and any of `steps`, `description`, `profile` (empty clears it), `map` (empty clears it), `default_within_ms`, `manual_only` |
+| `script_validate` | `steps`, `profile?`, `map?`, `manual_only?`. The checks `script_create` runs, without saving: `valid`, `errors` in the refusal's shape, `summary` and the parsed `steps`. |
 | `script_values` | `target?`, `profile?`, `limit?` (default 400). What a script can name in the open level: `pawn` (`class`, `source`, `components`), `values` (`path`, `kind` number, integer, boolean or enum, `type`, and an enum's `values`), `actors`, `spawned_classes`, `widgets`, `profile_values`, and with `target` a `target` object (`found`, `class`, `is_player_pawn`, `actors` of that class). |
 | `script_delete` | `path`, `confirm=true` |
-| `script_list` | `directory?` (default `/Game`). Returns `scripts` (`path`, `object_path`, `name`, `last_run`) and `count`. `last_run` is the script's newest run as [`script_runs`](#listing-runs) lists it, without its steps, or `null` when it never ran. |
+| `script_list` | `directory?` (default `/Game`). Returns `scripts` (`path`, `object_path`, `name`, `map`, `last_run`) and `count`. `last_run` is the script's newest run as [`script_runs`](#listing-runs) lists it, without its steps, or `null` when it never ran. |
 
-A profile that does not exist is refused. `steps` must hold at least one step.
+A profile that does not exist is refused, and so is a `map` that is not a level asset (`field: "map"`, with the closest levels as candidates). `map` takes a package path such as `/Game/Maps/L_Arena` or its object path `/Game/Maps/L_Arena.L_Arena`. `steps` must hold at least one step.
 
 ### Checks when a script is saved
 
-`script_create` and `script_update` refuse a step that a run could never check, so a typo in a value name is caught when the script is written rather than as a failed step later. `script_update` checks the script as it would stand after the update whenever `steps`, `profile` or `manual_only` changes.
+`script_create` and `script_update` refuse a step that a run could never check, so a typo in a value name is caught when the script is written rather than as a failed step later. `script_update` checks the script as it would stand after the update whenever `steps`, `profile`, `map` or `manual_only` changes. When the script's `map` is not the level open in the editor, the actors its steps name are left for the run to resolve, since they live in that level.
 
 - **The value has to resolve**, the way the observer reads it, against the level open in the editor and the script's profile. A numeric op reads a profile tracked value (its path or last segment), a property path on the player pawn (the pawn player 0 possesses in the level, or the game mode's `DefaultPawnClass`), a component's property (`CollisionCylinder.CapsuleHalfHeight`), `sub:<Subsystem>.<path>`, or `bone:<bone>.<channel>`. `exists` needs an actor in the level, or a class the game mode spawns. `visible` needs a widget class, a Widget Blueprint, or a widget inside one.
 - **The op and target have to suit the value's type.** A bool takes only `eq` with `true` or `false`, an enum only `eq` with one of its values, and a number a number target. An integer is refused an `eq` target it cannot hold, and a `gt` or `lt` target it can never pass.
@@ -141,6 +141,7 @@ pie(action="script_run", script="/Game/PIEStudio/Scripts/DoorOpens", start_pie=t
 | `script` or `steps` | | The script asset path, or the steps themselves. |
 | `name` | the asset name, or `inline` | The run's name. Also overrides the asset name for a stored script. |
 | `profile` | the script's | The observation profile to arm. |
+| `map` | the script's | The level to play in. When another level is open, the run opens this one before it arms anything, and is refused when the open level has unsaved changes or PIE is running in another level. With no map the run plays whatever level is open. `mode=manual` leaves the open level as it is. |
 | `record` | `true` | Arm the recorder too, so the run can be replayed. With `record=false` the run has no recording and cannot be replayed. |
 | `start_pie` | `false` | Start PIE when it is not running. Otherwise the run waits for the next PIE session. |
 | `block_on_manual` | `true` | Hold the run at a manual step until it has a verdict. Consecutive manual steps are put up together and the run holds until each has one. `false` starts each manual step and moves on. |
@@ -163,7 +164,7 @@ The observation and the recording use the run id as their ids, so `observation_r
 
 ### The answer
 
-`script_run` answers with the run as it stands when armed: `run_id`, `script` (the asset path, or `inline`), `script_name`, `state` (`armed`), `current_step`, `output_dir`, `results_path`, `observation_run_id`, `recording_id` (absent with `record=false`), `elapsed_ms`, `steps`, `awaiting`, `events`, `last_seq`, `summary`, `pie_started`, `pie_running` and `message`.
+`script_run` answers with the run as it stands when armed: `run_id`, `script` (the asset path, or `inline`), `script_name`, `state` (`armed`), `current_step`, `output_dir`, `results_path`, `observation_run_id`, `recording_id` (absent with `record=false`), `elapsed_ms`, `steps`, `awaiting`, `events`, `last_seq`, `summary`, `pie_started`, `pie_running`, `map` (when the run has one) and `message`.
 
 The run moves to `running` on the observer's first frame. All step and event times (`started_at_ms`, `ended_at_ms`, `at_ms`, `elapsed_ms`) are game milliseconds from that frame, the clock the observer and the replayer share.
 
@@ -355,7 +356,7 @@ The step records `verdict_source: "agent"` and the evidence in `results.json`, o
 
 ## Replay regression
 
-`script_replay` (`run_id?` or `results_path?`, `time_scale?` (default 1), `auto_stop_pie?` (default `true`), `pie_instance?`, `client_id?`, `wait?`, `timeout_seconds?`) replays the source run's recording with the same observation profile and checks every auto step again in its recorded window. Without `run_id` or `results_path` it replays the last run. It needs PIE stopped, starts PIE itself, and with `auto_stop_pie` ends PIE once the replay finishes. A run made with `record=false` has no recording and is refused.
+`script_replay` (`run_id?` or `results_path?`, `time_scale?` (default 1), `auto_stop_pie?` (default `true`), `pie_instance?`, `client_id?`, `wait?`, `timeout_seconds?`) replays the source run's recording with the same observation profile, in the level the source run played in when it had a `map`, and checks every auto step again in its recorded window. Without `run_id` or `results_path` it replays the last run. It needs PIE stopped, starts PIE itself, and with `auto_stop_pie` ends PIE once the replay finishes. A run made with `record=false` has no recording and is refused.
 
 ```text
 pie(action="script_replay", run_id="script_DoorOpens_20261023_100000", wait=true)
