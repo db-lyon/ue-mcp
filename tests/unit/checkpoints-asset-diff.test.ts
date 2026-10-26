@@ -64,6 +64,23 @@ describe("an asset diff's summary", () => {
     expect(describeRecord({ displayString: "x", diffType: "PropertyAddedToA", path: "Speed", before: "1.0", after: null })).toBe("Speed removed: 1.0");
   });
 
+  it("names what an added or removed node holds, past its class defaults", () => {
+    const node = (properties: { name: string; displayName: string; value: string; isDefault: boolean }[]) => ({
+      guid: "g", name: "MaterialGraphNode_3", class: "MaterialGraphNode", title: "Constant", fullTitle: "0.5",
+      pins: [], propertiesOf: "MaterialExpressionConstant", properties,
+    });
+    const added: AssetDiffRecord = {
+      displayString: "Added Node 'Constant'", diffType: "NODE_ADDED", category: "ADDITION",
+      node1: node([{ name: "R", displayName: "Value", value: "0.500000", isDefault: false }, { name: "Desc", displayName: "Desc", value: "", isDefault: true }]),
+    };
+    expect(describeRecord(added)).toBe("Added Node 'Constant': Value 0.500000");
+    expect(modified([added]).summary).toBe("1 difference: Added Node 'Constant': Value 0.500000");
+    const many = node(["A", "B", "C", "D", "E"].map((n) => ({ name: n, displayName: n, value: "1", isDefault: false })));
+    expect(describeRecord({ displayString: "Removed Node 'X'", diffType: "NODE_REMOVED", node1: many })).toBe("Removed Node 'X': A 1, B 1, C 1, and 2 more");
+    expect(describeRecord({ displayString: "Added Node 'Constant'", diffType: "NODE_ADDED", node1: node([]) })).toBe("Added Node 'Constant'");
+    expect(describeRecord({ displayString: "Added Node Constant", diffType: "NODE_ADDED" })).toBe("Added Node Constant");
+  });
+
   it("counts records past the ceiling", () => {
     const d = modified([{ displayString: "a", diffType: "NODE_ADDED" }], { recordsDropped: 4 });
     expect(d.summary).toBe("5 differences: a; and 4 more");

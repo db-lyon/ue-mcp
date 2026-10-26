@@ -15,7 +15,7 @@
 import { unifiedDiff } from "./text-diff.js";
 
 /** Bumped when the bridge's records change shape, so cached diffs are recomputed. */
-export const ASSET_DIFF_FORMAT = 1;
+export const ASSET_DIFF_FORMAT = 2;
 
 /** How many packages one list_changes diffs up front; the rest are diffed on request, per path. */
 export const MAX_ASSET_DIFFS = 25;
@@ -40,8 +40,8 @@ export interface AssetDiffRecord {
   before?: string | null;
   after?: string | null;
   graph?: string;
-  node1?: { guid: string; name: string; class: string; title: string };
-  node2?: { guid: string; name: string; class: string; title: string };
+  node1?: AssetDiffNode;
+  node2?: AssetDiffNode;
   pin1?: { name: string; direction: string; nodeGuid?: string; defaultValue: string; linkedTo: string[] };
   pin2?: { name: string; direction: string; nodeGuid?: string; defaultValue: string; linkedTo: string[] };
   /** For a NODE_PROPERTY graph record: the property records behind it. */
@@ -51,6 +51,43 @@ export interface AssetDiffRecord {
   treeLocation?: number[];
   owningObjectPath?: string;
   propertyDiffType?: string;
+}
+
+/** A graph node a record names. */
+export interface AssetDiffNode {
+  guid: string;
+  name: string;
+  class: string;
+  /** ENodeTitleType::ListView, the short title the engine's DisplayString uses. */
+  title: string;
+  /** ENodeTitleType::FullTitle. Set on NODE_ADDED and NODE_REMOVED records only, as are pins and properties. */
+  fullTitle?: string;
+  /** Visible input pins (exec pins left out) with their default values. */
+  pins?: AssetDiffNodePin[];
+  /** Class of the object whose properties are listed: the UMaterialExpression for a material node, the node otherwise. */
+  propertiesOf?: string;
+  /** The details panel's properties (CPF_Edit) of that object, exported as text, in class order (most derived first). */
+  properties?: AssetDiffNodeProperty[];
+  /** Properties past the per-node limit, counted. */
+  propertiesDropped?: number;
+}
+
+export interface AssetDiffNodePin {
+  name: string;
+  displayName: string;
+  defaultValue: string;
+  /** Wired to another node, so the default is not what the node reads. */
+  linked: boolean;
+}
+
+export interface AssetDiffNodeProperty {
+  name: string;
+  /** The details panel's label, such as "Value" for a Constant's R. */
+  displayName: string;
+  /** FProperty::ExportText of the value. */
+  value: string;
+  /** Still the class default. */
+  isDefault: boolean;
 }
 
 /** A group of records under one of the engine's own diff categories (Graph: EventGraph, Components, Defaults, Details...). */
@@ -130,7 +167,16 @@ export function describeRecord(r: AssetDiffRecord): string {
     if (r.diffType === "PropertyAddedToA") return `${label} removed: ${short(r.before)}`;
     return `${label} ${short(r.before)} to ${short(r.after)}`;
   }
-  return r.displayString;
+  const set = nodeValues(r);
+  return set ? `${r.displayString}: ${set}` : r.displayString;
+}
+
+/** An added or removed node's properties that differ from their class defaults, as "Value 0.5". */
+function nodeValues(r: AssetDiffRecord): string {
+  if (r.diffType !== "NODE_ADDED" && r.diffType !== "NODE_REMOVED") return "";
+  const set = (r.node1?.properties ?? []).filter((p) => !p.isDefault);
+  const shown = set.slice(0, 3).map((p) => `${p.displayName || p.name} ${short(p.value, 40)}`);
+  return shown.length < set.length ? `${shown.join(", ")}, and ${set.length - shown.length} more` : shown.join(", ");
 }
 
 const REMOVALS = new Set(["PropertyAddedToA", "OBJECT_REMOVED", "NODE_REMOVED"]);

@@ -41,11 +41,13 @@
 #include "IImageWrapperModule.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "MaterialGraph/MaterialGraph.h"
+#include "MaterialGraph/MaterialGraphNode.h"
 #include "MaterialGraph/MaterialGraphSchema.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
+#include "Materials/MaterialExpression.h"
 #include "Misc/FileHelper.h"
 #include "Misc/ObjectThumbnail.h"
 #include "Misc/PackageName.h"
@@ -187,20 +189,26 @@ namespace
 		}
 	}
 
+	/** A value exported as text, with temp package names mapped back and cut past CkDiffMaxValueChars. */
+	FString CkDiffExport(const FProperty* Property, const void* Value, const FCkDiffNames& Names)
+	{
+		FString Text;
+		Property->ExportTextItem_Direct(Text, Value, nullptr, nullptr, PPF_None);
+		Text = Names.Clean(Text);
+		if (Text.Len() > CkDiffMaxValueChars)
+		{
+			Text = Text.Left(CkDiffMaxValueChars) + FString::Printf(TEXT("... (%d characters)"), Text.Len());
+		}
+		return Text;
+	}
+
 	/** A resolved property's value as FProperty::ExportText writes it, or null when the path does not resolve on this side. */
 	TSharedPtr<FJsonValue> CkDiffValue(const FResolvedProperty& Resolved, const FCkDiffNames& Names)
 	{
 		if (!Resolved.Property || !Resolved.Object) return MakeShared<FJsonValueNull>();
 		const void* Value = Resolved.Property->ContainerPtrToValuePtr<void>(Resolved.Object);
 		if (!Value) return MakeShared<FJsonValueNull>();
-		FString Text;
-		Resolved.Property->ExportTextItem_Direct(Text, Value, nullptr, nullptr, PPF_None);
-		Text = Names.Clean(Text);
-		if (Text.Len() > CkDiffMaxValueChars)
-		{
-			Text = Text.Left(CkDiffMaxValueChars) + FString::Printf(TEXT("... (%d characters)"), Text.Len());
-		}
-		return MakeShared<FJsonValueString>(Text);
+		return MakeShared<FJsonValueString>(CkDiffExport(Resolved.Property, Value, Names));
 	}
 
 	/** The property at the root of a soft path, on the struct that declares it. */
@@ -275,13 +283,65 @@ namespace
 		Sections.Add(MakeShared<FJsonValueObject>(S));
 	}
 
-	TSharedPtr<FJsonObject> CkDiffNodeJson(const UEdGraphNode* Node)
+	/** Most properties listed for one added or removed node. */
+	constexpr int32 CkDiffMaxNodeProperties = 64;
+
+	/**
+	 * What an added or removed node holds: its full title, its visible input pins
+	 * with their defaults, and the details panel's properties (CPF_Edit) of the
+	 * object it edits, the UMaterialExpression for a material node and the node
+	 * itself otherwise. Each property says whether it is still its class default.
+	 */
+	void CkDiffNodeContents(const UEdGraphNode* Node, const FCkDiffNames& Names, const TSharedPtr<FJsonObject>& O)
+	{
+		O->SetStringField(TEXT("fullTitle"), Names.Clean(Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString()));
+
+		TArray<TSharedPtr<FJsonValue>> Pins;
+		for (const UEdGraphPin* Pin : Node->Pins)
+		{
+			if (!Pin || Pin->bHidden || Pin->Direction != EGPD_Input || Pin->PinType.PinCategory == TEXT("exec")) continue;
+			TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+			P->SetStringField(TEXT("name"), Pin->PinName.ToString());
+			P->SetStringField(TEXT("displayName"), Pin->GetDisplayName().ToString());
+			P->SetStringField(TEXT("defaultValue"), Names.Clean(Pin->GetDefaultAsString()));
+			P->SetBoolField(TEXT("linked"), Pin->LinkedTo.Num() > 0);
+			Pins.Add(MakeShared<FJsonValueObject>(P));
+		}
+		O->SetArrayField(TEXT("pins"), Pins);
+
+		const UObject* Edited = Node;
+		if (const UMaterialGraphNode* MaterialNode = Cast<UMaterialGraphNode>(Node))
+		{
+			if (MaterialNode->MaterialExpression) Edited = MaterialNode->MaterialExpression;
+		}
+		O->SetStringField(TEXT("propertiesOf"), Edited->GetClass()->GetName());
+		const UObject* Defaults = Edited->GetClass()->GetDefaultObject();
+		TArray<TSharedPtr<FJsonValue>> Props;
+		int32 Dropped = 0;
+		for (TFieldIterator<FProperty> It(Edited->GetClass()); It; ++It)
+		{
+			const FProperty* Property = *It;
+			if (!Property->HasAnyPropertyFlags(CPF_Edit) || Property->HasAnyPropertyFlags(CPF_Deprecated)) continue;
+			if (Props.Num() >= CkDiffMaxNodeProperties) { ++Dropped; continue; }
+			TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+			P->SetStringField(TEXT("name"), Property->GetName());
+			P->SetStringField(TEXT("displayName"), Property->GetDisplayNameText().ToString());
+			P->SetStringField(TEXT("value"), CkDiffExport(Property, Property->ContainerPtrToValuePtr<void>(Edited), Names));
+			P->SetBoolField(TEXT("isDefault"), Defaults && Property->Identical_InContainer(Edited, Defaults));
+			Props.Add(MakeShared<FJsonValueObject>(P));
+		}
+		O->SetArrayField(TEXT("properties"), Props);
+		if (Dropped > 0) O->SetNumberField(TEXT("propertiesDropped"), Dropped);
+	}
+
+	TSharedPtr<FJsonObject> CkDiffNodeJson(const UEdGraphNode* Node, const FCkDiffNames& Names, bool bContents = false)
 	{
 		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 		O->SetStringField(TEXT("guid"), Node->NodeGuid.ToString());
 		O->SetStringField(TEXT("name"), Node->GetName());
 		O->SetStringField(TEXT("class"), Node->GetClass()->GetName());
 		O->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+		if (bContents) CkDiffNodeContents(Node, Names, O);
 		return O;
 	}
 
@@ -330,8 +390,10 @@ namespace
 			const FString Tip = Names.Clean(R.ToolTip.ToString());
 			if (!Tip.IsEmpty()) Rec->SetStringField(TEXT("toolTip"), Tip);
 			if (!R.OwningObjectPath.IsEmpty()) Rec->SetStringField(TEXT("owningObjectPath"), Names.Clean(R.OwningObjectPath));
-			if (R.Node1) Rec->SetObjectField(TEXT("node1"), CkDiffNodeJson(R.Node1));
-			if (R.Node2) Rec->SetObjectField(TEXT("node2"), CkDiffNodeJson(R.Node2));
+			// An added or removed node has no property records behind it, so it carries what it holds.
+			const bool bContents = R.Diff == EDiffType::NODE_ADDED || R.Diff == EDiffType::NODE_REMOVED;
+			if (R.Node1) Rec->SetObjectField(TEXT("node1"), CkDiffNodeJson(R.Node1, Names, bContents));
+			if (R.Node2) Rec->SetObjectField(TEXT("node2"), CkDiffNodeJson(R.Node2, Names, bContents));
 			if (R.Pin1) Rec->SetObjectField(TEXT("pin1"), CkDiffPinJson(R.Pin1, Names));
 			if (R.Pin2) Rec->SetObjectField(TEXT("pin2"), CkDiffPinJson(R.Pin2, Names));
 			if (R.Diff == EDiffType::NODE_PROPERTY || R.Diff == EDiffType::OBJECT_PROPERTY)

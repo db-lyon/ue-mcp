@@ -21,6 +21,9 @@ export type { DaemonSkill, DaemonSkillOwner, ShadowedSkill, ProjectSkillFolder }
 
 export type {
   AssetDiff,
+  AssetDiffNode,
+  AssetDiffNodePin,
+  AssetDiffNodeProperty,
   AssetDiffRecord,
   AssetDiffSection,
   AssetFact,

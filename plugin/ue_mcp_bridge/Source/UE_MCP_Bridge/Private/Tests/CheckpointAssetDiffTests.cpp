@@ -108,7 +108,43 @@ bool FMCPCheckpointAssetDiffMaterialTest::RunTest(const FString& Parameters)
 	{
 		const TSharedPtr<FJsonObject> R = V->AsObject();
 		TestFalse(TEXT("every record carries the engine's DisplayString"), R->GetStringField(TEXT("displayString")).IsEmpty());
-		if (R->GetStringField(TEXT("diffType")) == TEXT("NODE_ADDED")) bAddedNode = true;
+		if (R->GetStringField(TEXT("diffType")) == TEXT("NODE_ADDED"))
+		{
+			bAddedNode = true;
+			// The added node carries what it holds: its full title, pins, and the expression's own properties.
+			const TSharedPtr<FJsonObject>* Node = nullptr;
+			if (TestTrue(TEXT("the added node is named"), R->TryGetObjectField(TEXT("node1"), Node)))
+			{
+				TestFalse(TEXT("the added node has a full title"), (*Node)->GetStringField(TEXT("fullTitle")).IsEmpty());
+				const TArray<TSharedPtr<FJsonValue>>* Pins = nullptr;
+				TestTrue(TEXT("the added node lists its pins"), (*Node)->TryGetArrayField(TEXT("pins"), Pins));
+				TestEqual(TEXT("properties are the expression's"), (*Node)->GetStringField(TEXT("propertiesOf")), FString(TEXT("MaterialExpressionConstant")));
+				bool bValue = false;
+				const TArray<TSharedPtr<FJsonValue>>* NodeProps = nullptr;
+				if (TestTrue(TEXT("the added node lists its properties"), (*Node)->TryGetArrayField(TEXT("properties"), NodeProps)))
+				{
+					for (const TSharedPtr<FJsonValue>& P : *NodeProps)
+					{
+						const TSharedPtr<FJsonObject> PO = P->AsObject();
+						if (PO->GetStringField(TEXT("name")) == TEXT("R"))
+						{
+							bValue = PO->GetStringField(TEXT("value")).StartsWith(TEXT("0.5"))
+								&& PO->GetStringField(TEXT("displayName")) == TEXT("Value")
+								&& !PO->GetBoolField(TEXT("isDefault"));
+						}
+					}
+				}
+				TestTrue(TEXT("the added Constant reads Value 0.5, not its class default"), bValue);
+			}
+		}
+		else
+		{
+			const TSharedPtr<FJsonObject>* Node = nullptr;
+			if (R->TryGetObjectField(TEXT("node1"), Node) && R->GetStringField(TEXT("diffType")) != TEXT("NODE_REMOVED"))
+			{
+				TestFalse(TEXT("only an added or removed node carries its properties"), (*Node)->HasField(TEXT("properties")));
+			}
+		}
 		const TArray<TSharedPtr<FJsonValue>>* Props = nullptr;
 		if (R->TryGetArrayField(TEXT("properties"), Props))
 		{

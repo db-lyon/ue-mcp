@@ -38,7 +38,7 @@ import {
 } from "./asset-diff.js";
 
 export { CheckpointError } from "./shadow-repo.js";
-export type { AssetDiff, AssetDiffRecord, AssetDiffSection, AssetFact, AssetThumbnail, AssetVersion } from "./asset-diff.js";
+export type { AssetDiff, AssetDiffNode, AssetDiffNodePin, AssetDiffNodeProperty, AssetDiffRecord, AssetDiffSection, AssetFact, AssetThumbnail, AssetVersion } from "./asset-diff.js";
 export type { ChangeEntry, CheckpointInfo, RestoreRefusal } from "./shadow-repo.js";
 
 /** How many Blueprint packages one list_changes diffs in the editor. */
