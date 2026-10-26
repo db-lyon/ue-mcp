@@ -11,6 +11,7 @@ import { McpError, ErrorCode } from "../core/errors.js";
 import { info, warn } from "../core/log.js";
 import { ALL_TOOLS } from "../tools.js";
 import { applyNativeToolsConfig } from "../surface/epic-surface.js";
+import { epicToolsetsOf } from "../surface/registered-surface.js";
 import { baseGraphFor, unionSurface, type SessionSurface, type UnionSurface } from "./session-surface.js";
 import { applyLeanContext, type ContextStrategy } from "../surface/context/lean-context.js";
 import { buildMicroGateway } from "../surface/context/micro-context.js";
@@ -341,6 +342,8 @@ export class SessionLoads {
     this.perSession.set(session, load);
     // The session's guard pipeline reads action effects from its own graph.
     session.toolGraph = load.registryTools;
+    // A toolset read before these register is read again (#1538).
+    session.bridge.expectEpicToolsets?.(epicToolsetsOf(load.registryTools));
     this.surfaces.push(load.surface);
     // The union is what explainMissingAction refuses from, so it has to know
     // about this editor before the first call is routed to it.

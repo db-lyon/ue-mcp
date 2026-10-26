@@ -301,6 +301,94 @@ describe("bridge capability handshake", () => {
     }
   });
 
+  it("re-reads the toolsets until the expected ones register after the handshake (#1538)", async () => {
+    // The editor's Python toolsets register after the bridge answers.
+    let listed = ["NativeToolset"];
+    let reads = 0;
+    const server = await withBridgeServer((request, socket) => {
+      if (request.method !== "epic_list_toolsets") return;
+      reads += 1;
+      socket.send(JSON.stringify({ id: request.id, result: { toolsets: listed.map((name) => ({ name })) } }));
+    }, { ...DEFAULT_CAPABILITIES, actions: ["epic_list_toolsets", "ping"] });
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
+    const bridge = new EditorBridge("127.0.0.1", server.port);
+    bridge.expectEpicToolsets(["NativeToolset", "editor_toolset.toolsets.scene.SceneTools"]);
+    const changes: Array<readonly string[] | null> = [];
+    bridge.onRegisteredActionsChanged(() => changes.push(bridge.epicToolsets ?? null));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    try {
+      await bridge.connect(1000);
+      await vi.waitFor(() => expect(bridge.epicToolsets).toEqual(["NativeToolset"]));
+      listed = ["NativeToolset", "editor_toolset.toolsets.scene.SceneTools"];
+      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.waitFor(() =>
+        expect(bridge.epicToolsets).toEqual(["NativeToolset", "editor_toolset.toolsets.scene.SceneTools"]));
+      expect(changes.at(-1)).toEqual(bridge.epicToolsets);
+
+      // Complete: no further reads.
+      const settled = reads;
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(reads).toBe(settled);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      bridge.disconnect();
+      vi.useRealTimers();
+      await server.close();
+    }
+  });
+
+  it("follows the toolsets when the expectation arrives after the handshake's read (#1538)", async () => {
+    let listed = ["NativeToolset"];
+    const server = await withBridgeServer((request, socket) => {
+      if (request.method !== "epic_list_toolsets") return;
+      socket.send(JSON.stringify({ id: request.id, result: { toolsets: listed.map((name) => ({ name })) } }));
+    }, { ...DEFAULT_CAPABILITIES, actions: ["epic_list_toolsets"] });
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
+    const bridge = new EditorBridge("127.0.0.1", server.port);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    try {
+      await bridge.connect(1000);
+      await vi.waitFor(() => expect(bridge.epicToolsets).toEqual(["NativeToolset"]));
+      expect(bridge["toolsetTimer"]).toBeNull();
+      bridge.expectEpicToolsets(["LateToolset", "NativeToolset"]);
+      listed = ["LateToolset", "NativeToolset"];
+      await vi.waitFor(() => expect(bridge.epicToolsets).toEqual(["LateToolset", "NativeToolset"]));
+    } finally {
+      bridge.disconnect();
+      vi.useRealTimers();
+      await server.close();
+    }
+  });
+
+  it("stops re-reading the toolsets when the socket goes away (#1538)", async () => {
+    let reads = 0;
+    const server = await withBridgeServer((request, socket) => {
+      if (request.method !== "epic_list_toolsets") return;
+      reads += 1;
+      socket.send(JSON.stringify({ id: request.id, result: { toolsets: [{ name: "NativeToolset" }] } }));
+    }, { ...DEFAULT_CAPABILITIES, actions: ["epic_list_toolsets"] });
+    const { EditorBridge } = await import("../../src/bridge/bridge.js");
+    const bridge = new EditorBridge("127.0.0.1", server.port);
+    bridge.expectEpicToolsets(["NeverRegisters"]);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    try {
+      await bridge.connect(1000);
+      await vi.waitFor(() => expect(reads).toBe(1));
+      await vi.waitFor(() => expect(bridge["toolsetTimer"]).not.toBeNull());
+      bridge.disconnect();
+      expect(bridge["toolsetTimer"]).toBeNull();
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(reads).toBe(1);
+    } finally {
+      bridge.disconnect();
+      vi.useRealTimers();
+      await server.close();
+    }
+  });
+
   it("keeps A's metadata absent until B answers its handshake", async () => {
     const held = holdHandshake();
     const serverA = await withBridgeServer(() => {});
