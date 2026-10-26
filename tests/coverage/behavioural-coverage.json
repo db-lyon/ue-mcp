@@ -13017,6 +13017,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEScriptMapTests.cpp",
+          "test": "UE.MCP.PIE.Script.MapOpensBeforeRun"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
           "test": "resolve_in_pie lets a value through that only exists once PIE runs, and is stored on the step"
@@ -13126,6 +13131,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEScriptMapTests.cpp",
+          "test": "UE.MCP.PIE.Script.MapOpensBeforeRun"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
           "test": "resolve_in_pie lets a value through that only exists once PIE runs, and is stored on the step"
@@ -13224,6 +13234,11 @@
       "registeredIn": "PIEHandlers_Script.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEScriptMapTests.cpp",
+          "test": "UE.MCP.PIE.Script.MapOpensBeforeRun"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
@@ -13338,6 +13353,11 @@
       "registeredIn": "PIEHandlers_Script.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PIEScriptMapTests.cpp",
+          "test": "UE.MCP.PIE.Script.MapOpensBeforeRun"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-pie-assets.test.ts",
