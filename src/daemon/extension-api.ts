@@ -12,6 +12,7 @@ import type { AssetDiff, ChangesResult, CheckpointResult, CheckpointState, Nativ
 import type { DaemonSkill } from "../extensions/skills-list.js";
 import type { ContextProjection, ContextProjectionOptions } from "../server/context-projection.js";
 import type { ActionEffectInfo } from "../surface/action-effects.js";
+import { isNewer } from "../core/version-check.js";
 
 export type { ActionEffectInfo } from "../surface/action-effects.js";
 
@@ -52,6 +53,39 @@ export const EXTENSION_API_MIN_VERSION = 1;
 /** Whether an extension declaring api { min, max } can load here. */
 export function extensionApiSupported(min: number, max: number): boolean {
   return min <= EXTENSION_API_VERSION && max >= EXTENSION_API_MIN_VERSION;
+}
+
+/** The `ueMcpExtension` field of an extension's package.json. */
+export interface ExtensionManifest {
+  name?: string;
+  api?: { min?: number; max?: number };
+  /** The oldest ue-mcp the extension runs on. */
+  ueMcp?: string;
+}
+
+/** An extension the daemon did not load, and what it needs. */
+export interface RefusedExtension {
+  name: string;
+  version: string;
+  reason: string;
+  /** The ue-mcp version it needs, when that is why. */
+  needsUeMcp?: string;
+}
+
+/**
+ * Why an extension cannot run on this ue-mcp, or null when it can. An extension
+ * that needs a newer ue-mcp is refused whole, never loaded with parts missing.
+ */
+export function extensionRefusal(name: string, ext: ExtensionManifest | undefined, installed: string): { reason: string; needsUeMcp?: string } | null {
+  const min = ext?.api?.min ?? 1;
+  const max = ext?.api?.max ?? min;
+  if (!extensionApiSupported(min, max)) {
+    return { reason: `${name} needs extension API ${min}..${max}; this ue-mcp serves ${EXTENSION_API_MIN_VERSION}..${EXTENSION_API_VERSION}` };
+  }
+  if (ext?.ueMcp && isNewer(ext.ueMcp, installed)) {
+    return { reason: `${name} needs ue-mcp ${ext.ueMcp} or later; this is ${installed}`, needsUeMcp: ext.ueMcp };
+  }
+  return null;
 }
 
 export interface EditorStatus {
@@ -330,6 +364,8 @@ export interface DaemonHealth {
   inflight: number;
   lastEventId: number;
   extensions: Array<{ name: string; version: string }>;
+  /** Extensions this daemon refused to load, with why; the client offers the update that fixes it. */
+  refusedExtensions?: RefusedExtension[];
   /** Version of the UI bundle being served, or null. */
   ui: string | null;
   /** What the HTTP API offers beyond apiVersion, for feature detection ("checkpoints", "skills", "context.projection", "actions.effects"). Absent on a daemon older than the field. */

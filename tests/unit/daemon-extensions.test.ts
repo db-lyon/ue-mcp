@@ -108,6 +108,15 @@ beforeAll(async () => {
   }));
   fs.writeFileSync(path.join(future, "index.js"), "export function activate() {}");
 
+  // One that needs a ue-mcp newer than this one.
+  const ahead = path.join(sandbox, "extensions", "ahead");
+  fs.mkdirSync(ahead, { recursive: true });
+  fs.writeFileSync(path.join(ahead, "package.json"), JSON.stringify({
+    name: "ahead-ext", version: "2.0.0", type: "module", main: "index.js",
+    ueMcpExtension: { name: "ahead", api: { min: 1, max: 99 }, ueMcp: "999.0.0" },
+  }));
+  fs.writeFileSync(path.join(ahead, "index.js"), "export function activate() {}");
+
   daemon = await startDaemon({
     projects: [uproject],
     publish: false,
@@ -128,6 +137,14 @@ describe("extensions", () => {
   it("loads the compatible extension and skips the other", async () => {
     const health = await (await fetch(`${base}/v1/health`, { headers: auth })).json();
     expect(health.extensions).toEqual([{ name: "sample", version: "0.1.0" }]);
+  });
+
+  it("refuses an extension that needs a newer ue-mcp, and says which in health", async () => {
+    const health = await (await fetch(`${base}/v1/health`, { headers: auth })).json();
+    expect(health.refusedExtensions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "ahead", version: "2.0.0", needsUeMcp: "999.0.0", reason: expect.stringContaining("needs ue-mcp 999.0.0 or later") }),
+    ]));
+    expect(health.extensions.map((x: { name: string }) => x.name)).not.toContain("ahead");
   });
 
   it("serves its routes, with path params and a per-project data dir", async () => {

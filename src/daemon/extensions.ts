@@ -13,10 +13,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { info, warn } from "../core/log.js";
-import { readEnv } from "../core/env.js";
+import { ENV_VARS, readEnv } from "../core/env.js";
 import { userDir } from "../core/user-dir.js";
 import type { DaemonExtension, DaemonExtensionApi, ExtensionHandler, ExtensionResponse } from "./extension-api.js";
-import { EXTENSION_API_MIN_VERSION, EXTENSION_API_VERSION, extensionApiSupported } from "./extension-api.js";
+import { extensionRefusal, type ExtensionManifest, type RefusedExtension } from "./extension-api.js";
+import { packageVersion } from "../core/package-root.js";
 
 export function extensionsDir(): string {
   return readEnv("extensionsDir") ?? path.join(userDir(), "extensions");
@@ -43,7 +44,7 @@ interface ExtensionPackage {
   main: string;
 }
 
-function readPackages(root: string): ExtensionPackage[] {
+function readPackages(root: string, installed: string, refused: RefusedExtension[]): ExtensionPackage[] {
   if (!fs.existsSync(root)) return [];
   const out: ExtensionPackage[] = [];
   for (const e of fs.readdirSync(root, { withFileTypes: true })) {
@@ -51,7 +52,7 @@ function readPackages(root: string): ExtensionPackage[] {
     const dir = path.join(root, e.name);
     try {
       const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8")) as {
-        version?: string; main?: string; ueMcpExtension?: { name?: string; api?: { min?: number; max?: number } };
+        version?: string; main?: string; ueMcpExtension?: ExtensionManifest;
       };
       const ext = pkg.ueMcpExtension;
       if (!ext?.name || !pkg.main) continue;
@@ -62,11 +63,16 @@ function readPackages(root: string): ExtensionPackage[] {
         warn("extension", `skipping ${dir}: it holds ${ext.name}, which loads from ${path.join(root, ext.name)}`);
         continue;
       }
-      const min = ext.api?.min ?? 1;
-      const max = ext.api?.max ?? min;
-      if (!extensionApiSupported(min, max)) {
-        warn("extension", `${ext.name} supports extension API ${min}..${max}; this daemon serves ${EXTENSION_API_MIN_VERSION}..${EXTENSION_API_VERSION}. Not loaded.`);
-        continue;
+      const refusal = extensionRefusal(ext.name, ext, installed);
+      if (refusal) {
+        // warn mode: a development daemon whose package version trails its code.
+        if (refusal.needsUeMcp && readEnv("extensionFloor") === "warn") {
+          warn("extension", `${refusal.reason}. Loaded anyway (${ENV_VARS.extensionFloor}=warn).`);
+        } else {
+          warn("extension", `${refusal.reason}. Not loaded.`);
+          refused.push({ name: ext.name, version: pkg.version ?? "0.0.0", ...refusal });
+          continue;
+        }
       }
       out.push({ dir, name: ext.name, version: pkg.version ?? "0.0.0", main: path.join(dir, pkg.main) });
     } catch (e) {
@@ -80,9 +86,11 @@ function readPackages(root: string): ExtensionPackage[] {
 export async function loadExtensions(
   apiFor: (name: string, routes: Route[], setBusy: (fn: () => boolean) => void) => DaemonExtensionApi,
   root: string = extensionsDir(),
+  refused: RefusedExtension[] = [],
+  installed: string = packageVersion(),
 ): Promise<LoadedExtension[]> {
   const loaded: LoadedExtension[] = [];
-  for (const pkg of readPackages(root)) {
+  for (const pkg of readPackages(root, installed, refused)) {
     const routes: Route[] = [];
     let busy: () => boolean = () => false;
     try {

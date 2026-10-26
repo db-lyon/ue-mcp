@@ -52,7 +52,7 @@ import { userDir } from "../core/user-dir.js";
 import { readRegistryAuth } from "../extensions/registry-auth.js";
 import { getDialogModeScopes, getFeedbackModeScopes, setDialogMode, setFeedbackMode, setPlaytestMode } from "../config/user-state.js";
 import { resolvePlaytestMode } from "../editor/playtest-mode.js";
-import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus } from "./extension-api.js";
+import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus, type RefusedExtension } from "./extension-api.js";
 import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 
 /** What this daemon's extension API offers beyond its version number. */
@@ -363,6 +363,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     inflight: inflight(),
     lastEventId: events.lastId,
     extensions: extensions.map((x) => ({ name: x.name, version: x.version })),
+    refusedExtensions,
     ui: ui.active()?.manifest.version ?? null,
     features: DAEMON_FEATURES,
   });
@@ -421,6 +422,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
 
   // ── UI bundles and extensions ───────────────────────────────────
   const ui = new UiBundleStore(DAEMON_API_VERSION, opts.uiDir);
+  const refusedExtensions: RefusedExtension[] = [];
   const extensions: LoadedExtension[] = await loadExtensions((name, routes, setBusy): DaemonExtensionApi => ({
     apiVersion: EXTENSION_API_VERSION,
     version: packageVersion(),
@@ -521,7 +523,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       info: (message) => info(`ext:${name}`, message),
       warn: (message, detail) => warn(`ext:${name}`, message, detail),
     },
-  }), opts.extensionsDir);
+  }), opts.extensionsDir, refusedExtensions);
 
   const readBody = (req: http.IncomingMessage): Promise<unknown> => new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];

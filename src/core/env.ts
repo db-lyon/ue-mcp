@@ -52,6 +52,8 @@ export const ENV_VARS = {
   serverMode: "UE_MCP_SERVER_MODE",
   /** Directory of daemon discovery files. Unset means ~/.ue-mcp/daemons. */
   daemonDir: "UE_MCP_DAEMON_DIR",
+  /** enforce or warn: whether an extension needing a newer ue-mcp is refused or loaded with a warning. Unset means enforce; warn is for development daemons. */
+  extensionFloor: "UE_MCP_EXTENSION_FLOOR",
   /** How long a daemon with no editor, client or stream attached waits before exiting, in milliseconds. */
   daemonIdleMs: "UE_MCP_DAEMON_IDLE_MS",
   /** Directory daemon extensions are loaded from. Unset means ~/.ue-mcp/extensions. */
