@@ -126,6 +126,8 @@ bool FPIEScriptDraftParseTest::RunTest(const FString& /*Parameters*/)
 		"{\"instruction\":\"x\",\"resolve_in_pie\":true},"
 		"{\"instruction\":\"x\",\"resolve_in_pie\":\"yes\",\"expect\":{\"value\":\"A\",\"op\":\"exists\"}}]")), Steps, Issues);
 	TestFalse(TEXT("bad steps refused"), bOk);
+	TestTrue(TEXT("a step that does not parse blocks a save"),
+		Issues.Num() > 0 && Issues.FilterByPredicate([](const FScriptStepIssue& I) { return !I.bBlocksSave; }).Num() == 0);
 	TestEqual(TEXT("indices line up with the input"), Steps.Num(), 5);
 	TestEqual(TEXT("one issue per bad step"), Issues.Num(), 4);
 	TestTrue(TEXT("unknown op names its field"), HasIssue(Issues, 1, TEXT("expect.op")));
@@ -138,6 +140,7 @@ bool FPIEScriptDraftParseTest::RunTest(const FString& /*Parameters*/)
 	Issues.Reset();
 	TestFalse(TEXT("empty steps refused"), ParseScriptStepsJsonIssues(TArray<TSharedPtr<FJsonValue>>(), Steps, Issues));
 	TestTrue(TEXT("empty steps is a script-level issue"), HasIssue(Issues, INDEX_NONE, TEXT("steps")));
+	TestTrue(TEXT("empty steps blocks a save"), Issues.Num() > 0 && Issues.Last().bBlocksSave);
 
 	// resolve_in_pie and a boolean target survive a round trip through JSON.
 	Issues.Reset();
@@ -273,6 +276,10 @@ bool FPIEScriptDraftRefusalTest::RunTest(const FString& /*Parameters*/)
 
 	TArray<FScriptStepIssue> Issues = Check({ Auto(EScriptExpectOp::Gt, TEXT("Helth"), true, 0.0) });
 	Issues.Append(Check({ Manual() }));
+	TArray<FScriptStepIssue> Blocking, Warnings;
+	SplitScriptIssues(Issues, Blocking, Warnings);
+	TestEqual(TEXT("an unresolved value and no auto step do not block a save"), Blocking.Num(), 0);
+	TestEqual(TEXT("both are warnings"), Warnings.Num(), 2);
 	const TSharedPtr<FJsonObject> Obj = ScriptIssuesErrorObject(Issues);
 	bool bSuccess = true;
 	TestTrue(TEXT("success false"), Obj->TryGetBoolField(TEXT("success"), bSuccess) && !bSuccess);

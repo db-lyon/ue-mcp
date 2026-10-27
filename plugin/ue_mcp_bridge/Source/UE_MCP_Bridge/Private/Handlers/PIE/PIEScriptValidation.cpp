@@ -550,7 +550,9 @@ namespace MCPPIE
 		Out.Reset();
 		if (Values.Num() == 0)
 		{
-			OutIssues.Add(DraftCheckIssue(INDEX_NONE, TEXT("steps"), TEXT("steps must contain at least one step")));
+			FScriptStepIssue Issue = DraftCheckIssue(INDEX_NONE, TEXT("steps"), TEXT("steps must contain at least one step"));
+			Issue.bBlocksSave = true;
+			OutIssues.Add(MoveTemp(Issue));
 			return false;
 		}
 		bool bOk = true;
@@ -565,6 +567,7 @@ namespace MCPPIE
 			}
 			bOk = false;
 			FScriptStepIssue Issue = DraftCheckIssue(I, Field, Err);
+			Issue.bBlocksSave = true;
 			if (Field == TEXT("judge"))
 			{
 				Issue.Candidates = { TEXT("auto"), TEXT("manual") };
@@ -1125,21 +1128,29 @@ namespace MCPPIE
 		return O;
 	}
 
-	TSharedPtr<FJsonObject> ScriptIssuesErrorObject(const TArray<FScriptStepIssue>& Issues)
+	TArray<TSharedPtr<FJsonValue>> ScriptIssuesToJson(const TArray<FScriptStepIssue>& Issues)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FScriptStepIssue& Issue : Issues) Out.Add(MakeShared<FJsonValueObject>(ScriptIssueToJson(Issue)));
+		return Out;
+	}
+
+	TSharedPtr<FJsonObject> ScriptIssuesErrorObject(const TArray<FScriptStepIssue>& Issues, const TCHAR* Lead)
 	{
 		TArray<FString> Lines;
-		TArray<TSharedPtr<FJsonValue>> Errors;
-		for (const FScriptStepIssue& Issue : Issues)
-		{
-			Lines.Add(Issue.Message);
-			Errors.Add(MakeShared<FJsonValueObject>(ScriptIssueToJson(Issue)));
-		}
+		for (const FScriptStepIssue& Issue : Issues) Lines.Add(Issue.Message);
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetBoolField(TEXT("success"), false);
 		Obj->SetStringField(TEXT("errorCode"), TEXT("INVALID_SCRIPT_STEPS"));
-		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("The script cannot be checked as written (%d problem%s): %s"),
-			Issues.Num(), Issues.Num() == 1 ? TEXT("") : TEXT("s"), *FString::Join(Lines, TEXT(" | "))));
-		Obj->SetArrayField(TEXT("errors"), Errors);
+		Obj->SetStringField(TEXT("error"), FString::Printf(TEXT("%s (%d problem%s): %s"),
+			Lead, Issues.Num(), Issues.Num() == 1 ? TEXT("") : TEXT("s"), *FString::Join(Lines, TEXT(" | "))));
+		Obj->SetArrayField(TEXT("errors"), ScriptIssuesToJson(Issues));
 		return Obj;
+	}
+
+	void SplitScriptIssues(const TArray<FScriptStepIssue>& Issues, TArray<FScriptStepIssue>& OutBlocking,
+		TArray<FScriptStepIssue>& OutWarnings)
+	{
+		for (const FScriptStepIssue& Issue : Issues) (Issue.bBlocksSave ? OutBlocking : OutWarnings).Add(Issue);
 	}
 }

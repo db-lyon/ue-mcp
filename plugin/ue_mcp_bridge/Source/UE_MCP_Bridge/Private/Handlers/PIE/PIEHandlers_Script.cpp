@@ -78,10 +78,10 @@ namespace
 		return Profile.IsEmpty() || LoadObject<UMCPPIEObservationProfile>(nullptr, *Profile) != nullptr;
 	}
 
-	// The checks script_create and script_update share: the profile and map exist, and each step is
-	// one the observer can check against the level and that profile. Issues already found (parse
-	// failures) come in through Issues. Returns the structured refusal, or null.
-	TSharedPtr<FJsonValue> CheckTestScript(const TArray<FScriptStepDef>& Steps, const FString& Profile, const FString& Map,
+	// The checks script_create, script_update and script_validate share: the profile and map exist,
+	// and each step is one the observer can check against the level and that profile. Issues already
+	// found (parse failures) come in through Issues, and every finding is added to it.
+	void CheckTestScript(const TArray<FScriptStepDef>& Steps, const FString& Profile, const FString& Map,
 		bool bManualOnly, TArray<FScriptStepIssue>& Issues)
 	{
 		TSet<int32> Failed;
@@ -113,6 +113,7 @@ namespace
 			FScriptStepIssue Issue;
 			Issue.Field = TEXT("map");
 			Issue.Message = FString::Printf(TEXT("Map not found: %s is not a level asset"), *MCPMapPackageName(Map));
+			Issue.bBlocksSave = true;
 			Issue.Candidates = RankScriptCandidates(MCPMapPackageName(Map), Maps);
 			Issues.Add(MoveTemp(Issue));
 		}
@@ -127,8 +128,18 @@ namespace
 			}
 			ValidateScriptSteps(Steps, bManualOnly, Ctx, Issues, Failed);
 		}
-		if (Issues.Num() == 0) return nullptr;
-		return MakeShared<FJsonValueObject>(ScriptIssuesErrorObject(Issues));
+	}
+
+	// script_create and script_update refuse only what cannot be written; every other finding is
+	// returned with the save as warnings, since a value may only resolve once PIE runs.
+	TSharedPtr<FJsonValue> RefuseUnsavableScript(const TArray<FScriptStepIssue>& Issues, TArray<FScriptStepIssue>& OutWarnings)
+	{
+		TArray<FScriptStepIssue> Blocking;
+		SplitScriptIssues(Issues, Blocking, OutWarnings);
+		if (Blocking.Num() == 0) return nullptr;
+		TSharedPtr<FJsonObject> Obj = ScriptIssuesErrorObject(Blocking, TEXT("The script cannot be saved as written"));
+		Obj->SetArrayField(TEXT("warnings"), ScriptIssuesToJson(OutWarnings));
+		return MakeShared<FJsonValueObject>(Obj);
 	}
 
 	FString ScriptVerdictForStatus(EScriptStepStatus Status)
@@ -402,7 +413,9 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptCreate(const TSharedPtr<FJsonObjec
 	TArray<FScriptStepDef> Steps;
 	TArray<FScriptStepIssue> Issues;
 	ParseScriptStepsJsonIssues(*StepsArr, Steps, Issues);
-	if (TSharedPtr<FJsonValue> Refusal = CheckTestScript(Steps, Profile, Map, bManualOnly, Issues)) return Refusal;
+	CheckTestScript(Steps, Profile, Map, bManualOnly, Issues);
+	TArray<FScriptStepIssue> Warnings;
+	if (TSharedPtr<FJsonValue> Refusal = RefuseUnsavableScript(Issues, Warnings)) return Refusal;
 
 	const FString AssetPath = PackagePath / Name;
 	if (OnConflict == TEXT("update") || OnConflict == TEXT("replace"))
@@ -430,6 +443,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptCreate(const TSharedPtr<FJsonObjec
 				MCPSetRollback(Result, TEXT("pie_script_update"), Inverse);
 			}
 			TestScriptFieldsToJson(Existing, AssetPath, Result);
+			Result->SetArrayField(TEXT("warnings"), ScriptIssuesToJson(Warnings));
 			return MCPResult(Result);
 		}
 	}
@@ -454,6 +468,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptCreate(const TSharedPtr<FJsonObjec
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	TestScriptFieldsToJson(Script, AssetPath, Result);
+	Result->SetArrayField(TEXT("warnings"), ScriptIssuesToJson(Warnings));
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("path"), AssetPath);
 	Payload->SetBoolField(TEXT("confirm"), true);
@@ -499,19 +514,18 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptUpdate(const TSharedPtr<FJsonObjec
 	UMCPPIETestScript* Script = LoadTestScriptAsset(Path);
 	if (!Script) return MCPError(FString::Printf(TEXT("Test script not found: %s"), *Path));
 
-	// The script as it would stand after the update is checked whenever its steps, profile, map or
+	// The script as it will stand after the update is checked whenever its steps, profile, map or
 	// manual_only change; a description or window change alone leaves the steps as they were.
 	TArray<FScriptStepDef> Steps;
+	TArray<FScriptStepIssue> Warnings;
 	if (bHasSteps || bHasProfile || bHasMap || bHasManualOnly)
 	{
 		TArray<FScriptStepIssue> Issues;
 		if (bHasSteps) ParseScriptStepsJsonIssues(*StepsArr, Steps, Issues);
 		else ScriptStepsFromAsset(Script, Steps);
-		if (TSharedPtr<FJsonValue> Refusal = CheckTestScript(Steps, bHasProfile ? Profile : Script->Profile,
-			bHasMap ? Map : Script->Map, bHasManualOnly ? bManualOnly : Script->bManualOnly, Issues))
-		{
-			return Refusal;
-		}
+		CheckTestScript(Steps, bHasProfile ? Profile : Script->Profile,
+			bHasMap ? Map : Script->Map, bHasManualOnly ? bManualOnly : Script->bManualOnly, Issues);
+		if (TSharedPtr<FJsonValue> Refusal = RefuseUnsavableScript(Issues, Warnings)) return Refusal;
 	}
 
 	const FString Before = TestScriptStateKey(Script);
@@ -535,6 +549,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptUpdate(const TSharedPtr<FJsonObjec
 		MCPSetRollback(Result, TEXT("pie_script_update"), Inverse);
 	}
 	TestScriptFieldsToJson(Script, Path, Result);
+	Result->SetArrayField(TEXT("warnings"), ScriptIssuesToJson(Warnings));
 	return MCPResult(Result);
 }
 
@@ -551,15 +566,13 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptValidate(const TSharedPtr<FJsonObj
 	TArray<FScriptStepDef> Steps;
 	TArray<FScriptStepIssue> Issues;
 	ParseScriptStepsJsonIssues(*StepsArr, Steps, Issues);
-	const TSharedPtr<FJsonValue> Refusal = CheckTestScript(Steps, Profile, Map, bManualOnly, Issues);
+	CheckTestScript(Steps, Profile, Map, bManualOnly, Issues);
 
-	// The same checks script_create runs, answered rather than refused, so a caller can draft in a loop.
+	// The same checks script_create runs, every finding reported as an error, so a caller can draft in a loop.
 	auto Result = MCPSuccess();
-	Result->SetBoolField(TEXT("valid"), !Refusal.IsValid());
-	TArray<TSharedPtr<FJsonValue>> Errors;
-	for (const FScriptStepIssue& I : Issues) Errors.Add(MakeShared<FJsonValueObject>(ScriptIssueToJson(I)));
-	Result->SetArrayField(TEXT("errors"), Errors);
-	if (Refusal.IsValid()) Result->SetStringField(TEXT("summary"), Refusal->AsObject()->GetStringField(TEXT("error")));
+	Result->SetBoolField(TEXT("valid"), Issues.Num() == 0);
+	Result->SetArrayField(TEXT("errors"), ScriptIssuesToJson(Issues));
+	if (Issues.Num() > 0) Result->SetStringField(TEXT("summary"), ScriptIssuesErrorObject(Issues)->GetStringField(TEXT("error")));
 	Result->SetArrayField(TEXT("steps"), ScriptStepDefsToJson(Steps));
 	return MCPResult(Result);
 }
