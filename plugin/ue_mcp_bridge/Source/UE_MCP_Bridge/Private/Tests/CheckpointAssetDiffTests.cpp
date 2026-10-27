@@ -211,6 +211,26 @@ bool FMCPCheckpointAssetDiffMaterialTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("an unloadable version fails"), JunkDiff->GetBoolField(TEXT("success")));
 		TestTrue(TEXT("and says why"), JunkDiff->GetStringField(TEXT("error")).Contains(TEXT("could not be loaded for diff")));
 	}
+
+	// items: several diffs in one call, one result each in order, a failing item answered in its place.
+	// Each item has files of its own, as list_changes sends them.
+	TSharedPtr<FJsonObject> BatchAdded = MakeShared<FJsonObject>();
+	BatchAdded->SetStringField(TEXT("originalFile"), Original);
+	BatchAdded->SetStringField(TEXT("toFile"), CkDiffTestSnapshot(Package, TEXT("M_CkDiff-batch-added")));
+	TSharedPtr<FJsonObject> BatchParams = MakeShared<FJsonObject>();
+	BatchParams->SetArrayField(TEXT("items"), {
+		MakeShared<FJsonValueObject>(Params), MakeShared<FJsonValueObject>(JunkParams), MakeShared<FJsonValueObject>(BatchAdded) });
+	const TSharedPtr<FJsonObject> Batch = CkDiffTestCall(*this, Registry, TEXT("checkpoint_diff_asset"), BatchParams);
+	const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
+	if (Batch.IsValid() && TestTrue(TEXT("a batch answers results"), Batch->TryGetArrayField(TEXT("results"), Results))
+		&& TestEqual(TEXT("one result per item"), Results->Num(), 3))
+	{
+		const TSharedPtr<FJsonObject> First = (*Results)[0]->AsObject();
+		TestEqual(TEXT("the first item is the modified material"), First->GetStringField(TEXT("status")), FString(TEXT("modified")));
+		TestEqual(TEXT("with the same records as on its own"), First->GetIntegerField(TEXT("recordCount")), Diff->GetIntegerField(TEXT("recordCount")));
+		TestFalse(TEXT("the unloadable item fails in its place"), (*Results)[1]->AsObject()->GetBoolField(TEXT("success")));
+		TestEqual(TEXT("and the item after it still runs"), (*Results)[2]->AsObject()->GetStringField(TEXT("status")), FString(TEXT("added")));
+	}
 	return true;
 }
 

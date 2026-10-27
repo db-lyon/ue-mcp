@@ -119,7 +119,7 @@ beforeAll(async () => {
         };
       },
       checkpoint_diff_blueprint: () => ({ success: true, isBlueprint: false }),
-      checkpoint_diff_asset: (p) => fakeAssetDiff(p),
+      checkpoint_diff_asset: (p) => (Array.isArray(p.items) ? { success: true, results: (p.items as Json[]).map(fakeAssetDiff) } : fakeAssetDiff(p)),
       checkpoint_open_native_diff: (p) => {
         opened.push({ ...p, fromContent: typeof p.fromFile === "string" && fs.existsSync(p.fromFile) ? fs.readFileSync(p.fromFile, "utf8") : null });
         return { success: true, opened: "window", windowTitle: `Diff of ${path.basename(String(p.originalFile))}` };
@@ -318,8 +318,13 @@ describe("checkpoints through the daemon", () => {
     const a = (await call(d, "POST", "/v1/checkpoints", { label: "big start" })).body.id as string;
     for (let i = 0; i < 27; i++) editorSave(`Content/Bulk/B_${String(i).padStart(2, "0")}.uasset`, `bulk ${i}`);
     const b = (await call(d, "POST", "/v1/checkpoints", { label: "big end" })).body.id as string;
+    const sent = bridge.calls.length;
     const r = await call(d, "GET", `/v1/checkpoints/changes?from=${a}&to=${b}`);
     expect(r.body.assetDiffs.diffed).toBe(25);
+    // One editor call for all 25, so the editor unloads the versions, a full garbage collection, once.
+    const diffCalls = bridge.calls.slice(sent).filter((c) => c.method === "checkpoint_diff_asset");
+    expect(diffCalls).toHaveLength(1);
+    expect(diffCalls[0].params.items).toHaveLength(25);
     expect(r.body.assetDiffs.deferred).toEqual(["Content/Bulk/B_25.uasset", "Content/Bulk/B_26.uasset"]);
     const late = (r.body.changes as Json[]).find((c) => c.path === "Content/Bulk/B_26.uasset")!;
     expect(late.assetDiff).toMatchObject({ state: "deferred" });

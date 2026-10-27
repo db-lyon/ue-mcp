@@ -1321,6 +1321,27 @@ namespace
 
 TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAsset(const TSharedPtr<FJsonObject>& Params)
 {
+	TArray<UPackage*> Loaded;
+	ON_SCOPE_EXIT { CkDiffUnload(Loaded); };
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	if (!TryGetArrayParam(Params, TEXT("items"), Items)) return DiffCheckpointAssetOne(Params, Loaded);
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	for (const TSharedPtr<FJsonValue>& Item : *Items)
+	{
+		const TSharedPtr<FJsonObject>* ItemParams = nullptr;
+		TSharedPtr<FJsonValue> One = Item.IsValid() && Item->TryGetObject(ItemParams)
+			? DiffCheckpointAssetOne(*ItemParams, Loaded)
+			: MCPError(TEXT("each item is an object of checkpoint_diff_asset parameters"));
+		Results.Add(One.IsValid() ? One : MakeShared<FJsonValueNull>());
+	}
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetArrayField(TEXT("results"), Results);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJsonObject>& Params, TArray<UPackage*>& Loaded)
+{
 	FString OriginalFile;
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("originalFile"), OriginalFile)) return Err;
 	const FString FromFile = OptionalString(Params, TEXT("fromFile"), FString());
@@ -1336,9 +1357,6 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAsset(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("%s is not under a mounted content folder"), *OriginalFile));
 	}
 	const FPackagePath OriginalPath = FPackagePath::FromLocalPath(OriginalFile);
-
-	TArray<UPackage*> Loaded;
-	ON_SCOPE_EXIT { CkDiffUnload(Loaded); };
 
 	FCkDiffSide A, B;
 	if (!FromFile.IsEmpty())

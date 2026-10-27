@@ -44,6 +44,18 @@ export type { ChangeEntry, CheckpointInfo, RestoreRefusal } from "./shadow-repo.
 /** How many Blueprint packages one list_changes diffs in the editor. */
 const MAX_BLUEPRINT_DIFFS = 25;
 
+/** A package diff the editor is asked for: its versions, exported files and cache entry. */
+interface DiffJob {
+  index: number;
+  c: ChangeEntry;
+  a: string | null;
+  b: string | null;
+  cacheFile: string;
+  fromFile: string | null;
+  toFile: string | null;
+  params: Json;
+}
+
 export interface CheckpointState {
   editor: string;
   enabled: boolean;
@@ -410,68 +422,141 @@ export class SessionCheckpoints {
     const packages = result.changes.filter((c) => c.kind === "package");
     const now = packages.slice(0, MAX_ASSET_DIFFS);
     const later = packages.slice(MAX_ASSET_DIFFS);
-    let legacy = false;
-    for (const c of now) {
-      const { diff, unknownMethod } = await this.diffPackage(result.from, result.to, c);
-      c.assetDiff = diff;
-      if (unknownMethod) legacy = true;
-      if (diff.blueprint) c.blueprintDiff = diff.blueprint;
-    }
+    const { diffs, unknownMethod } = await this.diffPackages(result.from, result.to, now);
+    now.forEach((c, i) => {
+      c.assetDiff = diffs[i];
+      if (diffs[i].blueprint) c.blueprintDiff = diffs[i].blueprint;
+    });
     for (const c of later) c.assetDiff = assetDiffDeferred();
     result.assetDiffs = { limit: MAX_ASSET_DIFFS, diffed: now.length, deferred: later.map((c) => c.path) };
-    return legacy;
+    return unknownMethod;
   }
 
   /** One package's diff, from the cache when these two versions were diffed before. */
   private async diffPackage(from: string, to: string | null, c: ChangeEntry): Promise<{ diff: AssetDiff; unknownMethod?: boolean }> {
-    if (c.large) return { diff: assetDiffError("The package is over the large-file size and kept as a plain copy, so it is not loaded to diff it.") };
-    if (!this.session.bridge.isConnected) return { diff: assetDiffError("The editor is not connected, so Unreal cannot load the versions to diff them.") };
-    const repo = this.repo();
-    const a = c.status === "added" ? null : await repo.versionOf(from, c.path);
-    const b = c.status === "deleted" ? null : await repo.versionOf(to, c.path);
-    if (a === undefined || b === undefined) return { diff: assetDiffError("The shadow history has no record of one version of this package.") };
+    const { diffs, unknownMethod } = await this.diffPackages(from, to, [c]);
+    return { diff: diffs[0], unknownMethod };
+  }
 
-    const key = `${ASSET_DIFF_FORMAT}\n${c.path.toLowerCase()}\n${a ?? "-"}\n${b ?? "-"}`;
-    const cacheFile = path.join(repo.diffsDir, `${crypto.createHash("sha1").update(key).digest("hex")}.json`);
-    try {
-      const cached = JSON.parse(fs.readFileSync(cacheFile, "utf-8")) as AssetDiff;
-      return { diff: this.withUrls(cached) };
-    } catch {
-      // Not diffed yet.
+  /**
+   * Packages' diffs, in order. The ones not cached go to the editor in one
+   * checkpoint_diff_asset call, which unloads the versions once at the end:
+   * every unload is a full garbage collection in the editor.
+   */
+  private async diffPackages(from: string, to: string | null, cs: ChangeEntry[]): Promise<{ diffs: AssetDiff[]; unknownMethod: boolean }> {
+    const diffs: AssetDiff[] = new Array(cs.length);
+    const jobs: DiffJob[] = [];
+    const repo = this.repo();
+    for (const [i, c] of cs.entries()) {
+      if (c.large) {
+        diffs[i] = assetDiffError("The package is over the large-file size and kept as a plain copy, so it is not loaded to diff it.");
+        continue;
+      }
+      if (!this.session.bridge.isConnected) {
+        diffs[i] = assetDiffError("The editor is not connected, so Unreal cannot load the versions to diff them.");
+        continue;
+      }
+      const a = c.status === "added" ? null : await repo.versionOf(from, c.path);
+      const b = c.status === "deleted" ? null : await repo.versionOf(to, c.path);
+      if (a === undefined || b === undefined) {
+        diffs[i] = assetDiffError("The shadow history has no record of one version of this package.");
+        continue;
+      }
+      const key = `${ASSET_DIFF_FORMAT}\n${c.path.toLowerCase()}\n${a ?? "-"}\n${b ?? "-"}`;
+      const cacheFile = path.join(repo.diffsDir, `${crypto.createHash("sha1").update(key).digest("hex")}.json`);
+      try {
+        diffs[i] = this.withUrls(JSON.parse(fs.readFileSync(cacheFile, "utf-8")) as AssetDiff);
+        continue;
+      } catch {
+        // Not diffed yet.
+      }
+      jobs.push({ index: i, c, a, b, cacheFile, fromFile: null, toFile: null, params: {} });
     }
+    if (!jobs.length) return { diffs, unknownMethod: false };
 
     const dir = this.diffDir("diff");
-    const ext = path.extname(c.path);
-    const base = path.basename(c.path, ext);
-    const fromFile = a ? path.join(dir, `${base}-${a.slice(0, 12)}${ext}`) : null;
-    const toFile = b ? path.join(dir, `${base}-${b.slice(0, 12)}${ext}`) : null;
     const thumb = (v: string) => path.join(repo.thumbsDir, `${v}.png`);
     const want = (v: string | null) => (v && !fs.existsSync(thumb(v)) ? thumb(v) : null);
+    const ready: DiffJob[] = [];
+    let unknownMethod = false;
     try {
-      if (fromFile && a) await repo.exportVersion(a, fromFile);
-      if (toFile && b) await repo.exportVersion(b, toFile);
       fs.mkdirSync(repo.thumbsDir, { recursive: true });
-      const fromThumbnail = want(a);
-      const toThumbnail = want(b);
-      let raw: Json | null;
-      try {
-        raw = (await this.session.bridge.call("checkpoint_diff_asset", {
-          originalFile: path.join(this.projectDir, c.path),
-          ...(fromFile ? { fromFile } : {}),
-          ...(toFile ? { toFile } : {}),
+      for (const job of jobs) {
+        const ext = path.extname(job.c.path);
+        const base = path.basename(job.c.path, ext);
+        job.fromFile = job.a ? path.join(dir, `${base}-${job.a.slice(0, 12)}${ext}`) : null;
+        job.toFile = job.b ? path.join(dir, `${base}-${job.b.slice(0, 12)}${ext}`) : null;
+        try {
+          if (job.fromFile && job.a) await repo.exportVersion(job.a, job.fromFile);
+          if (job.toFile && job.b) await repo.exportVersion(job.b, job.toFile);
+        } catch (e) {
+          diffs[job.index] = assetDiffError(`Preparing the diff failed: ${e instanceof Error ? e.message : String(e)}`);
+          continue;
+        }
+        const fromThumbnail = want(job.a);
+        const toThumbnail = want(job.b);
+        job.params = {
+          originalFile: path.join(this.projectDir, job.c.path),
+          ...(job.fromFile ? { fromFile: job.fromFile } : {}),
+          ...(job.toFile ? { toFile: job.toFile } : {}),
           ...(fromThumbnail ? { fromThumbnail } : {}),
           ...(toThumbnail ? { toThumbnail } : {}),
-        })) as Json | null;
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        if (/unknown method/i.test(message)) {
-          return { diff: assetDiffError("The editor's bridge plugin predates asset diffs (checkpoint_diff_asset); update the plugin."), unknownMethod: true };
-        }
-        return { diff: assetDiffError(`The editor did not answer the diff: ${message}`) };
+        };
+        ready.push(job);
       }
-      if (!raw || raw.success === false) return { diff: assetDiffError(String(raw?.error ?? "The editor returned no diff and no reason.")) };
+      const answers = await this.callDiffs(ready);
+      for (const [n, job] of ready.entries()) {
+        const answer = answers[n];
+        if ("error" in answer) {
+          if (/unknown method/i.test(answer.error)) {
+            unknownMethod = true;
+            diffs[job.index] = assetDiffError("The editor's bridge plugin predates asset diffs (checkpoint_diff_asset); update the plugin.");
+          } else {
+            diffs[job.index] = assetDiffError(`The editor did not answer the diff: ${answer.error}`);
+          }
+          continue;
+        }
+        diffs[job.index] = this.finishDiff(job, answer.raw);
+      }
+    } finally {
+      for (const job of jobs) {
+        if (job.fromFile) fs.rmSync(job.fromFile, { force: true });
+        if (job.toFile) fs.rmSync(job.toFile, { force: true });
+      }
+    }
+    return { diffs, unknownMethod };
+  }
+
+  /**
+   * checkpoint_diff_asset for the jobs: one call with items, or one call per
+   * job on a bridge that answers items without results.
+   */
+  private async callDiffs(jobs: DiffJob[]): Promise<Array<{ raw: Json | null } | { error: string }>> {
+    const one = async (params: Json): Promise<{ raw: Json | null } | { error: string }> => {
+      try {
+        return { raw: (await this.session.bridge.call("checkpoint_diff_asset", params)) as Json | null };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    };
+    if (jobs.length <= 1) return Promise.all(jobs.map((j) => one(j.params)));
+    const batch = await one({ items: jobs.map((j) => j.params) });
+    if ("error" in batch && /unknown method/i.test(batch.error)) return jobs.map(() => batch);
+    const results = "raw" in batch && Array.isArray(batch.raw?.results) ? (batch.raw.results as Array<Json | null>) : null;
+    if (results && results.length === jobs.length) return results.map((raw) => ({ raw }));
+    const answers: Array<{ raw: Json | null } | { error: string }> = [];
+    for (const j of jobs) answers.push(await one(j.params));
+    return answers;
+  }
+
+  /** The editor's answer for one job, with its pictures recorded, cached. */
+  private finishDiff(job: DiffJob, raw: Json | null): AssetDiff {
+    if (!raw || raw.success === false) return assetDiffError(String(raw?.error ?? "The editor returned no diff and no reason."));
+    const repo = this.repo();
+    const thumb = (v: string) => path.join(repo.thumbsDir, `${v}.png`);
+    try {
       const picture = (side: "before" | "after", t: Json | undefined): AssetThumbnail | undefined => {
-        const version = side === "before" ? a : b;
+        const version = side === "before" ? job.a : job.b;
         if (!version) return undefined;
         const meta = path.join(repo.thumbsDir, `${version}.json`);
         if (t && typeof t.file === "string") {
@@ -489,15 +574,12 @@ export class SessionCheckpoints {
         }
         return { error: "No picture was kept for this version." };
       };
-      const diff = assetDiffFromBridge(raw, c.path, picture);
+      const diff = assetDiffFromBridge(raw, job.c.path, picture);
       fs.mkdirSync(repo.diffsDir, { recursive: true });
-      fs.writeFileSync(cacheFile, JSON.stringify(diff));
-      return { diff: this.withUrls(diff) };
+      fs.writeFileSync(job.cacheFile, JSON.stringify(diff));
+      return this.withUrls(diff);
     } catch (e) {
-      return { diff: assetDiffError(`Preparing the diff failed: ${e instanceof Error ? e.message : String(e)}`) };
-    } finally {
-      if (fromFile) fs.rmSync(fromFile, { force: true });
-      if (toFile) fs.rmSync(toFile, { force: true });
+      return assetDiffError(`Preparing the diff failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
