@@ -87,7 +87,14 @@ describe("test scripts", () => {
     { instruction: "The cube is in the level", expect: { value: CUBE, op: "exists" } },
   ];
 
-  /** The structured refusal: every problem as { step, field, message, candidates? }. */
+  /** A save that went through: the check's findings as warnings [{ step, field, message, candidates? }]. */
+  async function savedWith(method: string, params: Json): Promise<{ result: Json; warnings: Json[] }> {
+    const result = await call(method, params);
+    expect(Array.isArray(result.warnings), `${method} answers warnings: ${JSON.stringify(result)}`).toBe(true);
+    return { result, warnings: result.warnings as Json[] };
+  }
+
+  /** The structured refusal of a script that cannot be written: every problem as { step, field, message, candidates? }. */
   async function refusedWith(method: string, params: Json): Promise<{ error: string; errors: Json[] }> {
     const r = await callBridge(bridge, method, params);
     expect(succeeded(r), `${method} should be refused: ${JSON.stringify(r.result)}`).toBe(false);
@@ -102,6 +109,7 @@ describe("test scripts", () => {
   it("script_create, script_read, script_update, script_list and script_delete round-trip one asset", async () => {
     const created = await call("pie_script_create", { name: "TS_BCovAssets", package_path: DIR, steps, description: "door check", default_within_ms: 4000 });
     expect(created.created).toBe(true);
+    expect(created.warnings).toEqual([]);
 
     const read = await call("pie_script_read", { path: SCRIPT });
     const readSteps = read.steps as Json[];
@@ -112,21 +120,22 @@ describe("test scripts", () => {
     expect(read.default_within_ms).toBe(4000);
     expect(read.manual_only).toBe(false);
 
-    // Cut down to a manual step, the script checks nothing until it says so.
-    const noAuto = await refusedWith("pie_script_update", { path: SCRIPT, steps: [steps[1]], description: "manual only" });
-    expect(noAuto.errors).toEqual([expect.objectContaining({ step: null, field: "steps", candidates: ["manual_only"] })]);
-    expect(((await call("pie_script_read", { path: SCRIPT })).steps as Json[]).length).toBe(3);
+    // Cut down to a manual step, the script checks nothing until it says so: saved, with a warning.
+    const noAuto = await savedWith("pie_script_update", { path: SCRIPT, steps: [steps[1]], description: "no auto step" });
+    expect(noAuto.warnings).toEqual([expect.objectContaining({ step: null, field: "steps", candidates: ["manual_only"] })]);
+    expect(((await call("pie_script_read", { path: SCRIPT })).steps as Json[]).length).toBe(1);
 
-    const updated = await call("pie_script_update", { path: SCRIPT, steps: [steps[1]], description: "manual only", manual_only: true });
-    expect(updated.updated).toBe(true);
+    const updated = await savedWith("pie_script_update", { path: SCRIPT, steps: [steps[1]], description: "manual only", manual_only: true });
+    expect(updated.result.updated).toBe(true);
+    expect(updated.warnings).toEqual([]);
     const after = await call("pie_script_read", { path: SCRIPT });
     expect((after.steps as Json[]).length).toBe(1);
     expect(after.description).toBe("manual only");
     expect(after.manual_only).toBe(true);
 
-    // Clearing manual_only checks the stored steps again.
-    expect((await refusedWith("pie_script_update", { path: SCRIPT, manual_only: false })).errors[0]).toMatchObject({ step: null, field: "steps" });
-    expect((await call("pie_script_read", { path: SCRIPT })).manual_only).toBe(true);
+    // Clearing manual_only checks the stored steps again, and saves.
+    expect((await savedWith("pie_script_update", { path: SCRIPT, manual_only: false })).warnings[0]).toMatchObject({ step: null, field: "steps" });
+    expect((await call("pie_script_read", { path: SCRIPT })).manual_only).toBe(false);
 
     expect(await scriptListed("TS_BCovAssets")).toBe(true);
 
@@ -147,8 +156,8 @@ describe("test scripts", () => {
     expect(await scriptListed("TS_BCovBad")).toBe(false);
   }, 30_000);
 
-  it("script_create refuses a value the observer cannot read, naming the step, the value and the closest candidates", async () => {
-    const r = await refusedWith("pie_script_create", {
+  it("script_create saves a value the observer cannot read, warning with the step, the value and the closest candidates", async () => {
+    const r = await savedWith("pie_script_create", {
       name: "TS_BCovUnknown", package_path: DIR,
       steps: [
         { instruction: "Look", expect: { value: "BaseEyeHeight", op: "gt", target: 0 } },
@@ -157,17 +166,18 @@ describe("test scripts", () => {
         { instruction: "No widget", expect: { value: "WBP_BCovNoSuchWidget", op: "visible" } },
       ],
     });
-    expect(r.errors.map((e) => [e.step, e.field])).toEqual([[1, "expect.value"], [2, "expect.value"], [3, "expect.value"]]);
-    expect(String(r.errors[0].message)).toContain("BaseEyeHieght");
-    expect(r.errors[0].candidates).toContain("BaseEyeHeight");
-    expect(r.errors[1].candidates).toContain(CUBE);
-    expect(String(r.errors[2].message)).toContain("resolve_in_pie");
-    expect(r.error).toContain("BaseEyeHieght");
-    expect(await scriptListed("TS_BCovUnknown")).toBe(false);
+    expect(r.result.created).toBe(true);
+    expect(r.warnings.map((e) => [e.step, e.field])).toEqual([[1, "expect.value"], [2, "expect.value"], [3, "expect.value"]]);
+    expect(String(r.warnings[0].message)).toContain("BaseEyeHieght");
+    expect(r.warnings[0].candidates).toContain("BaseEyeHeight");
+    expect(r.warnings[1].candidates).toContain(CUBE);
+    expect(String(r.warnings[2].message)).toContain("resolve_in_pie");
+    expect(((await call("pie_script_read", { path: `${DIR}/TS_BCovUnknown` })).steps as Json[]).length).toBe(4);
+    await call("pie_script_delete", { path: `${DIR}/TS_BCovUnknown`, confirm: true });
   }, 60_000);
 
-  it("script_create refuses an op or target the value's type cannot meet", async () => {
-    const r = await refusedWith("pie_script_create", {
+  it("script_create saves an op or target the value's type cannot meet, with a warning", async () => {
+    const r = await savedWith("pie_script_create", {
       name: "TS_BCovTypes", package_path: DIR,
       steps: [
         { instruction: "A bool compared as a number", expect: { value: "bCanBeDamaged", op: "gt", target: 0 } },
@@ -176,39 +186,46 @@ describe("test scripts", () => {
         { instruction: "A bool against true", expect: { value: "bCanBeDamaged", op: "eq", target: true } },
       ],
     });
-    expect(r.errors.map((e) => [e.step, e.field])).toEqual([[0, "expect.op"], [1, "expect.target"], [2, "expect.target"]]);
-    expect(r.errors[0].candidates).toEqual(["eq"]);
-    expect(await scriptListed("TS_BCovTypes")).toBe(false);
+    expect(r.warnings.map((e) => [e.step, e.field])).toEqual([[0, "expect.op"], [1, "expect.target"], [2, "expect.target"]]);
+    expect(r.warnings[0].candidates).toEqual(["eq"]);
+    expect(await scriptListed("TS_BCovTypes")).toBe(true);
+    await call("pie_script_delete", { path: `${DIR}/TS_BCovTypes`, confirm: true });
   }, 30_000);
 
-  it("resolve_in_pie lets a value through that only exists once PIE runs, and is stored on the step", async () => {
+  it("resolve_in_pie silences the warning for a value that only exists once PIE runs, and is stored on the step", async () => {
     const later = `${DIR}/TS_BCovLater`;
     const spawned = { instruction: "The spawned helper appears", expect: { value: "BP_BCovSpawnedLater", op: "exists" } };
-    expect((await refusedWith("pie_script_create", { name: "TS_BCovLater", package_path: DIR, steps: [spawned] })).errors[0])
+    expect((await savedWith("pie_script_create", { name: "TS_BCovLater", package_path: DIR, steps: [spawned] })).warnings[0])
       .toMatchObject({ step: 0, field: "expect.value" });
 
-    const created = await call("pie_script_create", { name: "TS_BCovLater", package_path: DIR, steps: [{ ...spawned, resolve_in_pie: true }] });
-    expect(created.created).toBe(true);
+    const flagged = await savedWith("pie_script_update", { path: later, steps: [{ ...spawned, resolve_in_pie: true }] });
+    expect(flagged.result.updated).toBe(true);
+    expect(flagged.warnings).toEqual([]);
     const read = await call("pie_script_read", { path: later });
     expect((read.steps as Json[])[0]).toMatchObject({ resolve_in_pie: true, expect: { value: "BP_BCovSpawnedLater", op: "exists" } });
 
-    // An update naming an unreadable value is refused and leaves the stored steps alone.
-    const bad = await refusedWith("pie_script_update", {
+    // An update naming an unreadable value saves with a warning; one that does not parse is refused and stores nothing.
+    const typo = await savedWith("pie_script_update", {
       path: later, steps: [{ instruction: "Typo", expect: { value: "BaseEyeHieght", op: "lt", target: 500 } }],
     });
-    expect(bad.errors[0]).toMatchObject({ step: 0, field: "expect.value" });
-    expect(((await call("pie_script_read", { path: later })).steps as Json[])[0].resolve_in_pie).toBe(true);
+    expect(typo.warnings[0]).toMatchObject({ step: 0, field: "expect.value" });
+    const broken = await refusedWith("pie_script_update", {
+      path: later, steps: [{ instruction: "Bad op", expect: { value: "BaseEyeHeight", op: "sideways" } }],
+    });
+    expect(broken.errors[0]).toMatchObject({ step: 0, field: "expect.op" });
+    expect(((await call("pie_script_read", { path: later })).steps as Json[])[0].instruction).toBe("Typo");
     await call("pie_script_delete", { path: later, confirm: true });
   }, 60_000);
 
-  it("script_create refuses a script with no auto step unless it is manual_only", async () => {
+  it("script_create warns about a script with no auto step unless it is manual_only", async () => {
     const manual = [{ instruction: "Does the menu feel right?", judge: "manual" }];
-    const r = await refusedWith("pie_script_create", { name: "TS_BCovManual", package_path: DIR, steps: manual });
-    expect(r.errors).toEqual([expect.objectContaining({ step: null, field: "steps" })]);
-    expect(await scriptListed("TS_BCovManual")).toBe(false);
+    const r = await savedWith("pie_script_create", { name: "TS_BCovManual", package_path: DIR, steps: manual });
+    expect(r.warnings).toEqual([expect.objectContaining({ step: null, field: "steps" })]);
+    expect(await scriptListed("TS_BCovManual")).toBe(true);
 
-    const created = await call("pie_script_create", { name: "TS_BCovManual", package_path: DIR, steps: manual, manual_only: true });
-    expect(created.created).toBe(true);
+    const created = await savedWith("pie_script_create", { name: "TS_BCovManual", package_path: DIR, steps: manual, manual_only: true, onConflict: "update" });
+    expect(created.result.updated).toBe(true);
+    expect(created.warnings).toEqual([]);
     expect((await call("pie_script_read", { path: `${DIR}/TS_BCovManual` })).manual_only).toBe(true);
     await call("pie_script_delete", { path: `${DIR}/TS_BCovManual`, confirm: true });
   }, 30_000);

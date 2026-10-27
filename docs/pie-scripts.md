@@ -68,7 +68,7 @@ A step can set up and drive what it then checks, so a script runs end to end wit
 - **act** entries are the step actions `uat_run` runs, through the same executor: `place` (`{at, offset?, face?}` next to an actor, facing it, or `{location, yaw?}`), `press` (`{action, frames?}`), `inject` (`{action, value}`), `hold` (`{action, value, ms}`), `tape` (`{action, values}`), `console`, `capture` (a label or `true`; the file lands under `<output_dir>/captures/`) and `wait_ms`. `client` (default 0, the editor's own player) sends an entry to a remote player. An act ends once every entry ran, every hold and tape on the editor's player played out, and every remote player confirmed what it was sent.
 - **A manual step may carry `act`**: the engine sets the scene, then the step asks for its verdict. A manual step with `act` starts its own block of manual steps.
 - **An act that fails fails its step**, with the reason in `evidence.reason`, and the run moves on.
-- `script_create`, `script_update` and `script_validate` resolve the actor every `set`, `call` and `place` names, the class every `spawn` names and the Input Action every `press`, `inject`, `hold` and `tape` names, and refuse one that does not exist with the field at fault, such as `act[1].press.action` or `arrange[0].target`, and candidates. `resolve_in_pie: true` lets an actor that only exists in PIE through; classes and Input Actions are always checked.
+- `script_create`, `script_update` and `script_validate` resolve the actor every `set`, `call` and `place` names, the class every `spawn` names and the Input Action every `press`, `inject`, `hold` and `tape` names, and report one that does not exist with the field at fault, such as `act[1].press.action` or `arrange[0].target`, and candidates. `resolve_in_pie: true` lets an actor that only exists in PIE through; classes and Input Actions are always checked.
 - A [manual run](#manual-runs) has no PIE and a [replay](#replay-regression) replays the recorded input, so neither runs `arrange` or `act`. The step's `act_result` says so.
 - What the act did is in the step's `act_result` and on its `step_acted` event: `{status, reason?, arranged, actions: [{index, action, ok, error?, at_ms}], started_at_ms, ended_at_ms, duration_ms, wall_ms, captures?}`. `status` is `running`, `done`, `failed` or `skipped`. Times are game milliseconds, except `wall_ms`.
 
@@ -86,11 +86,11 @@ Scripts are data assets, saved under `/Game/PIEStudio/Scripts` unless you give a
 | `script_delete` | `path`, `confirm=true` |
 | `script_list` | `directory?` (default `/Game`). Returns `scripts` (`path`, `object_path`, `name`, `map`, `last_run`) and `count`. `last_run` is the script's newest run as [`script_runs`](#listing-runs) lists it, without its steps, or `null` when it never ran. |
 
-A profile that does not exist is refused, and so is a `map` that is not a level asset (`field: "map"`, with the closest levels as candidates). `map` takes a package path such as `/Game/Maps/L_Arena` or its object path `/Game/Maps/L_Arena.L_Arena`. `steps` must hold at least one step.
+A `map` that is not a level asset is refused (`field: "map"`, with the closest levels as candidates). A profile that does not exist is a warning (`field: "profile"`). `map` takes a package path such as `/Game/Maps/L_Arena` or its object path `/Game/Maps/L_Arena.L_Arena`. `steps` must hold at least one step.
 
 ### Checks when a script is saved
 
-`script_create` and `script_update` refuse a step that a run could never check, so a typo in a value name is caught when the script is written rather than as a failed step later. `script_update` checks the script as it would stand after the update whenever `steps`, `profile`, `map` or `manual_only` changes. When the script's `map` is not the level open in the editor, the actors its steps name are left for the run to resolve, since they live in that level.
+`script_create` and `script_update` check every step a run would read, so a typo in a value name shows up when the script is written rather than as a failed step later. They save regardless and return what the check finds as `warnings`, since a value can resolve only once PIE runs and a script must stay editable while one of its steps does not resolve. `script_update` checks the script as it will stand after the update whenever `steps`, `profile`, `map` or `manual_only` changes. When the script's `map` is not the level open in the editor, the actors its steps name are left for the run to resolve, since they live in that level.
 
 - **The value has to resolve**, the way the observer reads it, against the level open in the editor and the script's profile. A numeric op reads a profile tracked value (its path or last segment), a property path on the player pawn (the pawn player 0 possesses in the level, or the game mode's `DefaultPawnClass`), a component's property (`CollisionCylinder.CapsuleHalfHeight`), `sub:<Subsystem>.<path>`, or `bone:<bone>.<channel>`. `exists` needs an actor in the level, or a class the game mode spawns. `visible` needs a widget class, a Widget Blueprint, or a widget inside one.
 - **The op and target have to suit the value's type.** A bool takes only `eq` with `true` or `false`, an enum only `eq` with one of its values, and a number a number target. An integer is refused an `eq` target it cannot hold, and a `gt` or `lt` target it can never pass.
@@ -100,22 +100,37 @@ A profile that does not exist is refused, and so is a `map` that is not a level 
 
 A value that only exists once PIE is running, such as an actor spawned during play, is let through by `resolve_in_pie: true` on its step. The step's op and target are still checked as far as they can be without a type.
 
-The refusal lists every problem, each with the step index, the field, a message and the closest valid candidates:
+The save answers every finding in `warnings`, each with the step index, the field, a message and the closest valid candidates. `warnings` is empty when the check finds nothing:
 
 ```json
 {
-  "success": false,
-  "errorCode": "INVALID_SCRIPT_STEPS",
-  "error": "The script cannot be checked as written (1 problem): steps[1].expect.value: 'BaseEyeHieght' cannot be read: DefaultPawn has no property or component named BaseEyeHieght (the observer reads it from the player pawn, DefaultPawn, the DefaultPawnClass of GameModeBase). If it only exists once PIE is running, set resolve_in_pie: true on the step.",
-  "errors": [
+  "success": true,
+  "created": true,
+  "path": "/Game/PIEStudio/Scripts/DoorOpens",
+  "steps": [],
+  "warnings": [
     { "step": 1, "field": "expect.value", "message": "steps[1].expect.value: 'BaseEyeHieght' cannot be read: DefaultPawn has no property or component named BaseEyeHieght (the observer reads it from the player pawn, DefaultPawn, the DefaultPawnClass of GameModeBase). If it only exists once PIE is running, set resolve_in_pie: true on the step.", "candidates": ["BaseEyeHeight", "BaseTurnRate", "BaseLookUpRate", "bHidden", "bHiddenEd"] }
   ]
 }
 ```
 
-`step` is `null` for a problem with the whole script, such as no auto step (`field: "steps"`, candidates `["manual_only"]`) or a missing profile (`field: "profile"`). Inline steps given to `script_run` are not checked this way.
+Only a script that cannot be written is refused: no steps, a step that does not parse (an unknown `judge` or `op`, a malformed `expect`, `arrange` or `act`), or a missing `map`. The refusal carries those in `errors`, in the same shape, and the remaining findings in `warnings`:
 
-`script_validate` runs the same checks and answers instead of refusing, so a client can draft in a loop, and `script_values` lists the values the checks accept. The built-in `playtest` flow drafts a script with a model this way; see [Flows](flows.md#playtest).
+```json
+{
+  "success": false,
+  "errorCode": "INVALID_SCRIPT_STEPS",
+  "error": "The script cannot be saved as written (1 problem): steps[0].expect.op 'sideways' is unknown (decreasing, increasing, eq, gt, lt, visible, exists)",
+  "errors": [
+    { "step": 0, "field": "expect.op", "message": "steps[0].expect.op 'sideways' is unknown (decreasing, increasing, eq, gt, lt, visible, exists)", "candidates": ["decreasing", "increasing", "eq"] }
+  ],
+  "warnings": []
+}
+```
+
+`step` is `null` for a problem with the whole script, such as no auto step (`field: "steps"`, candidates `["manual_only"]`) or a missing profile (`field: "profile"`). `script_run` does not run these checks: a stored script runs whatever its warnings, and inline steps are only parsed.
+
+`script_validate` runs the same checks without saving and reports every finding in `errors`, with `valid` false when there is any, so a client can draft in a loop, and `script_values` lists the values the checks accept. The built-in `playtest` flow drafts a script with a model this way; see [Flows](flows.md#playtest).
 
 ```text
 pie(action="script_create", name="DoorOpens", profile="/Game/PIEStudio/Profiles/Door",
