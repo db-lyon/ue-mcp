@@ -1,5 +1,6 @@
 #include "EditorHandlers.h"
 #include "HandlerCheckpoint.h"
+#include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerFunctionCall.h"
@@ -3619,12 +3620,23 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 
 	const bool bRequireClean = OptionalBool(Params, TEXT("requireClean"), true);
 	const bool bEndPIE = OptionalBool(Params, TEXT("endPIE"), true);
+	// The caller's answer to the shutdown save prompt, given up front so the
+	// prompt is never raised. Under interactive dialog handling the agent may
+	// not answer that prompt itself, so a close that raised it hung until a
+	// person clicked it in Unreal. refuse is the behaviour before this existed.
+	const FString DirtyChoice = OptionalString(Params, TEXT("dirtyPackages"), TEXT("refuse")).ToLower();
+	const bool bSaveDirty = DirtyChoice == TEXT("save");
+	const bool bDiscardDirty = DirtyChoice == TEXT("discard");
+	const bool bActOnDirty = bSaveDirty || bDiscardDirty;
+	const TArray<TSharedPtr<FJsonValue>>* NamedPackagesJson = nullptr;
+	const bool bNamedPackages = TryGetArrayParam(Params, TEXT("packages"), NamedPackagesJson) && NamedPackagesJson;
 	const bool bPIEWasActive = GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor;
 	const FDirtyEditorPackages Dirty = CollectDirtyEditorPackages();
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("scheduled"), false);
 	Result->SetBoolField(TEXT("requireClean"), bRequireClean);
+	Result->SetStringField(TEXT("dirtyPackages"), DirtyChoice);
 	Result->SetBoolField(TEXT("endPIE"), bEndPIE);
 	Result->SetBoolField(TEXT("pieWasActive"), bPIEWasActive);
 	Result->SetBoolField(TEXT("pieEndRequested"), false);
@@ -3633,6 +3645,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 	Result->SetArrayField(TEXT("dirtyContentPackages"), MCPStringListToJson(Dirty.Content));
 	Result->SetArrayField(TEXT("dirtyMapPackages"), MCPStringListToJson(Dirty.Maps));
 
+	if (!bActOnDirty && DirtyChoice != TEXT("refuse"))
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("dirtyPackages must be refuse, save or discard, not '%s'; editor shutdown was not scheduled"), *DirtyChoice));
+		return MCPResult(Result);
+	}
+
+	if (bNamedPackages && !bActOnDirty)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), TEXT("packages names what dirtyPackages=save or discard acts on, and dirtyPackages is refuse; editor shutdown was not scheduled"));
+		return MCPResult(Result);
+	}
+
 	if (bPIEWasActive && !bEndPIE)
 	{
 		Result->SetBoolField(TEXT("success"), false);
@@ -3640,11 +3667,124 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 		return MCPResult(Result);
 	}
 
-	if (bRequireClean && (Dirty.Content.Num() > 0 || Dirty.Maps.Num() > 0))
+	// ponytail: save/discard refuse during PIE because they act in this call so the result can name each package; lift when a deferred close can report back.
+	if (bActOnDirty && bPIEWasActive)
 	{
 		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(TEXT("error"), TEXT("Editor has dirty content or map packages; save or discard them before requesting shutdown"));
+		Result->SetStringField(TEXT("error"), TEXT("PIE is active, and dirtyPackages=save or discard acts on the packages in this call so the result can name each one. Stop play first (editor(play_in_editor, pieAction='stop')), then call again; nothing was saved, discarded or scheduled"));
 		return MCPResult(Result);
+	}
+
+	if (bRequireClean && !bActOnDirty && (Dirty.Content.Num() > 0 || Dirty.Maps.Num() > 0))
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), TEXT("Editor has dirty content or map packages; save or discard them before requesting shutdown, or pass dirtyPackages=save or discard"));
+		return MCPResult(Result);
+	}
+
+	if (bActOnDirty)
+	{
+		TArray<FString> AllDirty = Dirty.Content;
+		AllDirty.Append(Dirty.Maps);
+
+		// Act on exactly what this call read. With a named list, a dirty
+		// package the caller did not name is one it has not seen, and saving
+		// or discarding it on its behalf is the silent loss this refuses.
+		TArray<FString> Target;
+		if (bNamedPackages)
+		{
+			TSet<FString> Named;
+			for (const TSharedPtr<FJsonValue>& Value : *NamedPackagesJson)
+			{
+				FString Name;
+				if (Value.IsValid() && Value->TryGetString(Name))
+				{
+					Named.Add(FPackageName::ObjectPathToPackageName(Name.TrimStartAndEnd()));
+				}
+			}
+			TArray<FString> Unexpected;
+			for (const FString& Name : AllDirty)
+			{
+				(Named.Contains(Name) ? Target : Unexpected).Add(Name);
+			}
+			if (Unexpected.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("unexpectedDirtyPackages"), MCPStringListToJson(Unexpected));
+				Result->SetStringField(TEXT("error"), FString::Printf(
+					TEXT("%d dirty package(s) are not in packages, so dirtyPackages=%s would act on work the caller did not name. Add them to packages or deal with them first; nothing was saved, discarded or scheduled"),
+					Unexpected.Num(), *DirtyChoice));
+				return MCPResult(Result);
+			}
+		}
+		else
+		{
+			Target = AllDirty;
+		}
+
+		if (bSaveDirty)
+		{
+			// Every package is checked before any is written, so a refusal
+			// here leaves the disk as it was.
+			TArray<TSharedPtr<FJsonValue>> Failed;
+			auto AddFailure = [&Failed](const FString& Name, const FString& Reason)
+			{
+				TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("package"), Name);
+				Entry->SetStringField(TEXT("error"), Reason);
+				Failed.Add(MakeShared<FJsonValueObject>(Entry));
+			};
+			TArray<UPackage*> ToSave;
+			for (const FString& Name : Target)
+			{
+				UPackage* Package = FindPackage(nullptr, *Name);
+				FString Reason;
+				if (!Package) AddFailure(Name, TEXT("The package is no longer loaded."));
+				else if (MCPPackageWriteBlocked(Package, Reason)) AddFailure(Name, Reason);
+				else ToSave.Add(Package);
+			}
+			if (Failed.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("failedPackages"), Failed);
+				Result->SetStringField(TEXT("error"), TEXT("Some dirty packages cannot be written, so nothing was saved and editor shutdown was not scheduled. A never-saved /Temp world needs level(save_as) first; dirtyPackages=discard closes without it"));
+				return MCPResult(Result);
+			}
+
+			TArray<FString> Saved;
+			for (UPackage* Package : ToSave)
+			{
+				FString Reason;
+				if (SaveAssetPackageChecked(Package, Reason)) Saved.Add(Package->GetName());
+				else AddFailure(Package->GetName(), Reason);
+			}
+			Result->SetArrayField(TEXT("savedPackages"), MCPStringListToJson(Saved));
+			if (Failed.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("failedPackages"), Failed);
+				Result->SetStringField(TEXT("error"), FString::Printf(
+					TEXT("%d package(s) failed to save; savedPackages were written and editor shutdown was not scheduled"), Failed.Num()));
+				Result->SetBoolField(TEXT("changed"), Saved.Num() > 0);
+				MCPSetNoRollback(Result, TEXT("SavePackage overwrote each saved package on disk and the bytes it replaced are gone. Source control holds the previous revision."));
+				return MCPResult(Result);
+			}
+		}
+		else
+		{
+			// A clear dirty flag is what keeps a package off the shutdown save
+			// prompt's list, so with none left the prompt has nothing to ask.
+			for (const FString& Name : Target)
+			{
+				if (UPackage* Package = FindPackage(nullptr, *Name))
+				{
+					Package->SetDirtyFlag(false);
+				}
+			}
+			Result->SetArrayField(TEXT("discardedPackages"), MCPStringListToJson(Target));
+			Result->SetStringField(TEXT("discardNote"),
+				TEXT("IRREVERSIBLE: the discarded changes were never written to disk and nothing keeps a copy; they are gone when the editor closes. Their dirty flags are cleared now, so if the close is called off they stay in memory but no save will pick them up."));
+		}
 	}
 
 	if (bPIEWasActive)
@@ -3657,7 +3797,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 	// ticker is pumping can execute in the same pass. If PIE/SIE was active,
 	// keep polling until the editor has actually finished ending play.
 	FTSTicker::GetCoreTicker().AddTicker(
-		FTickerDelegate::CreateLambda([](float) -> bool
+		FTickerDelegate::CreateLambda([bActOnDirty](float) -> bool
 		{
 			if (!GEditor)
 			{
@@ -3667,6 +3807,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 			{
 				return true;
 			}
+			// The caller answered for the packages that were dirty when it
+			// asked. Something dirtied since then is unanswered, and closing
+			// now would raise the prompt this mode exists to avoid.
+			if (bActOnDirty)
+			{
+				const FDirtyEditorPackages Late = CollectDirtyEditorPackages();
+				if (Late.Content.Num() > 0 || Late.Maps.Num() > 0)
+				{
+					TArray<FString> LateAll = Late.Content;
+					LateAll.Append(Late.Maps);
+					UE_LOG(LogMCPBridge, Warning, TEXT("request_editor_shutdown: close called off, %d package(s) became dirty after the request: %s"),
+						LateAll.Num(), *FString::Join(LateAll, TEXT(", ")));
+					return false;
+				}
+			}
 			IMainFrameModule& MainFrameModule = FModuleManager::LoadModuleChecked<IMainFrameModule>(TEXT("MainFrame"));
 			MainFrameModule.RequestCloseEditor();
 			return false;
@@ -3674,7 +3829,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 		1.0f);
 
 	Result->SetBoolField(TEXT("scheduled"), true);
-	Result->SetStringField(TEXT("message"), TEXT("Graceful editor shutdown scheduled; active PIE/SIE will end before close"));
+	Result->SetStringField(TEXT("message"), bActOnDirty
+		? TEXT("Graceful editor shutdown scheduled with no save prompt. If any package is dirty again when the close runs, the close is called off and the output log names the packages")
+		: TEXT("Graceful editor shutdown scheduled; active PIE/SIE will end before close"));
 	// The early returns above leave scheduled=false and success=false, so
 	// reaching here always armed a shutdown that was not already armed.
 	Result->SetBoolField(TEXT("changed"), true);
@@ -3682,8 +3839,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 	// the editor is closing: a rollback would either arrive too late to matter
 	// or arrive after the process that would run it is gone.
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
-	Result->SetStringField(TEXT("rollbackNote"),
-		TEXT("The scheduled close cannot be called off, and nothing restarts the editor from inside it. editor(start_editor) launches a NEW editor process rather than restoring this session."));
+	Result->SetStringField(TEXT("rollbackNote"), bActOnDirty
+		? TEXT("Saved packages were overwritten on disk and discarded changes were never written; neither can be restored from here. The scheduled close cannot be called off by a caller, and editor(start_editor) launches a NEW editor process rather than restoring this session.")
+		: TEXT("The scheduled close cannot be called off, and nothing restarts the editor from inside it. editor(start_editor) launches a NEW editor process rather than restoring this session."));
 	return MCPResult(Result);
 }
 

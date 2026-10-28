@@ -10,6 +10,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EditorProcess } from "../../src/editor/engine-observer.js";
+import type { ToolContext } from "../../src/core/types.js";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 // No unit test may launch a real editor. An unknown EngineAssociation still
@@ -46,6 +47,7 @@ const observer = await import("../../src/editor/engine-observer.js");
 const { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../src/editor/editor-control.js");
 const { bridgeLockfilePath } = await import("../../src/bridge/editor-target.js");
 const { ProjectContext } = await import("../../src/config/project.js");
+const { editorTool } = await import("../../src/tools/editor.js");
 
 const findInteractiveEditors = vi.mocked(observer.findInteractiveEditors);
 // Stop and ownership also see headless editors; one list stands in for both here.
@@ -454,5 +456,67 @@ describe("native editor shutdown", () => {
     expect(shutdownHandler).toContain("FModuleManager::LoadModuleChecked<IMainFrameModule>");
     expect(shutdownHandler).toContain("MainFrameModule.RequestCloseEditor()");
     expect(shutdownHandler).not.toContain("UKismetSystemLibrary::QuitEditor()");
+  });
+});
+
+describe("request_editor_shutdown dirty-package choice", () => {
+  // Under interactive dialog handling an agent may not answer the shutdown
+  // save prompt, so a close that raised it hung until a person clicked it.
+  // The choice is made up front instead, and it only works if it reaches the
+  // editor intact.
+  it("accepts refuse, save and discard and nothing else", () => {
+    for (const choice of ["refuse", "save", "discard"]) {
+      expect(editorTool.schema.dirtyPackages.safeParse(choice).success, choice).toBe(true);
+    }
+    expect(editorTool.schema.dirtyPackages.safeParse("keep").success).toBe(false);
+    expect(editorTool.schema.packages.safeParse(["/Game/Maps/Arena"]).success).toBe(true);
+  });
+
+  it("forwards dirtyPackages and packages to the bridge", async () => {
+    const { projectDir, projectPath } = makeProject();
+    writeLockfile(projectDir, { port: 51999, pid: 4242 });
+    const call = vi.fn().mockResolvedValue({ success: true, scheduled: true });
+    const ctx = {
+      project: { projectDir, projectPath },
+      bridge: {
+        isConnected: true,
+        capabilities: { pid: process.pid, port: 52222 },
+        getTarget: () => ({ projectPath: null, port: 52222 }),
+        call,
+      },
+    } as unknown as ToolContext;
+
+    await editorTool.handler(ctx, {
+      action: "request_editor_shutdown",
+      dirtyPackages: "discard",
+      packages: ["/Game/Maps/Arena"],
+    });
+
+    expect(call).toHaveBeenCalledWith("request_editor_shutdown", {
+      requireClean: undefined,
+      dirtyPackages: "discard",
+      packages: ["/Game/Maps/Arena"],
+      endPIE: undefined,
+    });
+  });
+
+  it("acts before the close is scheduled and re-checks before closing", () => {
+    const source = readHandlerFile("EditorHandlers.cpp");
+    const handler = source.slice(
+      source.indexOf("FEditorHandlers::RequestEditorShutdown"),
+      source.indexOf("FEditorHandlers::FocusViewportOnActor"),
+    );
+    const ticker = handler.indexOf("FTSTicker::GetCoreTicker().AddTicker");
+    // Unnamed dirty work is refused before anything is saved or discarded.
+    expect(handler.indexOf("unexpectedDirtyPackages")).toBeLessThan(handler.indexOf("SaveAssetPackageChecked"));
+    expect(handler.indexOf("unexpectedDirtyPackages")).toBeLessThan(handler.indexOf("SetDirtyFlag(false)"));
+    // Both happen in the call, so the result can name them.
+    expect(handler.indexOf("SaveAssetPackageChecked")).toBeLessThan(ticker);
+    expect(handler.indexOf("SetDirtyFlag(false)")).toBeLessThan(ticker);
+    // Anything dirty again when the close runs calls the close off instead of
+    // raising the prompt.
+    const closing = handler.slice(ticker);
+    expect(closing.indexOf("CollectDirtyEditorPackages()")).toBeGreaterThan(-1);
+    expect(closing.indexOf("CollectDirtyEditorPackages()")).toBeLessThan(closing.indexOf("RequestCloseEditor()"));
   });
 });
