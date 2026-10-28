@@ -40,9 +40,11 @@ describe("tracked project staging", () => {
     const shardRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-stage-"));
     try {
       const [a, b] = await Promise.all([stageInChild(shardRoot), stageInChild(shardRoot)]);
-      expect(a.stderr).toBe("");
-      expect(b.stderr).toBe("");
-      expect([a.code, b.code]).toEqual([0, 0]);
+      // git may report LFS downloads on stderr; a collision reports "unable to create file".
+      expect(a.stderr).not.toMatch(/unable to create|File exists|fatal/i);
+      expect(b.stderr).not.toMatch(/unable to create|File exists|fatal/i);
+      expect([a.code, b.code], `${a.stderr}
+${b.stderr}`).toEqual([0, 0]);
       expect(a.dir).not.toBe(b.dir);
       for (const r of [a, b]) {
         expect(fs.existsSync(path.join(r.dir, "tests", "ue_mcp", "ue_mcp.uproject"))).toBe(true);
