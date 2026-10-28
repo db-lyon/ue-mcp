@@ -349,16 +349,22 @@ export function assertLiveTestProjectDir(reportedDir, allowed = liveTestProjectD
 }
 
 /**
- * Run the guard over any RPC caller. `call` takes (method, params) and resolves
- * to the raw handler result (or anything containing it); the identity marker is
- * matched out of the stringified value.
+ * Run the guard over any RPC caller. `call` takes (method, params, timeoutMs) and
+ * resolves to the raw handler result (or anything containing it); the identity
+ * marker is matched out of the stringified value.
  *
- * @param {(method: string, params: Record<string, unknown>) => Promise<unknown>} call
+ * The check is often the first Python call a fresh editor gets, and starting
+ * Python on a render editor still compiling shaders can take over the default
+ * 30 s, so it gets its own budget. It only reads, so a slow answer is safe.
+ *
+ * @param {(method: string, params: Record<string, unknown>, timeoutMs: number) => Promise<unknown>} call
  */
+export const PROJECT_IDENTITY_TIMEOUT_MS = 180_000;
+
 export async function verifyTestProjectTarget(call) {
   let result;
   try {
-    result = await call("execute_python", { code: PROJECT_IDENTITY_PYTHON });
+    result = await call("execute_python", { code: PROJECT_IDENTITY_PYTHON }, PROJECT_IDENTITY_TIMEOUT_MS);
   } catch (err) {
     throw new Error(
       "Aborting: could not confirm which project the connected editor has open " +

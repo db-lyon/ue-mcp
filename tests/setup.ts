@@ -85,7 +85,7 @@ export async function getBridgeFor(target: BridgeTarget = {}): Promise<EditorBri
     }
     _bridges.set(key, bridge);
     if (target.verifyTarget !== false && !_targetVerified) {
-      await verifyTestProjectTarget((method, params) => bridge.call(method, params));
+      await verifyTestProjectTarget((method, params, timeoutMs) => bridge.call(method, params, timeoutMs));
       _targetVerified = true;
     }
     return bridge;
