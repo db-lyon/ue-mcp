@@ -400,6 +400,22 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Bypass EditDefaultsOnly to write a per-instance override")),
 		SpecWorld, SpecPieInstance,
 	});
+	Registry.RegisterHandler(TEXT("shape_trace"), &ShapeTrace, {
+		MCPParam::Required(TEXT("shape"), EType::String, TEXT("sphere | box | capsule")),
+		MCPParam::Optional(TEXT("radius"), EType::Number, TEXT("Positive sphere or capsule radius in cm")),
+		MCPParam::Optional(TEXT("halfExtent"), EType::Vec3, TEXT("Positive box half extents in cm; axis aligned")),
+		MCPParam::Optional(TEXT("halfHeight"), EType::Number, TEXT("Capsule half height in cm, including caps; at least radius")),
+		MCPParam::Optional(TEXT("start"), EType::Vec3, TEXT("Ray start")),
+		MCPParam::Optional(TEXT("end"), EType::Vec3, TEXT("Ray end; pass end or direction and distance")),
+		MCPParam::Optional(TEXT("direction"), EType::Vec3, TEXT("Ray direction, normalised internally")),
+		MCPParam::Optional(TEXT("distance"), EType::Number, TEXT("Ray length when direction is given (default 200000)")),
+		MCPParam::Optional(TEXT("traceComplex"), EType::Boolean, TEXT("Trace per-triangle collision (default false)")),
+		MCPParam::Optional(TEXT("channel"), EType::String, TEXT("Collision channel (default Visibility)")),
+		MCPParam::Optional(TEXT("ignoreActors"), EType::Array, TEXT("Actor labels to skip")).Items(EType::String),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor (default) | pie")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
+		MCPParam::Optional(TEXT("multi"), EType::Boolean, TEXT("Return overlaps and the first blocking hit, capped at 64 (default false)")),
+	});
 	Registry.RegisterHandler(TEXT("line_trace"), &LineTrace, {
 		MCPParam::Optional(TEXT("start"), EType::Vec3, TEXT("Ray start")),
 		MCPParam::Optional(TEXT("end"), EType::Vec3, TEXT("Ray end; pass end or direction and distance")),
@@ -714,6 +730,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// gets its own timeout rather than the 30 second default. The contract's
 	// whereMode is refused before levelPath could open another map.
 	Registry.RegisterHandlerWithTimeout(TEXT("query_components"), &QueryComponents, 300.0f, {
+		MCPParam::Optional(TEXT("includeCollision"), EType::Boolean, TEXT("Include component collision state (default false)")),
+		MCPParam::Optional(TEXT("collisionChannel"), EType::String, TEXT("Collision channel to inspect; omitted lists non-Block responses, capped at 32")),
 		MCPParam::Optional(TEXT("componentClass"), EType::String, TEXT("Component class, resolved as a class or matched as a substring")),
 		MCPParam::Optional(TEXT("actorClass"), EType::String, TEXT("Owning actor class, resolved as a class or matched as a substring")),
 		SpecMatchSubclasses,

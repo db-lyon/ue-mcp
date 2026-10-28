@@ -2286,6 +2286,18 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "level",
     "params": [
       {
+        "name": "includeCollision",
+        "type": "boolean",
+        "required": false,
+        "description": "Include component collision state (default false)"
+      },
+      {
+        "name": "collisionChannel",
+        "type": "string",
+        "required": false,
+        "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
+      },
+      {
         "name": "componentClass",
         "type": "string",
         "required": false,
@@ -4159,6 +4171,96 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "shape_trace": {
+    "category": "level",
+    "params": [
+      {
+        "name": "shape",
+        "type": "string",
+        "required": true,
+        "description": "sphere | box | capsule"
+      },
+      {
+        "name": "radius",
+        "type": "number",
+        "required": false,
+        "description": "Positive sphere or capsule radius in cm"
+      },
+      {
+        "name": "halfExtent",
+        "type": "vec3",
+        "required": false,
+        "description": "Positive box half extents in cm; axis aligned"
+      },
+      {
+        "name": "halfHeight",
+        "type": "number",
+        "required": false,
+        "description": "Capsule half height in cm, including caps; at least radius"
+      },
+      {
+        "name": "start",
+        "type": "vec3",
+        "required": false,
+        "description": "Ray start"
+      },
+      {
+        "name": "end",
+        "type": "vec3",
+        "required": false,
+        "description": "Ray end; pass end or direction and distance"
+      },
+      {
+        "name": "direction",
+        "type": "vec3",
+        "required": false,
+        "description": "Ray direction, normalised internally"
+      },
+      {
+        "name": "distance",
+        "type": "number",
+        "required": false,
+        "description": "Ray length when direction is given (default 200000)"
+      },
+      {
+        "name": "traceComplex",
+        "type": "boolean",
+        "required": false,
+        "description": "Trace per-triangle collision (default false)"
+      },
+      {
+        "name": "channel",
+        "type": "string",
+        "required": false,
+        "description": "Collision channel (default Visibility)"
+      },
+      {
+        "name": "ignoreActors",
+        "type": "array",
+        "required": false,
+        "description": "Actor labels to skip",
+        "items": "string"
+      },
+      {
+        "name": "world",
+        "type": "string",
+        "required": false,
+        "description": "World scope: editor (default) | pie"
+      },
+      {
+        "name": "pieInstance",
+        "type": "integer",
+        "required": false,
+        "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+      },
+      {
+        "name": "multi",
+        "type": "boolean",
+        "required": false,
+        "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
+      }
+    ]
+  },
   "snap_actor_to_floor": {
     "category": "level",
     "params": [
@@ -5073,7 +5175,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   nudge_component: "Params: actorLabel OR actorPath, componentName, frame?, translationDelta?, axisRotation?, viewRotation?, scaleMultiplier?, dryRun?, world?, pieInstance?",
   place_actor: "Params: actorClass, label?, onConflict?, location?, rotation?, scale?, staticMesh?, material?, world?, pieInstance?",
   place_actors_batch: "Params: actors",
-  query_components: "Params: componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?",
+  query_components: "Params: includeCollision?, collisionChannel?, componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?",
   read_actor_motion: "Params: actorLabel?, actorLabels?, actorPath?, actorPaths?, world?, pieInstance?",
   rebuild_water_zone: "Params: actorLabel?, actorPath?, zoneExtent?, tileSize?, maxPasses?",
   recreate_physics_state: "Params: at least one of actorLabels/labelPrefix/tag/classFilter/componentClass/componentNameContains, dryRun?, maxComponents?, world?, pieInstance?",
@@ -5109,6 +5211,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_water_body_property: "Params: actorLabel?, actorPath?, propertyName, value",
   set_world_partition_settings: "Params: at least one of cellSize/loadingRange/settings, grid?, gridPath?",
   set_world_settings: "Params: defaultGameMode?, killZ?, globalGravityZ?, enableWorldBoundsChecks?",
+  shape_trace: "Params: shape, radius?, halfExtent?, halfHeight?, start?, end?, direction?, distance?, traceComplex?, channel?, ignoreActors?, world?, pieInstance?, multi?",
   snap_actor_to_floor: "Params: actorLabel?, actorPath?, floorOffset?, maxDistance?, world?, pieInstance?",
   snap_instances_to_surface: "Params: actorLabel?, actorPath?, componentName?, instanceIndices?, maxInstances?, direction?, traceStartOffset?, traceDistance?, surfaceOffset?, onMiss?, surfaceActorClass?, surfaceActorLabels?, channel?, traceComplex?, dryRun?",
   spawn_actors_batch: "Params: actorClass, instances OR fromComponents OR alongSpline, properties?, labelPrefix?, dryRun?, maxSpawn?, transactionLabel?",
@@ -5161,6 +5264,7 @@ export const schema: Record<string, z.ZodType> = {
   classPathContainsAny: z.array(z.string()).optional().describe("Match when the class path contains any of these case-insensitive substrings"),
   clearOverrides: z.boolean().optional().describe("true drops every component override so the mesh asset's own slots show through"),
   closedLoop: z.boolean().optional().describe("Close the spline"),
+  collisionChannel: z.string().optional().describe("Collision channel to inspect; omitted lists non-Block responses, capped at 32"),
   color: z.record(z.string(), z.unknown()).optional().describe("Alias for fogInscatteringColor (set_fog_properties). Colour {r, g, b} in 0-255 (set_light_properties, spawn_light)"),
   commitDeletes: z.boolean().optional().describe("Save through the editor's dirty-package save, which deletes the packages of deleted World Partition actors (default false)"),
   componentClass: z.string().optional().describe("Component class: short name or full path (add_component_to_actor). Component class name, exact or substring (get_actors_by_component_class). Case-insensitive substring over the component class name (get_component_tree). Component class, resolved as a class or matched as a substring (query_components). Primitive component class to rebuild (recreate_physics_state). Component class to remove (remove_components_by_class)"),
@@ -5176,7 +5280,7 @@ export const schema: Record<string, z.ZodType> = {
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
   defaultGameMode: z.string().optional().describe("GameMode class path or short name; None clears it"),
   destinationPath: z.string().optional().describe("Content path the generated static meshes are written to (default /Game/Meshes/Converted)"),
-  direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally (line_trace). Trace direction (default straight down) (snap_instances_to_surface)"),
+  direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally (line_trace, shape_trace). Trace direction (default straight down) (snap_instances_to_surface)"),
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   distance: z.number().optional().describe("Ray length when direction is given (default 200000)"),
   dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
@@ -5210,10 +5314,13 @@ export const schema: Record<string, z.ZodType> = {
   gridPath: z.string().optional().describe("Streaming grid for cellSize and loadingRange, by the dotted path get_world_partition_settings reports"),
   groupBy: z.string().optional().describe("Dot path to group matches by; counts components, not instances"),
   guids: z.array(z.string()).optional().describe("Exact actor GUIDs"),
+  halfExtent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Positive box half extents in cm; axis aligned"),
+  halfHeight: z.number().optional().describe("Capsule half height in cm, including caps; at least radius"),
   hidden: z.boolean().optional().describe("true hides the actors in the editor, false shows them"),
   hideFromOutliner: z.boolean().optional().describe("Keep the actor out of the World Outliner (default false)"),
   hlodLayer: z.string().nullable().optional().describe("HLODLayer asset path, or null to clear the per-actor override"),
   ignoreActors: z.array(z.string()).optional().describe("Actor labels to skip"),
+  includeCollision: z.boolean().optional().describe("Include component collision state (default false)"),
   includeExternalActors: z.boolean().optional().describe("Also save the level's loaded external actor and folder packages (default true)"),
   includeOccurrences: z.boolean().optional().describe("Include example actor and component occurrences per mesh"),
   includeProperties: z.boolean().optional().describe("Include reflected UPROPERTY values"),
@@ -5266,6 +5373,7 @@ export const schema: Record<string, z.ZodType> = {
   min: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Grid lower bound"),
   mobility: z.string().optional().describe("static | stationary | movable"),
   mode: z.string().optional().describe("pin (make resident, default) | unpin (release)"),
+  multi: z.boolean().optional().describe("Return overlaps and the first blocking hit, capped at 64 (default false)"),
   nameContains: z.string().optional().describe("Case-insensitive substring over the actor's internal name (delete_actors). Substring over the setting name (get_post_process_settings)"),
   nameFilter: z.string().optional().describe("Case-sensitive substring over the internal name or the label"),
   names: z.array(z.string()).optional().describe("Exact setting names to return"),
@@ -5289,6 +5397,7 @@ export const schema: Record<string, z.ZodType> = {
   properties: z.record(z.string(), z.unknown()).optional().describe("Property name to value, applied to the new transformer instance (add_runtime_cell_transformer). Property name to value, dotted paths supported (batch_set_actor_properties). Property name to value (set_volume_properties). Property name to value applied to every spawn (spawn_actors_batch). Property name to value, applied before initialisation (spawn_transient_actor)"),
   propertyName: z.string().optional().describe("Property name, dotted paths supported (bulk_set_component_property, set_actor_property, set_component_property, set_water_body_property). Only this property, with includeProperties (get_actor_details). FPostProcessSettings property on that component (get_post_process_settings, set_fixed_exposure, set_post_process_settings)"),
   propertyNames: z.array(z.string()).optional().describe("Restrict includeValues to these properties (get_component_details). Component UPROPERTY names projected under props.*, at most 32 (query_components)"),
+  radius: z.number().optional().describe("Positive sphere or capsule radius in cm"),
   recaptureSky: z.boolean().optional().describe("Recapture a SkyLight after the change"),
   recursiveFolder: z.boolean().optional().describe("Also take brushes in folders nested under folderPath (default true)"),
   reference: z.string().optional().describe("Alias for referenceLabel"),
@@ -5308,6 +5417,7 @@ export const schema: Record<string, z.ZodType> = {
   scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale"),
   scaleMultiplier: z.number().optional().describe("Uniform relative-scale multiplier, greater than zero"),
   settings: z.record(z.string(), z.unknown()).optional().describe("Setting name to value; each setting's bOverride flag is enabled too (set_post_process_settings). Dotted path rooted at the world partition to value (set_world_partition_settings)"),
+  shape: z.string().optional().describe("sphere | box | capsule"),
   skeletalMesh: z.string().nullable().optional().describe("SkeletalMesh asset path, or null to clear the mesh (set_component_skeletal_mesh). SkeletalMesh asset path to spawn; null is refused here (spawn_skeletal_mesh_actor)"),
   skipIfPresent: z.boolean().optional().describe("Report an existing transformer of this class instead of adding a duplicate (default true)"),
   slotIndex: z.number().int().optional().describe("Material slot (default 0)"),
@@ -5355,7 +5465,7 @@ export const schema: Record<string, z.ZodType> = {
   weldSimulatedBodies: z.boolean().optional().describe("Weld simulated bodies during attachment (default false)"),
   where: z.array(z.object({ field: z.string().describe("Dot path into the row, such as shadow.effectiveCastShadow or props.CullDistance"), op: z.string().optional().describe("eq (default) | ne | lt | lte | gt | gte | contains | notContains | startsWith | endsWith | in | notIn | exists | notExists | isNull | isNotNull | isTrue | isFalse"), value: z.unknown().optional().describe("Value the operator compares against") })).optional().describe("Predicates evaluated in the editor, at most 24"),
   whereMode: z.string().optional().describe("all (default) | any"),
-  world: z.string().optional().describe("World scope: editor (default) | pie (aim_actor_at, bulk_line_trace, count_actors_by_class, destroy_transient_actor, get_actor_bounds, get_actor_details, get_actors_by_class, get_actors_by_component_class, get_component_details, get_relative_transform, get_runtime_virtual_texture_summary, get_spline_info, get_world_outliner, line_trace, list_transient_actors, move_actor, nav_project_point, nudge_component, place_actor, query_components, recreate_physics_state, rerun_construction_scripts, restore_component_relative_transform, set_actor_property, set_component_property, set_component_skeletal_mesh, set_fog_properties, snap_actor_to_floor, spawn_transient_actor, summarize_static_mesh_usage, test_component_overlap). editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world (get_component_tree). World scope: auto (default, PIE when running) | editor | pie (read_actor_motion)"),
+  world: z.string().optional().describe("World scope: editor (default) | pie (aim_actor_at, bulk_line_trace, count_actors_by_class, destroy_transient_actor, get_actor_bounds, get_actor_details, get_actors_by_class, get_actors_by_component_class, get_component_details, get_relative_transform, get_runtime_virtual_texture_summary, get_spline_info, get_world_outliner, line_trace, list_transient_actors, move_actor, nav_project_point, nudge_component, place_actor, query_components, recreate_physics_state, rerun_construction_scripts, restore_component_relative_transform, set_actor_property, set_component_property, set_component_skeletal_mesh, set_fog_properties, shape_trace, snap_actor_to_floor, spawn_transient_actor, summarize_static_mesh_usage, test_component_overlap). editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world (get_component_tree). World scope: auto (default, PIE when running) | editor | pie (read_actor_motion)"),
   worldSpace: z.boolean().optional().describe("Treat transforms as world space (default true)"),
   zoneExtent: z.unknown().optional().describe("New WaterZone ZoneExtent in cm, {x, y} or [x, y]"),
 };

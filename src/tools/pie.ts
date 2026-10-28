@@ -7,6 +7,7 @@ export const pieTool: ToolDef = categoryTool(
   "pie",
   "PIE testing: record, replay and observe Play-In-Editor sessions, diff runs, inject input, drive remote players, and run test scripts with auto and manual steps. Starting PIE itself is editor(play_in_editor).",
   {
+    view_trace: specBp("read", "Trace the live PIE player viewpoint. Returns viewLocation, viewRotation, viewDirection and line; sweepRadius also returns a sphere sweep. Each hit includes component collision state, channel response, blocksVisibility and owner label/class. Ignores the viewing pawn by default; requires running PIE.", "pie_view_trace"),
     inject_input:         specBp("mutate", "Inject one frame of an Enhanced Input action into a PIE player. client 1..N relays to a remote player.", "pie_inject_input"),
     inject_input_start:   specBp("mutate", "Start holding an input action; returns injection_id. Rolls back with inject_input_stop.", "pie_inject_input_start"),
     inject_input_update:  specBp("mutate", "Change the value of a running hold.", "pie_inject_input_update"),

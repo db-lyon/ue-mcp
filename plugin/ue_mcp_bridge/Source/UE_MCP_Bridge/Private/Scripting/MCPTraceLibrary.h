@@ -39,6 +39,24 @@ struct FMCPTraceHit
 	UPROPERTY(BlueprintReadOnly, Category = "MCP|Trace")
 	FString ComponentName;
 
+	UPROPERTY(BlueprintReadOnly, Category = "MCP|Trace")
+	bool bStartPenetrating = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "MCP|Trace")
+	FString ActorClass;
+
+	UPROPERTY(BlueprintReadOnly, Category = "MCP|Trace")
+	FString ComponentClass;
+
+	UPROPERTY(BlueprintReadOnly, Category = "MCP|Trace")
+	FVector Normal = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "MCP|Trace")
+	int32 FaceIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "MCP|Trace")
+	FString BoneName;
+
 	/** Path of the physical material the hit reported, empty when none. */
 	UPROPERTY(BlueprintReadOnly, Category = "MCP|Trace")
 	FString PhysicalMaterial;
@@ -66,4 +84,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MCP|Trace")
 	static FMCPTraceHit LineTrace(FVector Start, FVector End, const FString& World = TEXT("pie"),
 		int32 PieInstance = -1, const FString& Channel = TEXT("Visibility"), bool bTraceComplex = false);
+
+	/** Sphere, axis-aligned box or vertical capsule sweep. Multi returns overlaps
+	 * through the first blocker (64 maximum). Errors return one entry with Error.
+	 * A single miss returns one entry with bHit false; a multi miss is empty.
+	 * IgnoreActors accepts labels or full actor paths in the selected world. */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Trace", meta = (AutoCreateRefTerm = "IgnoreActors"))
+	static TArray<FMCPTraceHit> ShapeTrace(FVector Start, FVector End, const FString& Shape,
+		const TArray<FString>& IgnoreActors, double Radius = 0.0, FVector HalfExtent = FVector(0, 0, 0),
+		double HalfHeight = 0.0, const FString& World = TEXT("pie"), int32 PieInstance = -1,
+		const FString& Channel = TEXT("Visibility"), bool bTraceComplex = false, bool bMulti = false);
 };
