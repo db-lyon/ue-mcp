@@ -368,6 +368,14 @@ export interface DaemonHealth {
   refusedExtensions?: RefusedExtension[];
   /** Version of the UI bundle being served, or null. */
   ui: string | null;
-  /** What the HTTP API offers beyond apiVersion, for feature detection ("checkpoints", "skills", "context.projection", "actions.effects"). Absent on a daemon older than the field. */
+  /**
+   * What the HTTP API offers beyond apiVersion, for feature detection ("checkpoints", "skills",
+   * "context.projection", "actions.effects", and:
+   *   "install.pendingBuild"  GET /v1/install carries plugin.pendingBuild, a source bridge deployed
+   *                           and not built yet, which the next start through ue-mcp builds first
+   *   "editor.rebuild"        POST /v1/editor/rebuild stops the editor, builds, and starts it again
+   *                           only when the build passed; a failed step carries `reason`).
+   * Absent on a daemon older than the field.
+   */
   features?: readonly string[];
 }

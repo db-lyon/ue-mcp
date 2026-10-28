@@ -338,9 +338,11 @@ A minute after it starts, and every six hours, the daemon looks for a newer rele
 |---|---|---|
 | Binary, Windows | Swapped in now | Each loaded file renamed aside and replaced; the new bridge loads on the next start, and the renamed files are removed once the editor exits |
 | Binary, Mac and Linux | Swapped in now | Staged beside the plugin and swapped in when the editor exits |
-| Source | Deployed; builds on the next restart | Deployed; builds on the next restart |
+| Source | Deployed and built now; a failed build fails the update | Deployed, with the build recorded as owed; the next start or restart through ue-mcp builds before the editor opens |
 
-Each step is reported as `update.staged`, `update.applied` or `update.failed`. A downloaded archive is installed only when the release manifest lists it with a matching SHA-256, and source is never written over a binary install. `UE_MCP_DISABLE_UPDATE_CHECK=1` turns the periodic check off.
+Unreal rebuilds a module on start only when its DLL is missing, never when its source is newer, so a source update is always built by ue-mcp. An owed build shows as `plugin.pendingBuild` in `GET /v1/install`, and `POST /v1/editor/rebuild` stops the editor, builds, and starts it again only when the build passed; a failed step carries `reason`. Running `ue-mcp update --apply-only` again with the editor down also finishes an owed build.
+
+Each step is reported as `update.staged`, `update.building`, `update.applied` or `update.failed`. A downloaded archive is installed only when the release manifest lists it with a matching SHA-256, and source is never written over a binary install. `UE_MCP_DISABLE_UPDATE_CHECK=1` turns the periodic check off.
 
 ## Bridge Connection
 

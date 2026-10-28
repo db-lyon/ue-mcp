@@ -12,6 +12,7 @@ import { packageModulePath, packageRoot, packageVersion } from "../core/package-
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
 import { installKindOf, installedBridge, resolvePluginDir } from "../editor/install-marker.js";
 import { applyUpdate, newerBridgeMessage, repinClientConfigs } from "../editor/bridge-update.js";
+import { recordPendingBuild } from "../editor/pending-build.js";
 import { RESET, BOLD, RED, DIM, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
@@ -113,8 +114,12 @@ async function update(argv: string[]) {
       fail("No .uproject here.");
       process.exit(1);
     }
+    const editorRunning = await editorRunningFor(uproject);
+    if (!editorRunning && installKindOf(resolvePluginDir(path.dirname(uproject))?.dir ?? "") === "source") {
+      step("Building the bridge (this can take a few minutes)...");
+    }
     const result = await applyUpdate(uproject, {
-      editorRunning: await editorRunningFor(uproject),
+      editorRunning,
       binaries: flagValue(args, "--binaries") ?? null,
     });
     if (!result.ok) {
@@ -124,7 +129,8 @@ async function update(argv: string[]) {
     const said = {
       applied: `Bridge ${result.version} installed`,
       staged: `Bridge ${result.version} staged; it replaces the running one when the editor exits`,
-      rebuild: `Bridge ${result.version} source deployed; it builds on the next restart`,
+      built: `Bridge ${result.version} source deployed and built`,
+      rebuild: `Bridge ${result.version} source deployed. The editor is running, so it builds the next time ue-mcp starts or restarts the editor`,
       unchanged: `Bridge already at ${result.version}`,
     }[result.state];
     ok(said);
@@ -241,14 +247,17 @@ async function update(argv: string[]) {
 
   // 4. Rebuild the editor. A running editor holds the plugin DLL, so the build
   //    would fail on a locked file; skip it and say what to run instead.
+  // Either way the build is owed, and the next start through ue-mcp pays it first (#1593).
   if (shouldBuild && uproject && (await editorRunningFor(uproject))) {
     shouldBuild = false;
+    recordPendingBuild(uproject, aligned, "editor running");
     console.log("");
     console.log(`  ${YELLOW}The editor is running, so the plugin was deployed but not rebuilt.${RESET}`);
-    step("Close the editor, then run `ue-mcp build`.");
+    step("Close the editor, then run `ue-mcp build`, or restart the editor through ue-mcp, which builds first.");
   } else if (shouldDeploy && !shouldBuild) {
+    if (uproject) recordPendingBuild(uproject, aligned, "--no-build");
     console.log("");
-    step("Plugin deployed but not rebuilt (--no-build). Run `ue-mcp build` before the next editor launch.");
+    step("Plugin deployed but not rebuilt (--no-build). Run `ue-mcp build` before the next editor launch, or start the editor through ue-mcp, which builds first.");
   }
   if (shouldBuild) {
     console.log("");

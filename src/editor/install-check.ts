@@ -30,6 +30,7 @@ import { ProjectContext } from "../config/project.js";
 import { packageRoot } from "../core/package-root.js";
 import { isUProjectPath } from "../config/uproject-path.js";
 import { defaultPluginDir, installKindOf, resolvePluginDir, type InstallKind } from "./install-marker.js";
+import { readPendingBuild, type PendingBuild } from "./pending-build.js";
 
 /**
  * Whether the project declares native modules of its own.
@@ -300,6 +301,8 @@ export interface InstallReport {
     compiled: boolean;
     binaryPath?: string;
     stale: boolean;
+    /** A source bridge deployed by an update and not built yet; the next start through ue-mcp builds it first (#1593). */
+    pendingBuild: PendingBuild | null;
   };
   toolchain: ToolchainReport;
   problems: InstallProblem[];
@@ -359,6 +362,7 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
     installedVersion && packagedVersion ? installedVersion === packagedVersion : null;
 
   const freshness: PluginFreshness = checkPluginFreshness(resolved);
+  const pendingBuild = binary ? null : readPendingBuild(resolved);
 
   const engine = trySelectEngine(
     {
@@ -429,11 +433,13 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
         what: "The plugin source is deployed and has never been compiled, so there is no module for the editor to load.",
         fix: "Build it with the editor STOPPED: project(action='build'), or open the project in Unreal and accept its rebuild prompt.",
       });
-    } else if (freshness.stale) {
+    } else if (freshness.stale || pendingBuild) {
       problems.push({
         code: "bridge_build_stale",
         what: "The compiled plugin is older than its source, so handlers added since the last build answer 'Unknown method'.",
-        fix: "Rebuild with the editor STOPPED: project(action='build').",
+        fix: pendingBuild
+          ? `The ${pendingBuild.version} source was deployed while the editor ran. editor(action='restart_editor') builds it before the editor opens again, or build with the editor STOPPED: project(action='build').`
+          : "Rebuild with the editor STOPPED: project(action='build').",
       });
     }
   }
@@ -473,6 +479,7 @@ export function inspectInstall(uprojectPath: string, options: InspectInstallOpti
       compiled,
       binaryPath: freshness.binaryPath,
       stale: freshness.stale,
+      pendingBuild,
     },
     toolchain,
     problems,

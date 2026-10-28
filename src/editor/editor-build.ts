@@ -11,6 +11,7 @@ import * as os from "node:os";
 import { readUeMcpConfig } from "../config/project.js";
 import { EngineResolutionError, engineLookupFor, selectEngine } from "./engine-root.js";
 import { invalidatePluginFreshness } from "./bridge-freshness.js";
+import { clearPendingBuild, markPendingBuildFailed } from "./pending-build.js";
 import { readEnv } from "../core/env.js";
 
 const IS_WINDOWS = process.platform === "win32";
@@ -339,19 +340,23 @@ export async function buildProject(
       // Only this project's: a build in one editor says nothing about another.
       invalidatePluginFreshness(resolvedPath);
       if (code === 0) {
+        // The editor target includes the bridge, so a build owed since a source update is paid.
+        clearPendingBuild(resolvedPath);
         resolve({ success: true, exitCode: 0, message: `Build succeeded (${target} ${platform} ${configuration})` });
         return;
       }
       const locked = ranOutOfMemory(transcript) ? [] : findLockedOutputs(transcript);
       const failure = readBuildFailure(transcript);
+      const message = ranOutOfMemory(transcript)
+        ? describeMemoryFailure(safeParallelActions())
+        : locked.length > 0
+          ? describeLockedOutputs(code, locked)
+          : describeBuildFailure(code, transcript);
+      markPendingBuildFailed(resolvedPath, message);
       resolve({
         success: false,
         exitCode: code,
-        message: ranOutOfMemory(transcript)
-          ? describeMemoryFailure(safeParallelActions())
-          : locked.length > 0
-            ? describeLockedOutputs(code, locked)
-            : describeBuildFailure(code, transcript),
+        message,
         ...(locked.length > 0 ? { lockedOutputs: locked } : {}),
         ...(failure.resultLine ? { resultLine: failure.resultLine } : {}),
         ...(failure.errors.length > 0 ? { errors: failure.errors } : {}),

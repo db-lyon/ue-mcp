@@ -309,10 +309,11 @@ describe.concurrent("project commands", () => {
       expect((await cli(["deploy", uproject])).code).toBe(0);
       const uplugin = path.join(pluginDir(uproject), "UE_MCP_Bridge.uplugin");
       fs.writeFileSync(uplugin, "stale");
+      const engine = fakeEngine("ApplySourceEngine");
 
-      const r = await cli(["update", uproject, "--apply-only"]);
+      const r = await cli(["update", uproject, "--apply-only"], { env: { UE_MCP_TEST_ENGINE_ROOT: engine.root, FAKE_BUILD_EXIT: "0" } });
       expect(r.code, r.stdout + r.stderr).toBe(0);
-      expect(plain(r.stdout)).toContain(`Bridge ${PACKAGE_VERSION} source deployed`);
+      expect(plain(r.stdout)).toContain(`Bridge ${PACKAGE_VERSION} source deployed and built`);
       expect(fs.readFileSync(uplugin, "utf8")).not.toBe("stale");
     });
 

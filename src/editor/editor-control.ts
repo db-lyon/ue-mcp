@@ -503,6 +503,10 @@ export interface StartEditorResult {
   bridgeReady?: boolean;
   /** The port the already-running editor published, when it is answering there. */
   port?: number;
+  /** Set when a source bridge owed a build since an update and was built before the launch (#1593). */
+  bridgeBuilt?: { version: string; message: string };
+  /** Set when that build failed earlier, so this launch opened the previous build. */
+  bridgeBuildFailed?: { version: string; message: string };
 }
 
 export async function startEditor(
@@ -596,12 +600,21 @@ export async function startEditor(
     };
   }
 
-  // No editor holds this project now, so a pending bridge update can finish, and a binary
-  // bridge that would not load is reinstalled before the editor can offer a rebuild it cannot do.
+  // No editor holds this project now, so a pending bridge update can finish, a binary bridge
+  // that would not load is reinstalled before the editor can offer a rebuild it cannot do, and
+  // a source bridge deployed while the editor ran is built, since Unreal would load the old DLL.
   const bridgeReady = await prepareBridgeForLaunch(project.projectPath);
   if (!bridgeReady.ok) {
     return { success: false, message: `Not launching: ${bridgeReady.message}` };
   }
+  const built = bridgeReady.built
+    ? { bridgeBuilt: bridgeReady.built }
+    : bridgeReady.buildFailed ? { bridgeBuildFailed: bridgeReady.buildFailed } : {};
+  const builtNote = bridgeReady.built
+    ? `Built the bridge ${bridgeReady.built.version} first. `
+    : bridgeReady.buildFailed
+      ? `The bridge ${bridgeReady.buildFailed.version} did not build (${bridgeReady.buildFailed.message}), so the editor opened on the previous build, where actions added since answer Unknown method until it builds. `
+      : "";
 
   try {
     // Recorded before the spawn so the wait can tell the lockfile this editor
@@ -629,14 +642,16 @@ export async function startEditor(
         timeline: result.timeline,
         elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
         ...(result.state ? { state: result.state } : {}),
+        ...built,
       };
     }
 
     return {
       success: true,
-      message: `Editor ready in ${result.elapsedSeconds.toFixed(1)}s (waited through startup: ${describeTimeline(result.timeline)}). No further status polling is needed.`,
+      message: `${builtNote}Editor ready in ${result.elapsedSeconds.toFixed(1)}s (waited through startup: ${describeTimeline(result.timeline)}). No further status polling is needed.`,
       timeline: result.timeline,
       elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
+      ...built,
     };
   } catch (error) {
     return {

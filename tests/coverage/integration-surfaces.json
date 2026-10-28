@@ -567,6 +567,11 @@
       "summary": "the daemon reports and applies bridge updates over /v1/update"
     },
     {
+      "id": "daemon.editor-rebuild",
+      "group": "daemon",
+      "summary": "a source bridge an update deployed is built: /v1/install names the owed build, /v1/editor/start builds before launching and refuses on a failed build, and /v1/editor/rebuild stops, builds and gives a failed step's reason"
+    },
+    {
       "id": "daemon.checkpoints",
       "group": "daemon",
       "summary": "the daemon's /v1/checkpoints routes create, list, diff, restore and clear checkpoints, arm the editor's save recording and publish checkpoint events, without touching the project's .git"

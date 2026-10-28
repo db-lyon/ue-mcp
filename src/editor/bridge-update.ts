@@ -11,8 +11,10 @@
  * exits. Either way the result is checked (verifyBridgeTree) and put back when
  * it would not load. Source is never written over binaries.
  *
- * A source install gets the new source from the running package; it builds on
- * the next restart.
+ * A source install gets the new source from the running package and is built
+ * at once with the editor down. With it running the build is recorded as owed
+ * (pending-build.ts), and the next start through ue-mcp builds first: Unreal
+ * itself rebuilds only a missing DLL, never one older than its source (#1593).
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -42,6 +44,12 @@ import { deploy, projectEngineVersion } from "./deployer.js";
 import { detectMcpClients, liftsAgeGate, readUeMcpEntry, writeMcpConfig } from "../integrations/claude-code/mcp-client-config.js";
 import { readEnv } from "../core/env.js";
 import { ASIDE_FILE, UPDATER_FILES, treeFiles, verifyBridgeTree } from "./bridge-tree.js";
+import { buildProject, type BuildResult } from "./editor-build.js";
+import { checkPluginFreshness } from "./bridge-freshness.js";
+import { clearPendingBuild, markPendingBuildFailed, readPendingBuild, recordPendingBuild } from "./pending-build.js";
+
+/** Builds the project's editor target; buildProject unless a test supplies another. */
+export type BridgeBuild = (uprojectPath: string) => Promise<BuildResult>;
 
 /** Minimal fetch, injected so the release lookups can be tested without a network. */
 export type ReleaseFetcher = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -316,7 +324,7 @@ export function settlePendingUpdate(pluginDir: string, editorRunning: boolean): 
   return false;
 }
 
-export type UpdateEvent = (type: "update.staged" | "update.applied" | "update.failed", data: Record<string, unknown>) => void;
+export type UpdateEvent = (type: "update.staged" | "update.building" | "update.applied" | "update.failed", data: Record<string, unknown>) => void;
 
 export interface ApplyOptions {
   /** The version to install. Defaults to the running package's. */
@@ -328,14 +336,21 @@ export interface ApplyOptions {
   onEvent?: UpdateEvent;
   /** The post-swap check; verifyBridgeTree unless a test supplies another. */
   verifyTree?: typeof verifyBridgeTree;
+  /** Builds a source install; buildProject unless a test supplies another. */
+  build?: BridgeBuild;
 }
 
 export interface ApplyResult {
   ok: boolean;
   kind: InstallKind | null;
   version: string;
-  /** applied: in place now; staged: waits for the editor to exit; rebuild: source deployed, builds on restart. */
-  state: "applied" | "staged" | "rebuild" | "unchanged";
+  /**
+   * applied: in place now; staged: waits for the editor to exit; built: source deployed and built;
+   * rebuild: source deployed with the editor running, built by the next start through ue-mcp.
+   */
+  state: "applied" | "staged" | "built" | "rebuild" | "unchanged";
+  /** A source install's build, when one ran. */
+  build?: Pick<BuildResult, "success" | "message" | "errors" | "resultLine">;
   /** Client configs whose pin moved to the new version. */
   repinned: string[];
   error?: string;
@@ -427,7 +442,34 @@ async function applyUpdateNow(uprojectPath: string, options: ApplyOptions): Prom
       project.setProject(uprojectPath);
       const deployed = deploy(project);
       if (deployed.error) throw new Error(deployed.error);
-      result.state = deployed.cppPluginDeployed ? "rebuild" : "unchanged";
+      // Unchanged source still builds when a build is owed or the binary is older than the source,
+      // which is how an update that deployed without building is finished by running it again.
+      const owed = deployed.cppPluginDeployed || readPendingBuild(uprojectPath) !== null || checkPluginFreshness(uprojectPath).stale;
+      if (owed) {
+        // Recorded first, so a build that fails or is interrupted is still owed at the next start.
+        recordPendingBuild(uprojectPath, version, options.editorRunning ? "editor running" : "source updated");
+        if (options.editorRunning) {
+          result.state = "rebuild";
+        } else {
+          result.state = "rebuild";
+          emit("update.building", { version });
+          const built = await (options.build ?? buildProject)(uprojectPath);
+          result.build = {
+            success: built.success,
+            message: built.message,
+            ...(built.errors ? { errors: built.errors } : {}),
+            ...(built.resultLine ? { resultLine: built.resultLine } : {}),
+          };
+          if (!built.success) {
+            markPendingBuildFailed(uprojectPath, built.message);
+            throw new Error(`the bridge ${version} source is deployed, but building it failed: ${built.message}`);
+          }
+          clearPendingBuild(uprojectPath);
+          result.state = "built";
+        }
+      } else {
+        result.state = "unchanged";
+      }
     } else {
       const marker = readInstallMarker(pluginDir);
       const current = marker?.version ?? readDescriptorVersion(pluginDir);
@@ -464,7 +506,7 @@ async function applyUpdateNow(uprojectPath: string, options: ApplyOptions): Prom
         }
       }
     }
-    if (result.state === "applied" || result.state === "rebuild") {
+    if (result.state === "applied" || result.state === "built" || result.state === "rebuild") {
       result.repinned = repinClientConfigs(uprojectPath, version);
       emit("update.applied", { version, kind, state: result.state, repinned: result.repinned });
     }
@@ -480,6 +522,10 @@ export interface LaunchPreparation {
   ok: boolean;
   /** Set when the bridge would not have loaded and was reinstalled first. */
   repaired?: string[];
+  /** Set when a source bridge owed a build and was built first. */
+  built?: { version: string; message: string };
+  /** Set when the owed build failed before, so the launch goes ahead on the previous build. */
+  buildFailed?: { version: string; message: string };
   /** Why the launch should not go ahead. */
   message?: string;
 }
@@ -491,11 +537,15 @@ export interface LaunchPreparation {
  * load (a module without its DLL, a manifest out of step, Source over
  * binaries) is reinstalled at its own version; when that fails too the launch
  * is refused with the reasons, instead of the editor offering a rebuild that
- * a binary install cannot do. Never throws.
+ * a binary install cannot do. A source install that owes a build since an
+ * update (pending-build.ts) is built first, and a failed build refuses the
+ * launch with the compiler's errors rather than opening the old DLL. Once a
+ * build of that source has failed, a start opens the previous build and says
+ * so instead of failing the same build again. Never throws.
  */
 export async function prepareBridgeForLaunch(
   uprojectPath: string,
-  options: Pick<ApplyOptions, "binaries" | "verifyTree"> = {},
+  options: Pick<ApplyOptions, "binaries" | "verifyTree" | "build"> = {},
 ): Promise<LaunchPreparation> {
   const projectDir = path.dirname(path.resolve(uprojectPath));
   const located = resolvePluginDir(projectDir);
@@ -506,7 +556,27 @@ export async function prepareBridgeForLaunch(
   } catch (e) {
     return { ok: false, message: `finishing the pending bridge update failed: ${e instanceof Error ? e.message : String(e)}` };
   }
-  if (installKindOf(pluginDir) !== "binary") return { ok: true };
+  if (installKindOf(pluginDir) !== "binary") {
+    const owed = readPendingBuild(uprojectPath);
+    if (!owed) return { ok: true };
+    if (owed.failed) return { ok: true, buildFailed: { version: owed.version, message: owed.failed.message } };
+    let built: BuildResult;
+    try {
+      built = await (options.build ?? buildProject)(uprojectPath);
+    } catch (e) {
+      built = { success: false, exitCode: null, message: e instanceof Error ? e.message : String(e) };
+    }
+    if (!built.success) {
+      markPendingBuildFailed(uprojectPath, built.message);
+      return {
+        ok: false,
+        message: `the bridge ${owed.version} source was deployed and not built yet, and building it failed: ${built.message} ` +
+          "Fix the error and build again, or start the editor again to open it on the previous build.",
+      };
+    }
+    clearPendingBuild(uprojectPath);
+    return { ok: true, built: { version: owed.version, message: built.message } };
+  }
   const verify = options.verifyTree ?? verifyBridgeTree;
   const marker = readInstallMarker(pluginDir);
   const version = marker?.version ?? readDescriptorVersion(pluginDir);

@@ -60,7 +60,7 @@ import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects"];
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild"];
 import { loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { UiBundleStore, contentType } from "./ui-bundles.js";
 import { collectStatus } from "../cli/status.js";
@@ -408,7 +408,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         warn("daemon", `${op}: ${name} failed: ${failure}`);
         events.publish("editor.operation", { op, step: name, phase: "failed", reason: failure });
       }
-      return { step: name, ok: failure === null, result: body };
+      // `reason` is the failure in one paragraph, so a UI can show it without parsing `result`.
+      return { step: name, ok: failure === null, result: body, ...(failure === null ? {} : { reason: failure }) };
     };
     if (op === "start") return { op, steps: [await step("editor", "start_editor")] };
     if (op === "stop") return { op, steps: [await step("editor", "stop_editor")] };
