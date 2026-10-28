@@ -348,6 +348,9 @@ export function assertLiveTestProjectDir(reportedDir, allowed = liveTestProjectD
   );
 }
 
+/** What the identity check waits for its answer; see verifyTestProjectTarget. */
+export const PROJECT_IDENTITY_TIMEOUT_MS = 180_000;
+
 /**
  * Run the guard over any RPC caller. `call` takes (method, params, timeoutMs) and
  * resolves to the raw handler result (or anything containing it); the identity
@@ -359,8 +362,6 @@ export function assertLiveTestProjectDir(reportedDir, allowed = liveTestProjectD
  *
  * @param {(method: string, params: Record<string, unknown>, timeoutMs: number) => Promise<unknown>} call
  */
-export const PROJECT_IDENTITY_TIMEOUT_MS = 180_000;
-
 export async function verifyTestProjectTarget(call) {
   let result;
   try {
