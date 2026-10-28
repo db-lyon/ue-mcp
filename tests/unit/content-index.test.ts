@@ -141,3 +141,55 @@ describe("project(list_content_assets) over the real dispatcher", () => {
     expect(result.assets.every((a) => a.assetPath.startsWith("/Game/Characters/"))).toBe(true);
   });
 });
+
+describe("project(list_files) by name", () => {
+  /** The dispatcher's context with no editor: list_files must never reach one. */
+  const offline = (project: ProjectContext) => ({
+    project,
+    bridge: {
+      isConnected: false,
+      connect: async () => {},
+      retargetProject: () => ({ projectPath: null, port: 1, portSource: "derived" as const, verified: true }),
+      getTarget: () => ({ projectPath: null, port: 1, portSource: "derived" as const, verified: true }),
+      call: async () => {
+        throw new Error("list_files must never reach the editor");
+      },
+    },
+  });
+  type Listing = { count: number; truncated: boolean; namePattern?: string; files: Array<{ name: string }> };
+  const list = (project: ProjectContext, args: Record<string, unknown>) =>
+    projectTool.handler(offline(project) as never, { action: "list_files", directory: "Content", recursive: true, ...args }) as Promise<Listing>;
+
+  it("keeps only files whose name contains namePattern, ignoring case", async () => {
+    const result = await list(makeProject(), { namePattern: "hero" });
+    expect(result.files.map((f) => f.name).sort()).toEqual(["M_Hero.uasset", "SK_Hero.uasset"]);
+    expect(result.namePattern).toBe("hero");
+    expect(result.truncated).toBe(false);
+  });
+
+  it("counts maxResults in matches, so files that do not match never use up the cap", async () => {
+    const project = makeProject();
+    const content = path.join(project.projectDir!, "Content", "Characters");
+    // Files that sort and walk before the one being searched for.
+    for (let i = 0; i < 20; i++) fs.writeFileSync(path.join(content, `A_Filler${i}.uasset`), "package");
+    const found = await list(project, { namePattern: "M_Hero", maxResults: 1 });
+    expect(found.files.map((f) => f.name)).toEqual(["M_Hero.uasset"]);
+    expect(found.truncated).toBe(false);
+  });
+
+  it("says truncated only when a match was left out", async () => {
+    const project = makeProject();
+    const exact = await list(project, { namePattern: "hero", maxResults: 2 });
+    expect(exact.count).toBe(2);
+    expect(exact.truncated).toBe(false);
+    const cut = await list(project, { namePattern: "hero", maxResults: 1 });
+    expect(cut.count).toBe(1);
+    expect(cut.truncated).toBe(true);
+  });
+
+  it("lists every file when no namePattern is given", async () => {
+    const result = await list(makeProject(), {});
+    expect(result.files.map((f) => f.name).sort()).toEqual(["L_Test.umap", "M_Hero.uasset", "SK_Hero.uasset", "notes.txt"]);
+    expect(result.namePattern).toBeUndefined();
+  });
+});

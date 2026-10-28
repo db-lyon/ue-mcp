@@ -125,7 +125,7 @@ export const projectTool: ToolDef = categoryTool(
     state: z.enum(["available", "blocked", "all"]).optional().describe("list_available_actions: which side of the line to list when includeNames=true (default available)"),
     skipToolchain: z.boolean().optional().describe("check_install: skip the C++ toolchain probe, which shells out to vswhere or the compiler"),
     contentPath: z.string().optional().describe("list_content_assets: mount path to list, e.g. /Game or /Game/Characters (default /Game)"),
-    namePattern: z.string().optional().describe("list_content_assets: case-insensitive substring the asset name must contain"),
+    namePattern: z.string().optional().describe("list_content_assets / list_files: case-insensitive substring the asset or file name must contain"),
     extensions: z.union([z.string(), z.array(z.string())]).optional().describe("For list_files: extension filter (#608)"),
     recursive: z.boolean().optional().describe("For list_files / list_content_assets: recurse into subdirectories (#608)"),
     directory: z.string().optional().describe("For search_cpp: subdirectory"),
