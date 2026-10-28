@@ -6,6 +6,7 @@
 #include "Handlers/Dialog/DialogHandlers.h"
 #include "Handlers/PIE/PIEHandlers.h"
 #include "Handlers/Checkpoint/CheckpointHandlers.h"
+#include "Handlers/Editor/EditorHandlers.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "HAL/PlatformMisc.h"
@@ -218,6 +219,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	FEditorHandlers::ShutdownMeshStudioRenders();
 	if (G_EditorReadyTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(G_EditorReadyTicker);

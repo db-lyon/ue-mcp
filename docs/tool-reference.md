@@ -17,6 +17,9 @@ UE-MCP exposes **<!-- count:tools -->30<!-- /count --> category tools** covering
 
 ### Parameters every category tool accepts
 
+For isolated mesh and assembly PNG captures with their own lighting, see
+[Studio mesh reference images](mesh-studio-render.md).
+
 These parameters sit beside `action` and `args` on every category tool. Dispatch reads them and strips them before the call reaches the bridge, so they never collide with an action's own parameters. While the server drives more than one editor, `editor` (which editor runs the call) is added the same way.
 
 | Parameter | Type | What it does |
