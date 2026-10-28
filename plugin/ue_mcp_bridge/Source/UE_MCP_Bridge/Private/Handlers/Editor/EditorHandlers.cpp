@@ -553,6 +553,11 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_dirty_packages"), &ListDirtyPackages, NoParams);
 	Registry.RegisterHandler(TEXT("get_world_state"), &GetWorldState, NoParams);
 	Registry.RegisterHandler(TEXT("request_editor_shutdown"), &RequestEditorShutdown);
+	Registry.RegisterHandler(TEXT("discard_dirty"), &DiscardDirty, {
+		MCPParam::Required(TEXT("packages"), EType::Array, TEXT("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched")).Items(EType::String),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would happen to each package and clear nothing (default false)")),
+		MCPParam::Optional(TEXT("allowContent"), EType::Boolean, TEXT("Also clear project and plugin content, including never-saved /Temp maps, whose unsaved edits are then lost when the editor closes (default false)")),
+	});
 	Registry.RegisterHandler(TEXT("list_pie_instances"), &ListPIEInstances, NoParams);
 	{
 		TArray<FMCPParamSpec> Spec = {
@@ -3684,6 +3689,242 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
 		TEXT("The scheduled close cannot be called off, and nothing restarts the editor from inside it. editor(start_editor) launches a NEW editor process rather than restoring this session."));
+	return MCPResult(Result);
+}
+
+namespace
+{
+	// What a dirty package is, for editor(discard_dirty). Transient and engine
+	// map packages hold nothing the project can save, so the editor's save
+	// prompt for them has no right answer but "Don't Save" (the
+	// /Engine/Maps/Entry startup map left an editor that could not be closed).
+	enum class EMCPDiscardPackageKind : uint8
+	{
+		Transient,
+		EngineMap,
+		Content,
+		Code,
+		PlayInEditor,
+	};
+
+	EMCPDiscardPackageKind MCPClassifyDiscardPackage(const UPackage* Package)
+	{
+		const FString PackageName = Package->GetName();
+		if (Package->HasAnyPackageFlags(PKG_CompiledIn) || PackageName.StartsWith(TEXT("/Script/")))
+		{
+			return EMCPDiscardPackageKind::Code;
+		}
+		if (Package->HasAnyPackageFlags(PKG_PlayInEditor))
+		{
+			return EMCPDiscardPackageKind::PlayInEditor;
+		}
+		if (Package == GetTransientPackage() || Package->HasAnyFlags(RF_Transient))
+		{
+			return EMCPDiscardPackageKind::Transient;
+		}
+		// The map itself, its built data and its external actors. Engine content
+		// that is not part of a map is still content: an engine material edited
+		// by hand is somebody's work.
+		if (PackageName.StartsWith(TEXT("/Engine/"))
+			&& (Package->ContainsMap() || Package->HasAnyPackageFlags(PKG_ContainsMapData)))
+		{
+			return EMCPDiscardPackageKind::EngineMap;
+		}
+		return EMCPDiscardPackageKind::Content;
+	}
+
+	const TCHAR* MCPDiscardPackageKindName(EMCPDiscardPackageKind Kind)
+	{
+		switch (Kind)
+		{
+		case EMCPDiscardPackageKind::Transient: return TEXT("transient");
+		case EMCPDiscardPackageKind::EngineMap: return TEXT("engineMap");
+		case EMCPDiscardPackageKind::Code: return TEXT("code");
+		case EMCPDiscardPackageKind::PlayInEditor: return TEXT("playInEditor");
+		default: return TEXT("content");
+		}
+	}
+
+	constexpr int32 MCPDiscardDirtyMaxPackages = 256;
+}
+
+// stop_editor has no flag that discards, and must not: the editor's own Save
+// Content prompt is the question for the person. But a package nobody can save
+// turns that prompt into a dead end. This clears the dirty flag on packages the
+// caller names, one by one, and refuses real content unless allowContent says
+// otherwise. All or nothing: one refusal clears none, so a repeat without the
+// refused names is the whole recovery.
+TSharedPtr<FJsonValue> FEditorHandlers::DiscardDirty(const TSharedPtr<FJsonObject>& Params)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Requested = nullptr;
+	const TSharedPtr<FJsonValue> MissingPackages = RequireArray(Params, TEXT("packages"), Requested);
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	const bool bAllowContent = OptionalBool(Params, TEXT("allowContent"), false);
+	if (MissingPackages) return MissingPackages;
+	if (Requested->Num() == 0)
+	{
+		return MCPError(TEXT("packages is empty. Name every package to clear, as editor(list_dirty_packages) reports it."));
+	}
+	if (Requested->Num() > MCPDiscardDirtyMaxPackages)
+	{
+		return MCPError(FString::Printf(TEXT("packages names %d packages; at most %d per call."), Requested->Num(), MCPDiscardDirtyMaxPackages));
+	}
+
+	struct FDiscardEntry
+	{
+		FString PackageName;
+		UPackage* Package = nullptr;
+		EMCPDiscardPackageKind Kind = EMCPDiscardPackageKind::Content;
+		FString Status;
+		FString Reason;
+	};
+
+	// Preflight: resolve and judge every name before anything is cleared.
+	TArray<FDiscardEntry> Entries;
+	TSet<FString> Seen;
+	int32 RefusedCount = 0;
+	for (int32 Index = 0; Index < Requested->Num(); ++Index)
+	{
+		FString Name;
+		if (!(*Requested)[Index].IsValid() || !(*Requested)[Index]->TryGetString(Name) || Name.TrimStartAndEnd().IsEmpty())
+		{
+			return MCPError(FString::Printf(TEXT("packages[%d] is not a package name."), Index));
+		}
+		const FString PackageName = FPackageName::ObjectPathToPackageName(Name.TrimStartAndEnd());
+		if (Seen.Contains(PackageName))
+		{
+			return MCPError(FString::Printf(TEXT("packages names %s twice."), *PackageName));
+		}
+		Seen.Add(PackageName);
+
+		FDiscardEntry& Entry = Entries.AddDefaulted_GetRef();
+		Entry.PackageName = PackageName;
+		Entry.Package = FindPackage(nullptr, *PackageName);
+		if (!Entry.Package)
+		{
+			Entry.Status = TEXT("refused");
+			Entry.Reason = TEXT("No package by this name is loaded, so there is nothing in memory to discard.");
+			++RefusedCount;
+			continue;
+		}
+		Entry.Kind = MCPClassifyDiscardPackage(Entry.Package);
+		if (!Entry.Package->IsDirty())
+		{
+			Entry.Status = TEXT("notDirty");
+			continue;
+		}
+		switch (Entry.Kind)
+		{
+		case EMCPDiscardPackageKind::Code:
+			Entry.Reason = TEXT("A code package holds compiled classes, not unsaved work, and the editor never asks to save it.");
+			break;
+		case EMCPDiscardPackageKind::PlayInEditor:
+			Entry.Reason = TEXT("A Play In Editor package goes away when the session ends. End PIE instead.");
+			break;
+		case EMCPDiscardPackageKind::Content:
+			if (!bAllowContent)
+			{
+				Entry.Reason = PackageName.StartsWith(TEXT("/Temp/"))
+					? TEXT("A never-saved map exists only in memory, so clearing it loses the whole map when the editor closes. Save it under a content path first, or pass allowContent=true to discard it.")
+					: TEXT("Project or plugin content: clearing it loses its unsaved edits when the editor closes. Save it with asset(save) or editor(save_dirty), or pass allowContent=true to discard it.");
+			}
+			break;
+		default:
+			break;
+		}
+		if (!Entry.Reason.IsEmpty())
+		{
+			Entry.Status = TEXT("refused");
+			++RefusedCount;
+		}
+	}
+
+	const bool bApply = !bDryRun && RefusedCount == 0;
+	int32 ClearedCount = 0;
+	int32 WouldClearCount = 0;
+	int32 NotDirtyCount = 0;
+	int32 StillDirtyCount = 0;
+	TArray<TSharedPtr<FJsonValue>> PackagesJson;
+	for (FDiscardEntry& Entry : Entries)
+	{
+		if (Entry.Status.IsEmpty())
+		{
+			if (bApply)
+			{
+				Entry.Package->SetDirtyFlag(false);
+				// Read back rather than trust the call: a package something
+				// re-dirties on the spot is not one the close will skip.
+				if (Entry.Package->IsDirty())
+				{
+					Entry.Status = TEXT("stillDirty");
+					Entry.Reason = TEXT("The package was dirty again as soon as its flag was cleared.");
+					++StillDirtyCount;
+				}
+				else
+				{
+					Entry.Status = TEXT("cleared");
+					++ClearedCount;
+				}
+			}
+			else
+			{
+				Entry.Status = TEXT("wouldClear");
+				++WouldClearCount;
+			}
+		}
+		else if (Entry.Status == TEXT("notDirty"))
+		{
+			++NotDirtyCount;
+		}
+
+		TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
+		Item->SetStringField(TEXT("package"), Entry.PackageName);
+		Item->SetStringField(TEXT("status"), Entry.Status);
+		if (Entry.Package)
+		{
+			Item->SetStringField(TEXT("kind"), MCPDiscardPackageKindName(Entry.Kind));
+		}
+		if (!Entry.Reason.IsEmpty())
+		{
+			Item->SetStringField(TEXT("reason"), Entry.Reason);
+		}
+		PackagesJson.Add(MakeShared<FJsonValueObject>(Item));
+	}
+
+	const FDirtyEditorPackages Remaining = CollectDirtyEditorPackages();
+	TArray<FString> RemainingAll = Remaining.Content;
+	RemainingAll.Append(Remaining.Maps);
+	RemainingAll.Sort();
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("dryRun"), bDryRun);
+	Result->SetBoolField(TEXT("allowContent"), bAllowContent);
+	Result->SetArrayField(TEXT("packages"), PackagesJson);
+	Result->SetNumberField(TEXT("clearedCount"), ClearedCount);
+	Result->SetNumberField(TEXT("wouldClearCount"), WouldClearCount);
+	Result->SetNumberField(TEXT("notDirtyCount"), NotDirtyCount);
+	Result->SetNumberField(TEXT("refusedCount"), RefusedCount);
+	// What the editor's dirty lists (the ones a close prompts for) still hold.
+	Result->SetArrayField(TEXT("remainingDirty"), MCPStringListToJson(RemainingAll));
+	Result->SetNumberField(TEXT("remainingDirtyCount"), RemainingAll.Num());
+	Result->SetBoolField(TEXT("changed"), ClearedCount > 0);
+	if (RefusedCount > 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Refused %d of %d package(s), so nothing was cleared. Each refusal says why; call again without them."),
+			RefusedCount, Entries.Num()));
+	}
+	else if (StillDirtyCount > 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d package(s) were dirty again straight after being cleared; the close will still ask about them."),
+			StillDirtyCount));
+	}
+	MCPSetNoRollback(Result, ClearedCount > 0
+		? TEXT("Only the dirty flag was cleared. The edits are still in memory, but the bridge has no action that marks a package dirty again, so nothing puts them back on the save list; the next edit to the same package does. Once the editor closes they are gone.")
+		: TEXT("Nothing was cleared, so there is nothing to undo."));
 	return MCPResult(Result);
 }
 
