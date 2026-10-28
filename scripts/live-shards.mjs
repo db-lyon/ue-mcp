@@ -19,6 +19,7 @@
  * The runner gives each kind its own editors, splits a kind's files across
  * them by measured time, and merges what they report.
  */
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -330,4 +331,54 @@ export function undeployedSources(src, dst) {
   };
   walk(src);
   return out;
+}
+
+/**
+ * The folder one run stages the tracked tests/ue_mcp into. Each runner process
+ * gets its own, because the release starts the live and live-base lanes at the
+ * same moment and a shared folder had one lane deleting what the other wrote (#1603).
+ */
+export function trackedStageDir(shardRoot, pid = process.pid) {
+  return path.join(shardRoot, `_tracked-${pid}`);
+}
+
+/** Remove staging folders left by runners that are no longer alive, and the old shared one. */
+export function sweepStaleTrackedStages(shardRoot, alive = pidAlive) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(shardRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const removed = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const m = /^_tracked(?:-(\d+))?$/.exec(e.name);
+    if (!m || (m[1] && alive(Number(m[1])))) continue;
+    fs.rmSync(path.join(shardRoot, e.name), { recursive: true, force: true });
+    removed.push(e.name);
+  }
+  return removed;
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err?.code === "EPERM";
+  }
+}
+
+/**
+ * The tracked tests/ue_mcp, as git has it, written into `stage`: what every
+ * shard starts from, so a run never inherits content an earlier run or a
+ * developer left behind.
+ */
+export function stageTrackedProject(repoRoot, stage) {
+  fs.rmSync(stage, { recursive: true, force: true });
+  fs.mkdirSync(stage, { recursive: true });
+  const files = execFileSync("git", ["ls-files", "-z", "tests/ue_mcp"], { cwd: repoRoot });
+  execFileSync("git", ["checkout-index", "--stdin", "-z", "-f", `--prefix=${stage}${path.sep}`], { cwd: repoRoot, input: files });
+  return path.join(stage, "tests", "ue_mcp");
 }

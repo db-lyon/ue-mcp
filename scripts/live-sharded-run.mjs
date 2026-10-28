@@ -22,6 +22,7 @@ import { TEST_EDITOR_ARGS } from "./test-editor-args.mjs";
 import {
   KIND_FLAGS, EDITOR_PEAK_MB, KEEP_IN_SHARD, liveFiles, planFixedShards, poolQueue, poolWantsEditor, nextBatch, POOL_EDITOR_WORK_MS, POOL_MIN_SHARE_MS, mirror, buildOutputFilter,
   timingFromReports, overBudget, slowest, headroomMB, editorFits, launchOrder, splitAtDeath, undeployedSources,
+  trackedStageDir, sweepStaleTrackedStages, stageTrackedProject,
 } from "./live-shards.mjs";
 
 const READY_TIMEOUT_S = 300;
@@ -123,19 +124,6 @@ function prepareScmShard(shardDir) {
 /** A killed editor leaves restore data, and the next launch stops at its prompt. */
 function clearRestoreData(projectDir) {
   fs.rmSync(path.join(projectDir, "Saved", "Autosaves", "PackageRestoreData.json"), { force: true });
-}
-
-/**
- * The tracked tests/ue_mcp, as git has it: what every shard starts from, so a
- * run never inherits content an earlier run or a developer left behind.
- */
-function stageTrackedProject(repoRoot) {
-  const stage = path.join(LIVE_SHARD_ROOT, "_tracked");
-  fs.rmSync(stage, { recursive: true, force: true });
-  fs.mkdirSync(stage, { recursive: true });
-  const files = execFileSync("git", ["ls-files", "-z", "tests/ue_mcp"], { cwd: repoRoot });
-  execFileSync("git", ["checkout-index", "--stdin", "-z", "-f", `--prefix=${stage}${path.sep}`], { cwd: repoRoot, input: files });
-  return path.join(stage, "tests", "ue_mcp");
 }
 
 /** Where the shards copy their build output from: a snapshot of tests/ue_mcp's, taken once per run. */
@@ -377,7 +365,10 @@ export async function runSharded(opts) {
   if (pool.files.length) say(`  hN   headless    ${String(pool.files.length).padStart(3)} files, ~${Math.round(queuedMs() / 1000)}s measured, one queue for up to ${maxHeadless} editor(s) as memory allows`);
   for (const s of plan) say(`  ${s.name.padEnd(4)} ${s.kind.padEnd(11)} ${String(s.files.length).padStart(3)} files, ~${Math.round(s.weightMs / 1000)}s measured`);
 
-  const trackedDir = stageTrackedProject(repoRoot);
+  sweepStaleTrackedStages(LIVE_SHARD_ROOT);
+  const trackedStage = trackedStageDir(LIVE_SHARD_ROOT);
+  process.once("exit", () => fs.rmSync(trackedStage, { recursive: true, force: true }));
+  const trackedDir = stageTrackedProject(repoRoot, trackedStage);
   if (!opts.stagedBuild) stageBuildOutput(repoRoot);
   else if (!fs.existsSync(path.join(STAGED_BUILD_DIR, "Plugins"))) {
     throw new Error(`--staged-build: nothing staged at ${STAGED_BUILD_DIR}; run node scripts/live-tests.mjs --stage-build first`);
