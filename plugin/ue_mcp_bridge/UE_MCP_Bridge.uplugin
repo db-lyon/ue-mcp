@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.4.11-beta.11",
+	"VersionName": "1.4.11-beta.12",
 	"FriendlyName": "UE MCP Bridge",
 	"Description": "C++ WebSocket bridge for UE-MCP, providing 2045+ editor actions over the MCP protocol",
 	"Category": "Developer Tools",
