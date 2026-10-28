@@ -149,6 +149,19 @@ export function poolWantsEditor({ remainingMs, queued, editors, max }) {
 }
 
 /**
+ * What the launcher does next: start an editor of `kind`, or wait (`kind` null).
+ * The pool's first editor goes before the fixed shards, since it holds most of the work.
+ */
+export function nextLaunch({ wantPool, poolEditors, fixedKind, running }) {
+  const poolFirst = wantPool && poolEditors === 0;
+  const kind = poolFirst ? "headless" : fixedKind ?? (wantPool ? "headless" : null);
+  if (kind) return { kind, poolFirst, done: false };
+  // Nothing running and nothing that can start: files still queued for a pool that
+  // stopped launching are reported as not run rather than waited on (#1609).
+  return { kind: null, done: running === 0 };
+}
+
+/**
  * The next files for one headless editor, off the front of the queue. Batches
  * shrink as the queue drains, so the editors finish together: a share of what
  * is left, between 20 s and 120 s of measured time, and at least one file.
@@ -381,4 +394,72 @@ export function stageTrackedProject(repoRoot, stage) {
   const files = execFileSync("git", ["ls-files", "-z", "tests/ue_mcp"], { cwd: repoRoot });
   execFileSync("git", ["checkout-index", "--stdin", "-z", "-f", `--prefix=${stage}${path.sep}`], { cwd: repoRoot, input: files });
   return path.join(stage, "tests", "ue_mcp");
+}
+
+/** UTC log stamp, as the engine writes it: [2026.10.23-19.25.32:762]. */
+export function parseLogStamp(stamp) {
+  const m = /(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2}):(\d{3})/.exec(stamp);
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6], +m[7]) : null;
+}
+
+/** When and why an editor died, read from its own log. A log older than `sinceMs` is a previous session's. */
+export function deathOf(projectDir, sinceMs = 0) {
+  const logFile = path.join(projectDir, "Saved", "Logs", "ue_mcp.log");
+  if (!fs.existsSync(logFile)) return { atMs: Date.now(), reason: "it exited without a log" };
+  const mtimeMs = fs.statSync(logFile).mtimeMs;
+  if (mtimeMs < sinceMs - 1000) return { atMs: Date.now(), reason: "it exited before writing a log" };
+  const text = fs.readFileSync(logFile, "utf8");
+  const crash = /^\[([^\]]+)\]\[[^\]]*\]LogWindows: Error: (?:appError called: )?(.*(?:Assertion failed|Fatal error|Unhandled Exception|Ran out of memory|Out of memory|EXCEPTION_).*)$/m.exec(text);
+  if (crash) return { atMs: parseLogStamp(crash[1]) ?? mtimeMs, reason: `it crashed: ${crash[2].trim().slice(0, 240)}` };
+  const exit = /^\[([^\]]+)\]\[[^\]]*\]LogCore: Engine exit requested \(reason: ([^)]*)\)/m.exec(text);
+  if (exit) return { atMs: parseLogStamp(exit[1]) ?? mtimeMs, reason: `it quit: its log records an exit request (${exit[2]})` };
+  return { atMs: mtimeMs, reason: "it exited with no crash in its log, which is what an out-of-memory kill looks like" };
+}
+
+/** The readiness wait's own verdicts that mean the process is gone or going. */
+const STARTUP_DEATH_REASON = /crashed|exited during startup|process is gone/i;
+
+/**
+ * Wait for a launched editor to report ready, watching its process the whole
+ * time (#1609). Resolves with the ready result. Rejects with `startupDeath` and
+ * the cause from its log when the process exits first, and with `startupTimeout`
+ * when it is not ready within the budget, even if the wait itself never returns.
+ *
+ * @param {{ child: import("node:child_process").ChildProcess, wait: (signal: AbortSignal) => Promise<{ ready: boolean, reason?: string }>,
+ *   readyTimeoutS: number, graceMs?: number, projectDir: string, launchedAtMs: number, pollMs?: number }} opts
+ */
+export async function awaitEditorStartup({ child, wait, readyTimeoutS, graceMs = 30_000, projectDir, launchedAtMs, pollMs = 1000 }) {
+  const abort = new AbortController();
+  const timers = [];
+  let onExit = () => {};
+  const exited = new Promise((resolve) => {
+    onExit = () => resolve({ exited: true });
+    child.once("exit", onExit);
+    child.once("error", onExit);
+    timers.push(setInterval(() => {
+      if (!pidAlive(child.pid)) onExit();
+    }, pollMs));
+  });
+  const deadline = new Promise((resolve) => {
+    timers.push(setTimeout(() => resolve({ timedOut: true }), readyTimeoutS * 1000 + graceMs));
+  });
+  const died = () => {
+    const death = deathOf(projectDir, launchedAtMs);
+    return Object.assign(new Error(`the editor died during startup, ${death.reason}`), { startupDeath: true, death });
+  };
+  try {
+    const outcome = await Promise.race([wait(abort.signal).then((ready) => ({ ready })), exited, deadline]);
+    if (outcome.ready?.ready) return outcome.ready;
+    if (outcome.exited || !pidAlive(child.pid) || STARTUP_DEATH_REASON.test(outcome.ready?.reason ?? "")) throw died();
+    const reason = outcome.ready?.reason && !/still not ready after/.test(outcome.ready.reason) ? `: ${outcome.ready.reason}` : "";
+    throw Object.assign(
+      new Error(`the editor did not report ready within ${readyTimeoutS}s${reason}. Check for a modal dialog in its window or log.`),
+      { startupTimeout: true },
+    );
+  } finally {
+    abort.abort();
+    for (const t of timers) clearTimeout(t);
+    child.off("exit", onExit);
+    child.off("error", onExit);
+  }
 }

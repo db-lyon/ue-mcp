@@ -9,8 +9,8 @@
  * beside the headroom before it starts, and the pool starts another headless
  * editor whenever one fits and the queue holds enough work for it, so a busy
  * machine gets fewer editors rather than an out-of-memory kill. An editor that
- * dies mid-run is reported as such, and the files it never reached run again
- * on a fresh editor.
+ * dies, mid-run or before it is ready, is reported with the cause its log
+ * records, and the files it never reached run again on a fresh editor.
  */
 import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -20,8 +20,8 @@ import { askOnce, extractReportedProjectDir, normalizeProjectRoot, PROJECT_IDENT
 import { resolveTestEngine } from "./build-utils.js";
 import { TEST_EDITOR_ARGS } from "./test-editor-args.mjs";
 import {
-  KIND_FLAGS, EDITOR_PEAK_MB, KEEP_IN_SHARD, liveFiles, planFixedShards, poolQueue, poolWantsEditor, nextBatch, POOL_EDITOR_WORK_MS, POOL_MIN_SHARE_MS, mirror, buildOutputFilter,
-  timingFromReports, overBudget, slowest, headroomMB, editorFits, launchOrder, splitAtDeath, undeployedSources,
+  KIND_FLAGS, EDITOR_PEAK_MB, KEEP_IN_SHARD, liveFiles, planFixedShards, poolQueue, poolWantsEditor, nextLaunch, nextBatch, POOL_EDITOR_WORK_MS, POOL_MIN_SHARE_MS, mirror, buildOutputFilter,
+  timingFromReports, overBudget, slowest, headroomMB, editorFits, launchOrder, splitAtDeath, undeployedSources, deathOf, awaitEditorStartup,
   trackedStageDir, sweepStaleTrackedStages, stageTrackedProject,
 } from "./live-shards.mjs";
 
@@ -179,19 +179,26 @@ async function answeringBridge(projectDir) {
   }
 }
 
-async function launch(job, editorExe, tsImport) {
+/**
+ * Start the job's editor and wait for it to report ready. `deps` replaces the
+ * process spawn, the readiness wait and the bridge check, for tests.
+ */
+export async function launch(job, editorExe, tsImport, deps = {}) {
+  const bridge = deps.answeringBridge ?? answeringBridge;
   // The base shard attaches to an editor already running on tests/ue_mcp and leaves it running.
   if (job.kind === "base") {
-    const running = await answeringBridge(job.dir);
+    const running = await bridge(job.dir);
     if (running) {
       Object.assign(job, running, { launched: false, launchS: 0, memoryAtReady: processMemoryMB(running.pid) });
       return;
     }
   }
   const uproject = path.join(job.dir, "ue_mcp.uproject");
-  const { waitForEditorReady } = await tsImport("../src/editor/editor-control.ts", import.meta.url);
+  const waitForEditorReady = deps.waitForEditorReady ?? (await tsImport("../src/editor/editor-control.ts", import.meta.url)).waitForEditorReady;
+  const readyTimeoutS = deps.readyTimeoutS ?? READY_TIMEOUT_S;
+  const proc = { spawn: deps.spawn ?? spawn };
   const launchedAtMs = Date.now();
-  const child = spawn(editorExe, [uproject, ...KIND_FLAGS[job.kind], ...TEST_EDITOR_ARGS], {
+  const child = proc.spawn(editorExe, [uproject, ...KIND_FLAGS[job.kind], ...TEST_EDITOR_ARGS], {
     stdio: "ignore",
     detached: true,
     windowsHide: job.kind !== "interactive",
@@ -200,12 +207,23 @@ async function launch(job, editorExe, tsImport) {
   child.unref();
   job.pid = child.pid;
   job.launched = true;
-  const ready = await waitForEditorReady(uproject, job.dir, READY_TIMEOUT_S, { launchedAtMs });
-  job.launchS = (Date.now() - launchedAtMs) / 1000;
-  if (!ready.ready) {
-    throw new Error(`editor not ready after ${job.launchS.toFixed(0)}s: ${ready.reason ?? "no reason given"}. Check for a modal dialog in its window or log.`);
+  try {
+    await awaitEditorStartup({
+      child,
+      wait: (signal) => waitForEditorReady(uproject, job.dir, readyTimeoutS, { launchedAtMs, signal }),
+      readyTimeoutS,
+      graceMs: deps.readyGraceMs,
+      projectDir: job.dir,
+      launchedAtMs,
+    });
+  } catch (err) {
+    // This runner spawned it, so ending it cannot touch anybody else's editor.
+    killTree(child.pid);
+    throw err;
+  } finally {
+    job.launchS = (Date.now() - launchedAtMs) / 1000;
   }
-  const running = await answeringBridge(job.dir);
+  const running = await bridge(job.dir);
   if (!running) throw new Error("the editor reported ready but its bridge does not answer");
   Object.assign(job, running);
   job.memoryAtReady = processMemoryMB(job.pid);
@@ -267,27 +285,6 @@ async function stop(job, tsImport) {
   }
   for (const pid of editorPidsFor(job.dir)) killTree(pid);
   clearRestoreData(job.dir);
-}
-
-/** UTC log stamp, as the engine writes it: [2026.10.23-19.25.32:762]. */
-function parseLogStamp(stamp) {
-  const m = /(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2}):(\d{3})/.exec(stamp);
-  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6], +m[7]) : null;
-}
-
-/** When and why an editor died, read from its own log. */
-function deathOf(projectDir) {
-  const logFile = path.join(projectDir, "Saved", "Logs", "ue_mcp.log");
-  if (!fs.existsSync(logFile)) return { atMs: Date.now(), reason: "it exited without a log" };
-  const text = fs.readFileSync(logFile, "utf8");
-  const crash = /^\[([^\]]+)\]\[[^\]]*\]LogWindows: Error: (?:appError called: )?(.*(?:Assertion failed|Fatal error|Unhandled Exception|Ran out of memory|Out of memory|EXCEPTION_).*)$/m.exec(text);
-  if (crash) return { atMs: parseLogStamp(crash[1]) ?? fs.statSync(logFile).mtimeMs, reason: `it crashed: ${crash[2].trim().slice(0, 240)}` };
-  const exit = /^\[([^\]]+)\]\[[^\]]*\]LogCore: Engine exit requested \(reason: ([^)]*)\)/m.exec(text);
-  if (exit) return { atMs: parseLogStamp(exit[1]) ?? fs.statSync(logFile).mtimeMs, reason: `it quit: its log records an exit request (${exit[2]})` };
-  return {
-    atMs: fs.statSync(logFile).mtimeMs,
-    reason: "it exited with no crash in its log, which is what an out-of-memory kill looks like",
-  };
 }
 
 /** Memory the running editors have yet to take: all of a launching one's peak, the rest of a ready one's. */
@@ -396,14 +393,23 @@ export async function runSharded(opts) {
   const nudge = () => wake();
   const nap = () => new Promise((r) => { wake = r; setTimeout(r, 2000); });
 
-  /** Launch the job's editor; false when it never became ready. */
+  /**
+   * Launch the job's editor: true when it is ready, "died" when it exited before
+   * that (recorded as a death, like one mid-run), false when it never became ready.
+   */
   const bringUp = async (job) => {
     try {
       job.copied = prepareShard(job, baseDir, trackedDir);
       await launch(job, editorExe, tsImport);
     } catch (err) {
-      launchFailures.push(`${job.name}: ${err?.message ?? err}`);
       await stop({ ...job, launched: true }, tsImport);
+      if (err?.startupDeath) {
+        deaths.push({ shard: job.name, reason: err.death.reason, culprit: null, unrun: job.files.length, duringStartup: true });
+        say(`  ${job.name}: the editor died during startup, ${err.death.reason}.`);
+        clearRestoreData(job.dir);
+        return "died";
+      }
+      launchFailures.push(`${job.name}: ${err?.message ?? err}`);
       return false;
     }
     jobs.push(job);
@@ -431,7 +437,16 @@ export async function runSharded(opts) {
   };
 
   const runFixed = async (job) => {
-    if (await bringUp(job)) {
+    const up = await bringUp(job);
+    if (up === "died") {
+      // One fresh editor per shard that died starting; a second death means the next would too.
+      if (!job.startupRetried) {
+        say(`  ${job.name}: running its ${job.files.length} file(s) on a fresh editor.`);
+        fixedQueue.unshift({ ...job, name: `${job.name}.${deaths.length}`, startupRetried: true, launched: false, pid: null, port: null, testsS: 0 });
+      } else {
+        launchFailures.push(`${job.name}: its fresh editor died during startup too, so its ${job.files.length} file(s) did not run`);
+      }
+    } else if (up) {
       const unrun = await runFiles(job, job.files, 0);
       if (unrun === null) await stop(job, tsImport);
       else if (unrun.length) {
@@ -446,7 +461,8 @@ export async function runSharded(opts) {
   // their files stray from the recorded times, and one started late still takes a share. After
   // POOL_EDITOR_WORK_MS it closes and a fresh editor takes over, before its deletes grow slow.
   const runPoolEditor = async (job) => {
-    if (await bringUp(job)) {
+    // An editor that died starting took no files off the queue, so the next pool editor gets them.
+    if ((await bringUp(job)) === true) {
       let batch = 0;
       // Past its share it still takes what is left when that is not worth a fresh editor's launch.
       while (pool.files.length > 0 && (job.weightMs < POOL_EDITOR_WORK_MS || queuedMs() < POOL_MIN_SHARE_MS)) {
@@ -478,12 +494,10 @@ export async function runSharded(opts) {
   for (;;) {
     // Two headless editors that never came up mean the next would not either.
     const wantPool = poolLaunchFailures < 2 && poolWantsEditor({ remainingMs: queuedMs(), queued: pool.files.length, editors: poolEditors.size, max: maxHeadless });
-    // The queue's first editor before the fixed shards, since it holds most of the work; on a machine
-    // with room for two editors, fixed shards first left it waiting until they were done.
-    const poolFirst = wantPool && poolEditors.size === 0;
-    const kind = poolFirst ? "headless" : fixedQueue[0]?.kind ?? (wantPool ? "headless" : null);
+    // On a machine with room for two editors, fixed shards first left the pool waiting until they were done.
+    const { kind, poolFirst, done } = nextLaunch({ wantPool, poolEditors: poolEditors.size, fixedKind: fixedQueue[0]?.kind ?? null, running: running.size });
+    if (done) break;
     if (!kind) {
-      if (running.size === 0 && pool.files.length === 0 && fixedQueue.length === 0) break;
       await nap();
       continue;
     }
@@ -505,6 +519,9 @@ export async function runSharded(opts) {
     tasks.push(task);
   }
   await Promise.all(tasks);
+  if (pool.files.length > 0) {
+    launchFailures.push(`headless: ${poolLaunchFailures} editor(s) failed to start, so ${pool.files.length} queued file(s) did not run`);
+  }
   const wallS = (Date.now() - started) / 1000;
 
   const merged = { testResults: [...results.values()] };
@@ -547,7 +564,7 @@ export async function runSharded(opts) {
   for (const t of slowest(timing.tests, 15)) say(`  ${(t.ms / 1000).toFixed(1).padStart(6)}s  ${t.test}`);
   const problems = [
     ...launchFailures.map((f) => `launch: ${f}`),
-    ...deaths.map((d) => `editor died: shard ${d.shard}, ${d.reason}${d.culprit ? `, while running ${d.culprit}` : ""}`),
+    ...deaths.map((d) => `editor died: shard ${d.shard}${d.duringStartup ? " during startup" : ""}, ${d.reason}${d.culprit ? `, while running ${d.culprit}` : ""}`),
     ...jobs.filter((j) => j.error).map((j) => `${j.name}: ${j.error}`),
     ...neverRan.map((f) => `not run: ${f}`),
     ...fileErrors.map((f) => `file: ${f}`),
