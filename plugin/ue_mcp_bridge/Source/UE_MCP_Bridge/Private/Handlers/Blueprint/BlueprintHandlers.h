@@ -59,6 +59,7 @@ private:
 	static TSharedPtr<FJsonValue> ListGraphs(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ResolveGraph(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetComponentProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetComponentPropertiesBatch(const TSharedPtr<FJsonObject>& Params);
 	// #442: dedicated OverrideMaterials writer for mesh-component templates.
 	static TSharedPtr<FJsonValue> SetComponentOverrideMaterials(const TSharedPtr<FJsonObject>& Params);
 	// #457: timeline track authoring (float / vector / linear-color / event).
