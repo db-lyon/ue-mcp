@@ -130,9 +130,9 @@ public:
 	static bool ShouldPublishStatus();
 
 	/**
-	 * Temp file plus rename, with the temp file named for this process. For polled files:
-	 * a reader holding the file open fails the rename, which is retried briefly and never
-	 * logged as an error, since the next publish replaces it anyway.
+	 * Unique sibling temp file plus atomic replacement, preserving the previous snapshot on failure.
+	 * For polled files, reader contention is retried briefly on Windows without error logging,
+	 * since the next publish replaces it anyway.
 	 */
 	static bool PublishAtomically(const FString& FinalPath, const FString& Contents);
 
