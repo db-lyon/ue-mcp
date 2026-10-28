@@ -6193,6 +6193,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/spatial-communication.test.ts",
           "test": "rejects reversed or overflowing focus framing before capture"
         }
@@ -7092,6 +7097,11 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "set_component_override_materials stores the material list"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -8457,6 +8467,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "get_output_log and search_log find a line a Python script just logged"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -8634,6 +8649,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "script_run applies arrange, runs act, then judges the expectation from the end of act"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -12550,6 +12570,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "checkpoint_prepare_restore refuses during PIE"
         },
@@ -12660,6 +12685,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "inject_input, inject_input_start, inject_input_update, inject_input_stop and inject_input_tape drive a bound action"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -18165,6 +18195,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "get_output_log and search_log find a line a Python script just logged"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -18557,6 +18592,11 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "set_blueprint_component_property writes a mesh that the component readers return"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
