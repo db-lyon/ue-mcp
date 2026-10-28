@@ -102,7 +102,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.133.0",
-    "@db-lyon/flowkit": "^0.18.1",
+    "@db-lyon/flowkit": "^0.18.2",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "isomorphic-git": "1.44.2",
     "js-yaml": "^4.1.0",

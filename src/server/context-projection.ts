@@ -176,7 +176,7 @@ export class ContextProjector {
       if (!view) {
         const scope = built.scoped ? new Set(built.categories) : undefined;
         const { advertisedTools, registryTools } = strategySurface(load.surface, built.strategy, scope);
-        view = { ...load, advertisedTools, registryTools, registry: buildLoadRegistry(registryTools, load.pluginLoad) };
+        view = { ...load, advertisedTools, registryTools, registry: buildLoadRegistry(registryTools, load.pluginLoad, load.configDir) };
         perLoad.set(key, view);
       }
       return view;

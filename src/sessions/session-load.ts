@@ -63,12 +63,16 @@ export function strategySurface(
   return { advertisedTools: enabled, registryTools: surface.tools };
 }
 
-/** One task registry over a load's registry tools and its plugins' task classes (#817). */
+/**
+ * One task registry over a load's registry tools and its plugins' task classes
+ * (#817). Class paths in the project's ue-mcp.yml resolve from `configDir`.
+ */
 export function buildLoadRegistry(
   registryTools: ToolDef[],
   pluginLoad: SessionLoad["pluginLoad"],
+  configDir: string | undefined,
 ): ReturnType<typeof buildFlowRegistry> {
-  const registry = buildFlowRegistry(registryTools);
+  const registry = buildFlowRegistry(registryTools, configDir);
   for (const { name, ctor } of pluginLoad.taskRegistrations) {
     registry.register(name, ctor);
   }
@@ -352,7 +356,7 @@ export class SessionLoads {
 
   /** One task registry per session, built from the graph that session has (#817). */
   private async buildRegistryFor(load: SessionLoad): Promise<void> {
-    load.registry = buildLoadRegistry(load.registryTools, load.pluginLoad);
+    load.registry = buildLoadRegistry(load.registryTools, load.pluginLoad, load.configDir);
   }
 
   /**

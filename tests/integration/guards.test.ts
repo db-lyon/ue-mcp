@@ -6,10 +6,12 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
 import { FakeBridge } from "../fake-bridge.js";
-import { json, McpServer, Sandbox } from "./harness.js";
+import { json, McpServer, REPO_ROOT, runCli, Sandbox, stopSandboxDaemons } from "./harness.js";
+import { call as daemonCall, daemonEnv, readDiscovery } from "./daemon-fakes.js";
 
 const guarded = (scope: string) => `ue-mcp:
   version: 1
@@ -61,6 +63,7 @@ afterAll(async () => {
   await mutations?.close();
   await writes?.close();
   await Promise.all([mutationsBridge?.stop(), writesBridge?.stop()]);
+  await stopSandboxDaemons(sb);
   sb.cleanup();
 });
 
@@ -115,4 +118,60 @@ describe("write detection", () => {
     expect(read.isError).toBe(false);
     expect(made(writesBridge)).toEqual(["delete_asset", "place_actor", "list_textures"]);
   });
+});
+
+describe("a guard class_path in ue-mcp.yml", () => {
+  it("resolves from the project folder when the daemon starts from another folder (#1590)", async () => {
+    covers("guards.config", "cli.daemon.start");
+    const project = sb.makeProject("FarProject", {
+      config: `ue-mcp:
+  version: 1
+guards:
+  freeze:
+    scope: mutations
+    before:
+      class_path: guards.BlockMutations
+`,
+    });
+    const projectDir = path.dirname(project);
+    const guardSource = pathToFileURL(path.join(REPO_ROOT, "src", "guard-task.ts")).href;
+    fs.mkdirSync(path.join(projectDir, "guards"));
+    fs.writeFileSync(path.join(projectDir, "guards", "package.json"), JSON.stringify({ type: "module" }));
+    fs.writeFileSync(
+      path.join(projectDir, "guards", "BlockMutations.js"),
+      `import { UeMcpGuard } from ${JSON.stringify(guardSource)};
+export default class BlockMutations extends UeMcpGuard {
+  get taskName() { return "block-mutations"; }
+  before(call) { return this.deny("frozen by guards/BlockMutations: " + call.method); }
+}
+`,
+    );
+    // Neither the CLI nor the daemon it spawns starts in the project folder.
+    const elsewhere = sb.path("launch-dir");
+    fs.mkdirSync(elsewhere, { recursive: true });
+    expect(path.relative(elsewhere, projectDir).startsWith("..")).toBe(true);
+    const bridge = await FakeBridge.start({ projectDir });
+    try {
+      const started = await runCli(sb, ["daemon", "start", project, "--json"], {
+        cwd: elsewhere,
+        env: daemonEnv({ UE_MCP_PORT: undefined }),
+      });
+      expect(started.code, started.stderr + started.stdout).toBe(0);
+      const d = readDiscovery(sb, project)!;
+      expect(d).not.toBeNull();
+
+      const server = await McpServer.start(sb, { projects: [project], mode: "daemon", port: null, cwd: elsewhere });
+      try {
+        expect((await daemonCall(d, "GET", "/v1/health")).body.clients).toBe(1);
+        const spawn = await call(server, "level", "place_actor", { actorClass: "PointLight" });
+        expect(spawn.isError).toBe(true);
+        expect(spawn.text).toContain("frozen by guards/BlockMutations: place_actor");
+        expect(made(bridge)).not.toContain("place_actor");
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await bridge.stop();
+    }
+  }, 90_000);
 });

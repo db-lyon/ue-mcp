@@ -388,6 +388,11 @@
           "suite": "integration",
           "file": "tests/integration/daemon-cli.test.ts",
           "test": "starts one daemon, reports it, prints its UI address, and stops it"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/guards.test.ts",
+          "test": "resolves from the project folder when the daemon starts from another folder (#1590)"
         }
       ]
     },
@@ -1433,6 +1438,11 @@
           "suite": "integration",
           "file": "tests/integration/guards.test.ts",
           "test": "refuses the calls it covers before they reach the editor and lets the rest through"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/guards.test.ts",
+          "test": "resolves from the project folder when the daemon starts from another folder (#1590)"
         }
       ]
     },
