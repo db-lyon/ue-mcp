@@ -421,7 +421,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 				if (LeafOwner && LeafOwner != PreparedAsset.Asset) LeafOwner->Modify();
 
 				FString SetError;
-				if (!MCPJsonProperty::SetJsonOnProperty(Property, ValueAddress, PreparedProperty.RequestedValue, SetError))
+				// The owner makes an Instanced property take its own copy and lets
+				// {instanceClass, properties} create a subobject. The preflight
+				// write above goes into temporary storage and stays ownerless: a
+				// copy made there would be discarded and leave an orphan behind.
+				if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(Property, ValueAddress, PreparedProperty.RequestedValue,
+					LeafOwner ? LeafOwner : PreparedAsset.Asset, SetError))
 				{
 					PreparedProperty.Error = FString::Printf(TEXT("Apply failed after preflight for '%s.%s': %s"),
 						*PreparedAsset.AssetPath, *PreparedProperty.PropertyName, *SetError);

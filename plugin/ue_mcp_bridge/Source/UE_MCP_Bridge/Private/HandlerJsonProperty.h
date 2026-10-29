@@ -608,6 +608,21 @@ namespace MCPJsonProperty
 				}
 				if (!Loaded) Loaded = StaticLoadObject(ObjProp->PropertyClass, nullptr, *Path);
 				if (!Loaded) { OutError = FString::Printf(TEXT("asset not found: %s"), *Path); return false; }
+
+				// An Instanced property owns its value. Assigning another object's
+				// subobject straight into one points two assets at a single object,
+				// so editing one silently edits the other, and re-saving never
+				// separates them. With the owner known, take a copy instead, as the
+				// editor's copy and paste does. IsIn means it already belongs here;
+				// IsAsset means the caller named a standalone asset, and cloning a
+				// whole asset into this one is not what they asked for.
+				UObject* const Owner = CurrentWriteOwner();
+				if (Owner && ObjProp->HasAnyPropertyFlags(CPF_InstancedReference)
+					&& !Loaded->IsIn(Owner) && !Loaded->IsAsset())
+				{
+					Loaded = DuplicateObject<UObject>(Loaded, Owner);
+				}
+
 				ObjProp->SetObjectPropertyValue(ValueAddr, Loaded);
 				return true;
 			}
