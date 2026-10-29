@@ -1521,7 +1521,7 @@ The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) a
 | `add_emitter(systemPath, emitterPath)` | Add emitter to system. Params: `systemPath, emitterPath` |
 | `remove_emitter(systemPath, emitterName?, emitterIndex?:n)` | Remove an emitter from a system (CRUD delete), addressed by emitterName or emitterIndex. Params: `systemPath, emitterName?, emitterIndex?` |
 | `list_emitters(systemPath)` | List emitters in system. Params: `systemPath` |
-| `set_emitter_property(systemPath\|assetPath, emitterName?, propertyName, value:*)` | Set emitter property. Params: `systemPath (or assetPath), emitterName?, propertyName, value` |
+| `set_emitter_property(systemPath\|assetPath, emitterName?, propertyName, value:*)` | Set emitter property. propertyName 'enabled' toggles the emitter and 'name' renames it (its Emitter.* parameters follow; the result's newEmitterName is the name it landed on); anything else is an FVersionedNiagaraEmitterData property. Params: `systemPath (or assetPath), emitterName?, propertyName, value` |
 | `list_modules(pathFilter?, cursor?, limit?:i)` | List Niagara module scripts, sorted by object path. pathFilter narrows the whole set rather than only the first page, which is what it always claimed to do. Params: `pathFilter?, cursor?, limit?` |
 | `get_emitter_info(assetPath)` | Inspect emitter. Params: `assetPath` |
 | `list_renderers(systemPath, emitterName?, emitterIndex?:n)` | List renderers on an emitter. Params: `systemPath, emitterName?, emitterIndex?` |

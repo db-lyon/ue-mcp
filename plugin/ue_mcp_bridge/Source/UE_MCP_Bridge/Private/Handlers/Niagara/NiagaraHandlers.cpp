@@ -1268,6 +1268,21 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 		Result->SetBoolField(TEXT("enabled"), bEnabled);
 		Result->SetBoolField(TEXT("previousEnabled"), bWasEnabled);
 	}
+	else if (PropName.Equals(TEXT("name"), ESearchCase::IgnoreCase))
+	{
+		PreviousValue = ResolvedEmitterName;
+		bHasPreviousValue = true;
+		System->Modify();
+		// SetName also renames the emitter's unique name, so its Emitter.*
+		// parameter namespace follows. It de-duplicates against the system's
+		// other emitters, so the name it lands on can differ from Value.
+		FNiagaraEmitterHandle& MutableHandle = const_cast<FNiagaraEmitterHandle&>(Handles[TargetIdx]);
+		MutableHandle.SetName(FName(*Value), *System);
+		System->RequestCompile(false);
+		bChanged = MutableHandle.GetName().ToString() != PreviousValue;
+		bSet = true;
+		Result->SetStringField(TEXT("newEmitterName"), MutableHandle.GetName().ToString());
+	}
 
 	// Try reflection on the EmitterData's properties
 	if (!bSet)
@@ -1322,7 +1337,9 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 		Result->SetStringField(TEXT("previousValue"), PreviousValue);
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("systemPath"), SystemPath);
-		Payload->SetStringField(TEXT("emitterName"), ResolvedEmitterName);
+		// The handle's current name rather than ResolvedEmitterName, so the
+		// inverse of a rename addresses the emitter by the name it now has.
+		Payload->SetStringField(TEXT("emitterName"), Handles[TargetIdx].GetName().ToString());
 		Payload->SetStringField(TEXT("propertyName"), PropName);
 		Payload->SetStringField(TEXT("value"), PreviousValue);
 		MCPSetRollback(Result, TEXT("set_emitter_property"), Payload);

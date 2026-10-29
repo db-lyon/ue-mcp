@@ -44,7 +44,7 @@ export const niagaraTool: ToolDef = categoryTool(
     add_emitter:    specBp("mutate", "Add emitter to system.", "add_emitter_to_system"),
     remove_emitter: specBp("mutate", "Remove an emitter from a system (CRUD delete), addressed by emitterName or emitterIndex.", "remove_emitter_from_system"),
     list_emitters:  specBp("read", "List emitters in system.", "list_emitters_in_system"),
-    set_emitter_property: specBp("mutate", "Set emitter property.", "set_emitter_property"),
+    set_emitter_property: specBp("mutate", "Set emitter property. propertyName 'enabled' toggles the emitter and 'name' renames it (its Emitter.* parameters follow; the result's newEmitterName is the name it landed on); anything else is an FVersionedNiagaraEmitterData property.", "set_emitter_property"),
     list_modules:   specBp("read", "List Niagara module scripts, sorted by object path. pathFilter narrows the whole set rather than only the first page, which is what it always claimed to do.", "list_niagara_modules"),
     get_emitter_info: specBp("read", "Inspect emitter.", "get_emitter_info"),
     list_renderers:   specBp("read", "List renderers on an emitter.", "list_emitter_renderers"),
