@@ -192,6 +192,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "An output parameter rather than an input (default false)"
+      },
+      {
+        "name": "isReference",
+        "type": "boolean",
+        "required": false,
+        "description": "Pass by reference (default false)"
+      },
+      {
+        "name": "isConst",
+        "type": "boolean",
+        "required": false,
+        "description": "Const parameter (default false)"
       }
     ]
   },
@@ -3136,7 +3148,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_component: "Params: assetPath (or path), componentClass, componentName?, onConflict?, parentComponent?, childActorClass?",
   add_custom_event: "Params: assetPath (or path), eventName, graphName?, parameters?, netMode?, reliable?, callInEditor?, posX?, posY?",
   add_event_dispatcher: "Params: blueprintPath, name, parameters?",
-  add_function_parameter: "Params: assetPath (or path), functionName, parameterName, parameterType?, isOutput?",
+  add_function_parameter: "Params: assetPath (or path), functionName, parameterName, parameterType?, isOutput?, isReference?, isConst?",
   add_local_variable: "Params: assetPath (or path), functionName, name, varType? (or type)",
   add_node: "Params: assetPath (or path), graphName?, nodeClass, nodeParams?, deferCompile?",
   add_timeline_track: "Params: assetPath (or path), timelineName, trackName, trackType?, keyframes?",
@@ -3296,8 +3308,9 @@ export const schema: Record<string, z.ZodType> = {
   inputs: z.array(z.record(z.string(), z.unknown())).optional().describe("Input parameters [{name, type}]"),
   instanceEditable: z.boolean().optional().describe("true: EditAnywhere; false: EditDefaultsOnly. Omitted leaves the editor default (add_variable). Two-state shorthand for editFlag; mutually exclusive with it (set_variable_properties)"),
   interfacePath: z.string().optional().describe("Interface class path (add_blueprint_interface). Implement this interface first when it is not present (override_function). Interface class path, as list_interfaces reports it (remove_blueprint_interface)"),
-  isConst: z.boolean().optional().describe("const: the function only reads state"),
+  isConst: z.boolean().optional().describe("Const parameter (default false) (add_function_parameter). const: the function only reads state (set_function_properties)"),
   isOutput: z.boolean().optional().describe("An output parameter rather than an input (default false) (add_function_parameter). Edit the return side (default false) (edit_graph_parameters)"),
+  isReference: z.boolean().optional().describe("Pass by reference (default false)"),
   keyframes: z.array(z.record(z.string(), z.unknown())).optional().describe("[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color"),
   keywords: z.string().optional().describe("Extra palette search keywords"),
   kind: z.string().optional().describe("exec, data or all (default all)"),

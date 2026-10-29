@@ -781,6 +781,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 	FString ParamType = OptionalString(Params, TEXT("parameterType"), TEXT("Float"));
 
 	bool bIsOutput = OptionalBool(Params, TEXT("isOutput"), false);
+	const bool bIsReference = OptionalBool(Params, TEXT("isReference"), false);
+	const bool bIsConst = OptionalBool(Params, TEXT("isConst"), false);
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -870,6 +872,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 	{
 		return MCPError(FString::Printf(TEXT("Unrecognized parameter type: %s"), *TypeError));
 	}
+
+	// Anim node functions bound on an AnimGraph node need their
+	// FAnimUpdateContext / FAnimNodeReference parameters as const references, or
+	// UFunction::IsSignatureCompatibleWith rejects them against the node's
+	// prototype function.
+	PinType.bIsReference = bIsReference;
+	PinType.bIsConst = bIsConst;
 
 	if (bIsOutput)
 	{
