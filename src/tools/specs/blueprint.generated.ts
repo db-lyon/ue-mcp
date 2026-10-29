@@ -63,6 +63,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SCS parent component for the hierarchy"
       },
       {
+        "name": "parentSocket",
+        "type": "string",
+        "required": false,
+        "description": "Bone or socket on parentComponent to attach to (the details panel's Parent Socket)"
+      },
+      {
         "name": "childActorClass",
         "type": "string",
         "required": false,
@@ -3133,7 +3139,7 @@ export const handlerSpecs: HandlerSpecs = {
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
   add_blueprint_interface: "Params: blueprintPath, interfacePath",
-  add_component: "Params: assetPath (or path), componentClass, componentName?, onConflict?, parentComponent?, childActorClass?",
+  add_component: "Params: assetPath (or path), componentClass, componentName?, onConflict?, parentComponent?, parentSocket?, childActorClass?",
   add_custom_event: "Params: assetPath (or path), eventName, graphName?, parameters?, netMode?, reliable?, callInEditor?, posX?, posY?",
   add_event_dispatcher: "Params: blueprintPath, name, parameters?",
   add_function_parameter: "Params: assetPath (or path), functionName, parameterName, parameterType?, isOutput?",
@@ -3338,6 +3344,7 @@ export const schema: Record<string, z.ZodType> = {
   parameterType: z.string().optional().describe("Parameter type in the add_variable vocabulary, containers included (default float) (add_function_parameter). Type in the add_variable vocabulary, for add and set_type (edit_graph_parameters)"),
   parentClass: z.string().optional().describe("Parent class: short name or full path (default Actor) (create_blueprint). Only Blueprints deriving from this class (export_blueprint_batch). New parent class: short name or full path (reparent_blueprint)"),
   parentComponent: z.string().optional().describe("SCS parent component for the hierarchy"),
+  parentSocket: z.string().optional().describe("Bone or socket on parentComponent to attach to (the details panel's Parent Socket)"),
   path: z.string().optional().describe("Alias for assetPath"),
   pinName: z.string().optional().describe("The pin whose links are broken (disconnect_pins). Alias for propertyName (read_node_property, set_node_property)"),
   posX: z.number().optional().describe("Node X position in the graph (add_custom_event, set_node_position). Re-center pasted nodes around this X (with posY) (import_nodes_t3d)"),

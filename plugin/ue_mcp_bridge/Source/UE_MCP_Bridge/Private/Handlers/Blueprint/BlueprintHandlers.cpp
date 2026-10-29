@@ -153,6 +153,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Name of the new component (default: componentClass)")),
 		SpecOnConflict,
 		MCPParam::Optional(TEXT("parentComponent"), EType::String, TEXT("SCS parent component for the hierarchy")),
+		MCPParam::Optional(TEXT("parentSocket"), EType::String, TEXT("Bone or socket on parentComponent to attach to (the details panel's Parent Socket)")),
 		MCPParam::Optional(TEXT("childActorClass"), EType::String, TEXT("ChildActorClass for an added ChildActorComponent: a Blueprint path with or without _C, or a C++ class")),
 	});
 	Registry.RegisterHandler(TEXT("add_blueprint_interface"), &AddBlueprintInterface, {
@@ -2156,6 +2157,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	// same call. Both are read before the load can fail (#1057).
 	const FString ParentComponent = OptionalString(Params, TEXT("parentComponent"));
 	const FString ChildActorClassPath = OptionalString(Params, TEXT("childActorClass"));
+	const FString ParentSocket = OptionalString(Params, TEXT("parentSocket"));
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -2244,6 +2246,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 				if (ComponentName != ComponentClass)
 				{
 					Subsystem->RenameSubobject(NewHandle, FText::FromString(ComponentName));
+				}
+
+				// The SCS node's AttachToName is what the details panel's Parent
+				// Socket writes, so a weapon or prop mesh can sit on a bone of the
+				// parent skeletal mesh from the moment it is added.
+				if (!ParentSocket.IsEmpty())
+				{
+					if (USCS_Node* Node = MCPFindSCSNode(Blueprint->SimpleConstructionScript, ComponentName))
+					{
+						Node->Modify();
+						Node->AttachToName = FName(*ParentSocket);
+					}
 				}
 
 				// #526: when adding a ChildActorComponent, let callers set its
