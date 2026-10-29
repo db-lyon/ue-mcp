@@ -351,6 +351,8 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("parameterName"), EType::String, TEXT("Parameter name")),
 		MCPParam::Optional(TEXT("parameterType"), EType::String, TEXT("Parameter type in the add_variable vocabulary, containers included (default float)")),
 		MCPParam::Optional(TEXT("isOutput"), EType::Boolean, TEXT("An output parameter rather than an input (default false)")),
+		MCPParam::Optional(TEXT("isReference"), EType::Boolean, TEXT("Pass by reference (default false)")),
+		MCPParam::Optional(TEXT("isConst"), EType::Boolean, TEXT("Const parameter (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("set_variable_default"), &SetVariableDefault, {
 		SpecAssetPath,

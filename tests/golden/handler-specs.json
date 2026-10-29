@@ -934,6 +934,18 @@
           "type": "boolean",
           "required": false,
           "description": "An output parameter rather than an input (default false)"
+        },
+        {
+          "name": "isReference",
+          "type": "boolean",
+          "required": false,
+          "description": "Pass by reference (default false)"
+        },
+        {
+          "name": "isConst",
+          "type": "boolean",
+          "required": false,
+          "description": "Const parameter (default false)"
         }
       ]
     },
