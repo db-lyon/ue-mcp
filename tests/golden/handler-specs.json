@@ -349,6 +349,12 @@
           "description": "SCS parent component for the hierarchy"
         },
         {
+          "name": "parentSocket",
+          "type": "string",
+          "required": false,
+          "description": "Bone or socket on parentComponent to attach to (the details panel's Parent Socket)"
+        },
+        {
           "name": "childActorClass",
           "type": "string",
           "required": false,

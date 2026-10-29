@@ -81,7 +81,7 @@ export const blueprintTool: ToolDef = categoryTool(
     author: {
       kind: "handler",
       effect: "mutate",
-      description: "Author a whole Blueprint in one call: optionally create it (parentClass), then add components, variables and function stubs, then compile - one agent-facing action instead of a dozen add_* round-trips. Params: assetPath, parentClass? (create/ensure the BP if given), components? [{componentClass, componentName?, parentComponent?, childActorClass?}], variables? [{name, varType}], functions? [{functionName}], compile? (default true). Returns per-step results + created flag. (#607)",
+      description: "Author a whole Blueprint in one call: optionally create it (parentClass), then add components, variables and function stubs, then compile - one agent-facing action instead of a dozen add_* round-trips. Params: assetPath, parentClass? (create/ensure the BP if given), components? [{componentClass, componentName?, parentComponent?, parentSocket?, childActorClass?}], variables? [{name, varType}], functions? [{functionName}], compile? (default true). Returns per-step results + created flag. (#607)",
       handler: async (ctx, p) => {
         const assetPath = p.assetPath as string;
         if (!assetPath) throw new Error("Missing 'assetPath'");
@@ -99,7 +99,7 @@ export const blueprintTool: ToolDef = categoryTool(
           } catch (e) { steps.push({ step: "create", target: assetPath, ok: false, error: e instanceof Error ? e.message : String(e) }); }
         }
         for (const c of (p.components as Array<Record<string, unknown>> ?? [])) {
-          await run("add_component", String(c.componentClass ?? ""), "add_component", { path: assetPath, componentClass: c.componentClass, componentName: c.componentName ?? c.componentClass, parentComponent: c.parentComponent, childActorClass: c.childActorClass });
+          await run("add_component", String(c.componentClass ?? ""), "add_component", { path: assetPath, componentClass: c.componentClass, componentName: c.componentName ?? c.componentClass, parentComponent: c.parentComponent, parentSocket: c.parentSocket, childActorClass: c.childActorClass });
         }
         for (const v of (p.variables as Array<Record<string, unknown>> ?? [])) {
           await run("add_variable", String(v.name ?? ""), "add_variable", { path: assetPath, name: v.name, type: v.varType ?? v.type });
@@ -160,7 +160,7 @@ export const blueprintTool: ToolDef = categoryTool(
     ...specSchema,
     assetPath: z.string().optional().describe("Blueprint asset path. Read/graph actions also accept a World/umap path (e.g. /Game/Maps/SomeLevel), resolved to that map's level script Blueprint (#942)"),
     parentClass: z.string().optional().describe("create / author / reparent: the parent class. export_batch: only Blueprints deriving from this class (#1166)"),
-    components: z.array(z.record(z.string(), z.unknown())).optional().describe("author: [{componentClass, componentName?, parentComponent?, childActorClass?}] (#607)"),
+    components: z.array(z.record(z.string(), z.unknown())).optional().describe("author: [{componentClass, componentName?, parentComponent?, parentSocket?, childActorClass?}] (#607)"),
     variables: z.array(z.record(z.string(), z.unknown())).optional().describe("author: [{name, varType}] (#607)"),
     functions: z.array(z.record(z.string(), z.unknown())).optional().describe("author: [{functionName}] (#607)"),
     compile: z.boolean().optional().describe("author: compile after authoring (default true) (#607)"),
