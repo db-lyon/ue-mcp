@@ -1135,6 +1135,104 @@ namespace
 #endif
 	}
 
+	/** The heights the target edit layer holds over a region: what a write into
+	 *  that layer replaces, so what its heightBefore, verticesChanged and rollback
+	 *  record have to describe. MCPLscReadHeights with no layer reads the MERGED
+	 *  landscape, which differs from the layer as soon as another edit layer has
+	 *  content, and a rollback replaying merged heights into the layer would
+	 *  count every other layer twice. */
+	bool MCPLscReadTargetLayerHeights(
+		ALandscape* Landscape,
+		ULandscapeInfo* Info,
+		const TSharedPtr<FJsonObject>& Params,
+		const FMCPLscRegion& Region,
+		TArray<uint16>& OutHeights,
+		TSharedPtr<FJsonValue>& OutError)
+	{
+		FGuid EditLayerGuid;
+		FString EditLayerName;
+		if (!MCPLscRequireEditLayer(Landscape, Params, EditLayerGuid, EditLayerName, OutError)) return false;
+		return MCPLscReadHeights(Info, EditLayerGuid, true, Region, OutHeights, OutError);
+	}
+
+	/**
+	 * An edit computed on the merged terrain, turned into the target layer's new
+	 * heights. Edit layers add up, so the layer takes the CHANGE the edit made to
+	 * the merged heights, scaled by the layer's heightmap alpha, on top of what it
+	 * already holds. Computing on the merged terrain is what the operators mean
+	 * (flatten to a world height, smooth the visible ground, erode it), and on a
+	 * landscape with one layer this is exactly the merged result. Writing the
+	 * merged result itself into one layer would count every other layer twice.
+	 */
+	bool MCPLscMergedEditToLayer(
+		ALandscape* Landscape,
+		ULandscapeInfo* Info,
+		const TSharedPtr<FJsonObject>& Params,
+		const FMCPLscRegion& Region,
+		const TArray<uint16>& MergedBefore,
+		const TArray<uint16>& MergedAfter,
+		TArray<uint16>& OutLayerBefore,
+		TArray<uint16>& OutLayerAfter,
+		int32& OutClamped,
+		TSharedPtr<FJsonValue>& OutError)
+	{
+		FGuid EditLayerGuid;
+		FString EditLayerName;
+		if (!MCPLscRequireEditLayer(Landscape, Params, EditLayerGuid, EditLayerName, OutError)) return false;
+		if (!MCPLscReadHeights(Info, EditLayerGuid, true, Region, OutLayerBefore, OutError)) return false;
+
+		double Alpha = 1.0;
+#if UE_MCP_HAS_5_5_API
+		// By reflection, as list_edit_layers reads it: the accessor moved in 5.6, the property did not.
+		if (const ULandscapeEditLayerBase* Layer = Landscape->GetEditLayerConst(EditLayerGuid))
+		{
+			if (const FNumericProperty* Prop = CastField<FNumericProperty>(Layer->GetClass()->FindPropertyByName(TEXT("HeightmapAlpha"))))
+			{
+				Alpha = Prop->GetFloatingPointPropertyValue(Prop->ContainerPtrToValuePtr<void>(Layer));
+			}
+		}
+#endif
+		if (FMath::Abs(Alpha) < UE_KINDA_SMALL_NUMBER)
+		{
+			OutError = MCPError(FString::Printf(
+				TEXT("Edit layer '%s' has a heightmap alpha of 0, so nothing written to it can change the terrain. Raise its alpha, or pass another editLayer."),
+				*EditLayerName));
+			return false;
+		}
+
+		OutClamped = 0;
+		OutLayerAfter.SetNumUninitialized(OutLayerBefore.Num());
+		for (int32 Index = 0; Index < OutLayerBefore.Num(); ++Index)
+		{
+			const double Next = (double)OutLayerBefore[Index]
+				+ ((double)MergedAfter[Index] - (double)MergedBefore[Index]) / Alpha;
+			if (Next < 0.0 || Next > 65535.0) ++OutClamped;
+			OutLayerAfter[Index] = FMCPLscHeightSpace::Clamp16(Next);
+		}
+		return true;
+	}
+
+	/** The merged terrain's own before/after next to the layer's, since heightBefore
+	 *  and heightAfter describe the layer written, which on a second layer is not
+	 *  the ground anyone sees. */
+	void MCPLscNoteMergedEdit(
+		const TSharedPtr<FJsonObject>& Result,
+		const FMCPLscHeightSpace& Space,
+		const TArray<uint16>& MergedBefore,
+		const TArray<uint16>& MergedAfter,
+		int32 LayerClamped)
+	{
+		Result->SetObjectField(TEXT("terrainBefore"), MCPLscHeightStats(MergedBefore, Space));
+		Result->SetObjectField(TEXT("terrainAfter"), MCPLscHeightStats(MergedAfter, Space));
+		if (LayerClamped > 0)
+		{
+			Result->SetNumberField(TEXT("layerVerticesClamped"), LayerClamped);
+			Result->SetStringField(TEXT("layerClampWarning"), FString::Printf(
+				TEXT("%d vertices needed a layer value past the uint16 range to make that change and were clamped, so the terrain there falls short of the edit. Write into the layer that holds most of the height there, or use a smaller change."),
+				LayerClamped));
+		}
+	}
+
 	/**
 	 * THE height write. Everything that changes terrain goes through here.
 	 *
@@ -1539,8 +1637,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHeightRegion(const TSharedPtr<FJso
 			TEXT("or 'heights' as one number per vertex, or 'height' / 'rawHeight' to fill the whole region with one value."));
 	}
 
+	// The layer's own heights: these values replace them verbatim, and the rollback replays them into the layer.
 	TArray<uint16> Previous;
-	if (!MCPLscReadHeights(Info, FGuid(), false, Region, Previous, Error)) return Error;
+	if (!MCPLscReadTargetLayerHeights(Landscape, Info, Params, Region, Previous, Error)) return Error;
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("heightSource"), Source);
@@ -1896,6 +1995,8 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SculptRegion(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("The landscape has a zero Z scale, so no height can be expressed in world units. Fix the actor scale before sculpting."));
 	}
 
+	// The MERGED terrain: the operators shape the ground as it stands. Only the
+	// change they make goes into the target layer (MCPLscMergedEditToLayer).
 	TArray<uint16> Previous;
 	if (!MCPLscReadHeights(Info, FGuid(), false, Region, Previous, Error)) return Error;
 
@@ -2103,7 +2204,11 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SculptRegion(const TSharedPtr<FJsonOb
 			TEXT("Reduce 'amount', or give the landscape actor a larger Z scale so the same world height needs fewer raw units."),
 			ClampedVertices));
 	}
-	return MCPLscWriteHeights(Landscape, Info, Params, Region, Previous, NewHeights, Result);
+	TArray<uint16> LayerBefore, LayerAfter;
+	int32 LayerClamped = 0;
+	if (!MCPLscMergedEditToLayer(Landscape, Info, Params, Region, Previous, NewHeights, LayerBefore, LayerAfter, LayerClamped, Error)) return Error;
+	MCPLscNoteMergedEdit(Result, Space, Previous, NewHeights, LayerClamped);
+	return MCPLscWriteHeights(Landscape, Info, Params, Region, LayerBefore, LayerAfter, Result);
 }
 
 // landscape(apply_erosion): hydraulic or thermal erosion over a rectangle.
@@ -2156,6 +2261,8 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ApplyErosion(const TSharedPtr<FJsonOb
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
+	// The MERGED terrain: erosion runs on the ground as it stands. Only the change
+	// it makes goes into the target layer (MCPLscMergedEditToLayer).
 	TArray<uint16> Previous;
 	if (!MCPLscReadHeights(Info, FGuid(), false, Region, Previous, Error)) return Error;
 
@@ -2329,7 +2436,11 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ApplyErosion(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("cellSteps"), (double)Work);
 	Result->SetStringField(TEXT("modelNote"),
 		TEXT("A grid model run on the CPU over the region, not the Landscape Mode erosion tool: hydraulic rains on every vertex, routes water to lower 4-neighbours, carries sediment to capacity and deposits the rest; thermal slumps anything steeper than the talus angle. Results are shaped by iteration count, so raise it gradually and re-read the region."));
-	return MCPLscWriteHeights(Landscape, Info, Params, Region, Previous, NewHeights, Result);
+	TArray<uint16> LayerBefore, LayerAfter;
+	int32 LayerClamped = 0;
+	if (!MCPLscMergedEditToLayer(Landscape, Info, Params, Region, Previous, NewHeights, LayerBefore, LayerAfter, LayerClamped, Error)) return Error;
+	MCPLscNoteMergedEdit(Result, MCPLscHeightSpaceFor(Landscape), Previous, NewHeights, LayerClamped);
+	return MCPLscWriteHeights(Landscape, Info, Params, Region, LayerBefore, LayerAfter, Result);
 }
 
 namespace
@@ -2660,8 +2771,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ImportHeightmap(const TSharedPtr<FJso
 		bRemapped = true;
 	}
 
+	// The layer's own heights: the file replaces them verbatim, and the rollback replays them into the layer.
 	TArray<uint16> Previous;
-	if (!MCPLscReadHeights(Info, FGuid(), false, Region, Previous, Error)) return Error;
+	if (!MCPLscReadTargetLayerHeights(Landscape, Info, Params, Region, Previous, Error)) return Error;
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("filePath"), Resolved);
