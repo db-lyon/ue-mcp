@@ -847,7 +847,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddNotifyState(const TSharedPtr<FJson
 
 	FAnimNotifyEvent& NewEvent = AnimAsset->Notifies.AddDefaulted_GetRef();
 	NewEvent.NotifyName = NotifyFName;
+	// A unique Guid and the class's trigger weight threshold, for the same
+	// reasons add_anim_notify sets them.
+	NewEvent.Guid = FGuid::NewGuid();
 	NewEvent.NotifyStateClass = StateObject;
+	NewEvent.TriggerWeightThreshold = StateObject->GetDefaultTriggerWeightThreshold();
 	NewEvent.TrackIndex = 0;
 	// Link both ends to the asset before SetDuration, which moves EndLink by
 	// setting a time on it: an unlinked EndLink has no sequence to resolve
