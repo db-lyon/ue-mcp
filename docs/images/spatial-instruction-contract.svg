@@ -52,9 +52,10 @@
       <text x="1180" y="316">actorLabel="Player",</text>
       <text x="1180" y="354">componentName="HeadMesh",</text>
       <text x="1180" y="392">frame="actor",</text>
-      <text x="1180" y="430">axisRotation={</text>
-      <text x="1210" y="468">axis:"up", degrees:15</text>
-      <text x="1180" y="506">})</text>
+      <text x="1180" y="430">viewRotation={</text>
+      <text x="1210" y="460">viewFrom:"above",</text>
+      <text x="1210" y="490">direction:"clockwise",</text>
+      <text x="1210" y="520">degrees:15 })</text>
     </g>
   </g>
 

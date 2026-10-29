@@ -2,12 +2,12 @@
 
 <Badge variant="time">⏱ ~5 minutes</Badge>
 
-UE-MCP lets you tell an AI assistant what you want done in Unreal. It can place actors, write blueprints, author materials, configure Niagara, build lighting, generate PCG systems, blah, blah, blah.
+UE-MCP lets an AI assistant work in the Unreal Editor: place actors, write Blueprints, author materials, configure Niagara, build lighting, generate PCG systems and more.
 
 ## Prerequisites
 
 1. Install [**Unreal Engine 5.4 to 5.8**](https://www.unrealengine.com/en-US/download "Free download via the Epic Games Launcher.")
-2. Install [**Node.js 18 or newer**](https://nodejs.org/ "JavaScript runtime that UE-MCP needs to run.")
+2. Install [**Node.js 20 or newer**](https://nodejs.org/ "JavaScript runtime that UE-MCP needs to run.")
 3. Install an MCP-capable AI client (e.g. [**Claude Code**](https://docs.anthropic.com/en/docs/claude-code "Anthropic's official CLI agent."))
 
 ## 1. Installation
@@ -20,19 +20,22 @@ UE-MCP lets you tell an AI assistant what you want done in Unreal. It can place 
    npx ue-mcp init
    ```
 
-The wizard then:
+The wizard:
 
-1. Auto-detects your `.uproject`.
-2. Asks which **tool categories** to enable (`level`, `blueprint`, `material`, `niagara`, etc.), with one-line descriptions. Pre-checked on a fresh install; on re-init, prior opt-outs in `ue-mcp.yml`'s `ue-mcp.disable[]` are remembered.
-3. Installs the C++ bridge plugin into `<YourProject>/Plugins/UE_MCP_Bridge/`. With a C++ toolchain on the machine it copies the source; without one it installs prebuilt binaries for your engine and platform. A plugin that is already there is adopted as it is, and source is never written over a binary install. `Plugins/UE_MCP_Bridge/.ue-mcp-install.json` records which kind it is.
-4. Enables the plugins it needs in your `.uproject`: `UE_MCP_Bridge`, `PythonScriptPlugin`, plus any of `Niagara`, `PCG`, `GameplayAbilities`, `EnhancedInput` required by the categories you kept.
-5. Scaffolds an empty `ue-mcp.yml` (for custom flows) if missing.
-6. Detects installed MCP clients (Claude Code project + global, Claude Desktop, Cursor, Codex) and writes the config for each you confirm. Global/Desktop configs default unchecked since opting them in affects every project on the machine.
-7. Asks about **agent behavior** (all default off on fresh installs - blasting through with Enter adds no surprises): enable the `feedback(submit)` tool, install the Claude-Code-only PostToolUse hook that nudges the agent to offer feedback after `execute_python`, install bundled Claude Code workflow skills.
-8. If you opted into the feedback prompt hook, optionally runs the **GitHub OAuth device flow** so `feedback(submit)` can author issues as your real GitHub user (default `author="user"`). The token is cached at `~/.ue-mcp/auth.json` (mode 600) and reused. Skip if you don't want it now - you can run `npx ue-mcp auth` later, or call `feedback(submit)` with `author="bot"` to post anonymously instead.
-9. Writes the final `ue-mcp.yml` and prints a recap of every file or directory init touched. Per-machine state (e.g. the list of Claude Code settings files where the feedback hook was installed) is kept under `~/.ue-mcp/`, not in the project tree.
+1. Finds the `.uproject` in the current directory (or asks for its path) and prints the bridge port this project will use.
+2. Asks which **tool categories** to enable (`level`, `blueprint`, `material`, `niagara`, etc.). All are checked on a fresh install. On a re-run, categories in `ue-mcp.yml`'s `disable` list stay unchecked.
+3. Asks whether to wrap **native Unreal tools** (UE 5.8's toolset registry) and which categories get them. See [Native Epic tools](configuration.md#native-epic-58-tools).
+4. Asks for the **context strategy**: `micro` (default), `lean` or `full`. See [Context strategy](configuration.md#context-strategy-full-lean-micro).
+5. Lists the MCP clients it detects (Claude Code project and global, Claude Desktop, Cursor, Codex) and writes the config for each one you keep checked. Project-scoped clients start checked; global and Desktop configs start unchecked because they affect every project on the machine.
+6. Asks about **agent behavior**. Everything starts unchecked on a fresh install:
+    - Enable the `feedback(submit)` tool.
+    - With Claude Code selected: install a PostToolUse hook that nudges the agent to offer feedback after `execute_python`, and install the bundled Claude Code skills into `.claude/skills/`.
+7. Installs the C++ bridge plugin into `<YourProject>/Plugins/UE_MCP_Bridge/`. With a C++ toolchain on the machine it copies the source; without one it installs prebuilt binaries for your engine and platform. A plugin that is already there is adopted as it is, and source is never written over a binary install. `Plugins/UE_MCP_Bridge/.ue-mcp-install.json` records which kind it is.
+8. Enables `UE_MCP_Bridge` and `PythonScriptPlugin` in your `.uproject`, plus `Niagara`, `PCG`, `EnhancedInput` or `GameplayAbilities` for the categories you kept.
+9. Creates `ue-mcp.yml` if it is missing, writes your choices into it, and adds `ue-mcp.local.yml` to `.gitignore`.
+10. With the feedback hook on, offers the **GitHub device flow** so `feedback(submit)` can file issues as your GitHub account. The token is cached at `~/.ue-mcp/auth.json` (mode 600). Skip it and run `npx ue-mcp auth` later, or call `feedback(submit)` with `author="bot"`.
 
-Running `init` again is safe: it adopts what is installed and changes only what differs.
+It prints one line per file it changed. Running `init` again is safe: it adopts what is installed and changes only what differs.
 
 ### Without prompts
 
@@ -44,13 +47,15 @@ npx ue-mcp init --yes --json --project=C:/Games/MyGame/MyGame.uproject --clients
 
 | Flag | Meaning |
 |---|---|
+| `--project=<path>` | The `.uproject` or its directory. Default: the one in the current directory. |
 | `--clients=<ids>` | `claude-code`, `claude-code-global`, `claude-desktop`, `cursor`, `codex`. Unset keeps the clients already configured, or on a fresh project every detected project-scoped one. |
 | `--install=auto\|source\|binary` | `auto` (default) adopts what is installed, else source with a toolchain and binaries without. |
 | `--binaries=<dir\|zip\|url>` | Where prebuilt binaries come from. Also `UE_MCP_BINARIES`. Default is the GitHub release for the version. |
 | `--disable=<categories>` | Tool categories to turn off. |
 | `--context=micro\|lean\|full` | Context strategy. |
-| `--[no-]feedback`, `--[no-]hook`, `--[no-]skills`, `--[no-]native-tools`, `--native-exclude=<categories>` | The agent behavior and native tool choices. |
-| `--[no-]pin` | Pin client configs to `ue-mcp@<this version>`. On by default with `--yes`, so the server and bridge move together. |
+| `--[no-]feedback`, `--feedback-mode=<mode>`, `--[no-]hook`, `--[no-]skills` | Agent behavior. `--feedback-mode` stores `interactive`, `auto-approve` or `defer` for this project. |
+| `--[no-]native-tools`, `--native-exclude=<categories>` | Native Unreal tools. |
+| `--[no-]pin` | Pin client configs to `ue-mcp@<this version>`. On by default with `--yes`, so the server and bridge move together; off by default in the wizard. |
 | `--command=<path>` | Use this instead of `npx` in client configs. |
 | `--dry-run` | Print the plan and change nothing. |
 
@@ -59,7 +64,7 @@ Unset flags keep the project's current choices. The exit code is 0 on success, 1
 ### `ue-mcp status`
 
 ```bash
-ue-mcp status --json
+npx ue-mcp status --json
 ```
 
 Read-only. Reports the plugin (directory, install kind, marker, versions, whether the `.uproject` enables it), running editors, toolchain, engine, `ue-mcp.yml`, each MCP client with the version its entry pins, and any install problem with its fix.
@@ -67,21 +72,21 @@ Read-only. Reports the plugin (directory, install kind, marker, versions, whethe
 ## 2. Open the Editor
 
 1. Open your project.
-2. When the editor asks whether to compile `UE_MCP_Bridge`, say yes. First-time compile takes ~30-60 seconds.
+2. With a source install, the editor asks to build the missing `UE_MCP_Bridge` modules. Say yes. The first build takes a few minutes. A binary install opens without a build.
 
-The bridge starts automatically once the editor finishes loading, listening on `ws://localhost:9877`.
+The bridge starts once the editor finishes loading. It listens on a port derived from the project path (see [Bridge Connection](configuration.md#bridge-connection)).
 
 ### Verify the bridge
 
-1. Open **Window → Output Log**.
+1. Open **Window > Output Log**.
 2. Filter on `LogMCPBridge`.
-3. Confirm this line appears:
+3. Confirm a line like this appears:
 
    ```
-   LogMCPBridge: [UE-MCP] Bridge listening on ws://localhost:9877
+   LogMCPBridge: [UE-MCP] Bridge listening on ws://127.0.0.1:51234 (loopback only)
    ```
 
-If it's not there, see [Troubleshooting](troubleshooting.md).
+If it is not there, see [Troubleshooting](troubleshooting.md).
 
 ## 3. Verify the connection
 
@@ -127,67 +132,67 @@ demo(action="step", stepIndex=1)
 reflection(action="reflect_class", className="StaticMeshActor")
 ```
 
-See the [Tool Reference](tool-reference.md) for everything available.
+Under the default `micro` strategy the agent reaches these through the `tools` gateway: `tools(action="call", category="level", method="get_outliner")`. See the [Tool Reference](tool-reference.md) for everything available.
 
 ## Updating
 
-Update from a **plain terminal** (not your MCP client), in the project directory, with the editor closed:
+Update from a plain terminal (not your MCP client), in the project directory:
 
 ```bash
-ue-mcp update                  # update npm package, deploy plugin, rebuild editor
+npx ue-mcp update
 ```
 
-The editor half is a C++ plugin that has to be recompiled, and `update` does that too. Run it outside the project directory and only the npm package updates, which it says. With the editor open it deploys and skips the build; close the editor and run `ue-mcp build`.
+This updates the package, deploys the new plugin source and rebuilds the editor target. Outside a project directory only the package updates, and the command says so. With the editor open it deploys and skips the build; the next editor start or restart through ue-mcp builds first, or close the editor and run `npx ue-mcp build`. `--no-build` stops after the deploy and `--no-deploy` updates the package only.
 
-A binary install updates to binaries for the new version instead, with nothing to build, checked against the release's manifest. The editor can stay open: on Windows the new binaries take the old ones' place and load on the next editor start; elsewhere they wait until the editor exits and swap in then. Pinned client configs move to the new version either way.
+A binary install updates to verified binaries for the new version instead, with nothing to build. The editor can stay open: on Windows the new files replace the loaded ones and load on the next editor start; on Mac and Linux they wait until the editor exits. Pinned client configs move to the new version either way.
 
-The daemon checks for a newer release on your channel (stable, or the prerelease you are on) and reports it at `GET /v1/update`; `POST /v1/update/apply` installs it the same way. `UE_MCP_DISABLE_UPDATE_CHECK=1` turns the check off.
+Then quit your MCP client and relaunch it so it starts the new server, and restart the editor so the new plugin loads.
 
-Then quit your MCP client and relaunch so it picks up the new server, and restart the editor so the rebuilt plugin loads.
+On the beta channel, run every command as `npx ue-mcp@beta`. A bare `npx ue-mcp` is the stable release.
 
 ### `ue-mcp doctor`
 
-If an update "succeeds" but the running server keeps reporting an old version, run:
+If an update succeeds but the running server still reports an old version, run:
 
 ```bash
-ue-mcp doctor
+npx ue-mcp doctor
 ```
 
-It prints every version source - registry latest, npm global, the running server(s), the deployed bridge plugin - and, crucially, flags a project-local `node_modules/ue-mcp` that **shadows** the global install. With `ue-mcp` pinned in a project's `package.json`, `npx ue-mcp` runs the local copy, so global updates do nothing. `doctor` surfaces that one-line root cause (and suggests pinning `.mcp.json` to `npx -y --min-release-age=0 ue-mcp@latest` so the server self-heals on each launch). `ue-mcp update --build` aligns a stale local copy automatically. It also flags a `.mcp.json` pinned to a version other than the installed bridge plugin's.
+It prints every version source (registry latest, npm global, the running servers, the deployed bridge plugin) and flags a project-local `node_modules/ue-mcp` that **shadows** the global install: with `ue-mcp` in a project's `package.json`, `npx ue-mcp` runs that local copy. `ue-mcp update` aligns a stale local copy. `doctor` also flags a client config pinned to a version other than the installed bridge's, and one that launches without `--min-release-age=0`.
 
-After removing the bridge or a project, MCP client configs can be left pointing at it. `doctor` names every such entry, in the project's configs and the machine-wide ones (Claude Desktop, Claude Code global, Codex), and `ue-mcp doctor --fix` removes exactly those entries:
+After removing the bridge or a project, MCP client configs can be left pointing at it. `doctor` names each such entry, in the project's configs and the machine-wide ones, and `--fix` removes exactly those entries (and adds `--min-release-age=0` where it is missing):
 
 ```bash
-ue-mcp doctor --fix
+npx ue-mcp doctor --fix
 ```
 
 ## Building the project
 
-To build your project's C++ code from the command line:
+To build your project's C++ editor target from the command line:
 
 ```bash
 npx ue-mcp build
 ```
 
-Stop the editor first. Pass a `.uproject` path if you're not in the project directory. AI agents can also trigger builds via `editor(action="build_project")`.
+Stop the editor first. Pass a `.uproject` path if you are not in the project directory. Agents can build with `editor(action="build_project")`.
 
 ## Unattended agent sessions
 
-If you set up the feedback prompt hook and then leave a long-running agent working, the elicitation approval prompt on `feedback(submit)` will stall the session waiting for you. For unattended runs, switch your personal feedback mode:
+`feedback(submit)` waits for your approval before it posts anything, which stalls an agent left running alone. For unattended runs, change your feedback mode:
 
 ```bash
 npx ue-mcp feedback mode defer          # or: auto-approve
 ```
 
-This writes the preference to `~/.ue-mcp/state.json` (per-user, per-machine - it is not committed to the project). `defer` writes submissions to `~/.ue-mcp/pending-feedback/` for later review with `npx ue-mcp feedback list/show/approve/discard`. `auto-approve` posts directly without prompting. Both still run the credential and privacy scrubs.
+The preference is stored in `~/.ue-mcp/state.json`, per user and per machine, not in the project. `defer` queues submissions in `~/.ue-mcp/pending-feedback/` for `npx ue-mcp feedback list/show/approve/discard`. `auto-approve` posts without asking. Both still run the credential and privacy scrubs.
 
-For a one-off agent run without changing the persisted preference, use the env var instead:
+For one run without changing the stored preference, set the environment variable:
 
 ```bash
 UE_MCP_FEEDBACK_MODE=defer npx ue-mcp ./MyGame.uproject
 ```
 
-See [Feedback → modes](feedback.md#feedback-modes).
+See [Feedback modes](feedback.md#feedback-modes).
 
 ## Switching projects
 
@@ -197,20 +202,18 @@ To point ue-mcp at a different `.uproject` without restarting your AI client, as
 Switch to the project at C:/path/to/Other.uproject.
 ```
 
-UE-MCP redeploys the bridge and reconnects. (Calls `project(action="set_project")` under the hood.)
-
-Path resolution and the editor connection move as one. The connection to the previous project's editor is dropped before the new project is loaded, so nothing can execute in the project you switched away from. If the new project's editor is not running, the switch still completes and the response reports the connection as unavailable: filesystem tools work, bridge actions wait for that editor. See [Switching Projects](configuration.md#switching-projects) for how the new project's port is chosen.
+This calls `project(action="set_project")`. The connection to the previous project's editor is dropped before the new project loads, so nothing runs in the project you left. If the new project's editor is not running, the switch still completes: filesystem tools work, and bridge actions wait for that editor. The switch does not install the bridge; run `npx ue-mcp init` in a project that lacks it. See [Switching Projects](configuration.md#switching-projects) for how the port is chosen.
 
 ## Manual configuration
 
-If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself.
+To skip `init`, install the bridge with `npx ue-mcp deploy` from the project directory, then add the server to your MCP client config yourself. The server does not install the plugin on its own; without it, the startup log says to run `init`.
 
 !!! tip "Use forward slashes on Windows"
     `C:/Users/...`, not `C:\Users\...`. Backslashes need escaping inside JSON.
 
 === "Claude Code"
 
-    `.mcp.json` in your project root:
+    `.mcp.json` in your project root (or `~/.claude/.mcp.json` for every project):
     ```json
     {
       "mcpServers": {
@@ -224,7 +227,7 @@ If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself.
 
 === "Claude Desktop"
 
-    `claude_desktop_config.json`:
+    `%APPDATA%/Claude/claude_desktop_config.json`:
     ```json
     {
       "mcpServers": {
@@ -238,7 +241,7 @@ If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself.
 
 === "Cursor"
 
-    `.cursor/mcp.json`:
+    `.cursor/mcp.json` in your project root:
     ```json
     {
       "mcpServers": {
@@ -261,13 +264,14 @@ If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself.
     enabled = true
     ```
 
-The first run auto-deploys the C++ plugin. To deploy explicitly: `npx ue-mcp deploy`, then restart the editor.
+`--min-release-age=0` lets npx run a release that is younger than npm's `min-release-age` setting. See [Troubleshooting](troubleshooting.md#server-wont-start-after-an-update-with-npms-min-release-age-set).
 
 ## Where to next
 
-- **[Tool Reference](tool-reference.md)** - every tool and every action
-- **[Flows](flows.md)** - chain actions into reusable YAML workflows with rollback and retries
-- **[Architecture](architecture.md)** - what's actually happening when you call a tool
-- **[Configuration](configuration.md)** - `ue-mcp.yml` options and per-client config
-- **[Neon Shrine Demo](neon-shrine-demo.md)** - guided 19-step procedural scene build
-- **[Troubleshooting](troubleshooting.md)** - connection errors, build errors, asset path errors
+- **[Tool Reference](tool-reference.md)**: every tool and every action
+- **[Flows](flows.md)**: chain actions into reusable YAML workflows with rollback and retries
+- **[Architecture](architecture.md)**: what happens when you call a tool
+- **[Configuration](configuration.md)**: client config, the daemon, the bridge connection, CLI commands
+- **[ue-mcp.yml Reference](config-file.md)**: every project config key
+- **[Neon Shrine Demo](neon-shrine-demo.md)**: guided 19-step procedural scene build
+- **[Troubleshooting](troubleshooting.md)**: connection errors, build errors, asset path errors

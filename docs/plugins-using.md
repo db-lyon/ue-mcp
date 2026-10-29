@@ -1,116 +1,128 @@
 # Using plugins
 
-Installing, configuring, and managing plugins in a project. If you're writing a plugin, see [Authoring a plugin](plugins-authoring.md).
+Installing, configuring and managing plugins in a project. To write one, see [Authoring a plugin](plugins-authoring.md).
+
+## Commands
+
+| Command | What it does |
+|---------|--------------|
+| `ue-mcp plugin install <name> [--version x.y.z]` | Install a plugin. |
+| `ue-mcp plugin update [name] [--version x.y.z]` | Move one or every declared plugin to a version. |
+| `ue-mcp plugin uninstall <name>` | Remove a plugin. Alias `remove`. |
+| `ue-mcp plugin list` | List the plugins declared in `ue-mcp.yml`. |
+| `ue-mcp plugin config <name> [...]` | Turn a plugin's flow groups on or off. |
+
+Each takes `--editor <name-or-path>` to pick the project when the server drives several editors.
 
 ## Installing
 
-The supported install path is:
-
 ```bash
-ue-mcp plugin install <package-name>
+ue-mcp plugin install <name>
 ```
 
-It's a thin wrapper that:
+`<name>` is a registry slug or an npm package name. A slug such as `meshy` is resolved to its package (`ue-mcp-meshy`) through the registry; any other name is passed to npm as is. The command:
 
-1. Runs `npm install --save <package-name>` so the package lands in `node_modules/` and is recorded in your `package.json`.
-2. Validates the plugin's `ue-mcp.plugin.yml` - checks that `actionPrefix` is a legal identifier, every `inject:` target is a real registered category, every `class_path` resolves, and `minServerVersion` is satisfied.
-3. Appends a `- name: <package-name>` entry to your `ue-mcp.yml`'s `plugins:` array (creating the array if needed).
-4. Copies any skills the plugin ships into `.claude/skills/`.
-5. Prints the restart instruction.
+1. Runs `npm install --save <package>` (and `npm init -y` first when the project has no `package.json`).
+2. Validates the manifest: `actionPrefix`, every `inject:` target is a built-in category, no injected action or provided category collides with a built-in, `minServerVersion`, and `nativeModule.minBridgeApi` against the deployed bridge. Any failure stops the install.
+3. Warns when the plugin's `uePluginDependency` is not enabled in the `.uproject`.
+4. Adds `- name: <package>` to `plugins:` in `ue-mcp.yml`, with `version:` when `--version` was given.
+5. Deploys the native module, if any, to `Plugins/<uePluginName>/` and prints `REBUILD REQUIRED`.
+6. Copies the plugin's skills into `.claude/skills/`.
+
+Restart your MCP client afterwards. Plugin actions appear on the next server start.
+
+To install by hand, run `npm install --save <package>` and add the entry to `ue-mcp.yml` yourself. The plugin's skills then arrive on the next `ue-mcp plugin update`, `ue-mcp init` or `ue-mcp deploy`.
 
 ## Updating
 
-`ue-mcp plugin update [name] [--version x.y.z]` moves each plugin declared in `ue-mcp.yml` (or just `name`) to the given version, or to the newest published one, crossing a minor where a caret range would stop. A plugin whose package, `ue-mcp.yml` pin or deployed native module is not at that version goes through the same path as `install`: npm and `package.json`, the pin (kept only if the entry was pinned), the native module with stale files removed, and skills. It ends by saying whether the UE project needs a rebuild and whether your MCP client needs a restart, and fails rather than reporting success when any step does not complete.
+`ue-mcp plugin update [name] [--version x.y.z]` moves each declared plugin (or just `name`) to the given version, or to the newest published one, including across a minor version a caret range would not cross. A plugin whose package, `ue-mcp.yml` pin or deployed native module is behind goes through the install path again: npm, the pin (kept only if the entry was pinned), the native module with files the new version dropped removed, and skills. It ends by saying whether the UE project needs a rebuild and whether the MCP client needs a restart, and fails if any step did not complete.
 
-## Installing manually
+## Removing
 
-You can also install manually - `npm install --save <package-name>` and edit `ue-mcp.yml` yourself. The plugin's skills then arrive on the next `ue-mcp plugin update`, `ue-mcp init` or `ue-mcp deploy`.
+`ue-mcp plugin uninstall <name>` refuses while an editor has the project open. Otherwise it runs `npm uninstall`, then removes the plugin's native module folder under `Plugins/` (source, Binaries and Intermediate), its entry in the `.uproject`, its skills and its `ue-mcp.yml` entry. The actions are gone on the next server start.
 
 ## The `plugins:` array
-
-The consumer surface is a single block in `ue-mcp.yml`:
 
 ```yaml
 plugins:
   - name: ue-mcp-perforce
   - name: some-other-plugin
-    version: "^0.2.0"     # optional; npm semver range against package.json
+    version: "^0.2.0"     # optional npm semver range
 ```
 
-Each entry resolves against the project's `node_modules/`. If `version` is omitted, whatever is currently installed loads. Order matters - see [Ordering and collisions](#ordering-and-collisions).
+Each entry resolves under the project's `node_modules/`. Without `version`, whatever is installed loads. Order decides collisions; see [Ordering and collisions](#ordering-and-collisions).
 
-## Introspection
+## Inspecting
 
-Two read-only actions on the `plugins` category:
+| Action | Returns |
+|--------|---------|
+| `plugins(action="list")` | `pluginCount`, `active`, and per plugin: name, version, prefix, `status`, `statusReason`, `degraded`, categories, injected and provided action counts, flow count, `uePluginDependency`, `uePluginPresent`. |
+| `plugins(action="describe", name="<package>")` | The same for one plugin, plus `minServerVersion`, the injected and provided action names, knowledge files, flows, and the package and manifest paths. |
 
-| Action | What it returns |
-|--------|-----------------|
-| `plugins(action="list")` | Every plugin: name, version, prefix, status, count of injected actions and flows, host UE plugin dependency check. |
-| `plugins(action="describe", name="<package>")` | Full detail for one plugin: the same fields as `list`, plus the actual injected action names, knowledge file paths, flows, and the resolved package + manifest paths on disk. |
+Both reflect what the running server loaded. See [Troubleshooting](plugins-troubleshooting.md).
 
-Both reflect the live state of the server, so they're the right tool when something looks wrong - see [Troubleshooting](plugins-troubleshooting.md).
+## Flow groups
 
-## Configuring a plugin (flow groups)
-
-A plugin that ships many flows organizes them into **groups** by the flow-name prefix - `niagara_fire` and `niagara_smoke` are the `niagara` group, `pcg_scatter_surface` is `pcg`, and so on. (A plugin can override a flow's group explicitly with a `group:` field on the flow entry.) You enable or disable whole groups without installing or uninstalling the plugin:
+A plugin's flows are grouped by the name prefix before the first underscore (`niagara_fire` is in `niagara`), unless a flow sets `group:`. Groups are on unless turned off:
 
 ```bash
-ue-mcp plugin config recipes --list-groups          # show groups + on/off + which layer set each
-ue-mcp plugin config recipes --disable gas,material  # turn groups off
-ue-mcp plugin config recipes --enable niagara        # turn a group back on
-ue-mcp plugin config recipes                         # no flags => interactive menu
+ue-mcp plugin config recipes --list-groups          # groups, on or off, and which layer set each
+ue-mcp plugin config recipes --disable gas,material
+ue-mcp plugin config recipes --enable niagara
+ue-mcp plugin config recipes                        # interactive menu
 ```
 
-Toggles are **opt-out**: a group is on unless you turn it off. They are stored as a map under the layered `ue-mcp:` config block, so they merge across the same `global < project < env < local` cascade as the rest of your config:
+`<name>` is the package name or its slug (the package name without `ue-mcp-`). The toggles are stored under the `ue-mcp:` block and merge across the config layers:
 
 ```yaml
 ue-mcp:
   pluginConfig:
-    recipes:            # the plugin slug: its package name minus `ue-mcp-`
+    recipes:
       groups:
         gas: false
         material: false
 ```
 
-Where the toggle is written depends on the target flag, because this is usually a **personal** preference and `ue-mcp.yml` is source-tracked - putting your taste there would collide with teammates:
-
 | Flag | File | Scope |
 |------|------|-------|
-| *(default)* | `~/.ue-mcp/config.yml` | you, across all your projects (untracked) |
-| `--local` | `ue-mcp.local.yml` | you, this project only (untracked) |
-| `--project` | `ue-mcp.yml` | the whole team, this project (tracked) |
+| none | `~/.ue-mcp/config.yml` | you, every project |
+| `--local` | `ue-mcp.local.yml` | you, this project |
+| `--project` | `ue-mcp.yml` | the team, this project |
 
-Default is user-global: "I never use GAS recipes" is a person-level trait, and it is the weakest layer so any project can still turn a group back on with `--local`. `--project` is the deliberate act of setting a team-wide default. Keep `ue-mcp.local.yml` out of version control (`ue-mcp init` adds it to `.gitignore`).
-
-Plugin flows are loaded once at server start, so **restart the MCP server** after changing group config.
+The user-global layer is the weakest, so a project can turn a group back on with `--local`. Plugin flows load at server start, so restart the MCP client after a change.
 
 ## Host UE plugin dependencies
 
-A plugin can declare a single Unreal-side dependency in its manifest:
+A manifest can name one Unreal plugin it needs:
 
 ```yaml
 uePluginDependency: SomePlugin
 ```
 
-This is the **`.uplugin` filename** - the same string that appears as `Plugins[].Name` in your `.uproject`. ue-mcp checks for it at server start and reports the result as `uePluginPresent` in `plugins(action="list")`.
+The value is the `.uplugin` name as it appears in `Plugins[].Name` in the `.uproject`. The server reports whether it is enabled as `uePluginPresent` on `plugins(action="list")`. The check does not stop the plugin loading; its actions fail at call time until the Unreal plugin is enabled and built.
 
-The check is informational, not gating: the npm-side plugin loads regardless, and its injected actions appear in the host category tools. But until the UE plugin is enabled in `.uproject` and its C++ modules are built, the actions will fail at execute time with a clear error.
+To enable it:
 
-To enable a host UE plugin:
-
-1. Add `{ "Name": "<DepName>", "Enabled": true }` to your `.uproject`'s `Plugins` array.
-2. Build the project (e.g. `npm run build` or `editor(action="build_all")`).
-3. Restart the editor.
-4. Run `plugins(action="list")` to confirm `uePluginPresent: true`.
-
-For source-distributed UE plugins, drop the source under `Plugins/<DepName>/` - either as a git submodule (recommended for size) or as a vendored copy. The `.uplugin` file inside that directory is what UE's plugin discovery walks.
+1. Add `{ "Name": "SomePlugin", "Enabled": true }` to the `.uproject`'s `Plugins` array, or put the plugin's source under `Plugins/SomePlugin/`.
+2. Build the project (`ue-mcp build`).
+3. Restart the editor, then check `uePluginPresent: true`.
 
 ## Ordering and collisions
 
-- **Plugin vs built-in:** A plugin action can never override a built-in. Collisions are hard-skipped at load time with a warning in the server log; the built-in stays.
-- **Plugin vs plugin:** First entry in `plugins:` wins. If two plugins both inject `gameplay.foo_bar`, only the earlier-listed one's version is registered. The order is intentionally stable - your `ue-mcp.yml` is the source of truth for resolution.
-- **Failed plugins are skipped, not partially loaded.** If a plugin fails validation (bad manifest, missing class_path, server-version mismatch, etc.), it is dropped entirely with a loud warning. Other plugins keep loading. The host tools are never partially mutated.
+- A plugin action never replaces a built-in. A collision is skipped with a warning and the built-in stays.
+- Between plugins, the entry listed first in `plugins:` wins, for injected actions and provided categories.
+- A plugin that fails a package-level rule is skipped entirely and the others keep loading. A failure confined to one action, handler, flow, task or knowledge entry drops only that unit; see [Validation rules](plugins-troubleshooting.md#validation-rules).
 
-## Removing a plugin
+## Over the daemon
 
-`ue-mcp plugin uninstall <package-name>` removes the plugin's skills and native module, deletes its entry from `ue-mcp.yml`, and runs `npm uninstall`. On next restart, the actions are gone.
+The project's daemon exposes the same operations over HTTP, running the CLI commands above one at a time:
+
+| Route | |
+|-------|---|
+| `GET /v1/plugins` | Declared plugins: version, pin, status, categories, problems. |
+| `GET /v1/plugins/catalog` | The registry's published plugins. |
+| `POST /v1/plugins/install` | Body `{ name, version? }`. |
+| `POST /v1/plugins/uninstall` | Body `{ name }`. |
+| `POST /v1/plugins/update` | Body `{ name? }`. |
+
+A change takes effect when the server restarts, which the response says with `restartRequired`.

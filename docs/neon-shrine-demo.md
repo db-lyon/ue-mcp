@@ -1,79 +1,56 @@
 # Neon Shrine Demo
 
-The Neon Shrine is a built-in **19-step procedural demo** that builds a complete scene from scratch through MCP tool calls - materials, geometry, lighting, atmosphere, VFX, PCG, sequencer, even an editor utility widget. It's the fastest way to see UE-MCP working end-to-end after install.
+The Neon Shrine is a built-in 19-step demo that builds a lit scene from scratch: materials, geometry, lights, fog, post process, Niagara, PCG, a level sequence and an editor utility widget. Running it checks that the bridge works end to end after install.
 
-## Running the Demo
+## Running the demo
 
-### Prerequisites
+The editor must be connected: `project(action="get_status")` reports `editorConnected: true`. The demo creates its own level at `/Game/Demo/DemoLevel` and writes its assets under `/Game/Demo/`.
 
-- Editor running and connected. Check with `project(action="get_status")` - `editorConnected` must be `true`.
-- An empty or expendable level. The demo creates ~30 actors and writes assets under `/Game/Demo/`.
-
-### Step List
-
-Get the ordered list of steps:
-
-```
-demo(action="step")
+```text
+demo(action="get_steps")              # index, id and description of every step
+demo(action="step", step=1)           # run one step; stepIndex is an alias
+demo(action="step", step=19)
+demo(action="step")                   # no step: the step list
 ```
 
-### Run Steps
+Or ask your agent to run the Neon Shrine demo.
 
-Execute one at a time:
+Steps are not idempotent. Running a step again spawns a second set of `Demo_` actors.
 
-```
-demo(action="step", stepIndex=1)
-demo(action="step", stepIndex=2)
-...
-demo(action="step", stepIndex=19)
-```
+## Cleanup
 
-Or just ask your AI to "run the Neon Shrine demo" and it will iterate through them.
-
-Each step returns a description of what it created and any new asset paths.
-
-### Cleanup
-
-Remove every actor and asset the demo created:
-
-```
+```text
 demo(action="cleanup")
 ```
 
-This wipes `/Game/Demo/` and removes the demo actors from the level.
+Cleanup switches the editor to `/Game/MCP_Home` (creating it on first use), destroys every actor whose label starts with `Demo_` in that level, deletes the demo's materials, Niagara system, PCG graph, level sequence and `DemoLevel`, then deletes `/Game/Demo` when it is empty. It has no inverse; rebuilding means running steps 1 to 19 again.
 
-## What the Demo Builds
+`demo(action="go_home")` switches the editor to `/Game/MCP_Home` on its own, for use before anything that would leave the editor on an Untitled map.
 
-| # | Step | Description |
+## Steps
+
+| # | Step | Builds |
 |---|---|---|
 | 1 | `create_level` | New level at `/Game/Demo/DemoLevel` |
 | 2 | `materials` | Three materials: floor, glow, pillar |
-| 3 | `floor` | 60m dark reflective floor |
+| 3 | `floor` | 60 m dark reflective floor |
 | 4 | `pedestal` | Central pedestal cylinder |
-| 5 | `hero_sphere` | Emissive gold hero sphere on the pedestal |
+| 5 | `hero_sphere` | Emissive gold hero sphere |
 | 6 | `pillars` | Four corner pillar cylinders |
 | 7 | `orbs` | Four glowing orbs at the pillar bases |
-| 8 | `neon_lights` | Four coloured point lights (cyan / magenta / amber / violet) |
+| 8 | `neon_lights` | Four coloured point lights |
 | 9 | `hero_light` | Warm point light above the hero sphere |
 | 10 | `moonlight` | Directional moon light |
 | 11 | `sky_light` | SkyLight ambient fill |
-| 12 | `fog` | ExponentialHeightFog atmosphere |
+| 12 | `fog` | ExponentialHeightFog |
 | 13 | `post_process` | PostProcessVolume with bloom and vignette |
 | 14 | `niagara_vfx` | Niagara particle system above the hero |
 | 15 | `pcg_scatter` | PCG scatter volume on the floor |
 | 16 | `orbit_rings` | Eight orbiting emissive spheres with rotation |
 | 17 | `level_sequence` | LevelSequence with the hero sphere bound |
-| 18 | `tuning_panel` | EditorUtilityWidget control panel |
+| 18 | `tuning_panel` | EditorUtilityWidget tuning panel |
 | 19 | `save` | Save the current level |
 
-## Why It Exists
+The implementation is `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/Demo/DemoHandlers.cpp`.
 
-- **Verification.** Running through all 19 steps confirms the bridge, asset registry, materials, lighting, Niagara, PCG, sequencer, and UMG editor utility paths all work.
-- **Showcase.** It's a single command that produces something visible.
-- **Reference.** Each step is a real handler call you can imitate. If you want to know how to spawn a colored point light or set up a PCG volume, look at how the corresponding step does it.
-
-The implementation lives in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/Demo/DemoHandlers.cpp`.
-
-## See Also
-
-For a much larger declarative example, see the **Beacon** flow described in [Flows](flows.md#beacon) - a 56-step shrine scene composed entirely from individual MCP tool calls in `src/flow/loader.ts`.
+For a scene built from individual tool calls in a flow, see the [Beacon flow](flows.md#beacon).

@@ -43,8 +43,8 @@ Changes still in memory at a checkpoint (an unsaved level edit, a dirty Blueprin
 | Action | What it does |
 |---|---|
 | `editor(checkpoint, label?)` | Record a checkpoint and return its id, the paths it recorded as changed, and the dirty packages. |
-| `editor(list_checkpoints, limit?)` | Whether checkpoints are on and why, the repository path, and the checkpoints, newest first. |
-| `editor(list_changes, from, to?)` | Every file changed between two checkpoints, or since `from` when `to` is omitted. Text files carry a unified diff, and every package carries an asset diff (below). |
+| `editor(list_checkpoints, limit?)` | Whether checkpoints are on and why, the repository path, and the checkpoints, newest first (default 50). |
+| `editor(list_changes, from, to?, assetDiffs?, blueprintDiffs?)` | Every file changed between two checkpoints, or since `from` when `to` is omitted. Config and source files carry a unified diff, and every package carries an asset diff (below). `assetDiffs` and `blueprintDiffs` default to true. |
 | `editor(diff_checkpoint_asset, from, to?, changedPath)` | One package's asset diff, for a package `list_changes` deferred or to diff one again. |
 | `editor(open_checkpoint_diff, from, to?, changedPath)` | Open Unreal's own diff of a package in the editor and bring it to the front. |
 | `editor(restore, checkpoint, paths?, force?)` | Put every path, or only `paths`, back to the checkpoint. Restoring a subset is a cherry pick: the rest of the turn stays. |

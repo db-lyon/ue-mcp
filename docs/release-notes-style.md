@@ -1,8 +1,7 @@
 # Release notes style
 
-The format is copied from projects that publish a lot of releases: Deno, Zed,
-Bun, Godot, and Epic's own Unreal Engine notes. Follow it rather than inventing
-a voice per release.
+Every release uses this format. Match the previous stable release rather than
+inventing a voice per release.
 
 ## Structure
 
@@ -15,36 +14,34 @@ Four top-level sections, in this order. Omit one only when it is empty.
 | `## Mentions` | Breaking changes, deprecations, upgrade steps, internals worth knowing |
 | `## Contributions` | Thanks, with GitHub handles |
 
-`scripts/compose-release-notes.mjs` files merged prerelease sections into these
-buckets by heading, so a section a late beta introduced cannot print after the
-internals. `classifySection` is the rule; extend its patterns rather than
-hand-sorting a composed body.
+Under each top-level section, every subsection (Server, Editor, a category
+name) sits inside its own `<details>` block with its name in the summary, and
+every one is collapsed. GitHub renders the markdown inside only when a blank
+line follows `</summary>`.
 
-Every section renders inside a `<details>` block with its name in the summary.
-Folded, a release is its four headings and one line per section; a stable cut
-composed from six prereleases is otherwise 460 lines of tables with the
-breaking changes at the bottom. Nothing is left half open: a reader deciding
-what to expand should not have to work out which parts were judged worth
-hiding.
+`scripts/compose-release-notes.mjs` sorts merged prerelease subsections into the
+four sections by heading. `classifySection` is the rule; extend its patterns
+rather than hand-sorting a composed body.
 
 ## The opening
 
 A compatibility line, an install block, and at most one plain sentence of scale.
 
-```markdown
+~~~markdown
 ## v1.3.1
 
 Unreal Engine 5.4 to 5.8.
 
+```bash
 npx ue-mcp@latest
+```
 
 259 new actions across 16 categories.
-```
+~~~
 
 **The engine range is 5.4 to 5.8.** State it. Do not annotate it with which
 versions have been compiled, verified, gated or built. Someone on 5.5 who hits
-a problem will file an issue, which is the system working. Hedging the range in
-public copy reads as a warning about our own product.
+a problem files an issue.
 
 ## Writing the entries
 
@@ -57,12 +54,10 @@ public copy reads as a warning about our own product.
 
 **No thesis sentence.** Not "The bridge stopped being one-way", not "Two
 guarantees nothing had ever checked". Release notes are a list of what changed.
-No human opens a release page for a framing device.
 
 **No three-part lists as a summary.** "N new actions across M categories, every
-X doing Y, and the Z now W" is a bulleted list flattened into a sentence. It
-asserts nothing and buries whatever was interesting. If three facts matter, they
-are three bullets under a section.
+X doing Y, and the Z now W" is a bulleted list flattened into a sentence. If
+three facts matter, they are three bullets under a section.
 
 **No editorialising the value.** Say what shipped. The reader decides whether it
 is significant.
@@ -77,15 +72,29 @@ A stable release is cumulative: the betas are invisible to anyone reading it.
 
 ## Headline frontmatter
 
-CI parses it and posts `landing/headline`. Three to six items, 3 to 30
-characters each, letters/digits/spaces and `_ - / ( ) . , +` only. No colons,
-semicolons, question marks, exclamation marks or the joiner. Joined length
-must stay under 140 characters.
+The notes file must start with YAML frontmatter holding a `headline:` array.
+CI validates it with `scripts/release-headline.mjs`, posts `landing/headline`
+and strips the frontmatter from the published body.
 
-Pick the items that represent the whole release. For a stable cut composed from
-prereleases the union is usually over the six-item cap, and the composer keeps
-the first six it saw, which favours the earliest beta. Reread the dropped list
-it prints and swap deliberately.
+- One to six items, 3 to 30 characters each.
+- Each item starts with a letter or digit and uses only letters, digits, spaces
+  and `_ - / ( ) . , +`. No colons, semicolons, question marks, exclamation
+  marks or the `·` joiner.
+- The items joined with ` · ` are at most 140 characters.
+- Concrete noun phrases naming features. No sentences.
+
+~~~yaml
+---
+headline:
+  - First feature noun phrase
+  - Second feature noun phrase
+---
+~~~
+
+For a stable release composed from prereleases, the union of headlines is
+usually over the six-item cap. The composer keeps items in order of first
+appearance, which favours the earliest beta, and prints what it dropped. Swap
+items deliberately.
 
 ## Contributions
 
@@ -95,5 +104,6 @@ Take the handles from the commit range, not from memory:
 gh api repos/OWNER/REPO/compare/vPREV...vNEW --jq '.commits[].author.login' | sort -u
 ```
 
-Credit anyone outside the maintainers who landed a PR. The composer generates
-this section when it is given contributors.
+Credit anyone outside the maintainers who landed a PR. For a stable release the
+composer writes this section from the commit range since the previous stable,
+excluding the repository owner.

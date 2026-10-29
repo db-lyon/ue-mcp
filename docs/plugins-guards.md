@@ -1,89 +1,73 @@
 # Guards
 
-A plugin, or a project in its own `ue-mcp.yml`, can gate **every** bridge call - not just its own actions - with a guard. Guards run in an ordered pipeline around `IBridge.call`, in the shape of NestJS guards/interceptors: a `before` hook may veto a call (deny) or act on it (e.g. check a file out of source control), and an `after` hook may observe or replace the result (audit, transform). The pipeline is agnostic - source control, access policy, audit, and rate limiting are all just guards.
+A guard gates every bridge call, not only a plugin's own actions. Guards are declared in a plugin manifest or in a project's `ue-mcp.yml`, in the same shape. They run in an ordered pipeline around each bridge call: a `before` hook can deny the call or act on it (for example check a file out), and an `after` hook can observe or replace the result. Source control, access policy, audit and rate limiting are all guards.
 
 ## Declaring a guard
 
-A guard is declared, not named into existence. The same shape works in a plugin manifest and in a project's `ue-mcp.yml`:
-
 ```yaml
 guards:
-  sandbox:                          # the guard's name
+  sandbox:                          # name: letters, digits, _ and -, starting with a letter
     description: Block writes outside the sandbox
-    scope: writes                   # all | mutations | writes | reads | unknown  (default: all)
-    order: 10                       # lower runs first before, last after
+    scope: writes                   # all | mutations | writes | reads | unknown (default all)
+    order: 10                       # lower runs first before the call, last after it (default 0)
     before:
-      class_path: my.tasks.SandboxCheck
+      class_path: guards/SandboxCheck
       options:
         allow: ["/Game/Sandbox/"]
     after:
-      class_path: my.tasks.SandboxAudit
+      class_path: guards/SandboxAudit
 ```
 
-Five scopes:
+A guard needs a `before` hook, an `after` hook, or both. Each hook names the class that implements it and the `options` it is built with.
+
+`class_path` resolution:
+
+- **In `ue-mcp.yml`**, it resolves from the folder that holds `ue-mcp.yml`, the same way as a [flow task](flows.md#class-path-resolution): `guards/SandboxCheck` looks for `guards/SandboxCheck.ts`, `.js`, or an `index` file in that folder.
+- **In a plugin**, use the `class_path` of a task declared under the manifest's `tasks:`, which resolves inside the package's `dist/`.
+
+A `class_path` that cannot be resolved stops the server at startup, naming the guard and the file that declared it, so a configured guard is never silently missing.
+
+## Scopes
 
 | Scope | Sees |
 |-------|------|
-| `all` | every call, reads included. For audit and rate limiting. |
-| `mutations` | every call that changes editor state, whether or not it names an asset. This is what "block everything that mutates" means. |
-| `writes` | calls that modify content already on disk. The source-control question. |
-| `reads` | only the calls that observe. For auditing what an agent looked at. |
-| `unknown` | only the calls whose effect a parameter decides: the escape hatches. |
+| `all` | Every call, reads included. For audit and rate limiting. |
+| `mutations` | Every call that changes editor state, whether or not it names an asset. Includes `unknown`. |
+| `writes` | Calls that modify content already on disk. The source control question. |
+| `reads` | Only calls that observe. |
+| `unknown` | Only calls whose effect a parameter decides. |
 
-`mutations` and `writes` are different questions, and the difference matters. Spawning an actor, starting a play session or answering a dialog all change something and name no content path, so `writes` never sees them. A call that creates a new asset modifies nothing that exists yet, so `writes` does not see that either. If the rule is "nothing may change until X", the scope is `mutations`.
+Every action declares its effect as `read`, `mutate` or `unknown`, and the scopes are read from that declaration (a plugin action declares it with [`effect:`](plugins-authoring.md#ue-mcppluginyml)). A bridge method the server does not recognise counts as a change: `mutations` sees it and `reads` does not.
 
-### Where the answer comes from
+`mutations` and `writes` differ. Spawning an actor, starting PIE or answering a dialog changes state and names no content path, so `writes` does not see it. Creating a new asset modifies nothing that exists yet, so `writes` does not see that either. For "nothing may change until X", use `mutations`.
 
-Every action declares what it does to the editor, as `read`, `mutate` or `unknown`, and the scopes are read off that declaration. Nothing here matches an action's name against a list of verbs.
-
-That is worth stating because it used to. `mutations` was once "a call counts unless its leading verb is a known read", which is a guess, and it was wrong in both directions: reads whose names do not open with a read verb (`metasound_get_graph`, `line_trace`, `hit_test_viewport_pixel`) were guarded for nothing, and before that inversion a hand-written list of mutating verbs had let `write_cpp_file`, `build`, `sculpt`, `place_actor` and every bare verb like `save` and `create` straight through. A list of verbs is open-ended; the set of actions is not.
-
-A call this server does not recognise at all - a plugin reaching the bridge with a method of its own - counts as a change. Nothing vouches for it, so `mutations` sees it and `reads` does not.
-
-`unknown` is the scope the declaration made possible rather than merely made correct. It is the set whose behaviour is decided by an argument instead of by the action: `editor(execute_python)`, `editor(execute_command)`, and the reflected `invoke_*` family. Those are the calls that can do anything, and a verb list cannot pick them out, because `unknown` is not a property of a name. If the rule is "a person approves the escape hatches, and ordinary edits go through", that is one guard:
+`unknown` covers the escape hatches: `editor(execute_python)`, `editor(execute_command)`, the `invoke_*` family and `epic(call_tool)`. To require a person's approval for those and let ordinary edits through:
 
 ```yaml
 guards:
   approve_escape_hatches:
-    description: Arbitrary code and wrapped third-party tools need a human
+    description: Arbitrary code needs a human
     scope: unknown
     before:
       class_path: guards/AskFirst
 ```
 
-`mutations` includes `unknown`, since a call that might change something is treated as one everywhere in this server.
+The <!-- count:nativeToolActions -->830<!-- /count --> actions that wrap Unreal's own toolsets all dispatch through the bridge method `epic_call_tool`. Their scope is decided from the method and the tool named in its arguments, so `gas(epic_list_attributes)` is in `reads` and `widget(epic_add_widget)` is in `mutations`, as each one declares.
 
-### Unreal's wrapped tools are in these scopes like anything else
+`writes` and `mutations` are computed only when a guard asks, so a read pays nothing for them. The `source_control_*` calls are never in `writes`: they are the operations a source control guard would make itself.
 
-The <!-- count:nativeToolActions -->830<!-- /count --> actions wrapping Unreal's own toolsets all dispatch through one bridge method, `epic_call_tool`, because the plugin registers a single reflective handler for the whole registry rather than one per tool: Unreal discovers that registry at runtime and it varies with the engine plugins a project enables, so there is nothing to compile a handler against.
+## Hooks
 
-That is invisible here. A scope is decided by what the CALL does, method and arguments together, and the argument names which tool is being invoked. `gas(epic_list_attributes)` is in `reads` and out of `mutations`; `widget(epic_add_widget)` is the reverse. Neither is in `unknown`, because their effects are declared, reviewed and known.
+- **`before`** denies by returning `success: false` or throwing. The call does not run, and the caller gets a `WRITE_BLOCKED` error with the message.
+- **`after`** runs after a successful call and cannot deny it. Returning data replaces the call's result. A failure or a throw is logged and the result stands.
 
-`unknown` is reserved for the calls whose deciding argument is a program, which nothing short of running it can answer: `execute_python`, `execute_command`, `invoke_*`, and the single wrapped tool that takes a list-or-close switch.
+`before` hooks run in `order`, `after` hooks in reverse order. A denial stops the remaining `before` hooks and the call.
 
-Both narrower scopes are computed lazily, so a read pays nothing and a pipeline of guards that all ask pays once.
+## Writing a guard
 
-`before` may deny: returning `success: false`, or throwing, stops the call and the caller gets a `WRITE_BLOCKED` error carrying the message. `after` runs on a call that already happened, so it cannot deny; returning `data` replaces the result, and a failure or a throw is logged and the call stands.
+Extend `UeMcpGuard` from `ue-mcp/guard` and implement `before`, `after`, or both. `this.config` is the declared `options`. `call` holds `phase`, `method`, `params`, `paths` (the existing files the call would modify, empty for a read) and `session`.
 
-A guard needs at least one hook. One with neither would be registered, reported at boot, and never run.
-
-Both hooks are optional and independent, so one named guard can hold both halves of a concern and they know they belong together. Ordering is a number rather than something a name has to imply.
-
-`class_path` is a path, resolved from the server's working directory: `guards/PolicyGuard` looks for `guards/PolicyGuard.ts`, `.js`, or an `index` under that name. Nothing enforces a directory, and `guards/` is the convention here only because a guard is not a task and should not sit in `tasks/` next to things that are. A plugin package is the one place a directory IS fixed: a plugin's own tasks resolve from its compiled `dist/tasks/`.
-
-YAML guard `options` are reloaded when a config file changes, with file checks shared across hooks at most every 250 ms. Layers follow the flow configuration order: `~/.ue-mcp/config.yml` (or `UE_MCP_GLOBAL_CONFIG`), the project's `ue-mcp.yml`, `ue-mcp.{UE_MCP_ENV}.yml`, then `ue-mcp.local.yml`. Environment and local overlays apply when a project file exists. Plugin guard options remain those declared in the plugin manifest; a YAML guard with the same name is a separate guard and cannot override them.
-
-Removing a config layer, guard or hook retains the last valid guard options until restart. This also keeps guards active while an editor saves YAML by deleting and rewriting a file. Malformed YAML, invalid guard declarations and file access errors retain the last valid guard configuration and log a warning. Unchanged invalid content is not repeatedly parsed; transient read errors are retried after five seconds. At startup, an unreadable or malformed global file is warned about and ignored, matching flow configuration loading. Invalid project configuration still prevents startup. Concurrent saves are retried, with the last successfully parsed startup snapshot used if the files keep changing.
-
-Adding or removing guards or hooks, or changing `class_path`, `scope` or `order`, requires restarting ue-mcp. Such changes retain the previous guard configuration until restart and log a warning when a registered YAML hook next checks the files. Restoring the registered structure allows option reloads to resume. A session with no registered YAML hooks only reads guard configuration at startup. Plugin manifest changes also require a restart.
-
-The call being guarded is layered over the options for legacy task hooks, so a hook reads its configuration and its subject from one object: `method`, `params`, `paths` (the existing files the call will touch, empty for reads) and, for `after`, `result`.
-
-A `class_path` that cannot be resolved stops the server at boot, naming the guard and the manifest or config that declared it. With no guard registered the pipeline is a pass-through, so a guard that failed to build would leave the calls it covers ungated while the configuration says they are guarded.
-
-## A deny guard (access policy)
-
-Blocks writes outside a sandbox path. A `before` hook denies by returning `success: false` or throwing; the underlying call never runs and the caller gets a `WRITE_BLOCKED` error carrying your message.
+### A deny guard
 
 ```yaml
 # ue-mcp.plugin.yml, or the guards: section of a project's ue-mcp.yml
@@ -112,20 +96,12 @@ export default class PolicyGuard extends UeMcpGuard<{ allow?: string[] }> {
 }
 ```
 
-`this.config` is what the declaration's `options` said, and `call` is the call being guarded. They are separate objects on purpose: they used to be one, and the call won any name collision, so a guard with an option called `method` silently read the guarded call's method instead of its own setting.
-
-`before` and `after` are separate methods, so a guard that wants both is one class with two of them and never has to work out which phase it is in.
-
-A guard written against `UeMcpTask` with a single `execute()` still works. It reads `this.options.method`, `this.options.params` and `this.options.paths` exactly as it always did.
-
-## An observe guard (audit)
-
-Runs after every successful call for its side effect. An `after` hook's failure is logged and the call stands, because the call already happened: it is for observation, not veto.
+### An audit guard
 
 ```yaml
 guards:
   audit:
-    description: Append every action to an audit log
+    description: Append every call to an audit log
     scope: all
     after:
       class_path: guards/AuditGuard
@@ -139,24 +115,32 @@ import { appendFileSync } from "node:fs";
 export default class AuditGuard extends UeMcpGuard<{ file?: string }> {
   get taskName() { return "audit-guard"; }
   async after(call: GuardedCall, result: unknown) {
-    const line = JSON.stringify({ method: call.method, paths: call.paths });
-    appendFileSync(this.config.file ?? "ue-mcp-audit.log", line + "\n");
-    // Returning nothing leaves the call's own result standing. Return an
-    // object to replace it.
+    appendFileSync(this.config.file ?? "ue-mcp-audit.log", JSON.stringify({ method: call.method, paths: call.paths }) + "\n");
+    // Return nothing to keep the result; return an object to replace it.
   }
 }
 ```
 
-## Composition and ordering
+A guard written as a plain `UeMcpTask` with `execute()` also works. It reads `this.options.method`, `this.options.params`, `this.options.paths` and, after the call, `this.options.result`, merged over its declared options.
 
-Multiple guards compose into one pipeline. `before` hooks run in order, `after` hooks in reverse order (the same nesting an interceptor stack gives you). A guard that denies short-circuits the rest of the `before` chain and the call itself.
+Guards from several plugins and the project combine into one pipeline. The [`ue-mcp-perforce`](https://github.com/db-lyon/ue-mcp-perforce) plugin's guard is an example: a `before` hook scoped to `writes` that checks the target files out, or refuses when someone else holds the lock.
 
-Guards from different plugins coexist - a source-control checkout guard, an access-policy deny guard, and an audit guard can all be installed at once, each shipped by whatever plugin owns that concern. The [`ue-mcp-perforce`](https://github.com/db-lyon/ue-mcp-perforce) plugin's source-control guard is an example: a `before` hook scoped to writes, checking the target files out, or refusing when a person holds the lock, before the write reaches the editor.
+## Reloading
 
-## Source control: core first, guards opt-in
+The `options` of guards declared in YAML reload when a config file changes. The layers are those of the [flow config](flows.md#config-layers): `~/.ue-mcp/config.yml` (or `UE_MCP_GLOBAL_CONFIG`), `ue-mcp.yml`, `ue-mcp.{env}.yml`, `ue-mcp.local.yml`. A plugin guard keeps the options in its manifest; a YAML guard with the same name is a separate guard.
 
-Checkout on write belongs to core. `source_control(action="set_checkout_mode")` decides what a bridge write does with a read-only file under source control, for whichever provider the editor has configured: `manual` (the default) refuses the write and names `source_control(checkout)`, and `auto` checks the file out through the provider first and lists it on the result as `autoCheckedOut`. `UE_MCP_CHECKOUT_MODE=auto` at editor startup turns `auto` on from the start. No plugin is needed for any of that.
+- Malformed YAML, an invalid declaration or a file read error keeps the last valid options and logs a warning. A read error is retried after five seconds.
+- Removing a layer, guard or hook keeps the last valid options until restart.
+- Adding or removing guards or hooks, or changing `class_path`, `scope` or `order`, needs a restart of ue-mcp. Until then the previous configuration stays and a warning is logged. Plugin manifest changes also need a restart.
+- At startup, an unreadable or malformed global file is ignored with a warning. An invalid project config stops startup.
 
-A source control guard from a plugin is an opt-in extra on top: a policy core does not have, such as refusing a write early when a person holds the lock, or opening files in a named changelist. Install one when you want that policy; leave it out and core's checkout mode still applies.
+## Source control
 
-The `source_control_*` calls themselves are never seen by `writes`. They are the provider operations a guard would make, so a guard intercepting `checkout`, `revert` or `submit` would check a file out before checking it out. The write classification declares them as writing nothing guardable rather than relying on how their parameters happen to be named.
+Checkout on write is core's. `source_control(action="set_checkout_mode")` decides what a bridge write does with a read-only file under source control, for whichever provider the editor has configured:
+
+- `manual` (default) refuses the write and names `source_control(checkout)`.
+- `auto` checks the file out first and lists it on the result as `autoCheckedOut`.
+
+`UE_MCP_CHECKOUT_MODE=auto` in the editor's environment turns on `auto` from startup. No plugin is needed for either mode.
+
+A source control guard from a plugin adds policy core does not have, such as refusing early when someone holds the lock or opening files in a named changelist.

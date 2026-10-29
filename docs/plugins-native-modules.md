@@ -1,17 +1,18 @@
-# Native modules
+# Native C++ modules
 
-When a plugin needs engine APIs ue-mcp's bridge doesn't already expose, it ships a UE C++ module alongside the npm package. The module compiles into the user's project at install time and registers handlers on the bridge via `UEMCP::RegisterExternalHandler`. This is Shape C from the [overview](plugins.md); most plugins never need it.
+A plugin that needs engine APIs the bridge does not expose ships a UE C++ module in its npm package. `ue-mcp plugin install` copies the module into the project, the project build compiles it, and its `StartupModule` registers handlers on the bridge with `UEMCP::RegisterExternalHandler`.
 
-Here is the manifest of a plugin of this shape, a fictional `sample-recorder`:
+A manifest for a fictional `sample-recorder` plugin:
 
 ```yaml
-actionPrefix: rec                    # used only when injecting into a built-in
+actionPrefix: rec                    # used only when injecting into a built-in category
 
 nativeModule:
-  uePluginName: Sample_Recorder      # name of the .uplugin that gets deployed
-  minBridgeApi: 2                    # gate against UEMCP_BRIDGE_API_VERSION; 2 = typed contracts
-  source: ue/Plugins/Sample_Recorder # path inside your npm tarball
-  category: recorder                 # surface handlers under a recorder(...) tool
+  uePluginName: Sample_Recorder      # the .uplugin that gets deployed
+  minBridgeApi: 2                    # minimum UEMCP_BRIDGE_API_VERSION; 2 = typed contracts
+  source: ue/Plugins/Sample_Recorder # path inside the package
+  supportedEngineVersions: ["5.6", "5.7"]   # optional; shown on the registry listing
+  category: recorder                 # surface the handlers under recorder(...)
   categoryDescription: "Record and replay gameplay input"
   specs: handler-specs.json          # recorded C++ contracts (ue-mcp plugin record-specs)
   handlers:
@@ -20,33 +21,35 @@ nativeModule:
     inject_input:
       description: "Single-frame Enhanced Input inject"
       timeoutSeconds: 5
-    # ... more handlers
 ```
 
-## How handlers become MCP actions
+## How handlers become actions
 
-Set `category` and ue-mcp surfaces every handler as an MCP action that dispatches to the bare bridge method your C++ registered (`record_arm` above). No TypeScript task class is involved - the C++ handler *is* the implementation. The category value picks one of two shapes:
+With `category` set, every handler listed under `handlers:` becomes an action that dispatches to the bridge method of the same name. No TypeScript task is involved.
 
-- **A new (non-built-in) category** - as in the `recorder` example above - is **provisioned as its own top-level tool** the plugin owns. Actions are **not** prefixed (the category is the namespace): `recorder(action="record_arm")`. Set `categoryDescription` for the tool's summary. This is the right choice when the handlers form their own domain. Cross-plugin name collisions resolve first-wins, like `provides:`.
-- **A built-in category** (e.g. `gameplay`) **injects** the handlers into that existing tool, prefixed with `actionPrefix`: handler `record_arm` becomes `gameplay(action="rec_record_arm")`. Choose this when the handlers belong inside a category that already exists.
+- **A new category** (`recorder` above) becomes its own top-level tool, with unprefixed actions: `recorder(action="record_arm")`. `categoryDescription` is the tool's summary. Between plugins, the first to claim a name wins.
+- **A built-in category** (for example `gameplay`) gets the handlers injected with the `actionPrefix`: `gameplay(action="rec_record_arm")`.
 
-Two rules that bite if missed:
+Without `category`, the handlers are registered on the bridge but are not actions. A task can still reach them with `this.bridge.call("record_arm", params)`.
 
-- **Declare each handler's parameters in C++, and record them.** See [Typed contracts](#typed-contracts). A handler surfaced without a contract has only the manifest's loose `schema:` (types `string`, `number`, `boolean`, `object`, `array`, with `required:` reported per action but left to the handler to enforce), which cannot express enums, ranges, integers or nested fields. With `specs:` set, a declared handler with no recorded contract is not surfaced at all.
-- **`timeoutSeconds`** sets the bridge-call timeout for that action (default 30s). Raise it for long-running handlers.
+Per handler:
 
-Omit `category` entirely and handlers are still registered on the bridge but exposed as no MCP action - useful only if another task calls them internally. For an agent-facing plugin you almost always want `category`.
+- `description` is the action's description.
+- `timeoutSeconds` is the bridge-call timeout (default 30).
+- `schema` declares loose parameters (`string`, `number`, `boolean`, `object`, `array`) for a handler with no recorded contract. It cannot express enums, ranges, integers or nested fields, and `required` is reported but left to the handler to enforce. Prefer a [typed contract](#typed-contracts).
+
+With `specs:` set, a handler listed under `handlers:` that has no recorded contract is not surfaced, and the reason appears under `degraded`.
 
 ## Typed contracts
 
-Bridge ABI 2 lets a native handler register with the same parameter contract a core ue-mcp handler declares (`MCPHandlerSpec.h`, shipped under the bridge's `Public/`). ue-mcp generates the action's `Params:` clause, its signature and its `describe_action` output from that contract. It checks every call against the contract before anything is sent:
+Bridge ABI 2 lets a native handler register with the same parameter contract a core handler declares (`MCPHandlerSpec.h` in the bridge's `Public/`). ue-mcp builds the action's signature and `describe_action` output from it and checks every call before sending it:
 
-- each parameter's type, including `integer`, `vec3`, `rotator` and `color`;
-- `Enum({...})` values on a string or an array of strings, matched case-sensitively;
+- each parameter's type, including `Integer`, `Vec3`, `Rotator`, `Color` and `Any`;
+- `Enum({...})` on a string or an array of strings, case-sensitive;
 - `Min`, `Max` and `Range` on a number or integer, or on each element of an array of them;
-- `WithFields({...})` on an object or an array of objects, nested to any depth, each field with its own type, enum and range;
-- required parameters, aliases, unions, literals, tagged variants (`oneOf`) and choices (`MCPSpec::ExactlyOne`, `MCPSpec::AtLeastOne`);
-- any key the contract does not declare, which is refused rather than silently ignored.
+- `WithFields({...})` on an object or an array of objects, to any depth;
+- required parameters, aliases, unions, literals, tagged variants and choices (`MCPSpec::ExactlyOne`, `MCPSpec::AtLeastOne`);
+- undeclared keys, which are refused.
 
 ```cpp
 UEMCP::RegisterExternalHandler(TEXT("stamp_set"), &FStampHandlers::Set, {
@@ -60,26 +63,27 @@ UEMCP::RegisterExternalHandler(TEXT("stamp_set"), &FStampHandlers::Set, {
 });
 ```
 
-A contract that fails validation (an enum on a number, a minimum above its maximum, a field declared twice) is logged as an error and dropped, and the call returns `false`. The handler stays registered.
+An invalid contract (an enum on a number, a minimum above its maximum, a field declared twice) is logged and dropped, and the call returns `false`. The handler stays registered.
 
-The bridge enforces the contract too. Every call to a handler registered with one is checked before the handler runs, whoever sent it, and refused with `Invalid parameters for <handler>: <reason>`. The bridge then renames declared aliases to their parameter's name, so read only the declared name and do not re-validate what the contract already says. `UEMCP::ContractViolation` (`MCPContract.h`) is the same check, for a handler that wants it for a nested call of its own. For a name-to-scalar map such as graph parameter overrides, declare it `Any` with `.OneOfForms({ EMCPValueForm::ScalarMap })`: each value must be a string, number, boolean or null.
+The bridge enforces the contract on every call, whoever sent it, and refuses a bad one with `Invalid parameters for <handler>: <reason>`. It renames aliases to the declared name before the handler runs, so read only the declared name. `UEMCP::ContractViolation` (`MCPContract.h`) runs the same check for a nested call. For a name-to-scalar map, declare `Any` with `.OneOfForms({ EMCPValueForm::ScalarMap })`.
 
 The bridge publishes the contracts in `get_bridge_capabilities.pluginHandlerSpecs`. Record them into the file `nativeModule.specs` names, with an editor running that has your module loaded:
 
 ```bash
-ue-mcp plugin record-specs --project path/to/Project.uproject
-ue-mcp plugin record-specs --project path/to/Project.uproject --check   # CI: fail when the file is stale
+ue-mcp plugin record-specs [dir] --project path/to/Project.uproject
+ue-mcp plugin record-specs [dir] --project path/to/Project.uproject --check   # fail when the file is stale
 ```
 
-Ship that file in the tarball (`files:`). The server builds the surface from the recording, so the surface is the same whether or not an editor is connected. `project(get_status)` reports `deployedPlugin.handlerSpecDrift` when the running module registered something different. A call to a drifted handler is checked against the contract the running module registered, since the bridge enforces that one anyway; `describe_action` keeps showing the recording until you re-record it and the client reconnects.
+Ship the file in the package. The server builds the surface from it, so the surface is the same with or without an editor connected. `project(action="get_status")` reports `deployedPlugin.handlerSpecDrift` when the running module registered something different. A call to a drifted handler is checked against what the running module registered; `describe_action` shows the recording until you record again and the client reconnects.
 
-## Layout inside the npm tarball
+## Package layout
 
 ```
 sample-recorder/
   ue-mcp.plugin.yml
-  dist/                              # tsc output (TypeScript tasks, if any)
-  ue/                                # native source ships here
+  handler-specs.json
+  dist/                              # TypeScript tasks, if any
+  ue/
     Plugins/
       Sample_Recorder/
         Sample_Recorder.uplugin
@@ -87,20 +91,17 @@ sample-recorder/
           Sample_Recorder/
             Sample_Recorder.Build.cs
             Private/
-              Handlers/              # handler .cpp files
-              Recorder/              # engine subsystem wrappers
-              UI/                    # editor UI panels
 ```
 
-Update `package.json` `files:` so the `ue/` directory ships with the published tarball:
+Add `ue` and the specs file to `files` in `package.json`:
 
 ```json
-"files": ["dist", "ue", "ue-mcp.plugin.yml", "knowledge", "README.md"]
+"files": ["dist", "ue", "handler-specs.json", "ue-mcp.plugin.yml", "knowledge", "skills", "README.md"]
 ```
 
-## The native module
+## The module
 
-Add `UE_MCP_Bridge` to `PrivateDependencyModuleNames` in your `.Build.cs`:
+Depend on `UE_MCP_Bridge` in the `.Build.cs`:
 
 ```csharp
 public class Sample_Recorder : ModuleRules
@@ -113,7 +114,7 @@ public class Sample_Recorder : ModuleRules
 }
 ```
 
-Register handlers from `StartupModule`:
+Register handlers in `StartupModule` and remove them in `ShutdownModule`:
 
 ```cpp
 #include "MCPHandlerRegistration.h"
@@ -124,7 +125,6 @@ void FSample_RecorderModule::StartupModule()
         TEXT("inject_input"),
         [](const TSharedPtr<FJsonObject>& Params) -> TSharedPtr<FJsonValue>
         {
-            // ... do the work, return a JSON value
             TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
             Result->SetBoolField(TEXT("success"), true);
             return MakeShared<FJsonValueObject>(Result);
@@ -141,27 +141,19 @@ void FSample_RecorderModule::ShutdownModule()
 }
 ```
 
-The handler's method name (`inject_input`) is the bare bridge method. It's what an auto-surfaced action (`gameplay(action="rec_inject_input")`, via `nativeModule.category`) dispatches to, what a TypeScript task can address through `this.call(...)`, and what the bridge looks up on any dispatch. Register it bare - ue-mcp adds the `actionPrefix` when it surfaces the action.
+Register the bare method name (`inject_input`). ue-mcp adds the `actionPrefix` when it injects the action into a built-in category. `RegisterExternalHandlerWithTimeout` and the contract overload's `TimeoutSeconds` argument set a longer game-thread timeout.
 
-## Install flow
+## Install and uninstall
 
-```bash
-ue-mcp plugin install sample-recorder
-```
+For a plugin with `nativeModule:`, `ue-mcp plugin install` also:
 
-The CLI now also:
+1. Reads `UEMCP_BRIDGE_API_VERSION` from the project's deployed `MCPHandlerRegistration.h` and fails when it is below `minBridgeApi`, pointing at `ue-mcp deploy`. With no bridge deployed it warns and continues.
+2. Copies `<package>/<source>` to `<project>/Plugins/<uePluginName>/`, removing files a previous version deployed and this one does not ship.
+3. Records the copied files in `<project>/.ue-mcp/native-modules.json`.
+4. Prints `REBUILD REQUIRED`. Build the project (`ue-mcp build`) before launching the editor.
 
-1. Reads `MCPHandlerRegistration.h` from the deployed bridge and checks that `UEMCP_BRIDGE_API_VERSION >= manifest.nativeModule.minBridgeApi`. Install fails fast if the bridge is too old, with a pointer to `ue-mcp deploy`.
-2. Copies `<pkgDir>/<source>` to `<projectDir>/Plugins/<uePluginName>/`.
-3. Records every copied file in `<projectDir>/.ue-mcp/native-modules.json` so `ue-mcp plugin uninstall` can clean up without nuking user edits.
-4. Prints `REBUILD REQUIRED` - the user must build the UE project before launching the editor so the new module compiles in.
+`ue-mcp plugin uninstall` deletes `Plugins/<uePluginName>/` (source, Binaries and Intermediate) and the plugin's entry in the `.uproject`. It refuses while an editor has the project open.
 
-## Bridge ABI versioning
+## Bridge ABI
 
-`UEMCP_BRIDGE_API_VERSION` is the C++ ABI contract every native plugin compiles against. Bumps are reserved for changes to the `FExternalHandlerFn` signature or the registration contract. Version 2 added typed contracts; a module that registers with one needs `minBridgeApi: 2`. A plugin declaring `minBridgeApi: N` refuses to load against a bridge whose version is below N. Inspect the deployed bridge's version with:
-
-```text
-project(action="get_status")
-```
-
-The response includes `bridgeApiVersion` when a bridge is deployed.
+`UEMCP_BRIDGE_API_VERSION` is the C++ contract native plugins compile against. It changes only when the `FExternalHandlerFn` signature or the registration contract changes. Version 2 added typed contracts, so a module that registers one needs `minBridgeApi: 2`. A plugin whose `minBridgeApi` is above the deployed version is not loaded. `project(action="get_status")` reports the deployed version as `bridgeApiVersion`.

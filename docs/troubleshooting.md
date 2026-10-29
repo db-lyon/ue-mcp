@@ -4,59 +4,48 @@
 
 ### "Editor not connected" / Bridge not running
 
-**Symptoms:** `project(action="get_status")` shows disconnected. Tools that require the editor return errors.
+**Symptoms:** `project(action="get_status")` shows `editorConnected: false`. Calls that need the editor fail with `Failed to connect to editor bridge at ws://127.0.0.1:<port>` or say no editor is connected.
 
 **Fixes:**
 
-1. **Is the editor running?** The C++ bridge plugin only runs when the editor is open.
-2. **Was the editor restarted after first setup?** The plugin is deployed on first run but needs an editor restart to load.
-3. **Check the Output Log.** In the editor: **Window > Developer Tools > Output Log**, filter on `LogMCPBridge`. You should see:
+1. **Is the editor running?** The bridge runs only inside an open editor.
+2. **Is the plugin installed?** `npx ue-mcp status` reports it. The server does not install it; run `npx ue-mcp init` (or `npx ue-mcp deploy`), then restart the editor.
+3. **Check the Output Log.** In the editor, open **Window > Output Log** and filter on `LogMCPBridge`. You should see:
    ```
-   LogMCPBridge: [UE-MCP] Bridge listening on ws://localhost:9877
+   LogMCPBridge: [UE-MCP] Bridge listening on ws://127.0.0.1:51234 (loopback only)
    ```
-4. **Port conflict.** If another process is using port 9877, the bridge can't start. Check with:
-
-    === "Windows"
-        ```bash
-        netstat -ano | findstr 9877
-        ```
-
-    === "macOS / Linux"
-        ```bash
-        lsof -i :9877
-        ```
-
-5. **The editor is up but the bridge is not.** If the bridge could not bind any port, it writes `<project>/Saved/UE_MCP_Bridge/bridge-error.json` with the range it tried and the socket error, and the client quotes that detail in the connection error rather than reporting no editor. Read the file directly if you are looking without the client.
-
-6. **A stale record.** `<project>/Saved/UE_MCP_Bridge/port.json` names the pid and the instance that wrote it, and only that instance removes it. An editor that was killed rather than closed leaves it behind; see [stop_editor or restart_editor says no port is published](#stop_editor-or-restart_editor-says-no-port-is-published).
+   The line before it says where the port came from (`-MCPPort`, `UE_MCP_PORT`, `requested.json`, `bridge.port` or derived from the project path).
+4. **Compare ports.** `get_status` reports `editorTarget.port` and how it was chosen. The bridge publishes the port it bound to `<project>/Saved/UE_MCP_Bridge/port.json`. If they differ, see [The editor is not listening on the port I pinned](#the-editor-is-not-listening-on-the-port-i-pinned).
+5. **The editor is up but the bridge is not.** If the bridge could not bind any port (it tries 50 above its base), it writes `<project>/Saved/UE_MCP_Bridge/bridge-error.json` with the range and the socket error, and the client quotes that detail in the connection error. Read the file directly if you are looking without the client.
+6. **A stale record.** An editor that was killed rather than closed leaves its `port.json` behind; see [stop_editor or restart_editor says no port is published](#stop_editor-or-restart_editor-says-no-port-is-published).
 
 ### Handlers time out, or the editor never finishes starting
 
-**Symptoms:** every call returns `Handler execution timed out`, `start_editor` waits out its timeout, or `get_status` says `disconnected` while an editor is plainly open.
+**Symptoms:** every call returns `Handler execution timed out`, `start_editor` waits out its timeout, or `get_status` says disconnected while an editor is plainly open.
 
-All of these mean the game thread is not returning to its tick loop, and the usual cause is something the editor is showing on screen: a modal dialog waiting for an answer, a long slow task (shader compile, asset registry scan, map load), or a startup phase that runs before the bridge plugin loads.
+The game thread is not returning to its tick loop. The usual cause is on screen: a modal dialog waiting for an answer, a long task (shader compile, asset registry scan, map load), or a startup phase before the bridge module loads.
 
-**Ask what the engine is actually doing:**
+**Ask what the engine is doing:**
 
 ```
 editor(action="get_engine_state")
 ```
 
-This one call is answered without the game thread. It reports:
+This call is answered without the game thread. It reports:
 
-- **`snapshot.slowTask`** - the name and percentage of the task the editor's own progress bar is showing.
-- **`snapshot.modal`** - the title, message, and buttons of the dialog blocking the game thread. Answer it with `editor(action="respond_to_dialog")`, or stop it happening again with `editor(action="set_dialog_policy")`.
-- **`snapshot.gameThreadStalledSeconds`** - how long the game thread has gone without ticking. Everything else in the snapshot is as old as this number says. It is `null` while `gameThreadTicking` is false, which means the editor is still starting and has no engine loop yet; `modulesLoaded` is the progress signal during that window.
-- **`snapshot.compiling`** - remaining shader jobs and asset compiles.
-- **`log.phase` / `log.tail`** - the startup phase parsed from the editor's own log, which is written from the first millisecond and so covers the window before the plugin exists. This is where "the following modules are missing or built with a different engine version" shows up.
-- **`processes`** - PID, command line, and whether the OS considers the process responsive.
-- **`dialogs`** - native (pre-Slate) message boxes, including the rebuild prompt above.
+- **`snapshot.slowTask`**: the name and percentage of the task the editor's progress bar shows.
+- **`snapshot.modal`**: the title, message and buttons of the dialog blocking the game thread. See [Dialog handling mode](configuration.md#dialog-handling-mode) for how it gets answered, or arm an answer with `editor(action="set_dialog_policy")`.
+- **`snapshot.gameThreadStalledSeconds`**: how long the game thread has gone without ticking. The rest of the snapshot is that old. It is `null` while `gameThreadTicking` is false, meaning the editor is still starting; `modulesLoaded` is the progress signal then.
+- **`snapshot.compiling`**: remaining shader jobs and asset compiles.
+- **`log.phase` / `log.tail`**: the startup phase parsed from the editor's log, which covers the window before the plugin exists. "The following modules are missing or built with a different engine version" shows up here.
+- **`processes`**: PID, command line, and whether the OS considers the process responsive.
+- **`dialogs`**: native (pre-Slate) message boxes, including that rebuild prompt.
 
-A timed-out handler carries the same snapshot in its `engineState` field, so a timeout says what the engine was doing while the request waited.
+A timed-out handler carries the same snapshot in its `engineState` field.
 
-The snapshot is also written to `<Project>/Saved/UE_MCP_Bridge/status.json` four times a second by a thread that keeps running while the game thread is blocked. Read that file directly when the bridge socket itself is unreachable.
+The snapshot is also written to `<Project>/Saved/UE_MCP_Bridge/status.json` four times a second by a thread that keeps running while the game thread is blocked. Read that file when the bridge socket is unreachable.
 
-**During startup**, the snapshot comes from a second plugin module that loads at `PostConfigInit`, well before the bridge itself (`PostEngineInit`) and before any socket exists. A cold launch publishes its first state after about a second and then tracks what the splash screen shows:
+**During startup** the snapshot comes from a second plugin module that loads at `PostConfigInit`, before the bridge (`PostEngineInit`) and before any socket exists. A cold launch publishes its first state after about a second and then tracks the splash screen:
 
 ```
 +1.6s  config init              | modules=0   | Initializing... 0%
@@ -66,9 +55,7 @@ The snapshot is also written to `<Project>/Saved/UE_MCP_Bridge/status.json` four
 +20.7s ready                    | modules=733 | Running Python start-up scripts... 95%
 ```
 
-That is the window where "the editor is stuck on the splash screen" reports come from, so read `status.json` (or `editor(get_engine_state)`, which merges it with the log) before assuming a launch failed.
-
-`editor(start_editor)` already waits through all of it. It blocks until the snapshot reports `ready`, draws that same trace as a progress bar in the terminal, and returns the phase timeline:
+Read `status.json` (or `editor(get_engine_state)`) before assuming a launch failed. `editor(start_editor)` already waits through all of it: it blocks until the snapshot reports `ready`, streams progress, and returns the phase timeline:
 
 ```
 Editor ready in 24.7s
@@ -76,15 +63,13 @@ launching 0s -> loading modules and plugins 0.8s -> config init 1.8s
   -> bridge starting 21.1s -> engine loop initialized 21.5s -> ready 24.7s
 ```
 
-There is no reason to poll after it returns, and no reason to poll while it runs.
+There is no need to poll during or after it.
 
-### A call timed out - did it happen or not?
+### A call timed out: did it happen or not?
 
 **Symptom:** a mutating call such as `widget(add_widget)` returns `timed out after 30s`, and reading the asset back shows the change is already there and saved.
 
-It happened. A handler applies the mutation, compiles, and saves the asset before it sends its reply, so a client-side timeout only says the reply did not arrive in time. It says nothing about whether the work ran.
-
-The timeout error names this explicitly:
+It happened. A handler applies the mutation, compiles and saves before it replies, so a client-side timeout says only that the reply was late. The error says so:
 
 ```
 Bridge call 'add_widget' timed out after 30s. Outcome is unknown: the editor may
@@ -93,60 +78,54 @@ back before retrying, and prefer an idempotent retry (pass the same names) so a
 call that did land is not repeated.
 ```
 
-A `MACHINE_ERROR` block carries the same thing structurally: `{"code":"BRIDGE_TIMEOUT","outcome":"unknown","operationId":"12","method":"add_widget"}`. Treat `outcome: "unknown"` as "verify, then retry", never as "failed".
+The `MACHINE_ERROR` block carries the same: `{"code":"BRIDGE_TIMEOUT","outcome":"unknown","operationId":"12","method":"add_widget"}`. Treat `outcome: "unknown"` as "verify, then retry", never as "failed".
 
-What to do:
+1. **Read the state back** (`widget(read_tree)`, `asset(read_properties)`, `level(get_outliner)`) before deciding anything.
+2. **Retry idempotently.** Pass the same names. `widget(add_widget)` is idempotent by `assetPath` + `widgetName`: a retry that finds the widget returns `existed: true`. Without `widgetName` there is nothing to match a replay against.
+3. **Check the server log** for the late reply. The connection stays open through a timeout, and when the editor answers the client logs `editor finished 'add_widget' (operation 12) 41000ms after the client timed out; the call completed`. That line is the answer for that operation id.
 
-1. **Read the state back** (`widget(read_tree)`, `asset(get_details)`, `level(get_outliner)`) before deciding anything.
-2. **Retry idempotently.** Pass the same names you passed the first time. `widget(add_widget)` is idempotent by `assetPath` + `widgetName`: a retry that finds the widget already there returns `existed: true` instead of adding a second one. Omitting `widgetName` gives up that protection, because there is then nothing to match a replay against.
-3. **Check the server log** for the late reply. The connection is kept open through a timeout, so when the editor finally answers, the client logs `editor finished 'add_widget' (operation 12) 41000ms after the client timed out; the call completed`. That line is the definitive answer for that operation id.
-
-The usual cause of the wait is the asset being open in its editor: a Widget Blueprint open in the UMG designer makes every compile far more expensive. `widget(add_widget)` and `widget(remove_widget)` allow 120s for that reason. Closing the asset tab, or using `editor(get_engine_state)` to see what the game thread is doing, covers the rest.
+The default timeout is 30 seconds. Slow handlers register longer ones (`widget(add_widget)` and `widget(remove_widget)` allow 120 seconds), any call can pass `timeoutMs`, and `UE_MCP_BRIDGE_TIMEOUT_MS` raises the floor for every call. A Widget Blueprint open in the UMG designer makes every compile much slower; closing the asset tab helps.
 
 ### The tool call sits there showing nothing while the editor starts
 
-**Symptom:** `start_editor` displays as a motionless line - `ue-mcp - editor (MCP)(action: "start_editor", timeout: 600)` - for the whole launch, with no progress.
+**Symptom:** in Claude Code, `start_editor` shows as a motionless line, `ue-mcp - editor (MCP)(action: "start_editor", timeout: 600)`, for the whole launch.
 
-The call is not stuck; it returns as soon as the editor is ready, and the number you see is the `timeout` argument, not elapsed time. The missing progress is a client-side regression: Claude Code collapses MCP tool calls unconditionally from 2.1.116 on, so the `notifications/progress` messages the server emits throughout the wait are received and never drawn ([anthropics/claude-code#51713](https://github.com/anthropics/claude-code/issues/51713); 2.1.101 was the last version that displayed them). An MCP server's stderr does not reach the transcript either - the client writes it to a log file.
-
-Nothing is wrong on the ue-mcp side and there is nothing to fix in your setup: other MCP clients render the same stream normally. When ue-mcp detects an affected Claude Code version, `start_editor` says so in its result rather than leaving the call looking hung, and the phase timeline it returns is exactly what you would have watched live.
+The call is not stuck. It returns when the editor is ready, and the number is the `timeout` argument, not elapsed time. Claude Code 2.1.116 through 2.1.152 collapse MCP tool calls, so the `notifications/progress` messages the server sends are received and never drawn ([anthropics/claude-code#51713](https://github.com/anthropics/claude-code/issues/51713)). Update Claude Code. On an affected version `start_editor` says so in its result, and the phase timeline it returns is what you would have watched.
 
 ### Connection drops / reconnecting
 
-The MCP server auto-reconnects every 15 seconds. If the editor is restarted, the connection will restore automatically.
+The client retries every 15 seconds while disconnected and reconnects at once when the editor publishes its `port.json`, so an editor restart restores the connection on its own. With the [daemon](configuration.md#the-daemon), your MCP client stays connected throughout.
 
-If the connection is flapping (connecting then immediately disconnecting), check the editor's Output Log for errors in the `LogMCPBridge` category.
-
-The bridge closes with a WebSocket status code and a reason, and the client repeats both. The ones worth recognising:
+If the connection flaps, check the Output Log for errors in `LogMCPBridge`. The bridge closes with a WebSocket status code and a reason, and the client repeats both:
 
 | Code | Meaning |
 |------|---------|
 | `1001` | The editor is shutting down |
 | `1002` | The frame stream stopped parsing. The reason names what was wrong |
-| `1009` | A message, a frame, or the unparsed receive buffer exceeded the 64 MiB bound. The reason names the size and the limit |
+| `1009` | A message, a frame, or the unparsed receive buffer exceeded 64 MiB. The reason names the size and the limit |
 
 ### stop_editor or restart_editor says no port is published
 
 **Symptom:** `stop_editor` returns something like `No bridge port published at C:/Game/Saved/UE_MCP_Bridge/port.json`, or reports that the PID in that file is no longer running.
 
-The editor publishes that file while its bridge is listening and removes it on a clean exit, and lifecycle actions read it and nothing else: a guessed port is how a quit request reaches whichever editor happens to hold that number (#819). So the message means one of three things.
+Lifecycle actions read that file and nothing else, so that a quit request never reaches another project's editor. The message means one of three things:
 
-1. **No editor is running for this project.** Nothing to stop. Start one with `editor(start_editor)`.
-2. **The editor is running but its bridge never started.** Check the Output Log for `LogMCPBridge` (see [Bridge not running](#editor-not-connected--bridge-not-running)). The message includes the phase the editor is actually at.
-3. **A previous editor was killed rather than closed.** Its lockfile is still on disk naming a PID that has gone. Delete `<project>/Saved/UE_MCP_Bridge/port.json` and the message clears.
+1. **No editor is running for this project.** Start one with `editor(start_editor)`.
+2. **The editor is running but its bridge never started.** See [Bridge not running](#editor-not-connected--bridge-not-running). The message includes the phase the editor is at.
+3. **A previous editor was killed rather than closed.** Its lockfile names a PID that has gone. Delete `<project>/Saved/UE_MCP_Bridge/port.json`.
 
-`start_editor` refusing with "Editor is already running for this project" is the same targeting rule from the other side: it names the PID, and that PID has this project's `.uproject` on its command line. Editors for other projects and headless shards never trigger it.
+`start_editor` refusing with "Editor is already running for this project" is the same rule from the other side: it names the PID, and that PID has this project's `.uproject` open. Editors of other projects never trigger it.
 
 ### The editor is not listening on the port I pinned
 
 **Symptom:** `ue-mcp.yml` sets `bridge.port`, but the editor bound something else, or the client cannot reach it.
 
-Search the editor's Output Log for `LogMCPBridge` and the line naming the base port. It says where the number came from, one of `-MCPPort command line`, `UE_MCP_PORT environment variable`, `bridge.port in <file>`, or `derived from the project path`. That one line tells you which of the following happened.
+Search the Output Log for the `LogMCPBridge` line naming the port's source: `-MCPPort command line`, `UE_MCP_PORT env`, `requested by the ue-mcp client in <path>`, `bridge.port in <file>`, or `Derived per-project port`.
 
-- **Something outranks the config.** `-MCPPort` and `UE_MCP_PORT` both win over `bridge.port`, on the client and in the editor alike. Clear the one that is set.
-- **The port was taken.** The log carries a warning naming the port that was asked for and the one bound instead. The bridge publishes the port it actually bound to `port.json` and the client follows it, so the connection works; the pin simply did not survive. Free the port, or pin a different one.
-- **The value was rejected.** A `bridge.port` that is not a whole number in `1-65535` is warned about by name and the derived port is used.
-- **The key is written in a form the plugin does not read.** The plugin reads this single key without a full YAML parser and warns when a file is beyond what it models. Write it as plain nested keys:
+- **Something outranks the config.** `-MCPPort` and `UE_MCP_PORT` win over `bridge.port`, on both sides. Clear the one that is set.
+- **The port was taken.** A warning names the port asked for and the one bound. The bridge publishes the bound port to `port.json` and the client follows it, so the connection works. Free the port or pin another.
+- **The value was rejected.** A `bridge.port` that is not a whole number in `1-65535` is warned about and the derived port is used.
+- **The key is written in a form the plugin does not read.** The plugin reads this key without a YAML parser. Write it as plain nested keys:
 
     ```yaml
     ue-mcp:
@@ -154,49 +133,41 @@ Search the editor's Output Log for `LogMCPBridge` and the line naming the base p
         port: 50123
     ```
 
-    A flow mapping (`bridge: { port: 50123 }`), an anchor, or an alias is read by the client and not by the plugin, which is the one way the two can still disagree.
+    A flow mapping (`bridge: { port: 50123 }`), an anchor or an alias is read by the client and not by the plugin. Once the client has run against the project it also writes the port to `Saved/UE_MCP_Bridge/requested.json`, which the plugin reads first.
 
 ### A call ran in the wrong editor
 
-Only possible with more than one editor session registered. Start with `project(action="list_editors")`: it reports every session, the bridge port each resolved to, and which one untargeted calls fall through to.
+Only possible with more than one editor session. Start with `project(action="list_editors")`: it reports every session, its bridge port, and which one untargeted calls use.
 
-- **The call had no target.** Untargeted calls run in the active session. Pass `editor="<name>"` on the call, or move the default with `project(action="use_editor", editorTarget="<name>")`.
+- **The call had no target.** Untargeted calls run in the active session. Pass `editor="<name>"`, or move the default with `project(action="use_editor", editorTarget="<name>")`.
 - **The `editor` parameter is not advertised.** It appears only while more than one session is registered. Add the other project with `project(action="add_editor", projectPath="...")`, or list both `.uproject` paths in your MCP client config.
-- **Two sessions on one port.** `list_editors` reports it as `portSharedWith`. It happens when two projects pin the same `bridge.port`, or when a global `UE_MCP_PORT` overrides both, and it means the editor answering there cannot be attributed to either project. Give each project its own port, or unset the variable, then restart the server.
+- **Two sessions on one port.** `list_editors` reports it as `portSharedWith`. Two projects pin the same `bridge.port`, or a global `UE_MCP_PORT` overrides both. Give each project its own port or unset the variable, then restart the server.
 
-Lifecycle actions are not affected by the last case: they resolve through the addressed project's own lockfile and the PID it names, and refuse rather than guess.
+Lifecycle actions are not affected by the last case: they use the addressed project's own lockfile and the PID it names, and refuse rather than guess.
 
 ## Plugin Build Issues
 
 ### Plugin fails to compile
 
-The C++ bridge links against many UE modules. If compilation fails:
-
-1. **Missing plugins.** Ensure these are enabled in your `.uproject`:
-    - `PythonScriptPlugin`
-    - `EnhancedInput`
-    - `GameplayAbilities`
-    - `Niagara`
-    - `PCG`
-
-2. **UE version mismatch.** The plugin is tested with UE 5.4–5.8. Older versions may have API differences. Check the build log for specific errors.
-
-3. **Rebuild from clean.** Delete `<Project>/Plugins/UE_MCP_Bridge/Binaries/` and `<Project>/Plugins/UE_MCP_Bridge/Intermediate/`, then rebuild.
+1. **Engine plugins.** The bridge's `.uplugin` depends on `PythonScriptPlugin`, `EnhancedInput`, `GameplayAbilities`, `Niagara`, `PCG`, `ControlRig`, `StateTree` and others ([full list](configuration.md#plugin-deployment)). Unreal enables them with the bridge. If an error names one, make sure the `.uproject` does not disable it.
+2. **Engine version.** The supported range is UE 5.4 to 5.8. Check the build log for the first error.
+3. **Rebuild from clean.** Delete `<Project>/Plugins/UE_MCP_Bridge/Binaries/` and `<Project>/Plugins/UE_MCP_Bridge/Intermediate/`, then run `npx ue-mcp build`.
+4. **No C++ toolchain.** Use prebuilt binaries instead: remove `Plugins/UE_MCP_Bridge/` and run `npx ue-mcp init --install=binary`.
 
 ### build_project fails with LNK1104 and no editor is running
 
-**Symptom:** `editor(build_project)` fails, the output has `LINK : fatal error LNK1104: cannot open file '...UnrealEditor-<Module>.dll'`, and the accelerator line before it says the file is `being used by another process. - ...CrashReportClientEditor.exe`.
+**Symptom:** `editor(build_project)` fails with `LINK : fatal error LNK1104: cannot open file '...UnrealEditor-<Module>.dll'`, and the line before it says the file is `being used by another process. - ...CrashReportClientEditor.exe`.
 
-**Cause:** an editor of this project crashed, and its crash reporter is still running with the project's module DLLs open.
+**Cause:** an editor of this project crashed, and its crash reporter still holds the project's module DLLs open.
 
-**Fix:** run `editor(action="stop_editor")`, then build again. With no editor of this project running, the stop ends the crash reporter that holds the project's binaries and reports it under `crashReporters`. The build's own error names the file and the process holding it, under `lockedOutputs`, so a holder that is something else is named too.
+**Fix:** run `editor(action="stop_editor")`, then build again. With no editor of this project running, the stop ends that crash reporter and reports it under `crashReporters`. The build error names the locked file and the process holding it under `lockedOutputs`, so a different holder is named too.
 
 ### Plugin not loading
 
-If the editor starts but the bridge doesn't appear in the Output Log:
+If the editor starts but `LogMCPBridge` never appears:
 
-1. Check **Edit > Plugins** in the editor - search for "UE_MCP_Bridge" and ensure it's enabled.
-2. Check that the plugin is listed in your `.uproject`:
+1. Check **Edit > Plugins**: search for "UE MCP Bridge" and make sure it is enabled.
+2. Check that the `.uproject` lists it:
    ```json
    { "Name": "UE_MCP_Bridge", "Enabled": true }
    ```
@@ -205,28 +176,30 @@ If the editor starts but the bridge doesn't appear in the Output Log:
 
 ### Server won't start
 
-1. **Node.js version.** Requires Node 18+. Check with `node --version`.
-2. **Build step.** Make sure you ran `npm run build` - the server runs from `dist/index.js`, not source.
-3. **Path to .uproject.** The path must be absolute and point to a valid `.uproject` file.
+1. **Node.js version.** ue-mcp needs Node 20 or newer. Check with `node --version`.
+2. **Project path.** The argument must be a `.uproject` or a directory holding one. Use an absolute path: the client chooses the working directory.
+3. **Daemon log.** With one project the client launches a shim that starts the project's daemon. `npx ue-mcp daemon status` shows whether it is up, and `~/.ue-mcp/daemons/<key>.log` holds its output. If the daemon cannot start, the server falls back to running in process and logs why. `UE_MCP_SERVER_MODE=in-process` skips the daemon entirely.
+4. **More detail.** `UE_MCP_LOG_LEVEL=debug` in the client config's environment. The server logs to stderr, which most clients write to their own log file.
 
 ### Server won't start after an update, with npm's `min-release-age` set
 
-npm 11.10 and later refuse a package version younger than `min-release-age` days. `npx` does not apply `min-release-age-exclude`, so excluding `ue-mcp` does not help, and a client config that runs `npx -y ue-mcp@<version>` fails with `ETARGET No matching version found` until the release is old enough.
+npm 11.10 and later refuse a package version younger than `min-release-age` days. `npx` does not apply `min-release-age-exclude`, so excluding `ue-mcp` does not help, and an entry that runs `npx -y ue-mcp@<version>` fails with `ETARGET No matching version found` until the release is old enough.
 
-The configs ue-mcp writes carry `--min-release-age=0` before the package spec, which lifts the gate for that one launch. Its dependencies resolve without the gate too. `ue-mcp doctor` reports any npx entry the gate would refuse, and `ue-mcp doctor --fix` adds the flag to it. Keep the `=` form: npm before 11.10 ignores the unknown key, but would take a separate `0` for the package to run.
+The entries ue-mcp writes carry `--min-release-age=0` before the package spec, which lifts the gate for that launch and its dependencies. `npx ue-mcp doctor` reports any npx entry without it, and `npx ue-mcp doctor --fix` adds it. Keep the `=` form: npm before 11.10 ignores the unknown key, but would read a separate `0` as the package to run.
 
 ### Tools return errors
 
-- **"Bridge not connected"** - the editor isn't running or the plugin isn't loaded. See connection issues above.
-- **"Handler not found"** - the action name might be wrong. Check the [Tool Reference](tool-reference.md) for valid action names.
-- **"Asset not found"** - asset paths should use the `/Game/` prefix (e.g., `/Game/Blueprints/BP_Player`), not filesystem paths.
-- **Timeout** - the default timeout is 30 seconds, and some actions set their own (`widget(add_widget)` allows 120s, project builds 300s). A timeout is not a failed call: see [A call timed out - did it happen or not?](#a-call-timed-out-did-it-happen-or-not) before retrying.
+- **`Failed to connect to editor bridge`**: the editor is not running or the plugin is not loaded. See [Connection Issues](#connection-issues).
+- **`Unknown action '<name>' on '<category>'`**: the action name is wrong. The error lists the closest names; see the [Tool Reference](tool-reference.md).
+- **`Unknown method`**: the server knows the action but the loaded plugin does not, so the plugin is older than the server. See [A Fix Shipped but the Editor Behaves the Same](#a-fix-shipped-but-the-editor-behaves-the-same-stale-compiled-plugin).
+- **"Asset not found"**: use Unreal asset paths with the `/Game/` prefix (`/Game/Blueprints/BP_Player`), not filesystem paths.
+- **Timeout**: not a failed call. See [A call timed out: did it happen or not?](#a-call-timed-out-did-it-happen-or-not) before retrying.
 
 ## Line Traces From a Python Script
 
-A script run with `editor(run_python_file)` cannot use the engine's trace functions the way the docs suggest. `unreal.SystemLibrary.line_trace_single` takes a `TraceTypeQuery` (`unreal.TraceTypeQuery.TRACE_TYPE_QUERY1` and so on), not a `CollisionChannel`, so passing `unreal.CollisionChannel.ECC_WORLD_STATIC` fails with "Failed to convert parameter 'trace_channel'", and `unreal.World` has no trace methods at all.
+A script run with `editor(run_python_file)` cannot call the engine's trace functions the obvious way. `unreal.SystemLibrary.line_trace_single` takes a `TraceTypeQuery` (`unreal.TraceTypeQuery.TRACE_TYPE_QUERY1` and so on), not a `CollisionChannel`, so passing `unreal.CollisionChannel.ECC_WORLD_STATIC` fails with "Failed to convert parameter 'trace_channel'", and `unreal.World` has no trace methods.
 
-The bridge plugin exposes the same query `level(line_trace)` runs, callable from Python:
+The bridge plugin exposes the query `level(line_trace)` runs:
 
 ```python
 import unreal
@@ -235,8 +208,8 @@ hit = unreal.MCPTraceLibrary.line_trace(
     unreal.Vector(0, 0, 10000),   # start
     unreal.Vector(0, 0, -10000),  # end
     "pie",                        # world: pie (default), editor or auto
-    0,                            # pie_instance: -1 for the first PIE world
-    "WorldStatic",                # channel: the project's channel names
+    -1,                           # pie_instance: -1 (default) for the first PIE world
+    "WorldStatic",                # channel: the project's channel names (default Visibility)
     False,                        # trace_complex
 )
 if hit.error:
@@ -246,11 +219,11 @@ if hit.hit:
     print(hit.actor_path, hit.component_name, hit.physical_material)
 ```
 
-The result carries `hit`, `location`, `impact_point`, `impact_normal`, `distance`, `actor_path`, `actor_label`, `component_name`, `physical_material`, `world` and `error` (empty when the trace ran). The class exists once the plugin's editor module is loaded, which is the case whenever the bridge is connected.
+The result carries `hit`, `location`, `impact_point`, `impact_normal`, `distance`, `actor_path`, `actor_label`, `component_name`, `physical_material`, `world` and `error` (empty when the trace ran). The class exists whenever the bridge is loaded.
 
 ## Asset Path Issues
 
-UE-MCP expects Unreal-style asset paths:
+UE-MCP expects Unreal asset paths:
 
 | Format | Example |
 |--------|---------|
@@ -259,24 +232,24 @@ UE-MCP expects Unreal-style asset paths:
 | Full object path | `/Game/Blueprints/BP_Player.BP_Player_C` |
 
 !!! warning "Common mistakes"
-    - Using filesystem paths (`C:/Users/.../Content/...`) - use `/Game/...` instead
-    - Including file extensions (`.uasset`) - omit the extension
-    - Missing the leading slash - `/Game/Foo`, not `Game/Foo`
+    - Filesystem paths (`C:/Users/.../Content/...`): use `/Game/...` instead
+    - File extensions (`.uasset`): omit the extension
+    - A missing leading slash: `/Game/Foo`, not `Game/Foo`
 
 ## Class Names and the A/U/F/E Prefix
 
-Unreal registers a class under its C++ name **minus** the type prefix. `AActor` is the class named `Actor`, `UMyConfig` is `MyConfig`, and its object path is `/Script/MyGame.MyConfig` with no `U` in it.
+Unreal registers a class under its C++ name **without** the type prefix. `AActor` is the class named `Actor`, `UMyConfig` is `MyConfig`, and its object path is `/Script/MyGame.MyConfig`.
 
-Every class parameter in the bridge (`className`, `parentClass`, `parentFilter`, `componentClass`, `actorClass`, `nodeClass`, `schema`, and the rest) accepts either spelling. Resolution tries, in order:
+Every class parameter (`className`, `parentClass`, `parentFilter`, `componentClass`, `actorClass`, `nodeClass`, `schema`, and the rest) accepts either spelling. Resolution tries, in order:
 
-1. The literal spelling you passed.
+1. The spelling you passed.
 2. The prefix-stripped spelling (`UMyConfig` to `MyConfig`).
 3. The prefixed spellings (`MyActor` to `AMyActor` / `UMyActor`).
 4. The object path form, including `Module.Class` promoted to `/Script/Module.Class` and the prefix stripped from the object part of a path.
 5. The Blueprint generated class (`BP_Thing` to `BP_Thing_C`).
 6. A case-insensitive sweep of loaded classes, native classes winning ties.
 
-When nothing resolves, the error lists every spelling that was tried and the closest loaded class names:
+When nothing resolves, the error lists every spelling tried and the closest loaded class names:
 
 ```
 Class not found for className 'UXianGameConfig'. Tried: UXianGameConfig, XianGameConfig,
@@ -285,22 +258,22 @@ stores class names without the C++ type prefix, so UMyConfig is registered as 'M
 and its path is /Script/<Module>.MyConfig. Closest loaded classes: XianGameConfig.
 ```
 
-Two error shapes are deliberately distinct, and the JSON carries a `reason` field:
+The JSON carries a `reason` field:
 
 | `reason` | Meaning |
 |---|---|
 | `class_not_found` | No spelling resolved. The response also carries `tried` and `suggestions` arrays. |
-| `abstract` / `deprecated` | The name resolved. The class itself cannot be instantiated; pass a concrete subclass. |
+| `abstract` / `deprecated` | The name resolved, but the class cannot be instantiated. Pass a concrete subclass. |
 | `wrong_base` | The name resolved to a class outside the family the action needs (for example a non-`UDataAsset` passed to `create_data_asset`). |
 
-If the suggestion list is empty, the owning module may not be loaded yet. Check with `reflection(action="is_module_loaded", moduleName="MyGame")` and `reflection(action="is_class_loaded", className="MyConfig")`.
+If the suggestion list is empty, the owning module may not be loaded. Check with `reflection(action="is_module_loaded", moduleName="MyGame")` and `reflection(action="is_class_loaded", className="MyConfig")`.
 
 ## Updates Don't Take Effect (server stuck on an old version)
 
-If `ue-mcp update` reports "already up to date" but the running server keeps reporting an old version, a project-local `node_modules/ue-mcp` is shadowing the global install:
+If `ue-mcp update` reports "already up to date" but the running server reports an old version, a project-local `node_modules/ue-mcp` is shadowing the global install:
 
 ```bash
-ue-mcp doctor
+npx ue-mcp doctor
 ```
 
 ```
@@ -308,134 +281,111 @@ local shadow:   ./node_modules/ue-mcp @ 1.0.64   <-- WARN npx runs THIS, not glo
 effective (npx):1.0.64  (behind latest 1.0.76)
 ```
 
-When `ue-mcp` is a dependency in the project's `package.json`, `npx ue-mcp` runs the local copy, so `npm i -g ue-mcp@latest` updates a copy npx never uses. Fixes:
+With `ue-mcp` in the project's `package.json`, `npx ue-mcp` runs the local copy, so `npm i -g ue-mcp@latest` updates a copy npx never uses. Fixes:
 
-- `ue-mcp update --build` aligns the local copy to latest automatically, or
+- `npx ue-mcp update` aligns the local copy, or
 - remove `ue-mcp` from the project's `package.json` and delete `node_modules/ue-mcp`, or
-- pin `.mcp.json` to `npx -y --min-release-age=0 ue-mcp@latest` so the server self-heals to latest on every launch.
+- launch with `npx -y --min-release-age=0 ue-mcp@latest` in the client config, so every launch fetches the current release.
 
-Then quit and relaunch your MCP client so it spawns the updated server.
+Then quit and relaunch your MCP client.
 
 ## A Beta Install Keeps Coming Back as the Stable Release
 
-A bare `npx ue-mcp` resolves to the `latest` dist-tag, which is the stable line. On the beta channel, run every command against the channel instead:
+A bare `npx ue-mcp` resolves to the `latest` dist-tag, which is the stable line. On the beta channel, run every command against the channel:
 
 ```bash
 npx ue-mcp@beta update
 npx ue-mcp@beta doctor
 ```
 
-`ue-mcp update` run by an older package leaves a newer binary bridge alone and says which command updates it. A stable MCP client entry (`ue-mcp@latest`) still works: its shim starts the daemon at the installed bridge's version. `ue-mcp doctor` shows what a bare `npx ue-mcp` runs as `effective (npx)` and flags a bridge ahead of it.
+`ue-mcp update` run by an older package leaves a newer binary bridge alone and prints the command that updates it. A client entry launching `ue-mcp@latest` still works with a beta binary bridge: the shim starts the daemon at the bridge's version. `doctor` shows what a bare `npx ue-mcp` runs as `effective (npx)`.
 
 ## A Fix Shipped but the Editor Behaves the Same (stale compiled plugin)
 
-Different from the case above. Here the version is correct - `ue-mcp doctor` shows latest, the server is up to date - but a fix that changes **editor behavior** (a dialog being auto-cancelled, an actor placed wrong, anything the C++ plugin does) still happens.
+Here `ue-mcp doctor` shows the current version, but a fix to **editor behavior** (anything the C++ plugin does) has no effect, or actions fail with `Unknown method`.
 
-Cause: the bridge's editor-side half is a C++ plugin shipped as source. Your editor runs the **compiled** version of it, and `ue-mcp update` run outside the project directory, or run by a version older than 1.3.10, neither deploys the new source into your project nor recompiles it. The version `doctor` reports is the npm/server half, so it looks up to date while the loaded plugin is stale. The fix never reaches the editor.
+Cause: the editor runs the **compiled** plugin. A source install compiles it from the source in your project, and `ue-mcp update` run outside the project directory, or with the editor open, does not rebuild it. The version `doctor` reports is the server's, so it looks current while the loaded plugin is old.
 
-Fix: from the project directory, with the editor closed, rebuild the plugin, then restart the editor so the new binary loads.
+Fix: from the project directory, with the editor closed, run the update (it deploys and builds), then start the editor:
 
 ```bash
-ue-mcp update --build
+npx ue-mcp update
 ```
 
-To confirm which binary is actually loaded, read `bridgeProtocol` from `project(action="get_status")`. `builtAt` there is the compile timestamp of the running plugin, and `plugin` versus `client` are the two protocol versions. When they differ, the client also says so in the error on any action the running plugin does not have. `bridgeApiVersion` in the same response is read from the header on disk and describes the source, so the two disagreeing is itself the signal that the deployed plugin has not been rebuilt.
+A start or restart through `editor(start_editor)` also builds a source bridge that owes a build.
 
-If `--build` reports success but the behavior still persists, force a clean rebuild (incremental builds and Live Coding can load stale patches over a fresh build):
+To see which binary is loaded, read `bridgeProtocol` from `project(action="get_status")`. `builtAt` is the compile time of the running plugin, and `plugin` versus `client` are the two protocol versions. `bridgeApiVersion` in the same response is read from the header on disk, so it disagreeing with the running plugin means the deployed source has not been rebuilt.
+
+If the build succeeds and the behavior persists, rebuild from clean (incremental builds and Live Coding can load stale patches over a fresh build):
 
 1. Delete `<Project>/Plugins/UE_MCP_Bridge/Binaries/` and `<Project>/Plugins/UE_MCP_Bridge/Intermediate/`.
 2. Delete any `*.patch_*.{dll,pdb,lib,exp}` under `<Project>/Binaries/Win64/`.
-3. Run `ue-mcp update --build` again, then restart the editor.
+3. Run `npx ue-mcp build`, then start the editor.
 
 ## Widget Blueprint Says a Variable Was Deleted but Still Has a GUID
 
-**Symptom:** compiling a Widget Blueprint raises an ensure in the editor log, and it comes back on every later compile:
+**Symptom:** compiling a Widget Blueprint raises an ensure, on every compile:
 
 ```
 Ensure condition failed: SeenVariableNames.Contains(It.Key())
 Variable [TaskbarContent] was deleted but still has a GUID referenced by WidgetBlueprint [WBP_ComputerTaskbar]
 ```
 
-A Widget Blueprint keeps a map of widget variable names to GUIDs so references survive a rename, and the compiler checks it both ways: every widget needs a GUID, and every GUID needs a widget behind it. An entry left behind by a widget that is gone breaks the second check, and name lookups keep resolving through the dead key.
+A Widget Blueprint maps widget variable names to GUIDs, and the compiler requires every GUID to have a widget behind it. An entry left by a widget that is gone breaks that check. `widget(add_widget)`, `widget(remove_widget)`, `widget(set_root)` and `widget(wrap_root)` prune the map, so this does not build up through ue-mcp.
 
-`widget(add_widget)`, `widget(remove_widget)`, `widget(set_root)` and `widget(wrap_root)` now prune that map on both sides of the compile, so this cannot accumulate.
-
-To repair an asset that already carries a dead entry, call `remove_widget` with the name from the ensure message:
+To repair an asset that already has a dead entry, call `remove_widget` with the name from the message:
 
 ```
 widget(action="remove_widget", assetPath="/Game/UI/WBP_ComputerTaskbar", widgetName="TaskbarContent")
 ```
 
-The widget is already gone, so the call reports `alreadyDeleted: true`, drops the dead entries, and saves. `prunedGuidEntries` in the result says how many it removed; `0` means the map was already clean and nothing was written.
+The widget is already gone, so the call reports `alreadyDeleted: true`, drops the dead entries and saves. `prunedGuidEntries` says how many it removed; `0` means the map was clean and nothing was written.
 
 ## A Call Node Came Back With No Title and No Pins
 
-**Symptom:** `blueprint(add_node)` reports `created: true`, but the node it made has the title `None`, carries no pins, and cannot be wired to anything.
+**Symptom:** `blueprint(add_node)` reports `created: true`, but the node's title is `None`, it has no pins, and it cannot be wired.
 
-That is an unbound stub: the node class was created, but no `UFunction` was attached to it, so there is nothing for it to call and nothing to draw pins from. The report is `created: true` because a node genuinely was added - the binding is the part that failed, and it used to fail silently.
+That is an unbound stub: the node was added, but no `UFunction` was bound to it. The resolver searches an explicit target class, the parent class, the common Kismet libraries, the Blueprint's component classes, the Blueprint's own generated and skeleton classes, and every loaded class. A function declared with `blueprint(create_function)` binds without a compile in between.
 
-The case this used to happen in is a function the Blueprint declares itself:
-
-```
-blueprint(action="create_function", assetPath="/Game/BP_Thing", functionName="ComputeAimOffset")
-blueprint(action="add_node", assetPath="/Game/BP_Thing", graphName="EventGraph",
-          nodeClass="K2Node_CallFunction", nodeParams={"functionName": "ComputeAimOffset"})
-```
-
-The resolver looked at an explicit target class, the parent class, the common Kismet libraries, the Blueprint's component classes, and every loaded class - but not at the Blueprint itself. A function declared on a Blueprint lives on its generated class, and on the skeleton class from the moment it is declared, and both are searched now, so the sequence above binds without needing a compile in between.
-
-If you still get a stub, the function name is the thing to check first. `blueprint(action="list_functions", assetPath=...)` reports what the Blueprint actually declares, and for a C++ `UFUNCTION` on a class the Blueprint does not own, naming it explicitly is the reliable form:
+If you still get a stub, check the function name first: `blueprint(action="list_functions", assetPath=...)` reports what the Blueprint declares. For a C++ `UFUNCTION` on a class the Blueprint does not own, name the class:
 
 ```
 nodeParams={"functionName": "MyFunction", "className": "/Script/MyModule.MyClass"}
 ```
 
-## Reimport Says It Worked but Read the Old File
+## Reimport
 
-**Symptom:** `asset(action="reimport", assetPath=..., filePath=...)` reports success, and the asset still has the contents of the file it was originally imported from.
+`asset(action="reimport")` rebuilds an asset from the file it was imported from, so it applies only to imported assets. Asked to reimport something authored in the editor (a Blueprint, a material, a data asset), it refuses at once:
 
-`filePath` repoints an asset at a new source before rebuilding it, which only works if the asset has somewhere to record that path. When it did not, the path used to be dropped and the reimport re-read the original file - reporting success either way, so there was nothing to notice.
+```
+Nothing can reimport a Blueprint: '/Game/BP_Thing' has no registered reimport handler.
+```
 
-That case is refused now. When a reimport does repoint an asset, the response says so:
+`filePath` repoints the asset at a new source first. The response says whether it did:
 
 ```
 sourceFileUpdated: true
 sourceFile: C:/path/to/the/new/file.png
 ```
 
-`sourceFileUpdated: false` means the asset was rebuilt from the source it already had, which is what you want when you pass no `filePath` at all.
-
-## Reimport Made the Editor Stop Responding
-
-**Symptom:** a call to `asset(action="reimport")` times out, and so does every call after it.
-
-Reimport rebuilds an asset from the file it was imported from, so it only applies to imported assets. Asked to reimport something authored in the editor - a Blueprint, a material, a data asset - Unreal's reimport manager does not return, and because it blocks the game thread the whole bridge stops answering rather than just that one call.
-
-The bridge now checks whether anything can reimport the asset before handing it over, so this comes back immediately:
-
-```
-Nothing can reimport a Blueprint: '/Game/BP_Thing' has no registered reimport handler.
-```
-
-If you hit the hang on an older build, the editor has to be restarted; nothing over the bridge can recover a blocked game thread.
+`sourceFileUpdated: false` means the asset was rebuilt from the source it already had, which is expected when you pass no `filePath`. An asset that cannot record a new source path refuses the call rather than re-reading the old file.
 
 ## Search Not Finding Assets
 
-If `asset(action="search")` misses assets in plugin directories:
+If `asset(action="search")` misses assets in plugin content:
 
-1. Add the content root to `ue-mcp.yml`:
+1. Add the content root to `ue-mcp.yml`. With no `directory`, search runs over each root, one root per page:
    ```yaml
    ue-mcp:
-     version: 1
      contentRoots:
        - /Game/
        - /MyPlugin/
    ```
-2. Wildcards work in search queries: `asset(action="search", query="/Game/Characters/*")`
+2. Wildcards work in queries: `asset(action="search", query="/Game/Characters/*")`.
 
 ## Logs
 
-### Bridge logs
+### Bridge log
 ```
 editor(action="get_log", category="LogMCPBridge")
 ```
@@ -445,7 +395,11 @@ editor(action="get_log", category="LogMCPBridge")
 editor(action="get_log")
 ```
 
-### Search logs
+### Search the log
 ```
 editor(action="search_log", query="error")
 ```
+
+### Server and daemon logs
+
+The server writes to stderr, which your MCP client stores in its own log. The daemon writes `~/.ue-mcp/daemons/<key>.log`. Set `UE_MCP_LOG_LEVEL=debug` for more.

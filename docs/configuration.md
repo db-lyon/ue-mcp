@@ -2,9 +2,7 @@
 
 ## MCP Client Configuration
 
-The easiest way to configure UE-MCP is to run `npx ue-mcp init` - it detects your MCP clients and writes the config automatically.
-
-### Manual Configuration
+`npx ue-mcp init` detects your MCP clients and writes the entry for each. To write it yourself, see [Manual configuration](getting-started.md#manual-configuration). Every client gets the same launch:
 
 ```json
 {
@@ -17,32 +15,22 @@ The easiest way to configure UE-MCP is to run `npx ue-mcp init` - it detects you
 }
 ```
 
-Codex uses TOML instead:
-
-```toml
-[mcp_servers.ue-mcp]
-command = "npx"
-args = ["-y", "--min-release-age=0", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
-cwd = "C:/path/to"
-enabled = true
-```
-
-### Where to Put This
-
-| Client | Config File |
+| Client | Config file |
 |--------|-------------|
-| Claude Code | `.mcp.json` in project root, or `~/.claude/` global config |
-| Claude Desktop | `claude_desktop_config.json` |
-| Cursor | `mcp.json` in `.cursor/` or project root |
-| Codex | `~/.codex/config.toml` |
+| Claude Code | `.mcp.json` in the project root, or `~/.claude/.mcp.json` for every project |
+| Claude Desktop | `%APPDATA%/Claude/claude_desktop_config.json` |
+| Cursor | `.cursor/mcp.json` in the project root |
+| Codex | `~/.codex/config.toml` (TOML, with `cwd` set to the project directory) |
+
+An entry written with `--pin` names `ue-mcp@<version>` instead of `@latest`, and `ue-mcp update` moves it with the bridge. The project path may be the `.uproject` or its directory. Use an absolute path, since clients launch the server from a working directory you do not control.
 
 ### Without a Project Path
 
-You can start the server without a `.uproject` argument. It will run in a limited mode - you can then use `project(action="set_project", projectPath="...")` at runtime to attach to a project.
+Started without a `.uproject` argument, the server runs without a project. Call `project(action="set_project", projectPath="...")` to attach one.
 
 ### Several Editors From One Server
 
-Pass more than one `.uproject` and each becomes an addressable **editor session** with its own bridge connection, its own port and its own port lockfile:
+Pass more than one `.uproject` and each becomes an addressable **editor session** with its own bridge connection, port and port lockfile. Several projects always run in process, without the [daemon](#the-daemon).
 
 ```json
 {
@@ -55,7 +43,7 @@ Pass more than one `.uproject` and each becomes an addressable **editor session*
 }
 ```
 
-Sessions are keyed by resolved project root, so one project is one session however its path is spelled, and two editors of the same project are never addressed as two sessions.
+Sessions are keyed by resolved project root, so one project is one session however its path is spelled.
 
 | Action | What it does |
 |--------|--------------|
@@ -64,7 +52,7 @@ Sessions are keyed by resolved project root, so one project is one session howev
 | `project(action="use_editor", editorTarget="Beta")` | Move the default target |
 | `project(action="drop_editor", editorTarget="Beta")` | Forget a session and close its socket. The editor keeps running |
 
-While more than one session is registered, **every** category tool, the `flow` tool and the HTTP `run` route accept an `editor` parameter naming the session, the project, or a `.uproject` path:
+While more than one session is registered, every category tool, the `flow` tool and the HTTP `run` route accept an `editor` parameter naming the session, the project, or a `.uproject` path:
 
 ```
 level(action="place_actor", editor="Beta", assetPath="/Game/Rock", location=[0,0,0])
@@ -72,150 +60,112 @@ editor(action="start_editor", editor="Beta")
 flow(action="run", flowName="build_and_check", editor="Beta")
 ```
 
-Calls with no `editor` run in the active session, which is the first project on the command line until `use_editor` moves it.
+Calls with no `editor` run in the active session: the first project on the command line until `use_editor` moves it. The `editor` parameter is advertised only while a second session exists. Registering or dropping a session re-advertises the tool list, so a client that honours `tools/list_changed` can target an editor it registered at runtime.
 
-**One editor is unchanged.** The `editor` parameter is advertised only while a second session exists, so a single-editor client sees exactly the schema, the status response and the events it always has. Registering or dropping a session re-advertises the tool list, so a client that honours `tools/list_changed` can target an editor it registered at runtime.
+**Each project needs its own port.** Derived ports differ per project, so this works by default. Pinning two projects to the same port (the same `bridge.port`, or a global `UE_MCP_PORT`) collapses their sessions onto one address. `list_editors` reports the clash under `portSharedWith`.
 
-**Each project needs its own port.** Ports are derived from the project root, so this works out of the box. Pinning every project to the same port (the same `bridge.port` in two `ue-mcp.yml` files, or a global `UE_MCP_PORT`) collapses the sessions onto one address, and a call targeted at one of them can then be served by the other. `list_editors` reports the clash under `portSharedWith`. Give each project its own port, or leave them derived.
+**Lifecycle actions act only on the editor you addressed.** See [Which editor lifecycle actions act on](#which-editor-lifecycle-actions-act-on). `drop_editor` only detaches; stopping an editor is always an explicit `editor(action="stop_editor")`.
 
-**Lifecycle actions act only on the editor you addressed.** `start_editor`, `stop_editor` and `restart_editor` resolve their target from the addressed session's own project: its port lockfile, and the PID that lockfile names, checked against the `.uproject` that process has open. See [Which editor lifecycle actions act on](#which-editor-lifecycle-actions-act-on). `drop_editor` detaches only: stopping an editor is always an explicit `editor(action="stop_editor")` against that session.
+Each project needs a bridge built from the current plugin source. A project whose bridge is missing or stale is still registered and startable, and `list_editors` reports it.
 
-Multi-editor needs a bridge built from the current plugin source in each project involved. A project whose bridge is missing or stale is still registered and still startable; `project(action="list_editors")` reports it.
-
-**The CLI takes a target too.** Every one-shot subcommand accepts `--editor <name-or-path>`, resolved as a session name first and a project path second:
+**The CLI takes a target too.** Every subcommand that acts on a project accepts `--editor <name-or-path>`, resolved as a session name first and a project path second:
 
 ```bash
 npx ue-mcp deploy --editor Beta
 npx ue-mcp build --editor Beta
-npx ue-mcp doctor --editor Beta
 npx ue-mcp context lean --editor Beta
-npx ue-mcp feedback list --editor Beta
 ```
 
-The name is the one `project(action="list_editors")` reports, read back from the argv in your MCP client config, so a name means the same editor on the command line that it means in a tool call. Without the flag every subcommand behaves exactly as it did: positional path first, then the project in the current directory.
+The name is the one `list_editors` reports, read from the argv in your MCP client configs. Without the flag a subcommand takes the positional path, then the project in the current directory.
 
 ## Project Configuration (`ue-mcp.yml`)
 
-Project config lives in `ue-mcp.yml` next to your `.uproject`, tracked in git so every collaborator shares the same surface. `npx ue-mcp init` scaffolds and maintains it.
+Project config lives in `ue-mcp.yml` next to your `.uproject`, tracked in git so every collaborator gets the same surface. It is one layer in a deep-merged stack (user-global, project, env overlay, local, environment variables). The **[ue-mcp.yml Reference](config-file.md)** lists every key, the layers and where each setting belongs.
 
-```yaml
-ue-mcp:
-  version: 1
-  contentRoots: [/Game/, /MyPlugin/]
-  disable: [gas]
-  nativeTools: { enabled: true }
-  http: { enabled: false }
-  context: { strategy: micro }
-tasks: {}
-flows: {}
-plugins: []
-```
-
-The file is one layer in a deep-merged stack (user-global → project → env → local → env vars). For the full anatomy, the layer cascade, where each setting belongs, and every `ue-mcp:` key, see the dedicated **[ue-mcp.yml Reference](config-file.md)**. The behavioral deep-dives for two of its keys live below: [Native Epic tools](#native-epic-5-8-tools) (`nativeTools`) and [Context strategy](#context-strategy-full-lean-micro) (`context`).
+Per-user preferences (feedback, dialog and playtest modes) are not in `ue-mcp.yml`. They live in `~/.ue-mcp/state.json`, set by the commands below.
 
 ### Native Epic 5.8 tools
 
-Unreal Engine 5.8 ships an experimental AI Toolset Registry (the plugin behind Unreal's own MCP server). ue-mcp reaches that registry in-process and surfaces every official toolset as first-class actions inside the matching ue-mcp category - Epic's GAS tools appear in `gas`, Niagara in `niagara`, and so on - so an agent discovers them in context. Toolsets with no natural home are reachable through the `epic` gateway (`status` / `list_toolsets` / `describe_toolset` / `call_tool`).
+UE 5.8 ships an experimental AI Toolset Registry (the plugin behind Unreal's own MCP server). ue-mcp reaches it in process and adds each official tool as an action in the matching category: Epic's GAS tools appear in `gas`, Niagara in `niagara`, and so on. Toolsets with no natural home are reached through the `epic` gateway (`status`, `list_toolsets`, `describe_toolset`, `call_tool`). [Native Tools](native-tools.md) lists them.
 
-- **On by default.** `npx ue-mcp init` includes a "Native Unreal tools (Epic 5.8)" page where you enable the feature and optionally exclude specific categories. The choice is written to `nativeTools` in `ue-mcp.yml`.
-- **Requires UE 5.8+** with the `ToolsetRegistry` plugin (and the toolset plugins you want) enabled in your project. On older engines or when the plugin is absent, enrichment is skipped and `epic(status)` reports `available: false`.
-- **Deterministic surface.** The catalog is sourced from the live editor when connected, falling back to a per-project cache and then a snapshot baked into the ue-mcp package, so the wrapped tools appear even on a cold first start and match the generated [tool reference](tool-reference.md) (both are built from the same snapshot). The 🧩 badge in the tool reference marks every wrapped official tool.
+- **On by default.** The `init` wizard has a page for it. The choice is written to `nativeTools` in `ue-mcp.yml`.
+- **Needs UE 5.8 or later** with the `ToolsetRegistry` plugin (and the toolset plugins you want) enabled. Otherwise enrichment is skipped and `epic(status)` reports `available: false`.
+- **Same surface with or without an editor.** The catalog comes from the live editor when connected, then a per-project cache, then a snapshot shipped in the package, so the wrapped tools appear on a cold start and match the [tool reference](tool-reference.md).
 
-To turn it off entirely, set `nativeTools.enabled: false` (the `epic` gateway stays available). To keep it on but drop a noisy domain, add that category to `nativeTools.exclude`.
-
-The feedback approval mode (`interactive` / `auto-approve` / `defer`) is intentionally **not** in `ue-mcp.yml` - it varies per developer and per machine, so it lives in `~/.ue-mcp/state.json` and is managed with `npx ue-mcp feedback mode ...` or the `UE_MCP_FEEDBACK_MODE` env var. See [Feedback → modes](feedback.md#feedback-modes).
+`nativeTools.enabled: false` turns it off (the `epic` gateway stays). Add a category to `nativeTools.exclude` to keep it on but leave that category unenriched.
 
 ### Dialog handling mode
 
-A modal dialog blocks Unreal's game thread, so every action is refused until it is answered. One guard per editor enforces that, and every route to the editor passes it, including each step of a running flow and the first call the server makes. This mode decides what happens next.
-
-It lives with the feedback mode and for the same reason: whether somebody is at the keyboard to answer a modal is a property of your machine, not project policy a collaborator should inherit.
-
-**Who may press is enforced, not just described.** `editor(action='respond_to_dialog')` is accepted only in `auto`. Under `interactive` and `defer` it comes back refused like any other action, because the answer belongs to the person: interactive asks them in a form, defer waits for them at the editor's own window. `editor(action='list_dialogs')` stays available in every mode, so the dialog can always be READ; only the press is withheld.
-
-`editor(set_dialog_policy)` is the exception. A dialog matching an armed pattern is answered immediately under every mode. Nothing else presses a button on its own, and there are no built-in policies.
+A modal dialog blocks Unreal's game thread, so every action is refused until it is answered. Every route to the editor checks for one, including each step of a running flow. This mode decides what happens next. It is a per-machine preference: whether somebody is at the keyboard is not project policy.
 
 | Mode | What happens to a blocking dialog |
 |------|-----------------------------------|
-| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open", under the title "Submission". The button you pick is pressed and the blocked call then runs. A dialog that asks a question per row (the "Save Content" prompt is a checkbox per unsaved package) carries those rows in the same form as one checkbox group titled "Assets", ticked as the dialog has them, and what you tick travels with the button in one press. The agent cannot press it for you: `editor(respond_to_dialog)` is refused in this mode. |
-| `auto` | The refusal includes the `editor(action='respond_to_dialog')` call for each button. The agent picks one and makes that call. Nothing is pressed until it does. |
-| `defer` | The refusal names the dialog and its buttons but not the calls that press them, and `editor(respond_to_dialog)` is refused. Answer it in the Unreal Editor window. |
+| `interactive` | You get an elicitation form titled "Submission" with the dialog's buttons as choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. A dialog with a checkbox per row (the "Save Content" prompt) shows those rows as one checkbox group titled "Assets", and what you tick is applied with the button. |
+| `auto` | The refusal includes the `editor(action='respond_to_dialog')` call for each button. The agent picks one and makes that call. |
+| `defer` | The refusal names the dialog and its buttons but not the calls. Answer it in the Unreal Editor window. |
 
-Read in this order (highest wins): the `UE_MCP_DIALOG_MODE` env var, `dialog.mode` for this project in `~/.ue-mcp/state.json`, `dialog.mode` for this user in the same file, then the default. **The default is `interactive` when your MCP client advertises the elicitation capability and `defer` when it does not. It never resolves to `auto`**: with no channel to a person, the fallback is the mode that suspends, not the one that lets the agent decide. `auto` applies only when you name it.
+`editor(respond_to_dialog)` is accepted only in `auto`; under `interactive` and `defer` it is refused, because the answer belongs to the person. `editor(list_dialogs)` works in every mode. A dialog matching a pattern armed with `editor(set_dialog_policy)` is answered at once under every mode. Nothing else presses a button on its own, and no policy is armed by default.
 
-What counts as blocking: the modal stack first, then every top-level window and its children. A window blocks when it is a regular window that is either modal or parented to another one. Menus, tooltips and notifications are not regular windows, so a hover is never mistaken for a question. Visibility is not consulted, because a window that is up but undrawn, or drawn behind the editor, still holds whatever raised it. The detection lives in the C++ bridge, so a project running an older compiled plugin keeps the detection it was built with until the plugin is redeployed and rebuilt.
+Precedence, highest first: `UE_MCP_DIALOG_MODE`, the project's `dialog.mode` in `~/.ue-mcp/state.json`, your user `dialog.mode` in the same file, then the default. **The default is `interactive` when your MCP client supports elicitation and `defer` when it does not. It is never `auto`.** An environment value that names no mode is ignored, and the result says so.
 
-Set it with `npx ue-mcp dialog mode <interactive|auto|defer>` (add `--editor <name>` to scope it to one project, `default` to clear it). An env value that names no mode is ignored, and the result says so.
+Set it with `npx ue-mcp dialog mode <interactive|auto|defer>`. Add `--editor <name>` to scope it to one project; `default` clears it.
 
-Under `interactive` the dialog is handed back whole on one call and the form goes up on the next, so its text lands somewhere nothing truncates it. An elicitation form is a few lines tall and the client decides how many of them it draws; one that keeps the opening line or two and collapses the rest would otherwise collapse the question itself. `dialogPhase` on the refusal says which call you are on: `relay` or `asking`.
+What counts as blocking: the modal stack, then every top-level window that is modal or parented to another regular window. Menus, tooltips and notifications are not regular windows. Visibility is not consulted, because a window drawn behind the editor still blocks. Detection lives in the C++ bridge, so it changes only when the plugin is rebuilt.
 
-A client known to render the whole message skips that round trip. Every other client, including one nobody has checked, gets the handover: relaying needlessly costs one call, and not relaying against a client that collapses the message asks someone to choose a button for a question they cannot see. `UE_MCP_DIALOG_RELAY=off` turns the handover off whatever the client is, and `=on` forces it back on.
+Under `interactive` the dialog text is returned on one call and the form goes up on the next, so a client that collapses long form messages cannot hide the question. `dialogPhase` on the refusal says which call this is: `relay` or `asking`. A client known to render the whole message skips the relay. `UE_MCP_DIALOG_RELAY=off` turns the relay off for every client, and `=on` forces it on.
 
-The form outlives the call that raised it. A blocked call waits a minute for your answer and then refuses, so one open form does not hold every other call behind it, but the form stays up and the button you pick is still pressed whenever you get to it. The screen is re-read first, so an answer that arrives after the dialog was closed at the editor's own window, or after a different prompt replaced it, presses nothing.
+A blocked call waits a minute for your answer and then refuses, but the form stays up and the button you pick is still pressed. The screen is re-read first, so an answer to a dialog that was already closed or replaced presses nothing.
 
-A daemon extension that runs actions in process, such as UE-MCP Studio, answers the dialogs its own calls meet: `callAction` takes a `dialogPrompt` with the same form an MCP client is shown, so `interactive` works there too. Its answer may also be `delegate`, which hands that one dialog to the agent with the press calls, as `auto` would. An answer sooner than `UE_MCP_ELICIT_MIN_HUMAN_MS` is not taken as a person's. Every dialog is also published on the daemon's event stream as `dialog.opened`, `dialog.answered`, `dialog.delegated` and `dialog.closed`, whoever met it and under every mode. Nothing changes for an MCP client or the CLI.
+A daemon extension that runs actions in process answers the dialogs its own calls meet: `callAction` takes a `dialogPrompt` with the same form an MCP client is shown. Its answer may also be `delegate`, which hands that one dialog to the agent with the press calls, as `auto` would. An answer sooner than `UE_MCP_ELICIT_MIN_HUMAN_MS` is not taken as a person's. Every dialog is published on the daemon's event stream as `dialog.opened`, `dialog.answered`, `dialog.delegated` and `dialog.closed`.
 
 ### Playtest mode
 
-Who starts playtest runs, `pie(action="script_run")` and `pie(action="script_replay")`: a person or an agent.
+Who starts playtest runs (`pie(action="script_run")` and `pie(action="script_replay")`): a person or an agent.
 
 | Mode | What happens |
 |---|---|
-| `manual` | A person starts playtests. An MCP client's `script_run` and `script_replay` are refused before anything reaches the editor, directly or through the micro gateway, with `success: false`, `refusedMethod`, and a `reason` that names the setting and the command that changes it. |
+| `manual` | A person starts playtests. An MCP client's `script_run` and `script_replay` are refused before anything reaches the editor, with `success: false`, `refusedMethod`, and a `reason` naming the setting and the command that changes it. |
 | `automatic` | An agent may start them. |
-| unset | Each client decides. The server changes nothing. |
+| unset | Each client decides. |
 
-Set it with `npx ue-mcp playtest mode <manual|automatic>` (add `--editor <name>` to scope it to one project, `clear` to clear it). A project's own setting wins over the per-user one. A daemon extension reads and sets it through `api.modes` (feature `modes.playtest`); calls it makes through `api.callAction` are not refused, so it applies its own rule.
+Set it with `npx ue-mcp playtest mode <manual|automatic>`. Add `--editor <name>` to scope it to one project; `clear` clears it. A project's setting wins over the user one. A daemon extension reads and sets it through `api.modes` (feature `modes.playtest`); its own `api.callAction` calls are not refused, so it applies its own rule.
 
 ### User-machine state (`~/.ue-mcp/`)
 
-Machine-specific state that ue-mcp commands write but you wouldn't hand-edit lives under `~/.ue-mcp/`:
+Files ue-mcp writes for itself. None belong in your project or in version control.
 
 | Path | What |
 |------|------|
-| `~/.ue-mcp/state.json` | Three things: (a) per-project `installedHooks` - absolute paths of every Claude Code `settings.json` where ue-mcp installed the feedback PostToolUse hook, keyed by absolute project root; (b) `preferences.feedback.mode` - your personal default for the feedback approval mode (`interactive` / `auto-approve` / `defer`). (c) `preferences.dialog.mode` and per-project `dialog.mode` - the dialog handling mode (`interactive` / `auto` / `defer`); (d) `preferences.playtest.mode` and per-project `playtest.mode` - the [playtest mode](#playtest-mode) (`manual` / `automatic`). Maintained by `npx ue-mcp init`, `npx ue-mcp uninstall-hooks`, `npx ue-mcp feedback mode`, `npx ue-mcp dialog mode` and `npx ue-mcp playtest mode`. Written by those commands, not by hand. |
-| `~/.ue-mcp/auth.json` | Cached GitHub OAuth token for `feedback(submit)` author=user mode. Mode 600. Written by `npx ue-mcp auth`. |
-| `~/.ue-mcp/pending-feedback/<id>.json` | Submissions captured while `feedback mode` is `defer`. Acted on with `npx ue-mcp feedback list/approve/discard`. |
-
-These files never need to be in your project tree or in version control.
+| `~/.ue-mcp/config.yml` | Your user-global config layer, hand-edited. See [Config layering](config-file.md#config-layering). |
+| `~/.ue-mcp/state.json` | Per project: the Claude Code `settings.json` files holding the feedback hook (`installedHooks`), the feedback, dialog and playtest modes, and the daemon extension version the project loads. Per user (`preferences`): the feedback, dialog and playtest modes. Written by `init`, `uninstall-hooks`, `feedback mode`, `dialog mode`, `playtest mode` and `extension`. `UE_MCP_USER_STATE` moves it. |
+| `~/.ue-mcp/auth.json` | GitHub OAuth token for `feedback(submit)` with `author="user"`. Mode 600. Written by `npx ue-mcp auth`. |
+| `~/.ue-mcp/registry.json` | Plugin registry publish token. Written by `npx ue-mcp login`. |
+| `~/.ue-mcp/pending-feedback/<id>.json` | Submissions queued while feedback mode is `defer`. |
+| `~/.ue-mcp/daemons/` | One discovery file (`<key>.json`, with the daemon's port and token) and one log (`<key>.log`) per project daemon. |
+| `~/.ue-mcp/extensions/` | Installed daemon extensions, one folder per `<name>@<version>`. |
 
 ## Plugins
 
-The `plugins:` array in **`ue-mcp.yml`** declares npm packages that inject new actions into existing built-in categories. The full author contract lives in [Plugins](plugins.md); this is the consumer view.
+The `plugins:` array in `ue-mcp.yml` declares npm packages that inject actions into the built-in categories:
 
 ```yaml
 plugins:
   - name: ue-mcp-perforce
   - name: some-other-plugin
-    version: "0.2.x"        # optional - npm semver range
+    version: "0.2.x"        # optional npm semver range
 ```
 
-At server start, ue-mcp resolves each entry against the project's `node_modules/`, validates the plugin manifest, and merges its injected actions into the host category tools. Stay-on-disk facts:
-
-- The package must already be installed under `<project>/node_modules/`. Use `ue-mcp plugin install <name>` to add an entry **and** run `npm install --save` in one step.
-- Plugins are loaded only when the server boots - edit the array and restart your MCP client (`/mcp` in Claude Code).
-- A plugin that fails validation is skipped with a loud warning. Other plugins keep loading; the host tools are never partially mutated.
-- Use the `plugins` tool to introspect the loaded set:
-  - `plugins(action="list")` - name, version, prefix, status, injected count, host UE plugin presence.
-  - `plugins(action="describe", name="<package>")` - full detail including injected actions, knowledge files, and flows.
-
-Order matters: earlier entries win on inter-plugin action-name collisions. A plugin action can never overwrite a built-in.
-
-### Host UE plugin dependencies
-
-A plugin can declare `uePluginDependency: <PluginName>` in its `ue-mcp.plugin.yml`. The MCP server checks the project's `.uproject` for `Plugins[].Name == "<PluginName>"` and exposes the result as `uePluginPresent` in `plugins(action="list")`. The npm side loads regardless - the flag is a signal that the host UE plugin needs to be enabled before the injected actions will actually run.
-
-For example, a plugin that declares `uePluginDependency: SomePlugin` will report `uePluginPresent: false` until `SomePlugin` is added to `<Project>.uproject`'s `Plugins` array and the C++ modules are built.
+`npx ue-mcp plugin install <name>` adds the entry and installs the package into the project's `node_modules/`. Plugins load when the server starts, so restart your MCP client after a change. `plugins(action="list")` and `plugins(action="describe", name="<package>")` show what loaded. [Using plugins](plugins-using.md) covers validation, ordering, host UE plugin dependencies and flow groups; [Plugins](plugins.md) is the author contract.
 
 ## Context strategy (full, lean, micro)
 
-Everything the server injects at session start - the `initialize` instructions plus the whole `tools/list` payload (names, descriptions, and parameter schemas) - is the "context tax". Three strategies trade that seed cost against how many discovery round-trips an agent makes.
+Everything the server sends at session start (the `initialize` instructions plus the whole `tools/list` payload of names, descriptions and parameter schemas) is the "context tax". Three strategies trade that seed cost against discovery round trips.
 
 | Strategy | Seed | What's advertised | Cost to use |
 |----------|------|-------------------|-------------|
-| **`micro`** (default) | <!-- tax:micro -->~2.2k<!-- /tax --> tokens | a single `tools` gateway - `search`, `list_categories`, `describe`, and `call` - fronting every category | discovery for everything |
-| **`lean`** | <!-- tax:lean -->~20k<!-- /tax --> tokens | the <!-- count:tools -->30<!-- /count --> category tools with their `action` enums and a one-line summary each; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the signatures on demand | ~1 round-trip to learn a category |
-| **`full`** | <!-- tax:full -->~55k<!-- /tax --> tokens | the <!-- count:tools -->30<!-- /count --> category tools, each with one signature line per action inline | zero discovery calls |
+| **`micro`** (default) | <!-- tax:micro -->~2.2k<!-- /tax --> tokens | a single `tools` gateway (`search`, `list_categories`, `describe`, `call`) fronting every category | discovery for everything |
+| **`lean`** | <!-- tax:lean -->~20k<!-- /tax --> tokens | the <!-- count:tools -->30<!-- /count --> category tools with their `action` enums and a one-line summary each; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the signatures | about one round trip to learn a category |
+| **`full`** | <!-- tax:full -->~55k<!-- /tax --> tokens | the <!-- count:tools -->30<!-- /count --> category tools, each with one signature line per action inline | no discovery calls |
 
 On demand, micro's `describe` of the largest category (a page of signatures) costs <!-- tax:describe -->~1.5k<!-- /tax --> tokens and a default `search` <!-- tax:search -->~520<!-- /tax -->.
 
@@ -223,19 +173,19 @@ The figures include the <!-- count:nativeToolActions -->830<!-- /count --> wrapp
 
 ### Calls, signatures and validation
 
-Every category tool takes `action` and `args`: `level(action="place_actor", args={actorClass: "PointLight", location: {x: 0, y: 0, z: 100}})`. Parameters sent flat beside `action`, as before, are still accepted. A call is read as flat as soon as anything other than `args` and the routing parameters (`timeoutMs`, `select`, `omit`, `editor`, `toEditor`) sits at the top level, which keeps a category's own `args` parameter (`editor(invoke_function)`'s function arguments) meaning what it always did.
+Every category tool takes `action` and `args`: `level(action="place_actor", args={actorClass: "PointLight", location: {x: 0, y: 0, z: 100}})`. Parameters sent flat beside `action` are also accepted. A call is read as flat when anything other than `args` and the routing parameters (`timeoutMs`, `select`, `omit`, `editor`, `toEditor`) is at the top level, so a category's own `args` parameter (`editor(invoke_function)`'s function arguments) keeps its meaning.
 
-Actions are described by one-line signatures such as `set_property(assetPath|path, propertyName, value:*, save?:b)`. The notation is explained once, in the server instructions: `?` optional, `a|b` an alias, `one(a; b+c)` exactly one group, `any(a; b)` at least one, and a type code after a colon (none means a string). Signatures come from each action's recorded C++ spec or Epic input schema, never from prose. `project(action="describe_action")` (or `describe` with a `method` in lean and micro) returns one action's full schema: every parameter's description, nested fields, allowed values and defaults.
+Actions are described by one-line signatures such as `set_property(assetPath|path, propertyName, value:*, save?:b)`. The server instructions explain the notation once: `?` optional, `a|b` an alias, `one(a; b+c)` exactly one group, `any(a; b)` at least one, and a type code after a colon (none means a string). Signatures come from each action's recorded C++ spec or Epic input schema. `project(action="describe_action")` (or `describe` with a `method` in lean and micro) returns one action's full schema: every parameter's description, nested fields, allowed values and defaults.
 
-Validation did not move: every call, on every strategy, is checked against the category's full parameter schema in the server, and a wrong type is refused with the same `Input validation error` text as before.
+Every call, on every strategy, is validated against the category's full parameter schema, and a wrong type is refused with an `Input validation error`.
 
-- **micro** mirrors the native MCP toolset gateway (`list_toolsets` / `describe_toolset` / `call_tool`): the agent calls `tools(action="search", query="rotate clockwise")`, then `tools(action="describe", category="level", method="nudge_component")`, then `tools(action="call", category="level", method="nudge_component", args={ ... })`. Omit `method` from describe for a page of the category's signatures, and pass `offset` (the `nextOffset` it returns) for the next page. Smallest seed, most discovery traffic.
-- **lean** keeps the category tools and action names visible, so the model can often call directly, and unknown actions are still refused with the closest names. `catalog` and each category's `describe` serve the signatures.
-- **full** is best when the agent should see every signature up front and the seed is affordable.
+- **micro** works like the native MCP toolset gateway: `tools(action="search", query="rotate clockwise")`, then `tools(action="describe", category="level", method="nudge_component")`, then `tools(action="call", category="level", method="nudge_component", args={ ... })`. Omit `method` from describe for a page of the category's signatures, and pass `offset` (the `nextOffset` it returns) for the next page.
+- **lean** keeps the category tools and action names visible, so the model can often call directly. Unknown actions are refused with the closest names.
+- **full** suits an agent that should see every signature up front when the seed is affordable.
 
-A smaller seed is not automatically a cheaper session: count the discovery round-trips as well. All three modes carry the same short spatial interpretation and verification guidance.
+A smaller seed is not automatically a cheaper session: count the discovery round trips too. All three carry the same spatial interpretation and verification guidance.
 
-Set the strategy with the standalone command (writes `ue-mcp.yml` for you):
+Set the strategy with the CLI, which writes `ue-mcp.yml`:
 
 ```
 npx ue-mcp context micro     # one gateway tool fronts everything (default)
@@ -244,28 +194,23 @@ npx ue-mcp context full      # every signature inline
 npx ue-mcp context           # show the current strategy
 ```
 
-`npx ue-mcp init` also has a **Context strategy** page. Or edit `ue-mcp.yml` directly:
-
-```yaml
-ue-mcp:
-  context:
-    strategy: lean
-```
-
-Or per session, without editing the file: `UE_MCP_CONTEXT_STRATEGY=full` (the env var wins over the config value). Anything other than `full` or `lean` resolves to `micro`. Restart your MCP client (`/mcp` in Claude Code) after changing the strategy.
+The `init` wizard has the same choice, or set `context.strategy` in `ue-mcp.yml`. `UE_MCP_CONTEXT_STRATEGY` wins over the file for one launch; anything other than `full` or `lean` resolves to `micro`. Restart your MCP client (`/mcp` in Claude Code) after changing it.
 
 ## The daemon
 
-With one project, `npx ue-mcp <uproject>` relays to that project's daemon: one background process per project that holds the editor connection. Your MCP client stays connected through an editor restart, a crash or a rebuild, and calls made while the editor is down get the offline actions or wait for it to return. The daemon starts on first use, reattaches within a second of the editor coming back, and exits after 30 minutes with no editor, client or UI attached.
+With one project, `npx ue-mcp <uproject>` is a stdio shim that relays to that project's daemon: one background process per project that holds the editor connection. Your MCP client stays connected through an editor restart, a crash or a rebuild, and calls made while the editor is down get the offline actions or wait for it to return. The daemon starts on first use, reattaches within a second of the editor coming back, and exits after 30 minutes with no editor, client or UI attached. Its log is `~/.ue-mcp/daemons/<key>.log`.
 
-Set `server.mode: in-process` in `ue-mcp.yml`, or `UE_MCP_SERVER_MODE=in-process` for one launch, to run the server inside the process your client launched instead. Several projects, or none, always run in process. If the daemon cannot start, the server runs in process and says so in its log.
+Set `server.mode: in-process` in `ue-mcp.yml`, or `UE_MCP_SERVER_MODE=in-process` for one launch, to run the server inside the process your client launched instead. Several projects, or none, always run in process. If the daemon cannot start, the server runs in process and logs why.
+
+A client entry launching `ue-mcp@latest` against a project whose binary bridge comes from a newer release (a beta) starts the daemon at the bridge's version, so the server and bridge stay matched.
 
 | Command | What it does |
 |---|---|
 | `npx ue-mcp daemon status` | The daemon's pid, port and version, its editors, and why each one last disconnected (`closed`, `crashed`, `restarting`, `rebuild` or `unknown`). `--json` for a machine. |
 | `npx ue-mcp daemon start` / `stop` | Start one for the project, or ask it to exit. |
+| `npx ue-mcp daemon run` | Run the daemon in the foreground. |
 | `npx ue-mcp daemon open` | Print the URL of the client UI it serves, if one is installed. `--browser` opens it. |
-| `npx ue-mcp extension install <source> [--sha256 <hex>] [project]` | Install a daemon extension into `~/.ue-mcp/extensions/<name>@<version>/`, record the project at that version, and restart the project's daemon to load it. The source is a zip, a URL with its SHA-256, or a release manifest (`.json` with `url` and `sha256`). Versions sit side by side: each project loads the version it records, so installing for one project never changes another. `extension use <name> <version> [project]` moves a project to a version already installed, `extension list [project]` shows every installed version and the one the project records, and `extension remove <name>` removes every version. A version no project records is removed on the next install. |
+| `npx ue-mcp extension install <source> [--sha256 <hex>] [project]` | Install a daemon extension into `~/.ue-mcp/extensions/<name>@<version>/`, record the project at that version, and restart the project's daemon to load it. The source is a zip, a URL with its SHA-256, or a release manifest (`.json` with `url` and `sha256`). Versions sit side by side: each project loads the version it records. `extension use <name> <version> [project]` moves a project to an installed version, `extension list [project]` shows every installed version and the one the project records, and `extension remove <name>` removes every version. A version no project records is removed on the next install. |
 
 The daemon listens on 127.0.0.1 only, and every request needs the token in `~/.ue-mcp/daemons/<key>.json`, which only your user can read.
 
@@ -276,9 +221,9 @@ ue-mcp:
     openBrowserOnCrash: false    # open the client UI in your browser when the editor crashes
 ```
 
-A call that still cannot reach the editor says why it last went away. The daemon's event stream (`GET /v1/events`) carries `call.started` and `call.finished` for every MCP call from every client, named by the client, with the category, action, duration and outcome. It also carries `dialog.opened`, `dialog.answered`, `dialog.delegated` and `dialog.closed` for editor dialogs, and the progress of every PIE test script run: `script.run_started`, `script.step_started`, `script.step_passed`, `script.step_failed`, `script.verdict_requested`, `script.verdict` and `script.run_finished`. [Test scripts](pie-scripts.md#daemon-events) lists their payloads.
+A call that still cannot reach the editor says why it last went away. The daemon's event stream (`GET /v1/events`) carries `call.started` and `call.finished` for every MCP call from every client, named by the client, with the category, action, duration and outcome. It also carries `dialog.opened`, `dialog.answered`, `dialog.delegated` and `dialog.closed`, and the progress of every PIE test script run: `script.run_started`, `script.step_started`, `script.step_passed`, `script.step_failed`, `script.verdict_requested`, `script.verdict` and `script.run_finished`. [Test scripts](pie-scripts.md#daemon-events) lists their payloads.
 
-The daemon also manages the project's plugins over HTTP, for clients such as an in-editor panel. `GET /v1/plugins` lists the plugins `ue-mcp.yml` declares with their version, status and categories, and `GET /v1/plugins/catalog` lists the registry's published plugins. `POST /v1/plugins/install` (`{ name, version? }`), `POST /v1/plugins/update` (`{ name? }`) and `POST /v1/plugins/uninstall` (`{ name }`) run the same `ue-mcp plugin` commands, one at a time, and publish `plugins.changed` on the event stream. A change takes effect when the server restarts.
+The daemon also manages the project's plugins over HTTP. `GET /v1/plugins` lists the plugins `ue-mcp.yml` declares with their version, status and categories, and `GET /v1/plugins/catalog` lists the registry's published plugins. `POST /v1/plugins/install` (`{ name, version? }`), `POST /v1/plugins/update` (`{ name? }`) and `POST /v1/plugins/uninstall` (`{ name }`) run the same `ue-mcp plugin` commands, one at a time, and publish `plugins.changed` on the event stream. A change takes effect when the server restarts.
 
 ### What a client can read from the daemon
 
@@ -298,15 +243,15 @@ These routes serve a client that builds its own agent context, such as an in-edi
 
 One id is listed once. A project copy wins over the packaged one, and `.claude/skills` over `.agents/skills`; the winner lists what it hides in `shadows`. A SKILL.md whose frontmatter does not parse is still listed, with the reason in `problems`.
 
-**Context projection.** `GET /v1/context/projection?strategy=micro|lean|full&categories=a,b` returns what the server would hand a client under that [context strategy](#context-strategy-full-lean-micro), narrowed to those categories: `strategy`, `categories` (the scope after resolving; omitted means every enabled category), `instructions` (the initialize text, quoting the scope's counts and categories), `tools` (each tool's `name`, `description`, `inputSchema` as `tools/list` sends it, and `category`, null for micro's `tools` gateway, lean's `catalog` and `flow`), and `seedTokens`, the characters of the instructions and tools JSON divided by 4, the estimate `scripts/context-tax.mjs` makes without an API key (`estimator: "chars/4"`). Over every category it is exactly what the server sends for that strategy. Lean's `catalog` and micro's gateway search and describe only the scope. `strategy` defaults to the server's own; an unknown strategy or category answers 400.
+**Context projection.** `GET /v1/context/projection?strategy=micro|lean|full&categories=a,b` returns what the server would hand a client under that [context strategy](#context-strategy-full-lean-micro), narrowed to those categories: `strategy`, `categories` (the scope after resolving; omitted means every enabled category), `instructions` (the initialize text, quoting the scope's counts and categories), `tools` (each tool's `name`, `description`, `inputSchema` as `tools/list` sends it, and `category`, null for micro's `tools` gateway, lean's `catalog` and `flow`), and `seedTokens`, the characters of the instructions and tools JSON divided by 4 (`estimator: "chars/4"`). Over every category it is exactly what the server sends for that strategy. Lean's `catalog` and micro's gateway search and describe only the scope. `strategy` defaults to the server's own; an unknown strategy or category answers 400.
 
-`api.context.call(tool, input, { strategy?, categories?, dialogPrompt?, dialogWaitMs?, elicit? })` runs one call to a projected tool as the MCP server would: a category, its lean `describe`, `catalog`, micro's `tools` gateway, or `flow`, through the same dispatch as `api.callAction`, so dialogs, forms, effect gates and checkpoints apply the same way. A tool or gateway call to a category outside the scope is refused with an error result and nothing runs.
+`api.context.call(tool, input, { strategy?, categories?, dialogPrompt?, dialogWaitMs?, elicit? })` runs one call to a projected tool as the MCP server would: a category, its lean `describe`, `catalog`, micro's `tools` gateway, or `flow`, through the same dispatch as `api.callAction`, so dialogs, forms, effect gates and checkpoints apply the same way. A call to a category outside the scope is refused with an error result and nothing runs.
 
-**Action effects.** `GET /v1/actions?categories=a,b` returns `{ actions }`, one entry per enabled action: `category`, `action`, `effect` (`read`, `mutate` or `unknown`) and `effectSource` (`declared` on the action, `inferred` from the name for a plugin action whose manifest gave none, `undeclared` when nothing claims it), read from the graph the server dispatches, plugin actions included. `destructive` says the action destroys or overwrites something it cannot give back. An action can declare it; otherwise a `mutate` or `unknown` action is destructive when its name leads with `delete`, `remove`, `clear`, `discard`, `revert`, `reset`, `purge`, `wipe`, `destroy`, `drop`, `overwrite`, `replace`, `restore` or `uninstall` (after an `epic_`, `bulk_` or `batch_` prefix), and a read never is. `destructiveSource` says which: `declared`, `lexicon` or `none`. The verb list is a fallback, so an action it misjudges declares the answer instead. An unknown category answers 400.
+**Action effects.** `GET /v1/actions?categories=a,b` returns `{ actions }`, one entry per enabled action: `category`, `action`, `effect` (`read`, `mutate` or `unknown`) and `effectSource` (`declared` on the action, `inferred` from the name for a plugin action whose manifest gave none, `undeclared` when nothing claims it), read from the graph the server dispatches, plugin actions included. `destructive` says the action destroys or overwrites something it cannot give back. An action can declare it; otherwise a `mutate` or `unknown` action is destructive when its name leads with `delete`, `remove`, `clear`, `discard`, `revert`, `reset`, `purge`, `wipe`, `destroy`, `drop`, `overwrite`, `replace`, `restore` or `uninstall` (after an `epic_`, `bulk_` or `batch_` prefix), and a read never is. `destructiveSource` says which: `declared`, `lexicon` or `none`. An unknown category answers 400.
 
 ### Context measurements
 
-A client that measures which context strategy costs least writes the result in one shared format, so measurements from different clients and models can be compared. `ue-mcp/daemon` exports the `ContextMeasurement` type, `parseContextMeasurement(value)` (returns `{ ok: true, value }` or `{ ok: false, errors }`, every problem named by its path) and `scopeBucket(categoryCount)`. The package ships the same shape as a JSON Schema at `ue-mcp/schemas/context-measurement.schema.json` for tools that are not TypeScript.
+A client that measures which context strategy costs least writes the result in one shared format, so measurements from different clients and models can be compared. `ue-mcp/daemon` exports the `ContextMeasurement` type, `parseContextMeasurement(value)` (returns `{ ok: true, value }` or `{ ok: false, errors }`, every problem named by its path) and `scopeBucket(categoryCount)`. The package ships the same shape as a JSON Schema at `ue-mcp/schemas/context-measurement.schema.json`.
 
 ```json
 {
@@ -328,11 +273,11 @@ A client that measures which context strategy costs least writes the result in o
 }
 ```
 
-One run is one model, one strategy and one scope over a set of tasks. `scope` buckets how many categories the context was narrowed to: `1-3`, `4-8` or `9+`, as `scopeBucket` computes it. `seedTokens` is the projection's estimate for that strategy and scope (`GET /v1/context/projection`). Per task, `totalTokens` counts everything the task spent, `modelCalls` the model requests, `discoveryCalls` the tool calls that only searched or described the surface, and `passed` whether it did what it was asked. A task keeps its `id` across runs so runs can be compared. Keys outside the format are refused.
+One run is one model, one strategy and one scope over a set of tasks. `scope` buckets how many categories the context was narrowed to: `1-3`, `4-8` or `9+`, as `scopeBucket` computes it. `seedTokens` is the projection's estimate for that strategy and scope (`GET /v1/context/projection`). Per task, `totalTokens` counts everything the task spent, `modelCalls` the model requests, `discoveryCalls` the tool calls that only searched or described the surface, and `passed` whether it did what it was asked. A task keeps its `id` across runs. Keys outside the format are refused.
 
 ### Updates through the daemon
 
-A minute after it starts, and every six hours, the daemon looks for a newer release on the install's channel and publishes `update.available` on its event stream. `GET /v1/update` reports the target version and, for a binary install, whether that release ships binaries for the project's engine and platform. `POST /v1/update/apply` (optional body `{ "version": "x.y.z" }`) installs it:
+A minute after it starts, and every six hours, the daemon looks for a newer release on the install's channel (stable, or the prerelease channel you are on) and publishes `update.available` on its event stream. `GET /v1/update` reports the target version and, for a binary install, whether that release ships binaries for the project's engine and platform. `POST /v1/update/apply` (optional body `{ "version": "x.y.z" }`) installs it:
 
 | Install | Editor down | Editor running |
 |---|---|---|
@@ -340,19 +285,21 @@ A minute after it starts, and every six hours, the daemon looks for a newer rele
 | Binary, Mac and Linux | Swapped in now | Staged beside the plugin and swapped in when the editor exits |
 | Source | Deployed and built now; a failed build fails the update | Deployed, with the build recorded as owed; the next start or restart through ue-mcp builds before the editor opens |
 
-Unreal rebuilds a module on start only when its DLL is missing, never when its source is newer, so a source update is always built by ue-mcp. An owed build shows as `plugin.pendingBuild` in `GET /v1/install`, and `POST /v1/editor/rebuild` stops the editor, builds, and starts it again only when the build passed; a failed step carries `reason`. Running `ue-mcp update --apply-only` again with the editor down also finishes an owed build.
+Unreal rebuilds a module on start only when its DLL is missing, never when its source is newer, so ue-mcp always builds a source update itself. An owed build shows as `plugin.pendingBuild` in `GET /v1/install`, and `POST /v1/editor/rebuild` stops the editor, builds, and starts it again only when the build passed; a failed step carries `reason`. Running `ue-mcp update --apply-only` again with the editor down also finishes an owed build.
 
-Each step is reported as `update.staged`, `update.building`, `update.applied` or `update.failed`. A downloaded archive is installed only when the release manifest lists it with a matching SHA-256, and source is never written over a binary install. `UE_MCP_DISABLE_UPDATE_CHECK=1` turns the periodic check off.
+Each step is reported as `update.staged`, `update.building`, `update.applied` or `update.failed`. A downloaded archive is installed only when the release manifest lists it with a matching SHA-256, and source is never written over a binary install. `UE_MCP_DISABLE_UPDATE_CHECK=1` turns the periodic check off, here and in the server.
 
 ## Bridge Connection
 
-The C++ plugin listens on a **per-project WebSocket port** derived from a hash of the project root path (in the IANA ephemeral range `49152-65535`). Deriving the port from the path means two checkouts of the same project - or several unrelated projects - on one machine each get a stable, launch-order-independent port, so their MCP clients never collide on a single fixed number. The Node client and the C++ bridge compute the identical value independently, and the bridge also publishes the actual bound port to `<project>/Saved/UE_MCP_Bridge/port.json` as the authoritative source (if the port is already taken, the bridge probes upward and the lockfile records where it really landed). The legacy fixed port `9877` remains the fallback when no project root is known. The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
+The C++ plugin listens on a **per-project WebSocket port** derived from a SHA-1 of the project root path, in the range `49152-65535`. Two checkouts of a project, or several projects, on one machine each get a stable port of their own. The client and the plugin compute the same value independently. If the port is taken, the plugin tries up to 50 ports above it, and publishes the port it bound to `<project>/Saved/UE_MCP_Bridge/port.json`, which the client reads first. The fixed port `9877` is used only when no project is loaded.
 
-On Windows the listening socket is claimed with `SO_EXCLUSIVEADDRUSE`, so a second editor of the same project cannot bind the same port. It walks upward instead and publishes where it landed, which is what lets two editors of one project coexist without their clients reaching the wrong one.
+The client connects on startup, retries every 15 seconds while disconnected, and reconnects at once when an editor publishes its `port.json`.
+
+On Windows the listening socket is claimed with `SO_EXCLUSIVEADDRUSE`, so a second editor of the same project cannot bind the same port. It moves upward and publishes where it landed.
 
 ### Pinning the port
 
-Pin an explicit port with `bridge.port` in `ue-mcp.yml`:
+Pin a port with `bridge.port` in `ue-mcp.yml`:
 
 ```yaml
 ue-mcp:
@@ -360,169 +307,157 @@ ue-mcp:
     port: 50123
 ```
 
-**Both halves honour it.** The client reads the key when it chooses where to connect, and the editor-side plugin reads it when it chooses where to listen, so a pinned project has one number on both ends (#819). Precedence is identical on both sides, highest first:
+Both halves honour it, with the same precedence, highest first:
 
 | Rank | Source | Notes |
 |------|--------|-------|
 | 1 | `-MCPPort=NNNN` on the editor command line, or an explicit port argument to the client | Per launch |
-| 2 | `UE_MCP_PORT` | Per environment. Applies to every project the shell starts, which is why it is the wrong tool for pinning one project |
-| 3 | `bridge.port` in the config layers | Per project, and the one to reach for |
-| 4 | The port derived from the project root path | The default when nothing is pinned |
+| 2 | `UE_MCP_PORT` | Per environment. Applies to every project the shell starts, so it is the wrong tool for pinning one project |
+| 3 | `bridge.port` in the config layers | Per project. The client also writes the port it resolved to `<project>/Saved/UE_MCP_Bridge/requested.json`, and the plugin reads that before its own config read, so an editor launched without the client's environment still binds the client's port |
+| 4 | The port derived from the project root path | The default |
 
-The plugin reads `bridge.port` from the same layered files as the client, and honours the same winner: `~/.ue-mcp/config.yml`, then `<project>/ue-mcp.yml`, then `<project>/ue-mcp.{env}.yml` when `UE_MCP_ENV` is set, then `<project>/ue-mcp.local.yml`. See [Config layering](config-file.md#config-layering).
+The plugin reads `bridge.port` from the same layered files as the client: `~/.ue-mcp/config.yml`, `<project>/ue-mcp.yml`, `<project>/ue-mcp.{env}.yml` when `UE_MCP_ENV` is set, then `<project>/ue-mcp.local.yml`. See [Config layering](config-file.md#config-layering).
 
-Two things to know about a pinned port:
-
-- **The lockfile still wins at connect time.** A pin is a request, not a guarantee. If something else already holds the port, the bridge walks upward, binds what it can, logs a warning naming the port you asked for and the one it took, and publishes the port it actually bound. The client reads `port.json`, so it follows.
-- **A value the plugin cannot use is announced, not applied.** A `bridge.port` that is not a whole number in `1-65535` is logged as a warning and the derived port is used instead. The plugin reads this one key with a small purpose-built reader rather than a full YAML parser (Unreal ships none, and one integer is not worth a dependency), so it handles plain nested keys and refuses anything more exotic. Written the ordinary way, as in the example above, it is read. Written as a flow mapping (`bridge: { port: 50123 }`) or with anchors, it is not, and the editor log says so.
+- **A pin is a request.** If something already holds the port, the plugin moves upward, logs a warning naming the port asked for and the one taken, and publishes the port it bound. The client follows `port.json`.
+- **A value the plugin cannot use is announced, not applied.** A `bridge.port` that is not a whole number in `1-65535` is logged as a warning and the derived port is used. The plugin reads this key with a small reader rather than a YAML parser: write it as plain nested keys, as above. A flow mapping (`bridge: { port: 50123 }`) or an anchor is not read by the plugin, and the editor log says so.
 
 ### Which editor lifecycle actions act on
 
-`editor(start_editor)`, `editor(stop_editor)` and `editor(restart_editor)` act on a process, so they resolve their target more strictly than ordinary tool calls (#819):
+`editor(start_editor)`, `editor(stop_editor)` and `editor(restart_editor)` act on a process, so they resolve their target more strictly than ordinary calls:
 
-- **The port comes from the lockfile and nowhere else.** No environment variable, no derived value, no `9877`. The bridge writes `<project>/Saved/UE_MCP_Bridge/port.json` whatever port it binds and removes it on exit, so it is the only file that says where this project's editor is listening. When it is absent, the action fails and names the path it checked instead of probing a port some other project's editor could answer on.
-- **The process check is scoped by `.uproject`.** "Is an editor running" is never the question; "is the editor holding this project open running" is. A second editor, a headless shard, or somebody else's project no longer blocks a launch.
-- **Stopping verifies before it acts.** The lockfile records the editor's PID, and a lockfile outlives a crash, so `stop_editor` confirms that PID is still an editor for this project before it sends the quit request.
-- **Stopping returns once the process has exited.** The bridge port closes early in shutdown and the process keeps unloading for seconds after, so `stop_editor` waits for the PID to leave the process table before it reports success, and fails naming the PID if it outlives the wait. `start_editor` likewise waits out an editor whose log is already closed instead of calling it running (#1179).
-- **Stopping clears a crash reporter a crashed editor left behind (Windows).** After a crash, `CrashReportClientEditor.exe` stays up and keeps the project's module DLLs open, so the next `build_project` fails at link time with `LNK1104`. Once no editor of this project is left running, whether because the stop closed it or because there was nothing to stop, `stop_editor` ends each crash reporter that belongs to this project and lists it under `crashReporters` with its pid and why it was judged this project's: a path under the project on its command line, or a project binary it holds open (asked of Windows Restart Manager). A crash reporter still watching a live editor, of this project or any other, and one tied to another project are never touched.
-- **No project loaded means no lifecycle action.** With nothing loaded there is no editor these calls could be about, so they say so rather than picking one.
+- **The port comes from the lockfile only.** The plugin writes `<project>/Saved/UE_MCP_Bridge/port.json` whatever port it binds and removes it on exit. When it is absent, the action fails and names the path it checked instead of probing a port another project's editor could answer on.
+- **The process check is scoped by `.uproject`.** The question is whether an editor holding this project is running. Another project's editor or a headless editor does not block a launch.
+- **Stopping verifies before it acts.** A lockfile outlives a crash, so `stop_editor` confirms the PID it names is still an editor for this project before it sends the quit request.
+- **Stopping returns once the process has exited.** `stop_editor` waits for the PID to leave the process table, and fails naming the PID if it outlives the wait. `start_editor` likewise waits out an editor whose log is already closed instead of calling it running.
+- **Stopping clears a crash reporter a crashed editor left behind (Windows).** `CrashReportClientEditor.exe` keeps the project's module DLLs open, so the next build fails with `LNK1104`. Once no editor of this project is running, `stop_editor` ends each crash reporter that belongs to this project and lists it under `crashReporters` with its pid and why it was judged this project's. A crash reporter watching a live editor, or tied to another project, is never touched.
+- **No project loaded means no lifecycle action.**
 
-Consequence worth knowing: if an editor is killed rather than closed, its lockfile stays behind and `stop_editor` reports the stale PID it names. Delete `<project>/Saved/UE_MCP_Bridge/port.json` to clear it.
+If an editor is killed rather than closed, its lockfile stays behind and `stop_editor` reports the stale PID. Delete `<project>/Saved/UE_MCP_Bridge/port.json` to clear it.
 
 ### Bridge state files
 
-The bridge keeps two records under `<project>/Saved/UE_MCP_Bridge/`. Both are published by rename, so a client polling them never reads a half-written file.
+The plugin keeps these under `<project>/Saved/UE_MCP_Bridge/`, each published by rename so a reader never sees a half-written file.
 
 | File | Written when | Contents |
 |------|--------------|----------|
 | `port.json` | The bridge is listening | `port`, `pid`, `instanceId`, `startedAt`, `status`, `protocolVersion`, `handlerApiVersion` |
 | `bridge-error.json` | The editor came up but the bridge could not bind | `status: "bind-failed"`, the port range tried, the socket error, `pid`, `instanceId` |
+| `status.json` | Four times a second from editor startup | The engine state snapshot `editor(get_engine_state)` reports, written by a thread that runs while the game thread is blocked |
+| `requested.json` | The client resolved a pinned port | The port the plugin should bind. See [Pinning the port](#pinning-the-port) |
 
-`instanceId` identifies the server object that wrote the record, and only that instance removes it. A pid alone is not enough, since pids are recycled: an editor that failed to start can no longer delete the record of one that is running, and a second instance of a project cannot overwrite the first's. The `pid` is what lifecycle actions check before they act on a record, as described above.
+`instanceId` identifies the server object that wrote a record, and only that instance removes it, so an editor that failed to start cannot delete the record of one that is running. `bridge-error.json` is what tells "no editor" from "editor running, bridge dead": when a connection fails and this record names a live process, the client quotes its detail in the error.
 
-`bridge-error.json` is what distinguishes "no editor" from "editor running, bridge dead". When a connection fails and this record names a live process, the client quotes its detail in the error.
+### Connection state
 
-### Connection States
-
-| State | Meaning |
-|-------|---------|
-| **Connected** | Bridge is active, all tools available |
-| **Disconnected** | Editor not running or plugin not loaded. Filesystem tools still work (INI parsing, C++ headers, asset listing) |
-| **Reconnecting** | Connection lost, auto-retry in progress |
+`project(action="get_status")` reports `editorConnected` and `editorTarget`: the `.uproject` the connection belongs to, the port, and how the port was chosen (`lockfile`, `config`, `derived`, `env`, `explicit`). With no editor connected, filesystem tools still work (INI parsing, C++ headers, asset listing) and bridge actions refuse with the reason.
 
 ### Who may connect
 
-The bridge binds loopback only and refuses every upgrade that carries an `Origin` header. Browsers always send one on a WebSocket upgrade and cannot suppress or forge it, so this keeps out any page served by a local dev server, which would otherwise be able to scan the port range and call `execute_python`. Native clients (the npm client, curl, editor tooling) omit the header and are unaffected.
-
-Check the current state with `project(action="get_status")`. Alongside `editorConnected`, it reports `editorTarget`: the `.uproject` the connection belongs to, the port, and how that port was chosen (`lockfile`, `config`, `derived`, `env`, `explicit`). The connection is always bound to one project, so `editorTarget.projectPath` matches the loaded project.
+The bridge binds loopback only and refuses every upgrade that carries an `Origin` header. Browsers always send one on a WebSocket upgrade and cannot suppress or forge it, so no web page can reach the bridge. Native clients (the npm client, curl, editor tooling) omit the header.
 
 ### Switching Projects
 
-`project(action="set_project", projectPath="...")` moves path resolution and the editor connection together. The socket to the previous project's editor is dropped before the new project is loaded, so no action can execute in the project you just left.
+`project(action="set_project", projectPath="...")` moves path resolution and the editor connection together. The socket to the previous project's editor is dropped before the new project loads, so no action runs in the project you left.
 
-The port for the new project is chosen from that project alone: its `Saved/UE_MCP_Bridge/port.json` lockfile first, then its own `bridge.port`, then the port derived from its root path.
+The new project's port is chosen from that project alone: its `Saved/UE_MCP_Bridge/port.json` first, then its own `bridge.port`, then the port derived from its root.
 
-A port pinned with `UE_MCP_PORT` (or an explicit port argument) is the exception. It was chosen for whichever project the server started on and says nothing about the one you switched to, so if the new project has published no lockfile the switch still completes and the connection is refused with an explanation. Start the new project's editor, which publishes the lockfile, or clear the pin so each project gets its derived port.
+A port pinned with `UE_MCP_PORT` (or an explicit port argument) was chosen for the project the server started on. If the new project has published no lockfile, the switch still completes and the connection is refused with an explanation. Start the new project's editor, which publishes the lockfile, or clear the pin.
 
 ## Plugin Deployment
 
-On first run with a project path, the server automatically:
+`npx ue-mcp init` and `npx ue-mcp deploy` install the bridge into `<Project>/Plugins/UE_MCP_Bridge/`, add `UE_MCP_Bridge` to the `.uproject`, and enable `PythonScriptPlugin` (needed for `execute_python`). `deploy` copies source and also refreshes installed skills; it never writes source over a binary install. The server itself only checks the plugin at startup: it enables the two `.uproject` entries for a plugin that is present, and logs a note telling you to run `init` when it is missing or `deploy` (`update` for a binary install) when its version differs.
 
-1. Copies `plugin/ue_mcp_bridge/` → `<Project>/Plugins/UE_MCP_Bridge/`
-2. Adds `UE_MCP_Bridge` to the `.uproject` plugins list
-3. Enables `PythonScriptPlugin` if not already enabled (needed for `execute_python` escape hatch)
-
-The plugin is editor-only and has no runtime footprint.
-
-### Plugin Dependencies
-
-The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if missing):
-
-- `PythonScriptPlugin` - for `editor(action="execute_python")`
-- `EnhancedInput` - for input action/mapping creation
-- `GameplayAbilities` - for GAS tools
-- `Niagara` - for VFX tools
-- `PCG` - for procedural generation tools
+The plugin is editor-only. Its `.uplugin` depends on these engine plugins, which Unreal enables with it: `PythonScriptPlugin`, `DataValidation`, `EditorScriptingUtilities`, `EnhancedInput`, `GameplayAbilities`, `GameplayTagsEditor`, `Niagara`, `PCG`, `IKRig`, `ControlRig`, `PoseSearch`, `Chooser`, `PropertyBindingUtils`, `Metasound`, `Synthesis`, `StateTree`, and `Fab` (optional).
 
 ## CLI Subcommands
 
-`npx ue-mcp` exposes a few utility subcommands beyond the default MCP server entry:
+Run `npx ue-mcp <command> --help` for a command's flags.
 
 | Command | Description |
 |---------|-------------|
-| `npx ue-mcp init` | Interactive setup wizard. Deploys the C++ bridge plugin, writes MCP client configs, scaffolds `ue-mcp.yml`, optionally installs Claude Code skills + feedback prompt hook, optionally runs the GitHub OAuth device flow. Migrates any legacy `.ue-mcp.json` / `ue-mcp.local.yml` it finds. |
-| `npx ue-mcp update` | Install the latest version, redeploy the plugin sources and rebuild the editor. Skips the build while the editor is running. `--no-build` stops after the deploy, `--no-deploy` updates the npm package only. A binary install gets verified binaries instead, with the editor open or closed. |
-| `npx ue-mcp doctor [--fix]` | Report every version source and install problem. `--fix` removes MCP client entries that point at a project which no longer exists or has no bridge. |
-| `npx ue-mcp deploy` | Copy the C++ bridge plugin sources into the project. Use after `ue-mcp update` or to force a redeploy. |
-| `npx ue-mcp build` | Build the project C++ code using Unreal Build Tool. Stop the editor first. |
-| `npx ue-mcp auth` | Run the GitHub device flow standalone so `feedback(submit)` can author issues as your real GitHub user. Same step that lives inside `init`; use this if you skipped it at init time. |
-| `npx ue-mcp uninstall-hooks` | Remove the feedback PostToolUse hook from every Claude Code settings file recorded for this project in `~/.ue-mcp/state.json`. |
-| `npx ue-mcp dialog mode [<mode>]` | Read or set how a modal dialog blocking the editor is handled (`interactive`, `auto`, or `defer`). `--editor <name>` scopes it to one project; `default` clears it. Stored in `~/.ue-mcp/state.json`. See [Dialog handling mode](#dialog-handling-mode). |
-| `npx ue-mcp playtest mode [<mode>]` | Read or set who starts playtest runs (`manual` or `automatic`). `--editor <name>` scopes it to one project; `clear` clears it. Stored in `~/.ue-mcp/state.json`. See [Playtest mode](#playtest-mode). |
-| `npx ue-mcp feedback mode [<mode>]` | Read or set your personal feedback approval mode (`interactive`, `auto-approve`, or `defer`). Stored in `~/.ue-mcp/state.json`. See [Feedback → modes](feedback.md#feedback-modes). |
-| `npx ue-mcp feedback list \| show \| approve \| discard \| review` | Manage submissions queued while feedback mode is `defer`. `review` (experimental) walks the queue interactively (approve/discard/skip per item). See [Feedback → Reviewing deferred submissions](feedback.md#reviewing-deferred-submissions). |
-| `npx ue-mcp resolve <issue>` | Fetch a feedback issue, branch, hand it to Claude Code to implement, open a PR. See [Feedback](feedback.md#resolving-feedback-issues). |
-| `npx ue-mcp plugin install <name>` | Install a ue-mcp plugin from npm and register it in `ue-mcp.yml`. See [Configuration → Plugins](#plugins). |
-| `npx ue-mcp plugin uninstall <name>` | Inverse of install. |
-| `npx ue-mcp plugin create <name>` | Scaffold a new plugin package. See [Plugins](plugins.md). |
-| `npx ue-mcp context [full\|lean\|micro]` | Read or set the [context strategy](#context-strategy-full-lean-micro) in `ue-mcp.yml`. No argument prints the current strategy. |
-| `npx ue-mcp daemon <status\|start\|stop\|open>` | Inspect or control the project's [daemon](#the-daemon). |
+| `npx ue-mcp init` | Setup wizard. Installs the bridge, writes MCP client configs and `ue-mcp.yml`, optionally installs Claude Code skills and the feedback hook. `--yes` / `--json` run it from flags. See [Getting Started](getting-started.md#1-installation). |
+| `npx ue-mcp update` | Update the package, deploy the plugin source and rebuild the editor target. Skips the build while the editor runs and records it as owed. `--no-build` stops after the deploy, `--no-deploy` updates the package only. A binary install gets verified binaries instead. `--apply-only` installs this package's own bridge into the project and stops. |
+| `npx ue-mcp doctor [--fix]` | Report every version source and install problem. `--fix` removes client entries that point at a project which no longer exists or has no bridge, and adds `--min-release-age=0` to npx launches. |
 | `npx ue-mcp status [--json]` | The project's install and editor state, read-only. |
+| `npx ue-mcp deploy` | Copy the bridge plugin source into the project and refresh installed skills. |
+| `npx ue-mcp build` | Build the project's editor target with UnrealBuildTool. Stop the editor first. |
+| `npx ue-mcp context [full\|lean\|micro]` | Read or set the [context strategy](#context-strategy-full-lean-micro) in `ue-mcp.yml`. |
+| `npx ue-mcp daemon <run\|start\|stop\|status\|open>` | Inspect or control the project's [daemon](#the-daemon). |
+| `npx ue-mcp extension <install\|use\|remove\|list>` | Manage [daemon extensions](#the-daemon). |
+| `npx ue-mcp dialog mode [<mode>]` | Read or set the [dialog handling mode](#dialog-handling-mode) (`interactive`, `auto`, `defer`; `default` clears). |
+| `npx ue-mcp playtest mode [<mode>]` | Read or set the [playtest mode](#playtest-mode) (`manual`, `automatic`; `clear` clears). |
+| `npx ue-mcp feedback mode [<mode>]` | Read or set your feedback approval mode (`interactive`, `auto-approve`, `defer`). See [Feedback modes](feedback.md#feedback-modes). |
+| `npx ue-mcp feedback list \| show \| approve \| discard \| review` | Manage submissions queued under `defer`. `review` (experimental) walks the queue one entry at a time. See [Reviewing deferred submissions](feedback.md#reviewing-deferred-submissions). |
+| `npx ue-mcp auth` | Run the GitHub device flow so `feedback(submit)` can file issues as your account. |
+| `npx ue-mcp login` / `logout` | Cache or forget the registry token `ue-mcp plugin publish` uses. |
+| `npx ue-mcp uninstall-hooks` | Remove the feedback hook from every Claude Code settings file recorded for this project. |
+| `npx ue-mcp resolve <issue>` | Fetch a feedback issue, branch, hand it to Claude Code to implement, open a PR. See [Development](development.md#resolving-an-issue-with-claude-code). |
+| `npx ue-mcp plugin <install\|uninstall\|update\|list\|config\|create\|publish\|check-skills\|record-specs>` | Install, configure, create and publish plugins. See [Using plugins](plugins-using.md) and [Plugins](plugins.md). |
+| `npx ue-mcp version` | Print the installed version. |
 
-Every subcommand above also accepts `--editor <name-or-path>` to pick which of several editors it acts on. See [Several Editors From One Server](#several-editors-from-one-server).
+Every command that acts on a project accepts `--editor <name-or-path>`. See [Several Editors From One Server](#several-editors-from-one-server).
 
 ## Editor Lifecycle
 
-The server can manage the editor process:
-
-| Command | Description |
+| Action | Description |
 |---------|-------------|
-| `editor(action="start_editor")` | Launch UE with the current project |
-| `editor(action="stop_editor")` | Gracefully stop the editor |
+| `editor(action="start_editor")` | Launch the editor on the current project and wait until it is ready |
+| `editor(action="stop_editor")` | Close the editor and wait for the process to exit |
 | `editor(action="restart_editor")` | Stop and relaunch |
-| `editor(action="build_project")` | Build the project C++ code via UBT |
+| `editor(action="build_project")` | Build the project C++ with UnrealBuildTool |
 | `project(action="build")` | The same build, with `configuration`, `platform` and `clean` parameters |
 
-Both builds run UnrealBuildTool as a separate process, so they work with the
-editor stopped. That is the case that matters: UnrealBuildTool cannot link while
-an editor holds the module DLLs, so a full rebuild has to happen with the editor
-down.
+A start or restart through ue-mcp first builds a source bridge that owes a build after an update. Both builds run UnrealBuildTool as a separate process, so they work with the editor stopped, which a full rebuild needs: UnrealBuildTool cannot link while an editor holds the module DLLs.
 
 ### Build parallelism
 
-UnrealBuildTool compiles one file per physical core by default, and each of those processes maps Unreal's precompiled header, which costs several GB. On a machine with fewer GB than cores, the compiler does not wait for room: it fails with `C3859` or `C1076` several minutes in, and the message names a paging file, so it reads as a broken machine rather than a default that does not fit it.
+UnrealBuildTool compiles one file per physical core by default, and each compiler process maps Unreal's precompiled header, which costs several GB. On a machine with fewer GB than cores, the compiler fails with `C3859` or `C1076` several minutes in, with a message about the paging file.
 
-ue-mcp computes a safe number from the machine's memory and core count and passes it to every build, including `ue-mcp build`, `ue-mcp update --build` and `editor(build_project)`. The cap is applied only when it is below what UnrealBuildTool would have chosen, so a machine with headroom builds exactly as before. There is nothing to configure.
-
-Set `UE_MCP_MAX_PARALLEL_ACTIONS` to a positive integer to override it, for a machine where the estimate is wrong in either direction. A build that runs out of room anyway reports what happened and what to change, rather than leaving the compiler's wording as the only explanation.
+ue-mcp computes a safe number from the machine's memory and core count and passes it to every build (`ue-mcp build`, `ue-mcp update`, `editor(build_project)`). The cap applies only when it is below what UnrealBuildTool would choose. Set `UE_MCP_MAX_PARALLEL_ACTIONS` to a positive integer to override it. A build that runs out of memory anyway says what happened and what to change.
 
 ## Which Engine A Project Uses
 
-The engine is resolved once, and the same answer drives the build tool, the
-editor launch, engine plugin discovery and the engine-source readers
-(`project(find_engine_symbol)`, `read_engine_header`, `search_engine_cpp`,
-`list_engine_modules`). Order, most specific first:
+The engine is resolved once, and the same answer drives the build tool, the editor launch, engine plugin discovery and the engine-source readers (`project(find_engine_symbol)`, `read_engine_header`, `search_engine_cpp`, `list_engine_modules`). Order, most specific first:
 
-1. `UE_MCP_TEST_ENGINE_ROOT` - an engine root pinned for the whole process.
-2. `UE_BUILD_TOOL_PATH` - a `Build.bat` / `Build.sh` pinned for the process.
-3. `editor.buildToolPath` in the project's `ue-mcp.yml` - the per-project form.
-4. `UE_EDITOR_PATH`, then `editor.path` - an editor binary names its own tree.
+1. `UE_MCP_TEST_ENGINE_ROOT`: an engine root pinned for the whole process.
+2. `UE_BUILD_TOOL_PATH`: a `Build.bat` / `Build.sh` pinned for the process.
+3. `editor.buildToolPath` in the project's `ue-mcp.yml`.
+4. `UE_EDITOR_PATH`, then `editor.path`: an editor binary names its own tree.
 5. `EngineAssociation` read as a path, absolute or relative to the project.
-6. An engine tree beside or above the project: the first directory from the
-   project upward that holds `Engine/Build/BatchFiles/`. This is the layout a
-   Perforce stream produces, with `<stream>/Engine` next to
-   `<stream>/MyProject/MyProject.uproject`.
-7. `EngineAssociation` as a registered build (a GUID, looked up in
-   `HKCU\Software\Epic Games\Unreal Engine\Builds`) or a version string such as
-   `5.8`, looked up as a launcher install.
+6. An engine tree beside or above the project: the first directory from the project upward that holds `Engine/Build/BatchFiles/`. This is the layout a Perforce stream produces, with `<stream>/Engine` next to `<stream>/MyProject/MyProject.uproject`.
+7. `EngineAssociation` as a registered build (a GUID, looked up in `HKCU\Software\Epic Games\Unreal Engine\Builds`) or a version string such as `5.8`, looked up as a launcher install.
 8. The engine the project's own log says it was last opened with.
 9. The default launcher install locations.
 
-`UE_MCP_PROTECTED_ENGINE_ROOTS` outranks all of it. An engine equal to or nested
-under a protected root is refused, including one that arrives through an
-explicit pin. Entries are separated by the platform path-list delimiter (`;` on
-Windows, `:` on macOS and Linux) and must be absolute.
+`UE_MCP_PROTECTED_ENGINE_ROOTS` outranks all of it. An engine equal to or under a protected root is refused, including one named by an explicit pin. Entries are separated by the platform path-list delimiter (`;` on Windows, `:` on macOS and Linux) and must be absolute.
 
-When nothing resolves, the error lists every path that was probed and where each
-came from, so a missing engine, a wrong root and an unsupported layout do not
-all read the same.
+When nothing resolves, the error lists every path probed and where each came from.
+
+## Environment variables
+
+Each wins over the matching config key. The full list, with the ones tests and services use, is in `src/core/env.ts`.
+
+| Variable | Effect |
+|---|---|
+| `UE_MCP_PORT` | Bridge port for every session, over the derived port and `bridge.port` |
+| `UE_MCP_HOST` | Host every bridge is reached on (default `127.0.0.1`) |
+| `UE_MCP_BRIDGE_TIMEOUT_MS` | Floor under every bridge call's timeout, in milliseconds |
+| `UE_MCP_STRICT_PARAMS` | `1` refuses a call with a parameter the action does not forward, instead of warning |
+| `UE_MCP_ENV` | Selects the `ue-mcp.<env>.yml` overlay |
+| `UE_MCP_GLOBAL_CONFIG` | Path of the user-global config layer |
+| `UE_MCP_CONTEXT_STRATEGY` | `full`, `lean` or `micro` |
+| `UE_MCP_SERVER_MODE` | `daemon` or `in-process` |
+| `UE_MCP_LOG_LEVEL` | `debug`, `info` (default), `warn` or `error` |
+| `UE_MCP_USER_STATE` | Path of `state.json` |
+| `UE_EDITOR_PATH`, `UE_BUILD_TOOL_PATH` | Editor binary and build script, for every project |
+| `UE_MCP_TEST_ENGINE_ROOT`, `UE_MCP_PROTECTED_ENGINE_ROOTS` | Engine pin and deny list (see above) |
+| `UE_MCP_MAX_PARALLEL_ACTIONS` | Cap on UnrealBuildTool's parallel compile actions |
+| `UE_MCP_DIALOG_MODE`, `UE_MCP_DIALOG_RELAY` | Dialog mode, and `on` / `off` for the dialog text relay |
+| `UE_MCP_FEEDBACK_MODE` | `interactive`, `auto-approve` or `defer` |
+| `UE_MCP_ELICIT_MIN_HUMAN_MS` | Fastest a person can answer an approval form; `0` disables the check |
+| `UE_MCP_HTTP_TOKEN` | Token for the flow HTTP server, over a generated one |
+| `UE_MCP_BINARIES` | Where prebuilt bridge binaries come from: a plugin directory, a `.zip`, a directory of archives, or a URL base |
+| `UE_MCP_DISABLE_UPDATE_CHECK` | `1` skips the check for a newer release |
+| `UE_MCP_DAEMON_IDLE_MS` | How long an idle daemon waits before exiting |
+| `UE_MCP_DAEMON_DIR`, `UE_MCP_EXTENSIONS_DIR`, `UE_MCP_PENDING_DIR`, `UE_MCP_AUTH_DIR` | Move the daemon, extension, deferred-feedback and token directories |
+| `UE_MCP_PUBLISH_TOKEN` | Registry publish token for CI, over the one `ue-mcp login` cached |

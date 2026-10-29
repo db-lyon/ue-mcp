@@ -17,55 +17,50 @@ UE-MCP exposes **<!-- count:tools -->30<!-- /count --> category tools** covering
 
 ### Parameters every category tool accepts
 
-Four parameters sit outside any one action. They are read by dispatch and stripped before the call reaches the bridge, so they can never collide with an action's own parameter of the same name, and they behave identically on every category tool.
+These parameters sit beside `action` and `args` on every category tool. Dispatch reads them and strips them before the call reaches the bridge, so they never collide with an action's own parameters. While the server drives more than one editor, `editor` (which editor runs the call) is added the same way.
 
 | Parameter | Type | What it does |
 |-----------|------|--------------|
 | `select` | string or string list | Keep only these result fields. |
 | `omit` | string or string list | Drop these result fields. Runs after `select`. |
 | `timeoutMs` | integer, 1 to 3600000 | How long to wait for this one call. |
-| `pathsRepaired` | (response field, not a parameter) | Reports backslashes the server folded out of your path parameters. |
+
+Results can also carry `fieldsNotFound`, `paramsNotForwarded`, `paramsNotRead` and `pathsRepaired`, described below.
 
 #### `select` and `omit`
 
-Some reads are large by nature. `level(get_component_tree)` on a character answers with every component's transform, collision, materials and tags; `asset(bulk_read_properties)` answers a library-wide question across hundreds of assets. An agent that wanted one field out of either still pays for all of it, and the cost lands in a context window rather than on a wire, where it cannot be recovered later in the conversation.
-
-Both take dotted paths, and both traverse arrays transparently:
+Use them to cut a large result, such as `level(get_component_tree)` on a character or `asset(bulk_read_properties)` across a library, down to the fields you need. Both take dotted paths and traverse arrays:
 
 ```
 level(action="get_outliner", select="actors.name")
-level(action="get_component_tree", actorName="BP_Hero", select=["components.name", "components.class"])
-asset(action="get_metadata", assetPath="/Game/Hero", omit="thumbnail")
+level(action="get_component_tree", args={actorLabel: "BP_Hero"}, select=["components.name", "components.class"])
+level(action="get_component_tree", args={actorLabel: "BP_Hero"}, omit="components.materials")
 ```
 
-`components.name` keeps the name of every component in the array. `components[].name` means the same thing: the brackets are accepted and discarded rather than being a second syntax with different behaviour. Two paths into the same array produce one array of two-key objects, not two arrays.
+`components.name` keeps the name of every component in the array. `components[].name` means the same thing. Two paths into the same array produce one array of two-key objects.
 
-`select` runs first and `omit` second, so keeping a subtree and dropping one field inside it does what it reads like.
-
-A path that matches nothing comes back in a `fieldsNotFound` field on the result rather than being ignored, because the alternative failure is a caller concluding a field is absent from the data when it only misspelled the path. If **no** path matched, the filter is not applied at all and the full result is returned with the same report: handing back `{}` would read as an empty answer from the editor rather than as a filter that did not fit.
+A path that matches nothing is listed in `fieldsNotFound`. If no path matched at all, the filter is not applied and the full result comes back with the same report.
 
 #### Parameters that went nowhere
 
 A parameter the action does not use is reported, not silently dropped:
 
 - `paramsNotForwarded` lists keys you sent that the action never passes to the editor. With `UE_MCP_STRICT_PARAMS=1` the call is refused instead and nothing reaches the editor.
-- `paramsNotRead` lists keys that reached the editor and that the handler never read. Every category reports it.
+- `paramsNotRead` lists keys that reached the editor and that the handler never read.
 
-Either field means the call ran without that parameter. Check the spelling against the action's `Params:` list before trusting the result.
+Either field means the call ran without that parameter. Check the spelling against the action's `Params:` list.
 
-Some actions take their `Params:` list from the handler's own declaration in the plugin rather than from a hand-written one (a pilot on `animation`, listed in `tests/golden/handler-specs.json`). There, `name (or other)` means `other` is an alias the editor renames to `name` before the handler runs. Send one of the two: sent together, the alias is the one ignored, and it comes back in `paramsNotRead`.
+In a `Params:` list, `name (or other)` means `other` is an alias the editor renames to `name` before the handler runs. Send one of the two. If both are sent, the alias is ignored and comes back in `paramsNotRead`.
 
 #### `timeoutMs`
 
-How long to wait for this call, in milliseconds. Omitted, the wait is 30 seconds, or longer for the actions the editor itself allows longer. Raise it for a large batch, or for an editor busy compiling shaders.
+How long to wait for this call, in milliseconds. The default is 30 seconds, or longer for actions the editor allows longer. Raise it for a large batch, or for an editor busy compiling shaders.
 
-A timeout never means the call did not happen. The request was sent; only the wait ended. Read the state back before retrying.
+A timeout does not mean the call did not happen. The request was sent; only the wait ended. Read the state back before retrying.
 
 #### `pathsRepaired`
 
-Unreal addresses content with forward slashes, and so does every bridge handler. An agent running on Windows does not reliably produce them: it writes `\Game\UI\WBP_Menu` or `/Game/UI\WBP_Menu`, because that is what the surrounding shell, the file explorer and half its training data look like. The bridge then fails to resolve an asset that is right there, and the error says the asset does not exist, which sends the caller looking for the wrong problem.
-
-So the server repairs it at the boundary, on any parameter whose **name** says it holds a path (one ending in `Path`, `Paths`, `Dir`, `Directory`, `File` or `Folder`, including every element of a list like `assetPaths`). Doing that silently would be worse than not doing it, so every repair comes back on the result:
+The server replaces backslashes with forward slashes in any parameter whose name ends in `Path`, `Paths`, `Dir`, `Directory`, `File` or `Folder`, including every element of a list such as `assetPaths`. Each repair is reported on the result:
 
 ```json
 {
@@ -76,9 +71,7 @@ So the server repairs it at the boundary, on any parameter whose **name** says i
 }
 ```
 
-Two shapes are deliberately left alone. A UNC path (`\\server\share\x`) keeps its leading pair, which is syntax rather than a mistake, and a parameter whose name does not say it holds a path is never touched, so a string that merely looks escaped survives intact. A Windows drive path (`C:\Users\...`) **is** repaired, because forward slashes are accepted everywhere it can be used: Node's fs layer, UBT and Unreal's own file APIs all take them.
-
-The field only appears when something was repaired, and only on an object result. It is absent from a clean call.
+A UNC path (`\\server\share\x`) is left alone. A Windows drive path (`C:\Users\name`) is repaired, because Node, UBT and Unreal's file APIs all accept forward slashes. The field appears only on an object result where something was repaired.
 
 ### Property paths
 
@@ -96,7 +89,7 @@ Other actions that take a dotted property name, such as PCG node settings, behav
 | `Rules[1]` | Element 1 of an array, or of a C-style fixed array. |
 | `WeaponProfiles[WeaponId=SGK_Stone_Axe]` | The one element whose `WeaponId` is `SGK_Stone_Axe`. |
 
-So one field of one entry in a 48-entry struct array is one call, with nothing to look up first:
+One field of one array entry is one call:
 
 ```
 asset(action="get_properties", args={assetPath: "/Game/Data/DA_Weapons",
@@ -115,60 +108,38 @@ asset(action="set_property", args={assetPath: "/Game/Data/DA_Weapons",
 
 **Maps and sets.** Their entries are not addressable by path. Read or write the whole `TMap` (`...Presentation.HolsterSlotOffsets`), which `get_properties` with `valueFormat="json"` returns as JSON and `set_property` takes back in the same form. A key selector on a map or set is refused with that advice.
 
-**What comes back.** An action that resolved a key also returns `indexedPath`: the same path with each key replaced by the index it matched (`WeaponProfiles[12].Presentation.MeshOffset.Scale3D`). Rollback records use that form. A write can change the very key it selected by, and a flow undoes steps in reverse order, so when the inverse runs the array is the way this write left it and the index still names the same element. `bulk_set_properties` matches every key once, during preflight, against the asset as it was before the batch, so one item can rename an element's key and set its other fields by the old key in the same call.
+**What comes back.** An action that resolved a key also returns `indexedPath`: the same path with each key replaced by the index it matched (`WeaponProfiles[12].Presentation.MeshOffset.Scale3D`). Rollback records use that form, so an inverse still names the right element after a write that changed its key. `bulk_set_properties` matches every key once, during preflight, against the asset as it was before the batch, so one item can rename an element's key and set its other fields by the old key in the same call.
 
 A keyed write is the same write as its indexed form: the same `Modify`, `PostEditChange` and dirty package, and the action's own `save` flag decides whether it reaches disk.
 
-Something in brackets that is neither a number nor `Field=Value` is refused. It used to be read as element 0.
+Something in brackets that is neither a number nor `Field=Value` is refused.
 
 ### Dialog handling modes
 
-A modal dialog blocks Unreal's game thread, so nothing else runs until it is answered. Every action is refused while one is up and the refusal carries the dialog's title, message and buttons.
+A modal dialog blocks Unreal's game thread. While one is up, every action is refused with `dialogBlocking: true`, `refusedMethod`, `dialogMode`, `dialogTitle`, `dialogMessage` and `buttons`. The same refusal applies on every route to that editor: an MCP tool call, a flow step, the HTTP flow surface and a plugin guard task. The gate is per editor, so a modal in one project does not refuse calls to another.
 
-The **dialog handling mode** decides what happens next.
+These stay reachable while a dialog is up: `editor(list_dialogs)`, `editor(respond_to_dialog)`, `editor(list_windows)`, `editor(press_window_button)`, `editor(close_window)`, `editor(get_dialog_policy)`, `editor(get_engine_state)` and `project(get_status)`. A successful result taken while a modal is up is stamped `editorBlockedByDialog` with the dialog's title and message. Everything else is refused, including `start_editor`, `stop_editor`, `restart_editor`, `set_dialog_policy` and `clear_dialog_policy`.
+
+The **dialog handling mode** decides who answers.
 
 | Mode | What happens to a blocking dialog |
 |------|-----------------------------------|
-| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. Decline or leave it open and you get the refusal instead, and the agent cannot press the button for you: `editor(respond_to_dialog)` is refused in this mode. Default when your client advertises elicitation. |
-| `auto` | The refusal includes the `editor(action='respond_to_dialog')` call for each button. The agent picks one and makes that call. Nothing is pressed until it does. Only applies if you name it. |
-| `defer` | The refusal names the dialog and its buttons but not the calls that press them, and `editor(respond_to_dialog)` is refused. Answer it in the Unreal Editor window. Procedurally this is interactive with the editor's own window as the form, which is where a client that cannot be elicited lands. Default when your client does not advertise elicitation. |
+| `interactive` | You get an elicitation form with the dialog's buttons as choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. Decline and you get the refusal. A dialog too long for a form is returned in full on the first refused call (`dialogPhase: "relay"`) and the form appears on the next. Default when your client advertises elicitation. |
+| `auto` | The refusal lists each button with the `editor(respond_to_dialog)` call that presses it, under `choices`. The agent picks one. Applies only when you set it. |
+| `defer` | The refusal names the dialog and its buttons but not the calls that press them. Answer it in the Unreal Editor window. Default when your client does not advertise elicitation. |
 
-**Who may press is enforced, not just described.** `editor(action='respond_to_dialog')` is accepted only in `auto`. Under `interactive` and `defer` it comes back refused like any other action, because the answer belongs to the person: interactive asks them in a form, defer waits for them at the editor's own window. `editor(action='list_dialogs')` stays available in every mode, so the dialog can always be READ; only the press is withheld.
+The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) are accepted only in `auto`. Under `interactive` and `defer` they are refused, because the answer belongs to the person.
 
-**Armed policies are the exception.** `editor(set_dialog_policy)` arms a pattern, and a dialog matching it is answered immediately, under every mode, with no elicitation and no refusal. That is the point of it: you decide the answer in advance. Nothing else presses a button on its own, and there are no built-in policies, so the list is empty until you put something in it.
+**Policies.** `editor(set_dialog_policy)` arms a pattern in advance. A dialog matching an armed policy is answered immediately under every mode. There are no built-in policies. `editor(start_editor)` takes `dialogPolicy` for prompts raised during startup, before the bridge can answer.
 
-**Setting it.** One key, read in this order (highest wins):
+**Setting the mode.** Highest wins:
 
-1. `UE_MCP_DIALOG_MODE=interactive|auto|defer` in the server's environment. A value that names no mode is ignored, and the result says it was ignored, so a typo cannot quietly change how dialogs are handled.
+1. `UE_MCP_DIALOG_MODE=interactive|auto|defer` in the server's environment. A value that names no mode is ignored, and the result says so.
 2. `dialog.mode` for this project in `~/.ue-mcp/state.json`, set with `npx ue-mcp dialog mode <mode> --editor <name>`.
 3. `dialog.mode` for this user in `~/.ue-mcp/state.json`, set with `npx ue-mcp dialog mode <mode>`.
-4. The default: `interactive` when the client advertised elicitation, otherwise `defer`.
+4. The default: `interactive` when the client advertises elicitation, otherwise `defer`. The default is never `auto`.
 
-The default never resolves to `auto`. With no channel to a person, the fallback is the one that suspends, never the one that lets something else decide. `auto` applies only when you name it. "Advertised elicitation" is read from the connected client's declared capabilities at call time, not from whether the server happens to have an elicitation gate, which it always does.
-
-Never hand-edit `~/.ue-mcp/state.json`; `npx ue-mcp dialog mode` writes it. Run it with no value to print the effective mode, the per-project value and the per-user value.
-
-Mode is not read from `ue-mcp.yml`, for the reason the feedback mode is not: whether somebody is at the keyboard to answer a modal is a property of your machine and your session, not project policy a collaborator should inherit.
-
-**The gate, which is not the mode.** Whatever the mode says, a modal blocking the editor stops everything else. Every action is refused while one is up, whatever raised it and whichever category is calling, and the refusal carries `dialogBlocking: true`, the dialog's exact title and complete message, its buttons in the dialog's own order, and the `editor(action='respond_to_dialog')` call for each. The refusal is identical on every action, so the only way forward is through the dialog.
-
-One guard per editor decides this, and every route to that editor passes it: an MCP tool call, a step inside a flow, a nested flow, the HTTP flow surface, a plugin guard task, and the catalog call the server makes before it has served anything. The bridge refuses anything that needs the editor at its dispatch point, so a call no longer queues behind the parked game thread and dies on a timeout that reads like a slow editor. The in-process actions are refused by the same guard, rather than carrying on while the editor is stuck. A flow is checked at every step and not only when it starts, because a modal can appear in the middle of a run that takes minutes.
-
-Five actions stay reachable throughout, or the dialog could never be answered: `list_dialogs`, `respond_to_dialog`, and the three `*_dialog_policy` actions. `project(get_status)` and `editor(get_engine_state)` stay reachable too, so a caller can always see where it stands, and `start_editor`, `stop_editor` and `restart_editor` stay reachable because they are how you get out of an editor that is stuck. Every one of those still reports the dialog: an allowed action is not a blind one, and a successful result taken while a modal is up is stamped `editorBlockedByDialog`. Nothing in the gate presses a button or ranks one.
-
-The gate is per editor. A modal in one project does not refuse calls addressed to another.
-
-**Where the mode applies.** Everywhere. Every action resolves it, so `interactive` puts the dialog to you whatever call tripped it, `auto` hands the press calls to the agent, and `defer` reports it for recognition and withholds them. The mode is read per call, from the same key and the same order as before.
-
-Answering through the elicitation form frees the editor, so the call that tripped the gate runs rather than making you ask twice. Where the gate caught it after the fact, the reply says `dialogAnswered: true` and names the call to repeat.
-
-`editor(stop_editor)` and `editor(restart_editor)` additionally ask the bridge whether a dialog is blocking the editor before they send anything, because they have to decide whether to send a quit at all. Every result of those two that met a dialog over the bridge reports `dialogMode` and `dialogModeSource`, whatever the call went on to do, so you can always see which mode applied and why. A dialog the user answered through the elicitation form is gone from the screen by the time the call returns, and the fields are still there, along with `dialogAnsweredByUser` naming the button that was pressed. When the stop then times out anyway, the report describes the editor as it is at that moment: it does not re-quote the dialog you just answered, and it never offers a `respond_to_dialog` call for a window that is no longer on screen.
-
-In defer, `stop_editor` and `restart_editor` withhold the press calls on every path they report a dialog on: the check before the quit, a dialog that comes up behind the quit, a dialog seen while the bridge is unreachable, and (for `restart_editor`) one raised while the editor is starting back up. To answer one from here after all, read it with `editor(list_dialogs)` and press with `editor(respond_to_dialog)`, which is a decision you make rather than one the payload makes for you.
-
-Two blocking-dialog reports are mode-independent, carry no `dialogMode`, and press nothing under every mode: a dialog raised during `editor(start_editor)`, where the bridge is not answering yet so there is no socket to deliver an answer on (`dialogPolicy` is the parameter for that case, and a caller arms it deliberately, in advance), and a dialog seen from outside while the bridge is unreachable, where `respond_to_dialog` cannot be delivered at all. `editor(start_editor)` resolves the mode like everything else and follows defer when that is what applies, as does the start half of a `restart_editor`.
-
-Nothing outside these modes ever answers a dialog by itself. `editor(set_dialog_policy)` still exists for a caller who wants a matching prompt pre-answered and dismissed without seeing it, and every policy in effect is one somebody armed deliberately.
+`npx ue-mcp dialog mode` with no value prints the effective mode and where it came from, and `npx ue-mcp dialog mode default` clears the preference. Do not hand-edit `~/.ue-mcp/state.json`. The mode is not read from `ue-mcp.yml`, because whether someone is at the keyboard is a property of your machine, not project policy. It is read per call, so a change applies without a restart.
 
 ---
 

@@ -1,42 +1,25 @@
 # Widgets
 
 The `widget` category authors UMG assets and drives live widgets while
-Play-In-Editor is running. This section covers the parts that need more than a
-one-line entry in the [Tool Reference](tool-reference.md).
+Play-In-Editor is running. These pages cover what needs more than a line in the
+[Tool Reference](tool-reference.md).
 
 ## Start here
 
 Every action in the category takes the same parameter names for the same
-concepts, so read the [parameter contract](widget-parameters.md) first. It is
-short, and it removes the guesswork from every other page here.
+concepts. Read the [parameter contract](widget-parameters.md) first.
 
 ## Authoring versus runtime
 
-Two different worlds are in play, and mixing them up is the most common source
-of confusion:
-
-- **Authoring** actions operate on a Widget Blueprint asset on disk. They work
-  whether or not PIE is running.
+- **Authoring** actions operate on a Widget Blueprint asset. During PIE, an
+  asset that is not already in memory can fail to load, so stop play first.
 - **Runtime** actions operate on live `UUserWidget` instances inside a running
-  PIE or Game world. They never fall back to the editor world, so calling one
-  before PIE starts returns an error rather than quietly answering with an
-  Editor Utility Widget.
+  PIE or Game world. They never fall back to the editor world, so a call made
+  before PIE starts returns an error.
 
-## When an authoring action says it cannot find the asset
+## When an authoring action cannot find the asset
 
-Every authoring action resolves its WidgetBlueprint fresh on every call, from
-the path you passed. Nothing is cached between calls. What used to make that
-look cached was the resolution route: it went through the AssetRegistry, and a
-registry entry can be mid-rescan, or can name an object a package reload has
-already replaced. The symptom was an intermittent "Failed to load
-WidgetBlueprint" on an asset that was plainly on disk and that
-`asset(action="search")` could see, and it got worse rather than better after
-`asset(action="force_reload")`.
-
-Resolution now asks the object hash first, revalidates whatever it gets (an
-object a reload consigned to oblivion is never handed back), and falls through
-progressively before giving up. When it does give up, the error names which of
-three things happened, because your next move differs:
+Every authoring action resolves its WidgetBlueprint from the path on every call. Nothing is cached between calls. When resolution fails, the error says which of four things happened:
 
 | Error says | What it means | What to do |
 |---|---|---|
@@ -45,26 +28,24 @@ three things happened, because your next move differs:
 | `'<path>' is a <Class>, not a WidgetBlueprint` | The path names a real asset of another type. | Point at the WidgetBlueprint. |
 | `WidgetBlueprint '<path>' resolved but has no WidgetTree` | The asset loaded and is broken. | Open it in the editor, or re-create it. |
 
+While PIE is running, the first two errors add a note to stop play and retry.
+
 ## Where the runtime actions stop
 
-The runtime actions here are point-in-time: one read of the current state, or
-one write plus the delegate broadcast that a real interaction would fire.
-Recording, replaying, sampling over a window, and synthesizing input events
-belong to the [`pie`](pie.md) tool.
+The runtime actions are point-in-time: one read of the current state, or one
+write plus the delegate broadcast a real interaction would fire. Use the
+[`pie`](pie.md) tool instead to:
 
-So reach for `pie` instead when you want to:
+- sample a widget's state every frame over a window: `pie(observe_arm)` and
+  `pie(observe_read)`;
+- play a timed sequence of input values: `pie(inject_input_tape)`;
+- inject an Enhanced Input action at the input layer rather than calling a
+  widget's own setter: `pie(inject_input)`;
+- record a session and replay it with drift comparison: `pie(record_arm)` and
+  `pie(replay_arm)`.
 
-- capture a widget's state every frame over a window rather than once, which is
-  `pie(observe_arm)` and `pie(observe_read)`;
-- drive a scripted sequence of interactions with timing, which is
-  `pie(inject_input_tape)`;
-- synthesize a real key, button or axis event at the input layer rather than
-  calling a widget's own setter, which is `pie(inject_input)`;
-- record a session and replay it with drift comparison.
-
-The same split already governs the `editor` category: `stage_game_input` sets
-the input mode because that is one call, while the injection itself lives in
-`pie(inject_input*)`.
+`editor(stage_game_input)` sets the input mode for the running game; the
+injection itself is `pie(inject_input*)`.
 
 ## Runtime pages
 

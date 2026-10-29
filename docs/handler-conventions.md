@@ -22,25 +22,20 @@ Each handler accepts a parameter identifying the entity it operates on. Examples
 | Entity | Natural key param |
 |---|---|
 | Actor | `actorPath`, or `actorLabel` (or `label` shorthand on creates) |
-| Asset (material, texture, mesh, datatable…) | `assetPath` or `path` |
+| Asset (material, texture, mesh, DataTable) | `assetPath` or `path` |
 | Blueprint variable | `blueprintPath` + `variableName` |
 | Blueprint function | `blueprintPath` + `functionName` |
 | Component | parent + `componentName` |
 | Material parameter | `materialPath` + `parameterName` |
 
-Handlers without a natural key (e.g., `execute_command`, `shell`) **cannot** be idempotent or reversible - document them as such, do not emit rollback records.
+Handlers without a natural key (such as `execute_command`) cannot be idempotent or reversible. They say so in the result and emit no rollback record.
 
 #### Selecting an actor
 
-Editor labels are **not unique**. A copy-pasted Blueprint gives every copy the
-same label, so a lookup that answers with the first actor the level iterator
-reached is a coin flip decided by streaming order. That is how a write aimed at
-one road landed on a road at the other end of the map and reported success
-(#983).
-
-Every actor-targeting handler therefore resolves its target through
-`MCPResolveActor` in `Public/HandlerActorResolve.h`, and never through a loop of its
-own:
+Editor labels are **not unique**: copies of a Blueprint share a label, so the
+first match a level iterator reaches depends on streaming order. Every
+actor-targeting handler resolves its target through `MCPResolveActor` in
+`Public/HandlerActorResolve.h`, never through a loop of its own:
 
 ```cpp
 FString ActorLabel;
@@ -300,7 +295,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorMaterial(const TSharedPtr<FJsonOb
 
 Delete handlers are idempotent: deleting a thing that is not there is a no-op, not an error.
 
-Reversibility is a decision, not a default. A delete that captures enough of the entity beforehand to recreate it emits a rollback record like any other mutation, and many now do. A delete that cannot must **say so in the result**, because a caller reading a body with no `rollback` field cannot tell a considered decision from an oversight, and neither can the conventions audit.
+A delete that captures enough of the entity beforehand to recreate it emits a rollback record like any other mutation. A delete that cannot must **say so in the result**, because a body with no `rollback` field does not tell a caller or the conventions audit whether that was a decision or an oversight.
 
 ```cpp
 auto Result = MCPSuccess();
@@ -323,11 +318,11 @@ MCPSetNoRollback(Result,
 return MCPResult(Result);
 ```
 
-Saying nothing is the one option that is not available. "Delete is not reversible by default" used to be written here as a licence to emit neither, and it is now the exact shape the ratchet in `tests/unit/handler-conventions.test.ts` counts and pins.
+Saying nothing is not an option: `tests/unit/handler-conventions.test.ts` fails on a mutation that emits neither.
 
 ### `rollbackPossible` - stating that there is no inverse
 
-The counterpart to `MCPSetRollback`, and the field the conventions audit actually gates on. It is set through `MCPSetNoRollback(Result, Reason)`, which writes both halves together:
+The counterpart to `MCPSetRollback`, and the field the conventions audit gates on. `MCPSetNoRollback(Result, Reason)` writes both halves together:
 
 ```json
 {
@@ -337,8 +332,6 @@ The counterpart to `MCPSetRollback`, and the field the conventions audit actuall
   "rollbackNote": "A one-shot sound is an event, not a state. It is already audible by the time this returns and nothing changed on disk or in the level, so there is nothing to undo and no action that would undo it. Calling again plays it again."
 }
 ```
-
-Roughly 290 sites across the plugin carry it, which makes it the most common way a mutation in this codebase finishes.
 
 Two rules:
 
@@ -361,16 +354,13 @@ Batch handlers should also accept `dryRun`, which runs the full preflight and re
 
 A handler with no natural key cannot be idempotent, and one whose effect is an event rather than a state cannot be undone. These are the standing cases:
 
-- `shell` - arbitrary command execution
-- `editor.execute_command` - arbitrary console commands
-- `editor.take_screenshot` - produces an output artifact, and deleting a file that regenerates on demand is not an undo
-- `editor.start_editor`, `editor.quit_editor` - process lifecycle
-- `level.save` - writing packages to disk has no inverse call
-- `asset.reimport` - the previous import is not recoverable from the asset it replaced
+- `editor(execute_command)`: arbitrary console commands
+- `editor(capture_screenshot)`: produces a file, and deleting a file that regenerates on demand is not an undo
+- `editor(start_editor)`, `editor(stop_editor)`: process lifecycle
+- `level(save)`: writing packages to disk has no inverse call
+- `asset(reimport)`: the previous import is not recoverable from the asset it replaced
 
-Being on this list is not an exemption from saying so. Each of these owes the caller a `rollbackPossible: false` and a note, and every one of them now emits it. There is no allowlist to be added to: the `NO_INVERSE` map that used to exempt four handlers is gone, because it stated their reasons inside a test file where no caller could read them, and all four now state the same reasons in the response body.
-
-`level.load` used to be on this list and is not any more: it captures the level that was open and emits the `load_level` call that returns to it.
+Each still owes the caller `rollbackPossible: false` and a note in the response body. There is no allowlist.
 
 ## Input mapping persistence
 
@@ -389,65 +379,32 @@ save other pending edits.
 
 ## Declaring parameters with a spec
 
-A handler can declare its parameters at registration instead of having them written again in TypeScript (#1057). The mechanism, and how the TS surface is generated from it, is in [Architecture: parameter specs](architecture.md#parameter-specs). What it asks of the handler:
+A handler declares its parameters at registration, and the TypeScript surface is generated from them. The mechanism, and how the TS surface is generated from it, is in [Architecture: parameter specs](architecture.md#parameter-specs). What it asks of the handler:
 
 - **Read the declared names, and only those.** The registry renames each alias to its parameter before the handler runs, so a spec'd handler calls `RequireString(Params, TEXT("assetPath"), ...)`, never `RequireStringAlt` with the alias. A second spelling belongs in the spec as `.Alias(TEXT("path"))`.
 - **Read every parameter before anything can fail.** `UE.MCP.Bridge.HandlerSpec.Contract` calls each spec'd handler with every declared parameter pointing at an asset that does not exist, and asserts the read set equals the spec. A parameter read after the asset load is never reached, and fails the test as a declared parameter the handler does not read.
 - **Exempt a handler the contract call could let write.** Every string the contract test sends is the same missing asset path, so a create handler is only safe to call when something those values fail (an unresolvable class or struct, a name holding `/`, an invalid package name, a missing source file) refuses the call before anything is created. A handler that would create a folder, a package or a file from them, spawn an actor, save, or run something, registers with `MCPSpec::ContractExempt(TEXT("reason"))` as its last argument. It is still spec'd and generates its surface, and `tests/unit/handler-spec-exempt.test.ts` reads its source instead of calling it, so it has to read every parameter through a `HandlerUtils.h` helper with a literal key (or through a function it hands `Params` to that does), and read nothing else.
 - **A required choice is a choice, not two optionals.** `actorLabel OR actorPath` is `MCPSpec::ExactlyOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } })`, and `settings OR propertyName + propertyValue` puts the pair in one branch. Every name in a choice is declared optional; the choice is what is required. The contract test calls the handler once per branch, sending only that branch's names, so each branch has to be read on its own path. `MCPSpec::AtLeastOne` is for selector sets where several may combine; declare a required parameter before its first member, since the clause lists the group's names with slashes.
 - **Declare the value's real shape.** A colour is `EMCPParamType::Color`. A number that may also be a colour is `.Or(EMCPParamType::Color)`, a reference that null clears is `.Nullable()`, a flag with one legal value is `.Literal(false)`, and an array of objects declares its element with `.Items(EMCPParamType::Object).WithFields({ MCPParam::RequiredField(...), MCPParam::OptionalField(...) })`. Elements of several shapes picked by one field are `.Tagged(TEXT("op"), { MCPParam::Variant(...), ... })`, and an `Any` value that takes a map, an entry list, a string list or a string is `.OneOfForms({ ... })`, read through `MCPReadFunctionArgs` or `MCPReadPythonArgs`. The contract test sends a literal's own value and a union's first type.
-- **Declare what the handler reads, not what the old surface documented.** Migrating `add_curve` dropped `curveType?`, which the TS side advertised and the handler never read.
+- **Declare what the handler reads.** A parameter the handler never reads does not belong in the spec, whatever the surface used to advertise.
 - **A key a shared helper reads only on some paths is read ahead.** `MCPReadParamsAhead(Params, { ... })` at the top of the handler names every declared key, so the read set is the spec whatever path a call takes; the helpers still read each key where they use it.
 - **A timeout override takes the spec too.** `RegisterHandlerWithTimeout(name, fn, seconds, { ... })` registers both, and the TS action spreads `specBp(...)` and adds its `timeoutMs`.
 - **Never a routing name.** `action`, `timeoutMs`, `select`, `omit`, `editor` and `toEditor` are refused at registration and again by the generator.
 - **Change a spec, then re-record.** `npm run specs:record` against `tests/ue_mcp`, then `npm run specs:generate`, and commit the recording and the generated module together with the C++.
 
-## Where the conversion stands
-
-The numbers move every time anyone touches a handler, so the live answer is the audit rather than a table here:
+## Checking a handler
 
 ```bash
 node scripts/audit-handler-conventions.mjs        # counts, plus the offenders by name
 node scripts/audit-handler-conventions.mjs --json # every handler, one row each
 ```
 
-`tests/unit/handler-conventions.test.ts` pins those counts. Two of them are flat
-rules at zero: a mutation that answers neither question fails the suite outright.
-The rest are a ratchet, where a number that goes UP means a new handler skipped a
-convention, and a number that goes DOWN means somebody fixed one and the fix is
-not finished until the lower number is committed.
+`tests/unit/handler-conventions.test.ts` pins the counts. Two are flat rules at
+zero: a mutation that emits neither a rollback record nor `rollbackPossible:
+false`, and a mutation with no idempotency answer, each fail the suite. The
+count of mutations without a rollback record is a ratchet: if it goes up, a new
+handler skipped the convention; if it goes down, lower the baseline in the test
+and commit it. It stays above zero because not every change has an inverse.
 
-Worth knowing when reading any figure quoted from this audit: for most of its
-life the gating test did not run at all. It imports the audit out of a
-`scripts/*.mjs` file that began with a shebang, which Vite hands to the ESM
-loader unstripped, so the suite failed to LOAD rather than to assert and
-contributed no assertions and no failure. Numbers from that period were produced
-by running the CLI by hand.
-
-The shape of what is left, as of the last sweep:
-
-| | |
-|---|---|
-| Registered handlers | ~1040 |
-| Classified as mutations | ~685 |
-| Emitting a rollback record | ~555 |
-| Emitting `rollbackPossible: false` with a reason instead | ~127 |
-| Emitting neither, and therefore actually outstanding | 0 |
-| Giving no idempotency answer | 0 |
-
-Every authoring category has been swept. Level, Asset, Blueprint, Material, Animation, Audio, Gameplay, GAS, Niagara, PCG, Sequencer, Spline, Widget, Landscape and Networking all emit an inverse from their creates and their modifies, including the ones an older version of this page listed as outstanding: `add_node`, `connect_pins`, `set_class_default`, `add_material_expression`, `delete_material_expression`, `create_state_machine`, `add_state`, `add_transition`, `set_bone_keyframes`, `add_attribute`, `set_ability_tags`, `set_niagara_parameter`, `add_emitter_to_system`, `add_pcg_node`, `set_pcg_node_settings`, `set_spline_points`, `add_widget`, `remove_widget`, `move_widget` and `set_sequence_keyframes`.
-
-The last two rows are zero and are held there by flat assertions rather than by a
-ratchet, because there is no debt left to ratchet down. `foliage(set_settings)`
-was the clearest of the tail and is now the clearest of the fixes: it captures
-each property's previous exported value before writing, emits itself as its own
-inverse with those values, and reports `changedCount` against the exported form
-so `1` and `1.000000` do not read as a change.
-
-A caveat that has not changed: this audit is source-level. It proves a rollback
-is EMITTED, never that it is correct. Correctness is what the live tests is for.
-
-`mutationsWithoutRollback` stays a number rather than a rule and stays non-zero
-on purpose. Not every change has an inverse, and a codebase where that count
-reached zero would be one that had started emitting rollbacks that do not roll
-anything back.
+The audit is source-level. It proves a rollback is emitted, not that it is
+correct; the live tests check correctness.

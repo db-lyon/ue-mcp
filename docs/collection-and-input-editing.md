@@ -1,12 +1,12 @@
 # Collection and input editing
 
-For a single nested field in a struct array, `asset(set_property)` already accepts a key selector:
+For a single nested field in a struct array, `asset(set_property)` accepts a key selector:
 
 ```json
 {"action":"set_property","assetPath":"/Game/Data/DA_Weapons","propertyName":"WeaponProfiles[WeaponId=Rifle].DisplayName","value":"Service rifle","save":false}
 ```
 
-The selector must match exactly one element. `asset(read_properties)` accepts the same path. Use `asset(bulk_set_properties)` for several keyed field writes with preflight and read-back.
+The selector must match exactly one element. `asset(read_properties)` accepts the same path. See [Property paths](tool-reference.md#property-paths) for the selector rules. Use `asset(bulk_set_properties)` for several keyed field writes with preflight and read-back.
 
 ## Update or clone a collection entry
 
@@ -44,7 +44,7 @@ Every source must exist before the call; a later clone cannot use a destination 
 
 Supply reflected settings fields in `playerMappableKeySettings`, or use the existing `mappingName`, `displayName` and `displayCategory` parameters. Omitted fields retain their values. A new settings object needs a non-empty `Name` or `mappingName`. Set `playerMappableKeySettings` to null to clear the local object. Setting only the behavior preserves the local object. `dryRun` validates without writing; `save` defaults to true. Rollback addresses the same mapping index, so replay it before reordering mappings. Clearing an override may recreate its object on rollback; clearing a custom settings subclass requires editor undo.
 
-InputAction settings still use `inputActionPath` and `mappingName`. To duplicate an InputAction together with its triggers, modifiers and settings, use `asset(duplicate)` with `sourcePath`, `destinationPath` and `onConflict="error"`, then inspect it with `gameplay(read_input_action)`.
+InputAction-level settings use `inputActionPath` instead of `imcPath` and `mappingIndex`. To duplicate an InputAction together with its triggers, modifiers and settings, use `asset(duplicate)` with `sourcePath`, `destinationPath` and `onConflict="error"`, then inspect it with `gameplay(read_input_action)`.
 
 ## Static editor functions
 

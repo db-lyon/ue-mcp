@@ -17,7 +17,7 @@ Studio's window has three tabs: **Chat**, **Plugins** and **Settings**. **Feedba
 - Windows 10 or 11.
 - Unreal Engine 5.7 or 5.8.
 - [Node.js](https://nodejs.org/) 20 or newer. Install the LTS release from the Node.js website with its Windows installer, using the default options. Studio does not install Node.js; when it is missing, the setup page opens the Node.js download page.
-- ue-mcp 1.4.11-beta.13 or later. Studio installs it.
+- ue-mcp 1.4.11 or later. Studio installs it.
 - The Microsoft Edge WebView2 Runtime, which Windows 11 includes. On Windows 10, if it is not already installed, get the Evergreen Runtime from [Microsoft's WebView2 page](https://developer.microsoft.com/en-us/microsoft-edge/webview2/). Without it, Studio opens in your web browser instead of its own window.
 - An internet connection, and an account or API key for at least one model provider (see [Models and accounts](#models-and-accounts)).
 
@@ -36,8 +36,6 @@ Studio's own setup does not compile anything: Fab supplies the Studio plugin alr
 
 The first time you open Studio, the **UE-MCP Studio** tab asks **Allow Studio to install its parts?** Nothing is downloaded or installed until you choose **Allow**. **Not now** closes the tab and records nothing, so Studio asks again the next time you open it.
 
-<img src="images/studio-consent-prompt.webp" alt="The UE-MCP Studio tab asking Allow Studio to install its parts, listing the bridge plugin, the ue-mcp server, the Studio extension and the window app with their folders, and the Allow and Not now buttons" style="max-width:100%">
-
 The prompt lists each part and the folder it goes to:
 
 | Part | Where it goes | Downloaded from |
@@ -47,7 +45,7 @@ The prompt lists each part and the folder it goes to:
 | The Studio extension | `%USERPROFILE%\.ue-mcp\extensions`, one `studio@<version>` folder per version | GitHub releases of ue-mcp-studio |
 | Studio's window app | `%USERPROFILE%\.ue-mcp\studio\window` | Part of the Studio extension |
 
-Your answer is kept per user in `%USERPROFILE%\.ue-mcp\studio\consent.json`, so you are asked once on each machine. If Studio was already installed before the prompt existed, that install keeps working and the file is written for you.
+Your answer is kept per user in `%USERPROFILE%\.ue-mcp\studio\consent.json`, so you are asked once on each machine.
 
 ### Setup page
 
