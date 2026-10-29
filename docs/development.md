@@ -45,7 +45,7 @@ For mesh edge connectivity, use `FMeshDescription::GetEdgeConnectedTriangleIDs`,
 
 The build script only ever builds the `ue_mcpEditor` target against the bundled `tests/ue_mcp/ue_mcp.uproject`, and it refuses to start if that resolves anywhere else. It also passes `-NoEngineChanges`, so Unreal itself aborts the build and prints the offending file list if the build would overwrite a file that already exists under the engine tree. That is what keeps a test build from invalidating the outputs of a shared source engine you use for other work.
 
-Engine selection order is `UE_MCP_TEST_ENGINE_ROOT`, then `UE_BUILD_TOOL_PATH`, then the default install locations. A pinned root that has no build tool is an error rather than a silent fallback to an engine you did not ask for.
+Engine selection order is `UE_MCP_TEST_ENGINE_ROOT`, then `UE_ROOT`, then `UE_BUILD_TOOL_PATH`, then the default install locations. `UE_ROOT` is the engine root some build hosts set for a pinned Unreal engine, so a test build there needs no ue-mcp-specific variable. A pinned root that has no build tool is an error rather than a silent fallback to an engine you did not ask for.
 
 Two optional environment variables tune the guard:
 
