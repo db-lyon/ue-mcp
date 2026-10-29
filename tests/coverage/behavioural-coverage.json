@@ -4410,6 +4410,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LandscapeHeightReadTests.cpp",
+          "test": "UE.MCP.Landscape.HeightRead.PreservesPackageDirtyState"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-landscape.test.ts",
           "test": "create_landscape spawns a landscape the info, component, proxy and layer listings report"
@@ -7962,6 +7967,11 @@
       "registeredIn": "LandscapeHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LandscapeHeightReadTests.cpp",
+          "test": "UE.MCP.Landscape.HeightRead.PreservesPackageDirtyState"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-landscape.test.ts",
