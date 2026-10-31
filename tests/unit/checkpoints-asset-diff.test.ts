@@ -6,6 +6,8 @@ import {
   describeRecord,
   nativeDiffOf,
   summarizeAssetDiff,
+  THUMBNAIL_FORMAT,
+  thumbnailWanted,
   type AssetDiff,
   type AssetDiffRecord,
 } from "../../src/checkpoints/asset-diff.js";
@@ -142,5 +144,24 @@ describe("an asset diff's summary", () => {
 
   it("summarizes an error and a deferred diff in the same words everywhere", () => {
     expect(summarizeAssetDiff({ state: "deferred", summary: "", nativeDiff: { available: false } })).toMatch(/^Not diffed yet/);
+  });
+});
+
+describe("a version's kept picture", () => {
+  it("is asked for when none is kept", () => {
+    expect(thumbnailWanted(false, null)).toBe(true);
+    expect(thumbnailWanted(false, { source: "rendered", format: THUMBNAIL_FORMAT })).toBe(true);
+  });
+
+  it("is kept when the current bridge rendered it", () => {
+    expect(thumbnailWanted(true, { source: "rendered", format: THUMBNAIL_FORMAT })).toBe(false);
+    expect(thumbnailWanted(true, { source: "saved", note: "no renderer", format: THUMBNAIL_FORMAT })).toBe(false);
+  });
+
+  it("is rendered again when an older bridge made it, such as a black Blueprint render", () => {
+    expect(thumbnailWanted(true, { source: "rendered" })).toBe(true);
+    expect(thumbnailWanted(true, { source: "rendered", format: THUMBNAIL_FORMAT - 1 })).toBe(true);
+    expect(thumbnailWanted(true, null)).toBe(true);
+    expect(thumbnailWanted(true, "not json")).toBe(true);
   });
 });
