@@ -14,8 +14,29 @@
  */
 import { unifiedDiff } from "./text-diff.js";
 
-/** Bumped when the bridge's records change shape, so cached diffs are recomputed. */
-export const ASSET_DIFF_FORMAT = 2;
+/** Bumped when the bridge's records or pictures change, so cached diffs are recomputed. */
+export const ASSET_DIFF_FORMAT = 3;
+
+/**
+ * Bumped when the bridge renders pictures differently, so a kept picture from an
+ * older bridge is rendered again. 2: Actor Blueprints loaded for diff are drawn,
+ * and a black render is no picture (#178 in ue-mcp-studio).
+ */
+export const THUMBNAIL_FORMAT = 2;
+
+/** What is kept beside a version's picture. */
+export interface ThumbnailMeta {
+  source: "rendered" | "saved";
+  note?: string;
+  format?: number;
+}
+
+/** Whether a version's kept picture, if any, should be asked of the editor again. */
+export function thumbnailWanted(pngExists: boolean, meta: unknown): boolean {
+  if (!pngExists) return true;
+  const m = meta as ThumbnailMeta | null | undefined;
+  return !m || typeof m !== "object" || m.format !== THUMBNAIL_FORMAT;
+}
 
 /** How many packages one list_changes diffs up front; the rest are diffed on request, per path. */
 export const MAX_ASSET_DIFFS = 25;

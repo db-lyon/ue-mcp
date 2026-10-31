@@ -29,6 +29,8 @@ import {
 } from "./shadow-repo.js";
 import {
   ASSET_DIFF_FORMAT,
+  THUMBNAIL_FORMAT,
+  thumbnailWanted,
   MAX_ASSET_DIFFS,
   assetDiffDeferred,
   assetDiffError,
@@ -446,7 +448,21 @@ export class SessionCheckpoints {
     const fromFile = a ? path.join(dir, `${base}-${a.slice(0, 12)}${ext}`) : null;
     const toFile = b ? path.join(dir, `${base}-${b.slice(0, 12)}${ext}`) : null;
     const thumb = (v: string) => path.join(repo.thumbsDir, `${v}.png`);
-    const want = (v: string | null) => (v && !fs.existsSync(thumb(v)) ? thumb(v) : null);
+    const metaOf = (v: string) => path.join(repo.thumbsDir, `${v}.json`);
+    const readMeta = (v: string): unknown => {
+      try {
+        return JSON.parse(fs.readFileSync(metaOf(v), "utf-8"));
+      } catch {
+        return null;
+      }
+    };
+    /** A picture to ask for: none kept, or one kept from an older bridge, dropped so it is never served again. */
+    const want = (v: string | null) => {
+      if (!v || !thumbnailWanted(fs.existsSync(thumb(v)), readMeta(v))) return null;
+      fs.rmSync(thumb(v), { force: true });
+      fs.rmSync(metaOf(v), { force: true });
+      return thumb(v);
+    };
     try {
       if (fromFile && a) await repo.exportVersion(a, fromFile);
       if (toFile && b) await repo.exportVersion(b, toFile);
@@ -473,19 +489,16 @@ export class SessionCheckpoints {
       const picture = (side: "before" | "after", t: Json | undefined): AssetThumbnail | undefined => {
         const version = side === "before" ? a : b;
         if (!version) return undefined;
-        const meta = path.join(repo.thumbsDir, `${version}.json`);
         if (t && typeof t.file === "string") {
           const info: { source: "rendered" | "saved"; note?: string } = { source: t.source === "saved" ? "saved" : "rendered" };
           if (typeof t.note === "string" && t.note) info.note = t.note;
-          fs.writeFileSync(meta, JSON.stringify(info));
+          fs.writeFileSync(metaOf(version), JSON.stringify({ ...info, format: THUMBNAIL_FORMAT }));
           return { id: version, url: "", ...info };
         }
         if (t && typeof t.error === "string") return { error: t.error };
-        try {
-          const info = JSON.parse(fs.readFileSync(meta, "utf-8")) as { source: "rendered" | "saved"; note?: string };
-          if (fs.existsSync(thumb(version))) return { id: version, url: "", ...info };
-        } catch {
-          // No picture kept for this version.
+        const kept = readMeta(version) as { source?: string; note?: string } | null;
+        if (kept && fs.existsSync(thumb(version))) {
+          return { id: version, url: "", source: kept.source === "saved" ? "saved" : "rendered", ...(typeof kept.note === "string" && kept.note ? { note: kept.note } : {}) };
         }
         return { error: "No picture was kept for this version." };
       };
