@@ -2715,6 +2715,11 @@
         {
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/CheckpointAssetDiffTests.cpp",
+          "test": "UE.MCP.Diff.CheckpointAsset.ActorBlueprintThumbnailsRender"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/CheckpointAssetDiffTests.cpp",
           "test": "UE.MCP.Diff.CheckpointAsset.MaterialGraphPropertiesAndThumbnails"
         },
         {
@@ -3222,6 +3227,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintTransactionalNodeTests.cpp",
           "test": "UE.MCP.Blueprint.TransactionalNodes.BlueprintHandlers"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/CheckpointAssetDiffTests.cpp",
+          "test": "UE.MCP.Diff.CheckpointAsset.ActorBlueprintThumbnailsRender"
         },
         {
           "suite": "automation",
@@ -3851,6 +3861,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BridgeProtocolTests.cpp",
           "test": "UE.MCP.Bridge.Protocol.ParamEcho"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/CheckpointAssetDiffTests.cpp",
+          "test": "UE.MCP.Diff.CheckpointAsset.ActorBlueprintThumbnailsRender"
         },
         {
           "suite": "automation",

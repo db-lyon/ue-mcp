@@ -1,16 +1,29 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/Blueprint.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SCS_Node.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/StaticMesh.h"
 #include "Framework/Application/SlateApplication.h"
+#include "GameFramework/Actor.h"
 #include "HAL/FileManager.h"
 #include "HandlerPackageSave.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Handlers/Diff/CheckpointThumbnail.h"
 #include "Handlers/Diff/DiffHandlers.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "Kismet2/KismetEditorUtilities.h"
 #include "MCPScopedTestMount.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
@@ -267,6 +280,101 @@ bool FMCPCheckpointNativeDiffWindowTest::RunTest(const FString& Parameters)
 		Found->RequestDestroyWindow();
 	}
 	IFileManager::Get().DeleteDirectory(*DiffDir, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPCheckpointBlankThumbnailTest,
+	"UE.MCP.Diff.CheckpointAsset.BlankRenderIsNoPicture",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPCheckpointBlankThumbnailTest::RunTest(const FString& Parameters)
+{
+	TArray<uint8> Black;
+	Black.SetNumZeroed(4 * 4 * 4);
+	TestTrue(TEXT("an all-black render is no picture"), MCPCkDiffIsBlankImage(Black, 4, 4));
+	TArray<uint8> NearBlack = Black;
+	NearBlack[5] = 2;
+	TestTrue(TEXT("readback noise at black is still no picture"), MCPCkDiffIsBlankImage(NearBlack, 4, 4));
+	TArray<uint8> OnePixel = Black;
+	OnePixel[4 * 9 + 1] = 40;
+	TestFalse(TEXT("one coloured pixel is a picture"), MCPCkDiffIsBlankImage(OnePixel, 4, 4));
+	TArray<uint8> AlphaOnly = Black;
+	AlphaOnly[3] = 255;
+	TestTrue(TEXT("alpha alone is no picture"), MCPCkDiffIsBlankImage(AlphaOnly, 4, 4));
+	TestTrue(TEXT("no pixels is no picture"), MCPCkDiffIsBlankImage(TArray<uint8>(), 0, 0));
+	TestTrue(TEXT("fewer bytes than the size says is no picture"), MCPCkDiffIsBlankImage(OnePixel, 8, 8));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPCheckpointBlueprintThumbnailTest,
+	"UE.MCP.Diff.CheckpointAsset.ActorBlueprintThumbnailsRender",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPCheckpointBlueprintThumbnailTest::RunTest(const FString& Parameters)
+{
+	FMCPScopedTestMount Mount(TEXT("/UEMCPCkThumbTest/"), TEXT("UEMCPCkThumbTest"));
+	const FString DiffDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::DiffDir(), TEXT("UE_MCP_CkDiffTest")));
+	ON_SCOPE_EXIT { IFileManager::Get().DeleteDirectory(*DiffDir, false, true); };
+
+	// An Actor Blueprint of engine basic shapes, as an agent builds one (#178).
+	UPackage* Package = CreatePackage(TEXT("/UEMCPCkThumbTest/BP_CkThumbGate"));
+	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(AActor::StaticClass(), Package, TEXT("BP_CkThumbGate"), BPTYPE_Normal,
+		UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass());
+	if (!TestNotNull(TEXT("the Blueprint is created"), Blueprint)) return false;
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (!TestNotNull(TEXT("the engine cube loads"), Cube)) return false;
+	USCS_Node* Pillar = Blueprint->SimpleConstructionScript->CreateNode(UStaticMeshComponent::StaticClass(), TEXT("Pillar"));
+	Cast<UStaticMeshComponent>(Pillar->ComponentTemplate)->SetStaticMesh(Cube);
+	Cast<UStaticMeshComponent>(Pillar->ComponentTemplate)->SetRelativeScale3D(FVector(0.8, 0.8, 4.4));
+	Blueprint->SimpleConstructionScript->AddNode(Pillar);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	FString Reason;
+	if (!TestTrue(TEXT("first version saves"), SaveAssetPackageChecked(Blueprint, Reason))) { AddError(Reason); return false; }
+	const FString Before = CkDiffTestSnapshot(Package, TEXT("BP_CkThumbGate-before"));
+
+	USCS_Node* Trigger = Blueprint->SimpleConstructionScript->CreateNode(UBoxComponent::StaticClass(), TEXT("Trigger"));
+	Cast<UBoxComponent>(Trigger->ComponentTemplate)->SetBoxExtent(FVector(700, 280, 150));
+	Blueprint->SimpleConstructionScript->AddNode(Trigger);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	if (!TestTrue(TEXT("second version saves"), SaveAssetPackageChecked(Blueprint, Reason))) { AddError(Reason); return false; }
+	const FString After = CkDiffTestSnapshot(Package, TEXT("BP_CkThumbGate-after"));
+
+	FString Original;
+	FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), Original, FPackageName::GetAssetPackageExtension());
+	FMCPHandlerRegistry Registry;
+	FDiffHandlers::RegisterHandlers(Registry);
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("originalFile"), Original);
+	Params->SetStringField(TEXT("fromFile"), Before);
+	Params->SetStringField(TEXT("toFile"), After);
+	Params->SetStringField(TEXT("fromThumbnail"), DiffDir / TEXT("bp-before.png"));
+	Params->SetStringField(TEXT("toThumbnail"), DiffDir / TEXT("bp-after.png"));
+	const TSharedPtr<FJsonObject> Diff = CkDiffTestCall(*this, Registry, TEXT("checkpoint_diff_asset"), Params);
+	if (!Diff.IsValid() || !TestTrue(TEXT("diff succeeds"), Diff->GetBoolField(TEXT("success")))) return false;
+
+	// Each version is drawn from the Blueprint loaded for diff, and the picture shows something.
+	IImageWrapperModule& Images = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+	for (const TCHAR* Side : { TEXT("before"), TEXT("after") })
+	{
+		const TSharedPtr<FJsonObject> Thumb = Diff->GetObjectField(Side)->GetObjectField(TEXT("thumbnail"));
+		if (!TestEqual(FString::Printf(TEXT("%s thumbnail rendered"), Side), Thumb->GetStringField(TEXT("source")), FString(TEXT("rendered"))))
+		{
+			AddError(FString::Printf(TEXT("%s: %s"), Side, *Thumb->GetStringField(TEXT("error"))));
+			continue;
+		}
+		TArray<uint8> Png;
+		TArray<uint8> Raw;
+		TSharedPtr<IImageWrapper> Reader = Images.CreateImageWrapper(EImageFormat::PNG);
+		const bool bDecoded = FFileHelper::LoadFileToArray(Png, *Thumb->GetStringField(TEXT("file")))
+			&& Reader.IsValid() && Reader->SetCompressed(Png.GetData(), Png.Num()) && Reader->GetRaw(ERGBFormat::BGRA, 8, Raw);
+		if (TestTrue(FString::Printf(TEXT("%s thumbnail decodes"), Side), bDecoded))
+		{
+			TestFalse(FString::Printf(TEXT("%s thumbnail is not black"), Side),
+				MCPCkDiffIsBlankImage(Raw, int32(Reader->GetWidth()), int32(Reader->GetHeight())));
+		}
+	}
 	return true;
 }
 

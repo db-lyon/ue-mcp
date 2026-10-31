@@ -2,6 +2,7 @@
 // package loaded with DiffUtils::LoadPackageForDiff, serialized as JSON, plus a
 // deterministic thumbnail of each version and the engine's diff window on request.
 #include "DiffHandlers.h"
+#include "CheckpointThumbnail.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerLogCapture.h"
@@ -11,8 +12,10 @@
 #include "AssetCompilingManager.h"
 #include "AssetDefinition.h"
 #include "AssetToolsModule.h"
+#include "CanvasTypes.h"
 #include "Components/ActorComponent.h"
 #include "Components/SceneComponent.h"
+#include "ContentStreaming.h"
 #include "DiffResults.h"
 #include "DiffUtils.h"
 #include "EdGraph/EdGraph.h"
@@ -27,6 +30,7 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -40,6 +44,7 @@
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Misc/App.h"
 #include "MaterialGraph/MaterialGraph.h"
 #include "MaterialGraph/MaterialGraphNode.h"
 #include "MaterialGraph/MaterialGraphSchema.h"
@@ -58,6 +63,8 @@
 #include "PackageTools.h"
 #include "PhysicsEngine/BodySetup.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "RenderingThread.h"
+#include "RHIUtilities.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Rendering/SkeletalMeshLODRenderData.h"
 #if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5)
@@ -67,11 +74,17 @@
 #define UE_MCP_CKDIFF_HAS_DETAILS_DIFF 0
 #endif
 #include "Settings/EditorLoadingSavingSettings.h"
+#include "SceneView.h"
 #include "ShaderCompiler.h"
+#include "ShowFlags.h"
 #include "Sound/SoundWave.h"
 #include "StaticMeshResources.h"
+#include "TextureResource.h"
+#include "ThumbnailHelpers.h"
 #include "Subsystems/AssetEditorSubsystem.h"
+#include "ThumbnailRendering/BlueprintThumbnailRenderer.h"
 #include "ThumbnailRendering/ThumbnailManager.h"
+#include "ThumbnailRendering/ThumbnailRenderer.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectHash.h"
 #include "Widgets/SWindow.h"
@@ -803,10 +816,57 @@ namespace
 		return true;
 	}
 
+	/** UThumbnailRenderer's view-family submit, which is protected. Never instantiated. */
+	struct FCkDiffThumbnailRenderAccess : public UThumbnailRenderer
+	{
+		static void Render(FCanvas* Canvas, FSceneViewFamily* Family, FSceneView* View) { RenderViewFamily(Canvas, Family, View); }
+	};
+
+	/**
+	 * An Actor Blueprint loaded for diff, drawn in a thumbnail scene owned here.
+	 * UBlueprintThumbnailRenderer::Draw draws nothing unless bHasBeenRegenerated is set,
+	 * and LoadPackageForDiff loads with compile-on-load disabled, so it never is (#178).
+	 * The scene and its preview actor are gone before the version is unloaded.
+	 */
+	bool CkDiffRenderBlueprint(UBlueprint* Blueprint, int32 Size, FObjectThumbnail& Out)
+	{
+		if (!FApp::CanEverRender() || !GEditor || !Blueprint->GeneratedClass || !Blueprint->GeneratedClass->IsChildOf(AActor::StaticClass())) return false;
+		UTextureRenderTarget2D* Target = GEditor->GetScratchRenderTarget(Size);
+		FTextureRenderTargetResource* Resource = Target ? Target->GameThread_GetRenderTargetResource() : nullptr;
+		if (!Resource) return false;
+		FlushAsyncLoading();
+		UTexture::ForceUpdateTextureStreaming();
+		IStreamingManager::Get().StreamAllResources();
+		{
+			FBlueprintThumbnailScene Scene;
+			Scene.SetBlueprint(Blueprint);
+			FCanvas Canvas(Resource, nullptr, FGameTime::GetTimeSinceAppStart(), GMaxRHIFeatureLevel);
+			Canvas.Clear(FLinearColor::Black);
+			{
+				FSceneViewFamilyContext Family(FSceneViewFamily::ConstructionValues(Resource, Scene.GetScene(), FEngineShowFlags(ESFIM_Game))
+					.SetTime(FGameTime::GetTimeSinceAppStart()));
+				Family.EngineShowFlags.DisableAdvancedFeatures();
+				Family.EngineShowFlags.MotionBlur = 0;
+				FCkDiffThumbnailRenderAccess::Render(&Canvas, &Family, Scene.CreateView(&Family, 0, 0, Size, Size));
+			}
+			Canvas.Flush_GameThread();
+			ENQUEUE_RENDER_COMMAND(UEMCPCkDiffThumbnailResolve)([Resource](FRHICommandListImmediate& RHICmdList)
+			{
+				TransitionAndCopyTexture(RHICmdList, Resource->GetRenderTargetTexture(), Resource->TextureRHI, {});
+			});
+			FlushRenderingCommands();
+			Scene.SetBlueprint(nullptr);
+		}
+		Out.SetImageSize(Size, Size);
+		TArray<uint8>& Data = Out.AccessImageData();
+		Data.SetNumUninitialized(Size * Size * sizeof(FColor));
+		return Resource->ReadPixelsPtr(reinterpret_cast<FColor*>(Data.GetData()), FReadSurfaceDataFlags(), FIntRect(0, 0, Size, Size));
+	}
+
 	/**
 	 * A picture of one version: rendered with ThumbnailTools::RenderThumbnail on
-	 * the object loaded for diff, or, where the class has no renderer or is a level,
-	 * the thumbnail saved inside that version's package.
+	 * the object loaded for diff, or, where the class has no renderer, is a level,
+	 * or the render came back black, the thumbnail saved inside that version's package.
 	 */
 	TSharedPtr<FJsonObject> CkDiffThumbnail(UObject* Asset, const FString& File, const FString& OriginalPackage, const FString& OutFile)
 	{
@@ -820,9 +880,21 @@ namespace
 			FAssetCompilingManager::Get().FinishAllCompilation();
 			if (GShaderCompilingManager) GShaderCompilingManager->FinishAllCompilation();
 			FObjectThumbnail Thumb;
-			ThumbnailTools::RenderThumbnail(Asset, CkDiffThumbnailSize, CkDiffThumbnailSize,
-				ThumbnailTools::EThumbnailTextureFlushMode::AlwaysFlush, nullptr, &Thumb);
-			if (CkDiffWritePng(Thumb, OutFile, Error))
+			UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
+			if (Blueprint && !Blueprint->bHasBeenRegenerated && !Info->bUseClassDefaultObject && Info->Renderer->IsA<UBlueprintThumbnailRenderer>())
+			{
+				CkDiffRenderBlueprint(Blueprint, CkDiffThumbnailSize, Thumb);
+			}
+			else
+			{
+				ThumbnailTools::RenderThumbnail(Asset, CkDiffThumbnailSize, CkDiffThumbnailSize,
+					ThumbnailTools::EThumbnailTextureFlushMode::AlwaysFlush, nullptr, &Thumb);
+			}
+			if (MCPCkDiffIsBlankImage(Thumb.GetUncompressedImageData(), Thumb.GetImageWidth(), Thumb.GetImageHeight()))
+			{
+				Error = TEXT("the rendered picture came back black or empty");
+			}
+			else if (CkDiffWritePng(Thumb, OutFile, Error))
 			{
 				T->SetStringField(TEXT("file"), OutFile);
 				T->SetStringField(TEXT("source"), TEXT("rendered"));
