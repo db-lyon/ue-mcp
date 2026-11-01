@@ -2,7 +2,18 @@ import * as path from "node:path";
 import { spawnOutsideTree } from "../core/spawn-outside-tree.js";
 import * as net from "net";
 import { bridgeReplyAccepted, callBridgeOnce, type BridgeReply } from "../bridge/bridge.js";
-import { readUeMcpConfig, type ProjectContext } from "../config/project.js";
+import { readUeMcpConfig, ueMcpConfigRejections, type ProjectContext } from "../config/project.js";
+import {
+  buildEditorLaunchArgs,
+  hasNoIdeArg,
+  hasOffscreenSwitch,
+  launchConfigRefusal,
+  renderWindowsCommandLine,
+  resolveIdeMode,
+  resolveWindowMode,
+  type EditorIdeMode,
+  type EditorWindowMode,
+} from "./launch-args.js";
 import { EngineResolutionError, engineLookupFor, selectEngine, trySelectEngine } from "./engine-root.js";
 import {
   editorOwnsProject,
@@ -512,6 +523,13 @@ export interface StartEditorResult {
   bridgeBuilt?: { version: string; message: string };
   /** Set when that build failed earlier, so this launch opened the previous build. */
   bridgeBuildFailed?: { version: string; message: string };
+  /** The window mode the launched editor runs in, read from its final arguments
+   *  (extraArgs can carry -RenderOffScreen too). Set once something was launched. */
+  window?: EditorWindowMode;
+  /** Whether the launched editor may open an IDE, read from its final
+   *  arguments (launchArgs or extraArgs can carry the no-IDE override too).
+   *  Set once something was launched. */
+  ide?: EditorIdeMode;
 }
 
 export async function startEditor(
@@ -537,6 +555,25 @@ export async function startEditor(
      * leaves the sharpest part of the suite unexercised by default.
      */
     paramEcho?: boolean;
+
+    /**
+     * How the editor's window should behave. Resolved against the project's
+     * `editor.window` in ue-mcp.yml, then `normal`. `offscreen` passes
+     * -RenderOffScreen, so no editor window appears on screen, and keeps the
+     * editor out of the background CPU throttle.
+     */
+    window?: EditorWindowMode;
+
+    /**
+     * Whether the editor may open an IDE. Resolved against the project's
+     * `editor.ide` in ue-mcp.yml, then `none` for an offscreen editor and
+     * `allow` otherwise. `none` passes the NullSourceCodeAccessor ini override.
+     */
+    ide?: EditorIdeMode;
+
+    /** Extra command-line arguments for the editor, appended after the
+     *  project's `editor.launchArgs` from ue-mcp.yml. */
+    extraArgs?: string;
 
     /** Draws the startup in a terminal. Omitted, nothing is drawn. */
     openDisplay?: (title: string) => ProgressDisplay;
@@ -605,6 +642,36 @@ export async function startEditor(
     };
   }
 
+  // Resolve the mode and build argv before anything is built or spawned, so a
+  // bad launch setting or extraArgs string refuses the call rather than
+  // launching half an editor.
+  const configRefusal = launchConfigRefusal(ueMcpConfigRejections(projectDir));
+  if (configRefusal) return { success: false, message: configRefusal };
+
+  // On Windows the pieces keep their quotes and the line is handed over
+  // verbatim, because Unreal reads the raw line and skips quoted text.
+  const onWindows = process.platform === "win32";
+  let launchArgs: string[];
+  try {
+    const windowMode = resolveWindowMode(opts.window, project.config.editor?.window);
+    launchArgs = buildEditorLaunchArgs(project.projectPath, {
+      window: windowMode,
+      ide: resolveIdeMode(opts.ide, project.config.editor?.ide, windowMode),
+      configLaunchArgs: project.config.editor?.launchArgs,
+      extraArgs: opts.extraArgs,
+      keepQuotes: onWindows,
+    });
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+  // The modes the editor will actually run in: launchArgs and extraArgs can
+  // carry either argument on a launch whose modes say otherwise.
+  const window: EditorWindowMode = hasOffscreenSwitch(launchArgs) ? "offscreen" : "normal";
+  const ide: EditorIdeMode = hasNoIdeArg(launchArgs) ? "none" : "allow";
+
   // No editor holds this project now, so a pending bridge update can finish, a binary bridge
   // that would not load is reinstalled before the editor can offer a rebuild it cannot do, and
   // a source bridge deployed while the editor ran is built, since Unreal would load the old DLL.
@@ -627,8 +694,9 @@ export async function startEditor(
     const launchedAtMs = Date.now();
     // Outside this server's process tree, so a client that ends the tree on
     // reconnect does not take the editor with it (#1274).
-    spawnOutsideTree(editorExe, [project.projectPath, ...(project.config.editor?.launchArgs ?? [])], {
+    spawnOutsideTree(editorExe, onWindows ? [renderWindowsCommandLine(launchArgs)] : launchArgs, {
       env: buildEditorLaunchEnv(opts.dialogPolicy, opts.paramEcho),
+      windowsVerbatimArguments: onWindows,
     });
 
     // Hold here until the editor is actually usable, drawing the startup as a
@@ -646,6 +714,8 @@ export async function startEditor(
         message: `Editor launched but did not become ready: ${result.reason}. Startup reached: ${describeTimeline(result.timeline)}.`,
         timeline: result.timeline,
         elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
+        window,
+        ide,
         ...(result.state ? { state: result.state } : {}),
         ...built,
       };
@@ -656,12 +726,16 @@ export async function startEditor(
       message: `${builtNote}Editor ready in ${result.elapsedSeconds.toFixed(1)}s (waited through startup: ${describeTimeline(result.timeline)}). No further status polling is needed.`,
       timeline: result.timeline,
       elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
+      window,
+      ide,
       ...built,
     };
   } catch (error) {
     return {
       success: false,
       message: `Failed to launch editor: ${error instanceof Error ? error.message : String(error)}`,
+      window,
+      ide,
     };
   }
 }
@@ -1030,6 +1104,10 @@ export interface RestartEditorResult {
   state?: EngineState;
   timeline?: ReadyPhase[];
   elapsedSeconds?: number;
+  /** The window mode the start half used. */
+  window?: EditorWindowMode;
+  /** Whether the editor the start half launched may open an IDE. */
+  ide?: EditorIdeMode;
 }
 
 
@@ -1397,6 +1475,7 @@ export async function restartEditor(
   project: ProjectContext,
   bridge?: { connect: (timeoutMs?: number) => Promise<void> } & ConnectedEditorSource,
   openDisplay?: (title: string) => ProgressDisplay,
+  opts: { window?: EditorWindowMode; ide?: EditorIdeMode; extraArgs?: string } = {},
 ): Promise<RestartEditorResult> {
   // Same rule as start and stop: without a loaded project there is no editor
   // this is about, and the machine-wide answer is somebody else's editor (#819).
@@ -1414,7 +1493,12 @@ export async function restartEditor(
     return { success: false, message: `Failed to stop editor: ${stopResult.message}` };
   }
 
-  const startResult = await startEditor(project, undefined, undefined, { openDisplay });
+  const startResult = await startEditor(project, undefined, undefined, {
+    openDisplay,
+    window: opts.window,
+    ide: opts.ide,
+    extraArgs: opts.extraArgs,
+  });
   const stopped = stopResult.stopped ? { stopped: stopResult.stopped } : {};
   if (!startResult.success) {
     return { ...startResult, ...stopped };
