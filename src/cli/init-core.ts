@@ -74,6 +74,19 @@ export const CATEGORIES: ToolCategory[] = [
   { name: "gas",        label: "gas",           description: "Gameplay Ability System abilities, effects, attributes", requiredPlugins: ["GameplayAbilities"] },
   { name: "networking", label: "networking",    description: "replication, dormancy, RPCs" },
   { name: "demo",       label: "demo",          description: "tutorial / demo project scaffolding" },
+  // Plugins these reach are optional: the handlers report "not available" when
+  // one is off, so they are not forced on through requiredPlugins.
+  { name: "pie",            label: "pie testing",    description: "record, replay and diff PIE sessions, input injection, test scripts" },
+  { name: "statetree",      label: "statetree",      description: "StateTree states, tasks, conditions, transitions, bindings" },
+  { name: "chooser",        label: "chooser",        description: "ChooserTable rows and columns (Motion Matching selection)" },
+  { name: "dataflow",       label: "dataflow",       description: "Dataflow graphs, Chaos geometry and simulation assets (UE 5.8+)" },
+  { name: "conversation",   label: "conversation",   description: "Conversation dialogue graphs, speakers, entry points (UE 5.8+)" },
+  { name: "epic",           label: "epic toolsets",  description: "Unreal AI Toolset Registry discovery and direct dispatch (UE 5.8+)" },
+  { name: "fab",            label: "fab",            description: "Fab library sync, download cache, content import" },
+  { name: "datasmith",      label: "datasmith",      description: "Datasmith scene import and metadata queries" },
+  { name: "metahuman",      label: "metahuman",      description: "MetaHumanCharacter assets" },
+  { name: "source_control", label: "source control", description: "provider status, checkout, history, diff, submit" },
+  { name: "plugins",    label: "plugins",       alwaysOn: true },
   // feedback has its own toggle: enabling it gives the agent a tool that can
   // post to a public issue tracker, behind user approval.
   { name: "feedback",   label: "feedback",      alwaysOn: true },
