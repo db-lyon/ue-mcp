@@ -18,6 +18,7 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "HAL/PlatformFileManager.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/AutomationTest.h"
@@ -236,8 +237,9 @@ bool FMCPBlueprintComponentBatchRefusalTest::RunTest(const FString& Parameters)
 	FString SaveError, Filename;
 	if (!TestTrue(TEXT("read-only fixture saves first"), SaveAssetPackageChecked(Bad, SaveError))) return false;
 	if (!TestTrue(TEXT("read-only filename resolves"), ResolvePackageFileName(Bad->GetOutermost(), Filename))) return false;
-	if (!TestTrue(TEXT("file can be marked read-only"), IFileManager::Get().SetReadOnly(*Filename, true))) return false;
-	ON_SCOPE_EXIT { IFileManager::Get().SetReadOnly(*Filename, false); };
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	if (!TestTrue(TEXT("file can be marked read-only"), PlatformFile.SetReadOnly(*Filename, true))) return false;
+	ON_SCOPE_EXIT { PlatformFile.SetReadOnly(*Filename, false); };
 	const auto ReadOnly = Run(Fixture, Request({Item(Bad, TEXT("CharacterMovement"), Valid)}));
 	TestFalse(TEXT("read-only package is refused"), ReadOnly->GetBoolField(TEXT("success")));
 	TestEqual(TEXT("refusal stage names write guard"), Row(ReadOnly, 0)->GetStringField(TEXT("stage")), FString(TEXT("write_guard")));
