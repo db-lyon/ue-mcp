@@ -114,7 +114,7 @@ function engineRootFromEnginePath(enginePath, platform = process.platform) {
 }
 
 function defaultEngineRoots(platform = process.platform) {
-  const versions = ['5.8', '5.7', '5.6', '5.5', '5.4', '5.3'];
+  const versions = ['5.9', '5.8', '5.7', '5.6', '5.5', '5.4', '5.3'];
 
   if (platform === 'win32') {
     return versions.map((version) => path.win32.join('C:/Program Files/Epic Games', `UE_${version}`));
@@ -345,6 +345,7 @@ export {
   comparisonPath,
   engineExecutables,
   engineRootFromEnginePath,
+  defaultEngineRoots,
   unrealTargetPlatform,
   isSameOrUnder,
   protectedEngineRoots,
