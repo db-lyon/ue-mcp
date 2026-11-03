@@ -575,7 +575,9 @@ bool FMCPEngineStatus::ShouldPublishStatus()
 
 bool FMCPEngineStatus::PublishAtomically(const FString& FinalPath, const FString& Contents)
 {
-	// Each publication owns its sibling temporary file, including concurrent calls in one process.
+	// Each publication owns its sibling temporary file, including concurrent calls in one process (#990).
+	// Windows contention retries are bounded to about 50 ms. A longer non-sharing read skips
+	// this snapshot, preserving the previous one until the next publication.
 	const FString TempPath = FString::Printf(TEXT("%s.%u.%s.tmp"), *FinalPath,
 		FPlatformProcess::GetCurrentProcessId(), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
 	if (!FFileHelper::SaveStringToFile(Contents, *TempPath))

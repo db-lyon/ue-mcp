@@ -92,7 +92,7 @@ bool FMCPEngineStatusConcurrentPublicationTest::RunTest(const FString& Parameter
 	ON_SCOPE_EXIT { Files.DeleteDirectory(*Directory, false, true); };
 
 	const auto Payload = [](int32 Writer) { return FString::ChrN(2048, static_cast<TCHAR>('A' + Writer)); };
-	const auto Document = [&Payload](int32 Writer, int32 Sequence)
+	const auto Document = [Payload](int32 Writer, int32 Sequence)
 	{
 		return FString::Printf(TEXT("{\"writer\":%d,\"sequence\":%d,\"payload\":\"%s\"}"), Writer, Sequence, *Payload(Writer));
 	};
@@ -114,12 +114,13 @@ bool FMCPEngineStatusConcurrentPublicationTest::RunTest(const FString& Parameter
 	TestTrue(TEXT("canonical path reads publication through duplicate separators"), FFileHelper::LoadFileToString(Readback, *Path));
 	TestEqual(TEXT("duplicate-separator publication remains complete"), Readback, Initial);
 
-	FEvent* Start = FPlatformProcess::GetSynchEventFromPool(true);
-	ON_SCOPE_EXIT { FPlatformProcess::ReturnSynchEventToPool(Start); };
+	TSharedPtr<FEvent, ESPMode::ThreadSafe> Start = MakeShareable(
+		FPlatformProcess::GetSynchEventFromPool(true),
+		[](FEvent* Event) { FPlatformProcess::ReturnSynchEventToPool(Event); });
 	TArray<TFuture<bool>> Writers;
 	for (int32 Writer = 0; Writer < 2; ++Writer)
 	{
-		Writers.Add(Async(EAsyncExecution::Thread, [Start, Path, Writer, &Document]()
+		Writers.Add(Async(EAsyncExecution::Thread, [Start, Path, Writer, Document]()
 		{
 			Start->Wait();
 			bool bSucceeded = true;
@@ -162,8 +163,14 @@ bool FMCPEngineStatusConcurrentPublicationTest::RunTest(const FString& Parameter
 		++Reads;
 	} while ((!Writers[0].IsReady() || !Writers[1].IsReady()) && FPlatformTime::Seconds() < Deadline);
 	TestTrue(TEXT("concurrent publishers finish within ten seconds"), Writers[0].IsReady() && Writers[1].IsReady());
-	// Join before any captured locals or the event are released, even if an assertion failed.
-	for (TFuture<bool>& Writer : Writers) TestTrue(TEXT("every concurrent publication succeeds"), Writer.Get());
+	// A stalled publisher must fail the test without blocking it forever. Captures own their state.
+	for (TFuture<bool>& Writer : Writers)
+	{
+		if (TestTrue(TEXT("publisher returns within ten seconds"), Writer.WaitFor(FTimespan::FromSeconds(10))))
+		{
+			TestTrue(TEXT("every concurrent publication succeeds"), Writer.Get());
+		}
+	}
 	TestTrue(TEXT("reader observed snapshots during publication"), Reads > 0);
 	TestTrue(TEXT("published destination never disappears"), bReadable);
 	TestTrue(TEXT("every observed document is complete JSON from one writer"), bComplete);
