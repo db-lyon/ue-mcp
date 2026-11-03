@@ -94,7 +94,7 @@ describe("the projection of every category", () => {
     expect(lean.tools.find((t) => t.name === "catalog")?.category).toBeNull();
     expect(lean.tools.find((t) => t.name === "flow")?.category).toBeNull();
     expect(lean.tools.find((t) => t.name === "level")?.category).toBe("level");
-    expect(projector.project({ strategy: "micro" }).tools.map((t) => [t.name, t.category])).toEqual([["tools", null], ["flow", null]]);
+    expect(projector.project({ strategy: "micro" }).tools.map((t) => [t.name, t.category])).toEqual([["tools", null]]);
   });
 });
 
@@ -102,17 +102,22 @@ describe("a scoped projection", () => {
   const scope = ["level", "blueprint"];
 
   for (const strategy of CONTEXT_STRATEGIES) {
-    it(`is strictly smaller and holds only its categories (${strategy})`, () => {
+    it(`holds only its categories, and is smaller where the seed lists them (${strategy})`, () => {
       const projector = new ContextProjector(runtimes.micro);
       const all = projector.project({ strategy });
       const some = projector.project({ strategy, categories: scope });
       expect(some.categories).toEqual(["level", "blueprint"].filter((c) => all.categories.includes(c)).sort((a, b) => all.categories.indexOf(a) - all.categories.indexOf(b)));
+      // Micro's seed is one line and the gateway whatever the scope; its guide is scoped instead.
+      if (strategy === "micro") {
+        expect(some.seedTokens).toBe(all.seedTokens);
+        return;
+      }
       expect(some.seedTokens).toBeLessThan(all.seedTokens);
       expect(some.instructions.length).toBeLessThan(all.instructions.length);
       const categoryTools = some.tools.filter((t) => t.category !== null).map((t) => t.name);
       expect(categoryTools.every((n) => scope.includes(n))).toBe(true);
       expect(some.instructions).toContain("2 categor");
-      if (strategy !== "micro") expect(categoryTools.sort()).toEqual([...scope].sort());
+      expect(categoryTools.sort()).toEqual([...scope].sort());
     });
   }
 
@@ -131,7 +136,9 @@ describe("a projected call", () => {
     const opts = { strategy: "micro" as const, categories: ["level", "blueprint"] };
     const listed = await projector.call(opts, "tools", { action: "list_categories" });
     expect(listed.isError, text(listed)).toBeFalsy();
-    expect(JSON.parse(text(listed)).categories.map((c: { category: string }) => c.category).sort()).toEqual(["blueprint", "level"]);
+    expect(JSON.parse(text(listed)).categories.map((c: { category: string }) => c.category).sort()).toEqual(["blueprint", "flow", "level"]);
+    const guide = await projector.call(opts, "tools", { action: "guide" });
+    expect(text(guide)).toContain("2 categories");
 
     const refused = await projector.call(opts, "tools", { action: "call", category: "asset", method: "list", args: {} });
     expect(refused.isError).toBe(true);

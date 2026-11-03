@@ -364,9 +364,16 @@ describe("micro mode can still answer its own dialog", () => {
   it("advertises the gateway, so every category call arrives as tools.call", async () => {
     const listed = await microClient.listTools();
     const names = listed.tools.map((t) => t.name).sort();
-    // The gateway fronts every category. `flow` is advertised alongside it,
-    // which is the second route to the editor and why it needs its own gate.
-    expect(names).toEqual(["flow", "tools"]);
+    // The gateway fronts every category and the flows.
+    expect(names).toEqual(["tools"]);
+  }, 60_000);
+
+  it("refuses a flow run through the gateway, the second route to the editor", async () => {
+    const res = await microClient.callTool({
+      name: "tools",
+      arguments: { action: "call", category: "flow", method: "list" },
+    });
+    expect(body(res).dialogBlocking).toBe(true);
   }, 60_000);
 
   it("refuses a real call made through the gateway", async () => {
