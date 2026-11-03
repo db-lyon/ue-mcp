@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -43,127 +43,127 @@ const S_epic_world_pos_to_screen_coords = {"properties":{"position":{"type":"obj
 export const actions: Record<string, ActionSpec> = {
   epic_capture_asset_image: {
     epicSchema: S_epic_capture_asset_image,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.CaptureAssetImage" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.CaptureAssetImage", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Renders a thumbnail for the specified asset (e.g. static meshes, skeletal meshes, skeletons, animations, montages, materials, textures). Params: assetPath", "epic_call_tool"),
   },
   epic_capture_editor_image: {
     epicSchema: S_epic_capture_editor_image,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.CaptureEditorImage" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.CaptureEditorImage", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Captures an image of the entire editor application as the user sees it. Params: none", "epic_call_tool"),
   },
   epic_capture_viewport: {
     epicSchema: S_epic_capture_viewport,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.CaptureViewport" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.CaptureViewport", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Captures the level viewport with optional annotations. Annotations rendering overlays a projected 3D world-space grid plus name + position labels on visible actors. The grid is drawn at a configurable ground-plane Z and projected through the camera, with coordinate numbers at intersections (shown in meters). Each labeled actor gets a crosshair at its projected screen position with a leader-line callout placed to avoid overlap. This gives a vision-capable agent spatial awareness: it can reference grid coordinates to direct placement and identify scene contents by label. Params: captureTransform?, annotations?, bShowUI?", "epic_call_tool"),
   },
   epic_focus_on_actors: {
     epicSchema: S_epic_focus_on_actors,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.FocusOnActors" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.FocusOnActors", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Repositions the level editor camera to focus on the specified actors. Cannot be called while PIE is active. Params: actors", "epic_call_tool"),
   },
   epic_get_camera_transform: {
     epicSchema: S_epic_get_camera_transform,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetCameraTransform" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetCameraTransform", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Returns the position and rotation of the level viewport camera. Params: none", "epic_call_tool"),
   },
   epic_get_content_browser_path: {
     epicSchema: S_epic_get_content_browser_path,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetContentBrowserPath" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetContentBrowserPath", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Gets the current path of the active content browser. Params: none", "epic_call_tool"),
   },
   epic_get_log_categories: {
     epicSchema: S_epic_get_log_categories,
-    epicTool: { toolset: "EditorToolset.LogsToolset", name: "EditorToolset.LogsToolset.GetLogCategories" },
+    epicTool: { toolset: "EditorToolset.LogsToolset", name: "EditorToolset.LogsToolset.GetLogCategories", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.LogsToolset] Returns a sorted list of registered log categories. Params: filter", "epic_call_tool"),
   },
   epic_get_log_entries: {
     epicSchema: S_epic_get_log_entries,
-    epicTool: { toolset: "EditorToolset.LogsToolset", name: "EditorToolset.LogsToolset.GetLogEntries" },
+    epicTool: { toolset: "EditorToolset.LogsToolset", name: "EditorToolset.LogsToolset.GetLogEntries", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.LogsToolset] Returns log entries from the current session's log file. Params: category?, pattern, maxEntries?", "epic_call_tool"),
   },
   epic_get_open_assets: {
     epicSchema: S_epic_get_open_assets,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetOpenAssets" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetOpenAssets", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Gets the list of assets currently open in asset editors. Params: none", "epic_call_tool"),
   },
   epic_get_selected_actors: {
     epicSchema: S_epic_get_selected_actors,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetSelectedActors" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetSelectedActors", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Gets the currently selected actors in the level editor. Params: none", "epic_call_tool"),
   },
   epic_get_selected_assets: {
     epicSchema: S_epic_get_selected_assets,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetSelectedAssets" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetSelectedAssets", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Gets the list of assets selected in the content browser. Params: none", "epic_call_tool"),
   },
   epic_get_verbosity: {
     epicSchema: S_epic_get_verbosity,
-    epicTool: { toolset: "EditorToolset.LogsToolset", name: "EditorToolset.LogsToolset.GetVerbosity" },
+    epicTool: { toolset: "EditorToolset.LogsToolset", name: "EditorToolset.LogsToolset.GetVerbosity", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.LogsToolset] Returns the current verbosity level for a log category. Params: category?", "epic_call_tool"),
   },
   epic_get_visible_actors: {
     epicSchema: S_epic_get_visible_actors,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetVisibleActors" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.GetVisibleActors", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Returns all actors in the current level whose bounds intersect the viewport frustum. Params: none", "epic_call_tool"),
   },
   epic_is_pierunning: {
     epicSchema: S_epic_is_pierunning,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.IsPIERunning" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.IsPIERunning", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Returns whether a Play In Editor session is currently running. Params: none", "epic_call_tool"),
   },
   epic_open_editor_for_asset: {
     epicSchema: S_epic_open_editor_for_asset,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.OpenEditorForAsset" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.OpenEditorForAsset", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Opens an asset editor for the specified asset. Params: assetPath", "epic_call_tool"),
   },
   epic_screen_coords_to_world: {
     epicSchema: S_epic_screen_coords_to_world,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.ScreenCoordsToWorld" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.ScreenCoordsToWorld", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Finds the world position of the nearest solid object at a given set of normalized view space coords. Params: coords, traceDistance?", "epic_call_tool"),
   },
   epic_search_cvars: {
     epicSchema: S_epic_search_cvars,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SearchCVars" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SearchCVars", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Finds all console variables that contain a given name. Params: name", "epic_call_tool"),
   },
   epic_select_actors: {
     epicSchema: S_epic_select_actors,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SelectActors" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SelectActors", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Selects the specified actors in the current scene. Params: actors", "epic_call_tool"),
   },
   epic_select_assets: {
     epicSchema: S_epic_select_assets,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SelectAssets" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SelectAssets", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Selects the specified assets in the content browser. Completes once the content browser has applied the selection. Params: assetPaths", "epic_call_tool"),
   },
   epic_set_camera_transform: {
     epicSchema: S_epic_set_camera_transform,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SetCameraTransform" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SetCameraTransform", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Sets the position and rotation of the level viewport camera. Params: transform", "epic_call_tool"),
   },
   epic_set_content_browser_path: {
     epicSchema: S_epic_set_content_browser_path,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SetContentBrowserPath" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.SetContentBrowserPath", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Navigates the active content browser to the specified folder path. Params: path", "epic_call_tool"),
   },
   epic_set_verbosity: {
     epicSchema: S_epic_set_verbosity,
-    epicTool: { toolset: "EditorToolset.LogsToolset", name: "EditorToolset.LogsToolset.SetVerbosity" },
+    epicTool: { toolset: "EditorToolset.LogsToolset", name: "EditorToolset.LogsToolset.SetVerbosity", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.LogsToolset] Sets the verbosity level for a log category. Params: category?, verbosity", "epic_call_tool"),
   },
   epic_start_pie: {
     epicSchema: S_epic_start_pie,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.StartPIE" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.StartPIE", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Starts a Play-In-Editor or Simulate-In-Editor session using the current level. Completes after the engine fires PostPIEStarted (session fully started, BeginPlay called) and Options.WarmupSeconds have elapsed, giving project- specific initialization (services, authentication, plugin warmup) time to settle before the agent inspects state or logs. Raises an error if a play session is already running. Params: options", "epic_call_tool"),
   },
   epic_stop_pie: {
     epicSchema: S_epic_stop_pie,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.StopPIE" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.StopPIE", engines: ["5.8"] },
     ...bp("mutate", "[Epic EditorToolset.EditorAppToolset] Stops the currently running play session (PIE or Simulate). Raises an error if no play session is running. Params: none", "epic_call_tool"),
   },
   epic_world_pos_to_screen_coords: {
     epicSchema: S_epic_world_pos_to_screen_coords,
-    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.WorldPosToScreenCoords" },
+    epicTool: { toolset: "EditorToolset.EditorAppToolset", name: "EditorToolset.EditorAppToolset.WorldPosToScreenCoords", engines: ["5.8"] },
     ...bp("read", "[Epic EditorToolset.EditorAppToolset] Converts a world-space position into normalized screen space based on the editor viewport camera. Params: position", "epic_call_tool"),
   },
 };

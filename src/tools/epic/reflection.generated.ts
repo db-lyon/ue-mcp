@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -24,32 +24,32 @@ const S_epic_set_properties = {"properties":{"instance":{"type":"object","proper
 export const actions: Record<string, ActionSpec> = {
   epic_get_class: {
     epicSchema: S_epic_get_class,
-    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.get_class" },
+    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.get_class", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Returns the class of an Unreal object. Params: instance", "epic_call_tool"),
   },
   epic_get_properties: {
     epicSchema: S_epic_get_properties,
-    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.get_properties" },
+    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.get_properties", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Returns the values of one or more properties on an object. Params: instance, properties", "epic_call_tool"),
   },
   epic_list_properties: {
     epicSchema: S_epic_list_properties,
-    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.list_properties" },
+    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.list_properties", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Returns a list of properties that are on the specified object. Params: instance", "epic_call_tool"),
   },
   epic_reset_properties: {
     epicSchema: S_epic_reset_properties,
-    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.reset_properties" },
+    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.reset_properties", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.object.ObjectTools] Resets one or more properties on an object to their default values, removing any per-instance overrides. Params: instance, properties", "epic_call_tool"),
   },
   epic_search_subclasses: {
     epicSchema: S_epic_search_subclasses,
-    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.search_subclasses" },
+    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.search_subclasses", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.object.ObjectTools] Finds all subclasses of a given class. Params: base_class, class_name", "epic_call_tool"),
   },
   epic_set_properties: {
     epicSchema: S_epic_set_properties,
-    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.set_properties" },
+    epicTool: { toolset: "editor_toolset.toolsets.object.ObjectTools", name: "editor_toolset.toolsets.object.ObjectTools.set_properties", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.object.ObjectTools] Sets the values of properties on an object. Params: instance, values", "epic_call_tool"),
   },
 };

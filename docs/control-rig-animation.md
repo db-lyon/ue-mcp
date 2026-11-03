@@ -18,8 +18,8 @@ configured.
 
 | Capability | Engine support |
 |------------|----------------|
-| `begin_control_rig_edit`, `read_control_rig_edit`, `capture_control_rig_pose`, `apply_control_rig_edits`, `bake_control_rig_edit` | UE 5.8 only. Older engines return `unsupported_engine_version`; there is no fallback to raw bone tracks |
-| `configure_ik_rig`, `configure_ik_retargeter` | UE 5.8 only, same error on older engines |
+| `begin_control_rig_edit`, `read_control_rig_edit`, `capture_control_rig_pose`, `apply_control_rig_edits`, `bake_control_rig_edit` | UE 5.8 and later. Older engines return `unsupported_engine_version`; there is no fallback to raw bone tracks |
+| `configure_ik_rig`, `configure_ik_retargeter` | UE 5.8 and later, same error on older engines |
 | `analyze_animation` | Every supported engine |
 | Other IK Rig and IK Retargeter create/read actions | See each action in the [tool reference](tool-reference.md) |
 
@@ -91,7 +91,7 @@ exposes the controls the motion needs, a Forward Solve that drives the bones,
 and a Backward Solve that initializes those controls from source animation
 without a pose jump. `rigMode="asset"` rejects a rig without inverse execution.
 
-If none fits, build one with the UE 5.8 Control Rig toolset wrapped on the
+If none fits, build one with the Control Rig toolset (UE 5.8+) wrapped on the
 animation category: `epic_create`, then `epic_import_bones_from_asset` for the
 production skeleton, `epic_add_control` for each control, and
 `epic_add_backward_solve_graph`. Wire the rest with the other Control Rig graph,

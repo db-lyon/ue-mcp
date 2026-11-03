@@ -2,9 +2,10 @@
  * What each wrapped engine tool does to the editor it is addressed to.
  *
  * This file is the reviewed half of the Epic action surface. The catalog in
- * `tests/golden/epic-catalog.json` says what tools exist and what arguments
- * they take; Epic ships no annotation saying whether one reads or writes, so
- * that judgement is made here, by a person, once, and lives in a diff.
+ * `tests/golden/epic-catalog/`, one snapshot per engine version, says what
+ * tools exist and what arguments they take; Epic ships no annotation saying
+ * whether one reads or writes, so that judgement is made here, by a person,
+ * once, and lives in a diff.
  *
  * It is hand-edited. `npm run epic:seed` only ADDS entries for tools that have
  * none, so re-recording a newer engine appends its new tools and never

@@ -42,6 +42,7 @@ import { isDirectiveResponse } from "../core/directive.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { contractViolation, liveContract, type ParamContract } from "../surface/handler-spec.js";
 import { ROUTING_PARAMS, undeclaredMessage, type ActionAccepts } from "../surface/action-schema.js";
+import type { EpicToolRef } from "../surface/epic-input.js";
 
 /**
  * Separate the per-call timeout budget from the action's own parameters.
@@ -104,6 +105,8 @@ export interface CallPreparation {
   liveSpecMethod?: string;
   /** Appended to a contract refusal, e.g. why the live spec could not be adopted. */
   contractNote?: string;
+  /** The engine tool a generated `epic_*` action wraps, whose engines gate the call. */
+  epicTool?: EpicToolRef;
 }
 
 /** What the inbound half decided, carried to the outbound half. */

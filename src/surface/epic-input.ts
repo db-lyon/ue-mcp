@@ -256,6 +256,8 @@ export interface EpicToolRef {
   readonly toolset: string;
   /** The qualified tool name, e.g. `UMGToolSet.UMGToolSet.GetWidgets`. */
   readonly name: string;
+  /** The recorded engine versions (major.minor) whose registry has this tool. */
+  readonly engines?: readonly string[];
 }
 
 type ParamMapper = (p: Record<string, unknown>) => Record<string, unknown>;

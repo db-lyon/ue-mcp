@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -53,177 +53,177 @@ const S_epic_set_vector_parameter = {"properties":{"instance":{"type":"object","
 export const actions: Record<string, ActionSpec> = {
   epic_add_expression: {
     epicSchema: S_epic_add_expression,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.add_expression" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.add_expression", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Adds a new expression node to a Material or MaterialFunction graph. Use list_expression_classes to discover available types. Params: material_or_function, expression_class, x?, y?", "epic_call_tool"),
   },
   epic_clear_parameters: {
     epicSchema: S_epic_clear_parameters,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.clear_parameters" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.clear_parameters", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Clears all parameter overrides on a material instance, reverting to parent defaults. Params: instance", "epic_call_tool"),
   },
   epic_connect_expressions: {
     epicSchema: S_epic_connect_expressions,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.connect_expressions" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.connect_expressions", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Connects an expression node's output pin to another expression node's input pin. Params: from_expression, from_output_name, to_expression, to_input_name", "epic_call_tool"),
   },
   epic_connect_to_output: {
     epicSchema: S_epic_connect_to_output,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.connect_to_output" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.connect_to_output", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Connects an expression node's output to one of the material's output properties. Params: expression, output_name, material_property", "epic_call_tool"),
   },
   epic_create: {
     epicSchema: S_epic_create,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.create" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.create", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Creates a new MaterialInstanceConstant asset derived from a parent material. Material instances expose the parent's parameters without triggering a full shader recompile when parameter values change. Params: folder_path, asset_name, parent", "epic_call_tool"),
   },
   epic_create_function: {
     epicSchema: S_epic_create_function,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.create_function" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.create_function", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Creates a new empty MaterialFunction asset. Params: folder_path, asset_name", "epic_call_tool"),
   },
   epic_create_material: {
     epicSchema: S_epic_create_material,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.create_material" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.create_material", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Creates a new empty Material asset. Warning: Each new Material increases shader compile times. Prefer creating a MaterialInstance from an existing Material where possible. Params: folder_path, asset_name", "epic_call_tool"),
   },
   epic_create_parameter_collection: {
     epicSchema: S_epic_create_parameter_collection,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.create_parameter_collection" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.create_parameter_collection", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Creates a new empty MaterialParameterCollection (MPC) asset. An MPC holds named Scalar and Vector parameters with default values that materials can reference at runtime without recompiling shaders. Params: folder_path, asset_name", "epic_call_tool"),
   },
   epic_delete_expression: {
     epicSchema: S_epic_delete_expression,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.delete_expression" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.delete_expression", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Removes an expression node from a Material or MaterialFunction graph. Params: material_or_function, expression", "epic_call_tool"),
   },
   epic_delete_parameter_group: {
     epicSchema: S_epic_delete_parameter_group,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.delete_parameter_group" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.delete_parameter_group", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Removes a parameter group, ungrouping all parameters that belong to it. The parameter expressions themselves are not deleted - only their group assignment is cleared. Params: material_or_function, group_name", "epic_call_tool"),
   },
   epic_delete_unused_expressions: {
     epicSchema: S_epic_delete_unused_expressions,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.delete_unused_expressions" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.delete_unused_expressions", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Deletes all expression nodes not connected to any material output. Useful for cleaning up a material graph after reorganising or after the AI has added experimental nodes that were later abandoned. Params: material", "epic_call_tool"),
   },
   epic_disconnect_expressions: {
     epicSchema: S_epic_disconnect_expressions,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.disconnect_expressions" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.disconnect_expressions", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Disconnects the input pin of an expression node, removing whatever is connected to it. Params: to_expression, to_input_name", "epic_call_tool"),
   },
   epic_disconnect_from_output: {
     epicSchema: S_epic_disconnect_from_output,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.disconnect_from_output" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.disconnect_from_output", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Disconnects the expression currently connected to a material output property. Params: material, material_property", "epic_call_tool"),
   },
   epic_get_expression_input_names: {
     epicSchema: S_epic_get_expression_input_names,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_expression_input_names" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_expression_input_names", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material.MaterialTools] Returns the names of all input pins on a material expression node. Use these names as to_input_name when calling connect_expressions. Params: expression", "epic_call_tool"),
   },
   epic_get_expression_inputs: {
     epicSchema: S_epic_get_expression_inputs,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_expression_inputs" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_expression_inputs", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material.MaterialTools] Returns the current wiring of each input pin on a material expression. Use after building or modifying a graph to verify the wiring matches expectations. Params: material_or_function, expression", "epic_call_tool"),
   },
   epic_get_expression_output_names: {
     epicSchema: S_epic_get_expression_output_names,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_expression_output_names" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_expression_output_names", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material.MaterialTools] Returns the names of all output pins on a material expression node. Use these names as from_output_name when calling connect_expressions or connect_to_output. The empty string represents the default (first) output of nodes that expose only an unnamed output. Params: expression", "epic_call_tool"),
   },
   epic_get_expressions: {
     epicSchema: S_epic_get_expressions,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_expressions" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_expressions", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material.MaterialTools] Returns all expression nodes in a Material or MaterialFunction graph. Params: material_or_function", "epic_call_tool"),
   },
   epic_get_property_input: {
     epicSchema: S_epic_get_property_input,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_property_input" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_property_input", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material.MaterialTools] Returns the expression and output pin feeding a material output property. Use to inspect what drives MP_EmissiveColor, MP_Opacity, MP_BaseColor, etc. Params: material, material_property", "epic_call_tool"),
   },
   epic_get_referencing_materials: {
     epicSchema: S_epic_get_referencing_materials,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_referencing_materials" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.get_referencing_materials", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material.MaterialTools] Returns asset data for all Materials that reference this MaterialFunction. Params: material_function", "epic_call_tool"),
   },
   epic_get_scalar_parameter: {
     epicSchema: S_epic_get_scalar_parameter,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.get_scalar_parameter" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.get_scalar_parameter", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Gets the current value of a scalar parameter on a material instance. Params: instance, name", "epic_call_tool"),
   },
   epic_get_static_switch_parameter: {
     epicSchema: S_epic_get_static_switch_parameter,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.get_static_switch_parameter" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.get_static_switch_parameter", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Gets the value of a static switch parameter on a material instance. Params: instance, name", "epic_call_tool"),
   },
   epic_get_texture_parameter: {
     epicSchema: S_epic_get_texture_parameter,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.get_texture_parameter" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.get_texture_parameter", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Gets the texture assigned to a texture parameter on a material instance. Params: instance, name", "epic_call_tool"),
   },
   epic_get_vector_parameter: {
     epicSchema: S_epic_get_vector_parameter,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.get_vector_parameter" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.get_vector_parameter", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Gets the current value of a vector parameter on a material instance. Params: instance, name", "epic_call_tool"),
   },
   epic_layout_expressions: {
     epicSchema: S_epic_layout_expressions,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.layout_expressions" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.layout_expressions", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Automatically arranges all expression nodes in a Material or MaterialFunction graph. Params: material_or_function", "epic_call_tool"),
   },
   epic_list_expression_classes: {
     epicSchema: S_epic_list_expression_classes,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.list_expression_classes" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.list_expression_classes", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material.MaterialTools] Returns MaterialExpression subclasses valid for the given context. Use the results with add_expression. Pass a search string to filter by name, e.g. 'Multiply' or 'Parameter'. Params: material_or_function, search", "epic_call_tool"),
   },
   epic_list_parameter_groups: {
     epicSchema: S_epic_list_parameter_groups,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.list_parameter_groups" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.list_parameter_groups", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material.MaterialTools] Returns the unique parameter group names defined in a Material or MaterialFunction. Parameters are organised into groups in the Material Instance editor. This returns the distinct set of group names found across all parameter expressions in the graph. The empty string represents parameters that have not been assigned to a named group. Params: material_or_function", "epic_call_tool"),
   },
   epic_list_parameters: {
     epicSchema: S_epic_list_parameters,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.list_parameters" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.list_parameters", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Returns all parameters exposed by a material or instance, with their names and types. Params: material", "epic_call_tool"),
   },
   epic_recompile: {
     epicSchema: S_epic_recompile,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.recompile" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.recompile", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Recompiles a Material or MaterialFunction after edits. For Materials, raises if the shader fails to compile. For MaterialFunctions, also recompiles any Materials that reference the function. Call this once after a set of graph modifications is complete - after adding or deleting expressions, making connections, or changing expression properties such as parameter names or default values. Params: material_or_function", "epic_call_tool"),
   },
   epic_rename_parameter_group: {
     epicSchema: S_epic_rename_parameter_group,
-    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.rename_parameter_group" },
+    epicTool: { toolset: "editor_toolset.toolsets.material.MaterialTools", name: "editor_toolset.toolsets.material.MaterialTools.rename_parameter_group", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material.MaterialTools] Renames a parameter group across all parameter expressions in a Material or MaterialFunction. All parameters currently in old_name will be moved to new_name. If new_name already exists, the parameters are merged into it. Params: material_or_function, old_name, new_name", "epic_call_tool"),
   },
   epic_set_parameter_override: {
     epicSchema: S_epic_set_parameter_override,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_parameter_override" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_parameter_override", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Enables or disables a parameter override on a material instance. Enabling sets the override to the current effective value. Disabling reverts to the parent. For non-static parameter types, disabling also discards the prior override value; re-enabling later restores the parent value, not the prior override. Static switches and static component masks preserve their value across toggle. Params: instance, name, override", "epic_call_tool"),
   },
   epic_set_parent: {
     epicSchema: S_epic_set_parent,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_parent" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_parent", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Changes the parent of a material instance. Params: instance, parent", "epic_call_tool"),
   },
   epic_set_scalar_parameter: {
     epicSchema: S_epic_set_scalar_parameter,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_scalar_parameter" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_scalar_parameter", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Sets the value of a scalar parameter on a material instance. Params: instance, name, value", "epic_call_tool"),
   },
   epic_set_static_switch_parameter: {
     epicSchema: S_epic_set_static_switch_parameter,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_static_switch_parameter" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_static_switch_parameter", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Sets the value of a static switch parameter on a material instance. Params: instance, name, value", "epic_call_tool"),
   },
   epic_set_texture_parameter: {
     epicSchema: S_epic_set_texture_parameter,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_texture_parameter" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_texture_parameter", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Assigns a texture to a texture parameter on a material instance. Params: instance, name, value", "epic_call_tool"),
   },
   epic_set_vector_parameter: {
     epicSchema: S_epic_set_vector_parameter,
-    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_vector_parameter" },
+    epicTool: { toolset: "editor_toolset.toolsets.material_instance.MaterialInstanceTools", name: "editor_toolset.toolsets.material_instance.MaterialInstanceTools.set_vector_parameter", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.material_instance.MaterialInstanceTools] Sets the value of a vector parameter on a material instance. Params: instance, name, value", "epic_call_tool"),
   },
 };

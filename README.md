@@ -161,7 +161,7 @@ The package ships skills that teach agents the non-obvious parts of driving the 
 | Skill | Covers |
 |-------|--------|
 | `ue-mcp-workflow` | Required order of operations, editor lifecycle, project scoping |
-| [`ue-mcp-animation`](skills/ue-mcp-animation/SKILL.md) | UE 5.8 IK/retarget authoring, per-rig Control Rig solving, generic contact locks, bake and deterministic V&V |
+| [`ue-mcp-animation`](skills/ue-mcp-animation/SKILL.md) | UE 5.8+ IK/retarget authoring, per-rig Control Rig solving, generic contact locks, bake and deterministic V&V |
 | `ue-mcp-blueprint` | Graph authoring, node discovery, pin wiring, compile loops |
 | `ue-mcp-niagara` | Emitter/module stack authoring and renderer setup |
 | `ue-mcp-native-cpp` | Writing and building native C++ against the bridge |

@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -49,157 +49,157 @@ const S_epic_update_node = {"properties":{"node":{"type":"object","properties":{
 export const actions: Record<string, ActionSpec> = {
   epic_add_comment_box: {
     epicSchema: S_epic_add_comment_box,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.AddCommentBox" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.AddCommentBox", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Adds a comment box around the given nodes. Params: graph, nodes, comment?, color?", "epic_call_tool"),
   },
   epic_add_node: {
     epicSchema: S_epic_add_node,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.AddNode" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.AddNode", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Adds a native node to the graph. Params: graph, nativeNodeType, nodeName, jsonParams, nodeTitle, nodeComment, xPositionIdx?, yPositionIdx?", "epic_call_tool"),
   },
   epic_add_subgraph_node: {
     epicSchema: S_epic_add_subgraph_node,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.AddSubgraphNode" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.AddSubgraphNode", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Adds a subgraph node to the graph. Params: graph, subGraphForNode, nodeName, jsonParams, nodeTitle, nodeComment, xPositionIdx?, yPositionIdx?", "epic_call_tool"),
   },
   epic_connect_node_pins: {
     epicSchema: S_epic_connect_node_pins,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ConnectNodePins" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ConnectNodePins", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Add an edge between two nodes connected to the specified pins. Params: fromNode, fromPinLabel, toNode, toPinLabel", "epic_call_tool"),
   },
   epic_create_graph: {
     epicSchema: S_epic_create_graph,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.CreateGraph" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.CreateGraph", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Creates a new saved PCG graph asset. Params: name, path?", "epic_call_tool"),
   },
   epic_disconnect_node_pins: {
     epicSchema: S_epic_disconnect_node_pins,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.DisconnectNodePins" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.DisconnectNodePins", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Removes the edge between two nodes connected to the specified pins. Params: fromNode, fromPinLabel, toNode, toPinLabel", "epic_call_tool"),
   },
   epic_draw_spline: {
     epicSchema: S_epic_draw_spline,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.DrawSpline" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.DrawSpline", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Triggers the user to draw a spline in the viewport to be used later in the world building. Waits for the user to be done. Params: actorLabel, actorTag, bRedraw, bClosedSpline", "epic_call_tool"),
   },
   epic_execute_graph_instance: {
     epicSchema: S_epic_execute_graph_instance,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ExecuteGraphInstance" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ExecuteGraphInstance", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Executes the graph instance and returns any issues encountered during execution. Params: pCGVolume", "epic_call_tool"),
   },
   epic_get_graph_description: {
     epicSchema: S_epic_get_graph_description,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetGraphDescription" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetGraphDescription", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Returns the description of a PCG graph. Params: graph", "epic_call_tool"),
   },
   epic_get_graph_instance_params: {
     epicSchema: S_epic_get_graph_instance_params,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetGraphInstanceParams" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetGraphInstanceParams", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Gets the graph instance params of a specific actor, actor MUST have a graph instance Params: pCGVolume", "epic_call_tool"),
   },
   epic_get_graph_schema: {
     epicSchema: S_epic_get_graph_schema,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetGraphSchema" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetGraphSchema", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Returns the schema for a PCG Graph's graph parameters Params: graph", "epic_call_tool"),
   },
   epic_get_graph_structure: {
     epicSchema: S_epic_get_graph_structure,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetGraphStructure" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetGraphStructure", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Returns the complete structure of a PCG graph including all nodes, connections, exposed parameters, and comment boxes. Params: graph", "epic_call_tool"),
   },
   epic_get_native_node_schema: {
     epicSchema: S_epic_get_native_node_schema,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetNativeNodeSchema" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetNativeNodeSchema", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Returns the schema for a PCG node type including input/output pins, parameters, and their types. Params: nodeName", "epic_call_tool"),
   },
   epic_get_node_data_view: {
     epicSchema: S_epic_get_node_data_view,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetNodeDataView" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetNodeDataView", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Returns a JSON Data View of a specific node's output data from the last graph execution. On first call, enables inspection so future ExecuteGraphInstance calls store per-node data. If no inspection data exists, returns an error prompting re-execution. IMPORTANT: Inspection state is shared at the graph asset level. If multiple actors use the same graph, you MUST call this tool (and ExecuteGraphInstance) on only one actor at a time. Wait for each call to fully complete before calling on the next actor. Concurrent calls on actors sharing the same graph will cause a freeze. Params: pCGVolume, node, pinLabel?, attributeName, startIndex?, endIndex?", "epic_call_tool"),
   },
   epic_get_node_info: {
     epicSchema: S_epic_get_node_info,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetNodeInfo" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.GetNodeInfo", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Returns node details including name, position, and all parameter values. Params: node", "epic_call_tool"),
   },
   epic_list_available_subgraphs: {
     epicSchema: S_epic_list_available_subgraphs,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ListAvailableSubgraphs" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ListAvailableSubgraphs", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Lists the PCG graphs that can be used with the Subgraph native node. Only these graphs should be used with the Subgraph native node. Params: none", "epic_call_tool"),
   },
   epic_list_graph_instances: {
     epicSchema: S_epic_list_graph_instances,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ListGraphInstances" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ListGraphInstances", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Gets all actors with a PCG graph instance in the scene. Params: none", "epic_call_tool"),
   },
   epic_list_native_nodes: {
     epicSchema: S_epic_list_native_nodes,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ListNativeNodes" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ListNativeNodes", engines: ["5.8"] },
     ...bp("read", "[Epic PCGToolset.PCGToolset] Returns a list of available native PCG node type names. Params: bCommonOnly?", "epic_call_tool"),
   },
   epic_remove_comment_box: {
     epicSchema: S_epic_remove_comment_box,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.RemoveCommentBox" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.RemoveCommentBox", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Removes a comment box from the graph. Does not affect the nodes it contains. Params: graph, commentId", "epic_call_tool"),
   },
   epic_remove_graph_params: {
     epicSchema: S_epic_remove_graph_params,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.RemoveGraphParams" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.RemoveGraphParams", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Removes graph parameters to a specific PCG graph, such that they are not overridable anymore. Params: graph, paramNames", "epic_call_tool"),
   },
   epic_remove_node: {
     epicSchema: S_epic_remove_node,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.RemoveNode" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.RemoveNode", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Removes the node from the graph, will also remove edges connected to the node. Params: graph, node", "epic_call_tool"),
   },
   epic_reposition_node: {
     epicSchema: S_epic_reposition_node,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.RepositionNode" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.RepositionNode", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Change the position of node. Params: node, xPositionIdx, yPositionIdx", "epic_call_tool"),
   },
   epic_reset_graph_instance_params: {
     epicSchema: S_epic_reset_graph_instance_params,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ResetGraphInstanceParams" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.ResetGraphInstanceParams", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Resets the given graph instance params back to the graph's default values. Actor MUST have a graph instance. Params: pCGVolume, paramNames", "epic_call_tool"),
   },
   epic_run_pcginstant_graph: {
     epicSchema: S_epic_run_pcginstant_graph,
-    epicTool: { toolset: "PCGToolset.PCGSpatialToolset", name: "PCGToolset.PCGSpatialToolset.RunPCGInstantGraph" },
+    epicTool: { toolset: "PCGToolset.PCGSpatialToolset", name: "PCGToolset.PCGSpatialToolset.RunPCGInstantGraph", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGSpatialToolset] Runs an instant PCG graph with the specified parameters in fire-and-forget mode (Should be called directly: Not callable in a python context execution context) Params: graph, params", "epic_call_tool"),
   },
   epic_set_graph_description: {
     epicSchema: S_epic_set_graph_description,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SetGraphDescription" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SetGraphDescription", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Set the description of a PCGGraph Params: graph, description", "epic_call_tool"),
   },
   epic_set_graph_instance_params: {
     epicSchema: S_epic_set_graph_instance_params,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SetGraphInstanceParams" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SetGraphInstanceParams", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Sets the graph instance params of a specific actor, actor MUST have a graph instance Params: pCGVolume, jsonParams", "epic_call_tool"),
   },
   epic_set_graph_params: {
     epicSchema: S_epic_set_graph_params,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SetGraphParams" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SetGraphParams", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Adds one or more graph user parameters to a specific PCG graph, such that they will be overridable in per graph instance. Params: graph, params", "epic_call_tool"),
   },
   epic_set_node_comment: {
     epicSchema: S_epic_set_node_comment,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SetNodeComment" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SetNodeComment", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Change the comment on the specified node. Params: node, nodeComment", "epic_call_tool"),
   },
   epic_spawn_graph_instance: {
     epicSchema: S_epic_spawn_graph_instance,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SpawnGraphInstance" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.SpawnGraphInstance", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Spawns a PCG Volume with associated Graph Instance into the scene, optionally with Graph Param overrides. Params: graph, name, transform, jsonParams", "epic_call_tool"),
   },
   epic_update_comment_box: {
     epicSchema: S_epic_update_comment_box,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.UpdateCommentBox" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.UpdateCommentBox", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Updates an existing comment box with new nodes and value. Params: graph, commentId, nodes, comment?, color?", "epic_call_tool"),
   },
   epic_update_node: {
     epicSchema: S_epic_update_node,
-    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.UpdateNode" },
+    epicTool: { toolset: "PCGToolset.PCGToolset", name: "PCGToolset.PCGToolset.UpdateNode", engines: ["5.8"] },
     ...bp("mutate", "[Epic PCGToolset.PCGToolset] Updates a node by changing its params and/or title. Params: node, jsonParams, nodeTitle", "epic_call_tool"),
   },
 };
