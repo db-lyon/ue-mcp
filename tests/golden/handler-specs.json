@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1211,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -34369,6 +34369,82 @@
               "animation"
             ]
           ]
+        }
+      ]
+    },
+    "set_blueprint_component_properties_batch": {
+      "category": "blueprint",
+      "params": [
+        {
+          "name": "items",
+          "type": "array",
+          "required": false,
+          "description": "Explicit [{assetPath, componentName, properties:{name:value}}]; mutually exclusive with directory",
+          "items": "object",
+          "fields": [
+            {
+              "name": "assetPath",
+              "type": "string",
+              "required": true,
+              "description": "Blueprint asset path"
+            },
+            {
+              "name": "componentName",
+              "type": "string",
+              "required": true,
+              "description": "Component instance name, property name or unambiguous class"
+            },
+            {
+              "name": "properties",
+              "type": "object",
+              "required": true,
+              "description": "Property name to JSON value or Unreal export text; null clears references"
+            }
+          ]
+        },
+        {
+          "name": "directory",
+          "type": "string",
+          "required": false,
+          "description": "Select Blueprint assets under this content path instead of items"
+        },
+        {
+          "name": "classFilter",
+          "type": "string",
+          "required": false,
+          "description": "Directory mode: only Blueprints deriving from this actor class"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Directory mode: component instance name, property name or unambiguous component class"
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": false,
+          "description": "Directory mode: property map applied to each matching Blueprint"
+        },
+        {
+          "name": "recursive",
+          "type": "boolean",
+          "required": false,
+          "description": "Directory mode: include subdirectories (default true)"
+        },
+        {
+          "name": "maxBlueprints",
+          "type": "integer",
+          "required": false,
+          "description": "Maximum candidate Blueprints, default 200, maximum 2000; overflow refuses the batch",
+          "minimum": 1,
+          "maximum": 2000
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Validate values on transient copies without editing, compiling or saving (default false)"
         }
       ]
     },

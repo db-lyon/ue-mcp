@@ -108,7 +108,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentPropertiesBatch(const TSh
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
 	if (MaxBlueprints < 1 || MaxBlueprints > 2000) return MCPError(TEXT("maxBlueprints must be between 1 and 2000"));
 	if (bItems == !Directory.IsEmpty()) return MCPError(TEXT("Pass items OR directory + componentName + properties"));
-	if (bItems && (!ClassFilter.IsEmpty() || !ComponentName.IsEmpty() || bProperties || Params->HasField(TEXT("recursive"))))
+	if (bItems && (!ClassFilter.IsEmpty() || !ComponentName.IsEmpty() || bProperties || HasParam(Params, TEXT("recursive"))))
 		return MCPError(TEXT("classFilter, componentName, properties and recursive are directory-mode parameters"));
 	if (bItems && (ItemsParam->Num() == 0 || ItemsParam->Num() > 10000))
 		return MCPError(TEXT("items must contain between 1 and 10000 entries"));

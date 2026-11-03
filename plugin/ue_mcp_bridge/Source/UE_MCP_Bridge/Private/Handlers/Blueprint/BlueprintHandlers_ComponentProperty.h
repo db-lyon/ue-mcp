@@ -1,8 +1,8 @@
 #pragma once
 
-// The single-property and batch writers share path resolution, value parsing,
-// mesh assignment and rollback serialization. Keep scratch validation on this
-// same path so it exercises the assignment that will reach the template.
+// Batch path resolution, value parsing, mesh assignment and rollback
+// serialization follow the single-property writer. Keep scratch validation on
+// this same path so it exercises the assignment that will reach the template.
 #include "HandlerJsonProperty.h"
 #include "HandlerPropertyText.h"
 #include "JsonSerializer.h"
