@@ -2,7 +2,7 @@
 
 ## MCP Client Configuration
 
-`npx ue-mcp init` detects your MCP clients and writes the entry for each. To write it yourself, see [Manual configuration](getting-started.md#manual-configuration). Every client gets the same launch:
+`npx ue-mcp init` detects your MCP clients and writes the entry for each. To write it yourself, see [Manual configuration](getting-started.md#manual-configuration). Every client gets the same launch (VS Code keys it under `servers`, Codex writes it as TOML):
 
 ```json
 {
@@ -20,7 +20,11 @@
 | Claude Code | `.mcp.json` in the project root, or `~/.claude/.mcp.json` for every project |
 | Claude Desktop | `%APPDATA%/Claude/claude_desktop_config.json` |
 | Cursor | `.cursor/mcp.json` in the project root |
-| Codex | `~/.codex/config.toml` (TOML, with `cwd` set to the project directory) |
+| VS Code | `.vscode/mcp.json` in the project root, under `servers` with `"type": "stdio"` |
+| Gemini CLI | `.gemini/settings.json` in the project root |
+| Codex | `.codex/config.toml` in the project root, or `~/.codex/config.toml` (TOML, with `cwd` set to the project directory) |
+
+`init` replaces an existing Unreal MCP entry in any of these files and saves the file first. See [Replacing an Unreal MCP entry](getting-started.md#replacing-an-unreal-mcp-entry).
 
 An entry written with `--pin` names `ue-mcp@<version>` instead of `@latest`, and `ue-mcp update` moves it with the bridge. The project path may be the `.uproject` or its directory. Use an absolute path, since clients launch the server from a working directory you do not control.
 
