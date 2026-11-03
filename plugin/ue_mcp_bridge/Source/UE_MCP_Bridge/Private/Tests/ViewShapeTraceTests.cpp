@@ -184,7 +184,8 @@ bool FViewTraceGeometryTest::RunTest(const FString& Parameters)
 	FLevelHandlers::RegisterHandlers(Registry);
 	UGameInstance* GameInstance = NewObject<UGameInstance>(Fixture.World);
 	Fixture.World->SetGameInstance(GameInstance);
-	ULocalPlayer* Player = NewObject<ULocalPlayer>(GameInstance);
+	// ULocalPlayer is ClassWithin UEngine; UGameInstance::CreateLocalPlayer uses the engine as its outer too.
+	ULocalPlayer* Player = NewObject<ULocalPlayer>(GEngine);
 	GameInstance->AddLocalPlayer(Player, FPlatformUserId::CreateFromInternalId(0));
 	APlayerController* Controller = Fixture.World->SpawnActor<APlayerController>();
 	if (!TestNotNull(TEXT("controller"), Controller)) return false;
