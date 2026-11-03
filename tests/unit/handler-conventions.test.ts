@@ -78,7 +78,10 @@ const BASELINE = {
   // replays, observations and script runs, deleted recordings and scripts, written test and scenario files,
   // and recorded verdicts, none of which has an inverse.
   // 169: editor(show_notification) shows a toast that fades by itself (db-lyon/ue-mcp-studio#43).
-  mutationsWithoutRollback: 169,
+  // 170: editor(discard_dirty) clears named dirty flags; no action restores
+  // those flags, and closing the editor loses the unsaved contents. The
+  // handler reports that limit through MCPSetNoRollback.
+  mutationsWithoutRollback: 170,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.

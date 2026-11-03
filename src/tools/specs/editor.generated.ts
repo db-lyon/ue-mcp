@@ -526,6 +526,30 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "discard_dirty": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "packages",
+        "type": "array",
+        "required": true,
+        "description": "Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched",
+        "items": "string"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Report what would happen to each package and clear nothing (default false)"
+      },
+      {
+        "name": "allowContent",
+        "type": "boolean",
+        "required": false,
+        "description": "Also clear project and plugin content, including never-saved /Temp maps, whose unsaved edits are then lost when the editor closes (default false)"
+      }
+    ]
+  },
   "end_editor_transaction": {
     "category": "editor",
     "params": [],
@@ -3591,6 +3615,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   create_level_sequence: "Params: name, packagePath?, onConflict?",
   create_new_level: "Params: levelPath, templateLevel?, onConflict?, worldPartition?",
   describe_object: "Params: objectPath (or path, or assetPath), includeProperties?, includeValues?, propertyNames?",
+  discard_dirty: "Params: packages, dryRun?, allowContent?",
   end_editor_transaction: "Params: none",
   end_profile_region: "Params: regionName",
   execute_command: "Params: command, world?, pieInstance?, playerIndex?",
@@ -3703,6 +3728,7 @@ export const schema: Record<string, z.ZodType> = {
   actorPaths: z.array(z.string()).optional().describe("Explicit actor object paths, the unambiguous selector"),
   affectActor: z.boolean().optional().describe("Hide or show the actor itself (default true only without a component filter)"),
   affectComponents: z.boolean().optional().describe("Hide or show matched components (default true with a component filter)"),
+  allowContent: z.boolean().optional().describe("Also clear project and plugin content, including never-saved /Temp maps, whose unsaved edits are then lost when the editor closes (default false)"),
   allViewports: z.boolean().optional().describe("Redraw every level viewport rather than one (default false)"),
   args: z.union([z.record(z.string(), z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))]))])), z.array(z.string()), z.array(z.object({ name: z.string(), value: z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))]))]).optional() })), z.string()], { error: "args must be an object mapping parameter name to value (e.g. {\"bEnabled\": true}), an array of positional strings, an entry list ([{\"name\": \"bEnabled\", \"value\": true}]), or a string" }).optional().describe("Function arguments: an object mapping parameter name to value (a struct value takes a JSON object such as {X,Y,Z} or export text), an entry list [{name, value}], or a JSON string of either (invoke_function, invoke_object_function, invoke_static_function). Positional arguments, as sys.argv[1:] or, with entryPoint, the call's arguments: a list of strings, a JSON array string, or one string. A parameter map is refused (run_python_file)"),
   asMain: z.boolean().optional().describe("Shorthand for runName __main__ (default false)"),
@@ -3753,7 +3779,7 @@ export const schema: Record<string, z.ZodType> = {
   directory: z.string().optional().describe("Package path validated recursively (default /Game/). Not with assetPath or assetPaths"),
   disable: z.union([z.array(z.string()), z.string()]).optional().describe("Channels to turn off, as an array or a comma-separated string"),
   discardUnsaved: z.boolean().optional().describe("For a map: switch even though the open map has unsaved changes, discarding them (default false)"),
-  dryRun: z.boolean().optional().describe("Report the targets without touching them (default TRUE; pass false to apply)"),
+  dryRun: z.boolean().optional().describe("Report what would happen to each package and clear nothing (default false) (discard_dirty). Report the targets without touching them (default TRUE; pass false to apply) (set_runtime_visibility)"),
   durationS: z.number().min(1).max(600).optional().describe("Seconds before the toast fades (default 8)"),
   enable: z.union([z.array(z.string()), z.string()]).optional().describe("Channels to turn on, as an array or a comma-separated string"),
   enabled: z.boolean().optional().describe("true (default) ejects the debug camera if needed and poses it; false returns control to the player (pose_debug_camera). Hide editor-only overlays (default true); false shows them again (set_game_view). Realtime update on every level viewport (default true) (set_realtime)"),
@@ -3848,6 +3874,7 @@ export const schema: Record<string, z.ZodType> = {
   outputDir: z.string().optional().describe("Absolute or project-relative directory for the frames (default Saved/SequenceFrames/<sequence>)"),
   outputPath: z.string().optional().describe("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png (capture_scene_png). Alias for filename (capture_screenshot)"),
   packagePath: z.string().optional().describe("Destination folder (default /Game/Cinematics)"),
+  packages: z.array(z.string()).optional().describe("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched"),
   parameterType: z.string().optional().describe("scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"),
   path: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_keyframes, set_sequence_playback_range). Alias for assetPath (add_sequence_track, get_sequence_info, open_asset). Alias for objectPath (describe_object, get_property, set_property). Alias for filePath (run_python_file)"),
   paths: z.array(z.string()).optional().describe("Dotted property or function paths to evaluate per match. A function segment may carry literal arguments, e.g. GetBalance(gold, 2)"),

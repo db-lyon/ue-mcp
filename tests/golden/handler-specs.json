@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1211,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -13275,6 +13275,30 @@
           "type": "boolean",
           "required": false,
           "description": "Delete the .uproject entry instead of writing an explicit disable (default false)"
+        }
+      ]
+    },
+    "discard_dirty": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "packages",
+          "type": "array",
+          "required": true,
+          "description": "Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched",
+          "items": "string"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would happen to each package and clear nothing (default false)"
+        },
+        {
+          "name": "allowContent",
+          "type": "boolean",
+          "required": false,
+          "description": "Also clear project and plugin content, including never-saved /Temp maps, whose unsaved edits are then lost when the editor closes (default false)"
         }
       ]
     },
