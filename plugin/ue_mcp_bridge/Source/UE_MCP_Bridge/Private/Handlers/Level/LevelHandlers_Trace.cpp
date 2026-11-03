@@ -311,8 +311,6 @@ namespace MCPTrace
 			for (int32 Index = 0; Index < FMath::Min(Hits.Num(), 64); ++Index)
 			{
 				auto Row = MakeShared<FJsonObject>();
-				Row->Values = Result->Values;
-				Row->SetBoolField(TEXT("hit"), Hits[Index].bBlockingHit);
 				Row->SetBoolField(TEXT("blockingHit"), Hits[Index].bBlockingHit);
 				Row->SetBoolField(TEXT("bStartPenetrating"), Hits[Index].bStartPenetrating);
 				EmitHitFields(Row, Hits[Index]);

@@ -730,8 +730,6 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// gets its own timeout rather than the 30 second default. The contract's
 	// whereMode is refused before levelPath could open another map.
 	Registry.RegisterHandlerWithTimeout(TEXT("query_components"), &QueryComponents, 300.0f, {
-		MCPParam::Optional(TEXT("includeCollision"), EType::Boolean, TEXT("Include component collision state (default false)")),
-		MCPParam::Optional(TEXT("collisionChannel"), EType::String, TEXT("Collision channel to inspect; omitted lists non-Block responses, capped at 32")),
 		MCPParam::Optional(TEXT("componentClass"), EType::String, TEXT("Component class, resolved as a class or matched as a substring")),
 		MCPParam::Optional(TEXT("actorClass"), EType::String, TEXT("Owning actor class, resolved as a class or matched as a substring")),
 		SpecMatchSubclasses,
@@ -759,6 +757,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("duplicateTransformTolerance"), EType::Number, TEXT("Centimetre bucket for duplicate-transform detection")),
 		MCPParam::Optional(TEXT("levelPath"), EType::String, TEXT("Query another map: opened temporarily, refused while anything is dirty, and the open map restored")),
 		SpecWorld, SpecPieInstance,
+		MCPParam::Optional(TEXT("includeCollision"), EType::Boolean, TEXT("Include component collision state (default false)")),
+		MCPParam::Optional(TEXT("collisionChannel"), EType::String, TEXT("Collision channel to inspect; omitted lists non-Block responses, capped at 32")),
 	});
 	// #984/#941/#907/#987: level-wide writes driven by an editor-side selector.
 	// Each can touch thousands of actors, so each gets its own timeout.

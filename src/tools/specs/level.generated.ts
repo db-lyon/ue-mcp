@@ -2286,18 +2286,6 @@ export const handlerSpecs: HandlerSpecs = {
     "category": "level",
     "params": [
       {
-        "name": "includeCollision",
-        "type": "boolean",
-        "required": false,
-        "description": "Include component collision state (default false)"
-      },
-      {
-        "name": "collisionChannel",
-        "type": "string",
-        "required": false,
-        "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
-      },
-      {
         "name": "componentClass",
         "type": "string",
         "required": false,
@@ -2471,6 +2459,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "integer",
         "required": false,
         "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+      },
+      {
+        "name": "includeCollision",
+        "type": "boolean",
+        "required": false,
+        "description": "Include component collision state (default false)"
+      },
+      {
+        "name": "collisionChannel",
+        "type": "string",
+        "required": false,
+        "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
       }
     ]
   },
@@ -5175,7 +5175,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   nudge_component: "Params: actorLabel OR actorPath, componentName, frame?, translationDelta?, axisRotation?, viewRotation?, scaleMultiplier?, dryRun?, world?, pieInstance?",
   place_actor: "Params: actorClass, label?, onConflict?, location?, rotation?, scale?, staticMesh?, material?, world?, pieInstance?",
   place_actors_batch: "Params: actors",
-  query_components: "Params: includeCollision?, collisionChannel?, componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?",
+  query_components: "Params: componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?, includeCollision?, collisionChannel?",
   read_actor_motion: "Params: actorLabel?, actorLabels?, actorPath?, actorPaths?, world?, pieInstance?",
   rebuild_water_zone: "Params: actorLabel?, actorPath?, zoneExtent?, tileSize?, maxPasses?",
   recreate_physics_state: "Params: at least one of actorLabels/labelPrefix/tag/classFilter/componentClass/componentNameContains, dryRun?, maxComponents?, world?, pieInstance?",

@@ -75,6 +75,7 @@ nav:
     - Layout Diagnostics: runtime-widget-layout-diagnostics.md
   - PIE testing:
     - pie.md
+    - Level traces: level-traces.md
     - Test scripts: pie-scripts.md
   - Flows:
     - flows.md

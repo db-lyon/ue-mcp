@@ -39,3 +39,5 @@ for hit in hits:
 ```
 
 The fourth argument is the ignored actor labels/paths. The reflected Boolean parameters are `trace_complex` and `multi`. Single mode returns one entry, including a miss with `hit=false`; multi mode returns overlaps through the first blocker, capped at 64, and an empty list on a miss. An error returns one entry with `error` populated. Python entries expose the existing trace result fields plus actor/component class, normal, face index, bone name and start penetration; the native action also reports truncation metadata.
+
+Shape traces require a finite positive `distance` when using `direction`. The existing `line_trace` action retains its earlier distance handling, including zero and negative distances.

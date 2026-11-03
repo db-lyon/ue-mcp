@@ -26960,18 +26960,6 @@
       "category": "level",
       "params": [
         {
-          "name": "includeCollision",
-          "type": "boolean",
-          "required": false,
-          "description": "Include component collision state (default false)"
-        },
-        {
-          "name": "collisionChannel",
-          "type": "string",
-          "required": false,
-          "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
-        },
-        {
           "name": "componentClass",
           "type": "string",
           "required": false,
@@ -27145,6 +27133,18 @@
           "type": "integer",
           "required": false,
           "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        },
+        {
+          "name": "includeCollision",
+          "type": "boolean",
+          "required": false,
+          "description": "Include component collision state (default false)"
+        },
+        {
+          "name": "collisionChannel",
+          "type": "string",
+          "required": false,
+          "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
         }
       ]
     },
