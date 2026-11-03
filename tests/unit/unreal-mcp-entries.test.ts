@@ -6,6 +6,7 @@ import {
   findUnrealMcpEntries,
   removeUnrealMcpEntries,
   REPLACED_BACKUP_SUFFIX,
+  sourceBuildConfigRoot,
 } from "../../src/integrations/claude-code/unreal-mcp-entries.js";
 import { readUeMcpEntry, writeMcpConfig, type McpClient } from "../../src/integrations/claude-code/mcp-client-config.js";
 import { proxyMcpJson, UNREAL_CLIENT_FIXTURES, UNREAL_URL } from "../helpers/unreal-mcp-fixtures.js";
@@ -139,5 +140,31 @@ describe("Unreal MCP entries per client format", () => {
     );
     removeUnrealMcpEntries({ configPath, format: "toml" });
     expect(fs.readFileSync(configPath, "utf-8")).toBe('[mcp_servers.keep]\r\ncommand = "k"\r\n');
+  });
+});
+
+describe("where a source build's editor writes client configs", () => {
+  const engine = (name: string, installed = false) => {
+    const root = path.join(dir, name);
+    fs.mkdirSync(path.join(root, "Engine", "Build"), { recursive: true });
+    if (installed) fs.writeFileSync(path.join(root, "Engine", "Build", "InstalledBuild.txt"), "");
+    return root;
+  };
+
+  it("is the folder holding Engine/ for a source build", () => {
+    const root = engine("UnrealEngine");
+    expect(sourceBuildConfigRoot(root, path.join(dir, "Game"))).toBe(path.resolve(root));
+  });
+
+  it("is nothing for an installed build, which writes into the project", () => {
+    expect(sourceBuildConfigRoot(engine("UE_5.9", true), path.join(dir, "Game"))).toBeNull();
+  });
+
+  it("is nothing under Program Files, nothing when unresolved, and nothing when it is the project directory", () => {
+    expect(sourceBuildConfigRoot("C:/Program Files/Epic Games/UE_5.9", path.join(dir, "Game"))).toBeNull();
+    expect(sourceBuildConfigRoot("C:\\Program Files (x86)\\UE", path.join(dir, "Game"))).toBeNull();
+    expect(sourceBuildConfigRoot(null, path.join(dir, "Game"))).toBeNull();
+    const root = engine("Same");
+    expect(sourceBuildConfigRoot(root, root)).toBeNull();
   });
 });

@@ -265,6 +265,73 @@ describe("init over Unreal MCP entries", () => {
     expect(fs.readFileSync(`${mcpJson}.ue-mcp-backup`, "utf8")).toBe(original);
   });
 
+  /** Every client config the editor writes, placed in `root`. */
+  function writeUnrealConfigs(root: string): void {
+    for (const f of UNREAL_CLIENT_FIXTURES) {
+      const file = path.join(root, f.file);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, f.content);
+    }
+  }
+
+  /** An engine tree with Engine/Source, as a source build has; InstalledBuild.txt marks an installed one. */
+  function engineTree(name: string, installed: boolean): string {
+    const root = sb.path(name);
+    fs.mkdirSync(path.join(root, "Engine", "Source"), { recursive: true });
+    fs.mkdirSync(path.join(root, "Engine", "Build"), { recursive: true });
+    if (installed) fs.writeFileSync(path.join(root, "Engine", "Build", "InstalledBuild.txt"), "");
+    writeUnrealConfigs(root);
+    return root;
+  }
+
+  it("replaces the entries a source build's editor wrote into the engine root, beside the project's own", async () => {
+    covers("cli.init.replace-unreal-mcp");
+    const root = engineTree("SourceEngine", false);
+    const uproject = sb.makeProject("SourceGame");
+    const env = { UE_MCP_TEST_ENGINE_ROOT: root };
+
+    const planned = JSON.parse((await cli(["init", uproject, "--json", "--dry-run", "--install", "source"], { env })).stdout).plan;
+    expect(planned.engineConfigRoot).toBe(path.resolve(root));
+    for (const f of UNREAL_CLIENT_FIXTURES) {
+      expect(planned.clients.find((c: { id: string }) => c.id === f.id), f.id).toMatchObject({
+        selected: true,
+        replaces: [],
+        engineRootConfig: { configPath: path.join(root, f.file), replaces: [{ name: "unreal-mcp", kind: "http", target: UNREAL_URL }] },
+      });
+    }
+
+    const r = await cli(["init", uproject, "--json", "--install", "source"], { env });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    const steps = JSON.parse(r.stdout).steps as Array<{ id: string; status: string; target: string; detail: string }>;
+    for (const f of UNREAL_CLIENT_FIXTURES) {
+      const file = path.join(root, f.file);
+      expect(steps.find((s) => s.id === `replace:${f.id}:engine-root`), f.id).toMatchObject({ status: "changed", target: file });
+      expect(steps.find((s) => s.id === `client:${f.id}:engine-root`), f.id).toMatchObject({ status: "changed", target: file });
+      expect(fs.readFileSync(`${file}.ue-mcp-backup`, "utf8")).toBe(f.content);
+      const after = fs.readFileSync(file, "utf8");
+      expect(after, f.id).not.toContain("unreal-mcp");
+      if (f.serversKey) {
+        expect(Object.keys(JSON.parse(after)[f.serversKey]).sort(), f.id).toEqual(["my-existing-server", "ue-mcp"]);
+      } else {
+        expect(after).toContain("[mcp_servers.my-existing-server]");
+        expect(after).toContain("[mcp_servers.ue-mcp]");
+      }
+      // The project's own config is written as for any selected client.
+      expect(fs.existsSync(path.join(path.dirname(uproject), f.file)), f.id).toBe(true);
+    }
+  });
+
+  it("never touches an installed engine, which writes into the project instead", async () => {
+    covers("cli.init.replace-unreal-mcp");
+    const root = engineTree("InstalledEngine", true);
+    const uproject = sb.makeProject("InstalledGame");
+    const before = snapshotTree(root);
+    const r = await cli(["init", uproject, "--json", "--install", "source", "--clients", "claude-code"], { env: { UE_MCP_TEST_ENGINE_ROOT: root } });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout).plan.engineConfigRoot).toBeNull();
+    expect(snapshotTree(root)).toEqual(before);
+  });
+
   it("leaves a config alone when --clients leaves its client out", async () => {
     covers("cli.init.replace-unreal-mcp");
     const uproject = projectWithUnrealEntries("LeftOut");

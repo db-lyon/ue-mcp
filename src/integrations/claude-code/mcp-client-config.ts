@@ -172,6 +172,25 @@ export function detectMcpClients(projectDir: string): McpClient[] {
   return clients;
 }
 
+/**
+ * The project-scoped client configs as they would sit under `dir`: the five
+ * files UE 5.9's client config writer writes, named as detectMcpClients names
+ * them. `detected` is whether the file exists.
+ */
+export function projectScopedClientsAt(dir: string): McpClient[] {
+  const at = (name: string, rel: string[], extra: Partial<McpClient> = {}): McpClient => {
+    const configPath = path.join(dir, ...rel);
+    return { name, configPath, detected: fs.existsSync(configPath), format: "json", ...extra };
+  };
+  return [
+    at("Claude Code (project)", [".mcp.json"]),
+    at("Cursor", [".cursor", "mcp.json"]),
+    at("VS Code", [".vscode", "mcp.json"], { serversKey: "servers", stdioType: true }),
+    at("Gemini CLI", [".gemini", "settings.json"]),
+    at("Codex (project)", [".codex", "config.toml"], { format: "toml" }),
+  ];
+}
+
 /** Whether a client's config has a ue-mcp entry, and the version it pins. */
 export interface UeMcpEntry {
   configured: boolean;

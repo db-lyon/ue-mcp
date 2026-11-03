@@ -109,7 +109,7 @@
     {
       "id": "cli.init.replace-unreal-mcp",
       "group": "cli",
-      "summary": "ue-mcp init finds an Unreal MCP entry (the editor's HTTP server or its stdio proxy) in a client config, selects that client, replaces the entry with ue-mcp, keeps every other server, saves the file first and says what it replaced, with and without prompts",
+      "summary": "ue-mcp init finds an Unreal MCP entry (the editor's HTTP server or its stdio proxy) in a client config, selects that client, replaces the entry with ue-mcp, keeps every other server, saves the file first and says what it replaced, with and without prompts; for a source-build engine it does the same in the engine root, where the editor writes those configs, and never touches an installed engine",
       "status": "covered",
       "tests": [
         {
@@ -120,12 +120,27 @@
         {
           "suite": "integration",
           "file": "tests/integration/cli-install.test.ts",
+          "test": "never touches an installed engine, which writes into the project instead"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/cli-install.test.ts",
+          "test": "replaces the entries a source build's editor wrote into the engine root, beside the project's own"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/cli-install.test.ts",
           "test": "replaces the stdio proxy entry and prints what it replaced"
         },
         {
           "suite": "integration",
           "file": "tests/integration/cli-install.test.ts",
           "test": "selects and replaces the HTTP entry in each client, keeps every other server, and saves each file first"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/init-interactive.test.ts",
+          "test": "names the engine root entry, offers its client, and replaces it there"
         },
         {
           "suite": "integration",

@@ -9,6 +9,7 @@
  *   keeping the HTTP entry under `_upstreamEntry` (Extras/Proxy config.go).
  */
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { serversKeyOf, type ClientShape } from "./mcp-client-config.js";
 
 export const UNREAL_MCP_SERVER_NAME = "unreal-mcp";
@@ -152,4 +153,22 @@ export function removeUnrealMcpEntries(client: ClientShape): ReplacedEntries {
 
 export function describeUnrealMcpEntry(e: UnrealMcpEntry): string {
   return e.kind === "proxy" ? `'${e.name}' (stdio proxy ${e.target})` : `'${e.name}' (${e.target})`;
+}
+
+const sameDir = (a: string, b: string) =>
+  process.platform === "win32" ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b);
+
+/**
+ * The directory the editor writes client configs to for a source build, or
+ * null. ModelContextProtocolClientConfig.cpp uses FPaths::RootDir() (the folder
+ * holding Engine/) unless FApp::IsEngineInstalled(), which an installed build's
+ * Engine/Build/InstalledBuild.txt sets; then it uses the project directory,
+ * which init already covers. Launcher installs are never returned.
+ */
+export function sourceBuildConfigRoot(engineRoot: string | null, projectDir: string): string | null {
+  if (!engineRoot) return null;
+  if (fs.existsSync(path.join(engineRoot, "Engine", "Build", "InstalledBuild.txt"))) return null;
+  if (/[\\/]Program Files( \(x86\))?([\\/]|$)/i.test(path.resolve(engineRoot))) return null;
+  if (sameDir(engineRoot, projectDir)) return null;
+  return path.resolve(engineRoot);
 }

@@ -141,6 +141,37 @@ describe("interactive init over an Unreal MCP entry", () => {
   });
 });
 
+describe("interactive init over a source build's engine root", () => {
+  it.runIf(pty !== null || process.env.CI !== undefined)("names the engine root entry, offers its client, and replaces it there", async () => {
+    covers("cli.init.replace-unreal-mcp");
+    const root = sb.path("AskedEngine");
+    fs.mkdirSync(path.join(root, "Engine", "Source"), { recursive: true });
+    const gemini = UNREAL_CLIENT_FIXTURES.find((f) => f.id === "gemini")!;
+    const config = path.join(root, gemini.file);
+    fs.mkdirSync(path.dirname(config), { recursive: true });
+    fs.writeFileSync(config, gemini.content);
+    const uproject = sb.makeProject("AskedEngineGame");
+    const projectDir = path.dirname(uproject);
+
+    const r = await runInTerminal(["init", uproject, "--install", "source"], projectDir, [
+      { prompt: "Tool categories", keys: [ENTER] },
+      { prompt: "Native Unreal tools", keys: [ENTER] },
+      { prompt: "Include native tools in these categories", keys: [ENTER] },
+      { prompt: "Context strategy", keys: [ENTER] },
+      // Gemini CLI is offered only because the engine root holds an entry, and starts checked.
+      { prompt: "Configure MCP clients", keys: [ENTER] },
+      { prompt: "Agent behavior", keys: [ENTER] },
+    ], { UE_MCP_TEST_ENGINE_ROOT: root });
+
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain(`has Unreal MCP entry 'unreal-mcp' (${UNREAL_URL}); ue-mcp replaces it`);
+    expect(r.output).toContain("in the engine source root");
+    const servers = JSON.parse(fs.readFileSync(config, "utf8")).mcpServers as Record<string, unknown>;
+    expect(Object.keys(servers).sort()).toEqual(["my-existing-server", "ue-mcp"]);
+    expect(fs.readFileSync(`${config}.ue-mcp-backup`, "utf8")).toBe(gemini.content);
+  });
+});
+
 describe("feedback review on a terminal", () => {
   it.runIf(pty !== null || process.env.CI !== undefined)("approves, discards and skips entries as answered, one at a time", async () => {
     covers("cli.feedback.review");

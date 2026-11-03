@@ -39,7 +39,7 @@
     {
       "id": "cli.init.replace-unreal-mcp",
       "group": "cli",
-      "summary": "ue-mcp init finds an Unreal MCP entry (the editor's HTTP server or its stdio proxy) in a client config, selects that client, replaces the entry with ue-mcp, keeps every other server, saves the file first and says what it replaced, with and without prompts"
+      "summary": "ue-mcp init finds an Unreal MCP entry (the editor's HTTP server or its stdio proxy) in a client config, selects that client, replaces the entry with ue-mcp, keeps every other server, saves the file first and says what it replaced, with and without prompts; for a source-build engine it does the same in the engine root, where the editor writes those configs, and never touches an installed engine"
     },
     {
       "id": "cli.init.json",
