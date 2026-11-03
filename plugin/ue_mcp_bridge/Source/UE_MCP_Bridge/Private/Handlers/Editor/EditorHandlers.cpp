@@ -1,4 +1,5 @@
 #include "EditorHandlers.h"
+#include "HandlerDiscardPackage.h"
 #include "HandlerCheckpoint.h"
 #include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
@@ -3627,6 +3628,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 	const FString DirtyChoice = OptionalString(Params, TEXT("dirtyPackages"), TEXT("refuse")).ToLower();
 	const bool bSaveDirty = DirtyChoice == TEXT("save");
 	const bool bDiscardDirty = DirtyChoice == TEXT("discard");
+	const bool bAllowContent = OptionalBool(Params, TEXT("allowContent"), false);
 	const bool bActOnDirty = bSaveDirty || bDiscardDirty;
 	const TArray<TSharedPtr<FJsonValue>>* NamedPackagesJson = nullptr;
 	const bool bNamedPackages = TryGetArrayParam(Params, TEXT("packages"), NamedPackagesJson) && NamedPackagesJson;
@@ -3751,6 +3753,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 				return MCPResult(Result);
 			}
 
+			TArray<TSharedPtr<FJsonValue>> Deleted;
+			MCPCommitEmptyExternalPackages(ToSave, Deleted, Failed);
+			Result->SetArrayField(TEXT("deletedPackages"), Deleted);
 			TArray<FString> Saved;
 			for (UPackage* Package : ToSave)
 			{
@@ -3764,24 +3769,56 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 				Result->SetBoolField(TEXT("success"), false);
 				Result->SetArrayField(TEXT("failedPackages"), Failed);
 				Result->SetStringField(TEXT("error"), FString::Printf(
-					TEXT("%d package(s) failed to save; savedPackages were written and editor shutdown was not scheduled"), Failed.Num()));
-				Result->SetBoolField(TEXT("changed"), Saved.Num() > 0);
-				MCPSetNoRollback(Result, TEXT("SavePackage overwrote each saved package on disk and the bytes it replaced are gone. Source control holds the previous revision."));
+					TEXT("%d package(s) failed to save; savedPackages were written, deletedPackages were committed, and editor shutdown was not scheduled"), Failed.Num()));
+				Result->SetBoolField(TEXT("changed"), Saved.Num() > 0 || Deleted.Num() > 0);
+				MCPSetNoRollback(Result, TEXT("Saved packages overwrote disk bytes and committed empty external packages deleted their files. Neither keeps a backup; source control holds the previous revision."));
 				return MCPResult(Result);
 			}
 		}
 		else
 		{
-			// A clear dirty flag is what keeps a package off the shutdown save
-			// prompt's list, so with none left the prompt has nothing to ask.
+			// Match editor(discard_dirty): preflight the whole selection before clearing any flag.
+			TArray<FString> Refused, Skipped, Discarded;
+			TArray<UPackage*> ToDiscard;
 			for (const FString& Name : Target)
 			{
-				if (UPackage* Package = FindPackage(nullptr, *Name))
+				UPackage* Package = FindPackage(nullptr, *Name);
+				if (!Package || !Package->IsDirty())
 				{
-					Package->SetDirtyFlag(false);
+					Skipped.Add(Name);
+					continue;
 				}
+				const EMCPDiscardPackageKind Kind = MCPClassifyDiscardPackage(Package);
+				if (Kind == EMCPDiscardPackageKind::Code || Kind == EMCPDiscardPackageKind::PlayInEditor
+					|| (Kind == EMCPDiscardPackageKind::Content && !bAllowContent))
+					Refused.Add(Name);
+				else ToDiscard.Add(Package);
 			}
-			Result->SetArrayField(TEXT("discardedPackages"), MCPStringListToJson(Target));
+			Result->SetArrayField(TEXT("skippedPackages"), MCPStringListToJson(Skipped));
+			if (Refused.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("refusedPackages"), MCPStringListToJson(Refused));
+				Result->SetStringField(TEXT("error"), TEXT("Discard preflight refused packages; nothing was discarded or scheduled. Project or plugin content requires allowContent=true; code and PIE packages cannot be discarded."));
+				return MCPResult(Result);
+			}
+			TArray<FString> StillDirty;
+			for (UPackage* Package : ToDiscard)
+			{
+				Package->SetDirtyFlag(false);
+				if (Package->IsDirty()) StillDirty.Add(Package->GetName());
+				else Discarded.Add(Package->GetName());
+			}
+			Result->SetArrayField(TEXT("discardedPackages"), MCPStringListToJson(Discarded));
+			if (StillDirty.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("stillDirtyPackages"), MCPStringListToJson(StillDirty));
+				Result->SetBoolField(TEXT("changed"), Discarded.Num() > 0);
+				MCPSetNoRollback(Result, TEXT("Dirty flags already cleared cannot restore unsaved edits after closing; the remaining dirty packages prevented shutdown."));
+				Result->SetStringField(TEXT("error"), TEXT("Some packages became dirty immediately after discard; editor shutdown was not scheduled."));
+				return MCPResult(Result);
+			}
 			Result->SetStringField(TEXT("discardNote"),
 				TEXT("IRREVERSIBLE: the discarded changes were never written to disk and nothing keeps a copy; they are gone when the editor closes. Their dirty flags are cleared now, so if the close is called off they stay in memory but no save will pick them up."));
 		}

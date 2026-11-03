@@ -133,6 +133,16 @@ bool FMCPShutdownDirtyChoiceRefusesTest::RunTest(const FString& Parameters)
 			!PackageFileName.IsEmpty() && IFileManager::Get().FileExists(*PackageFileName));
 	}
 
+	// No named list: all dirty content is preflighted, but none may be discarded by default.
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("dirtyPackages"), TEXT("discard"));
+		const auto Response = MCPShutdownChoiceRun(Registry, TEXT("request_editor_shutdown"), Params);
+		TestFalse(TEXT("content discard without allowContent schedules nothing"), MCPShutdownChoiceScheduled(Response));
+		TestTrue(TEXT("content discard refusal names the probe"), MCPShutdownChoiceListNames(Response, TEXT("refusedPackages"), PackageName));
+		TestTrue(TEXT("discard preflight leaves content dirty"), Package->IsDirty());
+	}
+
 	Package->SetDirtyFlag(false);
 	return true;
 }
