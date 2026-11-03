@@ -67,6 +67,12 @@ Malformed item sources and unloadable/wrong-type assets are blocked independentl
 
 `editor(get_mesh_studio_render, jobId=...)` reads progress or the final manifest; the last 16 jobs remain queryable until module shutdown. `editor(cancel_mesh_studio_render, jobId=...)` destroys the active preview scene and records unfinished items as blocked. Cancelling an already-finished job returns its existing result.
 
+Starting a job reports `created=true`. Cancellation reports `changed=true` when
+it stops an active job and `changed=false` for an already-finished job. Both
+mutations report `rollbackPossible=false` with a reason: output files can
+overwrite earlier PNGs without backups, and a released preview job cannot
+resume. Cancellation leaves files already written in place.
+
 If the bridge disconnects, the native job continues with its own deadline. A server response with `cleanupPending=true` means the server could not confirm cancellation; query the same job id after reconnecting. Jobs require editor frames to progress.
 
 ## Level cleanliness

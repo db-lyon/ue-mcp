@@ -52,7 +52,7 @@ namespace MeshStudioRender
 		TSet<FString> Result;
 		for (TObjectIterator<UPackage> It; It; ++It)
 		{
-			if (It->IsDirty() && !It->HasAnyPackageFlags(PKG_Transient) && *It != GetTransientPackage())
+			if (It->IsDirty() && !It->HasAnyFlags(RF_Transient) && *It != GetTransientPackage())
 				Result.Add(It->GetName());
 		}
 		return Result;
@@ -717,8 +717,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RenderMeshStudio(const TSharedPtr<FJsonO
 	const bool bFullyLoadTextures = OptionalBool(Params, TEXT("fullyLoadTextures"), true);
 	FVector Direction = OptionalVec3(Params, TEXT("viewDirection"), FVector(1.0, -1.35, 0.9));
 	const TArray<TSharedPtr<FJsonValue>>* ItemValues = nullptr;
-	MCPNoteParamRead(Params, TEXT("items"));
-	if (!Params->TryGetArrayField(TEXT("items"), ItemValues)) return MCPError(TEXT("items is required and must be an array"));
+	if (!TryGetArrayParam(Params, TEXT("items"), ItemValues) || !ItemValues) return MCPError(TEXT("items is required and must be an array"));
 	if (!GEditor || !GEditor->GetEditorWorldContext().World()) return MCPError(TEXT("Editor world not available"));
 	if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor) return MCPError(TEXT("render_mesh_studio is refused during PIE or simulation"));
 	if (!FApp::CanEverRender() || GUsingNullRHI) return MCPError(TEXT("render_mesh_studio requires a rendering editor (no null RHI)"));
@@ -743,6 +742,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::RenderMeshStudio(const TSharedPtr<FJsonO
 	Active->CaptureMode = Mode;
 	Active->ViewDirection = Direction;
 	Active->bFullyLoadTextures = bFullyLoadTextures;
+	MCPSetCreated(Active->Report);
+	MCPSetNoRollback(Active->Report, TEXT("The job writes PNGs and a manifest, overwriting matching PNG names without keeping their previous contents. Cancelling stops pending captures but does not restore files."));
 	if (!PreExitHandle.IsValid())
 		PreExitHandle = FCoreDelegates::OnPreExit.AddStatic(&FEditorHandlers::ShutdownMeshStudioRenders);
 	Active->Initialize();
@@ -780,11 +781,15 @@ TSharedPtr<FJsonValue> FEditorHandlers::CancelMeshStudioRender(const TSharedPtr<
 {
 	FString Id;
 	if (auto Error = RequireString(Params, TEXT("jobId"), Id)) return Error;
-	if (MeshStudioRender::Active.IsValid() && MeshStudioRender::Active->Id == Id)
+	const bool bWasActive = MeshStudioRender::Active.IsValid() && MeshStudioRender::Active->Id == Id;
+	if (bWasActive)
 		MeshStudioRender::Stop(TEXT("Cancelled by caller"));
 	const auto* Report = MeshStudioRender::Reports.Find(Id);
 	if (!Report) return MCPError(TEXT("Unknown or expired mesh studio jobId"));
-	return MeshStudioRender::Snapshot(*Report);
+	const auto Result = MeshStudioRender::Snapshot(*Report)->AsObject();
+	Result->SetBoolField(TEXT("changed"), bWasActive);
+	MCPSetNoRollback(Result, TEXT("Cancelling releases the preview scene and cannot resume the job. Existing output files remain; starting another render creates a new job."));
+	return MCPResult(Result);
 }
 
 void FEditorHandlers::ShutdownMeshStudioRenders()

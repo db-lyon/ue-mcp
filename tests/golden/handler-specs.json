@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1213,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -7281,6 +7281,17 @@
         }
       ],
       "contractExempt": "cancels the open undo transaction and restores what it touched"
+    },
+    "cancel_mesh_studio_render": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "description": "Job id returned by render_mesh_studio; already-finished jobs are returned unchanged"
+        }
+      ]
     },
     "cancel_skeleton_edit": {
       "category": "animation",
@@ -17255,6 +17266,17 @@
           "type": "string",
           "required": true,
           "description": "StaticMesh or SkeletalMesh asset path"
+        }
+      ]
+    },
+    "get_mesh_studio_render": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "description": "Job id returned by render_mesh_studio"
         }
       ]
     },
@@ -31647,6 +31669,150 @@
           "description": "Image height in pixels (default 256)"
         }
       ]
+    },
+    "render_mesh_studio": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "items",
+          "type": "array",
+          "required": true,
+          "description": "1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts",
+          "items": "object",
+          "fields": [
+            {
+              "name": "id",
+              "type": "string",
+              "required": true,
+              "description": "Unique filename stem: letters, digits, underscore or hyphen"
+            },
+            {
+              "name": "meshPath",
+              "type": "string",
+              "required": false,
+              "description": "StaticMesh or SkeletalMesh asset path"
+            },
+            {
+              "name": "parts",
+              "type": "array",
+              "required": false,
+              "description": "1-64 meshes forming one assembly",
+              "items": "object",
+              "fields": [
+                {
+                  "name": "meshPath",
+                  "type": "string",
+                  "required": true,
+                  "description": "StaticMesh or SkeletalMesh asset path"
+                },
+                {
+                  "name": "relativeTransform",
+                  "type": "object",
+                  "required": false,
+                  "description": "Transform relative to the assembly origin",
+                  "fields": [
+                    {
+                      "name": "location",
+                      "type": "vec3",
+                      "required": false,
+                      "description": "Translation in centimetres, default zero"
+                    },
+                    {
+                      "name": "rotation",
+                      "type": "rotator",
+                      "required": false,
+                      "description": "Pitch, yaw and roll in degrees, default zero"
+                    },
+                    {
+                      "name": "scale",
+                      "type": "vec3",
+                      "required": false,
+                      "description": "Scale, default one"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "aspect",
+              "type": "object",
+              "required": false,
+              "description": "Inventory aspect ratio; the longer output edge equals resolution",
+              "fields": [
+                {
+                  "name": "width",
+                  "type": "number",
+                  "required": true,
+                  "description": "Positive relative width",
+                  "minimum": 0.01,
+                  "maximum": 100
+                },
+                {
+                  "name": "height",
+                  "type": "number",
+                  "required": true,
+                  "description": "Positive relative height",
+                  "minimum": 0.01,
+                  "maximum": 100
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "outputDir",
+          "type": "string",
+          "required": true,
+          "description": "Absolute or project-relative directory for <id>.png and a job-specific JSON manifest"
+        },
+        {
+          "name": "resolution",
+          "type": "integer",
+          "required": false,
+          "description": "Longest image edge in pixels (default 512); shorter edge at least 32",
+          "minimum": 64,
+          "maximum": 4096
+        },
+        {
+          "name": "viewDirection",
+          "type": "vec3",
+          "required": false,
+          "description": "Direction from subject toward camera (default 1,-1.35,0.9), finite and nonzero"
+        },
+        {
+          "name": "lightingPreset",
+          "type": "string",
+          "required": false,
+          "description": "Studio lighting preset (default studio)",
+          "enum": [
+            "studio"
+          ]
+        },
+        {
+          "name": "cubemapPath",
+          "type": "string",
+          "required": false,
+          "description": "Skylight TextureCube (default /Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap)"
+        },
+        {
+          "name": "captureMode",
+          "type": "string",
+          "required": false,
+          "description": "beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)",
+          "enum": [
+            "beauty",
+            "matte",
+            "both"
+          ]
+        },
+        {
+          "name": "fullyLoadTextures",
+          "type": "boolean",
+          "required": false,
+          "description": "Wait across real editor frames for requested texture mips (default true); a 60s item timeout reports blocked"
+        }
+      ],
+      "contractExempt": "starts a latent preview-world render job and writes PNGs and a manifest"
     },
     "render_sequence_frames": {
       "category": "editor",

@@ -20,7 +20,7 @@ namespace MeshStudioRenderTests
 	{
 		TSet<FString> Names;
 		for (TObjectIterator<UPackage> It; It; ++It)
-			if (It->IsDirty() && !It->HasAnyPackageFlags(PKG_Transient) && *It != GetTransientPackage()) Names.Add(It->GetName());
+			if (It->IsDirty() && !It->HasAnyFlags(RF_Transient) && *It != GetTransientPackage()) Names.Add(It->GetName());
 		return Names;
 	}
 
@@ -81,7 +81,11 @@ namespace MeshStudioRenderTests
 			{
 				const auto Cancelled = Registry.ExecuteHandler(TEXT("cancel_mesh_studio_render"), Params)->AsObject();
 				Test.TestEqual(TEXT("cancellation is final"), Cancelled->GetStringField(TEXT("state")), TEXT("cancelled"));
+				Test.TestTrue(TEXT("cancellation reports its change"), Cancelled->GetBoolField(TEXT("changed")));
+				Test.TestFalse(TEXT("cancellation reports no inverse"), Cancelled->GetBoolField(TEXT("rollbackPossible")));
 				VerifyCleanup(Cancelled);
+				const auto Repeated = Registry.ExecuteHandler(TEXT("cancel_mesh_studio_render"), Params)->AsObject();
+				Test.TestFalse(TEXT("repeated cancellation reports no change"), Repeated->GetBoolField(TEXT("changed")));
 				Test.TestFalse(TEXT("cancelled item was never exported"), IFileManager::Get().FileExists(*(Directory / TEXT("cube.png"))));
 				return true;
 			}
@@ -166,6 +170,8 @@ namespace MeshStudioRenderTests
 				Test.AddError(Result->GetStringField(TEXT("error"))); return true;
 			}
 			JobId = Result->GetStringField(TEXT("jobId"));
+			Test.TestTrue(TEXT("start reports the new job"), Result->GetBoolField(TEXT("created")));
+			Test.TestFalse(TEXT("file output reports no inverse"), Result->GetBoolField(TEXT("rollbackPossible")));
 			return false;
 		}
 
