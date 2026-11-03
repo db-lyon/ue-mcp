@@ -2,6 +2,7 @@ import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/epic.generated.js";
 import { specBp, schema as specSchema } from "./specs/epic.generated.js";
+import { waitForAssistant } from "./ai-assistant-wait.js";
 
 // Wraps Epic's native UE 5.8 AI Toolset Registry (the plugin behind Unreal's
 // experimental MCP server) as first-class ue-mcp actions. The bridge reaches the
@@ -12,12 +13,23 @@ import { specBp, schema as specSchema } from "./specs/epic.generated.js";
 // stays tiny no matter how many toolsets ship (5.8 registers 50+).
 export const epicTool: ToolDef = categoryTool(
   "epic",
-  "The Unreal 5.8 AI Toolset Registry itself: discovery (status/list_toolsets/describe_toolset), direct dispatch (call_tool), and the registry's own meta-tooling (agent skills, programmatic tool batching). Toolsets that map to a real editor domain are NOT here - unless nativeTools withholds them, they appear as epic_* actions on that domain's category (GAS in gas, Sequencer in animation, Dataflow in dataflow, and so on), so reach for the domain tool first and use this one to introspect or call the registry directly. Requires UE 5.8+ with the ToolsetRegistry plugin enabled - call epic(status) first to check availability.",
+  "The Unreal 5.8 AI Toolset Registry itself: discovery (status/list_toolsets/describe_toolset), direct dispatch (call_tool), and the registry's own meta-tooling (agent skills, programmatic tool batching). Toolsets that map to a real editor domain are NOT here - unless nativeTools withholds them, they appear as epic_* actions on that domain's category (GAS in gas, Sequencer in animation, Dataflow in dataflow, and so on), so reach for the domain tool first and use this one to introspect or call the registry directly. Requires UE 5.8+ with the ToolsetRegistry plugin enabled - call epic(status) first to check availability. The ai_assistant_* actions drive Epic's in-editor AI Assistant (UE 5.9+ with the AI Assistant plugin): send a message and get the reply, read a conversation, and read its update events; check ai_assistant_status first.",
   {
     status:           specBp("read", "Report whether Epic's ToolsetRegistry is available and how many toolsets are registered. Never errors (reports available=false with a reason when the plugin is absent).", "epic_status"),
     list_toolsets:    specBp("read", "List registered toolsets: name, version, description, tool names + count. Strips the verbose per-tool input/output schemas to stay small - use describe_toolset for those (or includeSchemas).", "epic_list_toolsets"),
     describe_toolset: specBp("read", "Full schema for one toolset: every tool with its input/output JSON schema.", "epic_describe_toolset"),
     call_tool:        specBp("unknown", "Execute a registered Epic tool exactly as its MCP server would. tool takes the qualified name from describe_toolset, e.g. GASToolsets.AttributeSetToolset.ListAttributeSets; pass the arguments as input, or as inputJson to send raw JSON. Returns the tool's JSON result.", "epic_call_tool"),
+    ai_assistant_status: specBp("read", "Report whether Epic's AI Assistant API (UAIAssistantInstance, UE 5.9+ with the experimental AI Assistant plugin) is loaded: engineVersion, available, and when it is not, errorCode unsupported_engine_version or PLUGIN_NOT_AVAILABLE with the reason. When available, lists its UFUNCTIONs, whether the singleton exists, whether conversation updates are being recorded, and pendingRequests. Never errors.", "epic_ai_assistant_status"),
+    ai_assistant_send_message: {
+      ...specBp("mutate", "Send a user message to Epic's AI Assistant, as UAIAssistantInstance::SendTextMessageAndGetReply (reply=true, default) or SendTextMessage (reply=false). Empty conversationId starts a new conversation. Opens the assistant panel, which needs the editor's Epic sign-in to answer. Waits (default 300s) and returns state complete with reply (and conversationId, taken from the first update event when none was given) or, with reply=false, the conversationId the message was bound to; wait=false returns state pending and a requestId for get_request. A timeout fails with state timed_out and keeps the requestId. Engines before 5.9 return unsupported_engine_version.", "epic_ai_assistant_send_message"),
+      followUp: waitForAssistant(300),
+    },
+    ai_assistant_get_conversation: {
+      ...specBp("read", "Read an AI Assistant conversation as Epic serializes it (UAIAssistantInstance::GetConversationJson): conversation is the parsed JSON (conversationJson when it does not parse). Empty conversationId reads the active conversation. Opens the assistant panel. Waits like send_message (default 60s).", "epic_ai_assistant_get_conversation"),
+      followUp: waitForAssistant(60),
+    },
+    ai_assistant_get_request: specBp("read", "One poll of an AI Assistant request that send_message or get_conversation opened: state pending, complete (with its reply, conversationId or conversation) or failed (errorCode ai_assistant_failed, assistantError). A complete or failed answer releases the request; an unknown or released requestId returns ai_assistant_request_not_found.", "epic_ai_assistant_get_request"),
+    ai_assistant_get_events: specBp("read", "Conversation updates UAIAssistantInstance::OnConversationUpdated reported (Started, MessagesUpdated, Complete, Stopped), each with seq, conversationId and utc, oldest first; pass the last nextSeq as sinceSeq to read only newer ones. Recording starts once the assistant instance exists (after a send_message or get_conversation, or the panel's own use); listening=false says it has not started. Does not open the panel.", "epic_ai_assistant_get_events"),
     ...epicActions,
   },
   {

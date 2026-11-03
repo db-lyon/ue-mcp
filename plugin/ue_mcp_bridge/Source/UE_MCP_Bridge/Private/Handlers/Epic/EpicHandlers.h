@@ -36,4 +36,14 @@ private:
 	// Execute a registered tool as an AI agent would. Params: toolset, tool,
 	// input? (object) | inputJson? (string). Returns the tool's JSON result.
 	static TSharedPtr<FJsonValue> CallTool(const TSharedPtr<FJsonObject>& Params);
+
+	// Epic's AI Assistant (UAIAssistantInstance, UE 5.9+), by reflection. Sends
+	// and conversation reads are async: each returns a requestId that
+	// AIAssistantGetRequest polls. EpicHandlers_AIAssistant.cpp.
+	static void RegisterAIAssistantHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonValue> AIAssistantStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AIAssistantSendMessage(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AIAssistantGetConversation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AIAssistantGetRequest(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AIAssistantGetEvents(const TSharedPtr<FJsonObject>& Params);
 };

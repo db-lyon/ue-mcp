@@ -466,4 +466,6 @@ void FEpicHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("input"), EType::Object, TEXT("Tool arguments as a JSON object")),
 		MCPParam::Optional(TEXT("inputJson"), EType::String, TEXT("Tool arguments as a raw JSON string; wins over input")),
 	}, MCPSpec::ContractExempt(TEXT("runs a registered engine tool")));
+
+	RegisterAIAssistantHandlers(Registry);
 }
