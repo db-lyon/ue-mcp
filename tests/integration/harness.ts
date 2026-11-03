@@ -217,6 +217,8 @@ export interface CallResult {
   isError: boolean;
   blocks: string[];
   text: string;
+  /** Image and audio content blocks, in order. */
+  media: Array<{ type: string; mimeType: string; data: string }>;
 }
 
 /** A real ue-mcp server on stdio with an MCP client attached. */
@@ -273,10 +275,12 @@ export class McpServer {
 
   async call(name: string, args: Record<string, unknown>, timeoutMs = 60_000): Promise<CallResult> {
     const raw = await this.client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs });
-    const blocks = ((raw.content ?? []) as Array<{ type: string; text?: string }>)
-      .filter((b) => b.type === "text")
-      .map((b) => b.text ?? "");
-    return { isError: raw.isError === true, blocks, text: blocks.join("\n") };
+    const content = (raw.content ?? []) as Array<{ type: string; text?: string; mimeType?: string; data?: string }>;
+    const blocks = content.filter((b) => b.type === "text").map((b) => b.text ?? "");
+    const media = content
+      .filter((b) => b.type === "image" || b.type === "audio")
+      .map((b) => ({ type: b.type, mimeType: b.mimeType ?? "", data: b.data ?? "" }));
+    return { isError: raw.isError === true, blocks, text: blocks.join("\n"), media };
   }
 
   async close(): Promise<void> {

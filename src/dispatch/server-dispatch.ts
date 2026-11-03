@@ -38,10 +38,13 @@ import type { FlowContext } from "../flow/context.js";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
 
 type TextBlock = { type: "text"; text: string };
+/** Image or audio a result carries, as MCP content rather than base64 inside its JSON text. */
+export type MediaBlock = { type: "image" | "audio"; data: string; mimeType: string };
+export type ContentBlock = TextBlock | MediaBlock;
 
 /** What a tool callback hands back to the MCP SDK. */
 export interface ToolResult {
-  content: TextBlock[];
+  content: ContentBlock[];
   isError?: true;
 }
 
@@ -49,6 +52,29 @@ export interface ToolResult {
 export interface CallExtra {
   sendNotification?: (n: never) => Promise<void>;
   _meta?: { progressToken?: string | number };
+  /** Aborted by the SDK when the client sends notifications/cancelled for this request. */
+  signal?: AbortSignal;
+}
+
+/**
+ * A result's `media` entries ({type, mimeType, data}) become MCP image and
+ * audio content. Each entry stays in the JSON without its data and says which
+ * content block holds it, so the text still describes the result whole.
+ */
+export function splitMedia(data: unknown): { data: unknown; blocks: MediaBlock[] } {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return { data, blocks: [] };
+  const media = (data as Record<string, unknown>).media;
+  if (!Array.isArray(media)) return { data, blocks: [] };
+  const blocks: MediaBlock[] = [];
+  const kept = media.map((entry) => {
+    if (!entry || typeof entry !== "object") return entry;
+    const { data: payload, ...rest } = entry as Record<string, unknown>;
+    const type = rest.type;
+    if ((type !== "image" && type !== "audio") || typeof payload !== "string" || typeof rest.mimeType !== "string") return entry;
+    blocks.push({ type, data: payload, mimeType: rest.mimeType });
+    return { ...rest, contentBlock: blocks.length };
+  });
+  return blocks.length ? { data: { ...(data as Record<string, unknown>), media: kept }, blocks } : { data, blocks };
 }
 
 /**
@@ -269,6 +295,7 @@ export async function dispatchCategoryCall(
     ...loads.contextFor(session),
     elicit: deps.elicit(),
     onProgress: makeProgressReporter(extra),
+    signal: extra?.signal,
     client: deps.client(),
   };
 
@@ -427,10 +454,12 @@ export async function dispatchCategoryCall(
       return { content: [...blocks, ...served] };
     }
 
+    const { data: shown, blocks: media } = splitMedia(result.data);
     return {
       content: [
         ...answeredNote,
-        { type: "text" as const, text: stringify(result.data) },
+        { type: "text" as const, text: stringify(shown) },
+        ...media,
         ...served,
       ],
     };
