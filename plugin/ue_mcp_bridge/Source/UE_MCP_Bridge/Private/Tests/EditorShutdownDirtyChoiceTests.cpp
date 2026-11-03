@@ -101,6 +101,8 @@ bool FMCPShutdownDirtyChoiceRefusesTest::RunTest(const FString& Parameters)
 	if (!TestNotNull(TEXT("probe package created"), Package)) return false;
 	UDataTable* Probe = NewObject<UDataTable>(Package, FName(TEXT("DT_ShutdownChoiceProbe")), RF_Public | RF_Standalone);
 	if (!TestNotNull(TEXT("probe asset created"), Probe)) return false;
+	// An empty RowStruct logs an Error when the mount evicts the probe, failing the test.
+	Probe->RowStruct = FTableRowBase::StaticStruct();
 	Package->MarkPackageDirty();
 
 	// The calls below are refusals only because the probe is dirty and not
