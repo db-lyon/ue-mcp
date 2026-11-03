@@ -6,7 +6,7 @@
 import type { DialogPromptFn, ElicitParams, ElicitResult } from "../core/types.js";
 import type { DisconnectCause } from "./disconnect.js";
 import type { DaemonEvent } from "./events.js";
-import type { UiManifest } from "./ui-bundles.js";
+import type { UiBundleInfo, UiManifest } from "./ui-bundles.js";
 import type { ModelProvider } from "../flow/model-provider.js";
 import type { AssetDiff, ChangesResult, CheckpointResult, CheckpointState, NativeDiffResult, RestoreResult } from "../checkpoints/service.js";
 import type { DaemonSkill } from "../extensions/skills-list.js";
@@ -65,8 +65,9 @@ export interface ExtensionManifest {
    * The UI bundles it works with. The daemon serves the bundle named for the
    * extension at its own version, or else the newest from `min` up to that
    * version; never one newer. Without `min`, any older bundle qualifies.
+   * `root: false` keeps its bundle off /ui/, served only at /ui/ext/<name>/.
    */
-  ui?: { min?: string };
+  ui?: { min?: string; root?: boolean };
 }
 
 /** An extension the daemon did not load, and what it needs. */
@@ -227,6 +228,7 @@ export interface DaemonExtensionApi {
    *   "extension.versions"       `versions` names this extension's loaded, recorded and installed versions
    *   "ui.scopedKeys"            a key from `ui.trustKey` verifies this extension's own bundles and
    *                              bundles no loaded extension names, never another extension's
+   *   "ui.extensions"            `ui.own` gives this extension's own bundle, served at /ui/ext/<name>/
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
@@ -330,6 +332,11 @@ export interface DaemonExtensionApi {
      * served only at its version or older (`ueMcpExtension.ui`).
      */
     active(): UiManifest | null;
+    /**
+     * This extension's own bundle, newest in its version window, which the
+     * daemon serves at /ui/ext/<name>/ (feature "ui.extensions"), or null.
+     */
+    own?(): UiManifest | null;
   };
 
   /**
@@ -390,8 +397,13 @@ export interface DaemonHealth {
   extensions: Array<{ name: string; version: string }>;
   /** Extensions this daemon refused to load, with why; the client offers the update that fixes it. */
   refusedExtensions?: RefusedExtension[];
-  /** Version of the UI bundle being served, or null. */
+  /** Version of the UI bundle being served at /ui/, or null. */
   ui: string | null;
+  /**
+   * Each loaded extension's own bundle, in load order: name, version, `base`
+   * (/ui/ext/<name>/) and the signed `module` it declares (feature "ui.extensions").
+   */
+  uiBundles?: UiBundleInfo[];
   /**
    * What the HTTP API offers beyond apiVersion, for feature detection ("checkpoints", "skills",
    * "context.projection", "actions.effects", and:
@@ -400,7 +412,9 @@ export interface DaemonHealth {
    *   "editor.rebuild"        POST /v1/editor/rebuild stops the editor, builds, and starts it again
    *                           only when the build passed; a failed step carries `reason`
    *   "ui.scopedKeys"         a bundle named for a loaded extension is installed and served only
-   *                           when signed by a key that extension trusted).
+   *                           when signed by a key that extension trusted
+   *   "ui.extensions"         GET /ui/ext/<name>/ serves each loaded extension's own bundle, listed
+   *                           in `uiBundles`; `ueMcpExtension.ui.root: false` keeps one off /ui/).
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];

@@ -64,5 +64,5 @@ export {
 export type { DaemonEvent } from "./daemon/events.js";
 export type { DialogPromptFn, DialogPromptRequest, DialogPromptResult } from "./core/types.js";
 export type { DisconnectCause } from "./daemon/disconnect.js";
-export { signBundle, verifyBundle, type UiManifest } from "./daemon/ui-bundles.js";
+export { signBundle, verifyBundle, type UiBundleInfo, type UiManifest } from "./daemon/ui-bundles.js";
 export type { StatusReport, ClientStatus } from "./cli/status.js";

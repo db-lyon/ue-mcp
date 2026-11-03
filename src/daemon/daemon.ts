@@ -57,10 +57,10 @@ import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type
 import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 
 /** What this daemon's extension API offers beyond its version number. */
-export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys"];
+export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys"];
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions"];
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
@@ -383,6 +383,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     extensions: extensions.map((x) => ({ name: x.name, version: x.version })),
     refusedExtensions,
     ui: ui.active()?.manifest.version ?? null,
+    uiBundles: ui.extensionBundles(),
     features: DAEMON_FEATURES,
   });
   const editors = (): EditorState[] => rt.sessions.list().map((s) => states.get(s) ?? {
@@ -444,8 +445,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const refusedExtensions: RefusedExtension[] = [];
   // An extension's bundles are held to its version from activation, when it installs its own UI.
   const uiOwners: UiBundleOwner[] = [];
+  const uiOwner = (x: { name: string; version: string; uiMin?: string; uiRoot?: false }): UiBundleOwner =>
+    ({ name: x.name, version: x.version, ...(x.uiMin ? { uiMin: x.uiMin } : {}), ...(x.uiRoot === false ? { root: false } : {}) });
   const extensions: LoadedExtension[] = await loadExtensions((name, routes, setBusy, pkg): DaemonExtensionApi => {
-    uiOwners.push({ name, ...pkg });
+    uiOwners.push(uiOwner({ name, ...pkg }));
     ui.setOwners(uiOwners);
     return {
       apiVersion: EXTENSION_API_VERSION,
@@ -510,6 +513,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         trustKey: (pem) => ui.trustKey(pem, name),
         install: (dir) => ui.install(dir),
         active: () => ui.active()?.manifest ?? null,
+        own: () => ui.own(name)?.manifest ?? null,
       },
       modes: {
         get: () => {
@@ -555,7 +559,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     };
   }, opts.extensionsDir, refusedExtensions, packageVersion(), projectDir);
   // One that failed to activate no longer holds its bundles back.
-  ui.setOwners(extensions.map((x) => ({ name: x.name, version: x.version, ...(x.uiMin ? { uiMin: x.uiMin } : {}) })));
+  ui.setOwners(extensions.map(uiOwner));
 
   const readBody = (req: http.IncomingMessage): Promise<unknown> => new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -701,7 +705,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     if (req.method === "GET" && (url.pathname === "/ui" || url.pathname.startsWith("/ui/"))) {
       const file = ui.resolve(url.pathname);
       if (!file) {
-        const none = ui.active() === null;
+        const none = !url.pathname.startsWith("/ui/ext/") && ui.active() === null;
         res.writeHead(none ? 503 : 404, { "content-type": "text/plain; charset=utf-8" })
           .end(none ? "No client UI is installed for this daemon." : "Not found.");
         return;
