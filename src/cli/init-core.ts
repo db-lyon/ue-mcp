@@ -34,9 +34,18 @@ import {
   isProjectScopedClient,
   readUeMcpEntry,
   writeMcpConfig,
+  projectScopedClientsAt,
   type McpClient,
   type ServerLaunch,
 } from "../integrations/claude-code/mcp-client-config.js";
+import {
+  describeUnrealMcpEntry,
+  findUnrealMcpEntries,
+  removeUnrealMcpEntries,
+  sourceBuildConfigRoot,
+  type UnrealMcpEntry,
+} from "../integrations/claude-code/unreal-mcp-entries.js";
+import { engineLookupFor, resolveEngineRoot } from "../editor/engine-root.js";
 import { packageVersion } from "../core/package-root.js";
 import { warn as logWarn } from "../core/log.js";
 import { readEnv } from "../core/env.js";
@@ -103,7 +112,10 @@ export const CLIENT_IDS: Record<string, string> = {
   "claude-code-global": "Claude Code (global)",
   "claude-desktop": "Claude Desktop",
   cursor: "Cursor",
+  vscode: "VS Code",
+  gemini: "Gemini CLI",
   codex: "Codex",
+  "codex-project": "Codex (project)",
 };
 
 export function clientId(name: string): string {
@@ -189,6 +201,30 @@ export interface PlannedClient {
   detected: boolean;
   projectScoped: boolean;
   selected: boolean;
+  /** Unreal MCP entries in this config that writing the ue-mcp entry replaces. */
+  replaces: UnrealMcpEntry[];
+  /** The same client's config in a source build's root, when it holds Unreal MCP entries; see engineConfigRoot. */
+  engineRootConfig: { configPath: string; replaces: UnrealMcpEntry[] } | null;
+}
+
+/**
+ * Where the editor writes client configs for this project's engine when that
+ * is a source build: the folder holding Engine/. Null for an installed engine,
+ * which writes into the project directory.
+ */
+export function engineConfigRoot(project: ProjectContext): string | null {
+  const engineRoot = resolveEngineRoot(engineLookupFor(project.projectPath, project.engineAssociation, project.config.editor));
+  return sourceBuildConfigRoot(engineRoot, project.projectDir!);
+}
+
+/** Client configs in the engine root that hold Unreal MCP entries, by client name. */
+export function engineRootReplacements(root: string | null): Map<string, { client: McpClient; replaces: UnrealMcpEntry[] }> {
+  const found = new Map<string, { client: McpClient; replaces: UnrealMcpEntry[] }>();
+  for (const client of root ? projectScopedClientsAt(root) : []) {
+    const replaces = findUnrealMcpEntries(client);
+    if (replaces.length > 0) found.set(client.name, { client, replaces });
+  }
+  return found;
 }
 
 export interface InitPlan {
@@ -227,6 +263,8 @@ export interface InitPlan {
   /** Categories that can carry native Unreal tools (engine 5.8 and later). */
   nativeCategories: string[];
   bridge: BridgePort;
+  /** A source build's root, where the editor also writes client configs; null otherwise. */
+  engineConfigRoot: string | null;
   /** The GitHub account feedback issues author as, from `ue-mcp auth`; null when not signed in. */
   feedbackAuth: { login: string | null };
 }
@@ -320,18 +358,26 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
     if (!detected.some((c) => c.name === name)) blockers.push(`unknown client '${name}' (known: ${Object.keys(CLIENT_IDS).join(", ")})`);
   }
   const configured = detected.filter((c) => readUeMcpEntry(c).configured).map((c) => c.name);
-  const clients: PlannedClient[] = detected.map((c) => ({
-    id: clientId(c.name),
-    name: c.name,
-    configPath: c.configPath,
-    detected: c.detected,
-    projectScoped: isProjectScopedClient(c.name),
-    selected: wantedClients
-      ? wantedClients.includes(c.name)
-      : configured.length > 0
-        ? configured.includes(c.name)
-        : c.detected && isProjectScopedClient(c.name),
-  }));
+  const configRoot = engineConfigRoot(project);
+  const atEngineRoot = engineRootReplacements(configRoot);
+  const clients: PlannedClient[] = detected.map((c) => {
+    const replaces = findUnrealMcpEntries(c);
+    const engine = atEngineRoot.get(c.name);
+    return {
+      id: clientId(c.name),
+      name: c.name,
+      configPath: c.configPath,
+      detected: c.detected,
+      projectScoped: isProjectScopedClient(c.name),
+      // A config holding an Unreal MCP entry is selected unless --clients says otherwise.
+      selected: wantedClients
+        ? wantedClients.includes(c.name)
+        : replaces.length > 0 || !!engine
+          || (configured.length > 0 ? configured.includes(c.name) : c.detected && isProjectScopedClient(c.name)),
+      replaces,
+      engineRootConfig: engine ? { configPath: engine.client.configPath, replaces: engine.replaces } : null,
+    };
+  });
 
   const claudeCode = clients.some((c) => c.selected && c.name.startsWith("Claude Code"));
   const settingsPath = path.join(projectDir, ".claude", "settings.json");
@@ -373,6 +419,7 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
     categories: CATEGORIES.filter((c) => !c.alwaysOn).map(({ name, label, description, requiredPlugins }) => ({ name, label, description, requiredPlugins })),
     nativeCategories: ENRICHABLE_CATEGORIES,
     bridge: bridgePort(project),
+    engineConfigRoot: configRoot,
     feedbackAuth: { login: readUserAuthSync()?.login ?? null },
   };
 }
@@ -589,14 +636,28 @@ export async function apply(p: InitPlan): Promise<InitResult> {
       steps.push({ id: "gitignore", status: "changed", target: path.join(projectDir, ".gitignore"), detail: "ignored ue-mcp.local.yml" });
     }
 
-    // 4. MCP client configs.
+    // 4. MCP client configs, and the same client's config in a source build's root.
     const detected = detectMcpClients(projectDir);
-    for (const c of p.clients.filter((x) => x.selected)) {
-      const client = detected.find((d) => d.name === c.name) as McpClient;
+    const atEngineRoot = engineRootReplacements(p.engineConfigRoot);
+    const writeClient = (client: McpClient, id: string, label: string): void => {
       const before = fs.existsSync(client.configPath) ? fs.readFileSync(client.configPath, "utf-8") : null;
+      const replaced = removeUnrealMcpEntries(client);
+      if (replaced.backup) {
+        steps.push({
+          id: `replace:${id}`,
+          status: "changed",
+          target: client.configPath,
+          detail: `replaced Unreal MCP entry ${replaced.removed.map(describeUnrealMcpEntry).join(", ")} with ue-mcp; the previous file is saved as ${replaced.backup}`,
+        });
+      }
       writeMcpConfig(client, uproject, p.launch);
       const after = fs.readFileSync(client.configPath, "utf-8");
-      steps.push({ id: `client:${c.id}`, status: after === before ? "unchanged" : "changed", target: client.configPath, detail: `${c.name} MCP server entry` });
+      steps.push({ id: `client:${id}`, status: after === before ? "unchanged" : "changed", target: client.configPath, detail: label });
+    };
+    for (const c of p.clients.filter((x) => x.selected)) {
+      writeClient(detected.find((d) => d.name === c.name) as McpClient, c.id, `${c.name} MCP server entry`);
+      const engine = atEngineRoot.get(c.name);
+      if (engine) writeClient(engine.client, `${c.id}:engine-root`, `${c.name} MCP server entry in the engine source root`);
     }
 
     // 5. Claude Code hook and skills, which only mean something with Claude Code configured.
