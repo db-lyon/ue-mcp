@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -33,77 +33,77 @@ const S_epic_stop_tests = {"properties":{}} as const;
 export const actions: Record<string, ActionSpec> = {
   epic_discover_tests: {
     epicSchema: S_epic_discover_tests,
-    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.DiscoverTests" },
+    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.DiscoverTests", engines: ["5.8"] },
     ...bp("mutate", "[Epic AutomationTestToolset.AutomationTestToolset] Initialize automation worker discovery and load the test list. Must be called once before ListTests or RunTests. Takes several seconds as it discovers the local automation worker and enumerates all registered tests. Returns an async result that completes with a JSON status object when tests are available, or an error if discovery fails. Params: bForceRediscover?", "epic_call_tool"),
   },
   epic_get_section_property_values: {
     epicSchema: S_epic_get_section_property_values,
-    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.GetSectionPropertyValues" },
+    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.GetSectionPropertyValues", engines: ["5.8"] },
     ...bp("read", "[Epic ConfigSettingsToolset.ConfigSettingsToolset] Returns the current values of the specified properties as a JSON object. Raises an error if the section does not exist, has no settings object, or any requested property cannot be read. Params: containerName, categoryName, sectionName, propertyNames", "epic_call_tool"),
   },
   epic_get_section_schema: {
     epicSchema: S_epic_get_section_schema,
-    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.GetSectionSchema" },
+    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.GetSectionSchema", engines: ["5.8"] },
     ...bp("read", "[Epic ConfigSettingsToolset.ConfigSettingsToolset] Returns a JSON Schema describing the user-visible properties of a settings section. The schema maps each property name to its type, description, and constraints. Raises an error if the section does not exist or has no backing settings object (e.g. uses a custom widget instead). Params: containerName, categoryName, sectionName", "epic_call_tool"),
   },
   epic_get_test_results: {
     epicSchema: S_epic_get_test_results,
-    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.GetTestResults" },
+    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.GetTestResults", engines: ["5.8"] },
     ...bp("read", "[Epic AutomationTestToolset.AutomationTestToolset] Get detailed results for the current or most recent test run. Requires DiscoverTests() to have completed. Returns a JSON object with per-test state, duration, errors, and warnings. Params: none", "epic_call_tool"),
   },
   epic_get_test_status: {
     epicSchema: S_epic_get_test_status,
-    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.GetTestStatus" },
+    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.GetTestStatus", engines: ["5.8"] },
     ...bp("read", "[Epic AutomationTestToolset.AutomationTestToolset] Get a lightweight status snapshot of the automation controller. Requires DiscoverTests() to have completed. Returns a JSON object with the controller state, enabled test count, and completion/pass/fail counts. Params: none", "epic_call_tool"),
   },
   epic_list_categories: {
     epicSchema: S_epic_list_categories,
-    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.ListCategories" },
+    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.ListCategories", engines: ["5.8"] },
     ...bp("read", "[Epic ConfigSettingsToolset.ConfigSettingsToolset] Lists the names of all categories within a settings container, sorted alphabetically. Raises an error if the container does not exist. Params: containerName", "epic_call_tool"),
   },
   epic_list_containers: {
     epicSchema: S_epic_list_containers,
-    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.ListContainers" },
+    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.ListContainers", engines: ["5.8"] },
     ...bp("read", "[Epic ConfigSettingsToolset.ConfigSettingsToolset] Lists the names of all known settings containers, sorted alphabetically. Common containers are \"Editor\" and \"Project\". Params: none", "epic_call_tool"),
   },
   epic_list_sections: {
     epicSchema: S_epic_list_sections,
-    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.ListSections" },
+    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.ListSections", engines: ["5.8"] },
     ...bp("read", "[Epic ConfigSettingsToolset.ConfigSettingsToolset] Lists the names of all sections within a settings category, sorted alphabetically. Raises an error if the container or category does not exist. Params: containerName, categoryName", "epic_call_tool"),
   },
   epic_list_tests: {
     epicSchema: S_epic_list_tests,
-    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.ListTests" },
+    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.ListTests", engines: ["5.8"] },
     ...bp("read", "[Epic AutomationTestToolset.AutomationTestToolset] List available automation tests. Requires DiscoverTests() to have completed. Returns a JSON object: {\"tests\": [\"path1\", ...], \"total\": N, \"returned\": N}. Params: nameFilter, tagFilter, limit?", "epic_call_tool"),
   },
   epic_reset_section_to_defaults: {
     epicSchema: S_epic_reset_section_to_defaults,
-    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.ResetSectionToDefaults" },
+    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.ResetSectionToDefaults", engines: ["5.8"] },
     ...bp("mutate", "[Epic ConfigSettingsToolset.ConfigSettingsToolset] Resets the settings in a section to their default values. Raises an error if the section does not exist or reset is not supported. Params: containerName, categoryName, sectionName", "epic_call_tool"),
   },
   epic_run_tests: {
     epicSchema: S_epic_run_tests,
-    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.RunTests" },
+    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.RunTests", engines: ["5.8"] },
     ...bp("mutate", "[Epic AutomationTestToolset.AutomationTestToolset] Run a set of automation tests by name. Requires DiscoverTests() to have completed. Starts executing the specified tests and returns an async result that completes with a JSON summary when all tests finish. Params: testNames", "epic_call_tool"),
   },
   epic_run_tests_by_filter: {
     epicSchema: S_epic_run_tests_by_filter,
-    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.RunTestsByFilter" },
+    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.RunTestsByFilter", engines: ["5.8"] },
     ...bp("mutate", "[Epic AutomationTestToolset.AutomationTestToolset] Run automation tests selected by a filter expression. Requires DiscoverTests() to have completed. Much faster than RunTests when targeting a large batch because the engine narrows the report tree in a single pass instead of running a per-leaf membership check against the requested name list. Filter syntax (multiple expressions joined by '+'): \"StartsWith:System.Engine\" prefix match against the full test path \"^Foo\" prefix anchor (equivalent to StartsWith:) \"Bar$\" suffix anchor \"Substring\" bare token matches anywhere in the path \"Group:Smoke\" expand a named group from AutomationControllerSettings ini Groups Returns an async result that completes with the same JSON summary as RunTests. Params: filterExpression", "epic_call_tool"),
   },
   epic_save_section: {
     epicSchema: S_epic_save_section,
-    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.SaveSection" },
+    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.SaveSection", engines: ["5.8"] },
     ...bp("mutate", "[Epic ConfigSettingsToolset.ConfigSettingsToolset] Saves the settings in a section. Raises an error if the section does not exist or saving is not supported. Params: containerName, categoryName, sectionName", "epic_call_tool"),
   },
   epic_set_section_properties: {
     epicSchema: S_epic_set_section_properties,
-    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.SetSectionProperties" },
+    epicTool: { toolset: "ConfigSettingsToolset.ConfigSettingsToolset", name: "ConfigSettingsToolset.ConfigSettingsToolset.SetSectionProperties", engines: ["5.8"] },
     ...bp("mutate", "[Epic ConfigSettingsToolset.ConfigSettingsToolset] Sets one or more properties on a settings section from a JSON object and saves. PropertiesJson must be a JSON object mapping property names to new values, in the same format returned by GetSectionPropertyValues. Raises an error if the section does not exist, cannot be edited, has no settings object, the default config file is not writable, or any property cannot be set. Params: containerName, categoryName, sectionName, propertiesJson", "epic_call_tool"),
   },
   epic_stop_tests: {
     epicSchema: S_epic_stop_tests,
-    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.StopTests" },
+    epicTool: { toolset: "AutomationTestToolset.AutomationTestToolset", name: "AutomationTestToolset.AutomationTestToolset.StopTests", engines: ["5.8"] },
     ...bp("mutate", "[Epic AutomationTestToolset.AutomationTestToolset] Stop all currently running tests. Requires DiscoverTests() to have completed. If a RunTests async result is pending, it will be completed with an error. Params: none", "epic_call_tool"),
   },
 };

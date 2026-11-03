@@ -88,9 +88,9 @@ Project config lives in `ue-mcp.yml` next to your `.uproject`, tracked in git so
 
 Per-user preferences (feedback, dialog and playtest modes) are not in `ue-mcp.yml`. They live in `~/.ue-mcp/state.json`, set by the commands below.
 
-### Native Epic 5.8 tools
+### Native Epic tools
 
-UE 5.8 ships an experimental AI Toolset Registry (the plugin behind Unreal's own MCP server). ue-mcp reaches it in process and adds each official tool as an action in the matching category: Epic's GAS tools appear in `gas`, Niagara in `niagara`, and so on. Toolsets with no natural home are reached through the `epic` gateway (`status`, `list_toolsets`, `describe_toolset`, `call_tool`). [Native Tools](native-tools.md) lists them.
+UE 5.8 and later ship an experimental AI Toolset Registry (the plugin behind Unreal's own MCP server). ue-mcp reaches it in process and adds each official tool as an action in the matching category: Epic's GAS tools appear in `gas`, Niagara in `niagara`, and so on. Toolsets with no natural home are reached through the `epic` gateway (`status`, `list_toolsets`, `describe_toolset`, `call_tool`). [Native Tools](native-tools.md) lists them.
 
 - **On by default.** The `init` wizard has a page for it. The choice is written to `nativeTools` in `ue-mcp.yml`.
 - **Needs UE 5.8 or later** with the `ToolsetRegistry` plugin (and the toolset plugins you want) enabled. Otherwise enrichment is skipped and `epic(status)` reports `available: false`.

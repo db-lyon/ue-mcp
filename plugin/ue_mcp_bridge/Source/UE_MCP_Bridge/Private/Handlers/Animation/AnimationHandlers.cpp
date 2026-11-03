@@ -556,7 +556,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_ik_rig"), &ReadIKRig, {
 		AssetPath(TEXT("IKRigDefinition asset path")),
 	});
-	// UE 5.8 only; the older-engine stub reads its parameters ahead and refuses.
+	// UE 5.8+; the older-engine stub reads its parameters ahead and refuses.
 	Registry.RegisterHandler(TEXT("configure_ik_rig"), &ConfigureIKRig, {
 		MCPParam::Required(TEXT("rigPath"), EType::String, TEXT("Existing IKRigDefinition to configure")),
 		MCPParam::Optional(TEXT("autoSetup"), EType::String, TEXT("Native setup pass: retarget | full_body, which installs the retarget definition and then Full Body IK")),
@@ -612,7 +612,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("newName"), EType::String, TEXT("New pose name, not already taken on that side")),
 		Side(),
 	});
-	// UE 5.8 only; the older-engine stub reads its parameters ahead and refuses.
+	// UE 5.8+; the older-engine stub reads its parameters ahead and refuses.
 	Registry.RegisterHandlerWithTimeout(TEXT("batch_retarget_animations"), &BatchRetargetAnimations, 300.0f, {
 		MCPParam::Required(TEXT("retargeterPath"), EType::String, TEXT("IKRetargeter to bake through")).Alias(TEXT("assetPath")),
 		MCPParam::Required(TEXT("sourceMesh"), EType::String, TEXT("SkeletalMesh the source animations play on")),
@@ -651,7 +651,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		AssetPath(TEXT("Control Rig Blueprint asset path")),
 		MCPParam::Required(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh to preview the rig on")),
 	});
-	// The Control Rig edit session is UE 5.8 only. The read and capture stubs on
+	// The Control Rig edit session is UE 5.8+. The read and capture stubs on
 	// older engines read their parameters ahead and refuse.
 	auto EditSequencePath = []()
 	{
@@ -673,7 +673,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("displayRate"), EType::Number, TEXT("LevelSequence display rate in frames per second (default the source rate)")),
 		MCPParam::Optional(TEXT("bindingTag"), EType::String, TEXT("Stable natural key the later calls address (default derived from the mesh name)")),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns the existing session, error (default) refuses; an existing session is never modified")),
-	}, MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it creates and saves a LevelSequence")));
+	}, MCPSpec::ContractExempt(TEXT("UE 5.8+: before 5.8 the handler is a stub that reads nothing, and on 5.8 and later it creates and saves a LevelSequence")));
 	Registry.RegisterHandler(TEXT("read_control_rig_edit"), &ReadControlRigEdit, {
 		EditSequencePath(),
 		EditBindingTag(),
@@ -791,7 +791,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("tolerance"), EType::Number, TEXT("Key-reduction tolerance (default 0.001)")),
 		MCPParam::Optional(TEXT("createLink"), EType::Boolean, TEXT("Sequencer links are not supported yet; omit or pass false")).Literal(false),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")),
-	}, MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
+	}, MCPSpec::ContractExempt(TEXT("UE 5.8+: before 5.8 the handler is a stub that reads nothing, and on 5.8 and later it bakes and saves a new AnimSequence")));
 	Registry.RegisterHandler(TEXT("analyze_animation"), &AnalyzeAnimation, {
 		AssetPath(TEXT("AnimSequence asset path")),
 		MCPParam::Optional(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose proportions to sample with; must be compatible with the sequence's skeleton")),
@@ -843,7 +843,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_ik_retargeter"), &ReadIKRetargeter, {
 		AssetPath(TEXT("IKRetargeter asset path")),
 	});
-	// UE 5.8 only; the older-engine stub reads its parameters ahead and refuses.
+	// UE 5.8+; the older-engine stub reads its parameters ahead and refuses.
 	Registry.RegisterHandler(TEXT("configure_ik_retargeter"), &ConfigureIKRetargeter, {
 		MCPParam::Required(TEXT("retargeterPath"), EType::String, TEXT("Existing IKRetargeter to configure")),
 		MCPParam::Optional(TEXT("sourceRig"), EType::String, TEXT("Source IKRigDefinition to assign")),

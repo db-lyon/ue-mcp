@@ -170,6 +170,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "bridge/bridge-parity.ts": "Compares whichever graph and handshake it is handed; holds nothing per editor.",
   "guard-task.ts": "The base class a guard is written against; pure over the call it is handed.",
   "surface/epic-input.ts": "Pure argument shaping for one wrapped engine tool call; no editor to scope it to.",
+  "surface/epic-engines.ts": "Pure check of a wrapped tool's engines against the engine version it is handed.",
   "surface/path-params.ts": "Pure separator repair over a parameter bag; the same rule in every editor.",
   "surface/context/field-select.ts": "Pure projection over whatever result it is handed; no editor to scope it to.",
   "surface/param-forwarding.ts": "Pure read tracking over one mapper call; nothing per editor.",

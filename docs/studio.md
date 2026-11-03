@@ -55,7 +55,7 @@ After **Allow**, the tab shows the setup page with three steps.
 2. **Bridge.** A page for each group of choices, the same choices `npx ue-mcp init` makes, then **Review and install**. Every choice can be changed later.
     - **Project**: the project, its engine, the bridge port and the installed bridge version. Studio installs prebuilt binaries.
     - **Tools**: the tool categories to turn on. `project`, `editor`, `reflection` and `feedback` are always on.
-    - **Native tools**, on Unreal Engine 5.8 only: whether to offer the engine's own MCP tools as actions in the matching categories, and in which categories.
+    - **Native tools**, on Unreal Engine 5.8 and later: whether to offer the engine's own MCP tools as actions in the matching categories, and in which categories.
     - **Context**: how much of the tool surface an agent sees at the start of a session: `micro` (recommended), `lean` or `full`.
     - **MCP clients**: other MCP clients found on this machine to connect as well. A client whose config applies to every project is never chosen for you.
     - **Agent**: **Report ue-mcp gaps**, with its [feedback mode](#feedback), and an optional GitHub sign-in so issues are filed as your account. Without the sign-in, issues are filed anonymously on your behalf.

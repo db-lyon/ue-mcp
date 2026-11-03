@@ -24,7 +24,7 @@ export const UeMcpConfigSchema = z
   .object({
     contentRoots: z.array(z.string()).optional(),
     disable: z.array(z.string()).optional(),
-    // Native (Epic 5.8 ToolsetRegistry) tool surfacing. Enabled by default;
+    // Native (UE 5.8+ ToolsetRegistry) tool surfacing. Enabled by default;
     // `exclude` names ue-mcp categories that should NOT be enriched with Epic
     // tools (they stay reachable via the `epic` gateway). See scripts/generate-epic-actions.mjs.
     nativeTools: z

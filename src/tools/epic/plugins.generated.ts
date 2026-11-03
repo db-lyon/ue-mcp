@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -42,122 +42,122 @@ const S_epic_validate_new_plugin_name_and_location = {"properties":{"pluginName"
 export const actions: Record<string, ActionSpec> = {
   epic_add_plugin_dependency: {
     epicSchema: S_epic_add_plugin_dependency,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.AddPluginDependency" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.AddPluginDependency", engines: ["5.8"] },
     ...bp("mutate", "[Epic PluginToolset.PluginToolset] Adds a dependency entry to a plugin's Plugins array in its .uplugin file. No-ops if a dependency with that name already exists with matching settings. The dependency plugin does not need to be currently discovered. Params: pluginName, dependencyName, bOptional, bEnabled", "epic_call_tool"),
   },
   epic_create_plugin: {
     epicSchema: S_epic_create_plugin,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.CreatePlugin" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.CreatePlugin", engines: ["5.8"] },
     ...bp("mutate", "[Epic PluginToolset.PluginToolset] Creates a new plugin from a template and loads it into the editor. Use GetPluginTemplateDescriptions to obtain a valid TemplateInfo. Params: pluginName, relativePluginLocation, bPlaceInEngine, templateInfo, description", "epic_call_tool"),
   },
   epic_get_game_feature_state: {
     epicSchema: S_epic_get_game_feature_state,
-    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.GetGameFeatureState" },
+    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.GetGameFeatureState", engines: ["5.8"] },
     ...bp("read", "[Epic GameFeaturesToolset.GameFeaturesToolset] Gets the current state of a Game Feature Plugin. Params: pluginName", "epic_call_tool"),
   },
   epic_get_plugin_dependencies: {
     epicSchema: S_epic_get_plugin_dependencies,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginDependencies" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginDependencies", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Returns the dependency entries from a plugin's Plugins array in its .uplugin file. Params: pluginName", "epic_call_tool"),
   },
   epic_get_plugin_dependents: {
     epicSchema: S_epic_get_plugin_dependents,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginDependents" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginDependents", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Returns the names of all discovered plugins that declare a dependency on the given plugin. Params: pluginName", "epic_call_tool"),
   },
   epic_get_plugin_descriptor: {
     epicSchema: S_epic_get_plugin_descriptor,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginDescriptor" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginDescriptor", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Gets the editable descriptor fields for a discovered plugin. Params: pluginName", "epic_call_tool"),
   },
   epic_get_plugin_for_asset: {
     epicSchema: S_epic_get_plugin_for_asset,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginForAsset" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginForAsset", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Returns the name of the enabled plugin whose content mount point contains the given asset path. Accepts full asset paths or mount point prefixes (e.g. /PluginName/ or /Game/Path/To/Asset). Params: assetPath", "epic_call_tool"),
   },
   epic_get_plugin_info: {
     epicSchema: S_epic_get_plugin_info,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginInfo" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginInfo", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Gets metadata for a discovered plugin, including description, version, base directory, content directory, descriptor path, and mounted asset path. Params: pluginName", "epic_call_tool"),
   },
   epic_get_plugin_template_descriptions: {
     epicSchema: S_epic_get_plugin_template_descriptions,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginTemplateDescriptions" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.GetPluginTemplateDescriptions", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Returns the list of available plugin templates. Pass one of the results to CreatePlugin to create a new plugin from that template. Params: none", "epic_call_tool"),
   },
   epic_is_enabled: {
     epicSchema: S_epic_is_enabled,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.IsEnabled" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.IsEnabled", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Checks whether a discovered plugin is currently enabled. Params: pluginName", "epic_call_tool"),
   },
   epic_is_game_feature_active: {
     epicSchema: S_epic_is_game_feature_active,
-    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.IsGameFeatureActive" },
+    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.IsGameFeatureActive", engines: ["5.8"] },
     ...bp("read", "[Epic GameFeaturesToolset.GameFeaturesToolset] Checks whether a Game Feature Plugin is active. Raises an error if the subsystem is unavailable or the plugin is not found. Use GetGameFeatureState if you need the current state when the plugin is not active. Params: pluginName", "epic_call_tool"),
   },
   epic_is_game_feature_plugin: {
     epicSchema: S_epic_is_game_feature_plugin,
-    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.IsGameFeaturePlugin" },
+    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.IsGameFeaturePlugin", engines: ["5.8"] },
     ...bp("read", "[Epic GameFeaturesToolset.GameFeaturesToolset] Return whether or not a plugin is a Game Feature Plugin. Will error if no plugin of this name can be found by the Plugin Manager. Params: pluginName", "epic_call_tool"),
   },
   epic_is_plugin_creation_allowed: {
     epicSchema: S_epic_is_plugin_creation_allowed,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.IsPluginCreationAllowed" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.IsPluginCreationAllowed", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Checks whether the editor settings permit plugin creation from the plugin browser. Params: none", "epic_call_tool"),
   },
   epic_is_plugin_modification_allowed: {
     epicSchema: S_epic_is_plugin_modification_allowed,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.IsPluginModificationAllowed" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.IsPluginModificationAllowed", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Checks whether the editor settings permit modifying plugins from the plugin browser. Params: none", "epic_call_tool"),
   },
   epic_list_discovered_game_feature_plugins: {
     epicSchema: S_epic_list_discovered_game_feature_plugins,
-    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.ListDiscoveredGameFeaturePlugins" },
+    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.ListDiscoveredGameFeaturePlugins", engines: ["5.8"] },
     ...bp("read", "[Epic GameFeaturesToolset.GameFeaturesToolset] Lists all discovered Game Feature Plugins sorted by name. This includes enabled and disabled plugins. Only enabled plugins are known by the Game Features system beyond identifying if a plugin is a Game Feature Plugin. Use the Plugins toolset to do general plugin enable/disable tasks. Params: none", "epic_call_tool"),
   },
   epic_list_discovered_plugins: {
     epicSchema: S_epic_list_discovered_plugins,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.ListDiscoveredPlugins" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.ListDiscoveredPlugins", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Lists the names of all discovered plugins (enabled and disabled), sorted alphabetically. Params: none", "epic_call_tool"),
   },
   epic_list_enabled_game_feature_plugins: {
     epicSchema: S_epic_list_enabled_game_feature_plugins,
-    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.ListEnabledGameFeaturePlugins" },
+    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.ListEnabledGameFeaturePlugins", engines: ["5.8"] },
     ...bp("read", "[Epic GameFeaturesToolset.GameFeaturesToolset] Lists all enabled Game Feature Plugins sorted by name. Enabled plugins are the only plugins known by the Game Features system beyond identifying if a plugin is a Game Feature Plugin. Use the Plugins toolset to do general plugin enable/disable tasks. Params: none", "epic_call_tool"),
   },
   epic_list_enabled_plugins: {
     epicSchema: S_epic_list_enabled_plugins,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.ListEnabledPlugins" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.ListEnabledPlugins", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Lists the names of all enabled plugins, sorted alphabetically. Params: none", "epic_call_tool"),
   },
   epic_remove_plugin_dependency: {
     epicSchema: S_epic_remove_plugin_dependency,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.RemovePluginDependency" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.RemovePluginDependency", engines: ["5.8"] },
     ...bp("mutate", "[Epic PluginToolset.PluginToolset] Removes a dependency entry from a plugin's Plugins array in its .uplugin file. Params: pluginName, dependencyName", "epic_call_tool"),
   },
   epic_request_activate_game_feature: {
     epicSchema: S_epic_request_activate_game_feature,
-    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.RequestActivateGameFeature" },
+    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.RequestActivateGameFeature", engines: ["5.8"] },
     ...bp("mutate", "[Epic GameFeaturesToolset.GameFeaturesToolset] Requests activation of a Game Feature Plugin. Returns true if the activation request was submitted successfully. The actual activation happens asynchronously -- poll GetGameFeatureState() or IsGameFeatureActive() to confirm completion. Raises an error if the subsystem is unavailable or the plugin is not found. Params: pluginName", "epic_call_tool"),
   },
   epic_request_deactivate_game_feature: {
     epicSchema: S_epic_request_deactivate_game_feature,
-    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.RequestDeactivateGameFeature" },
+    epicTool: { toolset: "GameFeaturesToolset.GameFeaturesToolset", name: "GameFeaturesToolset.GameFeaturesToolset.RequestDeactivateGameFeature", engines: ["5.8"] },
     ...bp("mutate", "[Epic GameFeaturesToolset.GameFeaturesToolset] Requests deactivation of a Game Feature Plugin. Returns true if the deactivation request was submitted successfully. The actual deactivation happens asynchronously -- poll GetGameFeatureState() to confirm completion. Raises an error if the subsystem is unavailable or the plugin is not found. Params: pluginName", "epic_call_tool"),
   },
   epic_set_plugin_enabled: {
     epicSchema: S_epic_set_plugin_enabled,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.SetPluginEnabled" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.SetPluginEnabled", engines: ["5.8"] },
     ...bp("mutate", "[Epic PluginToolset.PluginToolset] Enables or disables a plugin in the project config. The change takes effect on the next editor restart. Params: pluginName, bEnabled", "epic_call_tool"),
   },
   epic_update_plugin_descriptor: {
     epicSchema: S_epic_update_plugin_descriptor,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.UpdatePluginDescriptor" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.UpdatePluginDescriptor", engines: ["5.8"] },
     ...bp("mutate", "[Epic PluginToolset.PluginToolset] Updates a plugin's descriptor fields and writes them to its .uplugin file. Checks out the file via source control if source control is enabled. No-ops if the serialized descriptor is unchanged (file is not touched). Params: pluginName, newDescriptor", "epic_call_tool"),
   },
   epic_validate_new_plugin_name_and_location: {
     epicSchema: S_epic_validate_new_plugin_name_and_location,
-    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.ValidateNewPluginNameAndLocation" },
+    epicTool: { toolset: "PluginToolset.PluginToolset", name: "PluginToolset.PluginToolset.ValidateNewPluginNameAndLocation", engines: ["5.8"] },
     ...bp("read", "[Epic PluginToolset.PluginToolset] Validates that PluginName and RelativePluginLocation are acceptable for a new plugin. Params: pluginName, relativePluginLocation, bPlaceInEngine, templateInfo", "epic_call_tool"),
   },
 };

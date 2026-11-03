@@ -12,7 +12,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { defaultEngineRoots as scriptDefaultRoots } from "../../scripts/build-utils.js";
 import {
+  DEFAULT_ENGINE_VERSIONS,
   EngineResolutionError,
   engineBuildTool,
   engineCandidates,
@@ -271,6 +273,16 @@ describe("engine resolution order", () => {
       "UE_MCP_TEST_ENGINE_ROOT",
       "project-relative engine tree",
     ]);
+  });
+
+  it("probes launcher installs newest first, 5.9 included, in step with the build scripts", () => {
+    const base = "C:/Program Files/Epic Games";
+    const present = [base, ...["5.8", "5.9"].map((v) => `${base}/UE_${v}/Engine/Build/BatchFiles/Build.bat`)];
+    expect(slashes(selectEngine(lookupOver(present), "buildTool").engineRoot)).toBe(`${base}/UE_5.9`);
+    expect(DEFAULT_ENGINE_VERSIONS[0]).toBe("5.9");
+    expect(scriptDefaultRoots("win32").map((r: string) => r.replace(/\\/g, "/"))).toEqual(
+      DEFAULT_ENGINE_VERSIONS.map((v) => `${base}/UE_${v}`),
+    );
   });
 
   it("returns null rather than throwing for the optional lookup", () => {

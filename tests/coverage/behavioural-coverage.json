@@ -6182,6 +6182,11 @@
           "suite": "live",
           "file": "tests/live/bcov-epic.test.ts",
           "test": "epic_status reports the registry available with as many toolsets as the listing"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/epic-catalog-drift.test.ts",
+          "test": "the live registry matches the snapshot recorded for this editor's engine"
         }
       ]
     },

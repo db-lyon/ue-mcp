@@ -28,6 +28,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { isSameOrUnder, protectedEngineRoots, resolveTestEngine } from "./build-utils.js";
 import { undeployedSources } from "./live-shards.mjs";
+import { ENGINES } from "./release-binaries.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN = path.join(ROOT, "plugin", "ue_mcp_bridge", "UE_MCP_Bridge.uplugin");
@@ -283,6 +284,13 @@ function upload() {
     const file = path.join(out, a.file);
     if (!fs.existsSync(file) || sha256(file) !== a.sha256) throw new Error(`${a.file} is missing or does not match the manifest`);
   }
+
+  // An installed when-built engine left out of the manifest ships no bridge for that engine.
+  const listed = new Set(manifest.assets.map((a) => a.engine));
+  const skipped = engines()
+    .map((e) => e.version)
+    .filter((v) => !listed.has(v) && ENGINES.some((e) => e.version === v && e.required === "when-built"));
+  if (skipped.length) console.warn(`warning: UE ${skipped.join(", ")} is installed but not in the manifest, so this release ships no bridge for it; run build for it first`);
 
   const tag = `v${version}`;
   const view = spawnSync("gh", ["release", "view", tag, "--json", "isDraft"], { encoding: "utf-8" });

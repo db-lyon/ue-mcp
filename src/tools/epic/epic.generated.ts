@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -24,32 +24,32 @@ const S_epic_update_skill = {"properties":{"skillPath":{"type":"string"},"descri
 export const actions: Record<string, ActionSpec> = {
   epic_create_skill: {
     epicSchema: S_epic_create_skill,
-    epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.CreateSkill" },
+    epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.CreateSkill", engines: ["5.8"] },
     ...bp("mutate", "[Epic ToolsetRegistry.AgentSkillToolset] Creates a new AgentSkill. This should ONLY be called after getting explicit direction or permission from the user. Params: folderPath, assetName, description, details", "epic_call_tool"),
   },
   epic_execute_tool_script: {
     epicSchema: S_epic_execute_tool_script,
-    epicTool: { toolset: "editor_toolset.toolsets.programmatic.ProgrammaticToolset", name: "editor_toolset.toolsets.programmatic.ProgrammaticToolset.execute_tool_script" },
+    epicTool: { toolset: "editor_toolset.toolsets.programmatic.ProgrammaticToolset", name: "editor_toolset.toolsets.programmatic.ProgrammaticToolset.execute_tool_script", engines: ["5.8"] },
     ...bp("mutate", "[Epic editor_toolset.toolsets.programmatic.ProgrammaticToolset] Execute a Python script against the toolset APIs. Use this to batch multiple tool calls into a single script execution, reducing round-trips and context usage. IMPORTANT: Available modules and usage instructions are described by the value returned by `get_execution_environment`. You MUST call `get_execution_environment` once in the conversation before using this tool. Read the value in the `instructions` field in the returned environment info prior to calling this function, so that you understand what APIs are available and how to use them. Before writing a script that calls multiple tools, look up the output schemas (if available) for any tools you plan to use. This returns the JSON schema describing each tool's return value, so you know how to parse results and pass data between calls. Params: script", "epic_call_tool"),
   },
   epic_get_execution_environment: {
     epicSchema: S_epic_get_execution_environment,
-    epicTool: { toolset: "editor_toolset.toolsets.programmatic.ProgrammaticToolset", name: "editor_toolset.toolsets.programmatic.ProgrammaticToolset.get_execution_environment" },
+    epicTool: { toolset: "editor_toolset.toolsets.programmatic.ProgrammaticToolset", name: "editor_toolset.toolsets.programmatic.ProgrammaticToolset.get_execution_environment", engines: ["5.8"] },
     ...bp("read", "[Epic editor_toolset.toolsets.programmatic.ProgrammaticToolset] Get details about execution environment. This includes instructions on how to write scripts, and constraints, such as what modules may be imported and the script entrypoint and function signature. Params: none", "epic_call_tool"),
   },
   epic_get_skills: {
     epicSchema: S_epic_get_skills,
-    epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.GetSkills" },
+    epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.GetSkills", engines: ["5.8"] },
     ...bp("read", "[Epic ToolsetRegistry.AgentSkillToolset] Returns detailed information about a specific set of AgentSkills. Params: skillPaths", "epic_call_tool"),
   },
   epic_list_skills: {
     epicSchema: S_epic_list_skills,
-    epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.ListSkills" },
+    epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.ListSkills", engines: ["5.8"] },
     ...bp("read", "[Epic ToolsetRegistry.AgentSkillToolset] Gets a summary of all AgentSkills in the project. Params: none", "epic_call_tool"),
   },
   epic_update_skill: {
     epicSchema: S_epic_update_skill,
-    epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.UpdateSkill" },
+    epicTool: { toolset: "ToolsetRegistry.AgentSkillToolset", name: "ToolsetRegistry.AgentSkillToolset.UpdateSkill", engines: ["5.8"] },
     ...bp("mutate", "[Epic ToolsetRegistry.AgentSkillToolset] Updates an existing AgentSkill. This should ONLY be called after getting explicit direction or permission from the user. Params: skillPath, description, details", "epic_call_tool"),
   },
 };
