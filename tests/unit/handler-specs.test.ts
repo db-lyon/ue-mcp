@@ -215,33 +215,6 @@ describe("the recording", () => {
     expect(module).toMatch(/ {2}n: z\.number\(\)\.int\(\)\.optional\(\)/);
   });
 
-  it("shares typed object arrays without weakening each action's contract", () => {
-    const captures: ParamSpec = { name: "items", type: "array", items: "object", required: true, description: "Captures", fields: [
-      { name: "id", type: "string", required: true, description: "Capture id" },
-    ] };
-    const rows: ParamSpec = { name: "items", type: "array", items: "object", required: false, description: "Dialog rows", fields: [
-      { name: "index", type: "integer", required: true, description: "Row index", minimum: 0 },
-      { name: "checked", type: "boolean", required: true, description: "Checked" },
-    ] };
-    const boundedRows: ParamSpec = { ...rows, fields: [{ ...rows.fields![0], minimum: undefined, maximum: 9 }, rows.fields![1]] };
-    const module = renderAll({ handlers: {
-      capture: { category: "editor", params: [captures] },
-      dialog: { category: "editor", params: [rows] },
-      other_dialog: { category: "editor", params: [boundedRows] },
-    } }).get("src/tools/specs/editor.generated.ts")!;
-    const expression = module.match(/^  items: (.*),$/m)![1];
-    const shared = new Function("z", `return ${expression}`)(zodRuntime) as z.ZodTypeAny;
-    expect(shared.safeParse([{ id: "cube" }]).success).toBe(true);
-    expect(shared.safeParse([{ index: 0, checked: true }]).success).toBe(true);
-    expect(shared.safeParse([{ index: -1, checked: true }]).success).toBe(true);
-    expect(shared.safeParse([{ index: 0, checked: "yes" }]).success).toBe(false);
-    expect(shared.safeParse([{ id: "cube" }, { index: 0, checked: true }]).success).toBe(false);
-    expect(paramZod(captures).safeParse([{ index: 0, checked: true }]).success).toBe(false);
-    expect(paramZod(rows).safeParse([{ id: "cube" }]).success).toBe(false);
-    expect(paramZod(rows).safeParse([{ index: -1, checked: true }]).success).toBe(false);
-    expect(paramZod(boundedRows).safeParse([{ index: 10, checked: true }]).success).toBe(false);
-  });
-
   it("refuses an enum or range off its type, and nested fields off an object (#1282)", () => {
     const one = (param: Partial<ParamSpec>): string =>
       specProblems({ probe: { params: [{ name: "v", type: "string", required: false, description: "", ...param } as ParamSpec] } }).join("\n");
@@ -383,19 +356,13 @@ function specSignature(param: ParamSpec): string {
 }
 
 /**
- * Whether a key a tool advertises accepts what a spec declares for it. Typed
- * object arrays can share a union; an integer is also accepted as a number.
+ * Whether a key a tool advertises accepts what a spec declares for it. A key
+ * the tool shares with its own category must match exactly (checked per
+ * category below); a key another category's handler declares only has to be
+ * accepted, and an integer is a number.
  */
-function accepts(advertised: z.ZodTypeAny, declared: string): boolean {
-  const signature = zodSignature(advertised);
-  if (signature === declared || (signature === "number" && declared === "integer")) return true;
-  if (advertised._zod.def.type === "optional" && declared.endsWith("?")) {
-    return accepts((advertised as z.ZodOptional<z.ZodTypeAny>).unwrap(), declared.slice(0, -1));
-  }
-  if (advertised._zod.def.type === "union") {
-    return ((advertised as z.ZodUnion).options as readonly z.ZodTypeAny[]).some((option) => accepts(option, declared));
-  }
-  return false;
+function accepts(advertised: string, declared: string): boolean {
+  return advertised === declared || (advertised === "number?" && declared === "integer?");
 }
 
 /** Every action, in any tool, that dispatches each spec'd method, as tool.action. */
@@ -470,12 +437,7 @@ describe.each(OTHER_CATEGORIES)("the %s category", (category) => {
         for (const key of [param.name, ...(param.aliases ?? [])]) {
           const advertised = tool.schema[key];
           expect(advertised, `${method}: ${key} is advertised`).toBeDefined();
-          const declarations = methods.flatMap(([, owner]) => owner.params.filter((p) =>
-            p.name === key || p.aliases?.includes(key)));
-          const objectArrays = declarations.every((p) => p.type === "array" && p.items === "object" && p.fields);
-          const shapes = [...new Set(declarations.map((p) => zodSignature(paramZod(p))))];
-          const expected = objectArrays && shapes.length > 1 ? `${shapes.join("|")}?` : specSignature(param);
-          expect(zodSignature(advertised as z.ZodTypeAny), `${method}: ${key}`).toBe(expected);
+          expect(zodSignature(advertised as z.ZodTypeAny), `${method}: ${key}`).toBe(specSignature(param));
         }
       }
     }
@@ -521,7 +483,7 @@ describe.each(SPEC_TOOLS)("the %s tool", (toolName) => {
           const advertised = tool.schema[key];
           expect(advertised, `${action}: ${key} is advertised`).toBeDefined();
           const signature = zodSignature(advertised as z.ZodTypeAny);
-          expect(accepts(advertised as z.ZodTypeAny, specSignature(param)), `${action}: ${key} is ${signature}`).toBe(true);
+          expect(accepts(signature, specSignature(param)), `${action}: ${key} is ${signature}`).toBe(true);
         }
       }
     }

@@ -113,9 +113,9 @@ export function zodExpression(param) {
 
 /**
  * One zod entry per key across a category. A key several handlers declare must
- * share a wire type. Arrays with different declared object fields take a
- * union in the shared schema; each action still validates its own contract.
- * Descriptions name which handlers each belongs to when they differ.
+ * accept the same thing in every one of them, because the category's shape is
+ * shared; the descriptions are merged, naming which handlers each belongs to
+ * when they differ.
  */
 /** The value with its enums and ranges removed, at every depth: what it is as a type. */
 function withoutRules(value) {
@@ -127,24 +127,15 @@ function withoutRules(value) {
 
 function categoryKeys(handlers) {
   const keys = new Map();
-  const claim = (key, expr, base, description, method, objectArray) => {
+  const claim = (key, expr, base, description, method) => {
     const entry = keys.get(key);
     if (!entry) {
-      keys.set(key, { expr, base, objectArray, descriptions: new Map([[description, [method]]]) });
+      keys.set(key, { expr, base, descriptions: new Map([[description, [method]]]) });
       return;
     }
     // Declarations that differ only by enum or range share the type; the
     // shared key takes the type and each action's contract enforces its own rules.
-    if (entry.variants && objectArray) {
-      const previous = entry.variants.get(base);
-      entry.variants.set(base, previous === undefined || previous === expr ? expr : base);
-      entry.expr = `z.union([${[...entry.variants.values()].join(", ")}])`;
-    }
-    else if (entry.expr !== expr && entry.base === base) entry.expr = base;
-    else if (entry.expr !== expr && entry.objectArray && objectArray) {
-      entry.variants = new Map([[entry.base, entry.expr], [base, expr]]);
-      entry.expr = `z.union([${[...entry.variants.values()].join(", ")}])`;
-    }
+    if (entry.expr !== expr && entry.base === base) entry.expr = base;
     else if (entry.expr !== expr) {
       throw new Error(`'${key}' is declared as ${entry.expr} and as ${expr} (${method}); one category key has one type`);
     }
@@ -156,9 +147,8 @@ function categoryKeys(handlers) {
     for (const param of spec.params) {
       const expr = zodExpression(param);
       const base = zodExpression(withoutRules(param));
-      const objectArray = param.type === "array" && param.items === "object" && !!param.fields;
-      claim(param.name, expr, base, param.description, method, objectArray);
-      for (const alias of param.aliases ?? []) claim(alias, expr, base, `Alias for ${param.name}`, method, objectArray);
+      claim(param.name, expr, base, param.description, method);
+      for (const alias of param.aliases ?? []) claim(alias, expr, base, `Alias for ${param.name}`, method);
     }
   }
   return [...keys.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => {

@@ -6,7 +6,7 @@
 {
   "action": "render_mesh_studio",
   "args": {
-    "items": [
+    "captures": [
       {
         "id": "cube",
         "meshPath": "/Engine/BasicShapes/Cube.Cube",
@@ -82,3 +82,9 @@ PIE and simulation are refused, as are concurrent studio jobs. Starting PIE or c
 The handler compares the nontransient dirty-package set before and after the job. It never saves packages or clears dirty flags. Existing dirty packages remain dirty. A package-set change during the operation stops the job and reports failure, including when another editor operation caused the change. The handler does not hide an unrelated edit by resetting its dirty flag. `dirtyPackagesUnchanged=true` is the verification to require before accepting a capture batch.
 
 Use `editor(capture_scene_png)` when the desired image is an actor as lit in an existing editor or PIE world. Use `render_mesh_studio` for isolated mesh reference images with their own lighting.
+
+## Native regression tests
+
+The latent `UE.MCP.Editor.MeshStudio` tests need the editor's normal Automation queue with a rendering RHI, so they cannot run through `npm run test:automation`. Run them on real editor frames; `tests/live/mesh-studio-render.test.ts` also requires the render editor kind.
+
+Cancelling an active job returns `success=true` for the cancellation action and `state=cancelled` for the job outcome. A render call whose wait budget expired still returns failure after successful cleanup.

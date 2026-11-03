@@ -151,13 +151,6 @@ Each shard of `npm run test:live` is a copy of `tests/ue_mcp` with its own edito
 - `tests/live/crash-class-inputs.test.ts` drives inputs that have crashed the editor and follows each call with a liveness probe.
 - `tests/live/matrix.ts` records where each case's assertion lives, and `tests/live/coverage.test.ts` checks each reference resolves.
 
-### Studio mesh render regression
-
-Studio mesh captures have a [development handoff](mesh-studio-render-handoff.md)
-with the spec/golden regeneration commands and the real-frame automation
-requirement. See [Studio mesh reference images](mesh-studio-render.md) for the
-action contract and package-cleanliness guarantees.
-
 ## Adding an action or category
 
 ### TypeScript side

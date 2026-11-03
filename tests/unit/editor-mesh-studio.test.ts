@@ -19,7 +19,7 @@ describe("editor.render_mesh_studio", () => {
   it("forwards the nested assembly contract unchanged and waits for the final manifest", async () => {
     const call = vi.fn().mockResolvedValueOnce(running).mockResolvedValueOnce(completed);
     const params = {
-      items: [{ id: "cube", parts: [{ meshPath: "/Engine/BasicShapes/Cube.Cube", relativeTransform: {
+      captures: [{ id: "cube", parts: [{ meshPath: "/Engine/BasicShapes/Cube.Cube", relativeTransform: {
         location: { x: 10, y: 0, z: 5 }, rotation: { pitch: 0, yaw: 45, roll: 0 }, scale: { x: 1, y: 2, z: 1 },
       } }], aspect: { width: 1, height: 2 } }],
       outputDir: "Saved/Icons", resolution: 128, viewDirection: { x: 1, y: -1, z: 1 },
@@ -38,9 +38,9 @@ describe("editor.render_mesh_studio", () => {
   it("rejects invalid pixel sizes, capture modes and nested aspect types through the recorded schema", async () => {
     const call = vi.fn();
     const ctx = { bridge: { call } } as unknown as ToolContext;
-    const base = { action: "render_mesh_studio", outputDir: "Saved/Icons", items: [{ id: "cube", meshPath: "/Engine/BasicShapes/Cube" }] };
+    const base = { action: "render_mesh_studio", outputDir: "Saved/Icons", captures: [{ id: "cube", meshPath: "/Engine/BasicShapes/Cube" }] };
     for (const bad of [{ resolution: 32 }, { resolution: 64.5 }, { captureMode: "hdr" }, {
-      items: [{ id: "cube", meshPath: "/Engine/BasicShapes/Cube", aspect: { width: "wide", height: 1 } }],
+      captures: [{ id: "cube", meshPath: "/Engine/BasicShapes/Cube", aspect: { width: "wide", height: 1 } }],
     }]) {
       // The category checks the generated per-action contract before dispatch.
       await expect(editorTool.handler(ctx, { ...base, ...bad })).rejects.toThrow();
@@ -66,7 +66,7 @@ describe("editor.render_mesh_studio", () => {
   });
 
   it("cancels on a wait timeout and returns the cleanup evidence", async () => {
-    const cancelled = { ...completed, success: false, state: "cancelled" };
+    const cancelled = { ...completed, success: true, state: "cancelled" };
     const call = vi.fn().mockResolvedValueOnce(running).mockResolvedValueOnce(cancelled);
     const ctx = { bridge: { call }, callTimeoutMs: 250 } as unknown as ToolContext;
     expect(await waitForMeshStudioRender(ctx, {}, running, clock())).toMatchObject({
@@ -78,12 +78,12 @@ describe("editor.render_mesh_studio", () => {
   it("carries the caller's timeout through the bridge follow-up to cancellation", async () => {
     vi.useFakeTimers();
     try {
-      const cancelled = { ...completed, success: false, state: "cancelled" };
+      const cancelled = { ...completed, success: true, state: "cancelled" };
       const call = vi.fn().mockResolvedValueOnce(running).mockResolvedValueOnce(running).mockResolvedValueOnce(cancelled);
       const ctx = { bridge: { call } } as unknown as ToolContext;
       const request = editorTool.handler(ctx, {
         action: "render_mesh_studio", outputDir: "Saved/Icons", timeoutMs: 1,
-        items: [{ id: "cube", meshPath: "/Engine/BasicShapes/Cube.Cube" }],
+        captures: [{ id: "cube", meshPath: "/Engine/BasicShapes/Cube.Cube" }],
       });
       await vi.advanceTimersByTimeAsync(1);
       const result = await request;

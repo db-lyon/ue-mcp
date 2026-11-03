@@ -790,7 +790,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("fullyLoadTextures"), EType::Boolean, TEXT("Stream textures in and flush the render thread before the capture (default true)")),
 	}, MCPSpec::ContractExempt(TEXT("spawns a capture actor and writes an image file")));
 	Registry.RegisterHandler(TEXT("render_mesh_studio"), &RenderMeshStudio, {
-		MCPParam::Required(TEXT("items"), EType::Array, TEXT("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts")).Items(EType::Object).WithFields({
+		MCPParam::Required(TEXT("captures"), EType::Array, TEXT("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts")).Items(EType::Object).WithFields({
 			MCPParam::RequiredField(TEXT("id"), EType::String, TEXT("Unique filename stem: letters, digits, underscore or hyphen")),
 			MCPParam::OptionalField(TEXT("meshPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
 			MCPParam::OptionalField(TEXT("parts"), EType::Array, TEXT("1-64 meshes forming one assembly")).Items(EType::Object).WithFields({

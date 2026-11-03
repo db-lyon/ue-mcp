@@ -80,6 +80,7 @@ namespace MeshStudioRenderTests
 			if (bCancel && StudioWorlds() > 0)
 			{
 				const auto Cancelled = Registry.ExecuteHandler(TEXT("cancel_mesh_studio_render"), Params)->AsObject();
+				Test.TestTrue(TEXT("cancel action succeeds"), Cancelled->GetBoolField(TEXT("success")));
 				Test.TestEqual(TEXT("cancellation is final"), Cancelled->GetStringField(TEXT("state")), TEXT("cancelled"));
 				Test.TestTrue(TEXT("cancellation reports its change"), Cancelled->GetBoolField(TEXT("changed")));
 				Test.TestFalse(TEXT("cancellation reports no inverse"), Cancelled->GetBoolField(TEXT("rollbackPossible")));
@@ -163,7 +164,7 @@ namespace MeshStudioRenderTests
 				Items.Add(MakeShared<FJsonValueObject>(Assembly));
 				Items.Add(MakeShared<FJsonValueObject>(MeshItem(TEXT("wrong_type"), TEXT("/Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap"))));
 			}
-			Params->SetArrayField(TEXT("items"), Items);
+			Params->SetArrayField(TEXT("captures"), Items);
 			const auto Result = Registry.ExecuteHandler(TEXT("render_mesh_studio"), Params)->AsObject();
 			if (!Test.TestTrue(TEXT("render starts"), Result->GetBoolField(TEXT("success"))))
 			{

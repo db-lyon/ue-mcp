@@ -31674,7 +31674,7 @@
       "category": "editor",
       "params": [
         {
-          "name": "items",
+          "name": "captures",
           "type": "array",
           "required": true,
           "description": "1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts",

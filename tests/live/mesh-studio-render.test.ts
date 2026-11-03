@@ -33,7 +33,7 @@ describe("mesh studio renders", () => {
     const before = await bridge.call("get_world_state", {}) as Json;
     const result = await server.call("editor", {
       action: "render_mesh_studio", outputDir: scratch, resolution: 128, captureMode: "both", fullyLoadTextures: true,
-      items: [{ id: "cube", meshPath: cube, aspect: { width: 1, height: 2 } }, {
+      captures: [{ id: "cube", meshPath: cube, aspect: { width: 1, height: 2 } }, {
         id: "assembly", parts: [{ meshPath: cube }, { meshPath: cube, relativeTransform: {
           location: { x: 200, y: 0, z: 0 }, rotation: { pitch: 0, yaw: 30, roll: 0 }, scale: { x: 1, y: 1, z: 1 },
         } }],
@@ -68,7 +68,7 @@ describe("mesh studio renders", () => {
   it("reports invalid items individually and continues rendering the valid item", async () => {
     const result = await server.call("editor", {
       action: "render_mesh_studio", outputDir: scratch, resolution: 64, timeoutMs: 120_000,
-      items: [
+      captures: [
         { id: "missing_source" },
         { id: "wrong_type", meshPath: "/Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap" },
         { id: "valid_after_errors", meshPath: cube },
@@ -84,12 +84,12 @@ describe("mesh studio renders", () => {
 
   it("cancels an active native job and verifies the cleanup without exporting a PNG", async () => {
     const start = await bridge.call("render_mesh_studio", {
-      outputDir: scratch, resolution: 128, items: [{ id: "cancelled", meshPath: cube }],
+      outputDir: scratch, resolution: 128, captures: [{ id: "cancelled", meshPath: cube }],
     }) as Json;
     expect(start.state).toBe("running");
     pending = start.jobId as string;
     const result = await bridge.call("cancel_mesh_studio_render", { jobId: pending }) as Json;
-    expect(result).toMatchObject({ success: false, state: "cancelled", cleanupComplete: true, dirtyPackagesUnchanged: true });
+    expect(result).toMatchObject({ success: true, state: "cancelled", cleanupComplete: true, dirtyPackagesUnchanged: true });
     expect((result.outcomes as Json[])[0]).toMatchObject({ id: "cancelled", status: "blocked" });
     expect(fs.existsSync(path.join(scratch, "cancelled.png"))).toBe(false);
     const status = await bridge.call("get_mesh_studio_render", { jobId: pending }) as Json;
@@ -99,7 +99,7 @@ describe("mesh studio renders", () => {
 
   it("refuses filename traversal and colliding ids before a render job starts", async () => {
     for (const items of [[{ id: "../escape", meshPath: cube }], [{ id: "Cube", meshPath: cube }, { id: "cube", meshPath: cube }]]) {
-      const result = await bridge.call("render_mesh_studio", { outputDir: scratch, items }) as Json;
+      const result = await bridge.call("render_mesh_studio", { outputDir: scratch, captures: items }) as Json;
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/filename-safe id/i);
       expect(result.jobId).toBeUndefined();

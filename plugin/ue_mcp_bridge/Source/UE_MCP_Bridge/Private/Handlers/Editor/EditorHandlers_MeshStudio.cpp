@@ -132,7 +132,7 @@ namespace MeshStudioRender
 
 	static bool ParseItems(const TArray<TSharedPtr<FJsonValue>>& Values, int32 Resolution, TArray<FItem>& Out, FString& Error)
 	{
-		if (Values.Num() < 1 || Values.Num() > 128) { Error = TEXT("items must contain 1-128 entries"); return false; }
+		if (Values.Num() < 1 || Values.Num() > 128) { Error = TEXT("captures must contain 1-128 entries"); return false; }
 		TSet<FString> Ids;
 		for (const TSharedPtr<FJsonValue>& Value : Values)
 		{
@@ -717,7 +717,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RenderMeshStudio(const TSharedPtr<FJsonO
 	const bool bFullyLoadTextures = OptionalBool(Params, TEXT("fullyLoadTextures"), true);
 	FVector Direction = OptionalVec3(Params, TEXT("viewDirection"), FVector(1.0, -1.35, 0.9));
 	const TArray<TSharedPtr<FJsonValue>>* ItemValues = nullptr;
-	if (!TryGetArrayParam(Params, TEXT("items"), ItemValues) || !ItemValues) return MCPError(TEXT("items is required and must be an array"));
+	if (!TryGetArrayParam(Params, TEXT("captures"), ItemValues) || !ItemValues) return MCPError(TEXT("captures is required and must be an array"));
 	if (!GEditor || !GEditor->GetEditorWorldContext().World()) return MCPError(TEXT("Editor world not available"));
 	if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor) return MCPError(TEXT("render_mesh_studio is refused during PIE or simulation"));
 	if (!FApp::CanEverRender() || GUsingNullRHI) return MCPError(TEXT("render_mesh_studio requires a rendering editor (no null RHI)"));
@@ -787,6 +787,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CancelMeshStudioRender(const TSharedPtr<
 	const auto* Report = MeshStudioRender::Reports.Find(Id);
 	if (!Report) return MCPError(TEXT("Unknown or expired mesh studio jobId"));
 	const auto Result = MeshStudioRender::Snapshot(*Report)->AsObject();
+	if (bWasActive) Result->SetBoolField(TEXT("success"), true);
 	Result->SetBoolField(TEXT("changed"), bWasActive);
 	MCPSetNoRollback(Result, TEXT("Cancelling releases the preview scene and cannot resume the job. Existing output files remain; starting another render creates a new job."));
 	return MCPResult(Result);
