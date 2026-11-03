@@ -123,7 +123,7 @@ and that a native tool for it can be requested at ${CORE_ISSUES_URL}.
 `;
 
 function fullInstructions(f: SurfaceFacts): string {
-  return `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${f.categoryCount} category tools covering ${f.actionCount} actions: ${f.ownActionCount} of ue-mcp's own, plus ${f.epicActionCount} official Unreal 5.8 tools wrapped in-process as \`epic_*\` actions (UE 5.8+; see the epic category).
+  return `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${f.categoryCount} category tools covering ${f.actionCount} actions: ${f.ownActionCount} of ue-mcp's own, plus ${f.epicActionCount} official Unreal tools wrapped in-process as \`epic_*\` actions (UE 5.8+; see the epic category).
 
 Every category tool takes "action" (the operation) and "args" (that action's parameters): level(action="place_actor", args={actorClass: "PointLight"}). Call project(action="get_status") first.
 

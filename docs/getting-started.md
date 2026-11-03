@@ -24,7 +24,7 @@ The wizard:
 
 1. Finds the `.uproject` in the current directory (or asks for its path) and prints the bridge port this project will use.
 2. Asks which **tool categories** to enable (`level`, `blueprint`, `material`, `niagara`, etc.). All are checked on a fresh install. On a re-run, categories in `ue-mcp.yml`'s `disable` list stay unchecked.
-3. Asks whether to wrap **native Unreal tools** (UE 5.8's toolset registry) and which categories get them. See [Native Epic tools](configuration.md#native-epic-58-tools).
+3. Asks whether to wrap **native Unreal tools** (the toolset registry in UE 5.8 and later) and which categories get them. See [Native Epic tools](configuration.md#native-epic-tools).
 4. Asks for the **context strategy**: `micro` (default), `lean` or `full`. See [Context strategy](configuration.md#context-strategy-full-lean-micro).
 5. Lists the MCP clients it detects (Claude Code project and global, Claude Desktop, Cursor, Codex) and writes the config for each one you keep checked. Project-scoped clients start checked; global and Desktop configs start unchecked because they affect every project on the machine.
 6. Asks about **agent behavior**. Everything starts unchecked on a fresh install:

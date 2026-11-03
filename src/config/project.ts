@@ -31,7 +31,7 @@ export interface UeMcpConfig {
   contentRoots?: string[];
   /** Tool categories to disable (e.g. ["gas", "networking", "pcg"]) */
   disable?: string[];
-  /** Native (Epic 5.8 ToolsetRegistry) tool surfacing. Enabled by default;
+  /** Native (UE 5.8+ ToolsetRegistry) tool surfacing. Enabled by default;
    *  `exclude` names ue-mcp categories that should not be enriched with Epic
    *  tools (they remain reachable via the `epic` gateway). */
   nativeTools?: {

@@ -46,7 +46,7 @@ export interface Counts {
   bridgeActions: number;
   localActions: number;
   perTool: Record<string, number>;
-  /** Official Unreal 5.8 ToolsetRegistry toolsets ue-mcp wraps. */
+  /** Official Unreal ToolsetRegistry toolsets ue-mcp wraps, across every recorded engine. */
   nativeToolsets: number;
   /** Official Epic tools wrapped across those toolsets, counted inside
    *  `actions`. */

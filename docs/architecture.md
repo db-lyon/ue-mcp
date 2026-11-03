@@ -318,7 +318,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches each re
 | ProjectHandlers | Project info, world subsystem queries |
 | StateTreeHandlers | StateTree authoring |
 | ChooserHandlers | Chooser tables |
-| EpicHandlers | The UE 5.8 Toolset Registry |
+| EpicHandlers | The Toolset Registry (UE 5.8+) |
 | MassHandlers | Mass Entity fragments, traits and processors |
 | SkeletalMeshHandlers | Skeletal mesh LODs, sections, instancing settings |
 | FabHandlers | Fab library import |

@@ -241,10 +241,10 @@ async function init(argv: string[]): Promise<number | void> {
   const disabled = optional.filter((_, i) => !states[i]).map((c) => c.name);
   console.log("");
 
-  // 2b. Native (Epic 5.8) tools, on by default.
+  // 2b. Native Unreal (UE 5.8+) tools, on by default.
   const existingNative = (project.config.nativeTools ?? {}) as { enabled?: boolean; exclude?: string[] };
-  const nativeEnabled = (await checkboxSelect("Native Unreal tools (Epic 5.8)", [{
-    label: "Enable native Epic 5.8 MCP tools",
+  const nativeEnabled = (await checkboxSelect("Native Unreal tools (UE 5.8+)", [{
+    label: "Enable native Unreal MCP tools (UE 5.8+)",
     checked: existingNative.enabled !== false,
     suffix: "Wraps Unreal's ToolsetRegistry (GAS, Niagara, PCG, UMG, ...) as first-class actions in the matching categories",
   }], "Pass --yes with --native-tools or --no-native-tools."))[0];
