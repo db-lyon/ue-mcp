@@ -231,10 +231,15 @@ UE_MCP_CONTEXT_STRATEGY=lean. The default is micro; full lists every signature i
 }
 
 // Smallest surface (context.strategy = "micro", the default since #1172). The
-// entire ue-mcp API is reached through one gateway tool, mirroring the native
-// MCP toolset gateway (list_toolsets / describe_toolset / call_tool).
-function microInstructions(f: SurfaceFacts): string {
-  return `UE-MCP (micro mode): Unreal Engine editor bridge (C++ plugin). The entire surface (${f.categoryCount} categories, ${f.actionCount} actions) is reached through a single gateway tool to keep context tiny.
+// seed is one line and one gateway tool, held at or below the engine's own
+// tool-search surface by the context-tax gate; the rest is tools(action="guide").
+function microInstructions(): string {
+  return 'UE-MCP: Unreal Engine editor bridge. Every action and flow is behind the tools gateway; read tools(action="guide") before your first call.';
+}
+
+/** What tools(action="guide") answers in micro mode: the usage the seed leaves out. */
+function microGuideText(f: SurfaceFacts): string {
+  return `UE-MCP (micro mode): Unreal Engine editor bridge (C++ plugin). ${f.categoryCount} categories (${f.actionCount} actions) and the project's named flows, all reached through the one \`tools\` gateway.
 
 ═══ HOW TO USE ═══
 - tools(action="search", query="rotate clockwise") - find action signatures by intent
@@ -244,6 +249,7 @@ function microInstructions(f: SurfaceFacts): string {
 - tools(action="call", category="blueprint", method="create", args={ ... }) - invoke any action
 
 \`method\` is the action name; \`args\` is the object of that action's parameters.
+Every call also takes, in args or beside it: timeoutMs (how long to wait in ms, default 30s; a timeout never means the call did not happen, so read the state back before retrying), select and omit (result fields to keep or drop, as dotted paths).
 ${SIGNATURE_LEGEND}
 Start with: tools(action="call", category="project", method="get_status").
 
@@ -252,22 +258,28 @@ ${SPATIAL_GUIDANCE}
 In micro mode invoke it through tools(action="call", category="level", method="nudge_component", args={ ... }).
 
 ═══ CATEGORIES ═══
-${f.categories}.
+${f.categories}, flow.
 
 ═══ FLOWS ═══
-flow(action="run", flowName="<name>") runs a named sequence; see the \`flows\` field
-from tools(action="call", category="project", method="get_status").
+Before chaining 3+ calls, check the \`flows\` field from tools(action="call", category="project", method="get_status")
+and run a matching flow: tools(action="call", category="flow", method="run", args={flowName: "<name>"}).
+method="list" lists the flows; method="plan" shows one without running it.
 
 This micro surface is the default. context.strategy: lean or full in ue-mcp.yml (or
 UE_MCP_CONTEXT_STRATEGY) advertises the category tools directly instead.
 `;
 }
 
+/** The micro guide for the categories one gateway reaches. */
+export function microGuide(tools: readonly ToolDef[]): string {
+  return microGuideText(surfaceFacts(tools));
+}
+
 const DECLARED = surfaceFacts(ALL_TOOLS);
 
 export const SERVER_INSTRUCTIONS = fullInstructions(DECLARED);
 export const SERVER_INSTRUCTIONS_LEAN = leanInstructions(DECLARED);
-export const SERVER_INSTRUCTIONS_MICRO = microInstructions(DECLARED);
+export const SERVER_INSTRUCTIONS_MICRO = microInstructions();
 
 /**
  * One strategy's base text. Without `scope` it quotes the declared graph and is
@@ -276,7 +288,7 @@ export const SERVER_INSTRUCTIONS_MICRO = microInstructions(DECLARED);
  */
 export function strategyInstructions(strategy: ContextStrategy, scope?: readonly ToolDef[], feedback = true): string {
   const facts = scope || !feedback ? surfaceFacts(scope ?? ALL_TOOLS, feedback) : DECLARED;
-  return strategy === "micro" ? microInstructions(facts) : strategy === "lean" ? leanInstructions(facts) : fullInstructions(facts);
+  return strategy === "micro" ? microInstructions() : strategy === "lean" ? leanInstructions(facts) : fullInstructions(facts);
 }
 
 /**

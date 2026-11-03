@@ -26,7 +26,7 @@ The wizard:
 2. Asks which **tool categories** to enable (`level`, `blueprint`, `material`, `niagara`, etc.). All are checked on a fresh install. On a re-run, categories in `ue-mcp.yml`'s `disable` list stay unchecked.
 3. Asks whether to wrap **native Unreal tools** (the toolset registry in UE 5.8 and later) and which categories get them. See [Native Epic tools](configuration.md#native-epic-tools).
 4. Asks for the **context strategy**: `micro` (default), `lean` or `full`. See [Context strategy](configuration.md#context-strategy-full-lean-micro).
-5. Lists the MCP clients it detects (Claude Code project and global, Claude Desktop, Cursor, Codex) and writes the config for each one you keep checked. Project-scoped clients start checked; global and Desktop configs start unchecked because they affect every project on the machine.
+5. Lists the MCP clients it detects (Claude Code project and global, Claude Desktop, Cursor, VS Code, Gemini CLI, Codex project and global) and writes the config for each one you keep checked. Project-scoped clients start checked; global and Desktop configs start unchecked because they affect every project on the machine. A config that already holds an Unreal MCP entry also starts checked, and `init` names the entry before it asks. See [Replacing an Unreal MCP entry](#replacing-an-unreal-mcp-entry).
 6. Asks about **agent behavior**. Everything starts unchecked on a fresh install:
     - Enable the `feedback(submit)` tool.
     - With Claude Code selected: install a PostToolUse hook that nudges the agent to offer feedback after `execute_python`, and install the bundled Claude Code skills into `.claude/skills/`.
@@ -48,7 +48,7 @@ npx ue-mcp init --yes --json --project=C:/Games/MyGame/MyGame.uproject --clients
 | Flag | Meaning |
 |---|---|
 | `--project=<path>` | The `.uproject` or its directory. Default: the one in the current directory. |
-| `--clients=<ids>` | `claude-code`, `claude-code-global`, `claude-desktop`, `cursor`, `codex`. Unset keeps the clients already configured, or on a fresh project every detected project-scoped one. |
+| `--clients=<ids>` | `claude-code`, `claude-code-global`, `claude-desktop`, `cursor`, `vscode`, `gemini`, `codex` (`~/.codex/config.toml`), `codex-project` (`.codex/config.toml`). Unset keeps the clients already configured, or on a fresh project every detected project-scoped one, plus every client whose config holds an Unreal MCP entry. |
 | `--install=auto\|source\|binary` | `auto` (default) adopts what is installed, else source with a toolchain and binaries without. |
 | `--binaries=<dir\|zip\|url>` | Where prebuilt binaries come from. Also `UE_MCP_BINARIES`. Default is the GitHub release for the version. |
 | `--disable=<categories>` | Tool categories to turn off. |
@@ -60,6 +60,17 @@ npx ue-mcp init --yes --json --project=C:/Games/MyGame/MyGame.uproject --clients
 | `--dry-run` | Print the plan and change nothing. |
 
 Unset flags keep the project's current choices. The exit code is 0 on success, 1 on failure, 2 on bad arguments.
+
+### Replacing an Unreal MCP entry
+
+UE 5.9's built-in MCP server can write its own entry into the project's client configs, and its stdio proxy can rewrite `.mcp.json` to launch the proxy instead. `init` recognises both:
+
+- an entry named `unreal-mcp` with a `url` (or Gemini CLI's `httpUrl`) on `localhost` or `127.0.0.1`, in `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.gemini/settings.json` or `.codex/config.toml`;
+- the `unreal-mcp-proxy` entry `unreal_mcp_proxy install` writes in `.mcp.json`, which launches the proxy binary and keeps the HTTP entry under `_upstreamEntry`, or any entry that launches `unreal_mcp_proxy`.
+
+For each client you configure, `init` copies the config to `<file>.ue-mcp-backup`, removes those entries, and writes the `ue-mcp` entry. Every other server and setting in the file is kept. The output names each entry it replaced and the backup it saved, in the wizard and with `--yes`; `--json` reports it as a `replace:<client>` step, and `--dry-run` lists it under each client's `replaces`. To undo, copy the backup over the config. A client left out of `--clients`, or unchecked in the wizard, is not touched.
+
+With a source-built engine, the editor writes these files into the engine root (the folder holding `Engine/`) instead of the project. `init` resolves the project's engine the same way `ue-mcp build` does and, when that engine is a source build, also replaces the entries it finds there, with the same backup and reporting: `--json` reports `replace:<client>:engine-root` and `client:<client>:engine-root`, and `--dry-run` lists them under each client's `engineRootConfig`. An installed engine (one with `Engine/Build/InstalledBuild.txt`, such as a launcher install) writes into the project, so `init` never edits files in it.
 
 ### `ue-mcp status`
 
@@ -253,9 +264,38 @@ To skip `init`, install the bridge with `npx ue-mcp deploy` from the project dir
     }
     ```
 
+=== "VS Code"
+
+    `.vscode/mcp.json` in your project root. VS Code keys servers under `servers`:
+    ```json
+    {
+      "servers": {
+        "ue-mcp": {
+          "type": "stdio",
+          "command": "npx",
+          "args": ["-y", "--min-release-age=0", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
+        }
+      }
+    }
+    ```
+
+=== "Gemini CLI"
+
+    `.gemini/settings.json` in your project root:
+    ```json
+    {
+      "mcpServers": {
+        "ue-mcp": {
+          "command": "npx",
+          "args": ["-y", "--min-release-age=0", "ue-mcp@latest", "C:/path/to/MyGame.uproject"]
+        }
+      }
+    }
+    ```
+
 === "Codex"
 
-    `~/.codex/config.toml`:
+    `.codex/config.toml` in your project root (read once Codex trusts the project), or `~/.codex/config.toml`:
     ```toml
     [mcp_servers.ue-mcp]
     command = "npx"

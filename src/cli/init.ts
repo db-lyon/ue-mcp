@@ -9,6 +9,7 @@ import type { CliUsage } from "./cli-main.js";
 import { getInstalledHooks, type FeedbackMode } from "../config/user-state.js";
 import { coreSkillsInstalled } from "../extensions/skills.js";
 import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../integrations/claude-code/mcp-client-config.js";
+import { describeUnrealMcpEntry, findUnrealMcpEntries, type UnrealMcpEntry } from "../integrations/claude-code/unreal-mcp-entries.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
 import {
@@ -17,6 +18,8 @@ import {
   FEEDBACK_MODES,
   apply,
   bridgePort,
+  engineConfigRoot,
+  engineRootReplacements,
   plan,
   type ContextStrategy,
   type InitChoices,
@@ -274,14 +277,33 @@ async function init(argv: string[]): Promise<number | void> {
   console.log("");
 
   // 3. MCP clients. Global and Desktop configs affect every project, so they start unchecked.
-  const detected = detectMcpClients(project.projectDir!).filter((c) => c.detected);
+  // A source build's editor writes client configs into the engine root too.
+  const atEngineRoot = engineRootReplacements(engineConfigRoot(project));
+  const detected = detectMcpClients(project.projectDir!).filter((c) => c.detected || atEngineRoot.has(c.name));
   let selectedClients: string[] = [];
   if (detected.length > 0) {
-    const clientStates = await checkboxSelect("Configure MCP clients", detected.map((c) => ({
-      label: c.name,
-      checked: isProjectScopedClient(c.name),
-      suffix: c.configPath,
-    })), "Pass --yes with --clients <ids>.");
+    // A config holding an Unreal MCP entry starts checked, and the entry is replaced.
+    const replaces = detected.map((c) => findUnrealMcpEntries(c));
+    const report = (name: string, file: string, found: UnrealMcpEntry[]) =>
+      info(`${name}: ${file} has Unreal MCP entry ${found.map(describeUnrealMcpEntry).join(", ")}; ue-mcp replaces it and saves the file first`);
+    detected.forEach((c, i) => {
+      if (replaces[i].length > 0) report(c.name, c.configPath, replaces[i]);
+      const engine = atEngineRoot.get(c.name);
+      if (engine) report(c.name, engine.client.configPath, engine.replaces);
+    });
+    const names = (found: UnrealMcpEntry[]) => found.map((e) => `'${e.name}'`).join(", ");
+    const clientStates = await checkboxSelect("Configure MCP clients", detected.map((c, i) => {
+      const engine = atEngineRoot.get(c.name);
+      const notes = [
+        replaces[i].length > 0 ? `replaces ${names(replaces[i])}` : null,
+        engine ? `replaces ${names(engine.replaces)} in ${engine.client.configPath}` : null,
+      ].filter(Boolean);
+      return {
+        label: c.name,
+        checked: isProjectScopedClient(c.name) || replaces[i].length > 0 || !!engine,
+        suffix: notes.length > 0 ? `${c.configPath} (${notes.join("; ")})` : c.configPath,
+      };
+    }), "Pass --yes with --clients <ids>.");
     selectedClients = detected.filter((_, i) => clientStates[i]).map((c) => c.name);
   } else {
     warn("No MCP clients detected. Add this to your MCP client config:");

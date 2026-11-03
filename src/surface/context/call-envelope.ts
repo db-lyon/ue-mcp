@@ -82,6 +82,17 @@ export function strippingInputSchema(shape: Record<string, z.ZodTypeAny>): z.Zod
 }
 
 /**
+ * The flat input schema a tool is registered and advertised with. A tool whose
+ * parameters sit under a nested key (the micro gateway) passes undeclared keys
+ * through, so the routing keys it honours beside `args` reach dispatch without
+ * being advertised.
+ */
+export function flatInputSchema(tool: ToolDef, shape: Record<string, z.ZodTypeAny>): z.ZodTypeAny {
+  if (!tool.options?.nestedParamsKey) return strippingInputSchema(shape);
+  return z.looseObject(shape).meta({ additionalProperties: undefined });
+}
+
+/**
  * Flatten one call into the category's own parameter bag.
  *
  * Envelope: `{action, args: {...}}`, optionally with routing keys beside

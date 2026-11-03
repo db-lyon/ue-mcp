@@ -9,7 +9,8 @@
  *   node scripts/check-release-gates.mjs version-delta   patch-only bumps
  *   node scripts/check-release-gates.mjs count-markers   stamped counts are current
  *   node scripts/check-release-gates.mjs docs-freshness  handlers moved, docs did not
- *   node scripts/check-release-gates.mjs context-tax     every seed within its budget
+ *   node scripts/check-release-gates.mjs context-tax     every seed within its budget, the default
+ *                                                        at or below the engine's tool-search surface
  *   node scripts/check-release-gates.mjs behavioural-coverage
  *                                                        every action tested, exempt or a shrinking gap
  *   node scripts/check-release-gates.mjs integration-coverage
@@ -22,8 +23,11 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   BUDGETS,
+  DEFAULT_SEED,
+  ENGINE_SEED,
   TAX_MARKER_FILES,
   budgetProblems,
+  engineCeilingProblems,
   measureContextTax,
   staleStamps,
 } from "./context-tax.mjs";
@@ -307,7 +311,8 @@ function checkDocsFreshness() {
  * measured it. This measures every seed and the two discovery answers micro
  * relies on, fails when one is over its budget, and fails when a number
  * stamped in the docs has drifted more than the tolerance from the
- * measurement.
+ * measurement. The default seed must also cost no more than the engine's
+ * own tool-search surface.
  */
 async function checkContextTax() {
   let rows;
@@ -334,9 +339,16 @@ async function checkContextTax() {
         + "\n    Run `node scripts/context-tax.mjs --stamp` and commit what it changes.",
     );
   }
-  if (over.length > 0 || stale.length > 0) return 1;
+  const ceiling = engineCeilingProblems(rows);
+  if (ceiling.length > 0) {
+    console.error(
+      "context-tax     - default seed over the engine's tool-search surface:\n" + ceiling.map((l) => `      ${l}`).join("\n")
+        + "\n    The default strategy must cost no more than Unreal's own MCP surface. Shrink the micro seed.",
+    );
+  }
+  if (over.length > 0 || stale.length > 0 || ceiling.length > 0) return 1;
   const summary = Object.keys(BUDGETS).map((k) => `${k} ${rows[k].tokens}/${BUDGETS[k]}`).join(", ");
-  console.log(`context-tax     - within budget (${summary})`);
+  console.log(`context-tax     - within budget (${summary}; default ${rows[DEFAULT_SEED].tokens}/${rows[ENGINE_SEED].tokens} engine)`);
   return 0;
 }
 
