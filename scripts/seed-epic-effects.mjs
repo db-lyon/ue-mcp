@@ -22,9 +22,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadMergedCatalog } from "./lib/epic-catalog.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
 const EFFECTS = path.join(ROOT, "src", "tools", "epic", "effects.ts");
 
 // Leading verbs of Epic's own descriptions. These are what the sentence starts
@@ -93,9 +93,10 @@ const HEADER = `/**
  * What each wrapped engine tool does to the editor it is addressed to.
  *
  * This file is the reviewed half of the Epic action surface. The catalog in
- * \`tests/golden/epic-catalog.json\` says what tools exist and what arguments
- * they take; Epic ships no annotation saying whether one reads or writes, so
- * that judgement is made here, by a person, once, and lives in a diff.
+ * \`tests/golden/epic-catalog/\`, one snapshot per engine version, says what
+ * tools exist and what arguments they take; Epic ships no annotation saying
+ * whether one reads or writes, so that judgement is made here, by a person,
+ * once, and lives in a diff.
  *
  * It is hand-edited. \`npm run epic:seed\` only ADDS entries for tools that have
  * none, so re-recording a newer engine appends its new tools and never
@@ -111,14 +112,15 @@ const HEADER = `/**
  *   mutate   may change the editor, its project on disk, or its process.
  *   unknown  decided by an argument rather than by the tool. Gated as mutate.
  */
-import type { ActionEffect } from "../../types.js";
+import type { ActionEffect } from "../../core/types.js";
 
 /** Keyed by the tool's fully qualified registry name. */
 export const EPIC_TOOL_EFFECTS: Record<string, ActionEffect> = {
 `;
 
 function main() {
-  const catalog = JSON.parse(fs.readFileSync(CATALOG, "utf8"));
+  // Every recorded engine: a tool any of them carries needs a verdict.
+  const catalog = loadMergedCatalog();
   const previous = fs.existsSync(EFFECTS) ? existingEntries(fs.readFileSync(EFFECTS, "utf8")) : new Map();
 
   const rows = [];

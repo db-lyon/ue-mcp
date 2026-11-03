@@ -6,9 +6,20 @@
  *
  * Reads two checked-in inputs and writes one generated module per category:
  *
- *   tests/golden/epic-catalog.json   what the registry contains, recorded from
- *                                    a live editor by `npm run epic:record`.
- *   src/tools/epic/effects.ts        what each tool DOES, decided by a person.
+ *   tests/golden/epic-catalog/*.json  what the registry contains, one snapshot
+ *                                     per engine version, recorded from a live
+ *                                     editor by `npm run epic:record`.
+ *   src/tools/epic/effects.ts         what each tool DOES, decided by a person.
+ *
+ * The actions are the union across every recorded engine, merged by the rule
+ * in scripts/lib/epic-catalog.mjs: newest definition, union of properties,
+ * intersection of required. Each action's `epicTool.engines` names the engines
+ * carrying it, and dispatch refuses a call on a recorded engine outside that
+ * list with unsupported_engine_version. Action keys are claimed oldest engine
+ * first, so recording a newer engine never renames an existing action.
+ * `catalog-engines.ts` lists the recorded engines.
+ *
+ * Flags, for tests: --catalog-dir, --effects, --out-dir.
  *
  * The split is the point. The catalog is Epic's, and re-recording it must never
  * silently discard a judgement somebody made; the effects file is ours, is
@@ -35,10 +46,16 @@ import { fileURLToPath } from "node:url";
 // declares them. Run under tsx, so this reads the real export rather than
 // parsing the file.
 import { ROUTING_PARAMS } from "../src/surface/action-schema.js";
+import { CATALOG_DIR, compareEngines, loadSnapshots, mergeSnapshots } from "./lib/epic-catalog.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
-const OUT_DIR = path.join(ROOT, "src", "tools", "epic");
+const flag = (name, fallback) => {
+  const i = process.argv.indexOf(name);
+  return i >= 0 && process.argv[i + 1] ? path.resolve(process.argv[i + 1]) : fallback;
+};
+const CATALOG = flag("--catalog-dir", CATALOG_DIR);
+const OUT_DIR = flag("--out-dir", path.join(ROOT, "src", "tools", "epic"));
+const EFFECTS = flag("--effects", path.join(OUT_DIR, "effects.ts"));
 
 /* ── routing ────────────────────────────────────────────────────────────────
  * Which ue-mcp category an Epic toolset belongs in. Kept here rather than
@@ -215,62 +232,65 @@ function minifyProp(prop, depth) {
 const q = (s) => JSON.stringify(s);
 
 function main() {
-  if (!fs.existsSync(CATALOG)) {
-    throw new Error(`No catalog at ${path.relative(ROOT, CATALOG)}. Run \`npm run epic:record\` against a 5.8 editor first.`);
-  }
-  const catalog = JSON.parse(fs.readFileSync(CATALOG, "utf8"));
-
+  const snapshots = loadSnapshots(CATALOG);
+  const merged = mergeSnapshots(snapshots);
   const effects = loadEffects();
+
+  // Oldest engine first, so a tool an older engine already had keeps its key
+  // when a newer engine adds a same-named tool to the category.
+  const entries = merged.toolsets
+    .flatMap((ts) => ts.tools.map((tool) => ({ ts, tool })))
+    .sort((a, b) => compareEngines(a.tool.engines[0], b.tool.engines[0]));
 
   // category -> { actions: [...], params: Map<name, {kinds:Set, description}> }
   const byCategory = new Map();
   const missingEffects = [];
   let total = 0;
 
-  for (const ts of catalog.toolsets ?? []) {
+  for (const { ts, tool } of entries) {
     const category = routeToolset(ts.name);
     if (!byCategory.has(category)) byCategory.set(category, { actions: [], params: new Map(), keys: new Set(), needsInput: false });
     const bucket = byCategory.get(category);
+    total++;
+    const effect = effects.get(tool.name);
+    if (!effect) { missingEffects.push(tool.name); continue; }
 
-    for (const tool of ts.tools ?? []) {
-      if (!tool?.name) continue;
-      total++;
-      const effect = effects.get(tool.name);
-      if (!effect) { missingEffects.push(tool.name); continue; }
-
-      let key = actionKey(bareToolName(tool.name));
-      if (bucket.keys.has(key)) {
-        // Two toolsets in one category shipping the same bare name. Qualify
-        // with the toolset's own short name so both stay reachable.
-        const disc = actionKey(bareToolName(ts.name)).replace(/^epic_/, "");
-        key = `${key}__${disc}`;
-        if (bucket.keys.has(key)) continue;
-      }
-      bucket.keys.add(key);
-
-      const input = tool.inputSchema ?? {};
-      if (reservedArgs(input).length > 0) bucket.needsInput = true;
-      for (const [name, prop] of Object.entries(input.properties ?? {})) {
-        // Never declared: the category tool owns the name.
-        if (RESERVED_TOP_LEVEL.has(name)) continue;
-        if (!bucket.params.has(name)) bucket.params.set(name, { kinds: new Set(), description: "" });
-        const entry = bucket.params.get(name);
-        entry.kinds.add(kindOf(prop));
-        if (!entry.description && typeof prop?.description === "string") {
-          entry.description = prose(prop.description);
-        }
-      }
-
-      const summary = prose(tool.description) || bareToolName(tool.name);
-      bucket.actions.push({
-        key,
-        effect,
-        toolset: ts.name,
-        tool: tool.name,
-        description: `[Epic ${ts.name}] ${summary} ${paramsClause(input)}`.replace(/\s+/g, " ").trim(),
-        input,
-      });
+    let key = actionKey(bareToolName(tool.name));
+    if (bucket.keys.has(key)) {
+      // Two toolsets in one category shipping the same bare name. Qualify
+      // with the toolset's own short name so both stay reachable.
+      const disc = actionKey(bareToolName(ts.name)).replace(/^epic_/, "");
+      key = `${key}__${disc}`;
+      if (bucket.keys.has(key)) continue;
     }
+    bucket.keys.add(key);
+
+    const input = tool.inputSchema ?? {};
+    if (reservedArgs(input).length > 0) bucket.needsInput = true;
+    for (const [name, prop] of Object.entries(input.properties ?? {})) {
+      // Never declared: the category tool owns the name.
+      if (RESERVED_TOP_LEVEL.has(name)) continue;
+      if (!bucket.params.has(name)) bucket.params.set(name, { kinds: new Set(), description: "" });
+      const entry = bucket.params.get(name);
+      // Every engine's type for it, so a type that changed accepts either.
+      for (const s of tool.inputSchemas ?? [input]) if (s.properties?.[name]) entry.kinds.add(kindOf(s.properties[name]));
+      entry.kinds.add(kindOf(prop));
+      if (!entry.description && typeof prop?.description === "string") {
+        entry.description = prose(prop.description);
+      }
+    }
+
+    const summary = prose(tool.description) || bareToolName(tool.name);
+    const availability = availabilityClause(tool.engines, merged.engines);
+    bucket.actions.push({
+      key,
+      effect,
+      toolset: ts.name,
+      tool: tool.name,
+      engines: tool.engines,
+      description: `[Epic ${ts.name}] ${summary} ${availability}${paramsClause(input)}`.replace(/\s+/g, " ").trim(),
+      input,
+    });
   }
 
   if (missingEffects.length > 0) {
@@ -294,13 +314,24 @@ function main() {
 
   const index = [...byCategory.keys()].sort();
   fs.writeFileSync(path.join(OUT_DIR, "index.ts"), emitIndex(index));
+  fs.writeFileSync(path.join(OUT_DIR, "catalog-engines.ts"), emitEngines(merged.engines));
 
-  console.log(`generated ${total} actions across ${written.length} categories`);
+  console.log(`generated ${total} actions across ${written.length} categories from UE ${merged.engines.join(", ")}`);
   for (const [cat, n, p] of written) console.log(`  ${cat.padEnd(14)} ${String(n).padStart(4)} actions, ${p} parameters`);
 }
 
+/**
+ * Where a tool exists, stated in its description only when that is not every
+ * recorded engine, so a single-engine catalog adds nothing to the surface.
+ */
+function availabilityClause(engines, all) {
+  const absent = all.filter((e) => !engines.includes(e));
+  if (absent.length === 0) return "";
+  return `Available on UE ${engines.join(", ")}; absent from UE ${absent.join(", ")}. `;
+}
+
 function loadEffects() {
-  const file = path.join(OUT_DIR, "effects.ts");
+  const file = EFFECTS;
   if (!fs.existsSync(file)) return new Map();
   // Read the declarations out of the source rather than importing it: this
   // script runs against a tree whose generated modules may not compile yet.
@@ -316,7 +347,7 @@ function emitCategory(category, bucket) {
   const header =
 `// GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -361,7 +392,7 @@ import { bp } from "../../surface/category-tool.js";
       return { schemaConst, entry:
 `  ${safeKey(a.key)}: {
     epicSchema: ${constName(a.key)},
-    epicTool: { toolset: ${q(a.toolset)}, name: ${q(a.tool)} },
+    epicTool: { toolset: ${q(a.toolset)}, name: ${q(a.tool)}, engines: ${q(a.engines)} },
     ...bp(${q(a.effect)}, ${q(a.description)}, "epic_call_tool"),
   },` };
     });
@@ -374,6 +405,14 @@ import { bp } from "../../surface/category-tool.js";
     + `\n};\n\n`
     + `/** The parameters those actions accept, declared so the MCP layer stops stripping them. */\n`
     + `export const schema: Record<string, z.ZodType> = {\n${schemas}\n};\n`;
+}
+
+function emitEngines(engines) {
+  return `// GENERATED FILE - do not edit. See scripts/generate-epic-actions.mjs.
+
+/** Engine versions with a recorded toolset catalog, oldest first. */
+export const EPIC_CATALOG_ENGINES: readonly string[] = ${q(engines)};
+`;
 }
 
 function emitIndex(categories) {

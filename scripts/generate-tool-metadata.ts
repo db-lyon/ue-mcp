@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 import { ALL_TOOLS, enumerateBridgeActions } from "../src/tools.js";
 import { actionSignature } from "../src/surface/action-signature.js";
+import { loadMergedCatalog } from "./lib/epic-catalog.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..");
@@ -60,8 +61,8 @@ export interface Counts {
  *
  * The tool total comes from `ALL_TOOLS`, the same graph the server advertises,
  * so it cannot disagree with what a client is handed. The toolset total comes
- * from the recorded catalog, which is the only place that grouping is written
- * down, and the two are cross-checked.
+ * from the recorded catalogs, merged across engine versions, which are the only
+ * place that grouping is written down, and the two are cross-checked.
  *
  * This used to read `assets/epic-catalog.snapshot.json` inside a `try` that
  * returned zeros. The catalog moved to `tests/golden/epic-catalog.json` when
@@ -77,16 +78,12 @@ function computeNativeCounts(): { nativeToolsets: number; nativeToolActions: num
     (n, t) => n + Object.keys(t.actions).filter((a) => a.startsWith(EPIC_ACTION_PREFIX)).length,
     0,
   );
-  const catalogPath = path.join(repo, "tests", "golden", "epic-catalog.json");
-  const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8")) as {
-    toolsets?: Array<{ tools?: unknown[] }>;
-  };
-  const toolsets = catalog.toolsets ?? [];
+  const toolsets = (loadMergedCatalog() as { toolsets: Array<{ tools?: unknown[] }> }).toolsets;
   const recorded = toolsets.reduce((n, t) => n + (t.tools?.length ?? 0), 0);
   if (recorded !== declared || declared === 0) {
     throw new Error(
       `Wrapped Epic tool count disagrees: ALL_TOOLS declares ${declared} ${EPIC_ACTION_PREFIX}* ` +
-        `actions, tests/golden/epic-catalog.json records ${recorded}. ` +
+        `actions, tests/golden/epic-catalog/ records ${recorded} across its engines. ` +
         `Run \`npm run epic:generate\` (or re-record the catalog) before regenerating metadata.`,
     );
   }

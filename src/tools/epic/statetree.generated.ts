@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit.
 //
-// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog.json
+// Written by scripts/generate-epic-actions.mjs from tests/golden/epic-catalog/
 // and src/tools/epic/effects.ts. To change what an action DOES, edit the
 // effects file and regenerate; to pick up a new engine's toolsets, re-record
 // the catalog and regenerate.
@@ -27,47 +27,47 @@ const S_epic_get_transitions = {"properties":{"state":{"type":"object","properti
 export const actions: Record<string, ActionSpec> = {
   epic_get_children: {
     epicSchema: S_epic_get_children,
-    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_children" },
+    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_children", engines: ["5.8"] },
     ...bp("read", "[Epic state_tree_toolset.toolsets.state_tree.StateTreeTools] Returns child states of a state. Params: state", "epic_call_tool"),
   },
   epic_get_editor_data: {
     epicSchema: S_epic_get_editor_data,
-    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_editor_data" },
+    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_editor_data", engines: ["5.8"] },
     ...bp("read", "[Epic state_tree_toolset.toolsets.state_tree.StateTreeTools] Returns the editor data for a StateTree asset. Params: state_tree", "epic_call_tool"),
   },
   epic_get_enter_conditions: {
     epicSchema: S_epic_get_enter_conditions,
-    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_enter_conditions" },
+    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_enter_conditions", engines: ["5.8"] },
     ...bp("read", "[Epic state_tree_toolset.toolsets.state_tree.StateTreeTools] Returns enter conditions on a state. Params: state", "epic_call_tool"),
   },
   epic_get_evaluators: {
     epicSchema: S_epic_get_evaluators,
-    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_evaluators" },
+    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_evaluators", engines: ["5.8"] },
     ...bp("read", "[Epic state_tree_toolset.toolsets.state_tree.StateTreeTools] Returns global evaluators. Params: state_tree", "epic_call_tool"),
   },
   epic_get_global_tasks: {
     epicSchema: S_epic_get_global_tasks,
-    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_global_tasks" },
+    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_global_tasks", engines: ["5.8"] },
     ...bp("read", "[Epic state_tree_toolset.toolsets.state_tree.StateTreeTools] Returns global tasks that run across all states. Params: state_tree", "epic_call_tool"),
   },
   epic_get_node_description: {
     epicSchema: S_epic_get_node_description,
-    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_node_description" },
+    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_node_description", engines: ["5.8"] },
     ...bp("read", "[Epic state_tree_toolset.toolsets.state_tree.StateTreeTools] Returns a human-readable description for a node. Params: state_tree, node", "epic_call_tool"),
   },
   epic_get_root_states: {
     epicSchema: S_epic_get_root_states,
-    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_root_states" },
+    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_root_states", engines: ["5.8"] },
     ...bp("read", "[Epic state_tree_toolset.toolsets.state_tree.StateTreeTools] Returns top-level states of a StateTree. Params: state_tree", "epic_call_tool"),
   },
   epic_get_tasks: {
     epicSchema: S_epic_get_tasks,
-    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_tasks" },
+    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_tasks", engines: ["5.8"] },
     ...bp("read", "[Epic state_tree_toolset.toolsets.state_tree.StateTreeTools] Returns tasks on a state. Params: state", "epic_call_tool"),
   },
   epic_get_transitions: {
     epicSchema: S_epic_get_transitions,
-    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_transitions" },
+    epicTool: { toolset: "state_tree_toolset.toolsets.state_tree.StateTreeTools", name: "state_tree_toolset.toolsets.state_tree.StateTreeTools.get_transitions", engines: ["5.8"] },
     ...bp("read", "[Epic state_tree_toolset.toolsets.state_tree.StateTreeTools] Returns transitions on a state. Params: state", "epic_call_tool"),
   },
 };
