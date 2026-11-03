@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1212,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -26309,6 +26309,60 @@
       "category": "pie",
       "params": []
     },
+    "pie_view_trace": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "playerIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Local player index in the selected PIE world (default 0)"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "PIE instance id; omitted selects the active PIE world"
+        },
+        {
+          "name": "distance",
+          "type": "number",
+          "required": false,
+          "description": "Positive trace distance in cm (default 1000)"
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "Collision channel, including project-renamed channels (default Visibility)"
+        },
+        {
+          "name": "sweepRadius",
+          "type": "number",
+          "required": false,
+          "description": "Also sweep a sphere of this radius in cm when positive"
+        },
+        {
+          "name": "traceComplex",
+          "type": "boolean",
+          "required": false,
+          "description": "Trace per-triangle collision (default false)"
+        },
+        {
+          "name": "ignoreActors",
+          "type": "array",
+          "required": false,
+          "description": "Actor labels or paths to skip",
+          "items": "string"
+        },
+        {
+          "name": "ignorePawn",
+          "type": "boolean",
+          "required": false,
+          "description": "Ignore the viewing player's pawn (default true)"
+        }
+      ]
+    },
     "place_actor": {
       "category": "level",
       "params": [
@@ -26905,6 +26959,18 @@
     "query_components": {
       "category": "level",
       "params": [
+        {
+          "name": "includeCollision",
+          "type": "boolean",
+          "required": false,
+          "description": "Include component collision state (default false)"
+        },
+        {
+          "name": "collisionChannel",
+          "type": "string",
+          "required": false,
+          "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
+        },
         {
           "name": "componentClass",
           "type": "string",
@@ -41348,6 +41414,96 @@
           "type": "boolean",
           "required": false,
           "description": "Enable world bounds checks"
+        }
+      ]
+    },
+    "shape_trace": {
+      "category": "level",
+      "params": [
+        {
+          "name": "shape",
+          "type": "string",
+          "required": true,
+          "description": "sphere | box | capsule"
+        },
+        {
+          "name": "radius",
+          "type": "number",
+          "required": false,
+          "description": "Positive sphere or capsule radius in cm"
+        },
+        {
+          "name": "halfExtent",
+          "type": "vec3",
+          "required": false,
+          "description": "Positive box half extents in cm; axis aligned"
+        },
+        {
+          "name": "halfHeight",
+          "type": "number",
+          "required": false,
+          "description": "Capsule half height in cm, including caps; at least radius"
+        },
+        {
+          "name": "start",
+          "type": "vec3",
+          "required": false,
+          "description": "Ray start"
+        },
+        {
+          "name": "end",
+          "type": "vec3",
+          "required": false,
+          "description": "Ray end; pass end or direction and distance"
+        },
+        {
+          "name": "direction",
+          "type": "vec3",
+          "required": false,
+          "description": "Ray direction, normalised internally"
+        },
+        {
+          "name": "distance",
+          "type": "number",
+          "required": false,
+          "description": "Ray length when direction is given (default 200000)"
+        },
+        {
+          "name": "traceComplex",
+          "type": "boolean",
+          "required": false,
+          "description": "Trace per-triangle collision (default false)"
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "Collision channel (default Visibility)"
+        },
+        {
+          "name": "ignoreActors",
+          "type": "array",
+          "required": false,
+          "description": "Actor labels to skip",
+          "items": "string"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        },
+        {
+          "name": "multi",
+          "type": "boolean",
+          "required": false,
+          "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
         }
       ]
     },
