@@ -101,10 +101,10 @@ describe("discovery reads the registered surface in every strategy", () => {
     expect(describeAlpha.count).toBe(2);
 
     const listed = await (gateway.actions.list_categories as { handler: Function }).handler(ctx, {});
-    expect(listed.categories.map((c: { category: string }) => c.category)).toEqual(["alpha"]);
+    expect(listed.categories.map((c: { category: string }) => c.category)).toEqual(["alpha", "flow"]);
 
     const unfiltered = await (gateway.actions.list_categories as { handler: Function }).handler(ctxWith(null), {});
-    expect(unfiltered.count).toBe(2);
+    expect(unfiltered.count).toBe(3);
   });
 
   it("lean: the catalog and a category's describe skip withheld actions", async () => {

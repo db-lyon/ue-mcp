@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
 import { composeServerInstructions } from "../surface/context/instructions.js";
 import { fullSurfaceDescription } from "../surface/context/lean-context.js";
-import { envelopeInputSchema, envelopeShape, strippingInputSchema, usesArgsEnvelope } from "../surface/context/call-envelope.js";
+import { envelopeInputSchema, envelopeShape, flatInputSchema, strippingInputSchema, usesArgsEnvelope } from "../surface/context/call-envelope.js";
 import type { ToolDef } from "../core/types.js";
 import type { ContextStrategy } from "../surface/context/lean-context.js";
 import { withholdFromTool } from "../surface/registered-surface.js";
@@ -51,7 +51,12 @@ export function advertisedPresentation(
       inputSchema: envelopeInputSchema(view),
     };
   }
-  return { description: view.description, inputSchema: strippingInputSchema(view.schema) };
+  return { description: view.description, inputSchema: flatInputSchema(view, view.schema) };
+}
+
+/** Whether tools/list carries the flow tool. Micro reaches flows through its gateway. */
+export function advertisesFlowTool(strategy: ContextStrategy): boolean {
+  return strategy !== "micro";
 }
 
 export function createMcpServer(rt: Runtime): RuntimeServer {
@@ -86,6 +91,7 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
     client: () => server.server.getClientVersion(),
     // An MCP session's playtest runs follow `ue-mcp playtest mode`.
     gatePlaytest: true,
+    flow: { tool: rt.flowTool, ctx: rt.baseCtx },
   };
 
   // The upgrade notice leads this client's first tool response.
@@ -135,18 +141,21 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
     };
     const registration = envelope
       ? server.registerTool(tool.name, { description, inputSchema: envelopeInputSchema(tool) }, callback as never)
-      : server.registerTool(tool.name, { description, inputSchema: strippingInputSchema(shape) }, callback as never);
+      : server.registerTool(tool.name, { description, inputSchema: flatInputSchema(tool, shape) }, callback as never);
     registeredTools.set(tool.name, registration);
   }
 
   // ── Flow tool ────────────────────────────────────────────────────
-  const flowTool = rt.flowTool;
-  const flowShape: Record<string, z.ZodType> = { ...flowTool.schema };
-  const flowRegistration = server.registerTool(flowTool.name, { description: flowTool.description, inputSchema: strippingInputSchema(flowShape) }, ((rawParams: Record<string, unknown>) => {
-    claimElicit();
-    return withNotice(dispatchFlowCall(deps, flowTool, rt.baseCtx, rawParams)) as never;
-  }) as never);
-  registeredTools.set(flowTool.name, flowRegistration);
+  // In micro mode flow is a gateway category (deps.flow), not a second tool.
+  if (advertisesFlowTool(contextStrategy)) {
+    const flowTool = rt.flowTool;
+    const flowShape: Record<string, z.ZodType> = { ...flowTool.schema };
+    const flowRegistration = server.registerTool(flowTool.name, { description: flowTool.description, inputSchema: strippingInputSchema(flowShape) }, ((rawParams: Record<string, unknown>) => {
+      claimElicit();
+      return withNotice(dispatchFlowCall(deps, flowTool, rt.baseCtx, rawParams)) as never;
+    }) as never);
+    registeredTools.set(flowTool.name, flowRegistration);
+  }
 
   // Re-advertise whenever targeting or what the plugins registered changes.
   let parityKey: string | null = null;

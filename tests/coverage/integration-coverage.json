@@ -1036,7 +1036,7 @@
         {
           "suite": "integration",
           "file": "tests/integration/server-startup.test.ts",
-          "test": "micro advertises the gateway and flow, and says how to use them"
+          "test": "micro advertises only the gateway, which guides, reaches flows and passes routing keys through"
         }
       ]
     },

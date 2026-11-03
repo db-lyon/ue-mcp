@@ -51,7 +51,7 @@ describe("upgrade notice", () => {
       expectNotice(first.text);
       expect(JSON.parse(first.blocks[1]).projectName).toBe("Game");
       expect((await info(server)).text).not.toContain(NOTICE);
-      expect((await server.call("flow", { action: "list" })).text).not.toContain(NOTICE);
+      expect((await server.callFlow({ action: "list" })).text).not.toContain(NOTICE);
     } finally {
       await server.close();
     }

@@ -10,6 +10,7 @@ import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from 
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
+import { microFlowCall } from "../surface/context/micro-context.js";
 import {
   routeEditorCall,
   callSubject,
@@ -169,6 +170,8 @@ export interface DispatchDeps {
    * caller enforces its own rules.
    */
   gatePlaytest?: boolean;
+  /** The flow route a micro gateway call to the flow category takes. */
+  flow?: { tool: ToolDef; ctx: ToolContext };
 }
 
 /** Window actions that can remove the window the dialog gate is holding (#1231). */
@@ -211,6 +214,7 @@ export async function dispatchCategoryCall(
 ): Promise<ToolResult> {
   const { sessions, loads } = deps;
   let rawParams: Record<string, unknown>;
+  let flowParams: Record<string, unknown> | null = null;
   try {
     if (envelope) {
       const flat = unwrapArgsEnvelope(tool, callArgs);
@@ -222,6 +226,7 @@ export async function dispatchCategoryCall(
     } else {
       rawParams = callArgs;
     }
+    flowParams = deps.flow ? microFlowCall(tool, rawParams) : null;
   } catch (e) {
     // Thrown to the SDK, which words it exactly as its own validation did.
     if (e instanceof SdkMcpError) throw e;
@@ -229,6 +234,7 @@ export async function dispatchCategoryCall(
     const code = e instanceof McpError ? e.code : ErrorCode.INVALID_PARAMS;
     return errorResult(code, msg);
   }
+  if (flowParams && deps.flow) return dispatchFlowCall(deps, deps.flow.tool, deps.flow.ctx, flowParams);
   let routed: RoutedCall;
   try {
     routed = routeEditorCall(tool, rawParams, sessions);
