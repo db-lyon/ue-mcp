@@ -70,6 +70,8 @@ UE 5.9's built-in MCP server can write its own entry into the project's client c
 
 For each client you configure, `init` copies the config to `<file>.ue-mcp-backup`, removes those entries, and writes the `ue-mcp` entry. Every other server and setting in the file is kept. The output names each entry it replaced and the backup it saved, in the wizard and with `--yes`; `--json` reports it as a `replace:<client>` step, and `--dry-run` lists it under each client's `replaces`. To undo, copy the backup over the config. A client left out of `--clients`, or unchecked in the wizard, is not touched.
 
+With a source-built engine, the editor writes these files into the engine root (the folder holding `Engine/`) instead of the project. `init` resolves the project's engine the same way `ue-mcp build` does and, when that engine is a source build, also replaces the entries it finds there, with the same backup and reporting: `--json` reports `replace:<client>:engine-root` and `client:<client>:engine-root`, and `--dry-run` lists them under each client's `engineRootConfig`. An installed engine (one with `Engine/Build/InstalledBuild.txt`, such as a launcher install) writes into the project, so `init` never edits files in it.
+
 ### `ue-mcp status`
 
 ```bash
