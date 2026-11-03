@@ -13,7 +13,7 @@ import { PACKAGE_VERSION, plain, REPO_ROOT, runCli, Sandbox, snapshotTree, type 
 const IS_WINDOWS = process.platform === "win32";
 const PLATFORM = IS_WINDOWS ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux";
 const HOOK_MATCHER = "mcp__ue-mcp__editor";
-const ALL_CLIENTS = "claude-code,claude-code-global,claude-desktop,cursor,codex";
+const ALL_CLIENTS = "claude-code,claude-code-global,claude-desktop,cursor,vscode,gemini,codex,codex-project";
 
 let sb: Sandbox;
 let fakeNpm: string;
@@ -102,7 +102,7 @@ describe("init --yes", () => {
   });
 
   it("deploys the bridge, enables it, and writes config, client entries, the hook and skills", () => {
-    covers("cli.init.yes");
+    covers("cli.init.yes", "cli.init.clients");
     expect(first.code, first.stdout + first.stderr).toBe(0);
     const dir = path.dirname(uproject);
 
@@ -122,15 +122,24 @@ describe("init --yes", () => {
       path.join(sb.home, ".claude", ".mcp.json"),
       path.join(sb.home, "AppData", "Roaming", "Claude", "claude_desktop_config.json"),
       path.join(dir, ".cursor", "mcp.json"),
+      path.join(dir, ".gemini", "settings.json"),
     ]) {
       const entry = ueMcpEntry(config);
       expect(entry, config).toBeDefined();
       // The machine path pins the exact version so server and bridge move together.
       expect(entry.args).toEqual(["-y", "--min-release-age=0", `ue-mcp@${PACKAGE_VERSION}`, serves]);
     }
-    const codex = fs.readFileSync(path.join(sb.home, ".codex", "config.toml"), "utf8");
-    expect(codex).toContain("[mcp_servers.ue-mcp]");
-    expect(codex).toContain(`ue-mcp@${PACKAGE_VERSION}`);
+    // VS Code keys its servers under `servers` and documents type stdio.
+    expect(readJson(path.join(dir, ".vscode", "mcp.json")).servers["ue-mcp"]).toEqual({
+      type: "stdio",
+      command: "npx",
+      args: ["-y", "--min-release-age=0", `ue-mcp@${PACKAGE_VERSION}`, serves],
+    });
+    for (const toml of [path.join(sb.home, ".codex", "config.toml"), path.join(dir, ".codex", "config.toml")]) {
+      const codex = fs.readFileSync(toml, "utf8");
+      expect(codex, toml).toContain("[mcp_servers.ue-mcp]");
+      expect(codex, toml).toContain(`ue-mcp@${PACKAGE_VERSION}`);
+    }
 
     const settings = path.join(dir, ".claude", "settings.json");
     expect(hasHookMatcher(settings)).toBe(true);

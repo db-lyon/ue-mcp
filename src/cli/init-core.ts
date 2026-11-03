@@ -103,7 +103,10 @@ export const CLIENT_IDS: Record<string, string> = {
   "claude-code-global": "Claude Code (global)",
   "claude-desktop": "Claude Desktop",
   cursor: "Cursor",
+  vscode: "VS Code",
+  gemini: "Gemini CLI",
   codex: "Codex",
+  "codex-project": "Codex (project)",
 };
 
 export function clientId(name: string): string {

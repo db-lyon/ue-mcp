@@ -32,6 +32,11 @@
       "summary": "ue-mcp init --yes on a bare project deploys the bridge, edits the .uproject, writes ue-mcp.yml, client configs, hooks and skills"
     },
     {
+      "id": "cli.init.clients",
+      "group": "cli",
+      "summary": "ue-mcp init writes the ue-mcp entry for Claude Code, Claude Desktop, Cursor, VS Code, Gemini CLI and Codex at the paths and in the shapes each client reads"
+    },
+    {
       "id": "cli.init.json",
       "group": "cli",
       "summary": "ue-mcp init --json prints one machine-readable result on stdout and nothing else"

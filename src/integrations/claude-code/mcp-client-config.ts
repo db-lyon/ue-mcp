@@ -63,7 +63,17 @@ export interface McpClient {
   configPath: string;
   detected: boolean;
   format: McpClientConfigFormat;
+  /** JSON key holding the servers. VS Code uses `servers`; the rest `mcpServers`. */
+  serversKey?: string;
+  /** Write `type: "stdio"` into the entry, as VS Code documents it. */
+  stdioType?: boolean;
 }
+
+export type ClientShape = Pick<McpClient, "configPath" | "format" | "serversKey">;
+
+export const serversKeyOf = (client: Pick<McpClient, "serversKey">): string => client.serversKey ?? "mcpServers";
+
+const PROJECT_SCOPED = new Set(["Cursor", "VS Code", "Gemini CLI"]);
 
 /**
  * Project-scoped clients write their MCP config alongside the .uproject,
@@ -71,7 +81,7 @@ export interface McpClient {
  * every project the user opens - they should not be opted in by default.
  */
 export function isProjectScopedClient(clientName: string): boolean {
-  return clientName.includes("(project)") || clientName === "Cursor";
+  return clientName.includes("(project)") || PROJECT_SCOPED.has(clientName);
 }
 
 export function detectMcpClients(projectDir: string): McpClient[] {
@@ -132,6 +142,33 @@ export function detectMcpClients(projectDir: string): McpClient[] {
     format: "toml",
   });
 
+  const vscodeMcp = path.join(projectDir, ".vscode", "mcp.json");
+  clients.push({
+    name: "VS Code",
+    configPath: vscodeMcp,
+    detected: fs.existsSync(path.join(projectDir, ".vscode")),
+    format: "json",
+    serversKey: "servers",
+    stdioType: true,
+  });
+
+  const geminiSettings = path.join(projectDir, ".gemini", "settings.json");
+  clients.push({
+    name: "Gemini CLI",
+    configPath: geminiSettings,
+    detected: fs.existsSync(path.join(projectDir, ".gemini")) || fs.existsSync(path.join(home, ".gemini")),
+    format: "json",
+  });
+
+  // Codex reads a project's .codex/config.toml once the project is trusted.
+  const codexProject = path.join(projectDir, ".codex", "config.toml");
+  clients.push({
+    name: "Codex (project)",
+    configPath: codexProject,
+    detected: fs.existsSync(path.join(projectDir, ".codex")) || fs.existsSync(path.dirname(codexConfig)),
+    format: "toml",
+  });
+
   return clients;
 }
 
@@ -156,11 +193,11 @@ function entryFromArgs(command: string | null, args: string[]): UeMcpEntry {
 }
 
 /** The ue-mcp entry in a client's config: whether there is one, its pin, command and project. */
-export function readUeMcpEntry(client: Pick<McpClient, "configPath" | "format">): UeMcpEntry {
+export function readUeMcpEntry(client: ClientShape): UeMcpEntry {
   try {
     const raw = fs.readFileSync(client.configPath, "utf-8");
     if (client.format === "json") {
-      const entry = JSON.parse(raw)?.mcpServers?.["ue-mcp"];
+      const entry = JSON.parse(raw)?.[serversKeyOf(client)]?.["ue-mcp"];
       if (!entry) return NO_ENTRY;
       const args: string[] = Array.isArray(entry.args) ? entry.args.map(String) : [];
       return entryFromArgs(typeof entry.command === "string" ? entry.command : null, args);
@@ -180,7 +217,7 @@ export function readUeMcpEntry(client: Pick<McpClient, "configPath" | "format">)
 }
 
 /** Remove the ue-mcp entry from a client's config, leaving everything else. True when one was removed. */
-export function removeUeMcpEntry(client: Pick<McpClient, "configPath" | "format">): boolean {
+export function removeUeMcpEntry(client: ClientShape): boolean {
   if (!fs.existsSync(client.configPath)) return false;
   const raw = fs.readFileSync(client.configPath, "utf-8");
   if (client.format === "toml") {
@@ -189,9 +226,10 @@ export function removeUeMcpEntry(client: Pick<McpClient, "configPath" | "format"
     fs.writeFileSync(client.configPath, next ? `${next}\n` : "");
     return true;
   }
-  const parsed = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
-  if (!parsed.mcpServers || !("ue-mcp" in parsed.mcpServers)) return false;
-  delete parsed.mcpServers["ue-mcp"];
+  const parsed = JSON.parse(raw) as Record<string, Record<string, unknown> | undefined>;
+  const servers = parsed[serversKeyOf(client)];
+  if (!servers || !("ue-mcp" in servers)) return false;
+  delete servers["ue-mcp"];
   fs.writeFileSync(client.configPath, JSON.stringify(parsed, null, 2));
   return true;
 }
@@ -201,13 +239,13 @@ export function removeUeMcpEntry(client: Pick<McpClient, "configPath" | "format"
  * entry, leaving its command, spec and projects as they are. True when the
  * config changed.
  */
-export function liftAgeGateInEntry(client: Pick<McpClient, "configPath" | "format">): boolean {
+export function liftAgeGateInEntry(client: ClientShape): boolean {
   if (!fs.existsSync(client.configPath)) return false;
   const raw = fs.readFileSync(client.configPath, "utf-8");
   const isSpec = (a: string) => a === "ue-mcp" || a.startsWith("ue-mcp@");
   if (client.format === "json") {
-    const parsed = JSON.parse(raw) as { mcpServers?: Record<string, { args?: unknown[] }> };
-    const args = parsed.mcpServers?.["ue-mcp"]?.args;
+    const parsed = JSON.parse(raw) as Record<string, Record<string, { args?: unknown[] }> | undefined>;
+    const args = parsed[serversKeyOf(client)]?.["ue-mcp"]?.args;
     if (!Array.isArray(args) || liftsAgeGate(args.map(String))) return false;
     const at = args.findIndex((a) => typeof a === "string" && isSpec(a));
     if (at < 0) return false;
@@ -234,11 +272,16 @@ export function writeMcpConfig(client: McpClient, uprojectPath: string, launch: 
   if (client.format === "toml") {
     writeCodexMcpConfig(client.configPath, uprojectPath, launch);
   } else {
-    writeJsonMcpConfig(client.configPath, uprojectPath, launch);
+    writeJsonMcpConfig(client.configPath, uprojectPath, launch, client);
   }
 }
 
-export function writeJsonMcpConfig(configPath: string, uprojectPath: string, launch: ServerLaunch = {}): void {
+export function writeJsonMcpConfig(
+  configPath: string,
+  uprojectPath: string,
+  launch: ServerLaunch = {},
+  shape: Pick<McpClient, "serversKey" | "stdioType"> = {},
+): void {
   let existing: Record<string, unknown> = {};
   if (fs.existsSync(configPath)) {
     try {
@@ -248,12 +291,14 @@ export function writeJsonMcpConfig(configPath: string, uprojectPath: string, lau
     }
   }
 
-  const mcpServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
-  mcpServers["ue-mcp"] = {
+  const key = serversKeyOf(shape);
+  const servers = (existing[key] ?? {}) as Record<string, unknown>;
+  servers["ue-mcp"] = {
+    ...(shape.stdioType ? { type: "stdio" } : {}),
     command: launch.command ?? "npx",
     args: ueMcpServerArgs(uprojectPath, launch),
   };
-  existing.mcpServers = mcpServers;
+  existing[key] = servers;
 
   const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
