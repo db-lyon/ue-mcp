@@ -402,6 +402,16 @@
       "summary": "tool calls with no editor running answer with a clear not-connected result instead of hanging"
     },
     {
+      "id": "server.resources",
+      "group": "server",
+      "summary": "resources/list and resources/read serve the resources registered with Epic's Unreal MCP plugin in the active editor, and list nothing without one"
+    },
+    {
+      "id": "server.media-content",
+      "group": "server",
+      "summary": "an image or audio a bridge result carries in media comes back as MCP image or audio content, not base64 inside the JSON text"
+    },
+    {
       "id": "gateway.list_categories",
       "group": "gateway",
       "summary": "tools(list_categories) lists every category with a summary"

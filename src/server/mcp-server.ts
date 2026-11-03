@@ -24,6 +24,7 @@ import {
   type ToolResult,
 } from "../dispatch/server-dispatch.js";
 import type { Runtime } from "./runtime.js";
+import { announceResourceChange, registerEditorResources } from "./editor-resources.js";
 
 export interface RuntimeServer {
   server: McpServer;
@@ -157,6 +158,9 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
     registeredTools.set(flowTool.name, flowRegistration);
   }
 
+  // Resources registered with Epic's Unreal MCP plugin in the active editor.
+  registerEditorResources(server, () => sessions.active.guarded);
+
   // Re-advertise whenever targeting or what the plugins registered changes.
   let parityKey: string | null = null;
   const sync = (force: boolean): void => {
@@ -167,7 +171,11 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
     for (const tool of rt.targetable) advertise(tool, have);
   };
   sync(true);
-  const unsubscribe = rt.onSurfaceChanged(() => sync(true));
+  const unsubscribe = rt.onSurfaceChanged(() => {
+    sync(true);
+    // An editor that connected or changed may serve different resources.
+    announceResourceChange(server);
+  });
 
   return { server, dispose: unsubscribe };
 }
