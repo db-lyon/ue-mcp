@@ -36,4 +36,19 @@ private:
 	// Execute a registered tool as an AI agent would. Params: toolset, tool,
 	// input? (object) | inputJson? (string). Returns the tool's JSON result.
 	static TSharedPtr<FJsonValue> CallTool(const TSharedPtr<FJsonObject>& Params);
+
+	// Epic's Unreal MCP plugin keeps a tool list of its own beside the registry:
+	// legacy Tool Library Blueprints, tools other plugins register, and its
+	// adapters onto the registry. EpicHandlers_MCP.cpp; 5.8+ with the plugin enabled.
+	static TSharedPtr<FJsonValue> ListMCPTools(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CallMCPTool(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListMCPResources(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadMCPResource(const TSharedPtr<FJsonObject>& Params);
 };
+
+// Shared by the two Epic handler files.
+namespace UEMCPEpic
+{
+	/** Every registered toolset schema as the registry's JSON array string; false when the registry is absent. */
+	bool GetAllSchemas(FString& Out);
+}

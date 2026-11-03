@@ -61,6 +61,11 @@
 			"Optional": true
 		},
 		{
+			"Name": "UEMCPEpicMCPFixture",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
 			"Name": "AllToolsets",
 			"Enabled": true,
 			"Optional": true

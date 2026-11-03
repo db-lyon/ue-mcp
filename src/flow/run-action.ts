@@ -104,10 +104,10 @@ export async function runBridge(
   // The caller's budget wins over the action's authored one: an action that
   // declares 120s is stating a floor it needs, not a ceiling.
   // Progress and cancellation reach the editor for a handler that defers its answer.
-  const sent = await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs, {
-    onProgress: ctx.onProgress,
-    signal: ctx.signal,
-  });
+  const live = ctx.onProgress || ctx.signal ? { onProgress: ctx.onProgress, signal: ctx.signal } : undefined;
+  const sent = live
+    ? await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs, live)
+    : await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs);
   const answered = followUp ? await followUp(ctx, params, sent) : sent;
   const raw = finishCall(answered, pipeline);
   if (typeof raw !== "object" || raw === null) {

@@ -79,6 +79,7 @@ const MODAL_SAFE_METHODS = new Set([
   "get_bridge_capabilities",
   "get_param_echo",
   "clear_param_echo",
+  "cancel_request",
 ]);
 
 export function isModalSafeMethod(method: string): boolean {
