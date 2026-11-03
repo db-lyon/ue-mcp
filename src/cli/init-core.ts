@@ -37,6 +37,12 @@ import {
   type McpClient,
   type ServerLaunch,
 } from "../integrations/claude-code/mcp-client-config.js";
+import {
+  describeUnrealMcpEntry,
+  findUnrealMcpEntries,
+  removeUnrealMcpEntries,
+  type UnrealMcpEntry,
+} from "../integrations/claude-code/unreal-mcp-entries.js";
 import { packageVersion } from "../core/package-root.js";
 import { warn as logWarn } from "../core/log.js";
 import { readEnv } from "../core/env.js";
@@ -192,6 +198,8 @@ export interface PlannedClient {
   detected: boolean;
   projectScoped: boolean;
   selected: boolean;
+  /** Unreal MCP entries in this config that writing the ue-mcp entry replaces. */
+  replaces: UnrealMcpEntry[];
 }
 
 export interface InitPlan {
@@ -323,18 +331,22 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
     if (!detected.some((c) => c.name === name)) blockers.push(`unknown client '${name}' (known: ${Object.keys(CLIENT_IDS).join(", ")})`);
   }
   const configured = detected.filter((c) => readUeMcpEntry(c).configured).map((c) => c.name);
-  const clients: PlannedClient[] = detected.map((c) => ({
-    id: clientId(c.name),
-    name: c.name,
-    configPath: c.configPath,
-    detected: c.detected,
-    projectScoped: isProjectScopedClient(c.name),
-    selected: wantedClients
-      ? wantedClients.includes(c.name)
-      : configured.length > 0
-        ? configured.includes(c.name)
-        : c.detected && isProjectScopedClient(c.name),
-  }));
+  const clients: PlannedClient[] = detected.map((c) => {
+    const replaces = findUnrealMcpEntries(c);
+    return {
+      id: clientId(c.name),
+      name: c.name,
+      configPath: c.configPath,
+      detected: c.detected,
+      projectScoped: isProjectScopedClient(c.name),
+      // A config holding an Unreal MCP entry is selected unless --clients says otherwise.
+      selected: wantedClients
+        ? wantedClients.includes(c.name)
+        : replaces.length > 0
+          || (configured.length > 0 ? configured.includes(c.name) : c.detected && isProjectScopedClient(c.name)),
+      replaces,
+    };
+  });
 
   const claudeCode = clients.some((c) => c.selected && c.name.startsWith("Claude Code"));
   const settingsPath = path.join(projectDir, ".claude", "settings.json");
@@ -597,6 +609,15 @@ export async function apply(p: InitPlan): Promise<InitResult> {
     for (const c of p.clients.filter((x) => x.selected)) {
       const client = detected.find((d) => d.name === c.name) as McpClient;
       const before = fs.existsSync(client.configPath) ? fs.readFileSync(client.configPath, "utf-8") : null;
+      const replaced = removeUnrealMcpEntries(client);
+      if (replaced.backup) {
+        steps.push({
+          id: `replace:${c.id}`,
+          status: "changed",
+          target: client.configPath,
+          detail: `replaced Unreal MCP entry ${replaced.removed.map(describeUnrealMcpEntry).join(", ")} with ue-mcp; the previous file is saved as ${replaced.backup}`,
+        });
+      }
       writeMcpConfig(client, uproject, p.launch);
       const after = fs.readFileSync(client.configPath, "utf-8");
       steps.push({ id: `client:${c.id}`, status: after === before ? "unchanged" : "changed", target: client.configPath, detail: `${c.name} MCP server entry` });

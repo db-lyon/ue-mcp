@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
 import { ENTRY, plain, runCli, Sandbox, snapshotTree, TSX } from "./harness.js";
 import { fakeSigning } from "./feedback-fakes.js";
+import { UNREAL_CLIENT_FIXTURES, UNREAL_URL } from "../helpers/unreal-mcp-fixtures.js";
 
 type Pty = typeof import("node-pty");
 let pty: Pty | null = null;
@@ -108,6 +109,35 @@ describe("interactive init", () => {
     expect(fs.existsSync(path.join(projectDir, "Plugins", "UE_MCP_Bridge", "UE_MCP_Bridge.uplugin"))).toBe(true);
     const mcp = JSON.parse(fs.readFileSync(path.join(projectDir, ".mcp.json"), "utf8")) as { mcpServers: Record<string, unknown> };
     expect(Object.keys(mcp.mcpServers)).toContain("ue-mcp");
+  });
+});
+
+describe("interactive init over an Unreal MCP entry", () => {
+  it.runIf(pty !== null || process.env.CI !== undefined)("names the entry before asking, starts its client checked, and replaces it", async () => {
+    covers("cli.init.replace-unreal-mcp");
+    const uproject = sb.makeProject("AskedReplace");
+    const projectDir = path.dirname(uproject);
+    const vscode = UNREAL_CLIENT_FIXTURES.find((f) => f.id === "vscode")!;
+    const config = path.join(projectDir, vscode.file);
+    fs.mkdirSync(path.dirname(config), { recursive: true });
+    fs.writeFileSync(config, vscode.content);
+
+    const r = await runInTerminal(["init", uproject, "--install", "source"], projectDir, [
+      { prompt: "Tool categories", keys: [ENTER] },
+      { prompt: "Native Unreal tools", keys: [ENTER] },
+      { prompt: "Include native tools in these categories", keys: [ENTER] },
+      { prompt: "Context strategy", keys: [ENTER] },
+      // VS Code is the only client detected, and starts checked.
+      { prompt: "Configure MCP clients", keys: [ENTER] },
+      { prompt: "Agent behavior", keys: [ENTER] },
+    ]);
+
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain(`has Unreal MCP entry 'unreal-mcp' (${UNREAL_URL}); ue-mcp replaces it`);
+    expect(r.output).toContain("replaced Unreal MCP entry 'unreal-mcp'");
+    const servers = JSON.parse(fs.readFileSync(config, "utf8")).servers as Record<string, unknown>;
+    expect(Object.keys(servers).sort()).toEqual(["my-existing-server", "ue-mcp"]);
+    expect(fs.readFileSync(`${config}.ue-mcp-backup`, "utf8")).toBe(vscode.content);
   });
 });
 

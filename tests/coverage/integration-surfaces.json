@@ -37,6 +37,11 @@
       "summary": "ue-mcp init writes the ue-mcp entry for Claude Code, Claude Desktop, Cursor, VS Code, Gemini CLI and Codex at the paths and in the shapes each client reads"
     },
     {
+      "id": "cli.init.replace-unreal-mcp",
+      "group": "cli",
+      "summary": "ue-mcp init finds an Unreal MCP entry (the editor's HTTP server or its stdio proxy) in a client config, selects that client, replaces the entry with ue-mcp, keeps every other server, saves the file first and says what it replaced, with and without prompts"
+    },
+    {
       "id": "cli.init.json",
       "group": "cli",
       "summary": "ue-mcp init --json prints one machine-readable result on stdout and nothing else"

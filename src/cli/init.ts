@@ -9,6 +9,7 @@ import type { CliUsage } from "./cli-main.js";
 import { getInstalledHooks, type FeedbackMode } from "../config/user-state.js";
 import { coreSkillsInstalled } from "../extensions/skills.js";
 import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../integrations/claude-code/mcp-client-config.js";
+import { describeUnrealMcpEntry, findUnrealMcpEntries } from "../integrations/claude-code/unreal-mcp-entries.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
 import {
@@ -277,10 +278,15 @@ async function init(argv: string[]): Promise<number | void> {
   const detected = detectMcpClients(project.projectDir!).filter((c) => c.detected);
   let selectedClients: string[] = [];
   if (detected.length > 0) {
-    const clientStates = await checkboxSelect("Configure MCP clients", detected.map((c) => ({
+    // A config holding an Unreal MCP entry starts checked, and the entry is replaced.
+    const replaces = detected.map((c) => findUnrealMcpEntries(c));
+    detected.forEach((c, i) => {
+      if (replaces[i].length > 0) info(`${c.name}: ${c.configPath} has Unreal MCP entry ${replaces[i].map(describeUnrealMcpEntry).join(", ")}; ue-mcp replaces it and saves the file first`);
+    });
+    const clientStates = await checkboxSelect("Configure MCP clients", detected.map((c, i) => ({
       label: c.name,
-      checked: isProjectScopedClient(c.name),
-      suffix: c.configPath,
+      checked: isProjectScopedClient(c.name) || replaces[i].length > 0,
+      suffix: replaces[i].length > 0 ? `${c.configPath} (replaces ${replaces[i].map((e) => `'${e.name}'`).join(", ")})` : c.configPath,
     })), "Pass --yes with --clients <ids>.");
     selectedClients = detected.filter((_, i) => clientStates[i]).map((c) => c.name);
   } else {
