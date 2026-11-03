@@ -18,7 +18,7 @@ configured.
 
 | Capability | Engine support |
 |------------|----------------|
-| `begin_control_rig_edit`, `read_control_rig_edit`, `capture_control_rig_pose`, `apply_control_rig_edits`, `bake_control_rig_edit` | UE 5.8 only. Older engines return `unsupported_engine_version`; there is no fallback to raw bone tracks |
+| `begin_control_rig_edit`, `read_control_rig_edit`, `capture_control_rig_pose`, `apply_control_rig_edits`, `bake_control_rig_edit` | UE 5.8 and later. Older engines return `unsupported_engine_version`; there is no fallback to raw bone tracks |
 | `configure_ik_rig`, `configure_ik_retargeter` | UE 5.8 and later, same error on older engines |
 | `analyze_animation` | Every supported engine |
 | Other IK Rig and IK Retargeter create/read actions | See each action in the [tool reference](tool-reference.md) |
