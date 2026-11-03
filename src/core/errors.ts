@@ -18,6 +18,8 @@ export enum ErrorCode {
   /** Another session holds the exclusive lock on an asset this call would
    *  mutate. Retryable: the holder's lease expires or it releases the lock. */
   ASSET_LOCKED = "ASSET_LOCKED",
+  /** The client cancelled the call (MCP notifications/cancelled) before it answered. */
+  CANCELLED = "CANCELLED",
 }
 
 /**
