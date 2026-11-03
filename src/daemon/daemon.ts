@@ -57,13 +57,14 @@ import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type
 import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 
 /** What this daemon's extension API offers beyond its version number. */
-export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions"];
+export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
 export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions"];
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
+import { ExtensionServices } from "./extension-services.js";
 import { collectStatus } from "../cli/status.js";
 import { resolvePluginDir } from "../editor/install-marker.js";
 import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-observer.js";
@@ -445,6 +446,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const refusedExtensions: RefusedExtension[] = [];
   // An extension's bundles are held to its version from activation, when it installs its own UI.
   const uiOwners: UiBundleOwner[] = [];
+  const services = new ExtensionServices();
   const uiOwner = (x: { name: string; version: string; uiMin?: string; uiRoot?: false }): UiBundleOwner =>
     ({ name: x.name, version: x.version, ...(x.uiMin ? { uiMin: x.uiMin } : {}), ...(x.uiRoot === false ? { root: false } : {}) });
   const extensions: LoadedExtension[] = await loadExtensions((name, routes, setBusy, pkg): DaemonExtensionApi => {
@@ -476,6 +478,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
         return { isError: !!r.isError, content: r.content };
       },
       features: EXTENSION_FEATURES,
+      services: services.forOwner(name),
       versions: () => ({
         loaded: pkg.version,
         recorded: recordedVersion(projectDir, name),
@@ -560,6 +563,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   }, opts.extensionsDir, refusedExtensions, packageVersion(), projectDir);
   // One that failed to activate no longer holds its bundles back.
   ui.setOwners(extensions.map(uiOwner));
+  for (const o of uiOwners) if (!extensions.some((x) => x.name === o.name)) services.revokeOwner(o.name);
 
   const readBody = (req: http.IncomingMessage): Promise<unknown> => new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -824,7 +828,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       unsubscribeCheckpoints();
       stopAllScriptWatches();
       unsubscribeDialogs();
-      for (const x of extensions) await Promise.resolve(x.dispose?.()).catch((e) => warn("extension", `${x.name} dispose failed`, e));
+      for (const x of extensions) {
+        await Promise.resolve(x.dispose?.()).catch((e) => warn("extension", `${x.name} dispose failed`, e));
+        services.revokeOwner(x.name);
+      }
       for (const w of watchers) w.close();
       if (opts.publish !== false) removeDiscovery(projectDir);
       for (const res of sse) res.end();

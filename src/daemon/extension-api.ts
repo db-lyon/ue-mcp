@@ -175,6 +175,21 @@ export interface ActionResult {
   content: Array<{ type: string; text?: string }>;
 }
 
+/**
+ * Objects extensions share in process (feature "extension.services"). One
+ * provider holds an id at a time; `provide` throws while another does and
+ * returns the revoke. `watch` calls back now if the id is provided, on each
+ * provide, and with undefined on each revoke, and returns the unsubscribe.
+ * Extensions activate in directory order, so a consumer may load before its
+ * provider. A provider's services are revoked when it is disposed, and a
+ * disposed extension's watches stop first.
+ */
+export interface ExtensionServicesApi {
+  provide(id: string, impl: unknown): () => void;
+  get<T>(id: string): T | undefined;
+  watch<T>(id: string, cb: (impl: T | undefined) => void): () => void;
+}
+
 export interface DaemonExtensionApi {
   /** EXTENSION_API_VERSION of the daemon that loaded this extension. */
   apiVersion: number;
@@ -229,9 +244,13 @@ export interface DaemonExtensionApi {
    *   "ui.scopedKeys"            a key from `ui.trustKey` verifies this extension's own bundles and
    *                              bundles no loaded extension names, never another extension's
    *   "ui.extensions"            `ui.own` gives this extension's own bundle, served at /ui/ext/<name>/
+   *   "extension.services"       `services` lets extensions provide and use each other's objects in process
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
+
+  /** Objects shared with other extensions in process (feature "extension.services"). */
+  services?: ExtensionServicesApi;
 
   /**
    * The model behind flow agent steps (`class_path: agent` and `agent_prompt`, and the
