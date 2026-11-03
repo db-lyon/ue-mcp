@@ -33,6 +33,7 @@ import { contestedProject } from "../editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "../surface/action-schema.js";
 import { withheldTarget, wrapsEpicTool } from "../surface/registered-surface.js";
+import { epicEngineRefusalFor } from "../surface/epic-engines.js";
 import { explainMissingAction } from "../sessions/session-surface.js";
 import type { FlowContext } from "../flow/context.js";
 import type { SessionLoad, SessionLoads } from "../sessions/session-load.js";
@@ -305,6 +306,11 @@ export async function dispatchCategoryCall(
   if (!sessionRegistry.listRegistered().includes(taskName)) {
     return errorResult("NOT_FOUND", unknownActionMessage(action, tool.name, Object.keys(tool.actions)));
   }
+
+  // A wrapped engine tool this engine's recorded registry lacks: named before the
+  // toolset check, which would only say the toolset is absent.
+  const engineRefusal = epicEngineRefusalFor(sessionLoad.registryTools, effectiveTask, session.bridge.capabilities?.engineVersion);
+  if (engineRefusal) return refusalResult(engineRefusal);
 
   // Withheld from the surface because the running plugin lacks its method (6.4).
   // A wrapped engine tool re-reads the editor's toolsets when they are unknown
