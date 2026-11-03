@@ -92,3 +92,71 @@ describe("UiBundleStore with an extension loaded", () => {
     }
   });
 });
+
+describe("UiBundleStore keys scoped to their extension", () => {
+  const pair = () => {
+    const k = crypto.generateKeyPairSync("ed25519");
+    return { pub: k.publicKey.export({ type: "spki", format: "pem" }).toString(), priv: k.privateKey.export({ type: "pkcs8", format: "pem" }).toString() };
+  };
+  const api = { min: DAEMON_API_VERSION, max: DAEMON_API_VERSION };
+  const build = (root: string, name: string, version: string, priv: string) => {
+    const dir = path.join(root, "build", `${name}-${version}`);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "index.html"), `${name}@${version}`);
+    signBundle(dir, { name, version, api }, priv);
+    return dir;
+  };
+  const withStore = (fn: (root: string, store: UiBundleStore) => void) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-ui-keys-"));
+    try {
+      const store = new UiBundleStore(DAEMON_API_VERSION, path.join(root, "ui"));
+      store.setOwners([{ name: "studio", version: "1.0.0" }, { name: "pro", version: "1.0.0" }]);
+      fn(root, store);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  };
+
+  it("a key trusted by pro cannot install or serve a bundle named studio", () => {
+    withStore((root, store) => {
+      const pro = pair();
+      store.trustKey(pro.pub, "pro");
+      const forged = build(root, "studio", "1.0.0", pro.priv);
+      expect(() => store.install(forged)).toThrow(/no trusted UI signing key is registered for studio/);
+      // Placed in the store by hand, it is still never served.
+      fs.cpSync(forged, path.join(root, "ui", "studio-1.0.0"), { recursive: true });
+      expect(store.active()).toBeNull();
+      // Once studio trusts its own key, a bundle pro signed still does not verify.
+      store.trustKey(pair().pub, "studio");
+      expect(() => store.install(forged)).toThrow(/signature/);
+      expect(store.active()).toBeNull();
+    });
+  });
+
+  it("a bundle no loaded extension names verifies with any trusted key", () => {
+    withStore((root, store) => {
+      const pro = pair();
+      store.trustKey(pro.pub, "pro");
+      expect(store.install(build(root, "free-ui", "2.0.0", pro.priv)).name).toBe("free-ui");
+      expect(store.active()?.manifest.name).toBe("free-ui");
+    });
+  });
+
+  it("an extension's own key installs and serves its own bundle", () => {
+    withStore((root, store) => {
+      const studio = pair();
+      store.trustKey(studio.pub, "studio");
+      store.install(build(root, "studio", "1.0.0", studio.priv));
+      expect(fs.readFileSync(store.resolve("/ui/")!, "utf-8")).toBe("studio@1.0.0");
+    });
+  });
+
+  it("a key the daemon trusts with no owner verifies every bundle", () => {
+    withStore((root, store) => {
+      const any = pair();
+      store.trustKey(any.pub);
+      expect(store.install(build(root, "studio", "1.0.0", any.priv)).name).toBe("studio");
+      expect(store.install(build(root, "free-ui", "1.0.0", any.priv)).name).toBe("free-ui");
+    });
+  });
+});

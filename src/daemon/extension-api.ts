@@ -225,6 +225,8 @@ export interface DaemonExtensionApi {
    *                              against that surface
    *   "actions.effects"          `actions.effects` lists each action's effect and whether it is destructive
    *   "extension.versions"       `versions` names this extension's loaded, recorded and installed versions
+   *   "ui.scopedKeys"            a key from `ui.trustKey` verifies this extension's own bundles and
+   *                              bundles no loaded extension names, never another extension's
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
@@ -316,7 +318,10 @@ export interface DaemonExtensionApi {
   setBusy(busy: () => boolean): void;
 
   ui: {
-    /** Trust an Ed25519 public key (PEM) for UI bundles. */
+    /**
+     * Trust an Ed25519 public key (PEM) for UI bundles. A bundle named for a
+     * loaded extension verifies only against that extension's keys (feature "ui.scopedKeys").
+     */
     trustKey(pem: string): void;
     /** Verify a bundle directory and install it. Throws when it does not verify. */
     install(dir: string): UiManifest;
@@ -393,7 +398,9 @@ export interface DaemonHealth {
    *   "install.pendingBuild"  GET /v1/install carries plugin.pendingBuild, a source bridge deployed
    *                           and not built yet, which the next start through ue-mcp builds first
    *   "editor.rebuild"        POST /v1/editor/rebuild stops the editor, builds, and starts it again
-   *                           only when the build passed; a failed step carries `reason`).
+   *                           only when the build passed; a failed step carries `reason`
+   *   "ui.scopedKeys"         a bundle named for a loaded extension is installed and served only
+   *                           when signed by a key that extension trusted).
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];

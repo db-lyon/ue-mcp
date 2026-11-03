@@ -253,6 +253,16 @@ describe("UI bundles", () => {
     expect(() => daemon.ui.install(bundle("client", "0.9.0", undefined, other))).toThrow(/signature/);
   });
 
+  it("refuses a bundle named for a loaded extension unless that extension trusted its key", async () => {
+    const other = crypto.generateKeyPairSync("ed25519");
+    daemon.ui.trustKey(other.publicKey.export({ type: "spki", format: "pem" }).toString(), "future");
+    const otherPem = other.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    expect(() => daemon.ui.install(bundle("sample", "0.1.0", undefined, otherPem))).toThrow(/signature does not verify/);
+    const res = await (await fetch(`${base}/v1/ext/sample/features`, { headers: auth })).json();
+    expect(res.features).toContain("ui.scopedKeys");
+    expect((await (await fetch(`${base}/v1/health`, { headers: auth })).json()).features).toContain("ui.scopedKeys");
+  });
+
   it("refuses a bundle with a file changed after signing", () => {
     const dir = bundle("client", "0.9.1");
     fs.writeFileSync(path.join(dir, "assets", "app.js"), "alert('changed')");

@@ -85,18 +85,25 @@ function listFiles(dir: string, base = dir): string[] {
 /**
  * Verify a bundle directory. Throws with the reason when the signature does not
  * verify against any trusted key, a listed file is missing or altered, or a
- * file is present that the manifest does not list.
+ * file is present that the manifest does not list. A function for
+ * `trustedKeys` picks the keys from the manifest's name.
  */
-export function verifyBundle(dir: string, trustedKeys: readonly crypto.KeyObject[]): UiManifest {
+export function verifyBundle(dir: string, trustedKeys: readonly crypto.KeyObject[] | ((name: string) => readonly crypto.KeyObject[])): UiManifest {
   const manifestPath = path.join(dir, "manifest.json");
   const sigPath = path.join(dir, "manifest.sig");
   if (!fs.existsSync(manifestPath) || !fs.existsSync(sigPath)) throw new Error(`${dir} has no manifest.json and manifest.sig`);
-  if (trustedKeys.length === 0) throw new Error("no trusted UI signing key is registered");
   const bytes = fs.readFileSync(manifestPath);
+  let manifest: UiManifest;
+  try {
+    manifest = JSON.parse(bytes.toString("utf-8")) as UiManifest;
+  } catch {
+    throw new Error(`${dir}: malformed manifest`);
+  }
+  const keys = typeof trustedKeys === "function" ? trustedKeys(String(manifest?.name)) : trustedKeys;
+  if (keys.length === 0) throw new Error(`no trusted UI signing key is registered for ${String(manifest?.name)}`);
   const sig = Buffer.from(fs.readFileSync(sigPath, "utf-8").trim(), "base64");
-  if (!trustedKeys.some((k) => crypto.verify(null, bytes, k, sig))) throw new Error(`${dir}: manifest signature does not verify`);
+  if (!keys.some((k) => crypto.verify(null, bytes, k, sig))) throw new Error(`${dir}: manifest signature does not verify`);
 
-  const manifest = JSON.parse(bytes.toString("utf-8")) as UiManifest;
   if (typeof manifest.version !== "string" || !manifest.api || typeof manifest.files !== "object") {
     throw new Error(`${dir}: malformed manifest`);
   }
@@ -115,19 +122,29 @@ export function verifyBundle(dir: string, trustedKeys: readonly crypto.KeyObject
 }
 
 export class UiBundleStore {
-  private readonly keys: crypto.KeyObject[] = [];
+  private readonly keys: Array<{ key: crypto.KeyObject; owner?: string }> = [];
   private current: UiBundle | null = null;
   private owners: UiBundleOwner[] = [];
 
   constructor(private readonly apiVersion: number, private readonly root: string = uiStoreDir()) {}
 
-  /** Trust a public key (PEM, Ed25519) for verifying bundles. */
-  trustKey(pem: string): void {
+  /**
+   * Trust a public key (PEM, Ed25519) for verifying bundles. A bundle named for
+   * a loaded extension verifies only against that extension's keys and keys
+   * with no owner; any other bundle verifies against every key.
+   */
+  trustKey(pem: string, owner?: string): void {
     const key = crypto.createPublicKey(pem);
     if (key.asymmetricKeyType !== "ed25519") throw new Error("UI signing keys must be Ed25519");
-    this.keys.push(key);
+    this.keys.push(owner ? { key, owner } : { key });
     this.current = null;
   }
+
+  /** The keys a bundle with this manifest name verifies against. */
+  private keysFor = (name: string): crypto.KeyObject[] => {
+    const owned = this.owners.some((o) => o.name === name);
+    return this.keys.filter((k) => !owned || !k.owner || k.owner === name).map((k) => k.key);
+  };
 
   /** The loaded extensions whose bundles are held to their versions. Replaces the previous set. */
   setOwners(owners: readonly UiBundleOwner[]): void {
@@ -137,12 +154,12 @@ export class UiBundleStore {
 
   /** Verify a bundle and copy it into the store. Returns its manifest. */
   install(sourceDir: string): UiManifest {
-    const manifest = verifyBundle(sourceDir, this.keys);
+    const manifest = verifyBundle(sourceDir, this.keysFor);
     const target = path.join(this.root, `${manifest.name}-${manifest.version}`.replace(/[^A-Za-z0-9._-]/g, "_"));
     const staging = `${target}.staging-${process.pid}`;
     fs.rmSync(staging, { recursive: true, force: true });
     fs.cpSync(sourceDir, staging, { recursive: true });
-    verifyBundle(staging, this.keys);
+    verifyBundle(staging, this.keysFor);
     fs.rmSync(target, { recursive: true, force: true });
     fs.renameSync(staging, target);
     this.current = null;
@@ -158,7 +175,7 @@ export class UiBundleStore {
       if (!e.isDirectory() || e.name.includes(".staging-")) continue;
       const dir = path.join(this.root, e.name);
       try {
-        const manifest = verifyBundle(dir, this.keys);
+        const manifest = verifyBundle(dir, this.keysFor);
         if (manifest.api.min <= this.apiVersion && this.apiVersion <= manifest.api.max) candidates.push({ manifest, dir });
       } catch {
         // Not ours, tampered, or for a key no extension trusts: never served.
