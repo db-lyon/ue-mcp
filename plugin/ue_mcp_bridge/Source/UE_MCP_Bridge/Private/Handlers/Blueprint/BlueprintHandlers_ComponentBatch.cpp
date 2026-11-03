@@ -240,12 +240,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentPropertiesBatch(const TSh
 			if (!Scratch)
 			{
 				const FName ScratchName = MakeUniqueObjectName(GetTransientPackage(), Item.Source->GetClass(), TEXT("MCPComponentBatchValidation"));
-				Scratch = DuplicateObject<UActorComponent>(Item.Source, GetTransientPackage(), ScratchName);
-				if (Scratch)
-				{
-					Scratch->ClearFlags(RF_Public | RF_Standalone);
-					Scratch->SetFlags(RF_Transient);
-				}
+				// Constructed from the template as its archetype, the way a spawned component is, rather than
+				// duplicated: DuplicateObject on a child's inherited override (outer: its inheritable component
+				// handler) crashed in UE 5.8 once that child had been compiled and saved.
+				Scratch = NewObject<UActorComponent>(GetTransientPackage(), Item.Source->GetClass(), ScratchName, RF_Transient, Item.Source);
 				KeepScratch.Emplace(Scratch);
 			}
 			if (!Scratch) { Fail(Item, TEXT("validate"), TEXT("Cannot create transient validation copy")); bValid = false; continue; }
