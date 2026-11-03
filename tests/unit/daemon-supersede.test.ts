@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DaemonDiscovery } from "../../src/daemon/discovery.js";
-import { drainInflight, watchSupersede } from "../../src/daemon/supersede-watch.js";
+import { drainInflight, waitForExit, watchSupersede } from "../../src/daemon/supersede-watch.js";
 
 const record = (pid: number): DaemonDiscovery => ({
   pid,
@@ -61,5 +61,23 @@ describe("drainInflight", () => {
     });
     now.mockRestore();
     expect(drained).toBe(false);
+  });
+});
+
+describe("waitForExit", () => {
+  it("returns true once the process is gone", async () => {
+    let alive = 3;
+    expect(await waitForExit(1, 10_000, () => alive-- > 0, async () => undefined)).toBe(true);
+  });
+
+  it("returns false when the process outlives the deadline", async () => {
+    const now = vi.spyOn(Date, "now");
+    let t = 0;
+    now.mockImplementation(() => t);
+    const exited = await waitForExit(1, 1_000, () => true, async (ms) => {
+      t += ms;
+    });
+    now.mockRestore();
+    expect(exited).toBe(false);
   });
 });

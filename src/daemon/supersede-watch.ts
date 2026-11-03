@@ -86,3 +86,13 @@ export async function drainInflight(inflight: () => number, ms: number, sleep = 
   }
   return true;
 }
+
+/** Wait for a process to end, up to `ms`. True when it did. */
+export async function waitForExit(pid: number, ms: number, isAlive: (pid: number) => boolean = isPidAlive, sleep = (t: number) => new Promise((r) => setTimeout(r, t))): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (isAlive(pid)) {
+    if (Date.now() >= deadline) return false;
+    await sleep(200);
+  }
+  return true;
+}
