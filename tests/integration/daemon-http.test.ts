@@ -144,6 +144,21 @@ describe("events", () => {
     expect(events.find((e) => e.type === "client.disconnected")!.data).toMatchObject({ clients: 0 });
   });
 
+  it("answers at once, and starts over with a gap for an id from an earlier daemon", async () => {
+    covers("daemon.events");
+    const newest = (await call(d, "GET", "/v1/health")).body.lastEventId as number;
+    // Headers arrive with no event to send.
+    const ctrl = new AbortController();
+    const quiet = await fetch(`${base(d)}/v1/events`, { headers: { ...bearer(d), "last-event-id": String(newest) }, signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(3_000)]) });
+    expect(quiet.status).toBe(200);
+    expect(quiet.headers.get("content-type")).toBe("text/event-stream");
+    ctrl.abort();
+    // A restarted daemon numbers from 1 again; a client still holding the old daemon's id gets a gap and the whole backlog.
+    const events = await readSse(`${base(d)}/v1/events`, { ...bearer(d), "last-event-id": String(newest + 100_000) }, (es) => es.some((e) => e.type === "gap") && es.some((e) => e.type !== "gap"), 5_000);
+    expect(events[0].type).toBe("gap");
+    expect(Number(events[1].id)).toBeLessThanOrEqual(newest);
+  });
+
   it("reports an editor attaching and going away", async () => {
     covers("daemon.events");
     const live = sb.makeProject("Live");

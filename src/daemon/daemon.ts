@@ -46,6 +46,7 @@ import { EventLog } from "./events.js";
 import { ExpectedDisconnect, settleAndClassify } from "./disconnect.js";
 import { WebSocketServerTransport } from "./ws-transport.js";
 import { watchDir, type DirWatch, type WatchFn } from "./dir-watch.js";
+import { drainInflight, watchSupersede } from "./supersede-watch.js";
 import { describeToolCall, resultError, type CallLabel } from "./activity.js";
 import { openUrl } from "../core/open-url.js";
 import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
@@ -608,12 +609,17 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       return;
     }
     if (req.method === "GET" && url.pathname === "/v1/events") {
-      const last = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
+      const asked = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
+      // An id past the newest came from an earlier daemon, which numbered its own events: start over, and say events were missed.
+      const restarted = asked > events.lastId;
+      const last = restarted ? 0 : asked;
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      // Headers now, not with the first event: a quiet daemon would otherwise leave the client without a response.
+      res.flushHeaders();
       const write = (e: { id: number; type: string; at: string; data: Record<string, unknown> }) =>
         res.write(`id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify({ at: e.at, ...e.data })}\n\n`);
       const backlog = events.since(last);
-      if (backlog.gap) res.write(`event: gap\ndata: {}\n\n`);
+      if (backlog.gap || restarted) res.write(`event: gap\ndata: {}\n\n`);
       for (const e of backlog.events) write(e);
       const unsubscribe = events.subscribe(write);
       sse.add(res);
@@ -808,7 +814,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
 
   async function handoff(): Promise<void> {
     info("daemon", "handoff requested; exiting once no call is in flight");
-    while (inflight() > 0) await new Promise((r) => setTimeout(r, 250));
+    // Bounded: a call that never returns would leave this daemon running beside its successor.
+    if (!(await drainInflight(inflight, HANDOFF_DRAIN_MS))) warn("daemon", `${inflight()} call(s) still in flight after ${HANDOFF_DRAIN_MS / 1000}s; handing off anyway`);
     await shutdown("handed off to a newer daemon");
   }
 
@@ -952,17 +959,29 @@ export async function runDaemon(projects: string[]): Promise<number> {
 
   // Only now, so a daemon taking over binds the port after the old one let it go.
   daemon.startFlowHttp();
+  // The record is ours from here; once it names another live daemon, this one steps down.
+  const supersede = watchSupersede({
+    projectDir,
+    onSuperseded: (by) => {
+      info("daemon", `daemon ${by.version} (pid ${by.pid}) took over this project; stopping this one`);
+      void daemon.close();
+    },
+  });
   const stop = (): void => void daemon.close().then(() => process.exit(0));
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   daemon.events.subscribe((e) => {
     if (e.type !== "daemon.stopping") return;
+    supersede.stop();
     // A daemon that took over published its record here, not in startDaemon, so it withdraws it here too.
     if (existing) removeDiscovery(projectDir);
     setTimeout(() => process.exit(0), 500).unref();
   });
   return new Promise<number>(() => {});
 }
+
+/** How long a daemon asked to hand off waits for its calls; under the 120 s its successor waits for it. */
+const HANDOFF_DRAIN_MS = 90_000;
 
 /** A live same-or-newer daemon published by another process, other than `ignorePid`. */
 function rivalDaemon(projectDir: string, version: string, ignorePid?: number): DaemonDiscovery | null {
