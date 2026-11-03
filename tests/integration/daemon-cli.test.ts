@@ -197,6 +197,21 @@ describe("handoff", () => {
     }
   });
 
+  it("a daemon whose record another live daemon took over stops itself", async () => {
+    covers("daemon.supersede");
+    const project = sb.makeProject("Superseded");
+    const d = await startDaemonCli(sb, project);
+    try {
+      // What a successor publishes: a live process that is not this daemon.
+      fs.writeFileSync(discoveryFile(sb, project), JSON.stringify({ ...readDiscovery(sb, project), pid: process.pid, token: "successor" }));
+      await waitFor(() => !pidAlive(d.pid), 20_000, `daemon pid ${d.pid} to stop`);
+      // It leaves the successor's record alone.
+      expect(readDiscovery(sb, project)).toMatchObject({ pid: process.pid, token: "successor" });
+    } finally {
+      fs.rmSync(discoveryFile(sb, project), { force: true });
+    }
+  });
+
   it("a daemon defers to a newer one that is already running", async () => {
     covers("daemon.handoff");
     const project = sb.makeProject("Newer");

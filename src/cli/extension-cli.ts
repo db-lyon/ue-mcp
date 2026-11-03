@@ -13,6 +13,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isPidAlive } from "../bridge/editor-target.js";
 import { findUProject } from "../config/uproject-path.js";
 import { readLiveDiscovery } from "../daemon/discovery.js";
 import { extensionsDir } from "../daemon/extensions.js";
@@ -39,8 +40,9 @@ async function restartDaemon(uproject: string): Promise<boolean> {
   const d = readLiveDiscovery(dir);
   if (!d) return false;
   await fetch(`http://127.0.0.1:${d.port}/v1/shutdown`, { method: "POST", headers: { authorization: `Bearer ${d.token}` } }).catch(() => undefined);
-  const deadline = Date.now() + 15_000;
-  while (readLiveDiscovery(dir)?.pid === d.pid && Date.now() < deadline) await new Promise((r) => setTimeout(r, 200));
+  // Wait for the process to end, not just its record: a new daemon started beside a live old one leaves two attached to the editor.
+  const deadline = Date.now() + 30_000;
+  while (isPidAlive(d.pid) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 200));
   await ensureDaemon(uproject);
   return true;
 }

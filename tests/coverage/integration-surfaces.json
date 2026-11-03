@@ -537,6 +537,11 @@
       "summary": "a newer daemon takes over from an older one for the same project"
     },
     {
+      "id": "daemon.supersede",
+      "group": "daemon",
+      "summary": "a daemon stops itself once its discovery record names another live daemon"
+    },
+    {
       "id": "daemon.start-lock",
       "group": "daemon",
       "summary": "concurrent starts leave exactly one daemon per project"
