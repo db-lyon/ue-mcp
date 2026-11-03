@@ -143,9 +143,9 @@ describe("a loaded plugin", () => {
 
   it("lists its flows in flow(list) and runs them", async () => {
     covers("plugin.load.flows");
-    const listed = await server.call("flow", { action: "list" });
+    const listed = await server.callFlow({ action: "list" });
     expect(listed.text).toContain("fixture_say");
-    const run = await server.call("flow", { action: "run", flowName: "fixture_say" });
+    const run = await server.callFlow({ action: "run", flowName: "fixture_say" });
     expect(run.isError, run.text).toBe(false);
     expect(run.text).toContain("hello, flow");
   });

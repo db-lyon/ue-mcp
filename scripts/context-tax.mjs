@@ -26,6 +26,11 @@ import { fileURLToPath } from "node:url";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import {
+  ENGINE_TOOL_SEARCH_INSTRUCTIONS,
+  ENGINE_TOOL_SEARCH_SOURCE,
+  ENGINE_TOOL_SEARCH_TOOLS,
+} from "../tests/fixtures/engine-tool-search-surface.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -39,6 +44,14 @@ export const BUDGETS = {
 };
 
 export const STRATEGIES = ["full", "lean", "micro"];
+
+/**
+ * The seed a client gets with no strategy configured must cost no more than
+ * the Unreal Engine 5.9 ModelContextProtocol plugin's tool-search surface
+ * (tests/fixtures/engine-tool-search-surface.mjs), measured the same way.
+ */
+export const DEFAULT_SEED = "default";
+export const ENGINE_SEED = "engine";
 
 /** Queries the default-search budget is measured over; the largest answer counts. */
 export const SEARCH_QUERIES = ["spawn actor", "blueprint variable", "material parameter", "rotate clockwise", "screenshot"];
@@ -74,8 +87,9 @@ function hermeticEnv(sandbox, strategy) {
     UE_MCP_AUTH_DIR: path.join(sandbox, "auth"),
     UE_MCP_DISABLE_UPDATE_CHECK: "1",
     UE_MCP_LOG_LEVEL: "error",
-    UE_MCP_CONTEXT_STRATEGY: strategy,
   });
+  // No strategy: whatever the server defaults to.
+  if (strategy) env.UE_MCP_CONTEXT_STRATEGY = strategy;
   return env;
 }
 
@@ -183,7 +197,39 @@ export async function measureContextTax() {
       rows.search = { what: `micro search "${seeded.search.query}"`, chars: seeded.search.text.length, tokens: s.tokens, exact: s.exact };
     }
   }
+  const unset = await withServer(undefined, async (client) => ({
+    instructions: client.getInstructions?.() ?? "",
+    tools: (await client.listTools()).tools,
+  }));
+  rows[DEFAULT_SEED] = await seedRow("default seed (no strategy set)", unset.instructions, unset.tools);
+  rows[ENGINE_SEED] = await seedRow(ENGINE_TOOL_SEARCH_SOURCE, ENGINE_TOOL_SEARCH_INSTRUCTIONS, ENGINE_TOOL_SEARCH_TOOLS);
   return rows;
+}
+
+/** One seed's row: the same payload and count as every strategy's. */
+async function seedRow(what, instructions, tools) {
+  const payload = JSON.stringify({ instructions, tools });
+  const t = await countTokens(payload);
+  return {
+    what,
+    toolCount: tools.length,
+    instructionsChars: instructions.length,
+    toolsChars: JSON.stringify(tools).length,
+    chars: payload.length,
+    tokens: t.tokens,
+    exact: t.exact,
+  };
+}
+
+/** A line when the default seed costs more than the engine's tool-search surface. */
+export function engineCeilingProblems(rows) {
+  const ours = rows[DEFAULT_SEED];
+  const engine = rows[ENGINE_SEED];
+  if (!ours || !engine) return [`${DEFAULT_SEED} or ${ENGINE_SEED} seed: not measured`];
+  if (ours.tokens > engine.tokens) {
+    return [`${ours.what}: ${ours.tokens} tokens, over the ${engine.tokens} of ${engine.what}`];
+  }
+  return [];
 }
 
 /** One line per number over its budget. */
@@ -284,7 +330,7 @@ async function main(argv) {
   }
 
   if (argv.includes("--check")) {
-    const problems = budgetProblems(rows);
+    const problems = [...budgetProblems(rows), ...engineCeilingProblems(rows)];
     if (problems.length > 0) {
       for (const p of problems) console.error(`  over budget: ${p}`);
       return 1;

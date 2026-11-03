@@ -39,7 +39,7 @@ interface Seen {
 async function observe(sb: Sandbox, uproject: string, env: Record<string, string | undefined> = {}): Promise<Seen> {
   const server = await McpServer.start(sb, { projects: [uproject], env });
   try {
-    const listed = json<{ flows: Array<{ name: string; description: string }> }>(await server.call("flow", { action: "list" }));
+    const listed = json<{ flows: Array<{ name: string; description: string }> }>(await server.callFlow({ action: "list" }));
     return {
       flows: Object.fromEntries(listed.flows.map((f) => [f.name, f.description])),
       tools: await server.toolNames(),
@@ -49,7 +49,7 @@ async function observe(sb: Sandbox, uproject: string, env: Record<string, string
   }
 }
 
-const MICRO = ["flow", "tools"];
+const MICRO = ["tools"];
 
 let sb: Sandbox;
 const seen: Record<string, Seen> = {};

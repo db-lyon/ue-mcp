@@ -94,8 +94,7 @@ const PER_SESSION: Record<string, string> = {
   "feedback/feedback-deferred.ts": "Deferred entries record the editor they came from and are filtered by it.",
   "feedback/feedback-fallback.ts": "Writes the saved report into the same per-editor deferred store, tagged with the submitting project.",
   "config/user-state.ts": "Keyed by absolute project root: installed hooks, and the per-project feedback mode.",
-  "integrations/claude-code/mcp-client-config.ts": "Writes the project positionals a server is started with.",
-  "cli/doctor.ts": "Reports every project the configured invocation names.",
+  "integrations/claude-code/mcp-client-config.ts": "Writes the project positionals a server is started with.",  "cli/doctor.ts": "Reports every project the configured invocation names.",
   "cli/init.ts": "Writes one project's config, chosen with --editor.",
   "cli/update.ts": "Updates one project's deployed bridge, chosen with --editor.",
   "cli/uninstall-hooks.ts": "Removes one project's hooks, chosen with --editor.",
@@ -137,6 +136,7 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
+  "integrations/claude-code/unreal-mcp-entries.ts": "Finds and removes entries in the client config file it is handed. No editor is involved.",
   "daemon/extension-install.ts": "Installs an extension into the user's extensions directory. No editor is involved.",
   "daemon/extension-versions.ts": "Lays out installed extension versions and picks the one a project records. No editor is involved.",
   "daemon/plugin-routes.ts": "Lists and changes the plugins of the one project the daemon serves, through the CLI. No editor is involved.",

@@ -283,6 +283,13 @@ export class McpServer {
     return { isError: raw.isError === true, blocks, text: blocks.join("\n"), media };
   }
 
+  /** A flow call: the flow tool where it is advertised, the micro gateway's flow category otherwise. */
+  async callFlow(args: Record<string, unknown>, timeoutMs = 60_000): Promise<CallResult> {
+    if ((await this.toolNames()).includes("flow")) return this.call("flow", args, timeoutMs);
+    const { action, ...rest } = args;
+    return this.call("tools", { action: "call", category: "flow", method: action, args: rest }, timeoutMs);
+  }
+
   async close(): Promise<void> {
     await this.client.close().catch(() => undefined);
     await this.transport.close().catch(() => undefined);
