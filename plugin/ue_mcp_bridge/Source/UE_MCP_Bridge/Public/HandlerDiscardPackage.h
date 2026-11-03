@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Package.h"
+#include "UObject/UObjectGlobals.h"
 
 // Shared eligibility rules for explicit dirty-flag disposal and editor shutdown.
 enum class EMCPDiscardPackageKind : uint8
@@ -50,4 +51,3 @@ inline const TCHAR* MCPDiscardPackageKindName(EMCPDiscardPackageKind Kind)
 	default: return TEXT("content");
 	}
 }
-

@@ -1,5 +1,5 @@
-#include "HandlerDiscardPackage.h"
 #include "EditorHandlers.h"
+#include "HandlerDiscardPackage.h"
 #include "HandlerCheckpoint.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
