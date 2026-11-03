@@ -87,7 +87,8 @@ namespace
 
 	UWorld* MCPMakeDirtyTestWorld(UPackage* Package, const TCHAR* WorldName)
 	{
-		UWorld* World = UWorld::CreateWorld(EWorldType::Inactive, /*bInformEngineOfWorld=*/false, FName(WorldName), Package, /*bAddToRoot=*/false);
+		UWorld* World = UWorld::CreateWorld(EWorldType::Inactive, /*bInformEngineOfWorld=*/false, FName(WorldName), Package, /*bAddToRoot=*/false, ERHIFeatureLevel::Num,
+			/*InWorldInitializationValues=*/nullptr, /*bInSkipInitWorld=*/true);
 		if (World)
 		{
 			World->SetFlags(RF_Public | RF_Standalone);
@@ -125,6 +126,8 @@ bool FEditorDiscardDirtyTest::RunTest(const FString& Parameters)
 
 	UWorld* EngineMap = MCPMakeDirtyTestWorld(EngineMapPackage, TEXT("EngineMap"));
 	UWorld* TransientMap = MCPMakeDirtyTestWorld(TransientMapPackage, TEXT("TransientMap"));
+	TestTrue(TEXT("engine map package retains ContainsMap without world initialization"), EngineMap && EngineMapPackage->ContainsMap());
+	TestTrue(TEXT("transient map package retains ContainsMap without world initialization"), TransientMap && TransientMapPackage->ContainsMap());
 	UCurveFloat* Curve = NewObject<UCurveFloat>(ContentPackage, *(TEXT("Curve_") + Run), RF_Public | RF_Standalone);
 	if (!TestTrue(TEXT("test worlds and asset created"), EngineMap && TransientMap && Curve))
 	{

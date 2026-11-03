@@ -1,3 +1,4 @@
+#include "HandlerDiscardPackage.h"
 #include "EditorHandlers.h"
 #include "HandlerCheckpoint.h"
 #include "HandlerRegistry.h"
@@ -3694,57 +3695,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 
 namespace
 {
-	// What a dirty package is, for editor(discard_dirty). Transient and engine
-	// map packages hold nothing the project can save, so the editor's save
-	// prompt for them has no right answer but "Don't Save" (the
-	// /Engine/Maps/Entry startup map left an editor that could not be closed).
-	enum class EMCPDiscardPackageKind : uint8
-	{
-		Transient,
-		EngineMap,
-		Content,
-		Code,
-		PlayInEditor,
-	};
-
-	EMCPDiscardPackageKind MCPClassifyDiscardPackage(const UPackage* Package)
-	{
-		const FString PackageName = Package->GetName();
-		if (Package->HasAnyPackageFlags(PKG_CompiledIn) || PackageName.StartsWith(TEXT("/Script/")))
-		{
-			return EMCPDiscardPackageKind::Code;
-		}
-		if (Package->HasAnyPackageFlags(PKG_PlayInEditor))
-		{
-			return EMCPDiscardPackageKind::PlayInEditor;
-		}
-		if (Package == GetTransientPackage() || Package->HasAnyFlags(RF_Transient))
-		{
-			return EMCPDiscardPackageKind::Transient;
-		}
-		// The map itself, its built data and its external actors. Engine content
-		// that is not part of a map is still content: an engine material edited
-		// by hand is somebody's work.
-		if (PackageName.StartsWith(TEXT("/Engine/"))
-			&& (Package->ContainsMap() || Package->HasAnyPackageFlags(PKG_ContainsMapData)))
-		{
-			return EMCPDiscardPackageKind::EngineMap;
-		}
-		return EMCPDiscardPackageKind::Content;
-	}
-
-	const TCHAR* MCPDiscardPackageKindName(EMCPDiscardPackageKind Kind)
-	{
-		switch (Kind)
-		{
-		case EMCPDiscardPackageKind::Transient: return TEXT("transient");
-		case EMCPDiscardPackageKind::EngineMap: return TEXT("engineMap");
-		case EMCPDiscardPackageKind::Code: return TEXT("code");
-		case EMCPDiscardPackageKind::PlayInEditor: return TEXT("playInEditor");
-		default: return TEXT("content");
-		}
-	}
-
 	constexpr int32 MCPDiscardDirtyMaxPackages = 256;
 }
 
