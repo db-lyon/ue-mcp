@@ -74,16 +74,29 @@ describe("Unreal MCP entries per client format", () => {
     expect(parsed.servers["ue-mcp"]).toMatchObject({ type: "stdio", command: "npx" });
   });
 
-  it("finds the stdio proxy entry by its _upstreamEntry and replaces it", () => {
-    const configPath = path.join(dir, ".mcp.json");
-    const proxy = path.join(dir, "Engine", "Plugins", "Experimental", "ModelContextProtocol", "Extras", "Proxy", "Bin", "Win64", "unreal_mcp_proxy.exe");
-    const content = proxyMcpJson(proxy, configPath);
-    fs.writeFileSync(configPath, content);
-    const client: McpClient = { name: "Claude Code (project)", configPath, detected: true, format: "json" };
+  const proxyBinary = () => path.join(dir, "Engine", "Plugins", "Experimental", "ModelContextProtocol", "Extras", "Proxy", "Bin", "Win64", "unreal_mcp_proxy.exe");
 
-    expect(findUnrealMcpEntries(client)).toEqual([{ name: "unreal-mcp", kind: "proxy", target: proxy }]);
-    const r = removeUnrealMcpEntries(client);
-    expect(fs.readFileSync(r.backup!, "utf-8")).toBe(content);
+  for (const withFlag of [false, true]) {
+    it(`finds and replaces the unreal-mcp-proxy entry install writes ${withFlag ? "with" : "without"} --mcp-json`, () => {
+      const configPath = path.join(dir, ".mcp.json");
+      const content = proxyMcpJson(proxyBinary(), withFlag ? configPath : undefined);
+      fs.writeFileSync(configPath, content);
+      const client: McpClient = { name: "Claude Code (project)", configPath, detected: true, format: "json" };
+
+      expect(findUnrealMcpEntries(client)).toEqual([{ name: "unreal-mcp-proxy", kind: "proxy", target: proxyBinary() }]);
+      const r = removeUnrealMcpEntries(client);
+      expect(fs.readFileSync(r.backup!, "utf-8")).toBe(content);
+      expect(Object.keys(JSON.parse(fs.readFileSync(configPath, "utf-8")).mcpServers)).toEqual(["my-existing-server"]);
+    });
+  }
+
+  it("removes both entries when the editor rewrote unreal-mcp beside an installed proxy", () => {
+    const configPath = path.join(dir, ".mcp.json");
+    const parsed = JSON.parse(proxyMcpJson(proxyBinary()));
+    parsed.mcpServers["unreal-mcp"] = { type: "http", url: "http://127.0.0.1:8001/mcp" };
+    fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2));
+    const r = removeUnrealMcpEntries({ configPath, format: "json" });
+    expect(r.removed.map((e) => e.name).sort()).toEqual(["unreal-mcp", "unreal-mcp-proxy"]);
     expect(Object.keys(JSON.parse(fs.readFileSync(configPath, "utf-8")).mcpServers)).toEqual(["my-existing-server"]);
   });
 
@@ -91,6 +104,12 @@ describe("Unreal MCP entries per client format", () => {
     const configPath = path.join(dir, ".mcp.json");
     fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { unreal: { command: "/opt/ue/Proxy/Bin/Linux/unreal_mcp_proxy", args: [] } } }));
     expect(findUnrealMcpEntries({ configPath, format: "json" })).toEqual([{ name: "unreal", kind: "proxy", target: "/opt/ue/Proxy/Bin/Linux/unreal_mcp_proxy" }]);
+  });
+
+  it("leaves an unreal-mcp entry that is not on localhost, as the proxy does", () => {
+    const configPath = path.join(dir, ".mcp.json");
+    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { "unreal-mcp": { type: "http", url: "https://remote.example.com/mcp" } } }));
+    expect(findUnrealMcpEntries({ configPath, format: "json" })).toEqual([]);
   });
 
   it("leaves other HTTP servers, a ue-mcp entry and unparseable files alone", () => {

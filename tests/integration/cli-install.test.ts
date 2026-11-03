@@ -260,7 +260,7 @@ describe("init over Unreal MCP entries", () => {
 
     const r = await cli(["init", uproject, "--yes", "--install", "source", "--clients", "claude-code"]);
     expect(r.code, r.stdout + r.stderr).toBe(0);
-    expect(plain(r.stdout)).toContain(`replaced Unreal MCP entry 'unreal-mcp' (stdio proxy ${proxy}) with ue-mcp`);
+    expect(plain(r.stdout)).toContain(`replaced Unreal MCP entry 'unreal-mcp-proxy' (stdio proxy ${proxy}) with ue-mcp`);
     expect(Object.keys(readJson(mcpJson).mcpServers).sort()).toEqual(["my-existing-server", "ue-mcp"]);
     expect(fs.readFileSync(`${mcpJson}.ue-mcp-backup`, "utf8")).toBe(original);
   });

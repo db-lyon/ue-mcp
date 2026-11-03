@@ -6,9 +6,12 @@
  * CLI gets `httpUrl` instead of `url`, and Codex gets a one-key TOML table. The
  * JSON is pretty printed with tabs, as UE's TPrettyJsonPrintPolicy does.
  *
- * The proxy entry follows Extras/Proxy/README.md: `unreal_mcp_proxy install`
- * launches the proxy binary with `--mcp-json <path>` and keeps the HTTP entry
- * it replaced under `_upstreamEntry`.
+ * The proxy entry follows Extras/Proxy/cmd/unreal_mcp_proxy (config.go
+ * proxyEntry, install.go): `install` deletes `unreal-mcp` and writes
+ * `unreal-mcp-proxy` with the binary's absolute path as `command`, `args` of
+ * `[]` or `["--mcp-json", <abs path>]`, and `_upstreamEntry` holding the
+ * removed entry under its name. Go's json.MarshalIndent sorts keys, indents
+ * two spaces, and saveConfig appends a newline.
  */
 import * as path from "node:path";
 
@@ -63,16 +66,21 @@ export const UNREAL_CLIENT_FIXTURES: UnrealClientFixture[] = [
   },
 ];
 
-/** A .mcp.json after `unreal_mcp_proxy install` rewrote the editor's entry. */
-export function proxyMcpJson(proxyBinary: string, mcpJsonPath: string): string {
-  return tabs({
+/**
+ * A .mcp.json after `unreal_mcp_proxy install` rewrote the editor's entry.
+ * `mcpJsonPath` is the `--mcp-json` the proxy was installed with, if any.
+ */
+export function proxyMcpJson(proxyBinary: string, mcpJsonPath?: string): string {
+  // Key order is Go's sorted order.
+  const value = {
     mcpServers: {
       "my-existing-server": { command: "my-server" },
-      "unreal-mcp": {
+      "unreal-mcp-proxy": {
+        _upstreamEntry: { "unreal-mcp": httpEntry },
+        args: mcpJsonPath ? ["--mcp-json", mcpJsonPath] : [],
         command: proxyBinary,
-        args: ["--mcp-json", mcpJsonPath],
-        _upstreamEntry: httpEntry,
       },
     },
-  });
+  };
+  return `${JSON.stringify(value, null, 2)}\n`;
 }

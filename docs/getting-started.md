@@ -65,8 +65,8 @@ Unset flags keep the project's current choices. The exit code is 0 on success, 1
 
 UE 5.9's built-in MCP server can write its own entry into the project's client configs, and its stdio proxy can rewrite `.mcp.json` to launch the proxy instead. `init` recognises both:
 
-- an entry named `unreal-mcp` with a `url` (or Gemini CLI's `httpUrl`) pointing at the editor's HTTP server, in `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.gemini/settings.json` or `.codex/config.toml`;
-- an entry that launches `unreal_mcp_proxy` or carries `_upstreamEntry`.
+- an entry named `unreal-mcp` with a `url` (or Gemini CLI's `httpUrl`) on `localhost` or `127.0.0.1`, in `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.gemini/settings.json` or `.codex/config.toml`;
+- the `unreal-mcp-proxy` entry `unreal_mcp_proxy install` writes in `.mcp.json`, which launches the proxy binary and keeps the HTTP entry under `_upstreamEntry`, or any entry that launches `unreal_mcp_proxy`.
 
 For each client you configure, `init` copies the config to `<file>.ue-mcp-backup`, removes those entries, and writes the `ue-mcp` entry. Every other server and setting in the file is kept. The output names each entry it replaced and the backup it saved, in the wizard and with `--yes`; `--json` reports it as a `replace:<client>` step, and `--dry-run` lists it under each client's `replaces`. To undo, copy the backup over the config. A client left out of `--clients`, or unchecked in the wizard, is not touched.
 

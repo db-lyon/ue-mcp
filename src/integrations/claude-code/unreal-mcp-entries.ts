@@ -3,14 +3,16 @@
  * which init replaces with the ue-mcp entry. Two shapes are recognised:
  *
  * - the HTTP entry the editor's client config writer adds, always named
- *   `unreal-mcp`, with `url` (or `httpUrl` for Gemini CLI) set to its server;
- * - the stdio proxy entry its `unreal_mcp_proxy install` writes in place of
- *   the HTTP one, which keeps the original under `_upstreamEntry`.
+ *   `unreal-mcp`, with `url` (or `httpUrl` for Gemini CLI) on 127.0.0.1;
+ * - the stdio entry `unreal_mcp_proxy install` writes in its place, named
+ *   `unreal-mcp-proxy`, launching the proxy binary by absolute path and
+ *   keeping the HTTP entry under `_upstreamEntry` (Extras/Proxy config.go).
  */
 import * as fs from "node:fs";
 import { serversKeyOf, type ClientShape } from "./mcp-client-config.js";
 
 export const UNREAL_MCP_SERVER_NAME = "unreal-mcp";
+export const UNREAL_MCP_PROXY_NAME = "unreal-mcp-proxy";
 
 /** Suffix of the copy init saves before it removes an entry. */
 export const REPLACED_BACKUP_SUFFIX = ".ue-mcp-backup";
@@ -25,15 +27,26 @@ export interface UnrealMcpEntry {
 
 const PROXY_COMMAND = /(^|[\\/])unreal_mcp_proxy(\.exe)?$/i;
 
+/** The proxy's own test for the editor's URL: localhost, 127.0.0.1 or ::1. */
+function isLocalhostUrl(raw: string): boolean {
+  try {
+    const host = new URL(raw).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
 function classify(name: string, entry: unknown): UnrealMcpEntry | null {
   if (!entry || typeof entry !== "object") return null;
   const e = entry as Record<string, unknown>;
   const command = typeof e.command === "string" ? e.command : "";
-  if ("_upstreamEntry" in e || PROXY_COMMAND.test(command.trim())) {
+  const upstream = e._upstreamEntry;
+  if (PROXY_COMMAND.test(command.trim()) || (name === UNREAL_MCP_PROXY_NAME && upstream && typeof upstream === "object")) {
     return { name, kind: "proxy", target: command || "(no command)" };
   }
   const url = typeof e.url === "string" ? e.url : typeof e.httpUrl === "string" ? e.httpUrl : null;
-  if (name === UNREAL_MCP_SERVER_NAME && url) return { name, kind: "http", target: url };
+  if (name === UNREAL_MCP_SERVER_NAME && url && isLocalhostUrl(url)) return { name, kind: "http", target: url };
   return null;
 }
 
