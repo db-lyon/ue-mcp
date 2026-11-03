@@ -8,6 +8,8 @@ For a single nested field in a struct array, `asset(set_property)` accepts a key
 
 The selector must match exactly one element. `asset(read_properties)` accepts the same path. See [Property paths](tool-reference.md#property-paths) for the selector rules. Use `asset(bulk_set_properties)` for several keyed field writes with preflight and read-back.
 
+`bulk_read_properties` rows report `resolvedPropertyNames` and `missingReasons` for keyed selectors.
+
 ## Update or clone a collection entry
 
 `asset(edit_collection_entry)` selects an existing struct with `entryKey`. For a struct array, also supply `keyField`. For a map, the key is converted using the map's reflected key type. Omit `newKey` to update the selected entry; supply an unused `newKey` to clone it. Existing destinations and ambiguous array keys are refused.
