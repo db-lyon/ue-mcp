@@ -77,7 +77,7 @@ Every route is on `127.0.0.1` and needs `Authorization: Bearer <token>`. The ser
 
 ### Extensions and UI bundles
 
-An extension (`src/daemon/extensions.ts`) is a package with `activate(api)` and a `ueMcpExtension` field naming the extension API range it supports. The daemon loads extensions at startup from `~/.ue-mcp/extensions/` (`UE_MCP_EXTENSIONS_DIR`). An extension can register routes under `/v1/ext/<name>/`, publish and read events, run actions in process with `callAction`, register a model provider, use checkpoints, keep a data directory, and trust a key for UI bundles. `EXTENSION_API_VERSION` versions this contract; the daemon serves every version from `EXTENSION_API_MIN_VERSION` up.
+An extension (`src/daemon/extensions.ts`) is a package with `activate(api)` and a `ueMcpExtension` field naming the extension API range it supports. The daemon loads extensions at startup from `~/.ue-mcp/extensions/` (`UE_MCP_EXTENSIONS_DIR`). An extension can register routes under `/v1/ext/<name>/`, publish and read events, run actions in process with `callAction`, register a model provider, use checkpoints, keep a data directory, trust a key for UI bundles, and provide or use objects shared with other extensions through `services` (one provider per id, revoked when the provider is disposed). `EXTENSION_API_VERSION` versions this contract; the daemon serves every version from `EXTENSION_API_MIN_VERSION` up.
 
 Versions install side by side as `<name>@<version>/`, and each project records the version it loads (`extension-versions.ts`), so updating an extension for one project does not change another. `ue-mcp extension install|use|list|remove` manages them.
 

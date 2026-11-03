@@ -30,6 +30,7 @@ export {
   type DialogEventData,
   type DaemonExtension,
   type DaemonExtensionApi,
+  type ExtensionServicesApi,
   type DaemonHealth,
   type EditorStatus,
   type ExtensionHandler,
