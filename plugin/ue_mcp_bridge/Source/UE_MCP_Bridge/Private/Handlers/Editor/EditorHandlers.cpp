@@ -3747,7 +3747,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 			{
 				Result->SetBoolField(TEXT("success"), false);
 				Result->SetArrayField(TEXT("failedPackages"), Failed);
-				Result->SetStringField(TEXT("error"), TEXT("Some dirty packages cannot be written, so nothing was saved and editor shutdown was not scheduled. A never-saved /Temp world needs level(save_as) first; dirtyPackages=discard closes without it"));
+				Result->SetStringField(TEXT("error"), TEXT("Some dirty packages cannot be written, so nothing was saved and editor shutdown was not scheduled. Save a never-saved /Temp world under a content path first; dirtyPackages=discard closes without it"));
 				return MCPResult(Result);
 			}
 

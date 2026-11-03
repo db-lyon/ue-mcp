@@ -15,7 +15,6 @@
     "generate_project_files": "Launches UnrealBuildTool in a separate process with no completion signal, and UBT rewrites project files only when their content changes, so an unchanged project shows no effect a test could read back.",
     "hot_reload": "Triggers a Live Coding compile of the running editor modules, which patches the bridge under test and holds the engine-wide Live Coding lock other editors build against.",
     "play_sound_at_location": "A one-shot sound is an audible event that leaves no state in the level, on disk or in any registry the bridge can read, so there is nothing to read back.",
-    "request_editor_shutdown": "The bridge half of editor(stop_editor), a server handler; tests/live/editor-lifecycle.test.ts asserts stop_editor ends the editor process, which is this action's effect, but reaches it through the handler the inventory cannot trace.",
     "run_automation_tests": "The runner npm run test:automation drives every UE.MCP.* test through (scripts/automation-tests.mjs); each release run asserts its per-test results, so it is exercised by the gate itself rather than by a test body.",
     "set_cloth_config": "No bridge action or engine Python API creates a clothing asset, and no content the test project can reach has one, so there is no cloth config to write and read back.",
     "unbind_cloth_from_section": "Unbinding needs a section already bound to a clothing asset, and no bridge action or engine Python API can create one in the test project."
