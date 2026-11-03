@@ -1,6 +1,7 @@
 #include "EpicHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerStaticInvoke.h"
 #include "UE_MCP_BridgeModule.h"
 
 #include "UObject/Object.h"
@@ -36,38 +37,7 @@ namespace UEMCPEpic
 		const TMap<FString, FString>& StringArgs,
 		TFunctionRef<void(UFunction*, uint8*)> ReadOut)
 	{
-		UClass* Cls = RegistryClass();
-		if (!Cls) return false;
-		UFunction* Func = Cls->FindFunctionByName(FName(FuncName));
-		if (!Func) return false;
-		UObject* CDO = Cls->GetDefaultObject();
-		if (!CDO) return false;
-
-		// Zeroed memory is a valid empty state for FString/bool/object-ptr parms,
-		// so Memzero is sufficient initialization for these signatures.
-		uint8* Buffer = (uint8*)FMemory_Alloca(FMath::Max<int32>(Func->ParmsSize, 1));
-		FMemory::Memzero(Buffer, Func->ParmsSize);
-
-		for (const TPair<FString, FString>& Arg : StringArgs)
-		{
-			if (FStrProperty* SP = CastField<FStrProperty>(Func->FindPropertyByName(FName(*Arg.Key))))
-			{
-				SP->SetPropertyValue_InContainer(Buffer, Arg.Value);
-			}
-		}
-
-		CDO->ProcessEvent(Func, Buffer);
-		ReadOut(Func, Buffer);
-
-		// Free heap allocations owned by the parms (notably the FString return).
-		for (TFieldIterator<FProperty> It(Func); It; ++It)
-		{
-			if (It->HasAnyPropertyFlags(CPF_Parm))
-			{
-				It->DestroyValue_InContainer(Buffer);
-			}
-		}
-		return true;
+		return MCPStaticInvoke::CallWithStrings(RegistryClass(), FuncName, StringArgs, ReadOut);
 	}
 
 	static bool IsAvailable()
@@ -120,16 +90,7 @@ namespace UEMCPEpic
 		Args.Add(TEXT("JsonInput"), Input);
 		InvokeStatic(TEXT("ExecuteTool"), Args, [&](UFunction* Func, uint8* Buffer)
 		{
-			for (TFieldIterator<FProperty> It(Func); It; ++It)
-			{
-				if (It->HasAnyPropertyFlags(CPF_ReturnParm))
-				{
-					if (FObjectPropertyBase* OP = CastField<FObjectPropertyBase>(*It))
-					{
-						Ret = OP->GetObjectPropertyValue_InContainer(Buffer);
-					}
-				}
-			}
+			Ret = MCPStaticInvoke::ReturnedObject(Func, Buffer);
 		});
 		return Ret;
 	}
