@@ -4,6 +4,7 @@ import type { ToolContext } from "../../src/core/types.js";
 import { actionSchema } from "../../src/surface/action-schema.js";
 import { ROUTING_PARAM_NAMES } from "../../src/surface/routing-params.js";
 import { declaredActionEffect } from "../../src/surface/action-effects.js";
+import { liftRollback } from "../../src/flow/rollback.js";
 import { resolveBridgeTimeout } from "../../src/bridge/bridge-timeouts.js";
 
 const METHOD = "set_blueprint_component_properties_batch";
@@ -33,7 +34,7 @@ describe("blueprint.set_component_properties_batch", () => {
     };
     await blueprintTool.handler(ctx, { action: ACTION, ...params });
     expect(call).toHaveBeenCalledTimes(1);
-    expect(call).toHaveBeenCalledWith(METHOD, params, undefined);
+    expect(call).toHaveBeenCalledWith(METHOD, params, 600_000);
   });
 
   it("forwards directory selection and leaves defaults to the native handler", async () => {
@@ -46,7 +47,7 @@ describe("blueprint.set_component_properties_batch", () => {
       recursive: false,
     };
     await blueprintTool.handler(ctx, { action: ACTION, ...params });
-    expect(call).toHaveBeenCalledWith(METHOD, params, undefined);
+    expect(call).toHaveBeenCalledWith(METHOD, params, 600_000);
     expect(call.mock.calls[0][1]).not.toHaveProperty("items");
     expect(call.mock.calls[0][1]).not.toHaveProperty("dryRun");
   });
@@ -60,11 +61,14 @@ describe("blueprint.set_component_properties_batch", () => {
         { index: 0, success: true, stage: "complete", saved: true, values: { Weight: 1 } },
         { index: 1, success: false, stage: "write_guard", saved: false, error: "Package is read-only", values: {} },
       ],
-      rollback: { method: ACTION, payload },
+      rollback: { method: METHOD, payload },
     };
     const { ctx } = context(response);
     const result = await blueprintTool.handler(ctx, { action: ACTION, ...payload });
     expect(result).toEqual(response);
+    expect(liftRollback((result as typeof response).rollback)).toEqual({
+      taskName: "ue-mcp.bridge", payload: { ...payload, method: METHOD },
+    });
   });
 
   it("advertises the recorded parameters and nested item types", () => {
@@ -82,6 +86,7 @@ describe("blueprint.set_component_properties_batch", () => {
   });
 
   it("allows enough time for the native batch to finish", () => {
+    expect(blueprintTool.actions[ACTION].timeoutMs).toBe(600_000);
     expect(resolveBridgeTimeout(METHOD, undefined, {})).toBeGreaterThanOrEqual(600_000);
   });
 });

@@ -129,7 +129,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentPropertiesBatch(const TSh
 			if (!FilterClass) return MCPError(TEXT("Cannot resolve Blueprint actor classFilter: ") + ClassFilter);
 		}
 		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-		Registry.SearchAllAssets(true);
+		Registry.ScanPathsSynchronous({Directory});
 		FARFilter Filter;
 		Filter.PackagePaths.Add(FName(*Directory));
 		Filter.bRecursivePaths = bRecursive;
@@ -386,7 +386,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentPropertiesBatch(const TSh
 		auto Payload = MakeShared<FJsonObject>();
 		Payload->SetArrayField(TEXT("items"), RollbackItems);
 		Payload->SetNumberField(TEXT("maxBlueprints"), MaxBlueprints);
-		MCPSetRollback(Result, TEXT("set_component_properties_batch"), Payload);
+		MCPSetRollback(Result, TEXT("set_blueprint_component_properties_batch"), Payload);
 	}
 	return MCPResult(Result);
 }

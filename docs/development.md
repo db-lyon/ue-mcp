@@ -151,34 +151,7 @@ Each shard of `npm run test:live` is a copy of `tests/ue_mcp` with its own edito
 - `tests/live/crash-class-inputs.test.ts` drives inputs that have crashed the editor and follows each call with a liveness probe.
 - `tests/live/matrix.ts` records where each case's assertion lives, and `tests/live/coverage.test.ts` checks each reference resolves.
 
-### Batch component template properties
-
-The [batch component properties guide](blueprint-component-properties-batch.md)
-documents `blueprint(set_component_properties_batch)`, result stages, dry runs
-and rollback limits. Its native regression filter is
-`UE.MCP.Blueprint.ComponentPropertiesBatch`; the TypeScript dispatch contract is
-in `tests/unit/blueprint-component-properties-batch.test.ts`.
-
-After deploying, building and launching the updated plugin on the dedicated test
-project, refresh the recorded surface in this order:
-
-```bash
-npm run specs:record
-npm run specs:generate
-npm run generate:metadata
-npm run golden:record
-npm run golden:record -- --connected
-npm run coverage:behavioural
-```
-
-Review the generated diffs. New `specBp` actions require the recorded spec before
-the TypeScript tool registry can load, so record and generate before type checks,
-golden recordings or tests. Run the native filter twice in the same editor
-process, then the unit suite, handler-spec contract suite and required repository
-checks. The component batch tests use private temporary mounts and exercise
-native properties, inherited overrides, montage references, dry runs, partial
-failure, read-only refusal, targeted persistence, directory selection and
-rollback followed by reload.
+See [batch component properties](blueprint-component-properties-batch.md) for batch template edits and rollback limits.
 
 ## Adding an action or category
 

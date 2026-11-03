@@ -131,7 +131,7 @@ When templates were edited, the result includes:
 ```json
 {
   "rollback": {
-    "method": "set_component_properties_batch",
+    "method": "set_blueprint_component_properties_batch",
     "payload": {
       "items": [
         {
@@ -146,8 +146,9 @@ When templates were edited, the result includes:
 }
 ```
 
-Replay with `blueprint`, `action` set to `rollback.method`, and the fields of
-`rollback.payload` as arguments. The payload includes touched items even when
+Flows replay `rollback.method` through the raw bridge task with `rollback.payload`.
+For a manual tool call, use `blueprint`, `action=set_component_properties_batch`,
+and the fields of `rollback.payload` as arguments. The payload includes touched items even when
 compilation or saving failed. It retains empty values, null references and
 structured map values. Dry runs and preflight refusals emit no rollback.
 

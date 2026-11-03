@@ -128,8 +128,8 @@ bool FMCPBlueprintComponentBatchNativeTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("there was no broad save"), IFileManager::Get().FileExists(*UnrelatedFile));
 
 	const auto Rollback = Result->GetObjectField(TEXT("rollback"));
-	TestEqual(TEXT("rollback uses public action"), Rollback->GetStringField(TEXT("method")), FString(TEXT("set_component_properties_batch")));
-	const auto Restored = Run(Fixture, Rollback->GetObjectField(TEXT("payload")));
+	TestEqual(TEXT("rollback uses registered bridge method"), Rollback->GetStringField(TEXT("method")), FString(TEXT("set_blueprint_component_properties_batch")));
+	const auto Restored = Fixture.Registry.ExecuteHandler(Rollback->GetStringField(TEXT("method")), Rollback->GetObjectField(TEXT("payload")))->AsObject();
 	if (!TestTrue(TEXT("rollback succeeds"), Restored->GetBoolField(TEXT("success")))) return false;
 	TestEqual(TEXT("rollback restores first native default"), Speed(First), Previous);
 	TestEqual(TEXT("rollback restores second native default"), Speed(Second), Previous);
