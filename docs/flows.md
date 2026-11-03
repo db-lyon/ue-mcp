@@ -28,6 +28,8 @@ Run it:
 flow(action="run", flowName="build_and_check")
 ```
 
+Under the default `micro` context strategy there is no separate `flow` tool; the same call goes through the gateway as `tools(action="call", category="flow", method="run", args={flowName: "build_and_check"})`, and so do `plan` and `list`.
+
 The config is reloaded on every `flow` call, so an edited flow runs without a server restart.
 
 The response carries a `summary` line per step, a `steps` array with what each step answered (`data`, `success`, `attempts`, `error`), `failedStep`, `rollback`, `hookErrors` and the `runId`.

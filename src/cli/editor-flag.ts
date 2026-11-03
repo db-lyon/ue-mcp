@@ -138,6 +138,9 @@ function candidateConfigFiles(cwd: string): string[] {
   const files = [
     path.join(cwd, ".mcp.json"),
     path.join(cwd, ".cursor", "mcp.json"),
+    path.join(cwd, ".vscode", "mcp.json"),
+    path.join(cwd, ".gemini", "settings.json"),
+    path.join(cwd, ".codex", "config.toml"),
   ];
   if (home) {
     files.push(path.join(home, ".claude", ".mcp.json"));
@@ -167,8 +170,9 @@ function readServerInvocations(cwd: string): ServerInvocation[] {
 
 function positionalsFromJson(raw: string): string[] {
   try {
-    const parsed = JSON.parse(raw) as { mcpServers?: Record<string, { args?: unknown }> };
-    const args = parsed?.mcpServers?.["ue-mcp"]?.args;
+    // VS Code keys its servers under `servers`, every other client under `mcpServers`.
+    const parsed = JSON.parse(raw) as Record<string, Record<string, { args?: unknown }> | undefined>;
+    const args = parsed?.mcpServers?.["ue-mcp"]?.args ?? parsed?.servers?.["ue-mcp"]?.args;
     return positionalsFromArgs(Array.isArray(args) ? args : []);
   } catch {
     return [];

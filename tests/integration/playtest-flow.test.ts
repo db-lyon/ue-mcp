@@ -138,7 +138,7 @@ describe("the playtest flow", () => {
       env: { ANTHROPIC_API_KEY: "sk-ant-fake-integration", ANTHROPIC_BASE_URL: api.origin },
     });
     try {
-      const ok = json<{ success: boolean; steps: Json[] }>(await server.call("flow", { action: "run", flowName: "playtest", params: { target: BP } }));
+      const ok = json<{ success: boolean; steps: Json[] }>(await server.callFlow({ action: "run", flowName: "playtest", params: { target: BP } }));
       expect(ok.success).toBe(true);
       expect(created).toHaveLength(1);
       const sent = api.requests.filter((r) => r.url.endsWith("/v1/messages"));
@@ -148,7 +148,7 @@ describe("the playtest flow", () => {
 
       alwaysBad = true;
       created.length = 0;
-      const failed = await server.call("flow", { action: "run", flowName: "playtest", params: { target: BP } });
+      const failed = await server.callFlow({ action: "run", flowName: "playtest", params: { target: BP } });
       expect(failed.text).toMatch(/still refused after 3 attempts/);
       expect(failed.text).toContain("Helth");
       expect(created).toHaveLength(0);
@@ -180,14 +180,14 @@ describe("the playtest flow", () => {
       env: { ANTHROPIC_API_KEY: "sk-ant-fake-integration", ANTHROPIC_BASE_URL: api.origin },
     });
     try {
-      const r = await server.call("flow", { action: "run", flowName: "playtest", params: { target: MISSING } });
+      const r = await server.callFlow({ action: "run", flowName: "playtest", params: { target: MISSING } });
       expect(r.text).toContain(`playtest target ${MISSING} does not exist`);
       expect(r.text).not.toMatch(/"success":\s*true/);
       expect(api.requests.filter((q) => q.url.endsWith("/v1/messages"))).toHaveLength(0);
       expect(bridge.calls.some((c) => c.method === "pie_script_validate")).toBe(false);
       expect(created).toHaveLength(0);
 
-      const described = json<{ success: boolean }>(await server.call("flow", { action: "run", flowName: "playtest", params: { target: "the hero" } }));
+      const described = json<{ success: boolean }>(await server.callFlow({ action: "run", flowName: "playtest", params: { target: "the hero" } }));
       expect(described.success).toBe(true);
       expect(created).toHaveLength(1);
     } finally {
@@ -204,7 +204,7 @@ describe("the playtest flow", () => {
     const bridge = await FakeBridge.start({ projectDir: path.dirname(project), handlers: editorLike(created), answerAnything: false });
     const server = await McpServer.start(sb, { projects: [project], port: null });
     try {
-      const r = await server.call("flow", { action: "run", flowName: "playtest", params: { target: BP } });
+      const r = await server.callFlow({ action: "run", flowName: "playtest", params: { target: BP } });
       expect(r.text).toContain(NO_MODEL);
       expect(created).toHaveLength(0);
       expect(bridge.calls.some((c) => c.method === "pie_script_validate")).toBe(false);
