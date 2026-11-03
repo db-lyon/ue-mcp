@@ -609,12 +609,17 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       return;
     }
     if (req.method === "GET" && url.pathname === "/v1/events") {
-      const last = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
+      const asked = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
+      // An id past the newest came from an earlier daemon, which numbered its own events: start over, and say events were missed.
+      const restarted = asked > events.lastId;
+      const last = restarted ? 0 : asked;
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      // Headers now, not with the first event: a quiet daemon would otherwise leave the client without a response.
+      res.flushHeaders();
       const write = (e: { id: number; type: string; at: string; data: Record<string, unknown> }) =>
         res.write(`id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify({ at: e.at, ...e.data })}\n\n`);
       const backlog = events.since(last);
-      if (backlog.gap) res.write(`event: gap\ndata: {}\n\n`);
+      if (backlog.gap || restarted) res.write(`event: gap\ndata: {}\n\n`);
       for (const e of backlog.events) write(e);
       const unsubscribe = events.subscribe(write);
       sse.add(res);

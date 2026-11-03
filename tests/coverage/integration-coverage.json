@@ -1685,6 +1685,11 @@
         {
           "suite": "integration",
           "file": "tests/integration/daemon-http.test.ts",
+          "test": "answers at once, and starts over with a gap for an id from an earlier daemon"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/daemon-http.test.ts",
           "test": "reports an editor attaching and going away"
         },
         {
