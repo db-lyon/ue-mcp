@@ -19,6 +19,7 @@ import path from "node:path";
 import { askOnce, extractReportedProjectDir, normalizeProjectRoot, PROJECT_IDENTITY_PYTHON, LIVE_SHARD_ROOT } from "./bridge-target.mjs";
 import { resolveTestEngine } from "./build-utils.js";
 import { TEST_EDITOR_ARGS } from "./test-editor-args.mjs";
+import { guardUserLayouts } from "./user-layout-guard.mjs";
 import {
   KIND_FLAGS, EDITOR_PEAK_MB, KEEP_IN_SHARD, liveFiles, planFixedShards, poolQueue, poolWantsEditor, nextLaunch, nextBatch, POOL_EDITOR_WORK_MS, POOL_MIN_SHARE_MS, mirror, buildOutputFilter,
   timingFromReports, overBudget, slowest, headroomMB, editorFits, launchOrder, splitAtDeath, undeployedSources, deathOf, awaitEditorStartup,
@@ -491,34 +492,41 @@ export async function runSharded(opts) {
   // can join at any point and a fixed shard cannot be split.
   const tasks = [];
   let told = false;
-  for (;;) {
-    // Two headless editors that never came up mean the next would not either.
-    const wantPool = poolLaunchFailures < 2 && poolWantsEditor({ remainingMs: queuedMs(), queued: pool.files.length, editors: poolEditors.size, max: maxHeadless });
-    // On a machine with room for two editors, fixed shards first left the pool waiting until they were done.
-    const { kind, poolFirst, done } = nextLaunch({ wantPool, poolEditors: poolEditors.size, fixedKind: fixedQueue[0]?.kind ?? null, running: running.size });
-    if (done) break;
-    if (!kind) {
-      await nap();
-      continue;
+  // Read before the first editor starts, released once every editor is gone.
+  const layouts = guardUserLayouts();
+  try {
+    for (;;) {
+      // Two headless editors that never came up mean the next would not either.
+      const wantPool = poolLaunchFailures < 2 && poolWantsEditor({ remainingMs: queuedMs(), queued: pool.files.length, editors: poolEditors.size, max: maxHeadless });
+      // On a machine with room for two editors, fixed shards first left the pool waiting until they were done.
+      const { kind, poolFirst, done } = nextLaunch({ wantPool, poolEditors: poolEditors.size, fixedKind: fixedQueue[0]?.kind ?? null, running: running.size });
+      if (done) break;
+      if (!kind) {
+        await nap();
+        continue;
+      }
+      if (running.size > 0 && !editorFits(kind, freeMB() - pendingMB(running), totalMB())) {
+        if (!told) say(`  waiting for memory: ${freeMB()} MB free, a ${kind} editor needs ${EDITOR_PEAK_MB[kind]} MB beside ${headroomMB(totalMB())} MB headroom`);
+        told = true;
+        await nap();
+        continue;
+      }
+      told = false;
+      const job = !poolFirst && fixedQueue.length > 0
+        ? fixedQueue.shift()
+        : poolJob();
+      job.memoryAtReady = null;
+      job.queuedS = (Date.now() - started) / 1000;
+      running.add(job);
+      if (job.kind === "headless") poolEditors.add(job);
+      const task = job.kind === "headless" ? runPoolEditor(job) : runFixed(job);
+      tasks.push(task);
     }
-    if (running.size > 0 && !editorFits(kind, freeMB() - pendingMB(running), totalMB())) {
-      if (!told) say(`  waiting for memory: ${freeMB()} MB free, a ${kind} editor needs ${EDITOR_PEAK_MB[kind]} MB beside ${headroomMB(totalMB())} MB headroom`);
-      told = true;
-      await nap();
-      continue;
-    }
-    told = false;
-    const job = !poolFirst && fixedQueue.length > 0
-      ? fixedQueue.shift()
-      : poolJob();
-    job.memoryAtReady = null;
-    job.queuedS = (Date.now() - started) / 1000;
-    running.add(job);
-    if (job.kind === "headless") poolEditors.add(job);
-    const task = job.kind === "headless" ? runPoolEditor(job) : runFixed(job);
-    tasks.push(task);
+    await Promise.all(tasks);
+  } finally {
+    const closed = layouts.release();
+    if (closed.length) say(`closed ${closed.length} tab(s) the test editors left open in the user editor layout: ${closed.join(", ")}`);
   }
-  await Promise.all(tasks);
   if (pool.files.length > 0) {
     launchFailures.push(`headless: ${poolLaunchFailures} editor(s) failed to start, so ${pool.files.length} queued file(s) did not run`);
   }
