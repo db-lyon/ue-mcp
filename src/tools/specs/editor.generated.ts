@@ -1109,6 +1109,17 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "get_shader_compile_status": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "waitUntilIdle",
+        "type": "boolean",
+        "required": false,
+        "description": "Poll between game-thread ticks until shaders are idle; timeoutMs is the server routing budget (default 60000)"
+      }
+    ]
+  },
   "get_standalone_status": {
     "category": "editor",
     "params": []
@@ -3615,6 +3626,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_sequence_channel_keys: "Params: sequencePath (or assetPath, or path), trackType?, trackName?, trackIndex?, bindingGuid?, bindingName?, actorLabel?, actorPath?, sectionIndex?, channel?, sampleStartFrame?, sampleEndFrame?, sampleStep?",
   get_sequence_info: "Params: assetPath (or path), includeSectionDetails?",
   get_sequence_runtime_bindings: "Params: world?, pieInstance?, sequencePath?, actorLabel?",
+  get_shader_compile_status: "Params: waitUntilIdle?",
   get_standalone_status: "Params: none",
   get_transaction_history: "Params: maxEntries?",
   get_undo_state: "Params: none",
@@ -3917,6 +3929,7 @@ export const schema: Record<string, z.ZodType> = {
   viewportIndex: z.number().optional().describe("Level viewport to act on (default the active one)"),
   viewportType: z.string().optional().describe("Perspective | Top | Bottom | Left | Right | Front | Back | OrthoFreelook"),
   waitForAssetRegistry: z.boolean().optional().describe("start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)"),
+  waitUntilIdle: z.boolean().optional().describe("Poll between game-thread ticks until shaders are idle; timeoutMs is the server routing budget (default 60000)"),
   width: z.number().optional().describe("Capture width in pixels (default 1280) (capture_scene_png). Viewport width to read x against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Frame width in pixels (default 1280) (render_sequence_frames)"),
   windowed: z.boolean().optional().describe("Run windowed rather than fullscreen (default true)"),
   windowId: z.number().int().optional().describe("Window to close, by the id list_windows reported (close_window). Describe only this window, by the id list_windows or list_dialogs reported (list_windows). Window to press a button on, by the id list_windows reported (press_window_button)"),
