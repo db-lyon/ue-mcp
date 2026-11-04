@@ -388,7 +388,8 @@ export interface BridgeActionSpec extends ActionSpecBase {
    */
   epicTool?: EpicToolRef;
   /**
-   * Runs after the bridge answers, with the parameters sent and the answer; what it returns replaces the answer.
+   * Runs after the bridge answers, with canonical parameters, the caller's routing timeoutMs when given, and the answer.
+   * What it returns replaces the answer. Routing timeoutMs is never sent to the bridge as a handler parameter.
    * For work the editor cannot do on its game thread, such as waiting for a PCG generation (#1365).
    */
   followUp?: (ctx: ToolContext, params: Record<string, unknown>, answered: unknown) => Promise<unknown>;
