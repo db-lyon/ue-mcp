@@ -224,6 +224,14 @@ namespace
 		return RB.Property;
 	}
 
+	/** A property path as the details panel labels it: the root's display name, "Hide when Full" for bHideWhenFull, and the rest of the path. */
+	FString CkDiffLabel(const FProperty* Root, const FString& Path)
+	{
+		const FString Name = Root->GetName();
+		const FString Display = Root->GetDisplayNameText().ToString();
+		return Path.StartsWith(Name, ESearchCase::CaseSensitive) ? Display + Path.Mid(Name.Len()) : Path;
+	}
+
 	/**
 	 * DiffUtils::CompareUnrelatedStructs, serialized: every FSingleObjectDiffEntry
 	 * with its path, type, the engine's message, and both values exported as text.
@@ -248,8 +256,13 @@ namespace
 			if (!Sink.Take()) continue;
 			TSharedPtr<FJsonObject> Rec = MakeShared<FJsonObject>();
 			if (!Group.IsEmpty()) Rec->SetStringField(TEXT("group"), Group);
-			Rec->SetStringField(TEXT("path"), Entry.Identifier.ToDisplayName());
-			if (Root) Rec->SetStringField(TEXT("property"), Root->GetName());
+			const FString Path = Entry.Identifier.ToDisplayName();
+			Rec->SetStringField(TEXT("path"), Path);
+			if (Root)
+			{
+				Rec->SetStringField(TEXT("property"), Root->GetName());
+				Rec->SetStringField(TEXT("label"), CkDiffLabel(Root, Path));
+			}
 			if (bHidden) Rec->SetBoolField(TEXT("hidden"), true);
 			Rec->SetStringField(TEXT("diffType"), CkDiffPropertyTypeName(Entry.DiffType));
 			Rec->SetStringField(TEXT("displayString"), DiffViewUtils::PropertyDiffMessage(Entry, ObjectName).ToString());
@@ -1020,7 +1033,7 @@ namespace
 		else if (Asset->IsA<UBlueprint>())
 		{
 			E.Tool = TEXT("SBlueprintDiff");
-			E.Note = TEXT("The Blueprint diff: graphs through FGraphDiffControl::DiffGraphs, components through DiffUtils::CompareUnrelatedSCS, My Blueprint variables, Defaults on the class default object and Class Settings, the last three through DiffUtils::CompareUnrelatedStructs.");
+			E.Note = TEXT("The Blueprint diff: the Blueprint type's own differences (a Widget Blueprint's widget tree) through UBlueprint::FindDiffs, graphs through FGraphDiffControl::DiffGraphs, components through DiffUtils::CompareUnrelatedSCS, My Blueprint variables, Defaults on the class default object and Class Settings, the last three through DiffUtils::CompareUnrelatedStructs.");
 			E.Native = TEXT("window");
 		}
 		else if (Asset->IsA<UMaterial>() || Asset->IsA<UMaterialFunction>())
@@ -1114,8 +1127,71 @@ namespace
 		CkDiffAddPropertySection(Sections, TEXT("Actors"), TEXT("DiffUtils::CompareUnrelatedObjects"), Records, Hidden);
 	}
 
-	void CkDiffBlueprint(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
+	/**
+	 * The Blueprint type's own diff, UBlueprint::FindDiffs, as FBlueprintTypeDiffControl runs it: the
+	 * category SBlueprintDiff names after the type ("Widget Blueprint"). An OBJECT_REQUEST_DIFF pairs two
+	 * subobjects (a widget in the widget tree and its slot), compared property by property under the
+	 * engine's label for the pair ("Widget WardMeter"); every other real result is listed as the engine
+	 * words it, and INFO_MESSAGE results become the section's notes. False when the type has no diff of
+	 * its own (the base UBlueprint answers false).
+	 */
+	bool CkDiffBlueprintType(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
 	{
+		TArray<FDiffSingleResult> Results;
+		FDiffResults Diffs(&Results);
+		if (!B->FindDiffs(A, Diffs)) return false;
+
+		TArray<TSharedPtr<FJsonValue>> Records;
+		TArray<TSharedPtr<FJsonValue>> Notes;
+		int32 Hidden = 0;
+		for (const FDiffSingleResult& R : Results)
+		{
+			const FString Display = Names.Clean(R.DisplayString.ToString());
+			if (R.Diff == EDiffType::INFO_MESSAGE)
+			{
+				if (!Display.IsEmpty()) Notes.Add(MakeShared<FJsonValueString>(Display));
+				continue;
+			}
+			if (R.Diff == EDiffType::OBJECT_REQUEST_DIFF)
+			{
+				// FindDiffs runs on the new version, so Object1 is the new subobject and Object2 the old one.
+				if (R.Object1 && R.Object2) CkDiffObjects(R.Object2, R.Object1, Display, Names, Records, Hidden, Sink);
+				continue;
+			}
+			// A custom object result is a heading; the property results that name the same objects are its differences.
+			if (R.Diff == EDiffType::CUSTOM_OBJECT) continue;
+			if (!R.IsRealDifference() || !Sink.Take()) continue;
+			TSharedPtr<FJsonObject> Rec = MakeShared<FJsonObject>();
+			Rec->SetStringField(TEXT("diffType"), CkDiffTypeName(R.Diff));
+			Rec->SetStringField(TEXT("category"), CkDiffCategoryName(R.Category));
+			Rec->SetStringField(TEXT("displayString"), Display);
+			const FString Tip = Names.Clean(R.ToolTip.ToString());
+			if (!Tip.IsEmpty() && Tip != Display) Rec->SetStringField(TEXT("toolTip"), Tip);
+			if (!R.OwningObjectPath.IsEmpty()) Rec->SetStringField(TEXT("owningObjectPath"), Names.Clean(R.OwningObjectPath));
+			if ((R.Diff == EDiffType::OBJECT_ADDED || R.Diff == EDiffType::OBJECT_REMOVED) && R.Object1)
+			{
+				TArray<TSharedPtr<FJsonValue>> Facts;
+				CkDiffFact(Facts, TEXT("Class"), R.Object1->GetClass()->GetName());
+				Rec->SetArrayField(TEXT("facts"), Facts);
+			}
+			Records.Add(MakeShared<FJsonValueObject>(Rec));
+		}
+		if (Records.Num() > 0 || Hidden > 0)
+		{
+			TSharedPtr<FJsonObject> S = CkDiffSection(B->GetClass()->GetDisplayNameText().ToString(), TEXT("properties"), TEXT("UBlueprint::FindDiffs"));
+			S->SetArrayField(TEXT("entries"), Records);
+			S->SetNumberField(TEXT("hiddenChanges"), Hidden);
+			if (Notes.Num()) S->SetArrayField(TEXT("notes"), Notes);
+			Sections.Add(MakeShared<FJsonValueObject>(S));
+		}
+		return true;
+	}
+
+	/** The Blueprint diff, SBlueprintDiff's categories in its order. True when the type's own diff ran (CkDiffBlueprintType). */
+	bool CkDiffBlueprint(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
+	{
+		const bool bTypeDiff = CkDiffBlueprintType(A, B, Names, Sections, Sink);
+
 		// Graphs, paired by path under the Blueprint as SBlueprintDiff pairs them.
 		TArray<UEdGraph*> GraphsA, GraphsB;
 		A->GetAllGraphs(GraphsA);
@@ -1254,6 +1330,7 @@ namespace
 			CkDiffObjects(A, B, FString(), Names, Records, Hidden, Sink);
 			CkDiffAddPropertySection(Sections, TEXT("Class Settings"), TEXT("DiffUtils::CompareUnrelatedObjects"), Records, Hidden);
 		}
+		return bTypeDiff;
 	}
 
 	void CkDiffDataTable(UDataTable* A, UDataTable* B, const FCkDiffNames& Names, TSharedPtr<FJsonObject> Result,
@@ -1476,7 +1553,10 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 		UBlueprint* BPB = Cast<UBlueprint>(B.Asset);
 		if (BPA && BPB)
 		{
-			CkDiffBlueprint(BPA, BPB, Names, Sections, Sink);
+			const bool bTypeDiff = CkDiffBlueprint(BPA, BPB, Names, Sections, Sink);
+			// Says the type's own diff (the widget tree of a Widget Blueprint) was compared, so a reader can
+			// tell "no difference" from "not compared".
+			Result->GetObjectField(TEXT("engine"))->SetBoolField(TEXT("blueprintTypeDiff"), bTypeDiff);
 			TSharedPtr<FJsonValue> Semantic = DiffBlueprintObjects(BPA, BPB, PackageName, PackageName);
 			if (Semantic.IsValid() && Semantic->Type == EJson::Object)
 			{
