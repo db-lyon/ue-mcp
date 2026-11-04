@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1211,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -28321,6 +28321,23 @@
           "type": "number",
           "required": false,
           "description": "Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"
+        }
+      ]
+    },
+    "read_mesh_materials": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StaticMesh or SkeletalMesh asset path"
+        },
+        {
+          "name": "lodIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Only return this LOD mapping; omitted returns every LOD"
         }
       ]
     },

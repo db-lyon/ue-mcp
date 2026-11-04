@@ -13,6 +13,7 @@ public:
 private:
 	// Handler implementations
 	static TSharedPtr<FJsonValue> ListAssets(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadMeshMaterials(const TSharedPtr<FJsonObject>& Params);
 
 	// UV authoring and inspection, in AssetHandlers_UV.cpp. There was no UV
 	// surface at all: one read-only peek at a single channel off render data.
