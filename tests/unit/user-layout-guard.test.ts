@@ -4,11 +4,12 @@
  * Browser an Interchange import summons) are closed again in the shared
  * per-user layout files, and nothing else in them changes.
  */
+import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { closeTabsOpenedSince, guardUserLayouts, openTabs, userLayoutFiles } from "../../scripts/user-layout-guard.mjs";
+import { closeTabsOpenedSince, guardUserLayouts, closeEditorTabWindows, guardUserLayoutsUntilExit, openTabs, userLayoutFiles } from "../../scripts/user-layout-guard.mjs";
 
 const tab = (id: string, state: string) => ({ TabId: id, TabState: state });
 const stack = (fg: string, tabs: object[]) => ({ SizeCoefficient: 1, Type: "Stack", HideTabWell: false, ForegroundTab: fg, Tabs: tabs });
@@ -112,5 +113,46 @@ describe("the guard around a run", () => {
 
   it("finds nothing when the folder does not exist", () => {
     expect(userLayoutFiles(path.join(os.tmpdir(), "no-such-unreal-engine-dir"))).toEqual([]);
+  });
+});
+
+describe("the guard for runners that leave the editor running", () => {
+  it("closes what the run opened when the process exits, and says so", () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "layout-guard-exit-"));
+    const jsonFile = path.join(dir, "EditorLayout.json");
+    const closedJson = json({ "UnrealEd_Layout_v1.6": unrealEd("ClosedTab", "ClosedTab") });
+    fs.writeFileSync(jsonFile, closedJson);
+    const proc = new EventEmitter();
+    const said: string[] = [];
+    guardUserLayoutsUntilExit((m: string) => said.push(m), proc, [jsonFile]);
+    // The smoke sweep's open_settings, saved by the attached editor.
+    fs.writeFileSync(jsonFile, json({ "UnrealEd_Layout_v1.6": unrealEd("OpenedTab", "ClosedTab") }));
+    expect(said).toEqual([]);
+    proc.emit("exit", 0);
+    expect(fs.readFileSync(jsonFile, "utf8")).toBe(closedJson);
+    expect(said).toEqual([`closed 1 tab(s) the run left open in the user editor layout: ${jsonFile}: UnrealEd_Layout_v1.6:ProjectSettings`]);
+  });
+});
+
+describe("closing the windows a test opened", () => {
+  it("closes Project Settings and Content Browser windows and nothing else", async () => {
+    const calls: Array<[string, Record<string, unknown>]> = [];
+    const call = async (method: string, params: Record<string, unknown>) => {
+      calls.push([method, params]);
+      return method === "list_windows"
+        ? { windows: [
+          { windowId: 3, title: "Project Settings", isModal: false },
+          { windowId: 4, title: "Content Browser", isModal: false },
+          { windowId: 5, title: "BP_Thing", isModal: false },
+          { windowId: 6, title: "Content Browser", isModal: true },
+        ] }
+        : { success: true };
+    };
+    expect(await closeEditorTabWindows(call)).toEqual(["Project Settings", "Content Browser"]);
+    expect(calls.filter(([m]) => m === "close_window").map(([, p]) => p.windowId)).toEqual([3, 4]);
+  });
+
+  it("does nothing when list_windows answers without windows", async () => {
+    expect(await closeEditorTabWindows(async () => undefined)).toEqual([]);
   });
 });

@@ -120,3 +120,41 @@ export function guardUserLayouts(files = userLayoutFiles()) {
     },
   };
 }
+
+/**
+ * For runners that drive an editor they do not close (attach mode, smoke): read
+ * the layouts now and close what the run opened when this process exits. A tab
+ * the editor saves only when it later quits is out of reach; its own
+ * open_settings and import cases are the ones that leave tabs behind.
+ */
+export function guardUserLayoutsUntilExit(say, proc = process, files = userLayoutFiles()) {
+  const guard = guardUserLayouts(files);
+  proc.once("exit", () => {
+    const closed = guard.release();
+    if (closed.length) say(`closed ${closed.length} tab(s) the run left open in the user editor layout: ${closed.join(", ")}`);
+  });
+  return guard;
+}
+
+/**
+ * Titles of the floating windows a test summons and an editor then saves as
+ * open: open_settings, open_tab and the Content Browser an Interchange import
+ * opens. Matched exactly, so an asset editor or a dialog is never closed.
+ */
+export const EDITOR_TAB_WINDOW_TITLES = ["Project Settings", "Editor Preferences", "Content Browser", "Output Log", "Plugins"];
+
+/**
+ * Close those windows through list_windows and close_window. `call(method,
+ * params)` resolves to the action's result object. Returns the titles closed.
+ */
+export async function closeEditorTabWindows(call) {
+  const listed = await call("list_windows", { maxTexts: 1, maxButtons: 1 });
+  const windows = Array.isArray(listed?.windows) ? listed.windows : [];
+  const closed = [];
+  for (const w of windows) {
+    if (!EDITOR_TAB_WINDOW_TITLES.includes(w?.title) || w.isModal) continue;
+    await call("close_window", { windowId: w.windowId });
+    closed.push(w.title);
+  }
+  return closed;
+}
