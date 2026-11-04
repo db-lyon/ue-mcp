@@ -2,6 +2,9 @@
 
 These workflows use the asset and material categories. Paths such as `/Game/Props/T_Normal.T_Normal` are object paths; imports take a disk `filePath` and a content folder `packagePath`.
 
+For inserting nodes into existing material wires and inspecting large graphs,
+see [Material insertion and filtered inspection](material-graph-surgery.md).
+
 ## Texture batches
 
 `asset(import_texture_batch)` imports 1-500 textures with per-file presets and overrides. `save` defaults true and `packagePath` defaults to `/Game/Textures`.

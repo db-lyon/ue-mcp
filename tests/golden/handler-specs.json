@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1213,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -19627,6 +19627,66 @@
         }
       ]
     },
+    "insert_expression_between": {
+      "category": "material",
+      "params": [
+        {
+          "name": "materialPath",
+          "type": "string",
+          "required": true,
+          "description": "Material asset path"
+        },
+        {
+          "name": "targetExpression",
+          "type": "string",
+          "required": false,
+          "description": "Target expression name; pass this or property"
+        },
+        {
+          "name": "property",
+          "type": "string",
+          "required": false,
+          "description": "Target material property, including MaterialAttributes"
+        },
+        {
+          "name": "targetInput",
+          "type": "string",
+          "required": false,
+          "description": "Target input name or index; default first input"
+        },
+        {
+          "name": "expressionType",
+          "type": "string",
+          "required": true,
+          "description": "New material expression class or short name"
+        },
+        {
+          "name": "inputForUpstream",
+          "type": "string",
+          "required": false,
+          "description": "New node input for the previous source; default first input"
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": false,
+          "description": "Editable reflected properties on the new expression"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "targetExpression"
+            ],
+            [
+              "property"
+            ]
+          ]
+        }
+      ]
+    },
     "inspect_anim_nodes": {
       "category": "animation",
       "params": [
@@ -28324,6 +28384,63 @@
         }
       ]
     },
+    "read_material_summary": {
+      "category": "material",
+      "params": [
+        {
+          "name": "materialPath",
+          "type": "string",
+          "required": true,
+          "description": "Material asset path"
+        },
+        {
+          "name": "classes",
+          "type": "array",
+          "required": false,
+          "description": "Expression classes to include, full or short names",
+          "items": "string"
+        },
+        {
+          "name": "parameterNames",
+          "type": "array",
+          "required": false,
+          "description": "Parameter names to include; intersects classes when both are supplied",
+          "items": "string"
+        },
+        {
+          "name": "propertyChain",
+          "type": "object",
+          "required": false,
+          "description": "One property or named expression input and upstream depth limit",
+          "fields": [
+            {
+              "name": "property",
+              "type": "string",
+              "required": false,
+              "description": "Root material property"
+            },
+            {
+              "name": "targetExpression",
+              "type": "string",
+              "required": false,
+              "description": "Root expression instead of property"
+            },
+            {
+              "name": "targetInput",
+              "type": "string",
+              "required": false,
+              "description": "Root expression input name or index"
+            },
+            {
+              "name": "depthLimit",
+              "type": "integer",
+              "required": false,
+              "description": "Maximum upstream depth from 0 to 64; default 8"
+            }
+          ]
+        }
+      ]
+    },
     "read_mirror_data_table": {
       "category": "animation",
       "params": [
@@ -32344,6 +32461,35 @@
               "actorPath"
             ]
           ]
+        }
+      ]
+    },
+    "restore_expression_insertion": {
+      "category": "material",
+      "params": [
+        {
+          "name": "materialPath",
+          "type": "string",
+          "required": true,
+          "description": "Material asset path"
+        },
+        {
+          "name": "expressionName",
+          "type": "string",
+          "required": true,
+          "description": "Inserted node name from the rollback record"
+        },
+        {
+          "name": "insertion",
+          "type": "object",
+          "required": true,
+          "description": "Original insertion parameters from the rollback record"
+        },
+        {
+          "name": "previousSource",
+          "type": "object",
+          "required": true,
+          "description": "Original source and channel masks from the rollback record"
         }
       ]
     },
