@@ -944,14 +944,7 @@ namespace
 			Texture->BlockOnAnyAsyncBuild();
 		}
 		FThumbnailRenderingInfo* Info = (Asset && !bLevel) ? UThumbnailManager::Get().GetRenderingInfo(Asset) : nullptr;
-		// A Blueprint loaded for diff is not compiled (LOAD_DisableCompileOnLoad), and the Blueprint and
-		// Widget Blueprint renderers draw nothing for one that has not been regenerated.
-		const UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
-		if (Blueprint && !Blueprint->bHasBeenRegenerated)
-		{
-			Error = TEXT("a Blueprint loaded for diff is not compiled, so Unreal's thumbnail renderer draws nothing for it");
-		}
-		else if (Info && Info->Renderer)
+		if (Info && Info->Renderer)
 		{
 			FAssetCompilingManager::Get().FinishAllCompilation();
 			if (GShaderCompilingManager) GShaderCompilingManager->FinishAllCompilation();
@@ -964,6 +957,8 @@ namespace
 				T->SetStringField(TEXT("source"), TEXT("rendered"));
 				return T;
 			}
+			// The Widget Blueprint renderer draws nothing for a Blueprint loaded for diff: it is not compiled
+			// (LOAD_DisableCompileOnLoad), so it has not been regenerated, and the target stays black.
 			Error = TEXT("Unreal's thumbnail renderer drew nothing for this version: ") + Error;
 		}
 		else

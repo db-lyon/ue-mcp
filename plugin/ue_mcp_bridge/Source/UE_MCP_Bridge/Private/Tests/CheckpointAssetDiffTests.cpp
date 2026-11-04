@@ -354,7 +354,7 @@ bool FMCPCheckpointAssetDiffWidgetBlueprintTest::RunTest(const FString& Paramete
 	}
 	TestTrue(TEXT("the added Print String is a NODE_ADDED record"), bNode);
 
-	// A Blueprint loaded for diff is not compiled, so its renderer draws nothing: never a blank picture, and the reason.
+	// A Widget Blueprint loaded for diff is not compiled, so its renderer draws nothing: never a blank picture, and the reason.
 	for (const TCHAR* Side : { TEXT("before"), TEXT("after") })
 	{
 		const TSharedPtr<FJsonObject> Thumb = Diff->GetObjectField(Side)->GetObjectField(TEXT("thumbnail"));
@@ -365,7 +365,7 @@ bool FMCPCheckpointAssetDiffWidgetBlueprintTest::RunTest(const FString& Paramete
 		}
 		else
 		{
-			TestTrue(FString::Printf(TEXT("%s has no picture, and says why"), Side), Thumb->GetStringField(TEXT("error")).Contains(TEXT("not compiled")));
+			TestTrue(FString::Printf(TEXT("%s has no picture, and says why"), Side), Thumb->GetStringField(TEXT("error")).Contains(TEXT("drew nothing")));
 		}
 	}
 	return true;
