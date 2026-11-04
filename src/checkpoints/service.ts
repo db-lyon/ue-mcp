@@ -29,6 +29,7 @@ import {
 } from "./shadow-repo.js";
 import {
   ASSET_DIFF_FORMAT,
+  thumbnailFile,
   MAX_ASSET_DIFFS,
   assetDiffDeferred,
   assetDiffError,
@@ -340,7 +341,7 @@ export class SessionCheckpoints {
   /** A picture asset diffs refer to, by id, as a file path. */
   thumbnail(id: string): { file: string; type: string } | null {
     if (!/^[0-9a-f]{40}$/.test(id) || !this.session.project.projectDir) return null;
-    const file = path.join(this.repo().thumbsDir, `${id}.png`);
+    const file = thumbnailFile(this.repo().thumbsDir, id);
     return fs.existsSync(file) ? { file, type: "image/png" } : null;
   }
 
@@ -484,7 +485,7 @@ export class SessionCheckpoints {
     if (!jobs.length) return { diffs, unknownMethod: false };
 
     const dir = this.diffDir("diff");
-    const thumb = (v: string) => path.join(repo.thumbsDir, `${v}.png`);
+    const thumb = (v: string) => thumbnailFile(repo.thumbsDir, v);
     const want = (v: string | null) => (v && !fs.existsSync(thumb(v)) ? thumb(v) : null);
     const ready: DiffJob[] = [];
     let unknownMethod = false;
@@ -562,12 +563,12 @@ export class SessionCheckpoints {
   private finishDiff(job: DiffJob, raw: Json | null): AssetDiff {
     if (!raw || raw.success === false) return assetDiffError(String(raw?.error ?? "The editor returned no diff and no reason."));
     const repo = this.repo();
-    const thumb = (v: string) => path.join(repo.thumbsDir, `${v}.png`);
+    const thumb = (v: string) => thumbnailFile(repo.thumbsDir, v);
     try {
       const picture = (side: "before" | "after", t: Json | undefined): AssetThumbnail | undefined => {
         const version = side === "before" ? job.a : job.b;
         if (!version) return undefined;
-        const meta = path.join(repo.thumbsDir, `${version}.json`);
+        const meta = thumbnailFile(repo.thumbsDir, version, "json");
         if (t && typeof t.file === "string") {
           const info: { source: "rendered" | "saved"; note?: string } = { source: t.source === "saved" ? "saved" : "rendered" };
           if (typeof t.note === "string" && t.note) info.note = t.note;
