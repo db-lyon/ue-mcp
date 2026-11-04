@@ -91,7 +91,7 @@ namespace MeshStudioRender
 		// Windows device names are invalid even with a PNG extension.
 		const FString Upper = Id.ToUpper();
 		if (Upper == TEXT("CON") || Upper == TEXT("PRN") || Upper == TEXT("AUX") || Upper == TEXT("NUL")) return false;
-		if (Upper.Len() == 4 && (Upper.StartsWith(TEXT("COM")) || Upper.StartsWith(TEXT("LPT")))
+		if (Upper.Len() == 4 && (Upper.StartsWith(TEXT("COM")) || Upper.StartsWith(TEXT("LPT"))))
 			return Upper[3] < '1' || Upper[3] > '9';
 		return true;
 	}
