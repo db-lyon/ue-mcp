@@ -13,9 +13,22 @@
  * same picture.
  */
 import { unifiedDiff } from "./text-diff.js";
+import * as path from "node:path";
 
 /** Bumped when the bridge's records change shape, so cached diffs are recomputed. */
-export const ASSET_DIFF_FORMAT = 2;
+export const ASSET_DIFF_FORMAT = 3;
+
+/**
+ * Bumped when the bridge's pictures change, so a picture kept for a version is
+ * rendered again. 2: the bridge no longer writes a blank picture (a Blueprint
+ * loaded for diff is not compiled, so its renderer drew nothing but black).
+ */
+export const THUMBNAIL_FORMAT = 2;
+
+/** Where the picture (png) of a version, or what is known about it (json), is kept. */
+export function thumbnailFile(dir: string, version: string, ext: "png" | "json" = "png"): string {
+  return path.join(dir, `${version}.v${THUMBNAIL_FORMAT}.${ext}`);
+}
 
 /** How many packages one list_changes diffs up front; the rest are diffed on request, per path. */
 export const MAX_ASSET_DIFFS = 25;

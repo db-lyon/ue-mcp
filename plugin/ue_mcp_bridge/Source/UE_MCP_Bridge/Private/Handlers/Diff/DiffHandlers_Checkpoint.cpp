@@ -857,6 +857,30 @@ namespace
 		return Side;
 	}
 
+	/** Most a colour channel may vary across a picture that still counts as one flat colour. */
+	constexpr int32 CkDiffBlankTolerance = 6;
+
+	/**
+	 * Whether a BGRA picture is one flat colour: a renderer that drew nothing leaves the cleared target
+	 * (black), or only its background tile. A picture of nothing is not a picture of the version.
+	 */
+	bool CkDiffIsBlank(const TArray<uint8>& Bytes, int32 Pixels)
+	{
+		uint8 Min[3] = { 255, 255, 255 };
+		uint8 Max[3] = { 0, 0, 0 };
+		for (int32 i = 0; i < Pixels; ++i)
+		{
+			const uint8* P = &Bytes[i * 4];
+			for (int32 c = 0; c < 3; ++c)
+			{
+				Min[c] = FMath::Min(Min[c], P[c]);
+				Max[c] = FMath::Max(Max[c], P[c]);
+			}
+			if (Max[0] - Min[0] > CkDiffBlankTolerance || Max[1] - Min[1] > CkDiffBlankTolerance || Max[2] - Min[2] > CkDiffBlankTolerance) return false;
+		}
+		return true;
+	}
+
 	bool CkDiffWritePng(const FObjectThumbnail& Thumb, const FString& OutFile, FString& OutError)
 	{
 		const int32 W = Thumb.GetImageWidth();
@@ -865,6 +889,11 @@ namespace
 		if (W <= 0 || H <= 0 || Bytes.Num() < W * H * 4)
 		{
 			OutError = TEXT("the thumbnail came back empty");
+			return false;
+		}
+		if (CkDiffIsBlank(Bytes, W * H))
+		{
+			OutError = TEXT("the thumbnail is one flat colour, a picture of nothing");
 			return false;
 		}
 		IImageWrapperModule& Module = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
@@ -902,7 +931,14 @@ namespace
 			Texture->BlockOnAnyAsyncBuild();
 		}
 		FThumbnailRenderingInfo* Info = (Asset && !bLevel) ? UThumbnailManager::Get().GetRenderingInfo(Asset) : nullptr;
-		if (Info && Info->Renderer)
+		// A Blueprint loaded for diff is not compiled (LOAD_DisableCompileOnLoad), and the Blueprint and
+		// Widget Blueprint renderers draw nothing for one that has not been regenerated.
+		const UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
+		if (Blueprint && !Blueprint->bHasBeenRegenerated)
+		{
+			Error = TEXT("a Blueprint loaded for diff is not compiled, so Unreal's thumbnail renderer draws nothing for it");
+		}
+		else if (Info && Info->Renderer)
 		{
 			FAssetCompilingManager::Get().FinishAllCompilation();
 			if (GShaderCompilingManager) GShaderCompilingManager->FinishAllCompilation();
@@ -915,6 +951,7 @@ namespace
 				T->SetStringField(TEXT("source"), TEXT("rendered"));
 				return T;
 			}
+			Error = TEXT("Unreal's thumbnail renderer drew nothing for this version: ") + Error;
 		}
 		else
 		{
@@ -923,26 +960,28 @@ namespace
 				: TEXT("an actor package has no thumbnail renderer");
 		}
 		// The thumbnail saved with this version, under the name it had in the project.
+		FString Saved = TEXT("this version's package has no saved thumbnail");
 		if (Asset)
 		{
 			const FName FullName(*FString::Printf(TEXT("%s %s.%s"), *Asset->GetClass()->GetName(), *OriginalPackage, *Asset->GetName()));
 			FThumbnailMap Map;
 			if (ThumbnailTools::LoadThumbnailsFromPackage(File, { FullName }, Map))
 			{
-				if (const FObjectThumbnail* Saved = Map.Find(FullName))
+				if (const FObjectThumbnail* Kept = Map.Find(FullName))
 				{
 					FString SaveError;
-					if (!Saved->IsEmpty() && CkDiffWritePng(*Saved, OutFile, SaveError))
+					if (!Kept->IsEmpty() && CkDiffWritePng(*Kept, OutFile, SaveError))
 					{
 						T->SetStringField(TEXT("file"), OutFile);
 						T->SetStringField(TEXT("source"), TEXT("saved"));
 						T->SetStringField(TEXT("note"), Error);
 						return T;
 					}
+					if (!Kept->IsEmpty()) Saved = TEXT("the thumbnail saved with this version: ") + SaveError;
 				}
 			}
 		}
-		T->SetStringField(TEXT("error"), Error + TEXT(", and this version's package has no saved thumbnail"));
+		T->SetStringField(TEXT("error"), Error + TEXT("; and ") + Saved);
 		return T;
 	}
 
