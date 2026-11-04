@@ -10,7 +10,7 @@ import { ensureGuard } from "../editor/dialog-guard.js";
 import { paramMapperOf } from "../surface/epic-input.js";
 import { epicEngineRefusal } from "../surface/epic-engines.js";
 import { actionAccepts } from "../surface/action-schema.js";
-import type { IBridge } from "../bridge/bridge.js";
+import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
 
 /**
  * Refuse a handler-backed call while a modal is up, through the one guard.
@@ -108,7 +108,11 @@ export async function runBridge(
   const params = forwardToBridge(pipeline, pipeline.params, mapParams, name);
   // The caller's budget wins over the action's authored one: an action that
   // declares 120s is stating a floor it needs, not a ceiling.
-  const sent = await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs);
+  // Progress and cancellation reach the editor for a handler that defers its answer.
+  const live = ctx.onProgress || ctx.signal ? { onProgress: ctx.onProgress, signal: ctx.signal } : undefined;
+  const sent = live
+    ? await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs, live)
+    : await ctx.bridge.call(method, params, pipeline.timeoutMs ?? timeoutMs);
   const answered = followUp ? await followUp(ctx, params, sent) : sent;
   const raw = finishCall(answered, pipeline);
   if (typeof raw !== "object" || raw === null) {
@@ -141,7 +145,8 @@ export function withCallTimeout<B extends { call: IBridge["call"] }>(bridge: B, 
   return new Proxy(bridge, {
     get(target, key) {
       if (key === "call") {
-        return (method: string, params?: Record<string, unknown>, ms?: number) => target.call(method, params, ms ?? timeoutMs);
+        return (method: string, params?: Record<string, unknown>, ms?: number, options?: BridgeCallOptions) =>
+          target.call(method, params, ms ?? timeoutMs, options);
       }
       const value = Reflect.get(target, key, target);
       return typeof value === "function" ? value.bind(target) : value;

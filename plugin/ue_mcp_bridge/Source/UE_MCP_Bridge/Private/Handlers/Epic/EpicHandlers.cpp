@@ -2,6 +2,11 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "UE_MCP_BridgeModule.h"
+#include "HandlerDeferred.h"
+
+#include "Containers/Ticker.h"
+#include "Misc/Guid.h"
+#include "UObject/StrongObjectPtr.h"
 
 #include "UObject/Object.h"
 #include "UObject/Class.h"
@@ -89,7 +94,7 @@ namespace UEMCPEpic
 		return bResult;
 	}
 
-	static bool GetAllSchemas(FString& Out)
+	bool GetAllSchemas(FString& Out)
 	{
 		FString Result;
 		const bool bCalled = InvokeStatic(TEXT("GetAllToolsetJsonSchemas"), {}, [&](UFunction* Func, uint8* Buffer)
@@ -203,6 +208,135 @@ namespace UEMCPEpic
 
 	static const FString UnavailableMsg =
 		TEXT("Epic ToolsetRegistry not available. Requires UE 5.8+ with the ToolsetRegistry plugin enabled in the project.");
+
+	// outputSchema per qualified tool name. Game thread only. Re-read when a tool
+	// is missing, since a toolset can register after the first call.
+	static TMap<FString, TSharedPtr<FJsonObject>>& OutputSchemas()
+	{
+		static TMap<FString, TSharedPtr<FJsonObject>> Cache;
+		return Cache;
+	}
+
+	static void RefreshOutputSchemas()
+	{
+		TMap<FString, TSharedPtr<FJsonObject>>& Cache = OutputSchemas();
+		Cache.Reset();
+		FString Raw;
+		TArray<TSharedPtr<FJsonValue>> Toolsets;
+		if (!GetAllSchemas(Raw) || !ParseJsonArray(Raw, Toolsets)) return;
+		for (const TSharedPtr<FJsonValue>& TV : Toolsets)
+		{
+			const TSharedPtr<FJsonObject>* Toolset = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Tools = nullptr;
+			if (!TV.IsValid() || !TV->TryGetObject(Toolset) || !Toolset || !(*Toolset)->TryGetArrayField(TEXT("tools"), Tools) || !Tools) continue;
+			FString ToolsetName;
+			(*Toolset)->TryGetStringField(TEXT("name"), ToolsetName);
+			for (const TSharedPtr<FJsonValue>& V : *Tools)
+			{
+				const TSharedPtr<FJsonObject>* Tool = nullptr;
+				FString Name;
+				if (!V.IsValid() || !V->TryGetObject(Tool) || !Tool || !(*Tool)->TryGetStringField(TEXT("name"), Name)) continue;
+				const TSharedPtr<FJsonObject>* Schema = nullptr;
+				(*Tool)->TryGetObjectField(TEXT("outputSchema"), Schema);
+				Cache.Add(Name.StartsWith(ToolsetName + TEXT(".")) ? Name : ToolsetName + TEXT(".") + Name, Schema ? *Schema : nullptr);
+			}
+		}
+	}
+
+	static TSharedPtr<FJsonObject> FindOutputSchema(const FString& Toolset, const FString& Tool)
+	{
+		const FString Qualified = Toolset + TEXT(".") + Tool;
+		if (!OutputSchemas().Contains(Qualified)) RefreshOutputSchemas();
+		const TSharedPtr<FJsonObject>* Found = OutputSchemas().Find(Qualified);
+		return Found ? *Found : nullptr;
+	}
+
+	// FJsonSchemaGenerator stamps a struct's name as the title of its schema
+	// node, so an FToolsetImage slot reads {type: object, title: ToolsetImage}.
+	// The same signal Epic's MCP server keys its image content blocks on.
+	static bool IsImageSlot(const TSharedPtr<FJsonObject>& Schema)
+	{
+		FString Type, Title;
+		Schema->TryGetStringField(TEXT("type"), Type);
+		Schema->TryGetStringField(TEXT("title"), Title);
+		return Type == TEXT("object") && Title == TEXT("ToolsetImage");
+	}
+
+	static FString EscapePointerPart(const FString& Part)
+	{
+		return Part.Replace(TEXT("~"), TEXT("~0")).Replace(TEXT("/"), TEXT("~1"));
+	}
+
+	/**
+	 * Walks Value beside its outputSchema and moves every image the schema marks
+	 * into OutMedia, leaving a urn in its slot. Returns the value to keep at this
+	 * slot. A null or malformed image is left as the tool wrote it.
+	 */
+	static TSharedPtr<FJsonValue> ExtractMedia(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonValue>& Value, const FString& Pointer, const FString& UriPrefix, TArray<TSharedPtr<FJsonValue>>& OutMedia, int32 Depth)
+	{
+		if (!Schema.IsValid() || !Value.IsValid() || Depth > 64) return Value;
+		if (IsImageSlot(Schema))
+		{
+			const TSharedPtr<FJsonObject>* Image = nullptr;
+			FString Mime, Data;
+			if (!Value->TryGetObject(Image) || !Image || !(*Image)->TryGetStringField(TEXT("mimeType"), Mime)
+				|| !(*Image)->TryGetStringField(TEXT("data"), Data) || Mime.IsEmpty() || Data.IsEmpty())
+			{
+				return Value;
+			}
+			const FString Uri = UriPrefix + Pointer;
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("type"), TEXT("image"));
+			Entry->SetStringField(TEXT("mimeType"), Mime);
+			Entry->SetStringField(TEXT("data"), Data);
+			Entry->SetStringField(TEXT("uri"), Uri);
+			Entry->SetStringField(TEXT("pointer"), Pointer);
+			OutMedia.Add(MakeShared<FJsonValueObject>(Entry));
+			return MakeShared<FJsonValueString>(Uri);
+		}
+		FString Type;
+		Schema->TryGetStringField(TEXT("type"), Type);
+		if (Type == TEXT("object"))
+		{
+			const TSharedPtr<FJsonObject>* Properties = nullptr;
+			const TSharedPtr<FJsonObject>* Object = nullptr;
+			if (!Schema->TryGetObjectField(TEXT("properties"), Properties) || !Properties || !Value->TryGetObject(Object) || !Object) return Value;
+			for (const auto& Pair : (*Properties)->Values)
+			{
+				const FString Key(*Pair.Key);
+				const TSharedPtr<FJsonObject>* Sub = nullptr;
+				const TSharedPtr<FJsonValue> Child = (*Object)->TryGetField(Key);
+				if (!Child.IsValid() || !Pair.Value.IsValid() || !Pair.Value->TryGetObject(Sub) || !Sub) continue;
+				const TSharedPtr<FJsonValue> Kept = ExtractMedia(*Sub, Child, Pointer + TEXT("/") + EscapePointerPart(Key), UriPrefix, OutMedia, Depth + 1);
+				if (Kept != Child) (*Object)->SetField(Key, Kept);
+			}
+			return Value;
+		}
+		if (Type == TEXT("array"))
+		{
+			const TSharedPtr<FJsonObject>* Items = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
+			if (!Schema->TryGetObjectField(TEXT("items"), Items) || !Items || !Value->TryGetArray(Array) || !Array) return Value;
+			TArray<TSharedPtr<FJsonValue>> Out = *Array;
+			bool bChanged = false;
+			for (int32 Index = 0; Index < Out.Num(); ++Index)
+			{
+				const TSharedPtr<FJsonValue> Kept = ExtractMedia(*Items, Out[Index], Pointer + TEXT("/") + FString::FromInt(Index), UriPrefix, OutMedia, Depth + 1);
+				if (Kept != Out[Index])
+				{
+					Out[Index] = Kept;
+					bChanged = true;
+				}
+			}
+			return bChanged ? MakeShared<FJsonValueArray>(Out) : Value;
+		}
+		return Value;
+	}
+
+	/** The answer for a finished UToolCallAsyncResult. */
+	static TSharedPtr<FJsonValue> BuildCallAnswer(
+		const FString& Toolset, const FString& Tool, const FString& ToolName, UObject* Result,
+		bool bHadTarget, const TWeakObjectPtr<UObject>& VerifiedTarget, const FString& Before);
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -380,6 +514,8 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 	// A tool that reports success while its target is unchanged applied nothing (#1318).
 	UObject* VerifiedTarget = UEMCPEpic::ResolveInputTarget(Input, UEMCPEpic::VerifiedTargetField(ToolName));
 	const FString Before = VerifiedTarget ? UEMCPEpic::Fingerprint(VerifiedTarget) : FString();
+	const TWeakObjectPtr<UObject> WeakTarget(VerifiedTarget);
+	const bool bHadTarget = VerifiedTarget != nullptr;
 
 	UObject* Result = UEMCPEpic::ExecuteTool(Toolset, ToolName, Input);
 	if (!Result)
@@ -389,12 +525,39 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 			*Toolset, *Tool));
 	}
 
-	UClass* RC = Result->GetClass();
-	bool bComplete = false;
-	if (FBoolProperty* P = CastField<FBoolProperty>(RC->FindPropertyByName(TEXT("bIsComplete"))))
+	FBoolProperty* CompleteProp = CastField<FBoolProperty>(Result->GetClass()->FindPropertyByName(TEXT("bIsComplete")));
+	if (!CompleteProp || CompleteProp->GetPropertyValue_InContainer(Result))
 	{
-		bComplete = P->GetPropertyValue_InContainer(Result);
+		return UEMCPEpic::BuildCallAnswer(Toolset, Tool, ToolName, Result, bHadTarget, WeakTarget, Before);
 	}
+
+	// The tool answers later (a capture waiting on a frame, an async Python tool).
+	// The registry hands back a promise object with no cancel of its own, so a
+	// cancel stops the wait here and the tool runs on to its end in the editor.
+	const FMCPDeferredCallPtr Deferred = MCPDeferRequest();
+	if (!Deferred)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Tool '%s' completes asynchronously, and only a bridge request can wait for it."), *Tool));
+	}
+	Deferred->SetCancelNote(TEXT("Epic's ToolsetRegistry gives a running tool no cancel hook, so the tool keeps running in the editor; only the wait was stopped."));
+	TStrongObjectPtr<UObject> Pending(Result);
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
+		[Deferred, Pending, CompleteProp, Toolset, Tool, ToolName, bHadTarget, WeakTarget, Before](float) -> bool
+		{
+			if (Deferred->IsCancelled()) return false;
+			if (!CompleteProp->GetPropertyValue_InContainer(Pending.Get())) return true;
+			Deferred->Complete(UEMCPEpic::BuildCallAnswer(Toolset, Tool, ToolName, Pending.Get(), bHadTarget, WeakTarget, Before));
+			return false;
+		}));
+	return MCPDeferredMarker();
+}
+
+TSharedPtr<FJsonValue> UEMCPEpic::BuildCallAnswer(
+	const FString& Toolset, const FString& Tool, const FString& ToolName, UObject* Result,
+	bool bHadTarget, const TWeakObjectPtr<UObject>& WeakTarget, const FString& Before)
+{
+	UClass* RC = Result->GetClass();
 	FString ToolError;
 	if (FStrProperty* P = CastField<FStrProperty>(RC->FindPropertyByName(TEXT("Error"))))
 	{
@@ -404,12 +567,6 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 	{
 		return MCPError(FString::Printf(TEXT("Tool '%s' failed: %s"), *Tool, *ToolError));
 	}
-	if (!bComplete)
-	{
-		return MCPError(FString::Printf(
-			TEXT("Tool '%s' returned an asynchronous result that did not complete synchronously; "
-				 "async tool results are not yet supported by the bridge wrapper."), *Tool));
-	}
 
 	FString Value;
 	if (FStrProperty* P = CastField<FStrProperty>(RC->FindPropertyByName(TEXT("Value"))))
@@ -417,6 +574,7 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 		Value = P->GetPropertyValue_InContainer(Result);
 	}
 
+	UObject* VerifiedTarget = WeakTarget.Get();
 	const bool bTargetUnchanged = IsValid(VerifiedTarget) && UEMCPEpic::Fingerprint(VerifiedTarget) == Before;
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	if (bTargetUnchanged)
@@ -431,7 +589,7 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 	}
 	Res->SetStringField(TEXT("toolset"), Toolset);
 	Res->SetStringField(TEXT("tool"), Tool);
-	if (VerifiedTarget) Res->SetBoolField(TEXT("targetChanged"), !bTargetUnchanged);
+	if (bHadTarget) Res->SetBoolField(TEXT("targetChanged"), !bTargetUnchanged);
 
 	if (!Value.IsEmpty())
 	{
@@ -439,7 +597,14 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Value);
 		if (FJsonSerializer::Deserialize(Reader, Parsed) && Parsed.IsValid())
 		{
+			// Images the outputSchema marks travel as media, so the server can hand
+			// them to the client as image content instead of base64 inside text.
+			TArray<TSharedPtr<FJsonValue>> Media;
+			const FString UriPrefix = FString::Printf(TEXT("urn:toolresult:%s.%s:%s:"), *Toolset, *ToolName,
+				*FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower));
+			Parsed = UEMCPEpic::ExtractMedia(UEMCPEpic::FindOutputSchema(Toolset, ToolName), Parsed, FString(), UriPrefix, Media, 0);
 			Res->SetField(TEXT("result"), Parsed);
+			if (Media.Num() > 0) Res->SetArrayField(TEXT("media"), Media);
 		}
 		else
 		{
@@ -467,7 +632,7 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 	// work to do, or found its target already in the requested state, is
 	// decided inside the tool and is not part of what it returns. A flag
 	// invented here would be a claim about somebody else's code.
-	if (VerifiedTarget)
+	if (bHadTarget)
 	{
 		Res->SetBoolField(TEXT("idempotencyObservable"), true);
 		Res->SetStringField(TEXT("idempotencyNote"), TEXT("The target the input names was compared before and after the call; targetChanged reports the outcome."));
@@ -499,10 +664,27 @@ void FEpicHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// The dispatcher every wrapped engine tool goes through. Its own contract is
 	// this bag; each generated epic_* action builds it from the wrapped tool's
 	// recorded input schema, which is that action's contract (#1057).
-	Registry.RegisterHandler(TEXT("epic_call_tool"), &CallTool, {
+	// 300s: an asynchronous tool's answer is awaited within the handler's budget.
+	Registry.RegisterHandlerWithTimeout(TEXT("epic_call_tool"), &CallTool, 300.0f, {
 		MCPParam::Required(TEXT("toolset"), EType::String, TEXT("Qualified toolset name from epic_list_toolsets, e.g. GASToolsets.AttributeSetToolset")),
 		MCPParam::Required(TEXT("tool"), EType::String, TEXT("Tool name from describe_toolset, bare or qualified with its toolset")),
 		MCPParam::Optional(TEXT("input"), EType::Object, TEXT("Tool arguments as a JSON object")),
 		MCPParam::Optional(TEXT("inputJson"), EType::String, TEXT("Tool arguments as a raw JSON string; wins over input")),
 	}, MCPSpec::ContractExempt(TEXT("runs a registered engine tool")));
+
+	// Epic's Unreal MCP plugin: its own tool list and resource providers.
+	Registry.RegisterHandler(TEXT("epic_list_mcp_tools"), &ListMCPTools, {
+		MCPParam::Optional(TEXT("nameFilter"), EType::String, TEXT("Case-sensitive substring of the tool name")),
+		MCPParam::Optional(TEXT("includeSchemas"), EType::Boolean, TEXT("Return each tool's input and output schemas (default false)")),
+		MCPParam::Optional(TEXT("includeRegistryAdapters"), EType::Boolean, TEXT("Also list the tools that only adapt ToolsetRegistry tools, which epic(list_toolsets) already covers (default false)")),
+	});
+	Registry.RegisterHandlerWithTimeout(TEXT("epic_call_mcp_tool"), &CallMCPTool, 300.0f, {
+		MCPParam::Required(TEXT("tool"), EType::String, TEXT("Tool name from epic_list_mcp_tools")),
+		MCPParam::Optional(TEXT("input"), EType::Object, TEXT("Tool arguments as a JSON object")),
+		MCPParam::Optional(TEXT("inputJson"), EType::String, TEXT("Tool arguments as a raw JSON string; wins over input")),
+	}, MCPSpec::ContractExempt(TEXT("runs a registered engine tool")));
+	Registry.RegisterHandler(TEXT("epic_list_mcp_resources"), &ListMCPResources, {});
+	Registry.RegisterHandler(TEXT("epic_read_mcp_resource"), &ReadMCPResource, {
+		MCPParam::Required(TEXT("uri"), EType::String, TEXT("Resource uri from epic_list_mcp_resources")),
+	});
 }

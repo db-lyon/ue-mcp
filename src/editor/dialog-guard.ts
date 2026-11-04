@@ -25,7 +25,7 @@
  * caught by whichever notices first.
  */
 import type { EditorSession } from "../sessions/session.js";
-import type { IBridge } from "../bridge/bridge.js";
+import type { BridgeCallOptions, IBridge } from "../bridge/bridge.js";
 import type { DialogPromptFn, ElicitFn, ElicitPrimitiveSchema, ElicitResult } from "../core/types.js";
 import type { DialogMode } from "../config/user-state.js";
 import { readEnv } from "../core/env.js";
@@ -79,6 +79,7 @@ const MODAL_SAFE_METHODS = new Set([
   "get_bridge_capabilities",
   "get_param_echo",
   "clear_param_echo",
+  "cancel_request",
 ]);
 
 export function isModalSafeMethod(method: string): boolean {
@@ -1286,9 +1287,9 @@ export function withoutDialogActuation<T extends IBridge>(session: EditorSession
   return new Proxy(raw, {
     get(target, prop, receiver) {
       if (prop !== "call") return Reflect.get(target, prop, receiver);
-      return async (method: string, params?: Record<string, unknown>, timeoutMs?: number) => {
+      return async (method: string, params?: Record<string, unknown>, timeoutMs?: number, options?: BridgeCallOptions) => {
         const armsAPolicy = method === "set_dialog_policy" || method === "clear_dialog_policy";
-        if (!armsAPolicy) return target.call(method, params, timeoutMs);
+        if (!armsAPolicy) return target.call(method, params, timeoutMs, options);
 
         // This is the ONLY thing standing in front of an unattended button
         // press: the plugin serves both methods during a modal on purpose, so
@@ -1312,7 +1313,7 @@ export function withoutDialogActuation<T extends IBridge>(session: EditorSession
               + "editor(respond_to_dialog).",
           };
         }
-        return target.call(method, params, timeoutMs);
+        return target.call(method, params, timeoutMs, options);
       };
     },
   });

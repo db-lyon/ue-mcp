@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -10,6 +11,7 @@ import { bridgeStateDir, isPidAlive, resolveLiveBridgeAddress } from "./editor-t
 import { syncRequestedPort } from "./requested-port.js";
 import { packageVersion } from "../core/package-root.js";
 import { readEnv } from "../core/env.js";
+import type { ProgressUpdate } from "../core/types.js";
 
 /**
  * The wire protocol this client speaks. Must match
@@ -149,10 +151,49 @@ export interface BridgeResponse {
  * `timeoutMs` is the caller's explicit budget; the plugin waits at least that
  * long on the game thread instead of its 30s default (#1339).
  */
-export function encodeRequest(id: string, method: string, params?: Record<string, unknown>, timeoutMs?: number): string {
-  return JSON.stringify(timeoutMs === undefined
-    ? { id, method, params: params ?? {} }
-    : { id, method, params: params ?? {}, timeoutMs });
+export function encodeRequest(
+  id: string,
+  method: string,
+  params?: Record<string, unknown>,
+  timeoutMs?: number,
+  extras?: { cancelToken?: string; progress?: boolean },
+): string {
+  const frame: Record<string, unknown> = { id, method, params: params ?? {} };
+  if (timeoutMs !== undefined) frame.timeoutMs = timeoutMs;
+  if (extras?.cancelToken) frame.cancelToken = extras.cancelToken;
+  if (extras?.progress) frame.progress = true;
+  return JSON.stringify(frame);
+}
+
+/**
+ * What a caller can hand one bridge call besides its parameters. A plugin that
+ * defers its answer sends notifications/progress frames while it is awaited and
+ * honours cancel_request; one that answers at once sends nothing, and a cancel
+ * then only stops this side waiting.
+ */
+export interface BridgeCallOptions {
+  onProgress?: (update: ProgressUpdate) => void;
+  signal?: AbortSignal;
+}
+
+/** A notifications/progress frame the plugin sends for a request it is still answering. */
+interface BridgeProgressFrame {
+  method: "notifications/progress";
+  params: { id?: string; progress?: number; total?: number; message?: string };
+}
+
+function isProgressFrame(msg: unknown): msg is BridgeProgressFrame {
+  return !!msg && typeof msg === "object" && (msg as { method?: unknown }).method === "notifications/progress";
+}
+
+/** The error a cancelled call rejects with. The editor may still have run it. */
+function cancelledError(method: string, operationId?: string): McpError {
+  return new McpError(
+    ErrorCode.CANCELLED,
+    `Bridge call '${method}' was cancelled by the client. A handler that had already answered or that cannot be `
+    + "interrupted may have applied its changes; read the state back before running it again.",
+    { outcome: "unknown", method, ...(operationId ? { operationId } : {}) },
+  );
 }
 
 /**
@@ -226,6 +267,7 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
   /** Kept so an "unknown method" answer can name the method it was about. */
   method: string;
+  onProgress?: (update: ProgressUpdate) => void;
 }
 
 /**
@@ -322,7 +364,7 @@ export interface IBridge {
   refreshEpicToolsets?(): Promise<readonly string[] | null>;
   /** The toolsets the surface declares, which a read after the handshake waits for (#1538). */
   expectEpicToolsets?(names: readonly string[]): void;
-  call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
+  call(method: string, params?: Record<string, unknown>, timeoutMs?: number, options?: BridgeCallOptions): Promise<unknown>;
   connect(timeoutMs?: number): Promise<void>;
   /**
    * Move the connection to another project's editor (#818). Drops the current
@@ -853,7 +895,8 @@ export class EditorBridge implements IBridge {
     return new McpError(ErrorCode.NOT_CONNECTED, `${base}${cause}${waited}`);
   }
 
-  async call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown> {
+  async call(method: string, params?: Record<string, unknown>, timeoutMs?: number, options?: BridgeCallOptions): Promise<unknown> {
+    if (options?.signal?.aborted) throw cancelledError(method);
     if (!this.isConnected) {
       try {
         await this.ensureConnected();
@@ -866,7 +909,12 @@ export class EditorBridge implements IBridge {
 
     const id = String(++this.idCounter);
     const explicit = typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0;
-    const frame = encodeRequest(id, method, params, explicit ? resolveBridgeTimeout(method, timeoutMs) : undefined);
+    const signal = options?.signal;
+    const cancelToken = signal ? randomUUID() : undefined;
+    const frame = encodeRequest(id, method, params, explicit ? resolveBridgeTimeout(method, timeoutMs) : undefined, {
+      cancelToken,
+      progress: !!options?.onProgress,
+    });
     // #989: not a flat 30s any more. An explicit per-call budget is honoured,
     // and a method the C++ side registered a longer timeout for is waited out
     // to that limit, so the client stops declaring a failure on a call the
@@ -901,7 +949,20 @@ export class EditorBridge implements IBridge {
         ));
       }, timeout);
 
-      this.pending.set(id, { resolve, reject, timer, method });
+      this.pending.set(id, { resolve, reject, timer, method, onProgress: options?.onProgress });
+      if (signal && cancelToken) {
+        // The client cancelled: tell the editor on a socket of its own, since
+        // this one's request is the thing being waited on, and stop waiting.
+        const onAbort = (): void => {
+          if (!this.pending.has(id)) return;
+          clearTimeout(timer);
+          this.pending.delete(id);
+          this.rememberAbandoned(id, method);
+          void callBridgeOnce(this.host, this.port, "cancel_request", { cancelToken }, 5000);
+          reject(cancelledError(method, id));
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
       ws.send(frame, (err) => {
         if (!err) return;
 
@@ -1059,7 +1120,19 @@ export class EditorBridge implements IBridge {
   private setupListeners(ws: WebSocket): void {
     ws.on("message", (data) => {
       try {
-        const msg = JSON.parse(data.toString()) as BridgeResponse;
+        const parsed = JSON.parse(data.toString()) as unknown;
+        if (isProgressFrame(parsed)) {
+          const target = parsed.params?.id !== undefined ? this.pending.get(String(parsed.params.id)) : undefined;
+          if (target?.onProgress && typeof parsed.params.progress === "number") {
+            target.onProgress({
+              progress: parsed.params.progress,
+              ...(typeof parsed.params.total === "number" ? { total: parsed.params.total } : {}),
+              message: typeof parsed.params.message === "string" ? parsed.params.message : "",
+            });
+          }
+          return;
+        }
+        const msg = parsed as BridgeResponse;
         const pending = this.pending.get(msg.id);
         if (!pending) {
           // A reply to a call that already timed out on this side. Nobody is

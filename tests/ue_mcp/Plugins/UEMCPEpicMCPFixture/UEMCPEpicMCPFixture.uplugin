@@ -1,0 +1,25 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "UE-MCP Epic MCP Fixture",
+	"Description": "Test-only tools, a legacy MCP tool library and a resource provider registered with Epic's Unreal MCP plugin, so the ue-mcp live tests can list and call them.",
+	"Category": "Testing",
+	"CreatedBy": "UE-MCP",
+	"EnabledByDefault": false,
+	"CanContainContent": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "UEMCPEpicMCPFixture",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ModelContextProtocol",
+			"Enabled": true
+		}
+	]
+}

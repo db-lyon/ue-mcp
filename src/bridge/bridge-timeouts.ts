@@ -80,6 +80,8 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   datasmith_inspect: 300,
   datasmith_reimport: 600,
   delete_exact_labeled_actors_in_levels: 300,
+  epic_call_mcp_tool: 300,
+  epic_call_tool: 300,
   export_blueprint_batch: 600,
   export_landscape_heightmap: 300,
   fix_asset_hygiene: 300,
