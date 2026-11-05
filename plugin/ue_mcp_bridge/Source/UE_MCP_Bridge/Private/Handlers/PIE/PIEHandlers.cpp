@@ -455,6 +455,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("contains"), EType::String, TEXT("Substring the message must contain")),
 		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Most rows (default 200)")).Min(1),
 		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("First row")).Min(0),
+		MCPParam::Optional(TEXT("max_message_chars"), EType::Integer, TEXT("Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)")).Min(0),
 	});
 
 	// Profiling

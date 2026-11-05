@@ -283,7 +283,7 @@ Step actions, each with `client`: `tape {action, values, hz}` (`hz` default 60, 
 | `anim_state` | A PIE actor's anim instance state: montage and state machines |
 | `anim_properties` | UPROPERTY values on a PIE actor's AnimInstance |
 | `session_errors` | Deduped errors and warnings from the Output Log, Blueprint exceptions included |
-| `session_log` | The paged raw log, filtered by verbosity, category or substring |
+| `session_log` | The paged raw log, filtered by verbosity, category or substring; messages past `max_message_chars` (default 500) are cut and marked `truncated` |
 
 Both session actions default to the live or most recent session; pass `session` to read a finished one from `Saved/MCPSessions/`. Actor and subsystem properties are `editor(get_object_properties, world="pie")` (`target="subsystem"` with `subsystemClass`) and `editor(get_runtime_values)`.
 

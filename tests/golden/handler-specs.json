@@ -26165,6 +26165,13 @@
           "required": false,
           "description": "First row",
           "minimum": 0
+        },
+        {
+          "name": "max_message_chars",
+          "type": "integer",
+          "required": false,
+          "description": "Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)",
+          "minimum": 0
         }
       ]
     },

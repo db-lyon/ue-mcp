@@ -1998,6 +1998,13 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "First row",
         "minimum": 0
+      },
+      {
+        "name": "max_message_chars",
+        "type": "integer",
+        "required": false,
+        "description": "Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)",
+        "minimum": 0
       }
     ]
   },
@@ -2216,7 +2223,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_script_values: "Params: target?, profile?, limit?",
   pie_script_verdict: "Params: step, verdict, note?, run_id?, source?, evidence?",
   pie_session_errors: "Params: session?, session_dir?, min_verbosity?",
-  pie_session_log: "Params: session?, session_dir?, min_verbosity?, category?, contains?, limit?, offset?",
+  pie_session_log: "Params: session?, session_dir?, min_verbosity?, category?, contains?, limit?, offset?, max_message_chars?",
   pie_test_list: "Params: recording_id?, recording_dir?",
   pie_test_run: "Params: test_path?, recording_id?, recording_dir?, name?, auto_run?",
   pie_test_scaffold: "Params: recording_id?, recording_dir?, name?, max_position_drift_cm?, max_velocity_drift_cms?, max_rotation_drift_deg?, max_errors?, start_when?",
@@ -2271,6 +2278,7 @@ export const schema: Record<string, z.ZodType> = {
   manual_only: z.boolean().optional().describe("Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"),
   map: z.string().optional().describe("Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open (pie_script_create). Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is (pie_script_run). Level the script plays in; empty clears it (pie_script_update). Level the script would play in (pie_script_validate)"),
   max_errors: z.number().int().min(0).optional().describe("no-errors predicate threshold (default 0) (pie_scenario_scaffold). Most errors logged during the run (default 0) (pie_test_scaffold)"),
+  max_message_chars: z.number().int().min(0).optional().describe("Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)"),
   max_points: z.number().int().min(1).optional().describe("series: most values per channel (default 500)"),
   max_position_drift_cm: z.number().optional().describe("Most position drift allowed (default 10)"),
   max_rotation_drift_deg: z.number().optional().describe("Most rotation drift allowed (default 5)"),
