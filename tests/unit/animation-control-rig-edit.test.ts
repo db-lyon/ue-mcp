@@ -641,6 +641,14 @@ describe("animation Control Rig edit workflow", () => {
     expect(source).toContain('Out.bSetRetargetSourceAsset = OptionalBool(Params, TEXT("setRetargetSourceAsset"), true)');
     expect(source).toContain("Output->SetRetargetSourceAsset(Mesh)");
     expect(source).toContain("SessionSource ? SessionSource->Interpolation : EAnimInterpolationType::Linear");
+    expect(handlerSpecs.bake_sequence_animation.params.map((p) => p.name)).toEqual([
+      "sequencePath", "bindingTag", "bindingGuid", "bindingName", "outputAssetPath", "frameRate", "onConflict",
+      ...bakeExportOptions,
+    ]);
+    expect(handlerSpecs.bake_sequence_animation.choices).toEqual([
+      { mode: "exactlyOne", branches: [["bindingTag"], ["bindingGuid"], ["bindingName"]] },
+    ]);
+    expect(animationTool.actions.bake_sequence_animation.bridge).toBe("bake_sequence_animation");
   });
 
   it("declares the AnimSequence-only analysis contract in its C++ spec, without edit-session fields (#1057)", async () => {

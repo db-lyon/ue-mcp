@@ -22,7 +22,9 @@ const STEP = `${DIR}/AS_BCovA_CrStep`;
 const STEP_SEQUENCE = `${DIR}/LS_BCovA_Step`;
 const STEP_BAKED = `${DIR}/AS_BCovA_StepBaked`;
 const STEP_TAG = "BCovA_Step";
-const ASSETS = [STEP_BAKED, STEP_SEQUENCE, STEP, BAKED, SEQUENCE, CONTROL_RIG, IDLE, MESH];
+const SEQ_BAKED = `${DIR}/AS_BCovA_SeqBaked`;
+const SEQ_BAKED_NO_RETARGET = `${DIR}/AS_BCovA_SeqBakedNoRetarget`;
+const ASSETS = [SEQ_BAKED_NO_RETARGET, SEQ_BAKED, STEP_BAKED, STEP_SEQUENCE, STEP, BAKED, SEQUENCE, CONTROL_RIG, IDLE, MESH];
 
 type Json = Record<string, unknown>;
 type Vec = { x: number; y: number; z: number };
@@ -32,6 +34,7 @@ const succeeded = (r: TestResult): boolean => r.ok && body(r).success !== false;
 
 let bridge: EditorBridge;
 let control = "";
+let bindingGuid = "";
 
 async function call(method: string, params: Json): Promise<Json> {
   const r = await callBridge(bridge, method, params);
@@ -91,6 +94,7 @@ describe("control rig authoring", () => {
     expect(begun.startFrame).toBe(0);
     expect(begun.endFrameExclusive).toBe(10);
     expect(begun.sourceInterpolation).toBe("linear");
+    bindingGuid = String(begun.bindingGuid);
     const controls = begun.controls as Control[];
     expect(begun.controlCount).toBe(controls.length);
     const pick = controls.find((c) => c.transformControl && c.animatable && c.name.toLowerCase().includes("pelvis"))
@@ -174,5 +178,25 @@ describe("control rig authoring", () => {
         expect(off, `${bone} frame ${frame} is ${off} cm off the source key`).toBeLessThan(0.01);
       });
     }
+  }, 300_000);
+
+  it("bake_sequence_animation bakes a binding with Sequencer export options", async () => {
+    const baked = await call("bake_sequence_animation", { sequencePath: SEQUENCE, bindingGuid, outputAssetPath: SEQ_BAKED });
+    expect(String(baked.outputAssetPath)).toContain("AS_BCovA_SeqBaked");
+    expect(Number(baked.sampledKeyCount)).toBeGreaterThan(1);
+    expect(String(baked.retargetSourceAsset)).toContain("SKM_BCovA_Cr");
+    expect(baked.interpolation).toBe("linear");
+    const read = await call("read_anim_sequence", { assetPath: SEQ_BAKED });
+    expect(String(read.retargetSourceAsset)).toContain("SKM_BCovA_Cr");
+
+    const plain = await call("bake_sequence_animation", {
+      sequencePath: STEP_SEQUENCE, bindingTag: STEP_TAG, outputAssetPath: SEQ_BAKED_NO_RETARGET,
+      setRetargetSourceAsset: false, interpolation: "step",
+    });
+    expect(plain.retargetSourceAsset).toBe("");
+    expect(plain.interpolation).toBe("step");
+    const plainRead = await call("read_anim_sequence", { assetPath: SEQ_BAKED_NO_RETARGET });
+    expect(plainRead.retargetSourceAsset).toBe("");
+    expect(plainRead.interpolation).toBe("step");
   }, 300_000);
 });

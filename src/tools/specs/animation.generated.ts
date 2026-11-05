@@ -1498,6 +1498,203 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "bake_sequence_animation": {
+    "category": "animation",
+    "params": [
+      {
+        "name": "sequencePath",
+        "type": "string",
+        "required": true,
+        "description": "LevelSequence to bake from; it is never modified"
+      },
+      {
+        "name": "bindingTag",
+        "type": "string",
+        "required": false,
+        "description": "Binding tag naming the skeletal mesh binding to bake"
+      },
+      {
+        "name": "bindingGuid",
+        "type": "string",
+        "required": false,
+        "description": "GUID of the skeletal mesh binding to bake"
+      },
+      {
+        "name": "bindingName",
+        "type": "string",
+        "required": false,
+        "description": "Display name of the possessable or spawnable binding to bake; must be unique"
+      },
+      {
+        "name": "outputAssetPath",
+        "type": "string",
+        "required": true,
+        "description": "Destination AnimSequence asset path"
+      },
+      {
+        "name": "frameRate",
+        "type": "number",
+        "required": false,
+        "description": "Frames per second of the bake (default the sequence's display rate)"
+      },
+      {
+        "name": "onConflict",
+        "type": "string",
+        "required": false,
+        "description": "skip returns an existing output, error (default) refuses; it never overwrites",
+        "enum": [
+          "skip",
+          "error"
+        ]
+      },
+      {
+        "name": "setRetargetSourceAsset",
+        "type": "boolean",
+        "required": false,
+        "description": "Name the bound mesh as the output's retarget source asset (default true). The bake records that mesh's bone lengths, so leaving it unset retargets them a second time on playback when the mesh differs from the skeleton's reference pose"
+      },
+      {
+        "name": "interpolation",
+        "type": "string",
+        "required": false,
+        "description": "Bone key interpolation of the output (default linear)",
+        "enum": [
+          "linear",
+          "step"
+        ]
+      },
+      {
+        "name": "curveInterpolation",
+        "type": "string",
+        "required": false,
+        "description": "Interpolation of baked curves (default linear)",
+        "enum": [
+          "linear",
+          "constant",
+          "cubic"
+        ]
+      },
+      {
+        "name": "recordInWorldSpace",
+        "type": "boolean",
+        "required": false,
+        "description": "Record the root in world space (default false)"
+      },
+      {
+        "name": "evaluateAllSkeletalMeshComponents",
+        "type": "boolean",
+        "required": false,
+        "description": "Evaluate every skeletal mesh component on the bound actor, not only the baked one (default true)"
+      },
+      {
+        "name": "exportTransforms",
+        "type": "boolean",
+        "required": false,
+        "description": "Bake bone transforms (default true)"
+      },
+      {
+        "name": "exportMorphTargets",
+        "type": "boolean",
+        "required": false,
+        "description": "Bake morph target curves (default true)"
+      },
+      {
+        "name": "exportAttributeCurves",
+        "type": "boolean",
+        "required": false,
+        "description": "Bake attribute curves (default true)"
+      },
+      {
+        "name": "exportMaterialCurves",
+        "type": "boolean",
+        "required": false,
+        "description": "Bake material curves (default true)"
+      },
+      {
+        "name": "skipCurvesWithZeroValue",
+        "type": "boolean",
+        "required": false,
+        "description": "Leave out curves that stay at zero (default true)"
+      },
+      {
+        "name": "includeAnimationNames",
+        "type": "array",
+        "required": false,
+        "description": "Bake only the bones and curves whose names match these",
+        "items": "string"
+      },
+      {
+        "name": "excludeAnimationNames",
+        "type": "array",
+        "required": false,
+        "description": "Leave out the bones and curves whose names match these",
+        "items": "string"
+      },
+      {
+        "name": "removeExcludedCurves",
+        "type": "boolean",
+        "required": false,
+        "description": "Remove excluded curves that already exist on the output (default false)"
+      },
+      {
+        "name": "warmUpFrames",
+        "type": "integer",
+        "required": false,
+        "description": "Display-rate frames evaluated before the start, after any delay (default 0)",
+        "minimum": 0,
+        "maximum": 100000
+      },
+      {
+        "name": "delayBeforeStart",
+        "type": "integer",
+        "required": false,
+        "description": "Display-rate frames to wait before the bake starts (default 0)",
+        "minimum": 0,
+        "maximum": 100000
+      },
+      {
+        "name": "bakeTimecode",
+        "type": "boolean",
+        "required": false,
+        "description": "Bake timecode attributes onto the root (default false)"
+      },
+      {
+        "name": "timecodeRate",
+        "type": "number",
+        "required": false,
+        "description": "Timecode rate in frames per second for bakeTimecode (default the project timecode rate)"
+      },
+      {
+        "name": "startFrame",
+        "type": "integer",
+        "required": false,
+        "description": "Custom range start in display-rate frames; pass with endFrame (default the playback range)"
+      },
+      {
+        "name": "endFrame",
+        "type": "integer",
+        "required": false,
+        "description": "Custom range end in display-rate frames, sampled as the last key; pass with startFrame"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "bindingTag"
+          ],
+          [
+            "bindingGuid"
+          ],
+          [
+            "bindingName"
+          ]
+        ]
+      }
+    ],
+    "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence"
+  },
   "batch_retarget_animations": {
     "category": "animation",
     "params": [
@@ -5513,6 +5710,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   bake_control_rig_edit: "Params: sequencePath, bindingTag, outputAssetPath, frameRate?, reduceKeys?, tolerance?, createLink?, onConflict?, setRetargetSourceAsset?, interpolation?, curveInterpolation?, recordInWorldSpace?, evaluateAllSkeletalMeshComponents?, exportTransforms?, exportMorphTargets?, exportAttributeCurves?, exportMaterialCurves?, skipCurvesWithZeroValue?, includeAnimationNames?, excludeAnimationNames?, removeExcludedCurves?, warmUpFrames?, delayBeforeStart?, bakeTimecode?, timecodeRate?, startFrame?, endFrame?",
   bake_keyframes_batch: "Params: assetPath (or path), tracks, save?",
   bake_root_motion_from_bone: "Params: assetPath (or path), sourceBone, rootBone?, axes?, interpolation?",
+  bake_sequence_animation: "Params: sequencePath, bindingTag OR bindingGuid OR bindingName, outputAssetPath, frameRate?, onConflict?, setRetargetSourceAsset?, interpolation?, curveInterpolation?, recordInWorldSpace?, evaluateAllSkeletalMeshComponents?, exportTransforms?, exportMorphTargets?, exportAttributeCurves?, exportMaterialCurves?, skipCurvesWithZeroValue?, includeAnimationNames?, excludeAnimationNames?, removeExcludedCurves?, warmUpFrames?, delayBeforeStart?, bakeTimecode?, timecodeRate?, startFrame?, endFrame?",
   batch_retarget_animations: "Params: retargeterPath (or assetPath), sourceMesh, targetMesh, animPaths, outputPath?, prefix?, suffix?, overwrite?, requireCompleteMapping?",
   begin_control_rig_edit: "Params: sequencePath, skeletalMeshPath, sourceAnimationPath, rigMode?, controlRigPath?, layered?, startFrame?, endFrame?, displayRate?, bindingTag?, onConflict?",
   begin_skeleton_edit: "Params: skeletalMeshPath, sessionTag?",
@@ -5645,7 +5843,9 @@ export const schema: Record<string, z.ZodType> = {
   bakeTimecode: z.boolean().optional().describe("Bake timecode attributes onto the root (default false)"),
   baseCostBias: z.number().optional().describe("Flat cost added to every pose"),
   binding: z.string().optional().describe("update (default) | becomeRelevant | initialUpdate"),
-  bindingTag: z.string().optional().describe("Edit-session natural key from begin_control_rig_edit (apply_control_rig_edits, bake_control_rig_edit, capture_control_rig_pose, read_control_rig_edit). Stable natural key the later calls address (default derived from the mesh name) (begin_control_rig_edit)"),
+  bindingGuid: z.string().optional().describe("GUID of the skeletal mesh binding to bake"),
+  bindingName: z.string().optional().describe("Display name of the possessable or spawnable binding to bake; must be unique"),
+  bindingTag: z.string().optional().describe("Edit-session natural key from begin_control_rig_edit (apply_control_rig_edits, bake_control_rig_edit, capture_control_rig_pose, read_control_rig_edit). Binding tag naming the skeletal mesh binding to bake (bake_sequence_animation). Stable natural key the later calls address (default derived from the mesh name) (begin_control_rig_edit)"),
   blendDuration: z.number().optional().describe("Crossfade in seconds (engine default 0.2) (add_transition). Crossfade in seconds (set_transition_blend)"),
   blendIn: z.number().optional().describe("Blend-in time in seconds"),
   blendLogic: z.string().optional().describe("Standard | Inertialization"),
@@ -5693,7 +5893,7 @@ export const schema: Record<string, z.ZodType> = {
   edits: z.array(z.record(z.string(), z.unknown())).optional().describe("Hierarchy edits, each one of {op:'add',bone,parent,transform?} | {op:'remove',bone,removeChildren?} | {op:'rename',bone,newName} | {op:'reparent',bone,parent} | {op:'set_transform',bone,transform,moveChildren?} | {op:'normalize_scale',bone}, which sets scale 1 on the bone and every descendant while keeping each one's component-space location and rotation"),
   enabled: z.boolean().optional().describe("Include the clip in the database (add_pose_search_sequence). Tick animation in the editor (default true) (preview_animation)"),
   enableRootMotion: z.boolean().optional().describe("Extract root motion from the root bone"),
-  endFrame: z.number().int().optional().describe("Custom range end in display-rate frames, sampled as the last key; pass with startFrame (bake_control_rig_edit). Exclusive edit range end frame (default the source length) (begin_control_rig_edit)"),
+  endFrame: z.number().int().optional().describe("Custom range end in display-rate frames, sampled as the last key; pass with startFrame (bake_control_rig_edit, bake_sequence_animation). Exclusive edit range end frame (default the source length) (begin_control_rig_edit)"),
   endPos: z.number().optional().describe("Trim end inside the source, in seconds (default the source play length)"),
   ensureDefaultOps: z.boolean().optional().describe("Ensure the complete default op stack (default true)"),
   entries: z.array(z.record(z.string(), z.unknown())).optional().describe("Per-bone scales as [{bone, scale, recursive?}]"),
@@ -5714,7 +5914,7 @@ export const schema: Record<string, z.ZodType> = {
   forceRemap: z.boolean().optional().describe("Replace existing mappings during auto-map (default false)"),
   forceRootLock: z.boolean().optional().describe("Lock the root bone even without root motion"),
   frame: z.number().optional().describe("One frame to sample, an integer; combines with frames"),
-  frameRate: z.number().optional().describe("Frames per second of the bake (default the sequence's display rate) (bake_control_rig_edit). Frames per second (default 30) (compose_pose_sequence, create_sequence)"),
+  frameRate: z.number().optional().describe("Frames per second of the bake (default the sequence's display rate) (bake_control_rig_edit, bake_sequence_animation). Frames per second (default 30) (compose_pose_sequence, create_sequence)"),
   frames: z.array(z.number()).optional().describe("Explicit frames to sample, integers in [0, frame count] (analyze_animation). Frames to sample; pass this or times, not both (default every sampled key) (measure_natural_speed, sample_pose). Frames to sample (default: first, middle and last) (read_bone_track). Integer frames to sample (default the first and last frame of the range) (read_control_rig_edit)"),
   fromState: z.string().optional().describe("State the transition leaves (add_transition, set_transition_blend). With toState, removes every transition between the two (remove_transition). With toState, the transition to condition when transitionGuid is omitted (set_transition_condition)"),
   fullBodyIK: z.object({ solverIndex: z.number().int().optional().describe("Full Body IK solver to edit (default the first)"), rootBone: z.string().describe("Solver root bone"), enabled: z.boolean().optional().describe("Enable or disable the solver"), goals: z.array(z.record(z.string(), z.unknown())).describe("Up to 256 goals as {name, bone, positionAlpha?, rotationAlpha?, chainDepth?, strengthAlpha?, pullChainAlpha?, pinRotation?}; alphas are in [0, 1]") }).optional().describe("Full Body IK solver and its desired goals"),
@@ -5738,7 +5938,7 @@ export const schema: Record<string, z.ZodType> = {
   inPlace: z.boolean().optional().describe("Reverse the source itself instead of writing a copy (default false)"),
   insertBeforeOutput: z.boolean().optional().describe("Splice into the pose chain feeding the Output Pose (default true)"),
   insertIndex: z.number().int().optional().describe("Position in the slot's segment list (default appends)"),
-  interpolation: z.string().optional().describe("Bone key interpolation of the output (default the interpolation of the clip the session began from) (bake_control_rig_edit). linear (default) | per_frame (bake_root_motion_from_bone). Interpolation of keys without their own interp: linear (default) | constant | cubic (set_anim_curve_keys)"),
+  interpolation: z.string().optional().describe("Bone key interpolation of the output (default the interpolation of the clip the session began from) (bake_control_rig_edit). linear (default) | per_frame (bake_root_motion_from_bone). Bone key interpolation of the output (default linear) (bake_sequence_animation). Interpolation of keys without their own interp: linear (default) | constant | cubic (set_anim_curve_keys)"),
   items: z.array(z.object({ name: z.string().describe("AnimMontage asset name"), animSequencePath: z.string().describe("AnimSequence the montage plays"), packagePath: z.string().optional().describe("Destination folder (default /Game/Animations)"), onConflict: z.string().optional().describe("skip (default) | error; any other value fails the item"), slotName: z.string().optional().describe("Slot name to write onto the track"), trackIndex: z.number().int().optional().describe("Slot track index (default 0)"), rateScale: z.number().optional().describe("Playback rate scale"), blendIn: z.number().optional().describe("Blend-in time in seconds"), blendOut: z.number().optional().describe("Blend-out time in seconds"), sequenceLength: z.number().optional().describe("Montage length in seconds"), sections: z.array(z.record(z.string(), z.unknown())).optional().describe("Sections as [{sectionName, startTime?, linkedSection?}]"), notifies: z.array(z.record(z.string(), z.unknown())).optional().describe("Notifies as [{notifyName, triggerTime, notifyClass?, properties?}]") })).optional().describe("Montages to author, each reported on its own"),
   kdTreeQueryNumNeighbors: z.number().optional().describe("KD-tree neighbours to consider"),
   keyframes: z.array(z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Bone-local translation"), rotation: z.record(z.string(), z.unknown()).optional().describe("Bone-local rotation as a quaternion {x, y, z, w}"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Bone-local scale") })).optional().describe("One key per frame, in order; an omitted channel keeps the reference pose"),
@@ -5775,7 +5975,7 @@ export const schema: Record<string, z.ZodType> = {
   notifyStateClass: z.string().optional().describe("UAnimNotifyState subclass: a class name, a bare suffix such as TimedParticleEffect, or a full path (add_anim_notify_state). Notify state class to match. Pass at least one of notifyName and notifyStateClass; both filters apply together (remove_anim_notify_state)"),
   numberOfPrincipalComponents: z.number().optional().describe("PCA components for PCAKDTree mode"),
   numFrames: z.number().optional().describe("Frame count, 1 to 10000 (default 1); the sequence has numFrames + 1 keys (compose_pose_sequence). Frame count (default 30) (create_sequence)"),
-  onConflict: z.string().optional().describe("skip (default) returns an existing section untouched, error refuses (add_montage_section). skip (default) returns an existing state untouched, error refuses (add_state). skip returns an existing output, error (default) refuses; it never overwrites (bake_control_rig_edit). skip returns the existing session, error (default) refuses; an existing session is never modified (begin_control_rig_edit). skip (default) returns an existing asset untouched, error refuses; it never overwrites (compose_pose_sequence). skip (default) returns an existing asset untouched, error refuses (create_anim_blueprint, create_anim_composite, create_anim_montage, create_blendspace, create_blendspace_1d, create_ik_retargeter, create_ik_rig, create_mirror_data_table, create_pose_search_database, create_pose_search_normalization_set, create_pose_search_schema, create_sequence). skip (default) returns the existing asset, error refuses; it never overwrites (create_control_rig). skip (default) | error. It never overwrites (create_skeleton). skip (default) returns an existing destination untouched, error refuses; it never overwrites (reverse_sequence)"),
+  onConflict: z.string().optional().describe("skip (default) returns an existing section untouched, error refuses (add_montage_section). skip (default) returns an existing state untouched, error refuses (add_state). skip returns an existing output, error (default) refuses; it never overwrites (bake_control_rig_edit, bake_sequence_animation). skip returns the existing session, error (default) refuses; an existing session is never modified (begin_control_rig_edit). skip (default) returns an existing asset untouched, error refuses; it never overwrites (compose_pose_sequence). skip (default) returns an existing asset untouched, error refuses (create_anim_blueprint, create_anim_composite, create_anim_montage, create_blendspace, create_blendspace_1d, create_ik_retargeter, create_ik_rig, create_mirror_data_table, create_pose_search_database, create_pose_search_normalization_set, create_pose_search_schema, create_sequence). skip (default) returns the existing asset, error refuses; it never overwrites (create_control_rig). skip (default) | error. It never overwrites (create_skeleton). skip (default) returns an existing destination untouched, error refuses; it never overwrites (reverse_sequence)"),
   operation: z.string().optional().describe("upsert (default) | remove | rename"),
   operations: z.array(z.discriminatedUnion("op", [z.object({ op: z.literal("set"), control: z.string().describe("Control name on the session's rig"), frame: z.number().int().optional().describe("One frame to key; pass exactly one of frame and frames"), frames: z.array(z.number().int()).optional().describe("Frames to key; pass exactly one of frame and frames"), transform: z.record(z.string(), z.unknown()).describe("{translation {x,y,z}, rotationDegrees {pitch,yaw,roll}, scale {x,y,z}}"), space: z.string().optional().describe("local (default) | component | global, where global is an alias for component") }).strict().describe("Write one full absolute transform at frame or frames"), z.object({ op: z.literal("set_keys"), control: z.string().describe("Control name on the session's rig"), keys: z.array(z.record(z.string(), z.unknown())).describe("[{frame, transform {translation {x,y,z}, rotationQuaternion {x,y,z,w}, scale {x,y,z}}}], frames strictly increasing"), space: z.string().optional().describe("local (default) | component | global, where global is an alias for component") }).strict().describe("Write strictly ordered full per-frame transforms from normalized quaternions"), z.object({ op: z.literal("offset"), control: z.string().describe("Control name on the session's rig"), startFrame: z.number().int().describe("First frame of the range"), endFrame: z.number().int().describe("Last frame of the range, at or after startFrame"), translationCm: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Translation delta in centimetres"), rotationDegrees: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Rotation delta in degrees"), scaleMultiplier: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Scale multiplier; one of translationCm, rotationDegrees and scaleMultiplier is required"), space: z.string().optional().describe("local (default) | component | global, where global is an alias for component"), blendInFrames: z.number().int().optional().describe("Frames to ease in over, from 0 (default 0)"), blendOutFrames: z.number().int().optional().describe("Frames to ease out over, from 0 (default 0)") }).strict().describe("Apply translation, rotation or scale deltas across an inclusive frame range"), z.object({ op: z.literal("contact_lock"), control: z.string().describe("Control name on the session's rig"), drivenReference: z.string().optional().describe("Bone or socket to constrain instead of the control; bake and analyze before accepting it"), startFrame: z.number().int().describe("First frame of the lock"), endFrame: z.number().int().describe("Last frame of the lock, at or after startFrame"), target: z.record(z.string(), z.unknown()).optional().describe("{translation {x,y,z}, rotationQuaternion? {x,y,z,w}}: a fixed component-space target, or a transform relative to targetReference when that is set; pass target or targetReference"), targetReference: z.string().optional().describe("Source-animation bone or socket to follow. Without target, the first frame's subject-to-reference offset is kept"), blendInFrames: z.number().int().optional().describe("Frames to ease in over, from 0 (default 0)"), blendOutFrames: z.number().int().optional().describe("Frames to ease out over, from 0 (default 0)"), stabilizeControls: z.array(z.string()).optional().describe("Up to 8 pole or stabilizer controls to hold steady; never the locked control itself"), positionToleranceCm: z.number().optional().describe("Readback position tolerance, above 0 and up to 100 (default 0.1)"), rotationToleranceDegrees: z.number().optional().describe("Readback rotation tolerance, above 0 and up to 180 (default 0.5)") }).strict().describe("Constrain a translatable driver control, or a driven bone or socket, to a fixed component-space target"), z.object({ op: z.literal("set_bool"), control: z.string().describe("Control name on the session's rig"), frame: z.number().int().optional().describe("One frame to key; pass exactly one of frame and frames"), frames: z.array(z.number().int()).optional().describe("Frames to key; pass exactly one of frame and frames"), value: z.boolean().describe("Value to key") }).strict().describe("Key a bool control at frame or frames"), z.object({ op: z.literal("set_float"), control: z.string().describe("Control name on the session's rig"), frame: z.number().int().optional().describe("One frame to key; pass exactly one of frame and frames"), frames: z.array(z.number().int()).optional().describe("Frames to key; pass exactly one of frame and frames"), value: z.number().describe("Finite value to key") }).strict().describe("Key a float control at frame or frames"), z.object({ op: z.literal("set_int"), control: z.string().describe("Control name on the session's rig"), frame: z.number().int().optional().describe("One frame to key; pass exactly one of frame and frames"), frames: z.array(z.number().int()).optional().describe("Frames to key; pass exactly one of frame and frames"), value: z.number().int().describe("Value to key") }).strict().describe("Key an integer or enum control at frame or frames; an enum takes one of its enumOptions values"), z.object({ op: z.literal("propagate_pose"), baseline: z.record(z.string(), z.unknown()).describe("Snapshot from capture_control_rig_pose before the edit"), accepted: z.record(z.string(), z.unknown()).describe("Snapshot from capture_control_rig_pose after the edit, same session, rig instance, frame and control set"), controls: z.array(z.record(z.string(), z.unknown())).describe("[{control, mode fixed | local_delta, donorFrames strictly increasing}], each control once; bool, enum and int controls take fixed only") }).strict().describe("Key the controls that changed between two live snapshots across each control's donor frames")])).optional().describe("Typed edits applied in one transaction, in order"),
   ops: z.array(z.object({ name: z.string().optional().describe("Op to write, by name"), index: z.number().int().optional().describe("Op to write, by stack index, when name is omitted"), enabled: z.boolean().optional().describe("Enable or disable the op"), settings: z.record(z.string(), z.unknown()).optional().describe("Properties on the op's settings struct, e.g. RootMotionSource"), chainSettings: z.array(z.record(z.string(), z.unknown())).optional().describe("Per-chain properties as [{chain, ...}], e.g. RotationMode") })).optional().describe("Per-op writes, at most 64. settings writes properties on the op's own settings struct, and chainSettings merges per-chain FK properties into the named chain rather than replacing the list"),
@@ -5827,7 +6027,7 @@ export const schema: Record<string, z.ZodType> = {
   sectionName: z.string().optional().describe("Composite section to add (add_montage_section). Composite section to remove (remove_montage_section)"),
   segmentIndex: z.number().optional().describe("Segment to anchor the section to, so it moves with that segment (#826) (add_montage_section). Segment to remove (remove_montage_segment). Replace only this segment; without it every segment in the slot is replaced (#626) (set_montage_sequence)"),
   sequenceLength: z.number().optional().describe("Montage length in seconds"),
-  sequencePath: z.string().optional().describe("AnimSequence, AnimComposite, AnimMontage or BlendSpace to append (add_pose_search_sequence). AnimSequence to evaluate (add_sequence_evaluator). LevelSequence holding the Control Rig edit session (apply_control_rig_edits, bake_control_rig_edit, capture_control_rig_pose, read_control_rig_edit). LevelSequence to create, or to reuse with onConflict=skip (begin_control_rig_edit)"),
+  sequencePath: z.string().optional().describe("AnimSequence, AnimComposite, AnimMontage or BlendSpace to append (add_pose_search_sequence). AnimSequence to evaluate (add_sequence_evaluator). LevelSequence holding the Control Rig edit session (apply_control_rig_edits, bake_control_rig_edit, capture_control_rig_pose, read_control_rig_edit). LevelSequence to bake from; it is never modified (bake_sequence_animation). LevelSequence to create, or to reuse with onConflict=skip (begin_control_rig_edit)"),
   sessionTag: z.string().optional().describe("Stable key every later call addresses (default Skel_<MeshName>) (begin_skeleton_edit). The open skeleton edit session to address; wins over skeletalMeshPath (cancel_skeleton_edit, commit_skeleton_edit, edit_skeleton_bones)"),
   setRetargetSourceAsset: z.boolean().optional().describe("Name the bound mesh as the output's retarget source asset (default true). The bake records that mesh's bone lengths, so leaving it unset retargets them a second time on playback when the mesh differs from the skeleton's reference pose"),
   shouldLoop: z.boolean().optional().describe("bShouldLoop"),
@@ -5846,7 +6046,7 @@ export const schema: Record<string, z.ZodType> = {
   sourceRig: z.string().optional().describe("Source IKRigDefinition to assign"),
   sources: z.array(z.object({ assetPath: z.string().describe("AnimSequence to sample"), frame: z.number().int().optional().describe("Frame to sample (default 0); exclusive with time"), time: z.number().optional().describe("Time in seconds to sample; exclusive with frame") })).optional().describe("Poses to compose, at most 32; sources[0] is the base pose and sets the skeleton"),
   space: z.string().optional().describe("world (default) | component | local (get_bone_transform, get_live_bone_transforms). local (default) | component, which composes the parent chain (get_bone_transforms, read_bone_track). local (default) | component | global, where global is an alias for component (read_control_rig_edit). component (default) | local | world, which resolves to component on an asset (sample_pose)"),
-  startFrame: z.number().int().optional().describe("Custom range start in display-rate frames; pass with endFrame (default the playback range) (bake_control_rig_edit). Inclusive edit range start frame (default 0) (begin_control_rig_edit)"),
+  startFrame: z.number().int().optional().describe("Custom range start in display-rate frames; pass with endFrame (default the playback range) (bake_control_rig_edit, bake_sequence_animation). Inclusive edit range start frame (default 0) (begin_control_rig_edit)"),
   startPos: z.number().optional().describe("Trim start inside the source, in seconds (default 0)"),
   startTime: z.number().optional().describe("Section start in seconds; taken from the segment when segmentIndex is given"),
   stateMachineName: z.string().optional().describe("State machine to edit (add_state, add_transition, remove_state, remove_state_machine, remove_transition, set_state_animation, set_state_machine_entry, set_transition_blend, set_transition_condition). State machine to read (read_state_machine)"),

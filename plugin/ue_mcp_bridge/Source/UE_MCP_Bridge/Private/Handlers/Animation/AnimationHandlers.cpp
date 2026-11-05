@@ -820,6 +820,19 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	BakeEditParams.Append(AnimExportOptionParams(TEXT("Bone key interpolation of the output (default the interpolation of the clip the session began from)")));
 	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit, BakeEditParams,
 		MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
+	TArray<FMCPParamSpec> BakeSequenceParams = {
+		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence to bake from; it is never modified")),
+		MCPParam::Optional(TEXT("bindingTag"), EType::String, TEXT("Binding tag naming the skeletal mesh binding to bake")),
+		MCPParam::Optional(TEXT("bindingGuid"), EType::String, TEXT("GUID of the skeletal mesh binding to bake")),
+		MCPParam::Optional(TEXT("bindingName"), EType::String, TEXT("Display name of the possessable or spawnable binding to bake; must be unique")),
+		MCPParam::Required(TEXT("outputAssetPath"), EType::String, TEXT("Destination AnimSequence asset path")),
+		MCPParam::Optional(TEXT("frameRate"), EType::Number, TEXT("Frames per second of the bake (default the sequence's display rate)")),
+		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")).Enum({ TEXT("skip"), TEXT("error") }),
+	};
+	BakeSequenceParams.Append(AnimExportOptionParams(TEXT("Bone key interpolation of the output (default linear)")));
+	Registry.RegisterHandler(TEXT("bake_sequence_animation"), &BakeSequenceAnimation, BakeSequenceParams,
+		MCPSpec::ExactlyOne({ { TEXT("bindingTag") }, { TEXT("bindingGuid") }, { TEXT("bindingName") } })
+			.ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
 	Registry.RegisterHandler(TEXT("analyze_animation"), &AnalyzeAnimation, {
 		AssetPath(TEXT("AnimSequence asset path")),
 		MCPParam::Optional(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose proportions to sample with; must be compatible with the sequence's skeleton")),

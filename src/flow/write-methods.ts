@@ -116,6 +116,8 @@ const EXPLICIT: Record<string, Extractor> = {
   begin_control_rig_edit: (p) => strArray([p.sequencePath]),
   // The bake writes its output asset and leaves the edit sequence alone.
   bake_control_rig_edit: (p) => strArray([p.outputAssetPath]),
+  // Same for a bake of any sequence binding: the LevelSequence is only read.
+  bake_sequence_animation: (p) => strArray([p.outputAssetPath]),
   // Batch rename: each entry is {sourcePath, destinationPath} or {assetPath, newName}.
   bulk_rename_assets: (p) => {
     const out: string[] = [];

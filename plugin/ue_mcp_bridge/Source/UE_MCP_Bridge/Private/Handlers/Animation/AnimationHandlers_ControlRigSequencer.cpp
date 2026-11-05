@@ -46,6 +46,7 @@ namespace
 #include "MovieScene.h"
 #include "MovieSceneBindingProxy.h"
 #include "MovieSceneObjectBindingID.h"
+#include "MovieScenePossessable.h"
 #include "MovieSceneSequencePlayer.h"
 #include "MovieSceneSpawnable.h"
 #if WITH_DEV_AUTOMATION_TESTS
@@ -4652,6 +4653,128 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 	Result->SetNumberField(TEXT("durationSeconds"), Output->GetPlayLength());
 	Result->SetBoolField(TEXT("createdLink"), false);
 	Result->SetBoolField(TEXT("sourceAnimationModified"), false);
+	ControlRigSequencerExportResultJson(Output, *ExportOptions, Result);
+	MCPSetDeleteAssetRollback(Result, Output->GetPathName());
+	return MCPResult(Result);
+#endif
+}
+
+// Bake any skeletal mesh binding of a LevelSequence to a new AnimSequence with
+// the full set of Sequencer bake options (#1642). The LevelSequence is read,
+// never modified, and an existing output is never overwritten.
+TSharedPtr<FJsonValue> FAnimationHandlers::BakeSequenceAnimation(const TSharedPtr<FJsonObject>& Params)
+{
+#if !UE_MCP_HAS_5_8_API
+	return ControlRigSequencerUnsupported();
+#else
+	FString SequencePath;
+	FString OutputAssetPath;
+	if (auto Error = RequireString(Params, TEXT("sequencePath"), SequencePath)) return Error;
+	if (auto Error = RequireString(Params, TEXT("outputAssetPath"), OutputAssetPath)) return Error;
+	const FString BindingTag = OptionalString(Params, TEXT("bindingTag"));
+	const FString BindingGuidText = OptionalString(Params, TEXT("bindingGuid"));
+	const FString BindingName = OptionalString(Params, TEXT("bindingName"));
+	const int32 BindingSelectors = (BindingTag.IsEmpty() ? 0 : 1) + (BindingGuidText.IsEmpty() ? 0 : 1) + (BindingName.IsEmpty() ? 0 : 1);
+	if (BindingSelectors != 1) return MCPError(TEXT("Pass exactly one of 'bindingTag', 'bindingGuid' or 'bindingName'"));
+
+	FString PackagePath;
+	FString AssetName;
+	FString Error;
+	if (!ControlRigSequencerSplitAssetPath(OutputAssetPath, PackagePath, AssetName, Error)) return MCPError(Error);
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("error")).ToLower();
+	if (OnConflict != TEXT("skip") && OnConflict != TEXT("error"))
+		return MCPError(TEXT("'onConflict' must be 'skip' or 'error'; bake never overwrites an AnimSequence"));
+
+	ULevelSequence* Sequence = Cast<ULevelSequence>(MCPLoadAssetObject(SequencePath));
+	if (!Sequence) return MCPError(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
+	UMovieScene* MovieScene = Sequence->GetMovieScene();
+	if (!MovieScene) return MCPError(TEXT("LevelSequence has no MovieScene"));
+
+	FFrameRate FrameRate;
+	if (!ControlRigSequencerReadRate(Params, TEXT("frameRate"), MovieScene->GetDisplayRate(), FrameRate, Error)) return MCPError(Error);
+	UAnimSeqExportOption* ExportOptions = NewObject<UAnimSeqExportOption>();
+	if (!ControlRigSequencerReadExportOptions(Params, MovieScene->GetDisplayRate(), EAnimInterpolationType::Linear, *ExportOptions, Error))
+		return MCPError(Error);
+	ExportOptions->bUseCustomFrameRate = true;
+	ExportOptions->CustomFrameRate = FrameRate;
+
+	if (UObject* Existing = MCPLoadAssetObject(OutputAssetPath))
+	{
+		if (OnConflict == TEXT("error")) return MCPError(FString::Printf(TEXT("Output asset already exists: %s"), *OutputAssetPath));
+		if (!Existing->IsA<UAnimSequence>()) return MCPError(FString::Printf(TEXT("Existing output is not an AnimSequence: %s"), *OutputAssetPath));
+		auto Result = MCPSuccess();
+		MCPSetExisted(Result);
+		Result->SetStringField(TEXT("outputAssetPath"), Existing->GetPathName());
+		return MCPResult(Result);
+	}
+
+	FGuid BindingGuid;
+	if (!BindingTag.IsEmpty())
+	{
+		const FMovieSceneObjectBindingIDs* Tagged = MovieScene->AllTaggedBindings().Find(FName(*BindingTag));
+		for (const FMovieSceneObjectBindingID& ID : Tagged ? Tagged->IDs : TArray<FMovieSceneObjectBindingID>())
+		{
+			if (!MovieScene->FindBinding(ID.GetGuid())) continue;
+			if (BindingGuid.IsValid() && BindingGuid != ID.GetGuid())
+				return MCPError(FString::Printf(TEXT("Binding tag '%s' resolves to more than one binding"), *BindingTag));
+			BindingGuid = ID.GetGuid();
+		}
+		if (!BindingGuid.IsValid()) return MCPError(FString::Printf(TEXT("Binding tag '%s' has no binding in this sequence"), *BindingTag));
+	}
+	else if (!BindingGuidText.IsEmpty())
+	{
+		if (!FGuid::Parse(BindingGuidText, BindingGuid) || !MovieScene->FindBinding(BindingGuid))
+			return MCPError(FString::Printf(TEXT("Binding '%s' was not found in this sequence"), *BindingGuidText));
+	}
+	else
+	{
+		TArray<FGuid> Named;
+		for (int32 Index = 0; Index < MovieScene->GetPossessableCount(); ++Index)
+		{
+			const FMovieScenePossessable& Possessable = MovieScene->GetPossessable(Index);
+			if (Possessable.GetName() == BindingName) Named.AddUnique(Possessable.GetGuid());
+		}
+		for (int32 Index = 0; Index < MovieScene->GetSpawnableCount(); ++Index)
+		{
+			const FMovieSceneSpawnable& Spawnable = MovieScene->GetSpawnable(Index);
+			if (Spawnable.GetName() == BindingName) Named.AddUnique(Spawnable.GetGuid());
+		}
+		if (Named.Num() > 1)
+			return MCPError(FString::Printf(TEXT("More than one binding is named '%s'; pass bindingGuid instead"), *BindingName));
+		if (Named.Num() == 1) BindingGuid = Named[0];
+		if (!BindingGuid.IsValid()) return MCPError(FString::Printf(TEXT("No binding is named '%s' in this sequence"), *BindingName));
+	}
+
+	FControlRigSequenceFocusGuard Focus(Sequence);
+	if (!Focus.IsReady()) return MCPError(TEXT("Could not focus the LevelSequence in Sequencer"));
+	if (!ControlRigSequencerBoundMesh(BindingGuid))
+		return MCPError(TEXT("The binding has no skeletal mesh component with a mesh assigned to bake"));
+
+	auto Created = MCPCreateAssetIdempotentNewObject<UAnimSequence>(AssetName, PackagePath, TEXT("error"), TEXT("AnimSequence"));
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UAnimSequence* Output = Created.Asset;
+	if (!ControlRigSequencerExportBinding(Output, ExportOptions, Sequence, BindingGuid, Error))
+	{
+		UEditorAssetLibrary::DeleteAsset(PackagePath + TEXT("/") + AssetName);
+		return MCPError(Error);
+	}
+	Output->MarkPackageDirty();
+	FString OutputSaveError;
+	if (!SaveAssetPackageChecked(Output, OutputSaveError))
+	{
+		UEditorAssetLibrary::DeleteAsset(PackagePath + TEXT("/") + AssetName);
+		return MCPError(TEXT("AnimSequence export completed in memory but the output asset could not be saved: ") + OutputSaveError);
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("sequencePath"), Sequence->GetPathName());
+	Result->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
+	Result->SetStringField(TEXT("outputAssetPath"), Output->GetPathName());
+	if (Output->GetSkeleton()) Result->SetStringField(TEXT("skeletonPath"), Output->GetSkeleton()->GetPathName());
+	Result->SetObjectField(TEXT("frameRate"), ControlRigSequencerRateJson(FrameRate));
+	Result->SetNumberField(TEXT("sampledKeyCount"), Output->GetNumberOfSampledKeys());
+	Result->SetNumberField(TEXT("durationSeconds"), Output->GetPlayLength());
 	ControlRigSequencerExportResultJson(Output, *ExportOptions, Result);
 	MCPSetDeleteAssetRollback(Result, Output->GetPathName());
 	return MCPResult(Result);
