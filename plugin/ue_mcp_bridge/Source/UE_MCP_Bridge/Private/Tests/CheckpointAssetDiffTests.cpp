@@ -541,8 +541,12 @@ bool FMCPCheckpointBlueprintThumbnailTest::RunTest(const FString& Parameters)
 	Params->SetStringField(TEXT("toFile"), After);
 	Params->SetStringField(TEXT("fromThumbnail"), DiffDir / TEXT("bp-before.png"));
 	Params->SetStringField(TEXT("toThumbnail"), DiffDir / TEXT("bp-after.png"));
+	Params->SetStringField(TEXT("fromGraphPicture"), DiffDir / TEXT("bp-graph-before.png"));
+	Params->SetStringField(TEXT("toGraphPicture"), DiffDir / TEXT("bp-graph-after.png"));
 	const TSharedPtr<FJsonObject> Diff = CkDiffTestCall(*this, Registry, TEXT("checkpoint_diff_asset"), Params);
 	if (!Diff.IsValid() || !TestTrue(TEXT("diff succeeds"), Diff->GetBoolField(TEXT("success")))) return false;
+	// A component change shows in the class picture, so no graph is drawn for it (#1569).
+	TestFalse(TEXT("a component change has no graph picture"), Diff->GetObjectField(TEXT("after"))->HasField(TEXT("graphPicture")));
 
 	// Each version is drawn from the Blueprint loaded for diff, and the picture shows something.
 	IImageWrapperModule& Images = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
@@ -565,6 +569,83 @@ bool FMCPCheckpointBlueprintThumbnailTest::RunTest(const FString& Parameters)
 				MCPCkDiffIsBlankImage(Raw, int32(Reader->GetWidth()), int32(Reader->GetHeight())));
 		}
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPCheckpointBlueprintGraphPictureTest,
+	"UE.MCP.Diff.CheckpointAsset.GraphOnlyChangeDrawsTheGraph",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPCheckpointBlueprintGraphPictureTest::RunTest(const FString& Parameters)
+{
+	FMCPScopedTestMount Mount(TEXT("/UEMCPCkGraphPicTest/"), TEXT("UEMCPCkGraphPicTest"));
+	const FString DiffDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::DiffDir(), TEXT("UE_MCP_CkDiffTest")));
+	ON_SCOPE_EXIT { IFileManager::Get().DeleteDirectory(*DiffDir, false, true); };
+
+	UPackage* Package = CreatePackage(TEXT("/UEMCPCkGraphPicTest/BP_CkGraphPic"));
+	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(AActor::StaticClass(), Package, TEXT("BP_CkGraphPic"), BPTYPE_Normal,
+		UBlueprint::StaticClass(), UBlueprintGeneratedClass::StaticClass());
+	if (!TestNotNull(TEXT("the Blueprint is created"), Blueprint)) return false;
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	FString Reason;
+	if (!TestTrue(TEXT("first version saves"), SaveAssetPackageChecked(Blueprint, Reason))) { AddError(Reason); return false; }
+	const FString Before = CkDiffTestSnapshot(Package, TEXT("BP_CkGraphPic-before"));
+
+	// Only the event graph changes: a Print String node, as in the report (#1569).
+	UEdGraph* Graph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
+	if (!TestNotNull(TEXT("the Blueprint has an event graph"), Graph)) return false;
+	UK2Node_CallFunction* Call = NewObject<UK2Node_CallFunction>(Graph);
+	Call->CreateNewGuid();
+	Call->FunctionReference.SetExternalMember(GET_FUNCTION_NAME_CHECKED(UKismetSystemLibrary, PrintString), UKismetSystemLibrary::StaticClass());
+	Call->NodePosX = 400;
+	Call->NodePosY = 200;
+	Graph->AddNode(Call, false, false);
+	Call->PostPlacedNewNode();
+	Call->AllocateDefaultPins();
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	if (!TestTrue(TEXT("second version saves"), SaveAssetPackageChecked(Blueprint, Reason))) { AddError(Reason); return false; }
+	const FString After = CkDiffTestSnapshot(Package, TEXT("BP_CkGraphPic-after"));
+
+	FString Original;
+	FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), Original, FPackageName::GetAssetPackageExtension());
+	FMCPHandlerRegistry Registry;
+	FDiffHandlers::RegisterHandlers(Registry);
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("originalFile"), Original);
+	Params->SetStringField(TEXT("fromFile"), Before);
+	Params->SetStringField(TEXT("toFile"), After);
+	Params->SetStringField(TEXT("fromGraphPicture"), DiffDir / TEXT("graph-before.png"));
+	Params->SetStringField(TEXT("toGraphPicture"), DiffDir / TEXT("graph-after.png"));
+	const TSharedPtr<FJsonObject> Diff = CkDiffTestCall(*this, Registry, TEXT("checkpoint_diff_asset"), Params);
+	if (!Diff.IsValid() || !TestTrue(TEXT("diff succeeds"), Diff->GetBoolField(TEXT("success")))) return false;
+
+	// Both versions of the event graph are drawn, and the two pictures differ where the node was added.
+	IImageWrapperModule& Images = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+	TArray<uint8> Raws[2];
+	int32 Index = 0;
+	for (const TCHAR* Side : { TEXT("before"), TEXT("after") })
+	{
+		const TSharedPtr<FJsonObject>* Pic = nullptr;
+		if (!TestTrue(FString::Printf(TEXT("%s has a graph picture"), Side), Diff->GetObjectField(Side)->TryGetObjectField(TEXT("graphPicture"), Pic))) return false;
+		TestFalse(FString::Printf(TEXT("%s names the graph it pictures"), Side), (*Pic)->GetStringField(TEXT("graph")).IsEmpty());
+		FString File;
+		if (!(*Pic)->TryGetStringField(TEXT("file"), File))
+		{
+			AddError(FString::Printf(TEXT("%s graph picture: %s"), Side, *(*Pic)->GetStringField(TEXT("error"))));
+			return false;
+		}
+		TArray<uint8> Png;
+		TSharedPtr<IImageWrapper> Reader = Images.CreateImageWrapper(EImageFormat::PNG);
+		const bool bDecoded = FFileHelper::LoadFileToArray(Png, *File)
+			&& Reader.IsValid() && Reader->SetCompressed(Png.GetData(), Png.Num()) && Reader->GetRaw(ERGBFormat::BGRA, 8, Raws[Index]);
+		if (!TestTrue(FString::Printf(TEXT("%s graph picture decodes"), Side), bDecoded)) return false;
+		TestFalse(FString::Printf(TEXT("%s graph picture shows something"), Side),
+			MCPCkDiffIsBlankImage(Raws[Index], int32(Reader->GetWidth()), int32(Reader->GetHeight())));
+		++Index;
+	}
+	TestTrue(TEXT("after names the added node"), Diff->GetObjectField(TEXT("after"))->GetObjectField(TEXT("graphPicture"))->GetNumberField(TEXT("changedNodes")) >= 1);
+	TestTrue(TEXT("the two versions are drawn differently"), Raws[0] != Raws[1]);
 	return true;
 }
 

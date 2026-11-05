@@ -44,6 +44,7 @@
 #include "GenericPlatform/GenericWindow.h"
 #include "GameFramework/Actor.h"
 #include "GraphDiffControl.h"
+#include "GraphEditor.h"
 #include "HAL/FileManager.h"
 #include "IAssetTools.h"
 #include "IImageWrapper.h"
@@ -80,6 +81,8 @@
 #define UE_MCP_CKDIFF_HAS_DETAILS_DIFF 0
 #endif
 #include "Settings/EditorLoadingSavingSettings.h"
+#include "Input/HittestGrid.h"
+#include "Slate/WidgetRenderer.h"
 #include "SceneView.h"
 #include "ShaderCompiler.h"
 #include "ShowFlags.h"
@@ -93,6 +96,7 @@
 #include "ThumbnailRendering/ThumbnailRenderer.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectHash.h"
+#include "Widgets/SVirtualWindow.h"
 #include "Widgets/SWindow.h"
 
 namespace
@@ -1498,12 +1502,9 @@ namespace
 		return true;
 	}
 
-	/** The Blueprint diff, SBlueprintDiff's categories in its order. True when the type's own diff ran (CkDiffBlueprintType). */
-	bool CkDiffBlueprint(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
+	/** Each graph of two Blueprint versions, paired by path under the Blueprint as SBlueprintDiff pairs them, in path order. */
+	TMap<FString, TPair<UEdGraph*, UEdGraph*>> CkDiffGraphPairs(UBlueprint* A, UBlueprint* B)
 	{
-		const bool bTypeDiff = CkDiffBlueprintType(A, B, Names, Sections, Sink);
-
-		// Graphs, paired by path under the Blueprint as SBlueprintDiff pairs them.
 		TArray<UEdGraph*> GraphsA, GraphsB;
 		A->GetAllGraphs(GraphsA);
 		B->GetAllGraphs(GraphsB);
@@ -1511,7 +1512,15 @@ namespace
 		for (UEdGraph* G : GraphsA) { FString P; G->GetPathName(A, P); Pairs.FindOrAdd(P).Key = G; }
 		for (UEdGraph* G : GraphsB) { FString P; G->GetPathName(B, P); Pairs.FindOrAdd(P).Value = G; }
 		Pairs.KeySort(TLess<FString>());
-		for (const TPair<FString, TPair<UEdGraph*, UEdGraph*>>& Pair : Pairs)
+		return Pairs;
+	}
+
+	/** The Blueprint diff, SBlueprintDiff's categories in its order. True when the type's own diff ran (CkDiffBlueprintType). */
+	bool CkDiffBlueprint(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
+	{
+		const bool bTypeDiff = CkDiffBlueprintType(A, B, Names, Sections, Sink);
+
+		for (const TPair<FString, TPair<UEdGraph*, UEdGraph*>>& Pair : CkDiffGraphPairs(A, B))
 		{
 			UEdGraph* Old = Pair.Value.Key;
 			UEdGraph* New = Pair.Value.Value;
@@ -1714,6 +1723,246 @@ namespace
 		CkDiffAddPropertySection(Sections, TEXT("Properties (against class defaults)"), TEXT("DiffUtils::CompareUnrelatedObjects"), Records, Hidden);
 	}
 
+	/** Graph picture size in pixels: wide, as a graph region is. */
+	constexpr int32 CkDiffGraphPictureWidth = 768;
+	constexpr int32 CkDiffGraphPictureHeight = 432;
+	/** Frames drawn so the panel builds its node widgets, measures them and settles its zoom. */
+	constexpr int32 CkDiffGraphPictureFrames = 12;
+	/** SGraphEditor's view location type: Slate positions are floats from 5.6. */
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+	using FCkDiffGraphViewVector = FVector2f;
+#else
+	using FCkDiffGraphViewVector = FVector2D;
+#endif
+
+	/** Whether every section is a graph section, so the Blueprint's class picture cannot show what changed. */
+	bool CkDiffOnlyGraphs(const TArray<TSharedPtr<FJsonValue>>& Sections)
+	{
+		if (Sections.Num() == 0) return false;
+		for (const TSharedPtr<FJsonValue>& S : Sections)
+		{
+			const TSharedPtr<FJsonObject>* O = nullptr;
+			if (!S.IsValid() || !S->TryGetObject(O) || (*O)->GetStringField(TEXT("kind")) != TEXT("graph")) return false;
+		}
+		return true;
+	}
+
+	/** The graph with the most differences between two Blueprint versions, and the engine's diff of it. */
+	struct FCkDiffGraphFocus
+	{
+		UEdGraph* Old = nullptr;
+		UEdGraph* New = nullptr;
+		FString Label;
+		TSharedPtr<TArray<FDiffSingleResult>> Results;
+		int32 Count = 0;
+	};
+
+	FCkDiffGraphFocus CkDiffFocusGraph(UBlueprint* A, UBlueprint* B)
+	{
+		FCkDiffGraphFocus Best;
+		for (const TPair<FString, TPair<UEdGraph*, UEdGraph*>>& Pair : CkDiffGraphPairs(A, B))
+		{
+			UEdGraph* Old = Pair.Value.Key;
+			UEdGraph* New = Pair.Value.Value;
+			if (!CkDiffGraphNeeded(Old ? Old : New)) continue;
+			TSharedPtr<TArray<FDiffSingleResult>> Results = MakeShared<TArray<FDiffSingleResult>>();
+			int32 Count = 0;
+			if (Old && New)
+			{
+				FGraphDiffControl::DiffGraphs(Old, New, *Results);
+				for (const FDiffSingleResult& R : *Results)
+				{
+					if (R.IsRealDifference()) ++Count;
+				}
+			}
+			else
+			{
+				Count = (Old ? Old : New)->Nodes.Num();
+			}
+			if (Count > Best.Count)
+			{
+				Best.Old = Old;
+				Best.New = New;
+				Best.Label = CkDiffGraphLabel(New ? New : Old);
+				Best.Results = Results;
+				Best.Count = Count;
+			}
+		}
+		return Best;
+	}
+
+	/** The nodes of Graph a difference names, directly or through one of its pins. */
+	TArray<UEdGraphNode*> CkDiffChangedNodes(const UEdGraph* Graph, const TArray<FDiffSingleResult>& Results)
+	{
+		TArray<UEdGraphNode*> Out;
+		auto Add = [&Out, Graph](UEdGraphNode* Node)
+		{
+			if (Node && Node->GetGraph() == Graph) Out.AddUnique(Node);
+		};
+		for (const FDiffSingleResult& R : Results)
+		{
+			if (!R.IsRealDifference()) continue;
+			Add(R.Node1);
+			Add(R.Node2);
+			if (R.Pin1) Add(R.Pin1->GetOwningNodeUnchecked());
+			if (R.Pin2) Add(R.Pin2->GetOwningNodeUnchecked());
+		}
+		return Out;
+	}
+
+	/**
+	 * One version of a graph drawn as Unreal's Blueprint diff panel draws it: an SGraphEditor on
+	 * the graph with the engine's diff results, which it highlights, rendered offscreen with
+	 * FWidgetRenderer. Focus nodes are selected, so they are outlined as well. With no view given
+	 * the panel zooms to fit the selection (the whole graph when nothing is selected) and hands
+	 * back the view it settled on, so the other version is drawn from the same camera.
+	 */
+	bool CkDiffRenderGraph(UEdGraph* Graph, const TSharedPtr<TArray<FDiffSingleResult>>& Results, const TArray<UEdGraphNode*>& Focus,
+		TOptional<TPair<FCkDiffGraphViewVector, float>>& View, FObjectThumbnail& Out, FString& OutError)
+	{
+		if (!FApp::CanEverRender() || !FSlateApplication::IsInitialized() || !FSlateApplication::Get().GetRenderer())
+		{
+			OutError = TEXT("the editor runs without rendering, so the graph cannot be drawn");
+			return false;
+		}
+		const FVector2D Size(CkDiffGraphPictureWidth, CkDiffGraphPictureHeight);
+		UTextureRenderTarget2D* Target = FWidgetRenderer::CreateTargetFor(Size, TF_Bilinear, /*bUseGammaCorrection*/ true);
+		if (!Target)
+		{
+			OutError = TEXT("no render target could be made for the graph");
+			return false;
+		}
+		Target->AddToRoot();
+		FWidgetRenderer* Renderer = new FWidgetRenderer(/*bUseGammaCorrection*/ true, /*bInClearTarget*/ true);
+		bool bRead = false;
+		TArray<FColor> Pixels;
+		{
+			TSharedRef<SGraphEditor> Editor = SNew(SGraphEditor)
+				.GraphToEdit(Graph)
+				.DiffResults(Results)
+				.IsEditable(false)
+				.ShowGraphStateOverlay(false);
+			TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow).Size(Size);
+			Window->SetContent(Editor);
+			Window->Resize(Size);
+			FHittestGrid HitTestGrid;
+			auto Draw = [&](int32 Frames)
+			{
+				for (int32 I = 0; I < Frames; ++I) Renderer->DrawWindow(Target, HitTestGrid, Window, 1.f, Size, 0.5f);
+			};
+			// The first frame builds the node widgets; the selection and the view are set on them.
+			Draw(1);
+			for (UEdGraphNode* Node : Focus) Editor->SetNodeSelection(Node, true);
+			if (View.IsSet())
+			{
+				Editor->SetViewLocation(View->Key, View->Value);
+			}
+			else
+			{
+				Editor->ZoomToFit(/*bOnlySelection*/ Focus.Num() > 0);
+			}
+			Draw(CkDiffGraphPictureFrames);
+			if (!View.IsSet())
+			{
+				FCkDiffGraphViewVector Location;
+				float Zoom = 1.f;
+				Editor->GetViewLocation(Location, Zoom);
+				View = TPair<FCkDiffGraphViewVector, float>(Location, Zoom);
+			}
+			FlushRenderingCommands();
+			if (FTextureRenderTargetResource* Resource = Target->GameThread_GetRenderTargetResource())
+			{
+				bRead = Resource->ReadPixels(Pixels);
+			}
+			Window->SetContent(SNullWidget::NullWidget);
+		}
+		BeginCleanup(Renderer);
+		Target->RemoveFromRoot();
+		if (!bRead || Pixels.Num() != CkDiffGraphPictureWidth * CkDiffGraphPictureHeight)
+		{
+			OutError = TEXT("the graph was drawn but its pixels could not be read back");
+			return false;
+		}
+		// The panel background is opaque; the target's alpha is whatever Slate composited, so it is dropped.
+		for (FColor& P : Pixels) P.A = 255;
+		Out.SetImageSize(CkDiffGraphPictureWidth, CkDiffGraphPictureHeight);
+		TArray<uint8>& Data = Out.AccessImageData();
+		Data.SetNumUninitialized(Pixels.Num() * sizeof(FColor));
+		FMemory::Memcpy(Data.GetData(), Pixels.GetData(), Data.Num());
+		return true;
+	}
+
+	/**
+	 * Pictures of a Blueprint change made only in graphs (#1569): the graph with the most
+	 * differences, drawn for each version from one camera framed on the nodes those differences
+	 * name. Written to before.graphPicture and after.graphPicture, each with its file and graph,
+	 * or the reason there is no picture.
+	 */
+	void CkDiffGraphPictures(UBlueprint* A, UBlueprint* B, const FString& FromFile, const FString& ToFile, const TSharedPtr<FJsonObject>& Result)
+	{
+		const FCkDiffGraphFocus Focus = CkDiffFocusGraph(A, B);
+		if (!Focus.Results.IsValid() || Focus.Count == 0) return;
+
+		// A node keeps its GUID across versions, so a change named on either side frames both.
+		TSet<FGuid> Guids;
+		if (Focus.Old) for (const UEdGraphNode* N : CkDiffChangedNodes(Focus.Old, *Focus.Results)) Guids.Add(N->NodeGuid);
+		if (Focus.New) for (const UEdGraphNode* N : CkDiffChangedNodes(Focus.New, *Focus.Results)) Guids.Add(N->NodeGuid);
+		auto FocusOf = [&Guids](UEdGraph* Graph)
+		{
+			TArray<UEdGraphNode*> Nodes;
+			if (!Graph) return Nodes;
+			for (UEdGraphNode* N : Graph->Nodes)
+			{
+				if (N && Guids.Contains(N->NodeGuid)) Nodes.Add(N);
+			}
+			return Nodes;
+		};
+
+		struct FSide
+		{
+			const TCHAR* Field;
+			UEdGraph* Graph;
+			TArray<UEdGraphNode*> Nodes;
+			FString File;
+		};
+		FSide Before{ TEXT("before"), Focus.Old, FocusOf(Focus.Old), FromFile };
+		FSide After{ TEXT("after"), Focus.New, FocusOf(Focus.New), ToFile };
+		// The camera is set on the version holding more of the changed nodes, then reused for the other.
+		FSide* Order[2] = { &After, &Before };
+		if (!Focus.New || Before.Nodes.Num() > After.Nodes.Num()) Swap(Order[0], Order[1]);
+
+		TOptional<TPair<FCkDiffGraphViewVector, float>> View;
+		for (FSide* Side : Order)
+		{
+			const TSharedPtr<FJsonObject>* SideJson = nullptr;
+			if (Side->File.IsEmpty() || !Result->TryGetObjectField(Side->Field, SideJson)) continue;
+			TSharedPtr<FJsonObject> Pic = MakeShared<FJsonObject>();
+			Pic->SetStringField(TEXT("graph"), Focus.Label);
+			FString Error;
+			if (!Side->Graph)
+			{
+				Error = FString::Printf(TEXT("the version %s has no graph %s: the change %s it"), Side->Field, *Focus.Label,
+					Side == &Before ? TEXT("added") : TEXT("removed"));
+			}
+			else
+			{
+				FObjectThumbnail Thumb;
+				FString Why;
+				if (CkDiffRenderGraph(Side->Graph, Focus.Results, Side->Nodes, View, Thumb, Why) && CkDiffWritePng(Thumb, Side->File, Why))
+				{
+					Pic->SetStringField(TEXT("file"), Side->File);
+					Pic->SetNumberField(TEXT("changedNodes"), Side->Nodes.Num());
+				}
+				else
+				{
+					Error = FString::Printf(TEXT("the graph %s could not be drawn: %s"), *Focus.Label, *Why);
+				}
+			}
+			if (!Error.IsEmpty()) Pic->SetStringField(TEXT("error"), Error);
+			(*SideJson)->SetObjectField(TEXT("graphPicture"), Pic);
+		}
+	}
+
 	void CkDiffUnload(TArray<UPackage*>& Packages)
 	{
 		if (Packages.Num() == 0) return;
@@ -1776,6 +2025,8 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 	const FString ToFile = OptionalString(Params, TEXT("toFile"), FString());
 	const FString FromThumbnail = OptionalString(Params, TEXT("fromThumbnail"), FString());
 	const FString ToThumbnail = OptionalString(Params, TEXT("toThumbnail"), FString());
+	const FString FromGraphPicture = OptionalString(Params, TEXT("fromGraphPicture"), FString());
+	const FString ToGraphPicture = OptionalString(Params, TEXT("toGraphPicture"), FString());
 	const int32 MaxRecords = FMath::Clamp(OptionalInt(Params, TEXT("maxRecords"), 2000), 1, 20000);
 	if (FromFile.IsEmpty() && ToFile.IsEmpty()) return MCPError(TEXT("fromFile or toFile is required: the versions to compare"));
 
@@ -1872,6 +2123,11 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJ
 			// Says the type's own diff (the widget tree of a Widget Blueprint) was compared, so a reader can
 			// tell "no difference" from "not compared".
 			Result->GetObjectField(TEXT("engine"))->SetBoolField(TEXT("blueprintTypeDiff"), bTypeDiff);
+			// A change made only in graphs looks the same in the class picture before and after, so the graph is drawn.
+			if (CkDiffOnlyGraphs(Sections) && (!FromGraphPicture.IsEmpty() || !ToGraphPicture.IsEmpty()))
+			{
+				CkDiffGraphPictures(BPA, BPB, FromGraphPicture, ToGraphPicture, Result);
+			}
 			TSharedPtr<FJsonValue> Semantic = DiffBlueprintObjects(BPA, BPB, PackageName, PackageName);
 			if (Semantic.IsValid() && Semantic->Type == EJson::Object)
 			{

@@ -13,7 +13,8 @@
  * Each version also gets a picture rendered with ThumbnailTools::RenderThumbnail
  * on the object loaded for diff, kept per blob id, so a version always has the
  * same picture. A level is drawn from the level itself, framed on the actors
- * that changed, so its pictures are kept per pair (pictureId).
+ * that changed, so its pictures are kept per pair (pictureId). A Blueprint changed only in its
+ * graphs is pictured by the changed graph instead, drawn for the pair.
  */
 import { unifiedDiff } from "./text-diff.js";
 import * as crypto from "node:crypto";
@@ -46,6 +47,14 @@ export function pictureId(packagePath: string, a: string | null, b: string | nul
   if (!version) return null;
   if (!/\.umap$/i.test(packagePath)) return version;
   return crypto.createHash("sha1").update(["level", a ?? "-", b ?? "-", side].join("\n")).digest("hex");
+}
+
+/**
+ * The id of a graph picture: one side of one diffed pair, since the region drawn
+ * depends on both versions. Forty hex digits, as the thumbnail route requires.
+ */
+export function graphPictureId(pairKey: string, side: "before" | "after"): string {
+  return crypto.createHash("sha1").update(`graph\n${pairKey}\n${side}`).digest("hex");
 }
 
 /** How many packages one list_changes diffs up front; the rest are diffed on request, per path. */
@@ -142,7 +151,15 @@ export interface AssetFact {
 }
 
 export type AssetThumbnail =
-  | { id: string; url: string; source: "rendered" | "saved"; note?: string }
+  | {
+      id: string;
+      url: string;
+      /** rendered or saved: a picture of the asset. graph: the changed graph of a graph-only Blueprint change. */
+      source: "rendered" | "saved" | "graph";
+      note?: string;
+      /** The graph a graph picture shows. */
+      graph?: string;
+    }
   | { error: string };
 
 /** One version of the package, as the editor loaded it. */
@@ -151,6 +168,8 @@ export interface AssetVersion {
   objectName?: string;
   facts: AssetFact[];
   thumbnail?: AssetThumbnail;
+  /** The asset's own picture, kept here when thumbnail is the changed graph instead. */
+  classThumbnail?: AssetThumbnail;
 }
 
 export interface AssetDiff {
@@ -296,22 +315,41 @@ export function nativeDiffOf(d: Pick<AssetDiff, "state" | "engine">): AssetDiff[
   return d.engine.nativeAvailable === false ? { available: false, reason: d.engine.nativeReason ?? "Unreal cannot open a diff of this type." } : { available: true };
 }
 
+/**
+ * The pictures of one version: the changed graph when the bridge drew one (a
+ * graph-only Blueprint change), with the asset's own picture kept beside it;
+ * otherwise the asset's picture, with the reason the graph could not be drawn.
+ */
+export function versionPictures(
+  thumbnail: AssetThumbnail | undefined,
+  graph: AssetThumbnail | undefined,
+): Pick<AssetVersion, "thumbnail" | "classThumbnail"> {
+  if (graph && "id" in graph) return { thumbnail: graph, ...(thumbnail ? { classThumbnail: thumbnail } : {}) };
+  if (!graph) return thumbnail ? { thumbnail } : {};
+  const why = `${graph.error.replace(/\.$/, "")}. The asset's own picture is shown, and a graph edit does not change it.`;
+  if (!thumbnail) return { thumbnail: { error: why } };
+  if ("error" in thumbnail) return { thumbnail: { error: `${thumbnail.error}; ${why}` } };
+  return { thumbnail: { ...thumbnail, note: thumbnail.note ? `${thumbnail.note}. ${why}` : why } };
+}
+
 /** The bridge's answer as an AssetDiff, with the CSV export turned into a unified diff and the pictures mapped to ids. */
 export function assetDiffFromBridge(
   raw: Json,
   key: string,
   picture: (side: "before" | "after", thumb: Json | undefined) => AssetThumbnail | undefined,
+  graphPicture?: (side: "before" | "after", graph: Json) => AssetThumbnail | undefined,
 ): AssetDiff {
   const version = (side: "before" | "after"): AssetVersion | null => {
     const v = raw[side];
     if (!v || typeof v !== "object") return null;
     const o = v as Json;
     const thumbnail = picture(side, o.thumbnail as Json | undefined);
+    const graph = graphPicture && o.graphPicture && typeof o.graphPicture === "object" ? graphPicture(side, o.graphPicture as Json) : undefined;
     return {
       class: str(o.class) ?? "",
       ...(str(o.objectName) ? { objectName: str(o.objectName) } : {}),
       facts: Array.isArray(o.facts) ? (o.facts as AssetFact[]) : [],
-      ...(thumbnail ? { thumbnail } : {}),
+      ...versionPictures(thumbnail, graph),
     };
   };
   const d: AssetDiff = {
