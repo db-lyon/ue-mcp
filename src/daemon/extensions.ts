@@ -45,6 +45,8 @@ export interface LoadedExtension {
   version: string;
   /** The oldest UI bundle version it works with. */
   uiMin?: string;
+  /** false when its bundles stay out of /ui/ (`ueMcpExtension.ui.root`). */
+  uiRoot?: false;
   routes: Route[];
   busy: () => boolean;
   dispose?: () => void | Promise<void>;
@@ -56,6 +58,7 @@ interface ExtensionPackage {
   version: string;
   main: string;
   uiMin?: string;
+  uiRoot?: false;
 }
 
 interface PackageJson {
@@ -117,7 +120,8 @@ function readPackages(root: string, installed: string, refused: RefusedExtension
     if (choice.record && projectDir) recordVersion(projectDir, name, choice.version);
     const { copy, pkg } = usable.get(choice.version)!;
     const uiMin = typeof pkg.ueMcpExtension?.ui?.min === "string" ? pkg.ueMcpExtension.ui.min : undefined;
-    out.push({ dir: copy.dir, name, version: choice.version, main: path.join(copy.dir, pkg.main!), ...(uiMin ? { uiMin } : {}) });
+    const uiRoot = pkg.ueMcpExtension?.ui?.root === false ? { uiRoot: false as const } : {};
+    out.push({ dir: copy.dir, name, version: choice.version, main: path.join(copy.dir, pkg.main!), ...(uiMin ? { uiMin } : {}), ...uiRoot });
   }
   return out;
 }
@@ -139,7 +143,7 @@ function warnForeignFolders(root: string): void {
 
 /** Load every extension, handing each an API built by `apiFor`. A failing one is named and skipped. */
 export async function loadExtensions(
-  apiFor: (name: string, routes: Route[], setBusy: (fn: () => boolean) => void, pkg: { version: string; uiMin?: string }) => DaemonExtensionApi,
+  apiFor: (name: string, routes: Route[], setBusy: (fn: () => boolean) => void, pkg: { version: string; uiMin?: string; uiRoot?: false }) => DaemonExtensionApi,
   root: string = extensionsDir(),
   refused: RefusedExtension[] = [],
   installed: string = packageVersion(),
@@ -154,8 +158,9 @@ export async function loadExtensions(
       const mod = (await import(pathToFileURL(pkg.main).href)) as Partial<DaemonExtension> & { default?: Partial<DaemonExtension> };
       const activate = mod.activate ?? mod.default?.activate;
       if (typeof activate !== "function") throw new Error("exports no activate(api)");
-      const handle = await activate(apiFor(pkg.name, routes, (fn) => (busy = fn), { version: pkg.version, ...(pkg.uiMin ? { uiMin: pkg.uiMin } : {}) }));
-      loaded.push({ name: pkg.name, version: pkg.version, ...(pkg.uiMin ? { uiMin: pkg.uiMin } : {}), routes, busy: () => busy(), dispose: handle?.dispose });
+      const ui = { ...(pkg.uiMin ? { uiMin: pkg.uiMin } : {}), ...(pkg.uiRoot === false ? { uiRoot: false as const } : {}) };
+      const handle = await activate(apiFor(pkg.name, routes, (fn) => (busy = fn), { version: pkg.version, ...ui }));
+      loaded.push({ name: pkg.name, version: pkg.version, ...ui, routes, busy: () => busy(), dispose: handle?.dispose });
       info("extension", `loaded ${pkg.name} ${pkg.version}`);
     } catch (e) {
       warn("extension", `${pkg.name} failed to load`, e);

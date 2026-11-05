@@ -70,17 +70,18 @@ Every route is on `127.0.0.1` and needs `Authorization: Bearer <token>`. The ser
 | `GET /v1/skills`, `GET /v1/actions`, `GET /v1/context/projection` | Skills, action effects, and what a context strategy advertises |
 | `/v1/ext/<name>/` | Routes an extension registers |
 | `GET /ui/` | The installed UI bundle |
+| `GET /ui/ext/<name>/` | A loaded extension's own UI bundle, listed in `/v1/health` under `uiBundles` |
 | `POST /v1/shutdown`, `POST /v1/handoff` | Exit now, or once no call is in flight |
 
 `DAEMON_API_VERSION` versions the HTTP API, the events and the shim protocol. `/v1/health` lists additions under `features`. [Configuration: the daemon](configuration.md#the-daemon) covers the CLI and what a client can read.
 
 ### Extensions and UI bundles
 
-An extension (`src/daemon/extensions.ts`) is a package with `activate(api)` and a `ueMcpExtension` field naming the extension API range it supports. The daemon loads extensions at startup from `~/.ue-mcp/extensions/` (`UE_MCP_EXTENSIONS_DIR`). An extension can register routes under `/v1/ext/<name>/`, publish and read events, run actions in process with `callAction`, register a model provider, use checkpoints, keep a data directory, and trust a key for UI bundles. `EXTENSION_API_VERSION` versions this contract; the daemon serves every version from `EXTENSION_API_MIN_VERSION` up.
+An extension (`src/daemon/extensions.ts`) is a package with `activate(api)` and a `ueMcpExtension` field naming the extension API range it supports. The daemon loads extensions at startup from `~/.ue-mcp/extensions/` (`UE_MCP_EXTENSIONS_DIR`). An extension can register routes under `/v1/ext/<name>/`, publish and read events, run actions in process with `callAction`, register a model provider, use checkpoints, keep a data directory, trust a key for UI bundles, and provide or use objects shared with other extensions through `services` (one provider per id, revoked when the provider is disposed). `EXTENSION_API_VERSION` versions this contract; the daemon serves every version from `EXTENSION_API_MIN_VERSION` up.
 
 Versions install side by side as `<name>@<version>/`, and each project records the version it loads (`extension-versions.ts`), so updating an extension for one project does not change another. `ue-mcp extension install|use|list|remove` manages them.
 
-A UI bundle (`src/daemon/ui-bundles.ts`) lives under `~/.ue-mcp/ui/`. It is served at `/ui/` only when its `manifest.sig` Ed25519 signature verifies against a key an extension trusted and every file matches its SHA-256 in `manifest.json`. A bundle named for a loaded extension is served only at that extension's version or older.
+A UI bundle (`src/daemon/ui-bundles.ts`) lives under `~/.ue-mcp/ui/`. It is served at `/ui/` only when its `manifest.sig` Ed25519 signature verifies against a key an extension trusted and every file matches its SHA-256 in `manifest.json`. A bundle named for a loaded extension is served only at that extension's version or older. A bundle named for a loaded extension verifies only against keys that extension trusted. Each loaded extension's own bundle is also served at `/ui/ext/<name>/`, within its own version window, and `ueMcpExtension.ui.root: false` keeps it off `/ui/`. A manifest's optional `module` (`entry`, `host`) is signed with it and names a file another page loads.
 
 The `ue-mcp/daemon` package export (`src/daemon-api.ts`) carries the types and helpers for building on the daemon: discovery, the extension contract, events, and bundle signing.
 

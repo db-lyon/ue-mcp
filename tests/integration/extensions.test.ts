@@ -14,6 +14,7 @@ import {
   bearer,
   call,
   daemonEnv,
+  pidAlive,
   readDiscovery,
   readSse,
   signedBundle,
@@ -320,6 +321,8 @@ describe("projects on different versions of one extension (#1619)", () => {
       const use = await runCli(multi, ["extension", "use", "integ-ui", "2.0.0", a, "--json"], { env: daemonEnv() });
       expect(use.code, use.stdout + use.stderr).toBe(0);
       expect(JSON.parse(use.stdout)).toMatchObject({ ok: true, name: "integ-ui", version: "2.0.0", daemonRestarted: true });
+      // The old daemon has exited before the command returns, so the project never has two.
+      expect(pidAlive(da.pid)).toBe(false);
       await waitGone(multi, a, da.pid);
       const da2 = readDiscovery(multi, a)!;
       expect((await call(da2, "GET", "/v1/ext/integ-ui/versions")).body).toMatchObject({ loaded: "2.0.0", recorded: "2.0.0" });
