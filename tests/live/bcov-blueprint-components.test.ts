@@ -15,7 +15,8 @@ const BP = `${DIR}/BP_BCovComponents`;
 const CHAR = `${DIR}/BP_BCovCharacter`;
 const PARENT = `${DIR}/BP_BCovCompParent`;
 const CHILD = `${DIR}/BP_BCovCompChild`;
-const ALL = [CHILD, PARENT, CHAR, BP];
+const ROOTED = `${DIR}/BP_BCovRooted`;
+const ALL = [CHILD, PARENT, CHAR, BP, ROOTED];
 const CUBE = "/Engine/BasicShapes/Cube.Cube";
 const SHAPE_MATERIAL = "/Engine/BasicShapes/BasicShapeMaterial";
 
@@ -77,6 +78,41 @@ describe("SCS components", () => {
     comps = await components(BP);
     expect(comps.map((c) => c.name)).not.toContain("BCovPivot");
     expect(comps.map((c) => c.name)).toContain("BCovMesh");
+  }, 180_000);
+
+  it("add_component asRoot replaces DefaultSceneRoot, and remove_component refuses DefaultSceneRoot without touching it (#1478)", async () => {
+    await call("create_blueprint", { assetPath: ROOTED, parentClass: "Actor" });
+    await call("add_component", { assetPath: ROOTED, componentClass: "StaticMeshComponent", componentName: "BCovEarlyMesh" });
+    let comps = await components(ROOTED);
+    expect(comps.find((c) => c.name === "BCovEarlyMesh")?.parent).toBe("DefaultSceneRoot");
+
+    const refused = await callBridge(bridge, "remove_component", { assetPath: ROOTED, componentName: "DefaultSceneRoot" });
+    expect(succeeded(refused)).toBe(false);
+    comps = await components(ROOTED);
+    expect(comps.map((c) => c.name)).toContain("DefaultSceneRoot");
+    expect(comps.find((c) => c.name === "BCovEarlyMesh")?.parent).toBe("DefaultSceneRoot");
+
+    const rooted = await call("add_component", { assetPath: ROOTED, componentClass: "SceneComponent", componentName: "Root", asRoot: true });
+    expect(rooted.isRoot).toBe(true);
+    expect(rooted.defaultSceneRootRemoved).toBe(true);
+    comps = await components(ROOTED);
+    expect(comps.map((c) => c.name)).not.toContain("DefaultSceneRoot");
+    expect(comps.find((c) => c.name === "Root")?.parent).toBeUndefined();
+    expect(comps.find((c) => c.name === "BCovEarlyMesh")?.parent).toBe("Root");
+
+    const again = await call("add_component", { assetPath: ROOTED, componentClass: "SceneComponent", componentName: "Root", asRoot: true });
+    expect(again.existed).toBe(true);
+    expect(again.unchanged).toBe(true);
+
+    const pivot = await call("add_component", { assetPath: ROOTED, componentClass: "SceneComponent", componentName: "BCovNewTop", asRoot: true });
+    expect(pivot.replacedRoots).toEqual(["Root"]);
+    comps = await components(ROOTED);
+    expect(comps.find((c) => c.name === "BCovNewTop")?.parent).toBeUndefined();
+    expect(comps.find((c) => c.name === "Root")?.parent).toBe("BCovNewTop");
+
+    const inherited = await callBridge(bridge, "add_component", { assetPath: CHAR, componentClass: "SceneComponent", componentName: "BCovNoRoot", asRoot: true });
+    expect(succeeded(inherited)).toBe(false);
+    expect((await components(CHAR)).map((c) => c.name)).not.toContain("BCovNoRoot");
   }, 180_000);
 
   it("add_component parentSocket is stored on the SCS node, read back and carried by the remove rollback", async () => {

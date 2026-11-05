@@ -3461,13 +3461,23 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		return MCPResult(Noop);
 	}
 
+	// #1478: DefaultSceneRoot is the placeholder the engine keeps while nothing
+	// else is the root, and the subobject editor refuses to delete it.
+	if (TargetNode == SCS->GetDefaultSceneRootNode())
+	{
+		return MCPError(FString::Printf(TEXT(
+			"'%s' is the DefaultSceneRoot placeholder, which the engine does not delete. Make another scene component "
+			"the root with add_component(asRoot=true), which drops DefaultSceneRoot and moves its children under the new root."),
+			*ComponentName));
+	}
+
 	// Read the identity the inverse needs BEFORE the node is destroyed: which
 	// class to re-add, under which SCS parent, and how much of the node the
 	// re-add cannot bring back.
 	const FString RemovedClassPath = TargetNode->ComponentTemplate->GetClass()->GetPathName();
 	const FString RemovedVariableName = TargetNode->GetVariableName().ToString();
 	const FString RemovedParentSocket = TargetNode->AttachToName.IsNone() ? FString() : TargetNode->AttachToName.ToString();
-	const int32 RemovedChildCount = TargetNode->GetChildNodes().Num();
+	const TArray<USCS_Node*> RemovedChildren = TargetNode->GetChildNodes();
 	FString RemovedParentName;
 	bool bParentAddressable = false;
 	bool bParentIsNative = false;
@@ -3531,8 +3541,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		}
 	}
 
-	// Remove via SubobjectDataSubsystem if available
-	bool bRemoved = false;
+	// Remove via SubobjectDataSubsystem, the editor's own delete. When it finds
+	// the component and refuses, that refusal is the answer (#1478): the direct
+	// SCS removal below is only for a component the subsystem cannot address.
+	bool bSubsystemAddressed = false;
 	if (USubobjectDataSubsystem* Subsystem = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
 	{
 		TArray<FSubobjectDataHandle> Handles;
@@ -3544,23 +3556,49 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 			const FSubobjectData* Data = Handle.GetData();
 			if (Data && Data->GetComponentTemplate() == TargetNode->ComponentTemplate)
 			{
+				bSubsystemAddressed = true;
+				if (!Data->CanDelete())
+				{
+					return MCPError(FString::Printf(TEXT("The engine refuses to delete component '%s'; nothing was removed."), *ComponentName));
+				}
 				TArray<FSubobjectDataHandle> ToDelete;
 				ToDelete.Add(Handle);
-				int32 Removed = Subsystem->DeleteSubobjects(ContextHandle, ToDelete, Blueprint);
-				bRemoved = (Removed > 0);
+				Subsystem->DeleteSubobjects(ContextHandle, ToDelete, Blueprint);
 				break;
 			}
 		}
 	}
-
-	// Fallback: direct SCS removal
-	if (!bRemoved)
+	if (!bSubsystemAddressed)
 	{
 		SCS->RemoveNode(TargetNode);
-		bRemoved = true;
 	}
 
-	if (bRemoved)
+	// Read the result back from the hierarchy itself instead of trusting either path.
+	TSet<const USCS_Node*> Reachable;
+	{
+		TArray<const USCS_Node*> Stack;
+		for (const USCS_Node* Root : SCS->GetRootNodes()) Stack.Add(Root);
+		while (Stack.Num() > 0)
+		{
+			const USCS_Node* Node = Stack.Pop();
+			if (!Node || Reachable.Contains(Node)) continue;
+			Reachable.Add(Node);
+			for (const USCS_Node* Child : Node->GetChildNodes()) Stack.Add(Child);
+		}
+	}
+	const bool bRemoved = !Reachable.Contains(TargetNode);
+	if (!bRemoved)
+	{
+		return MCPError(FString::Printf(TEXT("Component '%s' is still in the Blueprint after the delete; the engine refused it and nothing was removed."), *ComponentName));
+	}
+	TArray<FString> ChildrenKept;
+	TArray<FString> ChildrenRemoved;
+	for (USCS_Node* Child : RemovedChildren)
+	{
+		if (!Child) continue;
+		(Reachable.Contains(Child) ? ChildrenKept : ChildrenRemoved).Add(Child->GetVariableName().ToString());
+	}
+
 	{
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
@@ -3595,17 +3633,30 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		Result->SetBoolField(TEXT("previousParentIsNative"), bParentIsNative);
 		Result->SetBoolField(TEXT("hadParent"), !RemovedParentName.IsEmpty());
 		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		TArray<TSharedPtr<FJsonValue>> KeptJson;
+		for (const FString& Name : ChildrenKept) KeptJson.Add(MakeShared<FJsonValueString>(Name));
+		TArray<TSharedPtr<FJsonValue>> RemovedJson;
+		for (const FString& Name : ChildrenRemoved) RemovedJson.Add(MakeShared<FJsonValueString>(Name));
+		Result->SetArrayField(TEXT("childrenKept"), KeptJson);
+		Result->SetArrayField(TEXT("childrenRemoved"), RemovedJson);
 
 		FString LossyNote = FString::Printf(TEXT(
 			"add_component re-adds a default-constructed '%s' named '%s'. Every property override on the removed "
 			"template is gone, and any Blueprint node that referenced the component is not restored by re-adding it."),
 			*RemovedClassPath, *RemovedVariableName);
-		if (RemovedChildCount > 0)
+		if (ChildrenRemoved.Num() > 0)
 		{
 			LossyNote += FString::Printf(TEXT(
-				" The %d component(s) parented under it went with it: the inverse restores one component, not the "
-				"subtree."),
-				RemovedChildCount);
+				" The %d component(s) parented under it went with it (childrenRemoved): the inverse restores one "
+				"component, not the subtree."),
+				ChildrenRemoved.Num());
+		}
+		if (ChildrenKept.Num() > 0)
+		{
+			LossyNote += FString::Printf(TEXT(
+				" The %d component(s) parented under it stayed in the Blueprint, moved by the engine (childrenKept), "
+				"and the re-added component does not take them back."),
+				ChildrenKept.Num());
 		}
 		if (bParentIsNative)
 		{
@@ -3628,10 +3679,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		}
 		Result->SetStringField(TEXT("rollbackNote"), LossyNote);
 		return MCPResult(Result);
-	}
-	else
-	{
-		return MCPError(TEXT("Failed to remove component"));
 	}
 }
 

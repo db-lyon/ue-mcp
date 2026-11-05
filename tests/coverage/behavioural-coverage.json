@@ -178,6 +178,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "add_component asRoot replaces DefaultSceneRoot, and remove_component refuses DefaultSceneRoot without touching it (#1478)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "add_component parentSocket is stored on the SCS node, read back and carried by the remove rollback"
         },
         {
@@ -3974,6 +3979,11 @@
           "suite": "live",
           "file": "tests/live/asset-native-pipeline.test.ts",
           "test": "reads static mesh sockets, regex metadata and collision with reference details"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "add_component asRoot replaces DefaultSceneRoot, and remove_component refuses DefaultSceneRoot without touching it (#1478)"
         },
         {
           "suite": "live",
@@ -15015,6 +15025,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "add_component asRoot replaces DefaultSceneRoot, and remove_component refuses DefaultSceneRoot without touching it (#1478)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "add_component parentSocket is stored on the SCS node, read back and carried by the remove rollback"
         },
         {
@@ -16775,6 +16790,11 @@
       "registeredIn": "BlueprintHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "add_component asRoot replaces DefaultSceneRoot, and remove_component refuses DefaultSceneRoot without touching it (#1478)"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
