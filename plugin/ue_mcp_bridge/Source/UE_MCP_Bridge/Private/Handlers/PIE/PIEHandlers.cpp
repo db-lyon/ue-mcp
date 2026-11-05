@@ -68,6 +68,7 @@ void FPIEHandlers::StartupSystems()
 	MCPPIE::FPIEObserver::Get().Init();
 	MCPPIE::FPIESessionLog::Get().Init();
 	MCPPIE::FPIEScriptRunner::Get().Init();
+	MCPPIE::FPIEUatRunner::Get().Init();
 
 	if (IsSupersededPluginEnabled())
 	{

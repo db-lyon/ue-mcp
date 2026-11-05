@@ -253,7 +253,7 @@ Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `
 
 With Run Under One Process off, every client is a separate process the editor cannot reach directly. The tool attaches a replicated control component to each remote player's controller on the server and relays commands over the game connection. `inject_input`, `inject_input_start` and `inject_input_tape` take `client` 1..N; `inject_input_update` and `inject_input_stop` route by the returned id. `console` takes `client` 1..N only. The editor's own player console is `editor(execute_command, world="pie")`.
 
-`uat_run` opens the scenario's map, starts PIE with its players, waits for every remote player to join, and runs each step: drive input or console on any player, then judge the step from the host log and each client's own log file. A dedicated server needs `one_process: true`, its default. When the run ends it stops PIE, restores the play settings and writes `report.md` and `report.json` to `report_dir`.
+`uat_run` opens the scenario's map, starts PIE with its players, waits for every remote player to join, and runs each step: drive input or console on any player, then judge the step from the host log and each client's own log file. A dedicated server needs `one_process: true`, its default. When the run ends it stops PIE, restores the play settings, saves them, and writes `report.md` and `report.json` to `report_dir`. The settings it overrides are first written to `Saved/UE_MCP/pie-uat-play-settings.json`, so a run the editor never finished (a crash or a forced quit) is undone on the next editor start.
 
 ```json
 {
@@ -279,7 +279,7 @@ Step actions, each with `client`: `tape {action, values}`, `press {action, frame
 
 `expect` rules take `min` and `max` match counts, and `since: "run"` judges every line since PIE started instead of only the step's own lines. A step passes when every expectation is met and no `forbid` pattern matched in its window. It ends early once its expectations are met unless it forbids something, in which case it watches the whole window.
 
-`pie.windowless: true` launches separate-process clients with `-RenderOffscreen`: they render every frame as in a window but open no window and never take focus. Their frame rate is pinned to `pie.client_fps` (default 60).
+`pie.windowless: true` launches separate-process clients with `-RenderOffscreen`: they render every frame as in a window but open no window and never take focus. Their frame rate is pinned to `pie.client_fps` (default 60). Those launch parameters go in for the run only: a value an earlier run left behind is stripped before the next run adds its own, and on editor start.
 
 ### PIE inspection and session log
 
