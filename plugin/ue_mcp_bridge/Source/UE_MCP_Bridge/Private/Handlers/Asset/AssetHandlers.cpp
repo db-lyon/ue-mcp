@@ -1039,6 +1039,13 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("reindex_assets_fts"), &ReindexAssetsFTS, {
 		MCPParam::Optional(TEXT("directory"), EType::String, TEXT("Content path to rescan (default /Game)")),
 	});
+	// #1486: keystroke-speed search over assets, open-level actors and project files.
+	Registry.RegisterHandler(TEXT("quick_search"), &QuickSearch, {
+		MCPParam::Required(TEXT("query"), EType::String, TEXT("Words matched against names, classes and paths; every word must match. A leading BP_, M_ or DT_ keeps names with that prefix, and actor:, asset: or file: keeps one kind")),
+		MCPParam::Optional(TEXT("refreshFiles"), EType::Boolean, TEXT("Re-walk Source/ and Config/ now instead of using the listing cached for 2 seconds (default false)")),
+		SpecCursor,
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows per page, 1 to 200 (default 20)")),
+	});
 
 	// v0.7.19 #150 - AssetRegistry referencers
 	Registry.RegisterHandler(TEXT("get_asset_referencers"), &GetReferencers, {

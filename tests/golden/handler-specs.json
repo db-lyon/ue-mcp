@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1248,
+  "handlerCount": 1249,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -28350,6 +28350,35 @@
           "type": "string",
           "required": false,
           "description": "Only this ZoneGraphData actor, by full object path"
+        }
+      ]
+    },
+    "quick_search": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Words matched against names, classes and paths; every word must match. A leading BP_, M_ or DT_ keeps names with that prefix, and actor:, asset: or file: keeps one kind"
+        },
+        {
+          "name": "refreshFiles",
+          "type": "boolean",
+          "required": false,
+          "description": "Re-walk Source/ and Config/ now instead of using the listing cached for 2 seconds (default false)"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Rows per page, 1 to 200 (default 20)"
         }
       ]
     },

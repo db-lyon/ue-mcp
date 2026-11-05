@@ -9,6 +9,7 @@
 #include "Handlers/PIE/PIEHandlers.h"
 #include "Handlers/Checkpoint/CheckpointHandlers.h"
 #include "Handlers/Editor/EditorHandlers.h"
+#include "Handlers/Asset/AssetQuickSearch.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "HAL/PlatformMisc.h"
@@ -235,6 +236,8 @@ void FUE_MCP_BridgeModule::ShutdownModule()
 	FMCPDeletedActorPackages::Remove();
 	FPIEHandlers::ShutdownSystems();
 	FCheckpointHandlers::Shutdown();
+	// Unbinds the quick_search index from the Asset Registry while it is still loaded.
+	MCPQuickSearch::FAssetIndex::Shutdown();
 	// The snapshot itself outlives this module (its own module owns it and
 	// keeps publishing until PostConfigInit teardown); only the Slate and
 	// Engine sensors go away with us.
