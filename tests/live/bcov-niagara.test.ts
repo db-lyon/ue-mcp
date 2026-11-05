@@ -114,6 +114,20 @@ describe("Niagara systems and emitters", () => {
     expect((await call("validate_niagara_system", { systemPath: SYSTEM })).valid).toBe(true);
   }, 120_000);
 
+  it("set_emitter_property renames the emitter, and its rollback renames it back by the new name", async () => {
+    const renamed = await call("set_emitter_property", { ...onEmitter, propertyName: "name", value: "BCovRenamed" });
+    expect(renamed.newEmitterName).toBe("BCovRenamed");
+    expect(renamed.previousValue).toBe(EMITTER);
+    expect(await emitterNames(SYSTEM)).toEqual(["BCovRenamed"]);
+
+    const rollback = renamed.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("set_emitter_property");
+    expect(rollback.payload.emitterName).toBe("BCovRenamed");
+    const restored = await call(rollback.method, rollback.payload);
+    expect(restored.newEmitterName).toBe(EMITTER);
+    expect(await emitterNames(SYSTEM)).toEqual([EMITTER]);
+  }, 120_000);
+
   it("get_niagara_compiled_hlsl reports the GPU script only after set_emitter_property moves the sim target", async () => {
     const cpu = await call("get_niagara_compiled_hlsl", onEmitter);
     expect(String(cpu.note)).toContain("CPU-sim");

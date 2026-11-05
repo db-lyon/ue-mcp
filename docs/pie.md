@@ -74,6 +74,22 @@ pie(action="record_read", id="some-recording", file="drift")
 
 ## Actions
 
+### Live view and collision
+
+| Action | Purpose |
+|--------|---------|
+| `view_trace` | Read the selected player's live view, line trace from it and optionally sphere sweep; report hit collision settings |
+
+```text
+pie(action="view_trace", distance=3000, channel="Visibility", sweepRadius=20)
+level(action="query_components", world="pie", actorLabelContains="Cable", componentClass="BoxComponent", includeCollision=true, collisionChannel="Visibility")
+```
+
+`view_trace` uses the player controller's `GetPlayerViewPoint`, so it follows the live camera. `playerIndex` defaults to 0 within the selected world; `pieInstance` selects an exact instance, and omitting it prefers the active PIE world with that local player. Missing PIE, instance or player returns an error. `distance` defaults to 1000 cm and must be positive. `channel` defaults to Visibility and accepts project-renamed collision channels. `traceComplex` defaults to false. `ignoreActors` accepts labels or full paths; a label skips every match in that world. `ignorePawn` defaults to true for the viewing player's pawn.
+
+The response contains `viewLocation`, `viewRotation`, `viewDirection`, `playerIndex`, `pieInstance`, and `line`. A positive `sweepRadius` adds `sweep`, a sphere sweep on the same ray. Zero omits the sweep. Each trace uses the [level trace result](level-traces.md) fields. Hit components also report `collisionEnabled`, `objectType`, `responseOnChannel`, `collisionChannel`, `blocksVisibility`, `ownerActorLabel` and `ownerActorClass`. `blocksVisibility` describes the Visibility channel response; `collisionEnabled` separately tells you whether queries are enabled.
+
+
 ### Recording
 
 | Action | Purpose |
@@ -271,6 +287,19 @@ Step actions, each with `client`: `tape {action, values}`, `press {action, frame
 | `session_log` | The paged raw log, filtered by verbosity, category or substring |
 
 Both session actions default to the live or most recent session; pass `session` to read a finished one from `Saved/MCPSessions/`. Actor and subsystem properties are `editor(get_object_properties, world="pie")` (`target="subsystem"` with `subsystemClass`) and `editor(get_runtime_values)`.
+
+### Rendering validation in PIE
+
+These are the native routes for a before/after or performance pass on a running game (#1645).
+
+| Task | Call |
+|------|------|
+| Instance counts, cull distances and MinLOD of every instanced mesh component, including ones an actor holds only in a C++ array | `editor(get_runtime_values, world="pie", classFilter="InstancedStaticMeshComponent", paths=["GetInstanceCount", "InstanceStartCullDistance", "InstanceEndCullDistance", "MinLOD"])`. It walks each actor's owned components, so no UPROPERTY path to the component is needed, and returns one row per component. |
+| Switch quality during PIE | `editor(set_scalability, level="Low")`, or a single setting with `editor(set_cvars)`. Both apply to the running game. |
+| CSV profile and GPU profile around a timed window | `editor(execute_command, command="csvprofile start")`, then `csvprofile stop` when the window ends; the CSV lands in `Saved/Profiling/CSV`. `editor(execute_command, command="profilegpu")` captures one frame's GPU timings to the log, read back with `editor(get_log)`. For a trace Unreal Insights can open, use `editor(start_trace)` and `editor(stop_trace)`. |
+| Fixed-interval frame sequence | `editor(capture_screenshot_sequence, filename="Validation/run", frameCount=20, intervalMs=250)` captures the PIE viewport on a fixed schedule and reports each frame's lateness. |
+| Pose a pawn while paused | `editor(set_pie_paused, paused=true)`, then `editor(teleport_runtime_actor)` with `location` and `rotation`. |
+| Override a material scalar at runtime | `editor(invoke_object_function, world="pie", target="playerpawn", propertyPath="Mesh", functionName="CreateDynamicMaterialInstance", args={ElementIndex: 0})` returns the dynamic instance's path under `returnValues`; call `SetScalarParameterValue` on that `objectPath` with `{ParameterName, Value}`. |
 
 ## Multiplayer targeting
 

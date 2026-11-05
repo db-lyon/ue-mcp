@@ -4,7 +4,7 @@ Operating guide for Claude Code (and any AI agent) working in this repo. Shared 
 
 ## Repo at a glance
 
-- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->30<!-- /count --> category tools with <!-- count:actions -->2117+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
+- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->30<!-- /count --> category tools with <!-- count:actions -->2132+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
 - **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/<Category>/*.cpp`, registers actions with `FMCPHandlerRegistry`.
 - **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
 - **Docs** (`docs/`) - MkDocs site. Release bodies are drafted outside the repo (see Release process).
@@ -48,7 +48,7 @@ The merge style follows the commit count, and writing five commits only to squas
 - TS: `npx tsc --noEmit` for type-checking, `npx tsc` for emit. Build output goes to `dist/`.
 - UE C++: `npm run build`. This calls `scripts/build.js`, which always builds the `ue_mcpEditor` target against `tests/ue_mcp/ue_mcp.uproject` and nothing else.
 - Test builds pass `-NoEngineChanges`, so Unreal aborts with the offending file list if the build would overwrite anything already in the engine tree. Set `UE_MCP_ALLOW_TEST_ENGINE_CHANGES=true` only to bootstrap engine outputs in an engine you are willing to have written to.
-- Optional: `UE_MCP_TEST_ENGINE_ROOT` pins the engine to build and run with, and `UE_MCP_PROTECTED_ENGINE_ROOTS` is a deny list of roots the scripts refuse to touch at all. The deny list outranks every other setting, including the opt-in above.
+- Optional: `UE_MCP_TEST_ENGINE_ROOT` (or, after it, `UE_ROOT`) pins the engine to build and run with, and `UE_MCP_PROTECTED_ENGINE_ROOTS` is a deny list of roots the scripts refuse to touch at all. The deny list outranks every other setting, including the opt-in above.
 - `npm run up:build` stops the editor, builds, and relaunches. Use when iterating live.
 - The deployer (`scripts/deploy.mjs`) syncs `plugin/` → `tests/ue_mcp/Plugins/UE_MCP_Bridge/`. Neither `npm run up` nor `npm run build` runs it, so run it after plugin source edits and before building.
 
@@ -58,7 +58,7 @@ The merge style follows the commit count, and writing five commits only to squas
 
 - Target **only** `tests/ue_mcp/ue_mcp.uproject`. Confirm the MCP connection via `project(get_status)` before running. If the editor is connected to anything else (the user's real project, another workspace), abort.
 - Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
-- <!-- count:bridgeActions -->2048<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
+- <!-- count:bridgeActions -->2057<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
 
 ### Golden baseline - the advertised surface
 
@@ -139,7 +139,7 @@ CI **gates the publish job** on a single pre-staged input: the draft GitHub rele
 npm run release -- --version X.Y.Z[-beta.N] --notes /path/to/notes.md
 ```
 
-It checks the notes, bumps on `bump/<version>` with `npm run generate:metadata`, selects the tests, creates the draft, pushes and opens the PR, then runs in parallel: the PR's CI (unit, integration, release gates, once), the bridge binaries (incremental, uploaded to the draft), one editor on `tests/ue_mcp` beside the binaries compile for the lifecycle cases when selected, smoke over the actions no behavioural test dispatches and the selected `UE.MCP.*` automation tests when `plugin/` changed, and the base live files, and once the compile is done, the other selected live files against copies of `tests/ue_mcp`. The run closes every editor it started. `npm run release -- --rehearsal --since <tag>` runs the same lanes on the checkout without publishing anything, replaying that release's plugin changes into the binaries compile, to measure a run. It merges when all of them are green, and the merge publishes. Timing goes to `release-logs/release-timing.json`. The target is a release in under 10 minutes; the runner prints a warning when a run goes over 600 s, and an overrun is a defect to fix, not a budget to raise.
+It checks the notes, bumps on `bump/<version>` with `npm run generate:metadata`, selects the tests, creates the draft, pushes and opens the PR, then runs in parallel: the PR's CI (unit, integration, release gates, once), the bridge binaries (incremental, uploaded to the draft), one editor on `tests/ue_mcp` beside the binaries compile for the lifecycle cases when selected, smoke over the actions no behavioural test dispatches and the selected `UE.MCP.*` automation tests when `plugin/` changed, and the base live files, and once the compile is done, the other selected live files against copies of `tests/ue_mcp`. The run closes every editor it started. `npm run release -- --rehearsal --since <tag>` runs the same lanes on the checkout without publishing anything, replaying that release's plugin changes into the binaries compile, to measure a run. It merges when all of them are green, and the merge publishes. Each run appends its timing to `release-logs/release-timing.json`, which keeps every run. The target is a release in under 10 minutes; the runner prints a warning when a run goes over 600 s, and an overrun is a defect to fix, not a budget to raise.
 
 **Test selection** (`scripts/select-tests.ts`, #1509). The runner diffs against the previous release tag, prints what it chose and why, and writes `release-logs/selection.json`, which `test:live -- --files-from` and `scripts/automation-tests.mjs --filters-from` read. Run it alone with `npx tsx scripts/select-tests.ts --base <tag>` or `--files a,b`; `--related` also runs `vitest related` over the unit and integration suites.
 

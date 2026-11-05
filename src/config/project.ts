@@ -50,8 +50,19 @@ export interface UeMcpConfig {
   editor?: {
     path?: string;
     buildToolPath?: string;
-    /** Extra command-line arguments start_editor and restart_editor pass to this project's editor. */
+    /** Extra command-line arguments start_editor and restart_editor pass to this project's editor,
+     *  after the window and IDE mode arguments and before a per-call `extraArgs`. */
     launchArgs?: string[];
+    /** How start_editor and restart_editor launch this project's editor:
+     *  `normal` (default, today's behaviour) or `offscreen`, which passes
+     *  -RenderOffScreen so no editor window appears on screen. A per-call
+     *  `window` parameter overrides it. */
+    window?: "normal" | "offscreen";
+    /** Whether that editor may open an IDE: `allow`, or `none`, which passes
+     *  the NullSourceCodeAccessor ini override so the editor opens no IDE.
+     *  Unset = `none` for an offscreen editor and `allow` otherwise. A per-call
+     *  `ide` parameter overrides it. */
+    ide?: "allow" | "none";
   };
   /** Per-project equivalent of UE_MCP_ENV (#817): the `ue-mcp.<env>.yml`
    *  overlay this project merges. The env var still wins. */
@@ -116,6 +127,8 @@ export interface UeMcpConfig {
 export interface UeMcpConfigRejection {
   key: string;
   message: string;
+  /** Every validation issue under the key, its path relative to the key (`window`, `launchArgs.0`). */
+  issues: Array<{ path: string; message: string }>;
 }
 
 const rejectionsByDir = new Map<string, UeMcpConfigRejection[]>();
@@ -157,7 +170,7 @@ export function partitionUeMcpConfig(block: unknown): {
   if (block === null || typeof block !== "object" || Array.isArray(block)) {
     return {
       config: {},
-      rejected: [{ key: "ue-mcp", message: "the block is not a mapping of settings" }],
+      rejected: [{ key: "ue-mcp", message: "the block is not a mapping of settings", issues: [] }],
     };
   }
 
@@ -178,9 +191,14 @@ export function partitionUeMcpConfig(block: unknown): {
       if (one.data !== undefined) kept[key] = one.data;
       continue;
     }
-    const issue = one.error?.issues?.[0];
+    const issues = one.error?.issues ?? [];
+    const issue = issues[0];
     const where = issue && issue.path.length > 0 ? `${key}.${issue.path.join(".")}: ` : "";
-    rejected.push({ key, message: `${where}${issue?.message ?? "invalid value"}` });
+    rejected.push({
+      key,
+      message: `${where}${issue?.message ?? "invalid value"}`,
+      issues: issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+    });
   }
 
   // The survivors are parsed again as a whole, so the returned object is one
@@ -191,7 +209,7 @@ export function partitionUeMcpConfig(block: unknown): {
   if (!again.success) {
     return {
       config: {},
-      rejected: [...rejected, { key: "ue-mcp", message: "the surviving keys still did not validate together" }],
+      rejected: [...rejected, { key: "ue-mcp", message: "the surviving keys still did not validate together", issues: [] }],
     };
   }
   return { config: again.data, rejected };
@@ -286,6 +304,9 @@ export class ProjectContext {
       throw new Error(
         `'contentPath' must be a mount path such as /Game or /Game/Characters (got '${contentPath}').`,
       );
+    }
+    if (normalized.split("/").some((part) => part === "." || part === "..")) {
+      throw new Error(`'contentPath' names a folder inside a mount and cannot contain '.' or '..' (got '${contentPath}').`);
     }
     if (isGamePath(normalized)) {
       if (!this.contentDir) throw new Error("No project is loaded, so /Game has no directory to read.");

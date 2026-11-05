@@ -1892,6 +1892,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		MeshResult->SetStringField(TEXT("target"), Description);
 		MeshResult->SetStringField(TEXT("objectPath"), Target->GetPathName());
 		MeshResult->SetStringField(TEXT("propertyName"), ResolvedName);
+		MeshResult->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
+		if (PathInfo.bUsedKeySelector) MeshResult->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
 		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
 		MCPSetNoRollback(MeshResult,
 			TEXT("No rollback payload is built for a mesh swap here. Restore previousValue with level(set_component_skeletal_mesh)."));
@@ -1971,7 +1973,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("objectPath"), Description);
 	Result->SetStringField(TEXT("objectClass"), Target->GetClass()->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
-	Result->SetStringField(TEXT("resolvedPropertyName"), ResolvedName);
+	Result->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("leafPropertyName"), Prop->GetName());
 	Result->SetStringField(TEXT("type"), Prop->GetCPPType());

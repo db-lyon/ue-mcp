@@ -267,6 +267,26 @@
       "summary": "ue-mcp resolve works a GitHub issue into a pull request through gh, git and claude"
     },
     {
+      "id": "cli.flow.list",
+      "group": "cli",
+      "summary": "ue-mcp flow list prints the flows of the project in the working directory, merged with the built-ins, without reaching the editor"
+    },
+    {
+      "id": "cli.flow.plan",
+      "group": "cli",
+      "summary": "ue-mcp flow plan <name> prints a flow's resolved steps and params without running any, and exits 1 for an unknown flow"
+    },
+    {
+      "id": "cli.flow.run",
+      "group": "cli",
+      "summary": "ue-mcp flow run <name> runs the flow in process against the project's editor, prints each step as it finishes and exits 1 when it fails"
+    },
+    {
+      "id": "cli.flow.json",
+      "group": "cli",
+      "summary": "ue-mcp flow list|plan|run --json prints the flow tool's JSON result only"
+    },
+    {
       "id": "cli.plugin.install",
       "group": "cli",
       "summary": "ue-mcp plugin install adds a plugin package, validates its manifest and records it in ue-mcp.yml"
@@ -592,6 +612,11 @@
       "summary": "the daemon's /v1/checkpoints routes create, list, diff, restore and clear checkpoints, arm the editor's save recording and publish checkpoint events, without touching the project's .git"
     },
     {
+      "id": "daemon.journal",
+      "group": "daemon",
+      "summary": "the daemon's /v1/journal routes name the group mutating calls are journaled into, list the journal, and revert a group or every later one by replaying rollback descriptors and restoring checkpoint snapshots, after a restart too"
+    },
+    {
       "id": "daemon.skills",
       "group": "daemon",
       "summary": "the daemon lists ue-mcp's packaged skills and the project's own, with owner and location, over /v1/skills and api.skills"
@@ -615,6 +640,11 @@
       "id": "daemon.modes-playtest",
       "group": "daemon",
       "summary": "a daemon extension reads and sets the project's playtest mode through api.modes, and its own callAction is not gated by it"
+    },
+    {
+      "id": "daemon.sessions-access",
+      "group": "daemon",
+      "summary": "the daemon lists each MCP session over /v1/sessions and PUT /v1/sessions/<id>/access switches one to read-only, refusing its state-changing calls while another session on the same editor stays writable"
     },
     {
       "id": "package.dist-server",

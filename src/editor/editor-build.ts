@@ -6,13 +6,16 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { spawn } from "child_process";
 import * as os from "node:os";
 import { readUeMcpConfig } from "../config/project.js";
 import { EngineResolutionError, engineLookupFor, selectEngine } from "./engine-root.js";
 import { invalidatePluginFreshness } from "./bridge-freshness.js";
 import { clearPendingBuild, markPendingBuildFailed } from "./pending-build.js";
 import { readEnv } from "../core/env.js";
+import {
+  UnsafeArgumentError, assertBuildConfiguration, assertCmdSafe, assertPlatform, assertUeIdentifier,
+  spawnInvocation, windowsBatchInvocation, type Invocation,
+} from "../core/safe-spawn.js";
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -255,6 +258,45 @@ export function buildToolArgs(o: {
 }
 
 /**
+ * The process a build runs: the build tool and its argv, never a shell line
+ * made of names. Every name is checked first, and a value that cannot be
+ * passed safely is refused with an UnsafeArgumentError.
+ *
+ * Windows ships Build.bat, which only cmd.exe can run. It takes the lock,
+ * finds the bundled dotnet and rebuilds UnrealBuildTool itself, so it is
+ * run as it is, through a cmd line whose every token has been checked.
+ * #740: the quotes around the project path are cmd syntax; off Windows the
+ * path goes straight into argv with none.
+ */
+export function buildInvocation(o: {
+  buildTool: string;
+  projectPath: string;
+  platform: string;
+  configuration: string;
+  clean?: boolean;
+  windows: boolean;
+}): Invocation {
+  const projectName = path.basename(o.projectPath, path.extname(o.projectPath));
+  assertUeIdentifier(projectName, "Project name");
+  const target = assertUeIdentifier(`${projectName}Editor`, "Build target");
+  const platform = assertPlatform(o.platform);
+  const configuration = assertBuildConfiguration(o.configuration);
+  const viaCmd = o.windows && /\.(bat|cmd)$/i.test(o.buildTool);
+  if (!viaCmd) {
+    return {
+      command: o.buildTool,
+      args: buildToolArgs({ target, platform, configuration, projectPath: o.projectPath, clean: o.clean, windows: false }),
+    };
+  }
+  assertCmdSafe(o.buildTool, "Build tool path");
+  assertCmdSafe(o.projectPath, "Project path");
+  return windowsBatchInvocation(
+    o.buildTool,
+    buildToolArgs({ target, platform, configuration, projectPath: o.projectPath, clean: o.clean, windows: true }),
+  );
+}
+
+/**
  * Compile a project's C++ out of process, with UnrealBuildTool.
  *
  * Out of process is the point: UnrealBuildTool refuses to link while an editor
@@ -299,25 +341,16 @@ export async function buildProject(
   const platform = opts.platform?.trim() || getPlatformString();
   const configuration = opts.configuration?.trim() || "Development";
 
-  // #740: the quotes around the project path are SHELL syntax, not part of the
-  // value. On Windows the args are joined into a single `cmd /c` string, so
-  // they are required. Off Windows the args go straight into argv with no shell
-  // to strip them, so UnrealBuildTool received a path containing literal quote
-  // characters and reported "Unable to find project file" for a file that was
-  // plainly there - while the same command pasted into a terminal worked,
-  // because the shell removed them first.
-  const windowsArgs = buildToolArgs({ target, platform, configuration, projectPath: resolvedPath, clean: opts.clean, windows: true });
-  const posixArgs = buildToolArgs({ target, platform, configuration, projectPath: resolvedPath, clean: opts.clean, windows: false });
+  let invocation: Invocation;
+  try {
+    invocation = buildInvocation({ buildTool, projectPath: resolvedPath, platform, configuration, clean: opts.clean, windows: IS_WINDOWS });
+  } catch (err) {
+    if (err instanceof UnsafeArgumentError) return { success: false, exitCode: null, message: `Build refused: ${err.message}` };
+    throw err;
+  }
 
   return new Promise((resolve) => {
-    let proc;
-    if (IS_WINDOWS) {
-      const quotedCommand = `"${buildTool}"`;
-      const fullCommand = `cmd /c "${quotedCommand} ${windowsArgs.join(" ")}"`;
-      proc = spawn(fullCommand, [], { windowsHide: true, shell: true, stdio: "pipe" });
-    } else {
-      proc = spawn(buildTool, posixArgs, { windowsHide: true, stdio: "pipe" });
-    }
+    const proc = spawnInvocation(invocation, { stdio: "pipe" });
 
     // Kept so a failure can be read afterwards. The compiler reports running
     // out of room as a paging-file problem, which sends people to their

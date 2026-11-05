@@ -155,6 +155,17 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const TCHAR* const ValueYDoc = TEXT("Axis value Y (default 0)");
 	const TCHAR* const ValueZDoc = TEXT("Axis value Z (default 0)");
 
+	Registry.RegisterHandler(TEXT("pie_view_trace"), &ViewTrace, {
+		MCPParam::Optional(TEXT("playerIndex"), EType::Integer, TEXT("Local player index in the selected PIE world (default 0)")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("PIE instance id; omitted selects the active PIE world")),
+		MCPParam::Optional(TEXT("distance"), EType::Number, TEXT("Positive trace distance in cm (default 1000)")),
+		MCPParam::Optional(TEXT("channel"), EType::String, TEXT("Collision channel, including project-renamed channels (default Visibility)")),
+		MCPParam::Optional(TEXT("sweepRadius"), EType::Number, TEXT("Also sweep a sphere of this radius in cm when positive")),
+		MCPParam::Optional(TEXT("traceComplex"), EType::Boolean, TEXT("Trace per-triangle collision (default false)")),
+		MCPParam::Optional(TEXT("ignoreActors"), EType::Array, TEXT("Actor labels or paths to skip")).Items(EType::String),
+		MCPParam::Optional(TEXT("ignorePawn"), EType::Boolean, TEXT("Ignore the viewing player's pawn (default true)")),
+	});
+
 	// Input injection
 	Registry.RegisterHandler(TEXT("pie_inject_input"), &InjectInput, {
 		MCPParam::Required(TEXT("action_path"), EType::String, TEXT("InputAction asset path")),

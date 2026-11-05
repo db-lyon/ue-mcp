@@ -42,6 +42,12 @@ export interface ElicitFn {
 
 export interface ElicitParams {
   message: string;
+  /**
+   * Machine-readable context for a client that renders the form as its own
+   * card, keyed by a namespaced name such as `ue-mcp/guard`. Optional; a
+   * client that ignores it still has the message and the form.
+   */
+  _meta?: Record<string, unknown>;
   requestedSchema: {
     type: "object";
     properties: Record<string, ElicitPrimitiveSchema>;
@@ -123,6 +129,12 @@ export interface InProcessCallOptions {
    * that wants a person applies as it does for a client without elicitation.
    */
   elicit?: ElicitFn;
+  /**
+   * The access mode this call runs under. `read-only` refuses an action whose
+   * declared effect is `mutate` or `unknown`, and every state-changing bridge
+   * call it would make. Default read-write.
+   */
+  access?: "read-write" | "read-only";
 }
 
 export interface ToolContext {
@@ -394,7 +406,8 @@ export interface BridgeActionSpec extends ActionSpecBase {
    */
   epicTool?: EpicToolRef;
   /**
-   * Runs after the bridge answers, with the parameters sent and the answer; what it returns replaces the answer.
+   * Runs after the bridge answers, with canonical parameters, the caller's routing timeoutMs when given, and the answer.
+   * What it returns replaces the answer. Routing timeoutMs is never sent to the bridge as a handler parameter.
    * For work the editor cannot do on its game thread, such as waiting for a PCG generation (#1365).
    */
   followUp?: (ctx: ToolContext, params: Record<string, unknown>, answered: unknown) => Promise<unknown>;

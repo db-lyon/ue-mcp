@@ -7,7 +7,9 @@ import {
   readEngineSnapshot,
   withBridgeSnapshot,
   type EngineState,
+  type EditorProcess,
 } from "../../src/editor/engine-observer.js";
+import { windowModeOf } from "../../src/editor/launch-args.js";
 
 const temporaryRoots: string[] = [];
 
@@ -259,5 +261,38 @@ describe("withBridgeSnapshot", () => {
     const merged = withBridgeSnapshot(blindState({ processProbeFailed: false }), { phase: "ready" });
     expect(merged.running).toBe(true);
     expect(merged.summary).toContain("did not find it");
+  });
+});
+
+describe("windowModeOf", () => {
+  const proc = (commandLine: string, pid = 4242): EditorProcess => ({
+    pid,
+    commandLine,
+    projectPath: "C:/P/P.uproject",
+    headless: false,
+    responding: true,
+    windowTitle: null,
+  });
+
+  it("reads the command line, both ways", () => {
+    expect(windowModeOf([proc("UnrealEditor.exe -RenderOffScreen P.uproject")])).toBe("offscreen");
+    expect(windowModeOf([proc("UnrealEditor.exe P.uproject")])).toBe("normal");
+  });
+
+  it("is null with no editor process", () => {
+    expect(windowModeOf([])).toBeNull();
+    expect(windowModeOf([], 1111)).toBeNull();
+  });
+
+  it("reads a different live editor's command line when the snapshot's pid is not listed", () => {
+    expect(windowModeOf([proc("UnrealEditor.exe P.uproject", 2222)], 1111)).toBe("normal");
+    expect(windowModeOf([proc("UnrealEditor.exe P.uproject -RenderOffScreen", 2222)], 1111)).toBe("offscreen");
+  });
+
+  it("reads the command line of the process the snapshot names when two are running", () => {
+    const processes = [proc("UnrealEditor.exe P.uproject", 1111), proc("UnrealEditor.exe P.uproject -RenderOffScreen", 2222)];
+    expect(windowModeOf(processes, 2222)).toBe("offscreen");
+    expect(windowModeOf(processes, 1111)).toBe("normal");
+    expect(windowModeOf(processes)).toBe("normal");
   });
 });

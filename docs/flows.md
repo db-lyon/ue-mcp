@@ -44,7 +44,7 @@ The response carries a `summary` line per step, a `steps` array with what each s
 
 ## Tasks
 
-Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->2117+<!-- /count --> across <!-- count:tools -->30<!-- /count --> categories. A few more are built in:
+Every action is a task named `<category>.<action>`: `level.place_actor`, `asset.list`, `project.build`. There are <!-- count:actions -->2132+<!-- /count --> across <!-- count:tools -->30<!-- /count --> categories. A few more are built in:
 
 | Task | What it does |
 |------|--------------|
@@ -327,6 +327,26 @@ A parameter is an input when at least one step that reads it leaves it unset. A 
 | `steps` | The reading steps: `path` (`3`, `2/1` inside step 2's nested flow, `on_start/1` for a hook), `task`, and `flow`. |
 
 Required inputs come first. A param every step sets can still be overridden at run time; `inputs` lists only what the flow leaves open.
+
+### From a terminal
+
+`ue-mcp flow` runs the flow engine in its own process against the project in the working directory. No server, daemon or HTTP surface is needed.
+
+```bash
+npx ue-mcp flow list                    # every flow this project can run
+npx ue-mcp flow plan setup_scene        # the steps and inputs, nothing runs
+npx ue-mcp flow run setup_scene --param name=Arena --skip 3
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--param key=value` | `run`: a runtime param for every step. Repeatable. A value that parses as JSON is passed as that JSON. |
+| `--skip <step>` | `run`: a step number or task name to skip. Repeatable. |
+| `--rollback-on-failure` | `run`: replay the collected inverses when a step fails. |
+| `--editor <name-or-path>` | Target a registered editor or another project instead of the working directory. |
+| `--json` | Print the flow tool's JSON result and nothing else. |
+
+`run` prints each step as it starts and finishes, then the run summary. It exits 1 when the flow fails or is not found, and 2 for a usage error.
 
 ## HTTP and live events
 

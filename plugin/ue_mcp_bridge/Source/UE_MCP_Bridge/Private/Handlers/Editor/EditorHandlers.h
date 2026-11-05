@@ -115,6 +115,8 @@ class FEditorHandlers
 public:
 	// Register all editor handlers
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
+	// Release preview worlds and tick callbacks before the module unloads.
+	static void ShutdownMeshStudioRenders();
 
 private:
 	// Handler implementations
@@ -189,6 +191,7 @@ private:
 	static TSharedPtr<FJsonValue> EndProfileRegion(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddTraceBookmark(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetFrameTiming(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetShaderCompileStatus(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> TriggerHitch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LaunchStandaloneGame(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetStandaloneStatus(const TSharedPtr<FJsonObject>& Params);
@@ -202,6 +205,9 @@ private:
 	static TSharedPtr<FJsonValue> GetWorldState(const TSharedPtr<FJsonObject>& Params);
 	// Gracefully close the editor after dirty-package and PIE safety checks.
 	static TSharedPtr<FJsonValue> RequestEditorShutdown(const TSharedPtr<FJsonObject>& Params);
+	// Clear the dirty flag on named packages nobody can save, so a close does
+	// not stop on them; real content only with allowContent.
+	static TSharedPtr<FJsonValue> DiscardDirty(const TSharedPtr<FJsonObject>& Params);
 	// PIE runtime inspection/control (#739/#756/#757/#761/#764/#770/#777/#778).
 	static TSharedPtr<FJsonValue> ListPIEInstances(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> InvokeObjectFunction(const TSharedPtr<FJsonObject>& Params);
@@ -246,6 +252,9 @@ private:
 	static TSharedPtr<FJsonValue> SetPiePaused(const TSharedPtr<FJsonObject>& Params);
 	// #148: Headless SceneCapture2D → PNG (works when editor is unfocused)
 	static TSharedPtr<FJsonValue> CaptureScenePng(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RenderMeshStudio(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetMeshStudioRender(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CancelMeshStudioRender(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetRealtime(const TSharedPtr<FJsonObject>& Params);
 	// #228/#229: PIE pawn lookup + UFUNCTION invocation for PIE actors
 	static TSharedPtr<FJsonValue> GetPiePawn(const TSharedPtr<FJsonObject>& Params);

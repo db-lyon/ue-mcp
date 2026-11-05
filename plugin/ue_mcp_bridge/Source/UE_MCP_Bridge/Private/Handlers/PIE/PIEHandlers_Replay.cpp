@@ -77,6 +77,16 @@ namespace
 		Cfg.SourceRecordingId = OptionalString(Params, TEXT("recording_id"));
 		Cfg.SequencePath = OptionalString(Params, TEXT("sequence_path"));
 		Cfg.SourceDir = OptionalString(Params, TEXT("recording_dir"));
+		if (!Cfg.SourceDir.IsEmpty())
+		{
+			FString Resolved, PathError;
+			if (!MCPResolvePathInside(Cfg.SourceDir, MCPDefaultWritableRoots(), Resolved, PathError))
+			{
+				OutErr = MCPError(PathError);
+				return false;
+			}
+			Cfg.SourceDir = Resolved;
+		}
 
 		// Convenience: `recording_dir` alone (no id, no explicit sequence) names
 		// the recording folder directly - "replay this ./path/to/recording".

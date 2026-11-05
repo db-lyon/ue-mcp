@@ -63,6 +63,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "SCS parent component for the hierarchy"
       },
       {
+        "name": "parentSocket",
+        "type": "string",
+        "required": false,
+        "description": "Bone or socket on parentComponent to attach to (the details panel's Parent Socket)"
+      },
+      {
         "name": "childActorClass",
         "type": "string",
         "required": false,
@@ -192,6 +198,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "An output parameter rather than an input (default false)"
+      },
+      {
+        "name": "isReference",
+        "type": "boolean",
+        "required": false,
+        "description": "Pass by reference (default false)"
+      },
+      {
+        "name": "isConst",
+        "type": "boolean",
+        "required": false,
+        "description": "Const parameter (default false)"
       }
     ]
   },
@@ -2615,6 +2633,82 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "set_blueprint_component_properties_batch": {
+    "category": "blueprint",
+    "params": [
+      {
+        "name": "items",
+        "type": "array",
+        "required": false,
+        "description": "Explicit [{assetPath, componentName, properties:{name:value}}]; mutually exclusive with directory",
+        "items": "object",
+        "fields": [
+          {
+            "name": "assetPath",
+            "type": "string",
+            "required": true,
+            "description": "Blueprint asset path"
+          },
+          {
+            "name": "componentName",
+            "type": "string",
+            "required": true,
+            "description": "Component instance name, property name or unambiguous class"
+          },
+          {
+            "name": "properties",
+            "type": "object",
+            "required": true,
+            "description": "Property name to JSON value or Unreal export text; null clears references"
+          }
+        ]
+      },
+      {
+        "name": "directory",
+        "type": "string",
+        "required": false,
+        "description": "Select Blueprint assets under this content path instead of items"
+      },
+      {
+        "name": "classFilter",
+        "type": "string",
+        "required": false,
+        "description": "Directory mode: only Blueprints deriving from this actor class"
+      },
+      {
+        "name": "componentName",
+        "type": "string",
+        "required": false,
+        "description": "Directory mode: component instance name, property name or unambiguous component class"
+      },
+      {
+        "name": "properties",
+        "type": "object",
+        "required": false,
+        "description": "Directory mode: property map applied to each matching Blueprint"
+      },
+      {
+        "name": "recursive",
+        "type": "boolean",
+        "required": false,
+        "description": "Directory mode: include subdirectories (default true)"
+      },
+      {
+        "name": "maxBlueprints",
+        "type": "integer",
+        "required": false,
+        "description": "Maximum candidate Blueprints, default 200, maximum 2000; overflow refuses the batch",
+        "minimum": 1,
+        "maximum": 2000
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Validate values on transient copies without editing, compiling or saving (default false)"
+      }
+    ]
+  },
   "set_blueprint_component_property": {
     "category": "blueprint",
     "params": [
@@ -3133,10 +3227,10 @@ export const handlerSpecs: HandlerSpecs = {
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
   add_blueprint_interface: "Params: blueprintPath, interfacePath",
-  add_component: "Params: assetPath (or path), componentClass, componentName?, onConflict?, parentComponent?, childActorClass?",
+  add_component: "Params: assetPath (or path), componentClass, componentName?, onConflict?, parentComponent?, parentSocket?, childActorClass?",
   add_custom_event: "Params: assetPath (or path), eventName, graphName?, parameters?, netMode?, reliable?, callInEditor?, posX?, posY?",
   add_event_dispatcher: "Params: blueprintPath, name, parameters?",
-  add_function_parameter: "Params: assetPath (or path), functionName, parameterName, parameterType?, isOutput?",
+  add_function_parameter: "Params: assetPath (or path), functionName, parameterName, parameterType?, isOutput?, isReference?, isConst?",
   add_local_variable: "Params: assetPath (or path), functionName, name, varType? (or type)",
   add_node: "Params: assetPath (or path), graphName?, nodeClass, nodeParams?, deferCompile?",
   add_timeline_track: "Params: assetPath (or path), timelineName, trackName, trackType?, keyframes?",
@@ -3212,6 +3306,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   search_blueprint_nodes: "Params: assetPath (or blueprintPath), titles?, nodeClasses?, variableName?, variableAccess?, includeNestedGraphs?, authoredOnly?, cursor?, limit?",
   search_node_types: "Params: query, className? (or classFilter), includeGraphNodes?, cursor?, limit?",
   set_actor_tick_settings: "Params: assetPath (or path), bCanEverTick?, bStartWithTickEnabled?, TickInterval?",
+  set_blueprint_component_properties_batch: "Params: items?, directory?, classFilter?, componentName?, properties?, recursive?, maxBlueprints?, dryRun?",
   set_blueprint_component_property: "Params: assetPath (or path), componentName, propertyName, value",
   set_blueprint_variable_metadata: "Params: assetPath (or path), name, metadata, functionName?",
   set_capsule_size: "Params: assetPath (or path), componentName, halfHeight?, radius?",
@@ -3246,12 +3341,12 @@ export const schema: Record<string, z.ZodType> = {
   category: z.string().optional().describe("Category shown in My Blueprint and the details panel (add_variable). Case-insensitive substring over the property's Category metadata (compare_class_defaults). Node category: utilities (default), math, string, gameplay, actor and so on (list_node_types). Category (set_function_properties, set_variable_properties)"),
   channel: z.string().optional().describe("Narrow the answer to one collision channel: its configured name, the C++ enumerator, or the container index"),
   childActorClass: z.string().optional().describe("ChildActorClass for an added ChildActorComponent: a Blueprint path with or without _C, or a C++ class"),
-  classFilter: z.string().optional().describe("Case-insensitive substring match on node class name (read_blueprint_graph, read_blueprint_graph_summary). Alias for className (search_node_types)"),
+  classFilter: z.string().optional().describe("Case-insensitive substring match on node class name (read_blueprint_graph, read_blueprint_graph_summary). Alias for className (search_node_types). Directory mode: only Blueprints deriving from this actor class (set_blueprint_component_properties_batch)"),
   className: z.string().optional().describe("First class: native name or path, Blueprint asset path or generated class path (compare_class_defaults). C++ class name or path (get_cdo_properties, set_cdo_property). Base class: a native name or path such as Character, or a Blueprint asset path (list_subclasses). Declaring class to narrow the functions to (search_blueprint_call_sites). Narrow to one owning class, by short name or object path (search_node_types)"),
   columnGap: z.number().int().optional().describe("Horizontal spacing between columns (default 360)"),
   compactNodeTitle: z.string().optional().describe("Render the node in compact form under this title"),
   componentClass: z.string().optional().describe("Component class: a short name such as ChildActorComponent, or a full path"),
-  componentName: z.string().optional().describe("Name of the new component (default: componentClass) (add_component). SCS or inherited component name (get_blueprint_component_property, read_component_properties, remove_component, reparent_component, set_blueprint_component_property, set_capsule_size, set_component_override_materials). Component whose effective collision to read (get_component_collision)"),
+  componentName: z.string().optional().describe("Name of the new component (default: componentClass) (add_component). SCS or inherited component name (get_blueprint_component_property, read_component_properties, remove_component, reparent_component, set_blueprint_component_property, set_capsule_size, set_component_override_materials). Component whose effective collision to read (get_component_collision). Directory mode: component instance name, property name or unambiguous component class (set_blueprint_component_properties_batch)"),
   connections: z.array(z.record(z.string(), z.unknown())).optional().describe("[{sourceNode, sourcePin, targetNode, targetPin}]"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
   defaultValue: z.unknown().optional().describe("Default value as Unreal export text; an empty string clears it (edit_graph_parameters, edit_local_variable, set_struct_field_default). Alias for value (set_node_property)"),
@@ -3259,7 +3354,8 @@ export const schema: Record<string, z.ZodType> = {
   deprecated: z.boolean().optional().describe("Mark the function deprecated so its call sites warn"),
   deprecationMessage: z.string().optional().describe("Text shown at a deprecated function's call sites"),
   destinationPath: z.string().optional().describe("Full destination asset path"),
-  directory: z.string().optional().describe("Content path to search under (default /Game) (audit_blueprint_dead_code, export_blueprint_batch, search_blueprint_call_sites). Only report Blueprints under this content path (default /Game; / for every mount). Parent chains are still followed outside it (list_subclasses)"),
+  directory: z.string().optional().describe("Content path to search under (default /Game) (audit_blueprint_dead_code, export_blueprint_batch, search_blueprint_call_sites). Only report Blueprints under this content path (default /Game; / for every mount). Parent chains are still followed outside it (list_subclasses). Select Blueprint assets under this content path instead of items (set_blueprint_component_properties_batch)"),
+  dryRun: z.boolean().optional().describe("Validate values on transient copies without editing, compiling or saving (default false)"),
   dumpToFile: z.boolean().optional().describe("Write the whole result to a JSON file instead of returning it inline"),
   editFlag: z.string().optional().describe("EditAnywhere, EditDefaultsOnly, EditInstanceOnly or none: the value list_variables reports"),
   entries: z.array(z.record(z.string(), z.unknown())).optional().describe("[{name or index, tooltip}] per-enumerator tooltips"),
@@ -3296,8 +3392,10 @@ export const schema: Record<string, z.ZodType> = {
   inputs: z.array(z.record(z.string(), z.unknown())).optional().describe("Input parameters [{name, type}]"),
   instanceEditable: z.boolean().optional().describe("true: EditAnywhere; false: EditDefaultsOnly. Omitted leaves the editor default (add_variable). Two-state shorthand for editFlag; mutually exclusive with it (set_variable_properties)"),
   interfacePath: z.string().optional().describe("Interface class path (add_blueprint_interface). Implement this interface first when it is not present (override_function). Interface class path, as list_interfaces reports it (remove_blueprint_interface)"),
-  isConst: z.boolean().optional().describe("const: the function only reads state"),
+  isConst: z.boolean().optional().describe("Const parameter (default false) (add_function_parameter). const: the function only reads state (set_function_properties)"),
   isOutput: z.boolean().optional().describe("An output parameter rather than an input (default false) (add_function_parameter). Edit the return side (default false) (edit_graph_parameters)"),
+  isReference: z.boolean().optional().describe("Pass by reference (default false)"),
+  items: z.array(z.object({ assetPath: z.string().describe("Blueprint asset path"), componentName: z.string().describe("Component instance name, property name or unambiguous class"), properties: z.record(z.string(), z.unknown()).describe("Property name to JSON value or Unreal export text; null clears references") })).optional().describe("Explicit [{assetPath, componentName, properties:{name:value}}]; mutually exclusive with directory"),
   keyframes: z.array(z.record(z.string(), z.unknown())).optional().describe("[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color"),
   keywords: z.string().optional().describe("Extra palette search keywords"),
   kind: z.string().optional().describe("exec, data or all (default all)"),
@@ -3308,7 +3406,7 @@ export const schema: Record<string, z.ZodType> = {
   macroName: z.string().optional().describe("Macro graph name"),
   materialPaths: z.array(z.string()).optional().describe("Material asset paths; an empty array clears"),
   maxAssets: z.number().int().optional().describe("Cap on Blueprints exported (default 200, max 5000)"),
-  maxBlueprints: z.number().int().optional().describe("Cap on Blueprints loaded (default 2000)"),
+  maxBlueprints: z.number().int().optional().describe("Cap on Blueprints loaded (default 2000) (audit_blueprint_dead_code, search_blueprint_call_sites). Maximum candidate Blueprints, default 200, maximum 2000; overflow refuses the batch (set_blueprint_component_properties_batch)"),
   maxSamples: z.number().int().optional().describe("Samples listed per finding kind per Blueprint (default 20, max 500); counts stay complete"),
   metadata: z.record(z.string(), z.unknown()).optional().describe("{key: 'value'} pairs; a null value removes that key. Unreal stores every metadata value as text"),
   name: z.string().optional().describe("Dispatcher name (add_event_dispatcher, remove_event_dispatcher). Variable name (add_local_variable, add_variable, delete_variable, edit_local_variable, get_blueprint_variable_metadata, set_blueprint_variable_metadata, set_variable_default, set_variable_properties). Asset name; with packagePath, the same destination as assetPath (create_blueprint). Variable name, or a dotted path such as CharacterMovement.MaxWalkSpeed into the CDO's structs and subobjects (get_blueprint_variable_default)"),
@@ -3338,6 +3436,7 @@ export const schema: Record<string, z.ZodType> = {
   parameterType: z.string().optional().describe("Parameter type in the add_variable vocabulary, containers included (default float) (add_function_parameter). Type in the add_variable vocabulary, for add and set_type (edit_graph_parameters)"),
   parentClass: z.string().optional().describe("Parent class: short name or full path (default Actor) (create_blueprint). Only Blueprints deriving from this class (export_blueprint_batch). New parent class: short name or full path (reparent_blueprint)"),
   parentComponent: z.string().optional().describe("SCS parent component for the hierarchy"),
+  parentSocket: z.string().optional().describe("Bone or socket on parentComponent to attach to (the details panel's Parent Socket)"),
   path: z.string().optional().describe("Alias for assetPath"),
   pinName: z.string().optional().describe("The pin whose links are broken (disconnect_pins). Alias for propertyName (read_node_property, set_node_property)"),
   posX: z.number().optional().describe("Node X position in the graph (add_custom_event, set_node_position). Re-center pasted nodes around this X (with posY) (import_nodes_t3d)"),
@@ -3348,13 +3447,14 @@ export const schema: Record<string, z.ZodType> = {
   private: z.boolean().optional().describe("The Blueprint editor's Private checkbox, independent of editFlag"),
   profileName: z.string().optional().describe("Collision profile to resolve, e.g. Pawn, BlockAll, or one the project defined"),
   propagateToInstances: z.boolean().optional().describe("Also write the new default onto loaded instances (placed actors included) still holding the old one; overriding instances are left alone. Level packages are dirtied, not saved (default false)"),
+  properties: z.record(z.string(), z.unknown()).optional().describe("Directory mode: property map applied to each matching Blueprint"),
   propertyFilter: z.string().optional().describe("Case-insensitive substring over the property path"),
   propertyName: z.string().optional().describe("Property name (get_blueprint_component_property, set_blueprint_component_property, set_cdo_property). Pin or reflected node property name (read_node_property). Property, or a dotted path into the CDO's structs, array elements and own subobjects, e.g. CharacterMovement.bUseRVOAvoidance or CollisionCylinder.CapsuleRadius (set_class_default). Pin or struct property name (set_node_property)"),
   propertyNames: z.array(z.string()).optional().describe("Only these top-level properties (case-insensitive) (compare_class_defaults). Property names to read (omit for all) (get_cdo_properties)"),
   pure: z.boolean().optional().describe("BlueprintPure: no side effects, and the node loses its exec pins"),
   query: z.string().optional().describe("Words to match against the C++ name, the palette label and Keywords metadata"),
   radius: z.number().optional().describe("Capsule radius (unscaled)"),
-  recursive: z.boolean().optional().describe("Include subfolders of directory (default true)"),
+  recursive: z.boolean().optional().describe("Include subfolders of directory (default true) (audit_blueprint_dead_code, export_blueprint_batch). Directory mode: include subdirectories (default true) (set_blueprint_component_properties_batch)"),
   reliable: z.boolean().optional().describe("Send the replicated event reliably (default true; ignored when netMode is none)"),
   reverse: z.boolean().optional().describe("true reports the referencers of this asset instead"),
   rowGap: z.number().int().optional().describe("Vertical spacing between rows (default 200)"),

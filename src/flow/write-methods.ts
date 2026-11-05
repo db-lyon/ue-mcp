@@ -205,6 +205,21 @@ export function classifyWrite(
     return { writes: false, contentPaths: [] };
   }
 
+  // A batch writes what its steps write, all of it: a source-control guard
+  // checking out what a call will touch has to see every path before the job
+  // starts, because once it starts nothing else runs until it is done.
+  if (method === "execute_batch") {
+    const contentPaths: string[] = [];
+    for (const entry of Array.isArray(params.ops) ? params.ops : []) {
+      const call = entry as { method?: unknown; params?: unknown } | null;
+      if (!call || typeof call.method !== "string") continue;
+      const stepParams = call.params !== null && typeof call.params === "object" ? (call.params as Record<string, unknown>) : {};
+      contentPaths.push(...classifyWrite(call.method, stepParams, graph).contentPaths);
+    }
+    const deduped = dedupe(contentPaths);
+    return { writes: deduped.length > 0, contentPaths: deduped };
+  }
+
   const explicit = EXPLICIT[method];
   if (explicit) {
     const contentPaths = dedupe(explicit(params));

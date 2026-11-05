@@ -400,6 +400,22 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("force"), EType::Boolean, TEXT("Bypass EditDefaultsOnly to write a per-instance override")),
 		SpecWorld, SpecPieInstance,
 	});
+	Registry.RegisterHandler(TEXT("shape_trace"), &ShapeTrace, {
+		MCPParam::Required(TEXT("shape"), EType::String, TEXT("sphere | box | capsule")),
+		MCPParam::Optional(TEXT("radius"), EType::Number, TEXT("Positive sphere or capsule radius in cm")),
+		MCPParam::Optional(TEXT("halfExtent"), EType::Vec3, TEXT("Positive box half extents in cm; axis aligned")),
+		MCPParam::Optional(TEXT("halfHeight"), EType::Number, TEXT("Capsule half height in cm, including caps; at least radius")),
+		MCPParam::Optional(TEXT("start"), EType::Vec3, TEXT("Ray start")),
+		MCPParam::Optional(TEXT("end"), EType::Vec3, TEXT("Ray end; pass end or direction and distance")),
+		MCPParam::Optional(TEXT("direction"), EType::Vec3, TEXT("Ray direction, normalised internally")),
+		MCPParam::Optional(TEXT("distance"), EType::Number, TEXT("Ray length when direction is given (default 200000)")),
+		MCPParam::Optional(TEXT("traceComplex"), EType::Boolean, TEXT("Trace per-triangle collision (default false)")),
+		MCPParam::Optional(TEXT("channel"), EType::String, TEXT("Collision channel (default Visibility)")),
+		MCPParam::Optional(TEXT("ignoreActors"), EType::Array, TEXT("Actor labels to skip")).Items(EType::String),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("World scope: editor (default) | pie")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, TEXT("Which PIE world when world is pie: 0 = server or primary, 1..N = clients")),
+		MCPParam::Optional(TEXT("multi"), EType::Boolean, TEXT("Return overlaps and the first blocking hit, capped at 64 (default false)")),
+	});
 	Registry.RegisterHandler(TEXT("line_trace"), &LineTrace, {
 		MCPParam::Optional(TEXT("start"), EType::Vec3, TEXT("Ray start")),
 		MCPParam::Optional(TEXT("end"), EType::Vec3, TEXT("Ray end; pass end or direction and distance")),
@@ -741,6 +757,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("duplicateTransformTolerance"), EType::Number, TEXT("Centimetre bucket for duplicate-transform detection")),
 		MCPParam::Optional(TEXT("levelPath"), EType::String, TEXT("Query another map: opened temporarily, refused while anything is dirty, and the open map restored")),
 		SpecWorld, SpecPieInstance,
+		MCPParam::Optional(TEXT("includeCollision"), EType::Boolean, TEXT("Include component collision state (default false)")),
+		MCPParam::Optional(TEXT("collisionChannel"), EType::String, TEXT("Collision channel to inspect; omitted lists non-Block responses, capped at 32")),
 	});
 	// #984/#941/#907/#987: level-wide writes driven by an editor-side selector.
 	// Each can touch thousands of actors, so each gets its own timeout.
@@ -2150,10 +2168,32 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 	FRotator LookAt = FRotationMatrix::MakeFromX(Direction).Rotator();
 	const double Roll = OptionalNumber(Params, TEXT("roll"), 0.0);
 	LookAt.Roll = Roll;
-	Actor->SetActorRotation(LookAt);
+
+	// The same as move_actor: an editor aim is undoable and dirties the actor's package, so a plain
+	// save persists it. Without Modify() the rotation looked done but level(save) skipped the actor.
+	const bool bEditorWorld = !World->IsGameWorld();
+	{
+		const FScopedTransaction Transaction(FText::FromString(TEXT("Aim Actor")), bEditorWorld);
+		if (bEditorWorld)
+		{
+			Actor->Modify();
+			if (Actor->GetRootComponent()) Actor->GetRootComponent()->Modify();
+		}
+		Actor->SetActorRotation(LookAt);
+		if (bEditorWorld)
+		{
+			Actor->MarkPackageDirty();
+		}
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	if (bEditorWorld)
+	{
+		UPackage* ActorPackage = Actor->GetPackage();
+		Result->SetBoolField(TEXT("packageDirty"), ActorPackage && ActorPackage->IsDirty());
+		if (ActorPackage) Result->SetStringField(TEXT("package"), ActorPackage->GetName());
+	}
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Actor->GetActorRotation()));
@@ -2167,6 +2207,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRotation));
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 
+	// Last, as in move_actor: OnActorMoved listeners (PCG, splines) see the new rotation.
+	if (bEditorWorld)
+	{
+		Actor->PostEditMove(true);
+		MCPNotifyEditorMove(Actor);
+	}
 	return MCPResult(Result);
 }
 
@@ -4514,9 +4560,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::ExportActorFbx(const TSharedPtr<FJsonObje
 	}
 	if (!MeshAsset) return MCPError(FString::Printf(TEXT("Actor '%s' has no skeletal/static mesh to export"), *ActorLabel));
 
-	FString AbsPath = OutputPath;
-	if (FPaths::IsRelative(AbsPath)) AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
-	AbsPath = FPaths::ConvertRelativePathToFull(AbsPath);
+	FString AbsPath;
+	if (auto Err = MCPRequireWritablePath(OutputPath, AbsPath)) return Err;
 	if (!AbsPath.EndsWith(TEXT(".fbx"))) AbsPath += TEXT(".fbx");
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsPath), /*Tree*/ true);
 

@@ -33,6 +33,7 @@ import { mergeInjectionsIntoTool, type InjectionPlan } from "./injection.js";
 import { buildProvidedTool, type ProvisionPlan } from "./provision.js";
 import { readDeployedBridgeApiVersion } from "./bridge-api.js";
 import { resolveServerImportsToSelf } from "./self-resolve.js";
+import { pathInPackage } from "./package-paths.js";
 import { requiredFieldNames, requiringParams, reservedParamName, reservedParamReason } from "./manifest-params.js";
 import { ROUTING_PARAM_NAMES } from "../surface/routing-params.js";
 import {
@@ -299,7 +300,13 @@ export async function loadPlugins(
     // Knowledge: load file contents now; the loader returns text so the
     // server can attach to instructions before the bridge connects.
     for (const [category, relPath] of Object.entries(manifest.knowledge)) {
-      const abs = path.join(pkg.pkgDir, relPath);
+      let abs: string;
+      try {
+        abs = pathInPackage(pkg.pkgDir, relPath, "knowledge file");
+      } catch (e) {
+        warn("plugin", `plugin ${pkg.name}: ${e instanceof Error ? e.message : e}, skipping`);
+        continue;
+      }
       if (!fs.existsSync(abs)) {
         warn("plugin", `plugin ${pkg.name}: knowledge file ${relPath} not found, skipping`);
         continue;
@@ -445,9 +452,9 @@ async function loadOne(
   // contracts would advertise parameters nothing checks.
   let nativeSpecs: HandlerSpecs | undefined;
   if (manifest.nativeModule?.specs) {
-    const specsPath = path.join(pkg.pkgDir, manifest.nativeModule.specs);
     let raw: unknown;
     try {
+      const specsPath = pathInPackage(pkg.pkgDir, manifest.nativeModule.specs, "nativeModule.specs");
       raw = JSON.parse(fs.readFileSync(specsPath, "utf-8"));
     } catch (e) {
       return skip(base, `nativeModule.specs '${manifest.nativeModule.specs}' could not be read: ${(e as Error).message}`);

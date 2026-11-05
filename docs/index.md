@@ -1,6 +1,6 @@
 # UE-MCP
 
-**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->2117+<!-- /count --> actions.
+**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->2132+<!-- /count --> actions.
 
 An MCP client (Claude Code, Claude Desktop, Cursor and others) launches `ue-mcp` for your project. By default that process relays to the project's daemon, a background Node.js process that holds the WebSocket connection to the C++ bridge plugin inside the editor. The daemon outlives editor restarts, serves every MCP client of the project, and serves UE-MCP Studio, the in-editor agent.
 
@@ -75,6 +75,7 @@ A **plugin system** lets npm packages add actions to the existing categories, so
 - **[PIE testing](pie.md)**: recording, replay and test scripts
 - **[Flows](flows.md)**: YAML workflows, custom tasks, hooks, rollback
 - **[Checkpoints](checkpoints.md)**: keep or revert changes per checkpoint
+- **[Mutation journal](journal.md)**: revert a group of calls, or every group after one
 - **[Plugins](plugins.md)**: npm packages that add actions to existing categories
 - **[Configuration](configuration.md)**: MCP client setup, the daemon and settings
 - **[ue-mcp.yml Reference](config-file.md)**: every key in the project config file

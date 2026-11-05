@@ -1,5 +1,7 @@
 #include "EditorHandlers.h"
+#include "HandlerDiscardPackage.h"
 #include "HandlerCheckpoint.h"
+#include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerFunctionCall.h"
@@ -7,6 +9,7 @@
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
 #include "HandlerSceneCapture.h"
+#include "Handlers/Editor/HandlerWindowPick.h"
 #include "Handlers/Level/LevelHandlers.h"
 #include "Handlers/HandlerEditorState.h"
 #include "Misc/PackageName.h"
@@ -271,6 +274,9 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// pie_start_ignoring_blueprint_errors have no bridge action of their own,
 	// so they carry no spec.
 	using EType = EMCPParamType;
+	Registry.RegisterHandler(TEXT("get_shader_compile_status"), &GetShaderCompileStatus, {
+		MCPParam::Optional(TEXT("waitUntilIdle"), EType::Boolean, TEXT("Poll between game-thread ticks until shaders are idle; timeoutMs is the server routing budget (default 60000)")),
+	});
 	const TArray<FMCPParamSpec> NoParams;
 	auto ChannelListParam = [](const TCHAR* Name, const TCHAR* Description)
 	{
@@ -553,6 +559,11 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_dirty_packages"), &ListDirtyPackages, NoParams);
 	Registry.RegisterHandler(TEXT("get_world_state"), &GetWorldState, NoParams);
 	Registry.RegisterHandler(TEXT("request_editor_shutdown"), &RequestEditorShutdown);
+	Registry.RegisterHandler(TEXT("discard_dirty"), &DiscardDirty, {
+		MCPParam::Required(TEXT("packages"), EType::Array, TEXT("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched")).Items(EType::String),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would happen to each package and clear nothing (default false)")),
+		MCPParam::Optional(TEXT("allowContent"), EType::Boolean, TEXT("Also clear project and plugin content, including never-saved /Temp maps, whose unsaved edits are then lost when the editor closes (default false)")),
+	});
 	Registry.RegisterHandler(TEXT("list_pie_instances"), &ListPIEInstances, NoParams);
 	{
 		TArray<FMCPParamSpec> Spec = {
@@ -789,6 +800,37 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("fov"), EType::Number, TEXT("Capture FOV in degrees, greater than 0 and less than 180 (default 90)")),
 		MCPParam::Optional(TEXT("fullyLoadTextures"), EType::Boolean, TEXT("Stream textures in and flush the render thread before the capture (default true)")),
 	}, MCPSpec::ContractExempt(TEXT("spawns a capture actor and writes an image file")));
+	Registry.RegisterHandler(TEXT("render_mesh_studio"), &RenderMeshStudio, {
+		MCPParam::Required(TEXT("captures"), EType::Array, TEXT("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("id"), EType::String, TEXT("Unique filename stem: letters, digits, underscore or hyphen")),
+			MCPParam::OptionalField(TEXT("meshPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
+			MCPParam::OptionalField(TEXT("parts"), EType::Array, TEXT("1-64 meshes forming one assembly")).Items(EType::Object).WithFields({
+				MCPParam::RequiredField(TEXT("meshPath"), EType::String, TEXT("StaticMesh or SkeletalMesh asset path")),
+				MCPParam::OptionalField(TEXT("relativeTransform"), EType::Object, TEXT("Transform relative to the assembly origin")).WithFields({
+					MCPParam::OptionalField(TEXT("location"), EType::Vec3, TEXT("Translation in centimetres, default zero")),
+					MCPParam::OptionalField(TEXT("rotation"), EType::Rotator, TEXT("Pitch, yaw and roll in degrees, default zero")),
+					MCPParam::OptionalField(TEXT("scale"), EType::Vec3, TEXT("Scale, default one")),
+				}),
+			}),
+			MCPParam::OptionalField(TEXT("aspect"), EType::Object, TEXT("Inventory aspect ratio; the longer output edge equals resolution")).WithFields({
+				MCPParam::RequiredField(TEXT("width"), EType::Number, TEXT("Positive relative width")).Range(0.01, 100),
+				MCPParam::RequiredField(TEXT("height"), EType::Number, TEXT("Positive relative height")).Range(0.01, 100),
+			}),
+		}),
+		MCPParam::Required(TEXT("outputDir"), EType::String, TEXT("Absolute or project-relative directory for <id>.png and a job-specific JSON manifest")),
+		MCPParam::Optional(TEXT("resolution"), EType::Integer, TEXT("Longest image edge in pixels (default 512); shorter edge at least 32")).Range(64, 4096),
+		MCPParam::Optional(TEXT("viewDirection"), EType::Vec3, TEXT("Direction from subject toward camera (default 1,-1.35,0.9), finite and nonzero")),
+		MCPParam::Optional(TEXT("lightingPreset"), EType::String, TEXT("Studio lighting preset (default studio)")).Enum({TEXT("studio")}),
+		MCPParam::Optional(TEXT("cubemapPath"), EType::String, TEXT("Skylight TextureCube (default /Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap)")),
+		MCPParam::Optional(TEXT("captureMode"), EType::String, TEXT("beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)")).Enum({TEXT("beauty"), TEXT("matte"), TEXT("both")}),
+		MCPParam::Optional(TEXT("fullyLoadTextures"), EType::Boolean, TEXT("Wait across real editor frames for requested texture mips (default true); a 60s item timeout reports blocked")),
+	}, MCPSpec::ContractExempt(TEXT("starts a latent preview-world render job and writes PNGs and a manifest")));
+	Registry.RegisterHandler(TEXT("get_mesh_studio_render"), &GetMeshStudioRender, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Job id returned by render_mesh_studio")),
+	});
+	Registry.RegisterHandler(TEXT("cancel_mesh_studio_render"), &CancelMeshStudioRender, {
+		MCPParam::Required(TEXT("jobId"), EType::String, TEXT("Job id returned by render_mesh_studio; already-finished jobs are returned unchanged")),
+	});
 	Registry.RegisterHandler(TEXT("set_realtime"), &SetRealtime, {
 		MCPParam::Optional(TEXT("enabled"), EType::Boolean, TEXT("Realtime update on every level viewport (default true)")),
 	}, MCPSpec::ContractExempt(TEXT("toggles realtime on every level viewport")));
@@ -1785,6 +1827,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 		MeshResult->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
 		if (PathInfo.bUsedKeySelector) MeshResult->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+		MeshResult->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 		MeshResult->SetStringField(TEXT("type"), Property->GetCPPType());
 		if (bSaveMesh) EditorSetPropertyPersist(Asset, AssetPath, MeshResult);
 		else MeshResult->SetBoolField(TEXT("saved"), false);
@@ -1895,6 +1938,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+	Result->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("type"), Property->GetCPPType());
 	// previousValue and value are BOTH structured, and set_object_property
 	// reports the same pair in the same form. A caller that reads them off one
@@ -2006,6 +2050,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetProperty(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("className"), Object->GetClass()->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+	Result->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
 	Result->SetStringField(TEXT("leafPropertyName"), Property->GetName());
 	Result->SetStringField(TEXT("type"), Property->GetCPPType());
 	Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, Property));
@@ -2183,7 +2228,17 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetConfig(const TSharedPtr<FJsonObject>&
 		ConfigName = FString::Printf(TEXT("Default%s.ini"), *ConfigName);
 	}
 
-	FString ConfigDir = FPaths::ProjectConfigDir();
+	// configName names a file in the project's Config folder, never a path out of it.
+	if (!FPaths::IsRelative(ConfigName))
+	{
+		return MCPError(FString::Printf(TEXT("configName must be a file name inside the project's Config folder, not an absolute path: %s"), *ConfigName));
+	}
+	const FString ConfigDir = FPaths::ProjectConfigDir();
+	{
+		FString Contained;
+		if (auto Err = MCPRequirePathInside(ConfigName, { ConfigDir }, Contained, ConfigDir)) return Err;
+	}
+	// The config cache keys files by this exact string, so it keeps its usual form.
 	FString IniPath = FPaths::Combine(ConfigDir, ConfigName);
 
 	// A file only this call loads is dropped from the config cache again when it
@@ -2808,6 +2863,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 	{
 		Filename += TEXT(".png");
 	}
+	// A relative name lands in Saved/Screenshots; the result is absolute from here on.
+	{
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(Filename, Resolved, FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots")))) return Err;
+		Filename = Resolved;
+	}
 
 	// #64: Force the active level viewport to render even if the editor window is not focused
 	if (!GEditor)
@@ -2991,16 +3052,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		}
 		else
 		{
-			CaptureWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
-			if (!CaptureWindow.IsValid())
-			{
-				TArray<TSharedRef<SWindow>> VisibleWindows;
-				FSlateApplication::Get().GetAllVisibleWindowsOrdered(VisibleWindows);
-				if (VisibleWindows.Num() > 0)
-				{
-					CaptureWindow = VisibleWindows.Last();
-				}
-			}
+			TArray<TSharedRef<SWindow>> VisibleWindows;
+			FSlateApplication::Get().GetAllVisibleWindowsOrdered(VisibleWindows);
+			CaptureWindow = MCPPickCaptureWindow(
+				FSlateApplication::Get().GetActiveTopLevelWindow(),
+				VisibleWindows,
+				FGlobalTabmanager::Get()->GetRootWindow());
 		}
 		if (!CaptureWindow.IsValid())
 		{
@@ -3619,12 +3676,24 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 
 	const bool bRequireClean = OptionalBool(Params, TEXT("requireClean"), true);
 	const bool bEndPIE = OptionalBool(Params, TEXT("endPIE"), true);
+	// The caller's answer to the shutdown save prompt, given up front so the
+	// prompt is never raised. Under interactive dialog handling the agent may
+	// not answer that prompt itself, so a close that raised it hung until a
+	// person clicked it in Unreal. refuse is the behaviour before this existed.
+	const FString DirtyChoice = OptionalString(Params, TEXT("dirtyPackages"), TEXT("refuse")).ToLower();
+	const bool bSaveDirty = DirtyChoice == TEXT("save");
+	const bool bDiscardDirty = DirtyChoice == TEXT("discard");
+	const bool bAllowContent = OptionalBool(Params, TEXT("allowContent"), false);
+	const bool bActOnDirty = bSaveDirty || bDiscardDirty;
+	const TArray<TSharedPtr<FJsonValue>>* NamedPackagesJson = nullptr;
+	const bool bNamedPackages = TryGetArrayParam(Params, TEXT("packages"), NamedPackagesJson) && NamedPackagesJson;
 	const bool bPIEWasActive = GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor;
 	const FDirtyEditorPackages Dirty = CollectDirtyEditorPackages();
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("scheduled"), false);
 	Result->SetBoolField(TEXT("requireClean"), bRequireClean);
+	Result->SetStringField(TEXT("dirtyPackages"), DirtyChoice);
 	Result->SetBoolField(TEXT("endPIE"), bEndPIE);
 	Result->SetBoolField(TEXT("pieWasActive"), bPIEWasActive);
 	Result->SetBoolField(TEXT("pieEndRequested"), false);
@@ -3633,6 +3702,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 	Result->SetArrayField(TEXT("dirtyContentPackages"), MCPStringListToJson(Dirty.Content));
 	Result->SetArrayField(TEXT("dirtyMapPackages"), MCPStringListToJson(Dirty.Maps));
 
+	if (!bActOnDirty && DirtyChoice != TEXT("refuse"))
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("dirtyPackages must be refuse, save or discard, not '%s'; editor shutdown was not scheduled"), *DirtyChoice));
+		return MCPResult(Result);
+	}
+
+	if (bNamedPackages && !bActOnDirty)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), TEXT("packages names what dirtyPackages=save or discard acts on, and dirtyPackages is refuse; editor shutdown was not scheduled"));
+		return MCPResult(Result);
+	}
+
 	if (bPIEWasActive && !bEndPIE)
 	{
 		Result->SetBoolField(TEXT("success"), false);
@@ -3640,11 +3724,160 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 		return MCPResult(Result);
 	}
 
-	if (bRequireClean && (Dirty.Content.Num() > 0 || Dirty.Maps.Num() > 0))
+	// save/discard act in this call so the result can name each package, which a
+	// close deferred until PIE ends cannot do.
+	if (bActOnDirty && bPIEWasActive)
 	{
 		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(TEXT("error"), TEXT("Editor has dirty content or map packages; save or discard them before requesting shutdown"));
+		Result->SetStringField(TEXT("error"), TEXT("PIE is active, and dirtyPackages=save or discard acts on the packages in this call so the result can name each one. Stop play first (editor(play_in_editor, pieAction='stop')), then call again; nothing was saved, discarded or scheduled"));
 		return MCPResult(Result);
+	}
+
+	if (bRequireClean && !bActOnDirty && (Dirty.Content.Num() > 0 || Dirty.Maps.Num() > 0))
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), TEXT("Editor has dirty content or map packages; save or discard them before requesting shutdown, or pass dirtyPackages=save or discard"));
+		return MCPResult(Result);
+	}
+
+	if (bActOnDirty)
+	{
+		TArray<FString> AllDirty = Dirty.Content;
+		AllDirty.Append(Dirty.Maps);
+
+		// Act on exactly what this call read. With a named list, a dirty
+		// package the caller did not name is one it has not seen, and saving
+		// or discarding it on its behalf is the silent loss this refuses.
+		TArray<FString> Target;
+		if (bNamedPackages)
+		{
+			TSet<FString> Named;
+			for (const TSharedPtr<FJsonValue>& Value : *NamedPackagesJson)
+			{
+				FString Name;
+				if (Value.IsValid() && Value->TryGetString(Name))
+				{
+					Named.Add(FPackageName::ObjectPathToPackageName(Name.TrimStartAndEnd()));
+				}
+			}
+			TArray<FString> Unexpected;
+			for (const FString& Name : AllDirty)
+			{
+				(Named.Contains(Name) ? Target : Unexpected).Add(Name);
+			}
+			if (Unexpected.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("unexpectedDirtyPackages"), MCPStringListToJson(Unexpected));
+				Result->SetStringField(TEXT("error"), FString::Printf(
+					TEXT("%d dirty package(s) are not in packages, so dirtyPackages=%s would act on work the caller did not name. Add them to packages or deal with them first; nothing was saved, discarded or scheduled"),
+					Unexpected.Num(), *DirtyChoice));
+				return MCPResult(Result);
+			}
+		}
+		else
+		{
+			Target = AllDirty;
+		}
+
+		if (bSaveDirty)
+		{
+			// Every package is checked before any is written, so a refusal
+			// here leaves the disk as it was.
+			TArray<TSharedPtr<FJsonValue>> Failed;
+			auto AddFailure = [&Failed](const FString& Name, const FString& Reason)
+			{
+				TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("package"), Name);
+				Entry->SetStringField(TEXT("error"), Reason);
+				Failed.Add(MakeShared<FJsonValueObject>(Entry));
+			};
+			TArray<UPackage*> ToSave;
+			for (const FString& Name : Target)
+			{
+				UPackage* Package = FindPackage(nullptr, *Name);
+				FString Reason;
+				if (!Package) AddFailure(Name, TEXT("The package is no longer loaded."));
+				else if (MCPPackageWriteBlocked(Package, Reason)) AddFailure(Name, Reason);
+				else ToSave.Add(Package);
+			}
+			if (Failed.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("failedPackages"), Failed);
+				Result->SetStringField(TEXT("error"), TEXT("Some dirty packages cannot be written, so nothing was saved and editor shutdown was not scheduled. Save a never-saved /Temp world under a content path first; dirtyPackages=discard closes without it"));
+				return MCPResult(Result);
+			}
+
+			TArray<TSharedPtr<FJsonValue>> Deleted;
+			MCPCommitEmptyExternalPackages(ToSave, Deleted, Failed);
+			Result->SetArrayField(TEXT("deletedPackages"), Deleted);
+			TArray<FString> Saved;
+			for (UPackage* Package : ToSave)
+			{
+				FString Reason;
+				if (SaveAssetPackageChecked(Package, Reason)) Saved.Add(Package->GetName());
+				else AddFailure(Package->GetName(), Reason);
+			}
+			Result->SetArrayField(TEXT("savedPackages"), MCPStringListToJson(Saved));
+			if (Failed.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("failedPackages"), Failed);
+				Result->SetStringField(TEXT("error"), FString::Printf(
+					TEXT("%d package(s) failed to save; savedPackages were written, deletedPackages were committed, and editor shutdown was not scheduled"), Failed.Num()));
+				Result->SetBoolField(TEXT("changed"), Saved.Num() > 0 || Deleted.Num() > 0);
+				MCPSetNoRollback(Result, TEXT("Saved packages overwrote disk bytes and committed empty external packages deleted their files. Neither keeps a backup; source control holds the previous revision."));
+				return MCPResult(Result);
+			}
+		}
+		else
+		{
+			// Match editor(discard_dirty): preflight the whole selection before clearing any flag.
+			TArray<FString> Refused, Skipped, Discarded;
+			TArray<UPackage*> ToDiscard;
+			for (const FString& Name : Target)
+			{
+				UPackage* Package = FindPackage(nullptr, *Name);
+				if (!Package || !Package->IsDirty())
+				{
+					Skipped.Add(Name);
+					continue;
+				}
+				const EMCPDiscardPackageKind Kind = MCPClassifyDiscardPackage(Package);
+				if (Kind == EMCPDiscardPackageKind::Code || Kind == EMCPDiscardPackageKind::PlayInEditor
+					|| (Kind == EMCPDiscardPackageKind::Content && !bAllowContent))
+					Refused.Add(Name);
+				else ToDiscard.Add(Package);
+			}
+			Result->SetArrayField(TEXT("skippedPackages"), MCPStringListToJson(Skipped));
+			if (Refused.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("refusedPackages"), MCPStringListToJson(Refused));
+				Result->SetStringField(TEXT("error"), TEXT("Discard preflight refused packages; nothing was discarded or scheduled. Project or plugin content requires allowContent=true; code and PIE packages cannot be discarded."));
+				return MCPResult(Result);
+			}
+			TArray<FString> StillDirty;
+			for (UPackage* Package : ToDiscard)
+			{
+				Package->SetDirtyFlag(false);
+				if (Package->IsDirty()) StillDirty.Add(Package->GetName());
+				else Discarded.Add(Package->GetName());
+			}
+			Result->SetArrayField(TEXT("discardedPackages"), MCPStringListToJson(Discarded));
+			if (StillDirty.Num() > 0)
+			{
+				Result->SetBoolField(TEXT("success"), false);
+				Result->SetArrayField(TEXT("stillDirtyPackages"), MCPStringListToJson(StillDirty));
+				Result->SetBoolField(TEXT("changed"), Discarded.Num() > 0);
+				MCPSetNoRollback(Result, TEXT("Dirty flags already cleared cannot restore unsaved edits after closing; the remaining dirty packages prevented shutdown."));
+				Result->SetStringField(TEXT("error"), TEXT("Some packages became dirty immediately after discard; editor shutdown was not scheduled."));
+				return MCPResult(Result);
+			}
+			Result->SetStringField(TEXT("discardNote"),
+				TEXT("IRREVERSIBLE: the discarded changes were never written to disk and nothing keeps a copy; they are gone when the editor closes. Their dirty flags are cleared now, so if the close is called off they stay in memory but no save will pick them up."));
+		}
 	}
 
 	if (bPIEWasActive)
@@ -3657,7 +3890,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 	// ticker is pumping can execute in the same pass. If PIE/SIE was active,
 	// keep polling until the editor has actually finished ending play.
 	FTSTicker::GetCoreTicker().AddTicker(
-		FTickerDelegate::CreateLambda([](float) -> bool
+		FTickerDelegate::CreateLambda([bActOnDirty](float) -> bool
 		{
 			if (!GEditor)
 			{
@@ -3667,6 +3900,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 			{
 				return true;
 			}
+			// The caller answered for the packages that were dirty when it
+			// asked. Something dirtied since then is unanswered, and closing
+			// now would raise the prompt this mode exists to avoid.
+			if (bActOnDirty)
+			{
+				const FDirtyEditorPackages Late = CollectDirtyEditorPackages();
+				if (Late.Content.Num() > 0 || Late.Maps.Num() > 0)
+				{
+					TArray<FString> LateAll = Late.Content;
+					LateAll.Append(Late.Maps);
+					UE_LOG(LogMCPBridge, Warning, TEXT("request_editor_shutdown: close called off, %d package(s) became dirty after the request: %s"),
+						LateAll.Num(), *FString::Join(LateAll, TEXT(", ")));
+					return false;
+				}
+			}
 			IMainFrameModule& MainFrameModule = FModuleManager::LoadModuleChecked<IMainFrameModule>(TEXT("MainFrame"));
 			MainFrameModule.RequestCloseEditor();
 			return false;
@@ -3674,7 +3922,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 		1.0f);
 
 	Result->SetBoolField(TEXT("scheduled"), true);
-	Result->SetStringField(TEXT("message"), TEXT("Graceful editor shutdown scheduled; active PIE/SIE will end before close"));
+	Result->SetStringField(TEXT("message"), bActOnDirty
+		? TEXT("Graceful editor shutdown scheduled with no save prompt. If any package is dirty again when the close runs, the close is called off and the output log names the packages")
+		: TEXT("Graceful editor shutdown scheduled; active PIE/SIE will end before close"));
 	// The early returns above leave scheduled=false and success=false, so
 	// reaching here always armed a shutdown that was not already armed.
 	Result->SetBoolField(TEXT("changed"), true);
@@ -3682,8 +3932,194 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 	// the editor is closing: a rollback would either arrive too late to matter
 	// or arrive after the process that would run it is gone.
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
-	Result->SetStringField(TEXT("rollbackNote"),
-		TEXT("The scheduled close cannot be called off, and nothing restarts the editor from inside it. editor(start_editor) launches a NEW editor process rather than restoring this session."));
+	Result->SetStringField(TEXT("rollbackNote"), bActOnDirty
+		? TEXT("Saved packages were overwritten on disk and discarded changes were never written; neither can be restored from here. The scheduled close cannot be called off by a caller, and editor(start_editor) launches a NEW editor process rather than restoring this session.")
+		: TEXT("The scheduled close cannot be called off, and nothing restarts the editor from inside it. editor(start_editor) launches a NEW editor process rather than restoring this session."));
+	return MCPResult(Result);
+}
+
+namespace
+{
+	constexpr int32 MCPDiscardDirtyMaxPackages = 256;
+}
+
+// stop_editor has no flag that discards, and must not: the editor's own Save
+// Content prompt is the question for the person. But a package nobody can save
+// turns that prompt into a dead end. This clears the dirty flag on packages the
+// caller names, one by one, and refuses real content unless allowContent says
+// otherwise. All or nothing: one refusal clears none, so a repeat without the
+// refused names is the whole recovery.
+TSharedPtr<FJsonValue> FEditorHandlers::DiscardDirty(const TSharedPtr<FJsonObject>& Params)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Requested = nullptr;
+	const TSharedPtr<FJsonValue> MissingPackages = RequireArray(Params, TEXT("packages"), Requested);
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	const bool bAllowContent = OptionalBool(Params, TEXT("allowContent"), false);
+	if (MissingPackages) return MissingPackages;
+	if (Requested->Num() == 0)
+	{
+		return MCPError(TEXT("packages is empty. Name every package to clear, as editor(list_dirty_packages) reports it."));
+	}
+	if (Requested->Num() > MCPDiscardDirtyMaxPackages)
+	{
+		return MCPError(FString::Printf(TEXT("packages names %d packages; at most %d per call."), Requested->Num(), MCPDiscardDirtyMaxPackages));
+	}
+
+	struct FDiscardEntry
+	{
+		FString PackageName;
+		UPackage* Package = nullptr;
+		EMCPDiscardPackageKind Kind = EMCPDiscardPackageKind::Content;
+		FString Status;
+		FString Reason;
+	};
+
+	// Preflight: resolve and judge every name before anything is cleared.
+	TArray<FDiscardEntry> Entries;
+	TSet<FString> Seen;
+	int32 RefusedCount = 0;
+	for (int32 Index = 0; Index < Requested->Num(); ++Index)
+	{
+		FString Name;
+		if (!(*Requested)[Index].IsValid() || !(*Requested)[Index]->TryGetString(Name) || Name.TrimStartAndEnd().IsEmpty())
+		{
+			return MCPError(FString::Printf(TEXT("packages[%d] is not a package name."), Index));
+		}
+		const FString PackageName = FPackageName::ObjectPathToPackageName(Name.TrimStartAndEnd());
+		if (Seen.Contains(PackageName))
+		{
+			return MCPError(FString::Printf(TEXT("packages names %s twice."), *PackageName));
+		}
+		Seen.Add(PackageName);
+
+		FDiscardEntry& Entry = Entries.AddDefaulted_GetRef();
+		Entry.PackageName = PackageName;
+		Entry.Package = FindPackage(nullptr, *PackageName);
+		if (!Entry.Package)
+		{
+			Entry.Status = TEXT("refused");
+			Entry.Reason = TEXT("No package by this name is loaded, so there is nothing in memory to discard.");
+			++RefusedCount;
+			continue;
+		}
+		Entry.Kind = MCPClassifyDiscardPackage(Entry.Package);
+		if (!Entry.Package->IsDirty())
+		{
+			Entry.Status = TEXT("notDirty");
+			continue;
+		}
+		switch (Entry.Kind)
+		{
+		case EMCPDiscardPackageKind::Code:
+			Entry.Reason = TEXT("A code package holds compiled classes, not unsaved work, and the editor never asks to save it.");
+			break;
+		case EMCPDiscardPackageKind::PlayInEditor:
+			Entry.Reason = TEXT("A Play In Editor package goes away when the session ends. End PIE instead.");
+			break;
+		case EMCPDiscardPackageKind::Content:
+			if (!bAllowContent)
+			{
+				Entry.Reason = PackageName.StartsWith(TEXT("/Temp/"))
+					? TEXT("A never-saved map exists only in memory, so clearing it loses the whole map when the editor closes. Save it under a content path first, or pass allowContent=true to discard it.")
+					: TEXT("Project or plugin content: clearing it loses its unsaved edits when the editor closes. Save it with asset(save) or editor(save_dirty), or pass allowContent=true to discard it.");
+			}
+			break;
+		default:
+			break;
+		}
+		if (!Entry.Reason.IsEmpty())
+		{
+			Entry.Status = TEXT("refused");
+			++RefusedCount;
+		}
+	}
+
+	const bool bApply = !bDryRun && RefusedCount == 0;
+	int32 ClearedCount = 0;
+	int32 WouldClearCount = 0;
+	int32 NotDirtyCount = 0;
+	int32 StillDirtyCount = 0;
+	TArray<TSharedPtr<FJsonValue>> PackagesJson;
+	for (FDiscardEntry& Entry : Entries)
+	{
+		if (Entry.Status.IsEmpty())
+		{
+			if (bApply)
+			{
+				Entry.Package->SetDirtyFlag(false);
+				// Read back rather than trust the call: a package something
+				// re-dirties on the spot is not one the close will skip.
+				if (Entry.Package->IsDirty())
+				{
+					Entry.Status = TEXT("stillDirty");
+					Entry.Reason = TEXT("The package was dirty again as soon as its flag was cleared.");
+					++StillDirtyCount;
+				}
+				else
+				{
+					Entry.Status = TEXT("cleared");
+					++ClearedCount;
+				}
+			}
+			else
+			{
+				Entry.Status = TEXT("wouldClear");
+				++WouldClearCount;
+			}
+		}
+		else if (Entry.Status == TEXT("notDirty"))
+		{
+			++NotDirtyCount;
+		}
+
+		TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
+		Item->SetStringField(TEXT("package"), Entry.PackageName);
+		Item->SetStringField(TEXT("status"), Entry.Status);
+		if (Entry.Package)
+		{
+			Item->SetStringField(TEXT("kind"), MCPDiscardPackageKindName(Entry.Kind));
+		}
+		if (!Entry.Reason.IsEmpty())
+		{
+			Item->SetStringField(TEXT("reason"), Entry.Reason);
+		}
+		PackagesJson.Add(MakeShared<FJsonValueObject>(Item));
+	}
+
+	const FDirtyEditorPackages Remaining = CollectDirtyEditorPackages();
+	TArray<FString> RemainingAll = Remaining.Content;
+	RemainingAll.Append(Remaining.Maps);
+	RemainingAll.Sort();
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("dryRun"), bDryRun);
+	Result->SetBoolField(TEXT("allowContent"), bAllowContent);
+	Result->SetArrayField(TEXT("packages"), PackagesJson);
+	Result->SetNumberField(TEXT("clearedCount"), ClearedCount);
+	Result->SetNumberField(TEXT("wouldClearCount"), WouldClearCount);
+	Result->SetNumberField(TEXT("notDirtyCount"), NotDirtyCount);
+	Result->SetNumberField(TEXT("refusedCount"), RefusedCount);
+	// What the editor's dirty lists (the ones a close prompts for) still hold.
+	Result->SetArrayField(TEXT("remainingDirty"), MCPStringListToJson(RemainingAll));
+	Result->SetNumberField(TEXT("remainingDirtyCount"), RemainingAll.Num());
+	Result->SetBoolField(TEXT("changed"), ClearedCount > 0);
+	if (RefusedCount > 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Refused %d of %d package(s), so nothing was cleared. Each refusal says why; call again without them."),
+			RefusedCount, Entries.Num()));
+	}
+	else if (StillDirtyCount > 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d package(s) were dirty again straight after being cleared; the close will still ask about them."),
+			StillDirtyCount));
+	}
+	MCPSetNoRollback(Result, ClearedCount > 0
+		? TEXT("Only the dirty flag was cleared. The edits are still in memory, but the bridge has no action that marks a package dirty again, so nothing puts them back on the save list; the next edit to the same package does. Once the editor closes they are gone.")
+		: TEXT("Nothing was cleared, so there is nothing to undo."));
 	return MCPResult(Result);
 }
 
@@ -4707,7 +5143,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 		if (NotDrawn.Num() > 0) RuntimeComponents->SetArrayField(TEXT("notDrawn"), NotDrawn);
 	}
 
-	FString AbsPath = UEMCP::SceneCapture::ResolveOutputPath(OutputPath);
+	FString AbsPath;
+	if (auto Err = MCPRequireWritablePath(OutputPath, AbsPath)) return Err;
 	if (!AbsPath.EndsWith(TEXT(".png"))) AbsPath += TEXT(".png");
 
 	// Asked before the export, because it is the difference between creating a

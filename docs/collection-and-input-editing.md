@@ -8,6 +8,8 @@ For a single nested field in a struct array, `asset(set_property)` accepts a key
 
 The selector must match exactly one element. `asset(read_properties)` accepts the same path. See [Property paths](tool-reference.md#property-paths) for the selector rules. Use `asset(bulk_set_properties)` for several keyed field writes with preflight and read-back.
 
+`bulk_read_properties` rows report `resolvedPropertyNames` and `missingReasons` for keyed selectors.
+
 ## Update or clone a collection entry
 
 `asset(edit_collection_entry)` selects an existing struct with `entryKey`. For a struct array, also supply `keyField`. For a map, the key is converted using the map's reflected key type. Omit `newKey` to update the selected entry; supply an unused `newKey` to clone it. Existing destinations and ambiguous array keys are refused.
@@ -43,6 +45,8 @@ Every source must exist before the call; a later clone cannot use a destination 
 ```
 
 Supply reflected settings fields in `playerMappableKeySettings`, or use the existing `mappingName`, `displayName` and `displayCategory` parameters. Omitted fields retain their values. A new settings object needs a non-empty `Name` or `mappingName`. Set `playerMappableKeySettings` to null to clear the local object. Setting only the behavior preserves the local object. `dryRun` validates without writing; `save` defaults to true. Rollback addresses the same mapping index, so replay it before reordering mappings. Clearing an override may recreate its object on rollback; clearing a custom settings subclass requires editor undo.
+
+To let a settings menu list and rebind every key of a context on its own row (a keyboard key and a gamepad key on one action, for example), call this once per row from `read_imc`, each with its own `mappingName` and with `settingBehavior` set to `OverrideSettings`. Enhanced Input numbers the key slots of a shared name across mappings, so rows that share a name rebind together. A row left on `InheritSettingsFromAction` keeps reporting the action's settings, whatever its local object holds.
 
 InputAction-level settings use `inputActionPath` instead of `imcPath` and `mappingIndex`. To duplicate an InputAction together with its triggers, modifiers and settings, use `asset(duplicate)` with `sourcePath`, `destinationPath` and `onConflict="error"`, then inspect it with `gameplay(read_input_action)`.
 

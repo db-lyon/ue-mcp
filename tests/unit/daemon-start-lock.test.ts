@@ -6,12 +6,16 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as http from "node:http";
+import type { AddressInfo } from "node:net";
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { normalizeProjectRoot } from "../../src/bridge/port.js";
 import { isPidAlive } from "../../src/bridge/editor-target.js";
-import { daemonDir, projectKey, readLiveDiscovery, writeDiscovery, type DaemonDiscovery } from "../../src/daemon/discovery.js";
+import {
+  daemonDir, discoveryIsStale, discoveryPath, projectKey, readAnsweringDiscovery, readLiveDiscovery, writeDiscovery, type DaemonDiscovery,
+} from "../../src/daemon/discovery.js";
 import { isOlder } from "../../src/daemon/daemon.js";
 import { ensureDaemon } from "../../src/daemon/shim.js";
 import { packageVersion } from "../../src/core/package-root.js";
@@ -142,16 +146,109 @@ describe("waitForStartTurn", () => {
   });
 });
 
+/** A loopback HTTP server answering every request with `answer`; closed after each test. */
+const servers: http.Server[] = [];
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map((s) => new Promise((r) => s.close(r))));
+});
+async function serve(answer: (req: http.IncomingMessage, res: http.ServerResponse) => void): Promise<number> {
+  const server = http.createServer(answer);
+  servers.push(server);
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+  return (server.address() as AddressInfo).port;
+}
+/** Like the daemon's /v1/health: 401 without the bearer token, else its pid. */
+const healthOf = (pid: number, token = "t") => (req: http.IncomingMessage, res: http.ServerResponse) => {
+  if (req.headers.authorization !== `Bearer ${token}`) return void res.writeHead(401).end();
+  res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, pid }));
+};
+/** A loopback port nothing listens on. */
+async function closedPort(): Promise<number> {
+  const port = await serve(() => {});
+  await new Promise((r) => servers.pop()!.close(r));
+  return port;
+}
+
+describe("discoveryIsStale (#1460)", () => {
+  it("is stale when nothing listens on the record's port", async () => {
+    expect(await discoveryIsStale({ ...record(7, "1.4.6"), port: await closedPort() })).toBe(true);
+  });
+
+  it("is live when the daemon the record names answers for it", async () => {
+    expect(await discoveryIsStale({ ...record(7, "1.4.6"), port: await serve(healthOf(7)) })).toBe(false);
+  });
+
+  it("is stale when another process answers on the port", async () => {
+    expect(await discoveryIsStale({ ...record(7, "1.4.6"), port: await serve(healthOf(8)) })).toBe(true);
+    expect(await discoveryIsStale({ ...record(7, "1.4.6"), port: await serve(healthOf(7, "other")) })).toBe(true);
+    expect(await discoveryIsStale({ ...record(7, "1.4.6"), port: await serve((_q, res) => void res.end("<html>")) })).toBe(true);
+  });
+
+  it("is not stale on a timeout, since a busy daemon answers late", async () => {
+    const port = await serve(() => {});
+    expect(await discoveryIsStale({ ...record(7, "1.4.6"), port }, 200)).toBe(false);
+  });
+});
+
+describe("readAnsweringDiscovery (#1460)", () => {
+  it("drops a record whose pid was reused by a process with nothing on the port", async () => {
+    // process.pid stands in for the unrelated process that took the dead daemon's pid.
+    writeDiscovery(project, { ...record(process.pid, "1.4.6"), port: await closedPort() });
+    expect(readLiveDiscovery(project)?.pid).toBe(process.pid);
+    expect(await readAnsweringDiscovery(project)).toBeNull();
+    expect(fs.existsSync(discoveryPath(project))).toBe(false);
+  });
+
+  it("keeps a record the daemon answers for", async () => {
+    writeDiscovery(project, { ...record(process.pid, "1.4.6"), port: await serve(healthOf(process.pid)) });
+    expect((await readAnsweringDiscovery(project))?.pid).toBe(process.pid);
+    expect(fs.existsSync(discoveryPath(project))).toBe(true);
+  });
+
+  it("leaves a record rewritten while the stale one was probed", async () => {
+    writeDiscovery(project, record(process.pid, "1.4.6"));
+    const fresh = { ...record(process.pid, "1.4.7"), token: "new" };
+    expect(await readAnsweringDiscovery(project, {
+      isStale: async () => {
+        writeDiscovery(project, fresh);
+        return true;
+      },
+    })).toBeNull();
+    expect(readLiveDiscovery(project)?.token).toBe("new");
+  });
+
+  it("lets a starter start instead of deferring to a stale record", async () => {
+    const isAlive = (pid: number) => pid === 51 || pid === 52;
+    writeDiscovery(project, record(51, "1.4.6"));
+    const turn = await waitForStartTurn(project, sameOrNewer("1.4.6"), { pid: 52, isAlive, isStale: async () => true });
+    expect(turn).toEqual({ action: "start", existing: null });
+    releaseStartLock(project, 52);
+  });
+});
+
 describe("ensureDaemon", () => {
   it("spawns nothing while a live starter holds the lock, and returns what it publishes", async () => {
     expect(tryTakeStartLock(project)).toBe(true);
     const ready = ensureDaemon(path.join(project, "LockedProject.uproject"));
     await new Promise((r) => setTimeout(r, 600));
-    writeDiscovery(project, record(process.pid, packageVersion()));
+    writeDiscovery(project, { ...record(process.pid, packageVersion()), port: await serve(healthOf(process.pid)) });
     releaseStartLock(project);
     expect((await ready).pid).toBe(process.pid);
     // The spawn path is the only thing that opens the daemon log.
     expect(fs.existsSync(path.join(daemonDir(), `${projectKey(project)}.log`))).toBe(false);
+  });
+
+  it("drops a discovery record whose pid was reused and waits for a fresh daemon (#1460)", async () => {
+    writeDiscovery(project, { ...record(process.pid, packageVersion()), port: await closedPort() });
+    // Holding the lock stands in for the replacement daemon starting, so nothing is spawned.
+    expect(tryTakeStartLock(project)).toBe(true);
+    const ready = ensureDaemon(path.join(project, "LockedProject.uproject"));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(fs.existsSync(discoveryPath(project))).toBe(false);
+    const port = await serve(healthOf(process.pid));
+    writeDiscovery(project, { ...record(process.pid, packageVersion()), port });
+    releaseStartLock(project);
+    expect((await ready).port).toBe(port);
   });
 });
 

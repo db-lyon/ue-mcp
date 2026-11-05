@@ -63,9 +63,11 @@ nav:
   - Control Rig Animation: control-rig-animation.md
   - Spatial Instructions: spatial-instructions.md
   - Collection and Input Editing: collection-and-input-editing.md
+  - Blueprint Component Properties: blueprint-component-properties-batch.md
   - Native Tools: native-tools.md
   - Native Asset Pipeline: native-asset-pipeline.md
-  - Material Graph Editing: material-graph-surgery.md
+  - Shader Compilation: shader-compilation.md
+  - Studio Mesh Reference Images: mesh-studio-render.md
   - Handler Conventions: handler-conventions.md
   - Release Notes Style: release-notes-style.md
   - Widgets:
@@ -76,10 +78,12 @@ nav:
     - Layout Diagnostics: runtime-widget-layout-diagnostics.md
   - PIE testing:
     - pie.md
+    - Level traces: level-traces.md
     - Test scripts: pie-scripts.md
   - Flows:
     - flows.md
   - Checkpoints: checkpoints.md
+  - Mutation journal: journal.md
   - Plugins:
     - plugins.md
     - Registry (plugins.ue-mcp.com): https://plugins.ue-mcp.com

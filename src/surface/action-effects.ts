@@ -80,6 +80,10 @@ export const RAW_BRIDGE_METHODS: Readonly<Record<string, ActionEffect>> = {
   acquire_lock: "mutate",
   release_lock: "mutate",
   release_session_locks: "mutate",
+  // Several bridge calls in one game-thread job. editor(batch) reaches it,
+  // and its effect is its steps': ARGUMENT_DECIDES reads them off `ops`,
+  // and this is the answer when there are none to read.
+  execute_batch: "unknown",
   // Arbitrary python inside the editor process. Its effect is the string it
   // was handed, which is what `unknown` is for.
   execute_python: "unknown",
@@ -93,7 +97,8 @@ export const RAW_BRIDGE_METHODS: Readonly<Record<string, ActionEffect>> = {
   // Starts PIE past the Blueprint-error prompt, after the approval gate.
   // editor(play_in_editor_ignore_blueprint_errors).
   pie_start_ignoring_blueprint_errors: "mutate",
-  // Asks the editor to quit. editor(request_editor_shutdown).
+  // Asks the editor to quit, saving or discarding its dirty packages first
+  // when told to. editor(request_editor_shutdown).
   request_editor_shutdown: "mutate",
   // Resolves content roots and queries the asset registry. asset(search).
   search_assets: "read",
@@ -187,10 +192,27 @@ export function taskEffect(taskName: string, graph?: readonly ToolDef[]): Resolv
  * `execute_python` and `execute_command` stay `unknown` and always will: their
  * deciding argument is a program, and nothing short of running it answers.
  */
-const ARGUMENT_DECIDES: Readonly<Record<string, (p: Record<string, unknown>) => ActionEffect | undefined>> = {
+const ARGUMENT_DECIDES: Readonly<Record<string, (p: Record<string, unknown>, graph?: readonly ToolDef[]) => ActionEffect | undefined>> = {
   epic_call_tool: (p) => {
     const tool = typeof p.tool === "string" ? p.tool : undefined;
     return tool ? EPIC_TOOL_EFFECTS[tool] : undefined;
+  },
+  // A batch does what its steps do. The strongest step decides, and `unknown`
+  // outranks `mutate` here: a guard scoped to `unknown` exists to put a person
+  // in front of the escape hatches, and an execute_command hidden among
+  // declared mutations is still an escape hatch. A batch of reads reads.
+  execute_batch: (p, graph) => {
+    if (!Array.isArray(p.ops)) return undefined;
+    let strongest: ActionEffect = "read";
+    for (const entry of p.ops) {
+      const call = entry as { method?: unknown; params?: unknown } | null;
+      if (!call || typeof call.method !== "string") continue;
+      const params = call.params !== null && typeof call.params === "object" ? (call.params as Record<string, unknown>) : undefined;
+      const { effect } = bridgeMethodEffect(call.method, params, graph);
+      if (effect === "unknown") return "unknown";
+      if (effect === "mutate") strongest = "mutate";
+    }
+    return strongest;
   },
 };
 
@@ -216,7 +238,7 @@ export function bridgeMethodEffect(
   graph?: readonly ToolDef[],
 ): ResolvedEffect {
   if (params) {
-    const decided = ARGUMENT_DECIDES[method]?.(params);
+    const decided = ARGUMENT_DECIDES[method]?.(params, graph);
     if (decided !== undefined) return { effect: decided, source: "declared" };
   }
   const declared = indexFor(graph).byBridgeMethod.get(method);

@@ -118,3 +118,29 @@ export function elicitationNeedsRelay(client: ClientInfo | undefined): boolean {
   const name = client.name.toLowerCase();
   return !RENDERS_WHOLE_ELICITATION.some((known) => name.includes(known));
 }
+
+/**
+ * opencode advertised the elicitation capability from 2.0.18 but dropped every
+ * form it was sent until 2.1.4 (anomalyco/opencode#58184), so the call waited
+ * on a question nobody could see. Treating those builds as able to elicit put a
+ * blocking dialog into interactive mode with no way to answer it.
+ *
+ * Matched on the exact name opencode sends at initialize: "opencode" from
+ * 2.0.26 (anomalyco/opencode#53471). Earlier 2.0 builds sent "cli", "desktop"
+ * or "acp", too generic to match. An unparseable version counts as affected,
+ * because defer is the safe miss.
+ *
+ * Returns why this client cannot be shown a form despite advertising it, or
+ * null when its forms render.
+ */
+const OPENCODE_FORMS_FIXED_IN = [2, 1, 4];
+
+export function elicitationUnrenderedNote(client: ClientInfo | undefined): string | null {
+  if (!client || client.name.toLowerCase() !== "opencode") return null;
+  if (atLeast(client.version, OPENCODE_FORMS_FIXED_IN)) return null;
+  return (
+    `opencode ${client.version ?? "(unknown version)"} advertises MCP elicitation but does not show the form ` +
+    "(anomalyco/opencode#58184, fixed in 2.1.4), so dialogs are handled as defer. " +
+    "Upgrade opencode to 2.1.4 or later to answer them in a form."
+  );
+}
