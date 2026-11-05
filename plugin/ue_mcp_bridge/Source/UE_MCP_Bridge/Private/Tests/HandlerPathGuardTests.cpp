@@ -63,8 +63,8 @@ bool FMCPPathGuardTest::RunTest(const FString& Parameters)
 		MCPResolvePathInside(FPaths::ProjectSavedDir() / TEXT("x.json"), MCPDefaultWritableRoots(), Full, Error));
 
 	TestTrue(TEXT("an FPaths directory resolves to the real project folder"),
-		FPaths::IsSamePath(MCPFullPath(FPaths::ProjectSavedDir(), FPaths::ProjectDir()),
-			FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir())));
+		FPaths::IsSamePath(MCPFullPath(FPaths::ProjectSavedDir() / TEXT("x.json"), FPaths::ProjectDir()),
+			FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("x.json"))));
 	TestTrue(TEXT("a project-relative path still resolves against the project"),
 		FPaths::IsSamePath(MCPFullPath(TEXT("Saved/x.json"), FPaths::ProjectDir()),
 			FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()) / TEXT("Saved/x.json")));
