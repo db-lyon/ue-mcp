@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1221,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -38731,6 +38731,211 @@
           "type": "object",
           "required": true,
           "description": "{parameterName: value}; null clears that override"
+        }
+      ]
+    },
+    "set_physics_asset_body_material": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "physicalMaterialPath",
+          "type": "string",
+          "required": false,
+          "description": "PhysicalMaterial to assign; an empty string clears the override"
+        },
+        {
+          "name": "boneNames",
+          "type": "array",
+          "required": false,
+          "description": "Bodies physicalMaterialPath applies to, by bone name; omit for every body",
+          "items": "string"
+        },
+        {
+          "name": "bodies",
+          "type": "array",
+          "required": false,
+          "description": "Per-body materials, applied after physicalMaterialPath; this is how the rollback replays",
+          "items": "object",
+          "fields": [
+            {
+              "name": "boneName",
+              "type": "string",
+              "required": true,
+              "description": "Bone whose body to edit"
+            },
+            {
+              "name": "physicalMaterialPath",
+              "type": "string",
+              "required": true,
+              "description": "PhysicalMaterial to assign; an empty string clears the override"
+            }
+          ]
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the asset after the edit (default true)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "physicalMaterialPath"
+            ],
+            [
+              "bodies"
+            ]
+          ]
+        }
+      ]
+    },
+    "set_physics_asset_constraint_limits": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "PhysicsAsset asset path, or a SkeletalMesh whose assigned PhysicsAsset to edit",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "constraintNames",
+          "type": "array",
+          "required": false,
+          "description": "Constraints the shared values apply to, by constraint (joint) name; omit for every constraint",
+          "items": "string"
+        },
+        {
+          "name": "swing1Motion",
+          "type": "string",
+          "required": false,
+          "description": "Free | Limited | Locked"
+        },
+        {
+          "name": "swing2Motion",
+          "type": "string",
+          "required": false,
+          "description": "Free | Limited | Locked"
+        },
+        {
+          "name": "twistMotion",
+          "type": "string",
+          "required": false,
+          "description": "Free | Limited | Locked"
+        },
+        {
+          "name": "swing1LimitDegrees",
+          "type": "number",
+          "required": false,
+          "description": "Swing1 range, 0 to 180; written only where swing1 is Limited"
+        },
+        {
+          "name": "swing2LimitDegrees",
+          "type": "number",
+          "required": false,
+          "description": "Swing2 range, 0 to 180; written only where swing2 is Limited"
+        },
+        {
+          "name": "twistLimitDegrees",
+          "type": "number",
+          "required": false,
+          "description": "Twist range, 0 to 180; written only where twist is Limited"
+        },
+        {
+          "name": "swingSoft",
+          "type": "boolean",
+          "required": false,
+          "description": "Soft (true) or hard (false) cone limit"
+        },
+        {
+          "name": "twistSoft",
+          "type": "boolean",
+          "required": false,
+          "description": "Soft (true) or hard (false) twist limit"
+        },
+        {
+          "name": "constraints",
+          "type": "array",
+          "required": false,
+          "description": "Per-constraint values, applied after the shared ones; this is how the rollback replays",
+          "items": "object",
+          "fields": [
+            {
+              "name": "constraintName",
+              "type": "string",
+              "required": true,
+              "description": "Constraint (joint) name"
+            },
+            {
+              "name": "swing1Motion",
+              "type": "string",
+              "required": false,
+              "description": "Free | Limited | Locked"
+            },
+            {
+              "name": "swing2Motion",
+              "type": "string",
+              "required": false,
+              "description": "Free | Limited | Locked"
+            },
+            {
+              "name": "twistMotion",
+              "type": "string",
+              "required": false,
+              "description": "Free | Limited | Locked"
+            },
+            {
+              "name": "swing1LimitDegrees",
+              "type": "number",
+              "required": false,
+              "description": "Swing1 range, 0 to 180"
+            },
+            {
+              "name": "swing2LimitDegrees",
+              "type": "number",
+              "required": false,
+              "description": "Swing2 range, 0 to 180"
+            },
+            {
+              "name": "twistLimitDegrees",
+              "type": "number",
+              "required": false,
+              "description": "Twist range, 0 to 180"
+            },
+            {
+              "name": "swingSoft",
+              "type": "boolean",
+              "required": false,
+              "description": "Soft or hard cone limit"
+            },
+            {
+              "name": "twistSoft",
+              "type": "boolean",
+              "required": false,
+              "description": "Soft or hard twist limit"
+            }
+          ]
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the asset after the edit (default true)"
         }
       ]
     },
