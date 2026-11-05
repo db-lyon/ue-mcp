@@ -167,6 +167,11 @@
       "summary": "ue-mcp extension install unpacks an extension archive into the extensions directory"
     },
     {
+      "id": "cli.extension.use",
+      "group": "cli",
+      "summary": "ue-mcp extension use moves one project to an installed extension version and restarts its daemon"
+    },
+    {
       "id": "cli.extension.remove",
       "group": "cli",
       "summary": "ue-mcp extension remove deletes one installed extension and nothing else"
@@ -532,6 +537,11 @@
       "summary": "a newer daemon takes over from an older one for the same project"
     },
     {
+      "id": "daemon.supersede",
+      "group": "daemon",
+      "summary": "a daemon stops itself once its discovery record names another live daemon"
+    },
+    {
       "id": "daemon.start-lock",
       "group": "daemon",
       "summary": "concurrent starts leave exactly one daemon per project"
@@ -550,6 +560,11 @@
       "id": "daemon.model-provider",
       "group": "daemon",
       "summary": "a daemon extension registers the model flow agent steps run on with api.models.register"
+    },
+    {
+      "id": "daemon.extension-versions",
+      "group": "daemon",
+      "summary": "a daemon loads the extension version its project records, migrating the unversioned install, while other projects keep theirs"
     },
     {
       "id": "daemon.ui-bundles",

@@ -300,6 +300,71 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 	return MCPResult(Result);
 }
 
+namespace MCPComponentDefaultPropagation
+{
+	/** The edited value inside one component: the struct members walked down to it, then the property. */
+	void* ValueIn(UObject* Component, const TArray<FStructProperty*>& Chain, FProperty* Final)
+	{
+		void* Container = Component;
+		for (FStructProperty* Member : Chain)
+		{
+			Container = Member->ContainerPtrToValuePtr<void>(Container);
+		}
+		return Final->ContainerPtrToValuePtr<void>(Container);
+	}
+
+	/**
+	 * Components built from this template (placed instances, child Blueprint
+	 * templates, editor previews) whose value still equals the template's.
+	 * Read before the template changes: those follow the new default, and the
+	 * rest hold real overrides and keep them (#1604).
+	 */
+	TArray<UObject*> FollowersOf(UActorComponent* Template, const TArray<FStructProperty*>& Chain, FProperty* Final, int32& OutOverrides)
+	{
+		OutOverrides = 0;
+		TArray<UObject*> Instances;
+		Template->GetArchetypeInstances(Instances);
+		const void* Current = ValueIn(Template, Chain, Final);
+		TArray<UObject*> Followers;
+		for (UObject* Instance : Instances)
+		{
+			if (!IsValid(Instance) || Instance == Template) continue;
+			if (Instance->GetClass()->HasAnyClassFlags(CLASS_NewerVersionExists)) continue;
+			if (Instance->GetOutermost()->HasAnyPackageFlags(PKG_PlayInEditor)) continue;
+			if (Final->Identical(ValueIn(Instance, Chain, Final), Current, PPF_None))
+			{
+				Followers.Add(Instance);
+			}
+			else
+			{
+				++OutOverrides;
+			}
+		}
+		return Followers;
+	}
+
+	/** Give each follower the template's new value, as the Blueprint editor's details panel does. */
+	int32 Propagate(UActorComponent* Template, const TArray<UObject*>& Followers, const TArray<FStructProperty*>& Chain, FProperty* Final)
+	{
+		const void* NewValue = ValueIn(Template, Chain, Final);
+		int32 Updated = 0;
+		for (UObject* Instance : Followers)
+		{
+			if (!IsValid(Instance)) continue;
+			Instance->Modify();
+			Final->CopyCompleteValue(ValueIn(Instance, Chain, Final), NewValue);
+			FPropertyChangedEvent Changed(Final, EPropertyChangeType::ValueSet);
+			if (Chain.Num() > 0)
+			{
+				Changed.SetActiveMemberProperty(Chain[0]);
+			}
+			Instance->PostEditChangeProperty(Changed);
+			++Updated;
+		}
+		return Updated;
+	}
+}
+
 TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -406,6 +471,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	UStruct* CurrentStruct = Template->GetClass();
 	void* CurrentContainer = Template;
 	FProperty* FinalProp = nullptr;
+	TArray<FStructProperty*> MemberChain;
 
 	for (int32 i = 0; i < PathParts.Num(); i++)
 	{
@@ -416,6 +482,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		{
 			FStructProperty* StructProp = CastField<FStructProperty>(Prop);
 			if (!StructProp) break;
+			MemberChain.Add(StructProp);
 			CurrentContainer = StructProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 			CurrentStruct = StructProp->Struct;
 		}
@@ -454,6 +521,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		PrevStructured = FMCPJsonSerializer::SerializeValue(ValuePtr, FinalProp);
 	}
 
+	int32 OverriddenInstances = 0;
+	const TArray<UObject*> Followers = MCPComponentDefaultPropagation::FollowersOf(Template, MemberChain, FinalProp, OverriddenInstances);
+
 	Template->Modify();
 	FString SetErr;
 	if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(FinalProp, ValuePtr, ValueField, Template, SetErr))
@@ -477,6 +547,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 
 	Template->PostEditChange();
 
+	// Before the compile: its reinstancing keeps any instance value that differs
+	// from the template as an override, which would bake the old default in.
+	const int32 UpdatedInstances = MCPComponentDefaultPropagation::Propagate(Template, Followers, MemberChain, FinalProp);
+
 	// Compile and save. A save that did not reach disk fails the call and says
 	// why, since the in-memory read-back looks right until the editor restarts.
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
@@ -490,6 +564,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("value"), NewValue);
 	Result->SetBoolField(TEXT("inherited"), bIsInherited);
+	Result->SetNumberField(TEXT("instancesUpdated"), UpdatedInstances);
+	Result->SetNumberField(TEXT("instancesOverridden"), OverriddenInstances);
 	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
 	if (bMapBearing)
 	{

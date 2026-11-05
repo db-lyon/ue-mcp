@@ -109,7 +109,9 @@ async function ensureRunning(): Promise<void> {
 async function advertisedEpicActions(): Promise<string[]> {
   const tools = await server.listTools();
   return tools.flatMap((t) => {
-    const actions = (t.inputSchema as { properties?: { action?: { enum?: string[] } } }).properties?.action?.enum ?? [];
+    // The action enum is either the property's own or the first member of an anyOf beside a plain string.
+    const action = (t.inputSchema as { properties?: { action?: { enum?: string[]; anyOf?: Array<{ enum?: string[] }> } } }).properties?.action;
+    const actions = [...(action?.enum ?? []), ...(action?.anyOf ?? []).flatMap((m) => m.enum ?? [])];
     return actions.filter((a) => a.startsWith("epic_")).map((a) => `${t.name}.${a}`);
   }).sort();
 }
@@ -228,8 +230,13 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
 
   it("advertises the same epic_* actions after the editor restarts (#1538)", async () => {
     await ensureRunning();
-    const before = await advertisedEpicActions();
-    // The Python toolsets are the ones that register after the bridge answers.
+    // The Python toolsets register after the bridge answers, so an editor the test before this one
+    // just launched has not advertised them yet; the snapshot is taken once they are in.
+    let before: string[] = [];
+    await waitFor("the late epic_* toolsets before the restart", async () => {
+      before = await advertisedEpicActions();
+      return before.some((a) => a.startsWith("level."));
+    }, 420_000).catch(() => undefined);
     expect(before.filter((a) => a.startsWith("level.")).length, before.join(", ")).toBeGreaterThan(0);
 
     await stopEditor();
@@ -244,7 +251,7 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
     }, 420_000).catch(() => undefined);
     expect(after.filter((a) => !before.includes(a))).toEqual([]);
     expect(before.filter((a) => !after.includes(a))).toEqual([]);
-  }, START_TIMEOUT_S * 1000 * 2 + 420_000);
+  }, START_TIMEOUT_S * 1000 * 2 + 2 * 420_000);
 
   it.skipIf(!WINDOWS)(
     "stop_editor after a real crash ends the crash reporter, and the build that follows links (#1221)",

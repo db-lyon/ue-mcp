@@ -1,31 +1,27 @@
 # Authoring a plugin
 
-Everything you need to build and publish a plugin. If you only want to *use* a plugin somebody else wrote, see [Using plugins](plugins-using.md) instead.
+How to build and publish a plugin. To use one, see [Using plugins](plugins-using.md). [Native C++ modules](plugins-native-modules.md) and [Guards](plugins-guards.md) have their own pages.
 
-Two capabilities have their own pages: [Native C++ modules](plugins-native-modules.md) (shipping engine APIs the bridge doesn't expose) and [Guards](plugins-guards.md) (gating every bridge call).
-
-## Quick scaffolder
+## Scaffold
 
 ```bash
-ue-mcp plugin create my-thing
+ue-mcp plugin create my-thing    # [--dir path]
 cd my-thing
 npm install
 npm run build
-npm run check     # validate the manifest + task wiring
+npm run check     # validate the manifest, task wiring and skills
 ```
 
-The scaffold is a **superset**: it ships every way a plugin can extend ue-mcp, wired and working, so you never have to discover a capability before using it. Keep the shapes you want and delete the rest.
+The scaffold shows every way a plugin can extend ue-mcp. Keep what you need and delete the rest.
 
 | Shape | What it scaffolds |
 |-------|-------------------|
-| `inject` | An action added onto a built-in category, e.g. `project(action="<prefix>_hello")`. |
-| `provides` | A brand-new top-level category the plugin owns (actions unprefixed), e.g. `<prefix>(action="greet")`. |
-| `flows` | A chained, one-call orchestration (`<prefix>_demo`). |
-| `nativeModule` | A compile-ready C++ handler skeleton under `ue/Plugins/<UePlugin>/`, **dormant** by default. |
+| `inject` | `project(action="<prefix>_hello")` on a built-in category. |
+| `provides` | A category the plugin owns: `<prefix>(action="greet")`. |
+| `flows` | A flow, `<prefix>_demo`. |
+| `nativeModule` | A C++ handler skeleton under `ue/Plugins/<UePlugin>/` and its recorded contract in `handler-specs.json`. The manifest block is commented out, so nothing is deployed or compiled until you uncomment it and reinstall. |
 
-The native C++ module is the one shape that is scaffolded but not active: declaring `nativeModule:` makes `ue-mcp plugin install` deploy the module and force a UE rebuild, so the manifest block ships commented out. The C++ source still lands on disk - uncomment the block in `ue-mcp.plugin.yml` and reinstall to activate it. No separate flag, no compile cost until you opt in. See [Native C++ modules](plugins-native-modules.md).
-
-The scaffold also stamps `package.json`, `tsconfig.json`, a `src/index.ts` entry, `knowledge/`, a `scripts/check.mjs` validator, `LICENSE`, and `.gitignore`.
+It also writes `package.json`, `tsconfig.json`, `src/index.ts`, `knowledge/`, `skills/`, `scripts/check.mjs`, `README.md`, `LICENSE` and `.gitignore`.
 
 ## Package layout
 
@@ -33,90 +29,102 @@ The scaffold also stamps `package.json`, `tsconfig.json`, a `src/index.ts` entry
 my-plugin/
   package.json
   tsconfig.json
-  ue-mcp.plugin.yml          # author declaration: actionPrefix, inject, provides, tasks, flows, nativeModule
-  src/                       # author writes TypeScript here
-    index.ts                 # package entry (tasks load by class_path, but `main` points here)
+  ue-mcp.plugin.yml          # the manifest
+  src/
+    index.ts                 # package entry
     tasks/
       MyAction.ts            # one UeMcpTask subclass per file, default export
-    shared/                  # optional cross-task helpers (never referenced from the declaration)
-  dist/                      # tsc output - what actually ships and loads
-    tasks/
-      MyAction.js
-  ue/                        # dormant native C++ module (only deployed when nativeModule: is uncommented)
-    Plugins/
-      MyPlugin/
-  scripts/
-    check.mjs                # pre-publish validator: manifest parses, task refs resolve
+  dist/                      # tsc output; this is what loads
   knowledge/
-    gameplay.md              # one markdown file per target category
+    gameplay.md              # declared under knowledge:
   skills/
     import/
-      SKILL.md               # Claude Code skill, installed as .claude/skills/<prefix>-import
-  LICENSE
-  README.md
+      SKILL.md
+  ue/Plugins/MyPlugin/       # native source, only with nativeModule:
+  scripts/check.mjs
 ```
 
-Conventions:
-
-- One task class per file, default export, extending `UeMcpTask` from `ue-mcp/task`.
-- `class_path` in the declaration is resolved against the plugin's `dist/` (the loader tries `dist/<path>.js` then `dist/tasks/<path>.js`).
-- `src/shared/` holds helpers; never reference it from the declaration.
-- Compile to `dist/` with `tsc` so users need no TypeScript toolchain.
+`class_path` resolves inside the package, trying `dist/<path>.js`, `dist/tasks/<path>.js`, `<path>.js` and `dist/<path>/index.js`. Ship compiled JavaScript so users need no TypeScript toolchain.
 
 ## `package.json`
 
 ```json
 {
-  "name": "my-plugin",
+  "name": "ue-mcp-my-plugin",
   "version": "0.1.0",
-  "description": "My custom actions for ue-mcp",
   "type": "module",
   "main": "dist/index.js",
-  "files": ["dist", "ue-mcp.plugin.yml", "knowledge", "README.md"],
-  "keywords": ["unreal-engine"],
+  "files": ["dist", "ue-mcp.plugin.yml", "knowledge", "skills", "README.md"],
   "devDependencies": {
-    "ue-mcp": "^1.0.65",
+    "ue-mcp": "^1.4.11",
     "typescript": "^5.7.0"
   },
-  "scripts": {
-    "build": "tsc"
-  }
+  "scripts": { "build": "tsc" }
 }
 ```
 
-`UeMcpTask` (and the types you import alongside it) come from `ue-mcp/task` - a thin, server-free entry point. The running server answers every `ue-mcp` and `ue-mcp/*` import a plugin makes with its own package, so your task extends the same base class the server uses and the user needs no copy of ue-mcp in `node_modules`. The **dev** dependency is only there to type-check your build. Do not declare a `peerDependencies` range on `ue-mcp`: npm admits a prerelease only when a range names the same `major.minor.patch`, so `>=1.0.65` rejects `1.4.0-beta.1` and the install fails with ERESOLVE. `minServerVersion` in `ue-mcp.plugin.yml` is the version gate. You never depend on the underlying flow runtime directly - it stays an implementation detail behind `ue-mcp/task`.
+Import `UeMcpTask` from `ue-mcp/task`. The running server answers every `ue-mcp` and `ue-mcp/*` import a plugin makes with its own copy, so the dev dependency is only for type-checking. Do not declare a `peerDependencies` range on `ue-mcp`: npm rejects prereleases outside a range's exact `major.minor.patch`, so the install fails with ERESOLVE. Use `minServerVersion` in the manifest as the version gate. Do not import `@db-lyon/flowkit` directly.
 
 ## `ue-mcp.plugin.yml`
 
-This is the only file ue-mcp reads from your package. Authored once; never edited by users.
+The only file ue-mcp reads from your package.
 
 ```yaml
-actionPrefix: mypfx             # mandatory, lowercase, must match /^[a-z][a-z0-9_]*$/
-minServerVersion: 1.0.15        # optional - the server enforces this at install and load
-uePluginDependency: SomePlugin  # optional - .uplugin filename to check in .uproject
+actionPrefix: mypfx             # required, matches /^[a-z][a-z0-9_]*$/
+minServerVersion: 1.4.11        # optional, enforced at install and load
+uePluginDependency: SomePlugin  # optional, .uplugin name checked in the .uproject
 
 inject:
-  gameplay:
-    inspect_something:           # -> gameplay(action="mypfx_inspect_something")
-      task: mypfx.inspect_something
-      description: "Inspect some game state during a PIE session."
+  level:
+    inspect_actor:              # -> level(action="mypfx_inspect_actor")
+      task: mypfx.inspect_actor
+      description: "Summarize one placed actor."
+      effect: read              # read | mutate | unknown
       schema:
-        actorLabel:            { type: string, required: true }
-        includeComponents:     { type: boolean }
+        actorLabel:        { type: string, required: true }
+        includeProperties: { type: boolean }
 
 tasks:
-  mypfx.inspect_something:
-    class_path: tasks/InspectSomething
-    description: "Inspect game state for a given actor"
+  mypfx.inspect_actor:
+    class_path: tasks/InspectActor
+    description: "Summarize one placed actor"
+
+knowledge:
+  level: knowledge/level.md
 ```
 
-The key under each category is the **bare** action name. The loader prepends your `actionPrefix` to compute the injected name: `mypfx` + `inspect_something` -> `mypfx_inspect_something`. The user always sees the prefixed form.
+| Key | |
+|-----|---|
+| `actionPrefix` | Prepended to every injected action: `mypfx` + `inspect_actor` is `mypfx_inspect_actor`. |
+| `minServerVersion` | Lowest ue-mcp version the plugin runs on. |
+| `uePluginDependency` | See [Host UE plugin dependencies](plugins-using.md#host-ue-plugin-dependencies). |
+| `inject` | `<built-in category>: { <bare action>: { task, description?, effect?, schema? } }`. |
+| `provides` | See [Providing categories](#providing-categories). |
+| `tasks` | `<task name>: { class_path, description? }`. Every `inject` and `provides` action names one. |
+| `flows` | See [Flows](#flows). |
+| `knowledge` | `<category>: <path>`. See [Knowledge files](#knowledge-files). |
+| `guards` | See [Guards](plugins-guards.md). |
+| `nativeModule` | See [Native C++ modules](plugins-native-modules.md). |
+| `registry` | See [The registry listing](#the-registry-listing). |
+
+`effect` says what the action does to the editor. [Guard scopes](plugins-guards.md#scopes) are read from it. When it is omitted, the effect is inferred from the action name.
+
+### Parameter schemas
+
+`schema:` fields take `type`, `required` and `description`. `type` is one of `string`, `number`, `boolean`, `object`, `array`, a list of them (a union), or omitted to accept any JSON value:
+
+```yaml
+        value: { type: [number, boolean, string] }
+        raw:   { description: "Any JSON value" }
+```
+
+`required: true` is reported in the action's signature and `describe_action`, and a call without it is refused before your task runs.
+
+Never name a parameter `action`, `timeoutMs`, `select`, `omit`, `editor` or `toEditor`. The dispatcher consumes those before any handler runs, so the loader drops an action that declares one and reports it under `degraded`. A native C++ handler declares typed parameters in C++ instead; see [Typed contracts](plugins-native-modules.md#typed-contracts).
 
 ### Source control provider plugins
 
-The core `source_control` category is provider-neutral. Every action in it (`get_provider`, `connect`, `get_status`, `history`, `list_changes`, `checkout`, `add`, `mark_for_delete`, `revert`, `sync`, `diff`, `submit`, `set_checkout_mode`) goes through Unreal's `ISourceControlModule` and `ISourceControlProvider`, whichever provider the editor has configured, and is gated on what that provider reports it can do (`get_provider` returns it as `operations`). Core never checks a provider's name.
-
-Anything only one provider has belongs in that provider's plugin: shelves, streams and changelist edits for Perforce, branches and stashes for Git, and so on. Such a plugin injects into `source_control` under its own `actionPrefix`, so its actions sit beside the core ones without colliding: `p4_*` for Perforce, `git_*` for Git, `dv_*` for Diversion.
+The core `source_control` category works with whichever provider the editor has configured, through `ISourceControlProvider`, and never checks a provider's name. Provider-only features (Perforce shelves and streams, Git branches and stashes) belong in a provider plugin that injects into `source_control` under its own prefix:
 
 ```yaml
 actionPrefix: p4
@@ -126,42 +134,28 @@ inject:
     shelve:                      # -> source_control(action="p4_shelve")
       task: p4.shelve
       description: "Shelve the files of a pending changelist."
+      effect: mutate
       schema:
         changelist: { type: string, required: true }
 ```
 
-Do not re-implement a core action under a prefix. A plugin action should call the provider for what core cannot express, and leave checkout, add, delete, revert, sync and submit to `source_control`. Checkout on write is core's too: see [Guards](plugins-guards.md#source-control-core-first-guards-opt-in).
+Leave checkout, add, delete, revert, sync, submit and checkout on write to core. See [Source control](plugins-guards.md#source-control).
 
-`knowledge:` and `flows:` are optional - omit them when you have nothing to attach. A plugin can ship a single action and nothing else.
+## Providing categories
 
-Param schemas under `schema:` accept these types: `string`, `number`, `boolean`, `object`, `array`. Every param is optional at the top level of the host category tool's schema, because one schema serves all of that category's actions. `required: true` holds on the action itself: `describe_action` and the action's signature report it as required, and a call to that action without it is refused before your task runs. Never name a parameter `action`, `timeoutMs`, `select`, `omit`, `editor` or `toEditor`: the dispatcher consumes those before any handler runs, so such a parameter could never arrive, and the server drops the action that declares one at load with the reason in `project(get_status)`. The bridge refuses the same names in a C++ contract. A native C++ handler declares its parameters in C++ instead, with required names, integers, enums, ranges and nested fields, and every call is checked against them; see [Typed contracts](plugins-native-modules.md#typed-contracts).
-
-`type` is optional. Omit it for a param that genuinely has no single type, and the param accepts any JSON value:
+`provides:` registers a top-level category the plugin owns. Its actions are not prefixed:
 
 ```yaml
-        value: { description: "Value to write (number, bool, string, or enum name)" }
-```
-
-Give a list instead when you know the alternatives, and the param compiles to a union of exactly those:
-
-```yaml
-        value: { type: [number, boolean, string] }
-```
-
-## Providing new categories (`provides:`)
-
-When the plugin's actions don't belong inside any built-in category, declare a `provides:` block. Each entry registers a brand-new top-level MCP category that the plugin owns. Action names are NOT prefixed inside provided categories - the category itself is the namespace.
-
-```yaml
-actionPrefix: terrain            # still required (used for any inject: entries)
+actionPrefix: terrain            # still required
 
 provides:
-  terrain_sculpt:                # -> terrain_sculpt(action="sample_density", ...)
+  terrain_sculpt:                # -> terrain_sculpt(action="sample_density")
     description: "Terrain sculpting operations"
     actions:
       sample_density:
         task: terrain_sculpt.sample_density
-        description: "Sample density values along a curve through the terrain"
+        description: "Sample density along a line through the terrain"
+        effect: read
         schema:
           start: { type: array, required: true }
           end:   { type: array, required: true }
@@ -172,78 +166,70 @@ tasks:
     class_path: tasks/SampleDensity
 ```
 
-Rules:
-
-- Provided category names must match `/^[a-z][a-z0-9_]*$/`.
-- A provided name may not collide with a built-in category. The CLI fails install with the offending name; the runtime loader skips the plugin with a clear status reason.
-- Inter-plugin collisions resolve first-writer-wins. If two installed plugins both `provides: terrain_sculpt`, the one earlier in your `plugins:` array claims the name; the other is skipped with a warning visible in `plugins(list)`.
-- Knowledge files keyed by a provided category name (`knowledge/terrain_sculpt.md`) attach to that category's AI-facing docs the same way they do for injected categories.
-
-A plugin can mix `inject:` and `provides:` freely - whatever fits each action best. To back actions with C++ instead of TypeScript tasks, see [Native C++ modules](plugins-native-modules.md).
+The name must match `/^[a-z][a-z0-9_]*$/` and must not be a built-in category. Between plugins, the first in `plugins:` claims a name.
 
 ## Writing tasks
 
 ```ts
-// src/tasks/InspectSomething.ts
+// src/tasks/InspectActor.ts
 import { UeMcpTask, type TaskResult } from "ue-mcp/task";
 
-interface Options {
-  actorLabel: string;
-  includeComponents?: boolean;
-}
-
-export default class InspectSomething extends UeMcpTask<Options> {
-  get taskName() { return "mypfx.inspect_something"; }
+export default class InspectActor extends UeMcpTask<{ actorLabel: string; includeProperties?: boolean }> {
+  get taskName() { return "mypfx.inspect_actor"; }
 
   async execute(): Promise<TaskResult> {
-    const { actorLabel, includeComponents = false } = this.options;
-
     const details = await this.call("level.get_actor_details", {
-      actorLabel,
-      includeComponents,
+      actorLabel: this.options.actorLabel,
+      includeProperties: this.options.includeProperties ?? false,
     });
     if (!details.success) return details;
-
-    // ... process the result ...
     return { success: true, data: details.data };
   }
 }
 ```
 
-Notes:
+- Compose actions with `this.call("<category>.<action>", params)`, using the action's real parameter names. `this.bridge.call(method, params)` reaches a bridge method no action wraps.
+- Throw on failure; the runtime turns a throw into a failed result.
+- A multi-step mutation can return a `rollback: { taskName, payload }` record so a flow with `rollback_on_failure` can undo it.
 
-- Compose existing actions through `this.call('<category>.<action>', params)`. Don't reach into the bridge directly unless you have to - composition gives you free observability and rollback hooks. When you do need a raw bridge method that no task wraps, `UeMcpTask` gives you a typed `this.bridge.call(method, params)` and a typed `this.ctx` (`bridge`, `project`) with no casting.
-- Use the **real** parameter names of the host task you're calling. Param name drift between TS and C++ is how silent failures start.
-- If your task makes multi-step mutations, return a `rollback` record so users can opt into `rollback_on_failure: true` on the wrapping flow.
-- Throw, don't return success-with-error-data. The runtime catches throws and turns them into structured failures.
+The full base class is in the [UeMcpTask reference](flows.md#uemcptask-reference).
 
-A task can also be a [guard](plugins-guards.md) that gates every bridge call, not just an action's implementation.
+## Flows
+
+A plugin's `flows:` are added to every project that loads it:
+
+```yaml
+flows:
+  mypfx_inspect_all:
+    description: "Inspect the hero and the camera"
+    group: inspect               # optional; default is the name prefix, here "mypfx"
+    steps:
+      1: { task: level.mypfx_inspect_actor, options: { actorLabel: Hero } }
+      2: { task: level.mypfx_inspect_actor, options: { actorLabel: Camera } }
+```
+
+Steps take `task`, `flow`, `options`, `retries`, `retryDelay` and `retryOn`. A flow with more than one step has `rollback_on_failure: true` unless it says otherwise. Users can turn groups off with [`ue-mcp plugin config`](plugins-using.md#flow-groups).
 
 ## Knowledge files
 
-For each category your plugin injects into, ship a short markdown file under `knowledge/`. The server attaches it to that category's AI-facing docs at boot, so the agent sees plugin-specific guidance the moment it looks at that category.
-
-Keep it terse - one screenful per category. Concrete examples beat prose. The agent already knows how the category works; the knowledge file is just the delta the plugin introduces.
+A knowledge file is markdown attached to a category's AI-facing docs at server start. Declare each one under `knowledge:`; a file that is not declared is not read. Keep it to one screen of what the plugin adds:
 
 ```markdown
 # Sample Recorder - gameplay actions
 
-4 actions for recording and replaying gameplay input.
-
-Quick start:
-1. `gameplay(action="rec_record_arm", sample_hz=60)` - arm the recorder
-2. Press Play, play, stop PIE
-3. `gameplay(action="rec_replay_arm", recording_id="<id>")` - replay it
+1. `gameplay(action="rec_record_arm", sample_hz=60)` arms the recorder.
+2. Play, then stop PIE.
+3. `gameplay(action="rec_replay_arm", recording_id="<id>")` replays it.
 ```
 
 ## Skills
 
-A plugin can ship Claude Code skills: one directory per skill under `skills/`, each holding a `SKILL.md`. No manifest key is needed. Add `skills` to `files` in `package.json` so it ships.
+A plugin can ship Claude Code skills: one directory per skill under `skills/`, each with a `SKILL.md`. No manifest key is needed; add `skills` to `files` in `package.json`.
 
 ```markdown
 ---
 name: import
-description: Use when importing a character with MyPlugin. Claude reads this line to decide whether to load the skill.
+description: Use when importing a character with MyPlugin.
 ---
 
 # Importing a character
@@ -252,42 +238,32 @@ description: Use when importing a character with MyPlugin. Claude reads this lin
 2. `animation(action="list_skeletal_meshes")` to confirm the skeleton
 ```
 
-`ue-mcp plugin install` copies every skill directory into the project's `.claude/skills/`, and `ue-mcp plugin uninstall` removes them. `ue-mcp plugin update`, `ue-mcp init` and `ue-mcp deploy` refresh them and delete any your new version stopped shipping. Which package installed each skill is recorded in `.ue-mcp/skills.json`.
+`ue-mcp plugin install` copies each skill into `.claude/skills/` and `uninstall` removes them. `update`, `ue-mcp init` and `ue-mcp deploy` refresh them and delete skills the new version no longer ships. Ownership is recorded in `.ue-mcp/skills.json`.
 
-Each skill installs under your package's prefix: the package name without `ue-mcp-`, with a scope folded in. `skills/import/` in `ue-mcp-meshy` installs as `.claude/skills/meshy-import/`, and in `@studio/ue-mcp-foo` as `studio-foo-import/`. The installer sets the `name:` field to match. Two plugins can therefore ship the same skill name without colliding. A name that already starts with the prefix is not prefixed again.
-
-A skill directory the user created by hand under the same installed name is never overwritten; the install skips it with a warning.
-
-Check your skills before publishing:
+A skill installs under the package's prefix: the package name without `ue-mcp-`, with a scope folded in. `skills/import/` in `ue-mcp-meshy` installs as `meshy-import`, and in `@studio/ue-mcp-foo` as `studio-foo-import`. The installer sets `name:` to match. A name that already starts with the prefix is not prefixed again. A skill directory the user created under the same name is never overwritten.
 
 ```bash
 ue-mcp plugin check-skills .
 ```
 
-It prints the name each skill installs as, and fails on a `SKILL.md` without a `description:` or with a `category(action="x")` call that does not exist, counting the actions your plugin adds. A call into another plugin's category cannot be checked and is listed as unverified. The scaffold's `npm run check` runs it.
+prints the name each skill installs as and fails on a `SKILL.md` without `description:` or with a `category(action="x")` call that does not exist, counting your plugin's own actions. Calls into another plugin's category are listed as unverified. The scaffold's `npm run check` runs it.
 
 ## Publishing
 
 ```bash
-npm run build      # tsc -> dist/
-npm publish        # public registry
+npm run build
+npm publish
 ```
 
-Users install with:
-
-```bash
-ue-mcp plugin install <your-package-name>
-```
-
-Before publishing, confirm your plugin passes every [validation rule](plugins-troubleshooting.md#validation-rules).
+Users then run `ue-mcp plugin install <your-package>`. Check the [validation rules](plugins-troubleshooting.md#validation-rules) first.
 
 ### The registry listing
 
-`ue-mcp plugin publish [dir]` creates or updates your listing on the plugin registry. Log in once with `ue-mcp login`.
+`ue-mcp plugin publish [dir]` creates or updates your listing on [plugins.ue-mcp.com](https://plugins.ue-mcp.com). Log in once with `ue-mcp login`.
 
-- **Slug.** A listing that already names your package keeps its slug. `--slug` creates a new listing's slug; changing an existing one also needs `--rename`.
-- **Derived on every publish.** `provides` comes from `ue-mcp.plugin.yml`: `tools` for a native module, `inject:` or `provides:`, `flows` for a non-empty `flows:`, and `skills` when `skills/` has a skill. `ueVersions` comes from `nativeModule.supportedEngineVersions`.
-- **Curated text.** Put it in the manifest so it moves with the code, or pass it as flags (`--tagline`, `--description`, `--category`). `--tags-from-keywords` sets the tags from `package.json` `keywords`. Anything you set neither way keeps the listing's current value.
+- **Slug.** A listing that already names your package keeps its slug. `--slug` sets a new listing's slug; changing an existing one also needs `--rename`.
+- **Derived on every publish.** `provides` from the manifest: `tools` for `inject:`, `provides:` or a native module, `flows` for a non-empty `flows:`, `skills` when `skills/` has one. `ueVersions` from `nativeModule.supportedEngineVersions`.
+- **Curated text.** Set it in the manifest's `registry:` block, or with `--tagline`, `--description` and `--category`. `--tags-from-keywords` takes the tags from `package.json` `keywords`. A field set neither way keeps the listing's value.
 
   ```yaml
   registry:
@@ -297,10 +273,11 @@ Before publishing, confirm your plugin passes every [validation rule](plugins-tr
     tags: [voxel, terrain]
   ```
 
-- **README.** `--readme snapshot` (the default) stores your README.md, and the listing shows that copy until the next publish. `--readme live` stores none, and the listing renders the README from your public repository each time it is viewed.
-- **`--dry-run`** prints each field the publish would change, the slug first, and posts nothing.
+- **README.** `--readme snapshot` (default) stores your README.md. `--readme live` stores none, and the listing renders the README from your public repository.
+- **Repository.** `--repo <url>` overrides the repository from `package.json`. `--private` or `--public` marks whether that repository is public.
+- **`--dry-run`** prints each field that would change, the slug first, and posts nothing.
 
-In CI, publish the listing right after the package:
+In CI:
 
 ```yaml
 - run: npm publish
@@ -309,4 +286,4 @@ In CI, publish the listing right after the package:
     UE_MCP_PUBLISH_TOKEN: ${{ secrets.UE_MCP_PUBLISH_TOKEN }}
 ```
 
-Mint the token on the registry's account page.
+Mint the token on the registry's account page. `--token <t>` passes one on the command line.

@@ -189,6 +189,8 @@ export async function waitForEditorReady(
     openDisplay?: (title: string) => ProgressDisplay;
     onProgress?: ProgressFn;
     launchedAtMs?: number;
+    /** Ends the wait early, for a caller that has its own verdict (the process exited). */
+    signal?: AbortSignal;
   } = {},
 ): Promise<ReadyResult> {
   const startTime = Date.now();
@@ -217,6 +219,9 @@ export async function waitForEditorReady(
   };
 
   while (Date.now() - startTime < maxWaitMs) {
+    if (opts.signal?.aborted) {
+      return finish({ ready: false, elapsedSeconds: elapsed(), timeline, reason: "the wait was cancelled" });
+    }
     const snapshot = readEngineSnapshot(projectPath);
     const logState = readLogState(projectPath);
 

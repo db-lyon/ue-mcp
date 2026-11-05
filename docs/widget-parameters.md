@@ -1,8 +1,7 @@
 # Widget parameter contract
 
 Every action in the `widget` category takes the same parameter names for the
-same concepts. There is nothing to guess per action, and nothing to discover by
-probing.
+same concepts.
 
 | Concept | Canonical parameter | Shape |
 | --- | --- | --- |
@@ -24,8 +23,7 @@ probing.
 `assetPath` is an Unreal package path. It starts at a mount point (`/Game`,
 `/Engine`, a plugin mount) and ends with the asset name.
 
-These spellings are accepted and normalized to the same path, so a value copied
-out of the content browser or off disk still works:
+These spellings are accepted and normalized to the same path:
 
 | Sent | Used |
 | --- | --- |
@@ -49,9 +47,8 @@ These are rejected, and the error names the field it came from:
 { "action": "create", "assetPath": "/Game/UI/WBP_HUD", "parentClass": "/Script/UMG.UserWidget" }
 ```
 
-`name` plus `packagePath` remains valid and means exactly the same thing. What
-is refused is the contradictory combination, because only one of the two can be
-honoured:
+`name` plus `packagePath` is also accepted and means the same thing. A `name`
+that contradicts `assetPath` is refused:
 
 ```json
 { "action": "create", "assetPath": "/Game/UI/WBP_HUD", "name": "HUD" }
@@ -61,13 +58,13 @@ honoured:
 > but name is 'HUD'. assetPath already carries the asset name. Pass assetPath
 > alone, or pass name together with packagePath.
 
-`blueprint(create)` follows the same rule for the same reason.
+`blueprint(create)` also takes `assetPath` or `name` plus `packagePath`, but
+when both are given it uses `assetPath` and ignores `name`.
 
 ## Accepted aliases
 
-Older and engine-side spellings keep working. They are declared in the tool
-schema, so a client cannot strip them, and they are folded into the canonical
-name before the call is dispatched. Prefer the canonical name in new code.
+These spellings are declared in the tool schema and folded into the canonical
+name before dispatch. Prefer the canonical name.
 
 | Alias | Canonical |
 | --- | --- |
@@ -78,13 +75,13 @@ name before the call is dispatched. Prefer the canonical name in new code.
 | `parentWidget` | `parentWidgetName` |
 | `name` + `packagePath` (create actions) | `assetPath` |
 
-`path` is an input alias only. A `path` field in a *response* is whatever that
-handler chose to report and carries no promise of being an asset path.
+`path` is an input alias only. A `path` field in a response is whatever that
+handler reports, not necessarily an asset path.
 
 ## epic_* actions
 
-The `epic_*` actions in this category wrap Unreal's own UMG toolset. Those tools
-take one nested arguments object, so the canonical envelope is `input`:
+The `epic_*` actions in this category wrap Unreal's own UMG toolset, which takes
+one nested arguments object. Pass it as `input`:
 
 ```json
 {
@@ -93,7 +90,7 @@ take one nested arguments object, so the canonical envelope is `input`:
 }
 ```
 
-Two conveniences sit on top of that:
+Two shortcuts also work:
 
 - A top-level parameter named by the wrapped tool's own schema is folded into
   `input`.
@@ -107,9 +104,9 @@ Two conveniences sit on top of that:
 An explicit `input` always wins over a top-level value, and `inputJson` (a raw
 JSON string) is passed through untouched.
 
-A call that still cannot satisfy the tool's required arguments is refused before
-it reaches the editor, with the arguments that are missing, the shape to send,
-and any top-level parameters that are not arguments of that tool:
+A call missing a required argument is refused before it reaches the editor. The
+error names the missing arguments, the shape to send, and any top-level
+parameters that are not arguments of that tool:
 
 > UMGToolSet.UMGToolSet.AddWidget is missing required argument(s): widgetClass.
 > Pass them in 'input', for example {"input": {"widgetClass": "..."}}.

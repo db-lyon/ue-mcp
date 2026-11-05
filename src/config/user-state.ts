@@ -39,6 +39,8 @@ interface ProjectState {
   dialog?: { mode?: DialogMode };
   /** Per-project playtest mode: who starts playtest runs in this project. */
   playtest?: { mode?: PlaytestMode };
+  /** The daemon extension version this project loads, by extension name (#1619). */
+  extensions?: Record<string, string>;
 }
 
 export type FeedbackMode = "interactive" | "auto-approve" | "defer";
@@ -341,6 +343,8 @@ function mergeProjectState(base: ProjectState, extra: ProjectState, extraWins: b
   if (feedback) merged.feedback = feedback;
   if (dialog) merged.dialog = dialog;
   if (playtest) merged.playtest = playtest;
+  const extensions = { ...second.extensions, ...first.extensions };
+  if (Object.keys(extensions).length > 0) merged.extensions = extensions;
   return merged;
 }
 
@@ -587,6 +591,55 @@ export function setPlaytestMode(mode: PlaytestMode | undefined, projectRoot?: st
     if (value === undefined) delete state.preferences.playtest.mode;
     else state.preferences.playtest.mode = value;
     writeState(state);
+  });
+}
+
+/** The version of extension `name` this project records, or null. */
+export function getProjectExtensionVersion(projectRoot: string, name: string): string | null {
+  const v = readState().projects?.[projectKey(projectRoot)]?.extensions?.[name];
+  return typeof v === "string" && v ? v : null;
+}
+
+/** Record the version of extension `name` this project loads. Pass undefined to clear it. */
+export function setProjectExtensionVersion(projectRoot: string, name: string, version: string | undefined): void {
+  withStateLock(() => {
+    const state = readState();
+    const key = projectKey(projectRoot);
+    if (!state.projects) state.projects = {};
+    if (!state.projects[key]) state.projects[key] = {};
+    const project = state.projects[key];
+    const extensions = { ...project.extensions };
+    if (version === undefined) delete extensions[name];
+    else extensions[name] = version;
+    if (Object.keys(extensions).length > 0) project.extensions = extensions;
+    else delete project.extensions;
+    writeState(state);
+  });
+}
+
+/** Every version of extension `name` some project records. */
+export function recordedExtensionVersions(name: string): Set<string> {
+  const out = new Set<string>();
+  for (const project of Object.values(readState().projects ?? {})) {
+    const v = project?.extensions?.[name];
+    if (typeof v === "string" && v) out.add(v);
+  }
+  return out;
+}
+
+/** Forget extension `name` in every project, when it is removed from the machine. */
+export function clearExtensionRecords(name: string): void {
+  withStateLock(() => {
+    const state = readState();
+    let changed = false;
+    for (const project of Object.values(state.projects ?? {})) {
+      if (project?.extensions && name in project.extensions) {
+        delete project.extensions[name];
+        if (Object.keys(project.extensions).length === 0) delete project.extensions;
+        changed = true;
+      }
+    }
+    if (changed) writeState(state);
   });
 }
 

@@ -1,18 +1,17 @@
 # Spatial instructions
 
-A human says "turn the hood a bit clockwise". An editor needs an axis, an angle,
-a coordinate frame, and a promise about what must not move. This page is how one
-becomes the other.
+A person says "turn the hood a bit clockwise". An editor needs an axis, an angle,
+a coordinate frame, and a statement of what must not move. This page maps one to
+the other.
 
-It exists because the failure it prevents is silent. A raw relative-Euler edit on
-an attached or socketed component changes axes nobody asked about, reports
-success, and looks fine in the response. The mistake only surfaces in a
-screenshot, usually later, usually to a person.
+The failure it prevents is silent. A raw relative Euler edit on an attached or
+socketed component changes axes nobody asked about, reports success, and only
+shows up later in a screenshot.
 
 ## The six-field sentence
 
-Every spatial request normalizes to six fields. If all six are known, the
-transform is unambiguous.
+Every spatial request normalizes to six fields. With all six known, the transform
+is unambiguous.
 
 <img src="images/spatial-instruction-contract.svg" alt="A human visual cue is normalized into target, frame, viewpoint, operation, amount and constraints, then applied and verified" style="max-width:100%">
 
@@ -25,43 +24,39 @@ transform is unambiguous.
 | Amount | How much, in real units | 15 degrees clockwise |
 | Constraints | What must not change | preserve location and scale |
 
-Most requests supply three or four of these and imply the rest. Infer what is
-obvious. Ask exactly one question when the missing field would change the
-result, which in practice means frame or viewpoint.
+Most requests supply three or four fields and imply the rest. Infer what is
+obvious. Ask only when a missing field changes the result, which in practice
+means frame or viewpoint.
 
-## Frame: whose axes are these?
+## Frame: whose axes?
 
-"Move forward" means the +X direction **of the selected frame**. The same words
-produce four different moves.
+"Move forward" means +X **of the selected frame**. The same words produce four
+different moves.
 
 <img src="images/spatial-reference-frames.svg" alt="World, actor, parent and component coordinate frames compared" style="max-width:100%">
 
-- **world** is fixed to the level and never follows the character. Use it for
-  level-aligned moves: "line it up with the wall".
-- **actor** follows the character. This is what a person means by left, right,
-  forward and back when they are talking about a character.
-- **parent** is the attachment parent's frame. Use it when the component should
-  move consistently with whatever it hangs off.
-- **component** is the component's own current orientation. Use it for "push it
-  further along the way it is already pointing".
+- **world** is fixed to the level. Use it for level-aligned moves: "line it up
+  with the wall".
+- **actor** follows the character, and is the default. This is what a person
+  means by left, right, forward and back when talking about a character.
+- **parent** is the attachment parent component's frame. The socket is not part
+  of it; the result reports the socket separately.
+- **component** is the component's own current orientation: "push it further
+  along the way it already points".
 
-When a person says "the character's right", they mean `frame="actor"`. They do
-not mean the camera, even though the camera is what they are looking at.
+"The character's right" means `frame="actor"`, not the camera the person is
+looking through. Screen left and right need the camera viewpoint.
 
-## Viewpoint: clockwise is incomplete without it
+## Viewpoint: clockwise needs one
 
-Clockwise is not a property of a rotation. It is a property of a rotation
-**plus** the side you are viewing it from. The same rotation is clockwise and
-counterclockwise depending on where you stand.
+Clockwise is a property of a rotation **plus** the side it is viewed from. The
+same rotation is clockwise from one side and counterclockwise from the other.
 
 <img src="images/spatial-viewpoint-clock.svg" alt="A top-down viewpoint defining a clockwise rotation about the actor up axis" style="max-width:100%">
 
-So "rotate it clockwise" is not yet an instruction. "Looking down on the
-character, rotate it 15 degrees clockwise" is: it names the axis (actor up) and
-the sign together.
-
-If a request says clockwise without a viewpoint, that is the one question worth
-asking.
+"Rotate it clockwise" is not yet an instruction. "Looking down on the character,
+rotate it 15 degrees clockwise" is: it names the axis (actor up) and the sign.
+If a request says clockwise without a viewpoint, ask for it.
 
 ## Phrase book
 
@@ -69,9 +64,9 @@ asking.
 
 ## Doing it
 
-`level(nudge_component)` takes the normalized fields directly. It composes
-quaternion deltas rather than writing Euler angles, which is what keeps an
-attached or socketed component from drifting on axes that were never mentioned.
+`level(nudge_component)` takes the normalized fields directly and composes a
+quaternion delta instead of writing Euler angles, so an attached or socketed
+component does not drift on axes nobody mentioned.
 
 ```text
 level(action="nudge_component",
@@ -79,18 +74,31 @@ level(action="nudge_component",
       componentName="HeadMesh",
       frame="actor",
       viewRotation={ viewFrom: "above", direction: "clockwise", degrees: 15 },
-      dryRun=true,
-      world="editor")
+      dryRun=true)
 ```
 
-This previews the requested inputs without moving anything. It returns the exact
-component path, attachment/socket, absolute transform flags, current bounds,
-relative/world transforms with quaternions, and the selected frame's world axes.
-`operationApplied=false` means inspection or preview, never a completed edit.
-Omit the deltas to use `dryRun=true` as a spatial inspection call.
+| Parameter | Meaning |
+|---|---|
+| `actorLabel` or `actorPath` | The actor; `actorPath` is unambiguous |
+| `componentName` | Exact SceneComponent name |
+| `frame` | `world`, `actor` (default), `parent`, `component` |
+| `translationDelta` | `{forwardCm, rightCm, upCm}` along the frame's axes |
+| `axisRotation` | `{axis: forward\|right\|up, degrees}`, signed |
+| `viewRotation` | `{viewFrom, direction: clockwise\|counterclockwise, degrees}`, degrees greater than zero |
+| `scaleMultiplier` | Uniform multiplier on relative scale, greater than zero |
+| `dryRun` | Preview without writing (default false) |
+| `world`, `pieInstance` | `editor` (default) or `pie`, and which PIE world |
+
+`axisRotation` and `viewRotation` are mutually exclusive.
+
+`dryRun=true` changes nothing. It returns the component path, attachment parent
+and socket, absolute location/rotation/scale flags, bounds, relative and world
+transforms with quaternions, the frame's world axes, and the requested world
+location, rotation and relative scale. `operationApplied=false` means preview,
+never a completed edit. With no deltas, a dry run is a spatial inspection call.
 
 `viewFrom` names the observer's side **in the selected frame**, looking toward
-the target. It does not read or guess the player/editor camera:
+the target. It does not read the player or editor camera:
 
 | View from | Observer side | Rotation axis | Clockwise signed degrees |
 |---|---|---|---|
@@ -101,59 +109,51 @@ the target. It does not read or guess the player/editor camera:
 | above | +Z | up | positive |
 | below | -Z | up | negative |
 
-Counterclockwise reverses the sign. The native tests project all twelve cases
-into camera right/up axes. Under Unreal's quaternion convention a positive
-angle about `up` carries +X toward +Y, which a viewer above reads as clockwise,
-so clockwise from above is `axisRotation={axis:"up",degrees:15}`. Reach for
-`viewRotation` and let the engine pick the sign.
+Counterclockwise reverses the sign. The result reports the resolved
+`rotationAxis` and signed `rotationDegrees`. Use `viewRotation` and let the
+handler pick the sign rather than guessing one for `axisRotation`.
 
-`viewRotation` and signed `axisRotation` are mutually exclusive. Magnitudes in
-`viewRotation` must be finite and greater than zero. `frame=parent` uses the
-parent component's orientation; the attachment socket is reported separately.
-
-Echo the resolved target, frame, viewpoint and amount in ordinary language.
-If these agree with the user's request, make the same call with `dryRun=false`.
-No additional confirmation is required for an already authorized edit. The
-preview reports **requested setter inputs**, not a guaranteed final transform:
-socket attachment, absolute flags, scale, physics and construction can affect
-the result. Read the applied call's `after` transform and rollback data.
+Echo the resolved target, frame, viewpoint and amount in plain language. If they
+match the request, repeat the call with `dryRun=false`. The preview reports the
+**requested setter inputs**, not a guaranteed final transform: socket attachment,
+absolute flags, scale, physics and construction scripts can change the result.
+Read the applied call's `after` transforms. Its rollback is a
+`level(restore_component_transform)` call with the previous relative transform.
 
 Translation is in centimetres along the frame's forward, right and up. Scale is a
 uniform multiplier. Rotation is an axis and an angle, never three Euler numbers.
 
 ## Verifying
 
-Keep `capture_scene_png`'s `captureMetadata` beside each image. It contains the
-actual camera location/rotation/basis, FOV, image dimensions, world/PIE identity,
-world time, texture-loading setting and resolved focus actor/bounds. These are
-measurements of this capture, not a claim that its lighting or pose was suitable.
-`get_viewport_state`, `set_viewport_exposure` and `hit_test_viewport_pixel` refer
-to the editor viewport, not this separate SceneCapture2D. Do not use the live
-viewport's pixel hit test to locate a point in a headless capture.
+A successful transform write is not visual verification. Read the returned
+transform, and for anything a person will look at, capture images.
 
-A spatial change is only done when someone can see that it is done. Read the
-returned transform, and for anything a human will look at, capture an image.
+`editor(capture_scene_png)` returns `captureMetadata` with each image: camera
+location, rotation and basis, FOV, image size, world and PIE instance, world
+time, the texture-loading setting and the focus target. Keep it beside the image.
+`editor(get_viewport_state)`, `editor(set_viewport_exposure)` and
+`editor(hit_test_viewport_pixel)` act on the editor viewport, not this separate
+SceneCapture2D, so do not use the viewport's pixel hit test to locate a point in
+a headless capture.
 
-Frame the capture so the contact region fills roughly half to three quarters of
-the shot, and take it from more than one angle: front, side, top, three-quarter.
-A single wide shot or a dark shot proves nothing, and accepting one is how a
-wrong result gets reported as a right one.
+Frame the capture so the contact region fills half to three quarters of the
+shot, light it, and take matching views from several angles: front, side, top,
+three-quarter. Do not infer 3D contact from one image.
 
 When the target is attached to a character, stop the actor and freeze the parent
-skeletal pose before the baseline capture, and hold both across every subsequent
-probe. Otherwise the pose moves between captures and the comparison measures the
-animation rather than the edit.
+skeletal pose before the baseline capture, and hold both across every probe.
+Otherwise the comparison measures the animation instead of the edit.
 
 ## When to ask
 
 Ask when the answer changes the transform:
 
-- clockwise or counterclockwise with no viewpoint named
-- left or right when it is genuinely unclear whether the character or the camera
-  is the reference
-- a component that is attached, where the frame decides whether the parent
-  carries the change
+- clockwise or counterclockwise with no viewpoint
+- left or right when it is unclear whether the character or the camera is the
+  reference
+- an attached component, where the frame decides whether the parent carries the
+  change
 
 Do not ask when context settles it. "Move the character's arm forward 5 cm" has
-a target, a frame, an operation and an amount, and the missing viewpoint does not
-affect a translation.
+a target, a frame, an operation and an amount; a viewpoint does not affect a
+translation.

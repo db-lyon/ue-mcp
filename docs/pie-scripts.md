@@ -49,7 +49,7 @@ Auto steps run one at a time. The next step starts on the frame the previous one
 
 ### Arrange and act
 
-A step can set up and drive what it then checks, so a script runs end to end with nobody at the controls:
+A step can set up and drive what it then checks, so a script runs end to end with nobody at the controls. `pie(uat_run)` drives the same step actions for multiplayer scenarios; see [PIE testing](pie.md#remote-players-and-acceptance-runs).
 
 ```json
 {
@@ -95,7 +95,6 @@ A `map` that is not a level asset is refused (`field: "map"`, with the closest l
 - **The value has to resolve**, the way the observer reads it, against the level open in the editor and the script's profile. A numeric op reads a profile tracked value (its path or last segment), a property path on the player pawn (the pawn player 0 possesses in the level, or the game mode's `DefaultPawnClass`), a component's property (`CollisionCylinder.CapsuleHalfHeight`), `sub:<Subsystem>.<path>`, or `bone:<bone>.<channel>`. `exists` needs an actor in the level, or a class the game mode spawns. `visible` needs a widget class, a Widget Blueprint, or a widget inside one.
 - **The op and target have to suit the value's type.** A bool takes only `eq` with `true` or `false`, an enum only `eq` with one of its values, and a number a number target. An integer is refused an `eq` target it cannot hold, and a `gt` or `lt` target it can never pass.
 - **A script needs an auto step with an `expect`.** A script judged entirely by verdicts says so with `manual_only: true`.
-
 - **What arrange and act name has to exist**: the actors, actor classes and Input Actions ([Arrange and act](#arrange-and-act)).
 
 A value that only exists once PIE is running, such as an actor spawned during play, is let through by `resolve_in_pie: true` on its step. The step's op and target are still checked as far as they can be without a type.
@@ -130,7 +129,7 @@ Only a script that cannot be written is refused: no steps, a step that does not 
 
 `step` is `null` for a problem with the whole script, such as no auto step (`field: "steps"`, candidates `["manual_only"]`) or a missing profile (`field: "profile"`). `script_run` does not run these checks: a stored script runs whatever its warnings, and inline steps are only parsed.
 
-`script_validate` runs the same checks without saving and reports every finding in `errors`, with `valid` false when there is any, so a client can draft in a loop, and `script_values` lists the values the checks accept. The built-in `playtest` flow drafts a script with a model this way; see [Flows](flows.md#playtest).
+`script_validate` runs the same checks without saving and reports every finding in `errors`, with `valid` false when there is any, so a client can draft in a loop. `script_values` lists the values the checks accept. The built-in `playtest` flow drafts a script this way; see [Flows](flows.md#playtest).
 
 ```text
 pie(action="script_create", name="DoorOpens", profile="/Game/PIEStudio/Profiles/Door",
@@ -149,7 +148,7 @@ pie(action="script_create", name="DoorOpens", profile="/Game/PIEStudio/Profiles/
 pie(action="script_run", script="/Game/PIEStudio/Scripts/DoorOpens", start_pie=true, wait=true)
 ```
 
-`script_run` takes a stored script (`script`) or inline `steps`, exactly one of them. The editor runs one script at a time; `script_run` is refused while another run is active.
+`script_run` takes a stored script (`script`) or inline `steps`, exactly one of them. The editor runs one script at a time; `script_run` is refused while another run is active. With the [playtest mode](configuration.md#playtest-mode) set to `manual`, an MCP client's `script_run` and `script_replay` are refused.
 
 | Param | Default | Meaning |
 |---|---|---|
@@ -210,7 +209,7 @@ With `wait=true` the answer is merged with the run's final status, without `even
 
 The editor holds one run in memory: the active one, or the last one to end. An older run id answers from that run's `results.json`, events included, with `live: false`. A run id with no `results.json`, and any call before the first run, answers `state: "idle"` with empty `steps`, `awaiting` and `events`, and `last_seq` equal to `since_seq`.
 
-`awaiting` lists the steps waiting for a verdict as `{ index, instruction }`. `since_seq` returns only the events after that number, so a caller that polls passes the `last_seq` it last saw. Each event is `{ seq, type, run_id, step, at_ms, wall_time, data }`, where `step` is the step index or `-1`. The editor's event types are `run_started`, `step_started`, `step_passed`, `step_failed`, `awaiting_verdict`, `verdict` and `run_finished`.
+`awaiting` lists the steps waiting for a verdict as `{ index, instruction }`. `since_seq` returns only the events after that number, so a caller that polls passes the `last_seq` it last saw. Each event is `{ seq, type, run_id, step, at_ms, wall_time, data }`, where `step` is the step index or `-1`. The editor's event types are `run_started`, `step_started`, `step_acted`, `step_passed`, `step_failed`, `awaiting_verdict`, `verdict` and `run_finished`.
 
 `wait` and `timeout_seconds` work as they do on `script_run`, and the merged answer keeps `events` after `since_seq`. Calling `script_status` on a run that has not ended also makes the server follow it again, so its events reach the daemon stream after a server restart.
 

@@ -46,6 +46,7 @@ import { EventLog } from "./events.js";
 import { ExpectedDisconnect, settleAndClassify } from "./disconnect.js";
 import { WebSocketServerTransport } from "./ws-transport.js";
 import { watchDir, type DirWatch, type WatchFn } from "./dir-watch.js";
+import { drainInflight, watchSupersede } from "./supersede-watch.js";
 import { describeToolCall, resultError, type CallLabel } from "./activity.js";
 import { openUrl } from "../core/open-url.js";
 import { handleFlowRoute, hostIsAllowed } from "../flow/http-server.js";
@@ -57,18 +58,21 @@ import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type
 import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 
 /** What this daemon's extension API offers beyond its version number. */
-export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects"];
+export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild"];
-import { loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
-import { UiBundleStore, contentType } from "./ui-bundles.js";
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval"];
+import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
+import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
+import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
+import { ExtensionServices } from "./extension-services.js";
 import { collectStatus } from "../cli/status.js";
 import { resolvePluginDir } from "../editor/install-marker.js";
 import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-observer.js";
 import { applyUpdate, checkForUpdate, readPendingUpdate, repinClientConfigs, settlePendingUpdate } from "../editor/bridge-update.js";
 import { subscribeFlowEvents } from "../flow/events.js";
 import { registerModelProvider } from "../flow/model-provider.js";
+import { registerFlowStepApprover } from "../flow/step-approval.js";
 import { subscribeScriptEvents } from "../pie/script-events.js";
 import { stopAllScriptWatches } from "../pie/script-watch.js";
 import { pluginRoutes } from "./plugin-routes.js";
@@ -382,6 +386,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     extensions: extensions.map((x) => ({ name: x.name, version: x.version })),
     refusedExtensions,
     ui: ui.active()?.manifest.version ?? null,
+    uiBundles: ui.extensionBundles(),
     features: DAEMON_FEATURES,
   });
   const editors = (): EditorState[] => rt.sessions.list().map((s) => states.get(s) ?? {
@@ -441,107 +446,129 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   // ── UI bundles and extensions ───────────────────────────────────
   const ui = new UiBundleStore(DAEMON_API_VERSION, opts.uiDir);
   const refusedExtensions: RefusedExtension[] = [];
-  const extensions: LoadedExtension[] = await loadExtensions((name, routes, setBusy): DaemonExtensionApi => ({
-    apiVersion: EXTENSION_API_VERSION,
-    version: packageVersion(),
-    projectDir,
-    dataDir: (() => {
-      const dir = path.join(userDir(), "data", projectKey(projectDir), name);
-      fs.mkdirSync(dir, { recursive: true });
-      return dir;
-    })(),
-    events: {
-      publish: (type, data) => events.publish(`${name}.${type}`, data),
-      subscribe: (listener) => events.subscribe(listener),
-      since: (lastId) => events.since(lastId),
-    },
-    route: (method, routePath, handler) => {
-      routes.push({ method, path: routePath, handler });
-    },
-    callAction: async (category, action, args, callOpts) => {
-      const r = await rt.callAction(category, action, args, {
-        ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
-        ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
-        ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
-      });
-      return { isError: !!r.isError, content: r.content };
-    },
-    features: EXTENSION_FEATURES,
-    models: {
-      register: (provider) => registerModelProvider(provider),
-    },
-    skills: {
-      list: () => listDaemonSkills(projectDir),
-    },
-    actions: {
-      effects: (categories) => actionEffects(categories),
-    },
-    context: {
-      project: (o) => projector.project(o),
-      call: async (tool, input, callOpts) => {
-        const r = await projector.call(
-          { strategy: callOpts?.strategy ?? rt.contextStrategy, ...(callOpts?.categories ? { categories: callOpts.categories } : {}) },
-          tool,
-          input ?? {},
-          {
-            ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
-            ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
-            ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
-          },
-        );
+  // An extension's bundles are held to its version from activation, when it installs its own UI.
+  const uiOwners: UiBundleOwner[] = [];
+  const services = new ExtensionServices();
+  const uiOwner = (x: { name: string; version: string; uiMin?: string; uiRoot?: false }): UiBundleOwner =>
+    ({ name: x.name, version: x.version, ...(x.uiMin ? { uiMin: x.uiMin } : {}), ...(x.uiRoot === false ? { root: false } : {}) });
+  const extensions: LoadedExtension[] = await loadExtensions((name, routes, setBusy, pkg): DaemonExtensionApi => {
+    uiOwners.push(uiOwner({ name, ...pkg }));
+    ui.setOwners(uiOwners);
+    return {
+      apiVersion: EXTENSION_API_VERSION,
+      version: packageVersion(),
+      projectDir,
+      dataDir: (() => {
+        const dir = path.join(userDir(), "data", projectKey(projectDir), name);
+        fs.mkdirSync(dir, { recursive: true });
+        return dir;
+      })(),
+      events: {
+        publish: (type, data) => events.publish(`${name}.${type}`, data),
+        subscribe: (listener) => events.subscribe(listener),
+        since: (lastId) => events.since(lastId),
+      },
+      route: (method, routePath, handler) => {
+        routes.push({ method, path: routePath, handler });
+      },
+      callAction: async (category, action, args, callOpts) => {
+        const r = await rt.callAction(category, action, args, {
+          ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
+          ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
+          ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
+        });
         return { isError: !!r.isError, content: r.content };
       },
-    },
-    editors: () => editors(),
-    editorOperation: (op) => editorOp(op),
-    setBusy,
-    ui: {
-      trustKey: (pem) => ui.trustKey(pem),
-      install: (dir) => ui.install(dir),
-      active: () => ui.active()?.manifest ?? null,
-    },
-    modes: {
-      get: () => {
-        const feedback = getFeedbackModeScopes(projectDir);
-        const dialog = getDialogModeScopes(projectDir);
-        return {
-          // Unset everywhere, feedback asks, as the tool does; a dialog mode left unset follows the client.
-          feedback: { mode: feedback.project ?? feedback.user ?? "interactive", project: feedback.project !== undefined },
-          dialog: { mode: dialog.project ?? dialog.user ?? null, project: dialog.project !== undefined },
-          playtest: resolvePlaytestMode(projectDir),
-        };
+      features: EXTENSION_FEATURES,
+      services: services.forOwner(name),
+      versions: () => ({
+        loaded: pkg.version,
+        recorded: recordedVersion(projectDir, name),
+        installed: versionsOf(installedCopies(opts.extensionsDir ?? extensionsDir()).get(name) ?? []),
+      }),
+      models: {
+        register: (provider) => registerModelProvider(provider),
       },
-      setFeedback: (mode) => setFeedbackMode(mode, projectDir),
-      setDialog: (mode) => setDialogMode(mode, projectDir),
-      setPlaytest: (mode) => setPlaytestMode(mode, projectDir),
-    },
-    checkpoints: (() => {
-      const of = (editor?: string) => {
-        const session = editor ? rt.sessions.find(editor) : rt.sessions.active;
-        if (!session) throw new Error(`No editor session '${editor}'`);
-        return checkpointsFor(session);
-      };
-      return {
-        state: (o) => of(o?.editor).state(o?.limit),
-        setEnabled: (enabled, o) => of(o?.editor).setEnabled(enabled),
-        create: (label, o) => of(o?.editor).create(label),
-        changes: (from, to, o) => of(o?.editor).changes(from, to ?? null, { assetDiffs: o?.assetDiffs }),
-        assetDiff: (from, to, file, o) => of(o?.editor).assetDiff(from, to ?? null, file),
-        thumbnail: (id, o) => of(o?.editor).thumbnail(id),
-        openNativeDiff: (file, from, to, o) => of(o?.editor).openNativeDiff(file, from, to ?? null),
-        restore: (checkpoint, o) => of(o?.editor).restore(checkpoint, { paths: o?.paths, force: o?.force }),
-        clear: (o) => of(o?.editor).clear(),
-      };
-    })(),
-    registryAccount: async () => {
-      const auth = await readRegistryAuth();
-      return auth ? { login: auth.login, token: auth.token, registry: auth.registry } : null;
-    },
-    log: {
-      info: (message) => info(`ext:${name}`, message),
-      warn: (message, detail) => warn(`ext:${name}`, message, detail),
-    },
-  }), opts.extensionsDir, refusedExtensions);
+      flows: {
+        approveSteps: (approver) => registerFlowStepApprover(name, approver),
+      },
+      skills: {
+        list: () => listDaemonSkills(projectDir),
+      },
+      actions: {
+        effects: (categories) => actionEffects(categories),
+      },
+      context: {
+        project: (o) => projector.project(o),
+        call: async (tool, input, callOpts) => {
+          const r = await projector.call(
+            { strategy: callOpts?.strategy ?? rt.contextStrategy, ...(callOpts?.categories ? { categories: callOpts.categories } : {}) },
+            tool,
+            input ?? {},
+            {
+              ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
+              ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
+              ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
+            },
+          );
+          return { isError: !!r.isError, content: r.content };
+        },
+      },
+      editors: () => editors(),
+      editorOperation: (op) => editorOp(op),
+      setBusy,
+      ui: {
+        trustKey: (pem) => ui.trustKey(pem, name),
+        install: (dir) => ui.install(dir),
+        active: () => ui.active()?.manifest ?? null,
+        own: () => ui.own(name)?.manifest ?? null,
+      },
+      modes: {
+        get: () => {
+          const feedback = getFeedbackModeScopes(projectDir);
+          const dialog = getDialogModeScopes(projectDir);
+          return {
+            // Unset everywhere, feedback asks, as the tool does; a dialog mode left unset follows the client.
+            feedback: { mode: feedback.project ?? feedback.user ?? "interactive", project: feedback.project !== undefined },
+            dialog: { mode: dialog.project ?? dialog.user ?? null, project: dialog.project !== undefined },
+            playtest: resolvePlaytestMode(projectDir),
+          };
+        },
+        setFeedback: (mode) => setFeedbackMode(mode, projectDir),
+        setDialog: (mode) => setDialogMode(mode, projectDir),
+        setPlaytest: (mode) => setPlaytestMode(mode, projectDir),
+      },
+      checkpoints: (() => {
+        const of = (editor?: string) => {
+          const session = editor ? rt.sessions.find(editor) : rt.sessions.active;
+          if (!session) throw new Error(`No editor session '${editor}'`);
+          return checkpointsFor(session);
+        };
+        return {
+          state: (o) => of(o?.editor).state(o?.limit),
+          setEnabled: (enabled, o) => of(o?.editor).setEnabled(enabled),
+          create: (label, o) => of(o?.editor).create(label),
+          changes: (from, to, o) => of(o?.editor).changes(from, to ?? null, { assetDiffs: o?.assetDiffs }),
+          assetDiff: (from, to, file, o) => of(o?.editor).assetDiff(from, to ?? null, file),
+          thumbnail: (id, o) => of(o?.editor).thumbnail(id),
+          openNativeDiff: (file, from, to, o) => of(o?.editor).openNativeDiff(file, from, to ?? null),
+          restore: (checkpoint, o) => of(o?.editor).restore(checkpoint, { paths: o?.paths, force: o?.force }),
+          clear: (o) => of(o?.editor).clear(),
+        };
+      })(),
+      registryAccount: async () => {
+        const auth = await readRegistryAuth();
+        return auth ? { login: auth.login, token: auth.token, registry: auth.registry } : null;
+      },
+      log: {
+        info: (message) => info(`ext:${name}`, message),
+        warn: (message, detail) => warn(`ext:${name}`, message, detail),
+      },
+    };
+  }, opts.extensionsDir, refusedExtensions, packageVersion(), projectDir);
+  // One that failed to activate no longer holds its bundles back.
+  ui.setOwners(extensions.map(uiOwner));
+  for (const o of uiOwners) if (!extensions.some((x) => x.name === o.name)) services.revokeOwner(o.name);
 
   const readBody = (req: http.IncomingMessage): Promise<unknown> => new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -586,12 +613,17 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       return;
     }
     if (req.method === "GET" && url.pathname === "/v1/events") {
-      const last = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
+      const asked = Number(req.headers["last-event-id"] ?? url.searchParams.get("since") ?? 0) || 0;
+      // An id past the newest came from an earlier daemon, which numbered its own events: start over, and say events were missed.
+      const restarted = asked > events.lastId;
+      const last = restarted ? 0 : asked;
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      // Headers now, not with the first event: a quiet daemon would otherwise leave the client without a response.
+      res.flushHeaders();
       const write = (e: { id: number; type: string; at: string; data: Record<string, unknown> }) =>
         res.write(`id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify({ at: e.at, ...e.data })}\n\n`);
       const backlog = events.since(last);
-      if (backlog.gap) res.write(`event: gap\ndata: {}\n\n`);
+      if (backlog.gap || restarted) res.write(`event: gap\ndata: {}\n\n`);
       for (const e of backlog.events) write(e);
       const unsubscribe = events.subscribe(write);
       sse.add(res);
@@ -687,7 +719,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     if (req.method === "GET" && (url.pathname === "/ui" || url.pathname.startsWith("/ui/"))) {
       const file = ui.resolve(url.pathname);
       if (!file) {
-        const none = ui.active() === null;
+        const none = !url.pathname.startsWith("/ui/ext/") && ui.active() === null;
         res.writeHead(none ? 503 : 404, { "content-type": "text/plain; charset=utf-8" })
           .end(none ? "No client UI is installed for this daemon." : "Not found.");
         return;
@@ -786,7 +818,8 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
 
   async function handoff(): Promise<void> {
     info("daemon", "handoff requested; exiting once no call is in flight");
-    while (inflight() > 0) await new Promise((r) => setTimeout(r, 250));
+    // Bounded: a call that never returns would leave this daemon running beside its successor.
+    if (!(await drainInflight(inflight, HANDOFF_DRAIN_MS))) warn("daemon", `${inflight()} call(s) still in flight after ${HANDOFF_DRAIN_MS / 1000}s; handing off anyway`);
     await shutdown("handed off to a newer daemon");
   }
 
@@ -806,7 +839,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       unsubscribeCheckpoints();
       stopAllScriptWatches();
       unsubscribeDialogs();
-      for (const x of extensions) await Promise.resolve(x.dispose?.()).catch((e) => warn("extension", `${x.name} dispose failed`, e));
+      for (const x of extensions) {
+        await Promise.resolve(x.dispose?.()).catch((e) => warn("extension", `${x.name} dispose failed`, e));
+        services.revokeOwner(x.name);
+      }
       for (const w of watchers) w.close();
       if (opts.publish !== false) removeDiscovery(projectDir);
       for (const res of sse) res.end();
@@ -927,17 +963,29 @@ export async function runDaemon(projects: string[]): Promise<number> {
 
   // Only now, so a daemon taking over binds the port after the old one let it go.
   daemon.startFlowHttp();
+  // The record is ours from here; once it names another live daemon, this one steps down.
+  const supersede = watchSupersede({
+    projectDir,
+    onSuperseded: (by) => {
+      info("daemon", `daemon ${by.version} (pid ${by.pid}) took over this project; stopping this one`);
+      void daemon.close();
+    },
+  });
   const stop = (): void => void daemon.close().then(() => process.exit(0));
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   daemon.events.subscribe((e) => {
     if (e.type !== "daemon.stopping") return;
+    supersede.stop();
     // A daemon that took over published its record here, not in startDaemon, so it withdraws it here too.
     if (existing) removeDiscovery(projectDir);
     setTimeout(() => process.exit(0), 500).unref();
   });
   return new Promise<number>(() => {});
 }
+
+/** How long a daemon asked to hand off waits for its calls; under the 120 s its successor waits for it. */
+const HANDOFF_DRAIN_MS = 90_000;
 
 /** A live same-or-newer daemon published by another process, other than `ignorePid`. */
 function rivalDaemon(projectDir: string, version: string, ignorePid?: number): DaemonDiscovery | null {

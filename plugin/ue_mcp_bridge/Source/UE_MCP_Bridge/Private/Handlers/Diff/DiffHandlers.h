@@ -44,7 +44,12 @@ private:
 	// records for the class serialized, facts about each version, and a thumbnail of each
 	// written to fromThumbnail and toThumbnail. Params: originalFile, fromFile?, toFile?,
 	// fromThumbnail?, toThumbnail?, maxRecords?. In DiffHandlers_Checkpoint.cpp.
+	// items: [{ those params }] diffs several packages and answers results, one per item,
+	// unloading the versions once at the end: each unload is a full garbage collection.
 	static TSharedPtr<FJsonValue> DiffCheckpointAsset(const TSharedPtr<FJsonObject>& Params);
+
+	// One package of DiffCheckpointAsset; the versions it loads are added to Loaded.
+	static TSharedPtr<FJsonValue> DiffCheckpointAssetOne(const TSharedPtr<FJsonObject>& Params, TArray<class UPackage*>& Loaded);
 
 	// editor(open_checkpoint_diff): Unreal's own diff window for two versions, or the
 	// asset editor on the one version of an added or deleted asset. Params: originalFile,

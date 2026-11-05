@@ -1,66 +1,84 @@
 # UE-MCP
 
-**Unreal Engine Model Context Protocol Server** - lets AI assistants drive the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->2114+<!-- /count --> actions.
+**Unreal Engine Model Context Protocol Server.** It lets AI assistants drive the Unreal Editor through <!-- count:tools -->30<!-- /count --> category tools covering <!-- count:actions -->2114+<!-- /count --> actions.
 
-UE-MCP is a bridge between an AI client (Claude Code, Claude Desktop, Cursor, etc.) and the Unreal Editor. It runs a TypeScript MCP server on your machine, which talks over WebSocket to a C++ plugin running inside the editor. The result: your AI can place actors, write blueprints, author materials, sculpt landscape, set up Niagara VFX, configure replication, run PIE, build the project - anything the editor can do.
+An MCP client (Claude Code, Claude Desktop, Cursor and others) launches `ue-mcp` for your project. By default that process relays to the project's daemon, a background Node.js process that holds the WebSocket connection to the C++ bridge plugin inside the editor. The daemon outlives editor restarts, serves every MCP client of the project, and serves UE-MCP Studio, the in-editor agent.
 
 ```mermaid
 flowchart LR
-    AI[AI Assistant] -->|stdio| MCP[MCP Server<br/>TypeScript / Node.js]
-    MCP -->|WebSocket<br/>JSON-RPC| Plugin[C++ Bridge Plugin<br/>inside Unreal Editor]
-    Plugin -->|UE API| Editor[Editor Subsystems]
-    MCP -->|direct fs| FS[Config INI<br/>C++ Headers<br/>Asset Listing]
+    Client[MCP client] -->|stdio| Shim[ue-mcp<br/>stdio relay]
+    Shim -->|WebSocket| Daemon[ue-mcp daemon<br/>one per project]
+    Studio[UE-MCP Studio] -->|HTTP| Daemon
+    Daemon -->|WebSocket| Bridge[Bridge plugin<br/>inside Unreal Editor]
+    Daemon -->|files| FS[Project files<br/>Config, Source, Content]
 ```
 
-Filesystem-based reads (config INI parsing, C++ header reflection, asset directory scanning) work even when the editor isn't running, so the AI can explore project structure and source code without a live editor.
+Some actions read project files directly (config INI files, C++ source, the Content folder, the engine symbol index), and building, starting and stopping the editor need no running editor. Everything else goes through the bridge. See [Architecture](architecture.md).
 
-## New Here?
+## New here?
 
-Start with **[Getting Started](getting-started.md)**. It assumes zero knowledge - no Node.js, no MCP, no command line - and walks you all the way to your AI placing actors in your level.
+Start with **[Getting Started](getting-started.md)**. It assumes no Node.js, MCP or command line experience and ends with your AI placing actors in your level.
 
-## What Can It Do?
+## What can it do?
 
 | Category | Examples |
 |----------|----------|
-| **Levels** | Place/move/delete actors, spawn lights and volumes, manage splines |
-| **Blueprints** | Read/write graphs, add nodes, connect pins, compile, CDO property access |
-| **Materials** | Create materials and instances, author expression graphs, set parameters |
-| **Assets** | CRUD, import meshes/textures/animations, datatables |
-| **Animation** | Anim blueprints, montages, retargeting, native Control Rig editing, deterministic pose analysis |
-| **VFX** | Create and configure Niagara systems and emitters |
-| **Landscape** | Sculpt terrain, paint weight layers, materials, splines, proxies |
-| **PCG** | Author and execute Procedural Content Generation graphs |
-| **Foliage** | Painting, types, instance queries |
-| **Audio** | SoundCues, MetaSounds, ambient audio |
-| **UI** | UMG widget trees, editor utility widgets and blueprints |
-| **Gameplay** | Physics, collision, navigation, AI (behavior trees, EQS, perception), input |
-| **StateTree** | States, tasks, conditions, transitions, bindings, evaluators, global tasks, parameters |
-| **GAS** | Gameplay Ability System - attributes, abilities, effects, cues |
-| **Networking** | Replication, dormancy, relevancy, net priority |
-| **Editor** | Console commands, Python escape hatch, PIE, viewport, sequencer, build pipeline, logs |
-| **Reflection** | Class/struct/enum introspection, gameplay tags, SaveGame inspection |
-| **Project** | Status, INI config, C++ source/header parsing, build |
-| **Dataflow** | Dataflow graph nodes, pins, variables, templates (UE 5.8+) |
-| **Conversation** | Dialogue graph nodes, speakers, entry points (UE 5.8+) |
-| **Demo** | Built-in 19-step Neon Shrine procedural scene |
-| **Feedback** | Submit tool-gap reports as GitHub issues |
+| `project` | Status and editor connection, INI config, C++ source and engine symbol lookup, build |
+| `asset` | Search, CRUD, import, DataTables, textures, meshes |
+| `blueprint` | Read and write graphs, nodes, pins, variables, components, compile |
+| `level` | Place, move and delete actors, components, lights, volumes, splines |
+| `material` | Materials, instances, expression graphs, parameters |
+| `animation` | Anim blueprints, montages, blendspaces, skeletons, retargeting, Control Rig |
+| `landscape` | Sculpt, paint weight layers, materials, splines, proxies |
+| `pcg` | Author and execute PCG graphs |
+| `foliage` | Foliage types, instances, procedural spawners, settings |
+| `niagara` | Niagara systems, emitters, parameters, graph authoring |
+| `audio` | SoundCues, MetaSounds, ambient sounds |
+| `widget` | UMG widget trees, editor utility widgets |
+| `editor` | Console commands, Python, Play-In-Editor, viewport, logs, editor start and stop |
+| `pie` | Record, replay and observe PIE sessions, inject input, run test scripts |
+| `reflection` | Class, struct and enum reflection, gameplay tags, SaveGame inspection |
+| `gameplay` | Physics, collision, navigation, AI, input, game framework |
+| `gas` | Gameplay Ability System attributes, abilities, effects, cues |
+| `networking` | Replication, dormancy, relevancy, net priority |
+| `statetree` | States, tasks, conditions, transitions, bindings, parameters |
+| `chooser` | ChooserTable columns and rows |
+| `dataflow` | Dataflow graph nodes, pins, variables, templates (UE 5.8+) |
+| `conversation` | Dialogue graph nodes, speakers, entry points (UE 5.8+) |
+| `epic` | The UE 5.8 AI Toolset Registry: discovery and direct calls |
+| `fab` | Fab login, owned-library sync and import |
+| `datasmith` | Inspect, import and reimport Datasmith scenes |
+| `metahuman` | Create, dress and assemble MetaHuman characters |
+| `source_control` | Status, checkout, add, revert, sync, diff and submit through the editor's provider |
+| `plugins` | List and describe the installed ue-mcp plugins |
+| `demo` | The 19-step Neon Shrine procedural scene |
+| `feedback` | File a report when an action falls short |
 
-Plus a **flow engine** that lets you chain any of these into multi-step YAML workflows with rollback, retries, and step references - see [Flows](flows.md).
+A **flow engine** chains actions into YAML workflows with rollback, retries and step references. See [Flows](flows.md).
 
-And a **plugin system** that lets npm packages inject new actions into the existing categories. Plugins ship through `npm install` and slot into the same `pcg`/`landscape`/etc. tools the agent is already using - there is nothing extra for the agent to discover. See [Plugins](plugins.md) for the author contract and [Configuration → Plugins](configuration.md#plugins) for the consumer view.
+A **plugin system** lets npm packages add actions to the existing categories, so the agent finds them in the tools it already uses. See [Plugins](plugins.md) and [Configuration: Plugins](configuration.md#plugins).
 
 ## Navigation
 
-- **[Getting Started](getting-started.md)** - Zero-to-running walkthrough for first-time users
-- **[UE-MCP Studio](studio.md)** - The in-editor agent: install from Fab, first start, sign-in, approvals, updates and uninstall
-- **[Architecture](architecture.md)** - How the TypeScript server, C++ plugin, and editor fit together
-- **[Tool Reference](tool-reference.md)** - All <!-- count:tools -->30<!-- /count --> tools with every action and its parameters
-- **[Native Control Rig Animation](control-rig-animation.md)** - Agent workflow for rig discovery, anatomical solving, quaternion keys, baking, and deterministic V&V
-- **[Flows](flows.md)** - Multi-step YAML workflows, custom tasks, hooks, rollback
-- **[Plugins](plugins.md)** - npm packages that inject new actions into existing categories
-- **[Configuration](configuration.md)** - `ue-mcp.yml` and MCP client config
-- **[Neon Shrine Demo](neon-shrine-demo.md)** - 19-step procedural scene walkthrough
-- **[Feedback](feedback.md)** - Agent feedback system for improving UE-MCP
-- **[Troubleshooting](troubleshooting.md)** - Connection issues, build issues, asset path issues
-- **[Development](development.md)** - Building from source, testing, contributing
-- **[Handler Conventions](handler-conventions.md)** - Idempotency and rollback rules for C++ handlers
+- **[Getting Started](getting-started.md)**: zero-to-running walkthrough
+- **[Studio](studio.md)**: the in-editor agent, from install to uninstall
+- **[Architecture](architecture.md)**: the daemon, the server, the bridge plugin and how they connect
+- **[Tool Reference](tool-reference.md)**: all <!-- count:tools -->30<!-- /count --> tools with every action and its parameters
+- **[Control Rig Animation](control-rig-animation.md)**: rig discovery, solving, keys, baking and verification
+- **[Spatial Instructions](spatial-instructions.md)**: how spatial edits are resolved and verified
+- **[Collection and Input Editing](collection-and-input-editing.md)**: nested collection fields and input mappings
+- **[Native Tools](native-tools.md)**: the Epic toolsets surfaced as `epic_*` actions
+- **[Native Asset Pipeline](native-asset-pipeline.md)**: import, inspection and round-trip export of textures and meshes
+- **[Handler Conventions](handler-conventions.md)**: idempotency and rollback rules for C++ handlers
+- **[Release Notes Style](release-notes-style.md)**: how release notes are written
+- **[Widgets](widgets.md)**: UMG authoring, parameters and runtime inspection
+- **[PIE testing](pie.md)**: recording, replay and test scripts
+- **[Flows](flows.md)**: YAML workflows, custom tasks, hooks, rollback
+- **[Checkpoints](checkpoints.md)**: keep or revert changes per checkpoint
+- **[Plugins](plugins.md)**: npm packages that add actions to existing categories
+- **[Configuration](configuration.md)**: MCP client setup, the daemon and settings
+- **[ue-mcp.yml Reference](config-file.md)**: every key in the project config file
+- **[Neon Shrine Demo](neon-shrine-demo.md)**: the 19-step procedural scene
+- **[Feedback](feedback.md)**: how agent feedback is filed
+- **[Troubleshooting](troubleshooting.md)**: connection, build and asset path issues
+- **[Development](development.md)**: building from source, testing, contributing

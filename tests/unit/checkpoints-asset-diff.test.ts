@@ -6,8 +6,6 @@ import {
   describeRecord,
   nativeDiffOf,
   summarizeAssetDiff,
-  THUMBNAIL_FORMAT,
-  thumbnailWanted,
   type AssetDiff,
   type AssetDiffRecord,
 } from "../../src/checkpoints/asset-diff.js";
@@ -27,6 +25,52 @@ function modified(entries: AssetDiffRecord[], extra: Record<string, unknown> = {
 }
 
 describe("an asset diff's summary", () => {
+  it("names a widget's property by its group and the details panel's label", () => {
+    const d = assetDiffFromBridge({
+      status: "modified",
+      assetClass: "WidgetBlueprint",
+      engine: { tool: "SBlueprintDiff", note: "", native: "window", nativeAvailable: true, blueprintTypeDiff: true },
+      before: { class: "WidgetBlueprint", facts: [] },
+      after: { class: "WidgetBlueprint", facts: [] },
+      sections: [{
+        category: "Widget Blueprint",
+        kind: "properties",
+        engineSource: "UBlueprint::FindDiffs",
+        notes: ["Warning: This may be missing changes to Animations and Bindings"],
+        entries: [{ displayString: "bHideWhenFull changed value in WardMeter", diffType: "PropertyValueChanged", group: "Widget WardMeter", path: "bHideWhenFull", label: "Hide when Full", property: "bHideWhenFull", before: "False", after: "True" }],
+      }],
+    }, "Content/UI/WBP_GameHUD.uasset", noPicture);
+    expect(d.summary).toBe("1 difference: Widget WardMeter > Hide when Full False to True");
+    expect(d.sections?.[0].notes).toEqual(["Warning: This may be missing changes to Animations and Bindings"]);
+  });
+
+  it("names the fact that changed when no property record does", () => {
+    const d = assetDiffFromBridge({
+      status: "modified",
+      assetClass: "SoundWave",
+      engine: { tool: "DiffUtils::CompareUnrelatedObjects", note: "", native: "details", nativeAvailable: true },
+      before: { class: "SoundWave", facts: [{ name: "Duration", value: "1.250 s" }, { name: "Channels", value: "2" }] },
+      after: { class: "SoundWave", facts: [{ name: "Duration", value: "0.980 s" }, { name: "Channels", value: "2" }] },
+      sections: [],
+    }, "Content/Audio/SW_Chime.uasset", noPicture);
+    expect(d.summary).toBe("SoundWave changed. Duration: 1.250 s to 0.980 s");
+  });
+
+  it("never says a Widget Blueprint has no difference when the bridge did not compare its widget tree", () => {
+    const raw = {
+      status: "modified",
+      assetClass: "WidgetBlueprint",
+      engine: { tool: "SBlueprintDiff", note: "", native: "window", nativeAvailable: true },
+      before: { class: "WidgetBlueprint", facts: [] },
+      after: { class: "WidgetBlueprint", facts: [] },
+      sections: [],
+    };
+    const old = assetDiffFromBridge(raw, "Content/UI/WBP_GameHUD.uasset", noPicture);
+    expect(old.summary).toBe("WidgetBlueprint: the file changed; this bridge does not compare the widget tree, so open Unreal's diff to see it");
+    const compared = assetDiffFromBridge({ ...raw, engine: { ...raw.engine, blueprintTypeDiff: true } }, "Content/UI/WBP_GameHUD.uasset", noPicture);
+    expect(compared.summary).toBe("WidgetBlueprint: the file changed, and Unreal's diff finds no difference");
+  });
+
   it("leads with the count and the records that carry values", () => {
     const d = modified([
       { displayString: "Two Sided changed value in M", diffType: "PropertyValueChanged", path: "Two Sided", property: "TwoSided", before: "False", after: "True" },
@@ -51,7 +95,7 @@ describe("an asset diff's summary", () => {
       { displayString: "Property Changed", diffType: "NODE_PROPERTY", node2: { guid: "g", name: "n", class: "MaterialGraphNode", title: "Roughness Param" }, properties: [{ displayString: "x", diffType: "PropertyValueChanged", path: "Default Value", before: "0.2", after: "0.7" }] },
       { displayString: "Removed actor QA_Doomed (PointLight)", diffType: "OBJECT_REMOVED", group: "QA_Doomed" },
     ]);
-    expect(d.summary).toBe("3 differences: Removed actor QA_Doomed (PointLight); Roughness Param Default Value 0.2 to 0.7; and 1 more");
+    expect(d.summary).toBe("3 differences: Removed actor QA_Doomed (PointLight); Roughness Param > Default Value 0.2 to 0.7; and 1 more");
     const bp = modified([
       { displayString: "Added Variable Health", diffType: "PropertyAddedToB", group: "Health", path: "Health", before: null, after: "real" },
       { displayString: "Health added to Default__BP", diffType: "PropertyAddedToB", path: "Health", before: null, after: "100.0" },
@@ -62,7 +106,7 @@ describe("an asset diff's summary", () => {
 
   it("names a group once, and an added or removed value", () => {
     expect(describeRecord({ displayString: "x", diffType: "PropertyAddedToB", group: "Health", path: "Health", before: null, after: "real" })).toBe("Health added: real");
-    expect(describeRecord({ displayString: "x", diffType: "PropertyAddedToB", group: "RowB", path: "Dev Comment", before: null, after: "hi" })).toBe("RowB Dev Comment added: hi");
+    expect(describeRecord({ displayString: "x", diffType: "PropertyAddedToB", group: "RowB", path: "Dev Comment", before: null, after: "hi" })).toBe("RowB > Dev Comment added: hi");
     expect(describeRecord({ displayString: "x", diffType: "PropertyAddedToA", path: "Speed", before: "1.0", after: null })).toBe("Speed removed: 1.0");
   });
 
@@ -144,24 +188,5 @@ describe("an asset diff's summary", () => {
 
   it("summarizes an error and a deferred diff in the same words everywhere", () => {
     expect(summarizeAssetDiff({ state: "deferred", summary: "", nativeDiff: { available: false } })).toMatch(/^Not diffed yet/);
-  });
-});
-
-describe("a version's kept picture", () => {
-  it("is asked for when none is kept", () => {
-    expect(thumbnailWanted(false, null)).toBe(true);
-    expect(thumbnailWanted(false, { source: "rendered", format: THUMBNAIL_FORMAT })).toBe(true);
-  });
-
-  it("is kept when the current bridge rendered it", () => {
-    expect(thumbnailWanted(true, { source: "rendered", format: THUMBNAIL_FORMAT })).toBe(false);
-    expect(thumbnailWanted(true, { source: "saved", note: "no renderer", format: THUMBNAIL_FORMAT })).toBe(false);
-  });
-
-  it("is rendered again when an older bridge made it, such as a black Blueprint render", () => {
-    expect(thumbnailWanted(true, { source: "rendered" })).toBe(true);
-    expect(thumbnailWanted(true, { source: "rendered", format: THUMBNAIL_FORMAT - 1 })).toBe(true);
-    expect(thumbnailWanted(true, null)).toBe(true);
-    expect(thumbnailWanted(true, "not json")).toBe(true);
   });
 });

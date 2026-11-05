@@ -5,6 +5,7 @@
 #include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
 #include "BlueprintHandlers_CDOPath.h"
+#include "BlueprintHandlers_PlayWorldReinstance.h"
 #include "JsonSerializer.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -81,6 +82,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	// Reports parameters its handlers never read (#1057).
 	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("blueprint"));
+	MCPBlueprintPlayWorld::RegisterPossessedPawnRebindGuard();
 	constexpr float ReadBlueprintGraphTimeoutSeconds = 180.0f;
 	// #945: a first sweep on a cold project pays for every package load the
 	// registry could not rule out, which the default request timeout does not

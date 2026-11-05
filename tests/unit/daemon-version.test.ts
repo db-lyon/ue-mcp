@@ -56,15 +56,18 @@ describe("daemonCommand", () => {
     expect(args).toContain(process.argv[1]);
   });
 
+  // Never this package's own version, which takes the other branch.
+  const other = "99.0.0-other.1";
+
   it("runs the other version through npx without a shell", () => {
-    const args = daemonCommand("/p/Game.uproject", "1.4.11-beta.8", "/node/npx-cli.js")!;
+    const args = daemonCommand("/p/Game.uproject", other, "/node/npx-cli.js")!;
     expect(args).toEqual([
-      "/node/npx-cli.js", "-y", NPX_AGE_GATE_OVERRIDE, "ue-mcp@1.4.11-beta.8", "daemon", "run", path.resolve("/p/Game.uproject"),
+      "/node/npx-cli.js", "-y", NPX_AGE_GATE_OVERRIDE, `ue-mcp@${other}`, "daemon", "run", path.resolve("/p/Game.uproject"),
     ]);
   });
 
   it("gives up on another version when npx is not there", () => {
-    expect(daemonCommand("/p/Game.uproject", "1.4.11-beta.8", null)).toBeNull();
+    expect(daemonCommand("/p/Game.uproject", other, null)).toBeNull();
   });
 });
 

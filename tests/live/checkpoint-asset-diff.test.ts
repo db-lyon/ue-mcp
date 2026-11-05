@@ -16,6 +16,7 @@ import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
+import { thumbnailFile } from "../../src/checkpoints/asset-diff.js";
 import { LiveServer, resultJson, type LiveCallResult } from "./server.js";
 import { closeLiveBridges, liveTarget } from "./harness.js";
 
@@ -41,6 +42,8 @@ let localYml: string;
 let localYmlBefore: string | null = null;
 let start = "";
 let end = "";
+let startAt = "";
+let endAt = "";
 let changes: Json[] = [];
 let result: Json = {};
 
@@ -71,8 +74,8 @@ const allProps = (d: Json): Json[] => records(d).flatMap((r) => [r, ...((r.prope
 
 function expectPicture(v: Json | null | undefined, label: string): void {
   expect(v, label).toBeTruthy();
-  expect(v!.thumbnail?.id, `${label}: ${JSON.stringify(v!.thumbnail)}`).toMatch(/^[0-9a-f]{40}$/);
-  const file = path.join(projectDir, "Saved", "UE_MCP_Bridge", "shadow-thumbs", `${v!.thumbnail.id}.png`);
+  expect(String(v!.thumbnail?.id), `${label}: ${JSON.stringify(v!.thumbnail)}`).toMatch(/^[0-9a-f]{40}$/);
+  const file = thumbnailFile(path.join(projectDir, "Saved", "UE_MCP_Bridge", "shadow-thumbs"), v!.thumbnail.id);
   expect(fs.statSync(file).size, file).toBeGreaterThan(100);
   expect(v!.thumbnail.url).toContain(`/v1/checkpoints/thumbnails/${v!.thumbnail.id}.png`);
 }
@@ -81,6 +84,10 @@ beforeAll(async () => {
   bridge = await getBridge();
   projectDir = (await liveTarget()).projectDir;
   localYml = path.join(projectDir, "ue-mcp.local.yml");
+  // Off any map under DIR so the folder can be deleted. MCP_Home is not checked in; demo_go_home creates and loads it.
+  await call("demo_go_home");
+  // delete_asset also removes a map file the asset registry no longer lists; delete_folder only sees what it lists.
+  await callBridge(bridge, "delete_asset", { assetPath: LEVEL, force: true });
   await callBridge(bridge, "delete_folder", { path: DIR, force: true });
 
   localYmlBefore = fs.existsSync(localYml) ? fs.readFileSync(localYml, "utf8") : null;
@@ -96,6 +103,10 @@ beforeAll(async () => {
   await call("create_material_instance", { parentPath: MAT, name: "MI_CkA", packagePath: DIR });
   await call("save_asset", { assetPath: MI });
   await call("create_blueprint", { assetPath: BP, parentClass: "Actor" });
+  // A visible mesh, so the Blueprint has a picture: the engine only renders Blueprints that show something.
+  await call("add_component", { assetPath: BP, componentClass: "StaticMeshComponent", componentName: "CkBody" });
+  await call("set_blueprint_component_property", { assetPath: BP, componentName: "CkBody", propertyName: "StaticMesh", value: "/Engine/BasicShapes/Cube.Cube" });
+  await call("compile_blueprint", { assetPath: BP });
   await call("save_asset", { assetPath: BP });
   await call("duplicate_asset", { sourcePath: "/Engine/BasicShapes/Cube", destinationPath: SM });
   await call("save_asset", { assetPath: SM });
@@ -107,6 +118,7 @@ beforeAll(async () => {
   await call("create_material", { name: "M_CkDoomed", packagePath: DIR });
   await call("save_asset", { assetPath: DOOMED });
   await call("create_new_level", { levelPath: LEVEL });
+  expect((await call("get_current_level")).mapPackagePath).toBe(LEVEL);
   await call("place_actor", { actorClass: "PointLight", label: "CkMover", location: { x: 0, y: 0, z: 100 } });
   await call("place_actor", { actorClass: "PointLight", label: "CkDoomed", location: { x: 300, y: 0, z: 100 } });
   await call("save_level", {});
@@ -119,7 +131,8 @@ afterAll(async () => {
   await server?.close();
   if (bridge) {
     await callBridge(bridge, "checkpoint_arm", { enabled: false });
-    await callBridge(bridge, "load_level", { levelPath: "/Game/MCP_Home", discardUnsaved: true });
+    await callBridge(bridge, "demo_go_home", {});
+    await callBridge(bridge, "delete_asset", { assetPath: LEVEL, force: true });
     await callBridge(bridge, "delete_folder", { path: DIR, force: true });
     disconnectBridge();
   }
@@ -138,7 +151,9 @@ afterAll(async () => {
 
 describe.sequential("a turn's asset diffs", () => {
   it("list_changes gives every package of the turn an asset diff from Unreal's diff code", async () => {
-    start = (await tool("editor", "checkpoint", { label: "asset diff turn start" })).id;
+    const startTaken = await tool("editor", "checkpoint", { label: "asset diff turn start" });
+    start = String(startTaken.id);
+    startAt = String(startTaken.createdAt);
 
     await tool("material", "set_expression_value", { materialPath: MAT, expressionIndex: 0, value: 0.7 });
     await tool("material", "add_expression", { materialPath: MAT, expressionType: "Constant", name: "CkAdded", value: 0.5 });
@@ -162,7 +177,9 @@ describe.sequential("a turn's asset diffs", () => {
     await tool("asset", "save", { assetPath: NEW_MAT });
     await tool("asset", "delete", { assetPath: DOOMED, force: true });
 
-    end = (await tool("editor", "checkpoint", { label: "asset diff turn end" })).id;
+    const endTaken = await tool("editor", "checkpoint", { label: "asset diff turn end" });
+    end = String(endTaken.id);
+    endAt = String(endTaken.createdAt);
     result = await tool("editor", "list_changes", { from: start, to: end });
     changes = result.changes as Json[];
     expect(result.assetDiffs).toMatchObject({ limit: 25, deferred: [] });
@@ -186,7 +203,7 @@ describe.sequential("a turn's asset diffs", () => {
   it("a material instance carries its overridden parameter", () => {
     const d = diffOf(MI);
     expect(d.engine.tool).toBe("SMaterialInstanceDiff");
-    const scalar = records(d).find((r) => /Scalar Parameter Values/i.test(String(r.path)));
+    const scalar = records(d).find((r) => /Scalar\s*Parameter\s*Values/i.test(String(r.path)));
     expect(scalar, JSON.stringify(records(d))).toBeTruthy();
     expect(JSON.stringify(records(d))).toContain("0.4");
     expect(d.after.facts.some((f: Json) => f.name === "Scalar parameter Roughness" && f.value.startsWith("0.4"))).toBe(true);
@@ -200,8 +217,12 @@ describe.sequential("a turn's asset diffs", () => {
     expect(JSON.stringify(d.blueprint)).toContain("CkHealth");
     const change = changes.find((c) => c.path === rel(BP))!;
     expect(JSON.stringify(change.blueprintDiff)).toContain("CkHealth");
-    expectPicture(d.before, "Blueprint before");
-    expectPicture(d.after, "Blueprint after");
+    // This Blueprint has nothing to draw (a light and a variable), so its thumbnail is one flat colour:
+    // no picture, and the reason, never a blank square.
+    for (const [v, label] of [[d.before, "Blueprint before"], [d.after, "Blueprint after"]] as const) {
+      if (v.thumbnail && "id" in v.thumbnail) expectPicture(v, label);
+      else expect(v.thumbnail?.error, label).toMatch(/drew nothing|no thumbnail renderer/);
+    }
   });
 
   it("a static mesh carries the changed property and its LOD facts", () => {
@@ -235,7 +256,7 @@ describe.sequential("a turn's asset diffs", () => {
     const actors = records(d, "Actors");
     expect(actors.some((r) => r.diffType === "OBJECT_ADDED" && r.group === "CkNew")).toBe(true);
     expect(actors.some((r) => r.diffType === "OBJECT_REMOVED" && r.group === "CkDoomed")).toBe(true);
-    expect(actors.some((r) => String(r.group).startsWith("CkMover") && /Relative Location/i.test(String(r.path)))).toBe(true);
+    expect(actors.some((r) => String(r.group).startsWith("CkMover") && /Relative\s*Location/i.test(String(r.path)))).toBe(true);
   });
 
   it("an added asset has no before and says what it is; a deleted one has no after", () => {
@@ -270,6 +291,10 @@ describe.sequential("a turn's asset diffs", () => {
     const opened = await tool("editor", "open_checkpoint_diff", { from: start, to: end, changedPath: rel(MAT) });
     expect(opened.opened).toBe("window");
     expect(opened.windowTitle).toBeTruthy();
+    // Each side is dated with its checkpoint's time, not the unset date shown as "Dec 31, 1" (#1606).
+    const revisions = opened.revisions as { before: Json; after: Json };
+    expect(Date.parse(String(revisions.before.date))).toBe(Date.parse(startAt));
+    expect(Date.parse(String(revisions.after.date))).toBe(Date.parse(endAt));
     const listed = body(await callBridge(bridge, "list_windows", { maxTexts: 1, maxButtons: 1 }));
     const win = (listed.windows as Json[]).find((w) => w.title === opened.windowTitle);
     expect(win, JSON.stringify(listed.windows?.map((w: Json) => w.title))).toBeTruthy();

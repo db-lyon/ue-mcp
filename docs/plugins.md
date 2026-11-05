@@ -1,85 +1,74 @@
 # Plugins
 
-ue-mcp's plugin system lets npm packages extend the server in three ways:
+A ue-mcp plugin is an npm package that extends the server. It can:
 
-- **Inject** new actions into ue-mcp's built-in categories so agents discover them where they're already working.
-- **Provide** entirely new top-level categories that the plugin owns end-to-end.
-- **Ship native C++** that registers handlers directly with the editor bridge, opening up engine APIs that have no built-in coverage.
+- **Inject** actions into a built-in category, prefixed with the plugin's `actionPrefix`.
+- **Provide** a new top-level category it owns.
+- **Ship native C++** that registers handlers on the editor bridge.
 
-Most plugins use only the first shape; the other two are available when injection is the wrong fit. This section splits into [using a plugin somebody else wrote](plugins-using.md) and [writing your own](plugins-authoring.md).
+It can also ship [flows](flows.md), [guards](plugins-guards.md), knowledge text for the categories it touches, and Claude Code skills.
 
-Browse and search published plugins in the registry at **[plugins.ue-mcp.com](https://plugins.ue-mcp.com)**, then install any listing by its slug with `ue-mcp plugin install <slug>`.
+Published plugins are listed at **[plugins.ue-mcp.com](https://plugins.ue-mcp.com)**.
 
 ## Quick start
 
 In your Unreal project directory:
 
 ```bash
-ue-mcp plugin install <slug>
+ue-mcp plugin install <slug-or-package>
 ```
 
-That runs `npm install --save`, validates the plugin's manifest, deploys its native C++ module if it has one, and adds an entry to your `ue-mcp.yml`. When a native module was deployed, rebuild the UE project so it compiles in. Then restart your MCP client (in Claude Code, `/mcp` reconnects).
+This installs the package with npm, validates its manifest, adds it to `plugins:` in `ue-mcp.yml`, copies its skills, and deploys its native module if it has one. Rebuild the UE project when a native module was deployed, then restart your MCP client (in Claude Code, `/mcp`).
 
-Verify with the introspection tool:
+Check it loaded:
 
 ```text
 plugins(action="list")
 ```
 
-The plugin's entry reports `status: "active"` and lists the categories it injects into or provides. Its actions are then callable like built-in ones, for example `<category>(action="<prefix>_<action>", ...)` for an injected action. Full consumer details are in [Using plugins](plugins-using.md).
+The entry reports `status: "active"` and the categories it injects into or provides. See [Using plugins](plugins-using.md).
 
-## How plugins work
+## How plugins load
 
-A plugin is a normal npm package that ships:
+A plugin package ships a `ue-mcp.plugin.yml` manifest and its compiled task classes under `dist/`. At server start ue-mcp:
 
-- A `ue-mcp.plugin.yml` manifest declaring an `actionPrefix`, the actions it injects into which host categories, and the task classes that back them.
-- Compiled task classes (one per injected action) under `dist/`, each extending `UeMcpTask` from [`ue-mcp/task`](plugins-authoring.md#writing-tasks).
-- Optional `knowledge/<category>.md` markdown that the server attaches to the host category's AI-facing docs at boot.
-- Optional `flows:` entries that compose injected actions with built-ins.
+1. Reads `plugins:` from the project's `ue-mcp.yml`.
+2. Resolves each entry under `<project>/node_modules/`.
+3. Validates each plugin's manifest.
+4. Imports its task classes and registers them as tasks.
+5. Adds injected actions to the host category tools (`<category>(action="<prefix>_<action>")`) and registers provided categories as their own tools.
+6. Attaches the plugin's knowledge files to those categories' AI-facing docs.
 
-At server start, ue-mcp:
+All of this happens before the tools are registered with the MCP client, so plugin actions are listed beside the built-in ones.
 
-1. Reads `plugins:` from your project's `ue-mcp.yml`.
-2. Resolves each entry against `<project>/node_modules/`.
-3. Loads and validates each plugin's `ue-mcp.plugin.yml`.
-4. Imports its task classes and registers them with the flow runtime.
-5. Merges the injected actions into the host category tools - the action shows up as `<category>(action="<prefix>_<bare>", ...)`.
-6. Concatenates the plugin's knowledge files into the host categories' AI-facing docs.
+## Shapes
 
-The injection happens before any tool is registered with the MCP client, so by the time the agent sees the `gameplay` tool's action list, the plugin's actions are already there alongside the built-ins.
+| Shape | Manifest block | Use it when |
+|-------|----------------|-------------|
+| Inject | `inject:` | The action belongs in an existing category. The default choice. |
+| Provide | `provides:` | The actions form a domain no built-in category covers. |
+| Native C++ | `nativeModule:` | The plugin needs engine APIs the bridge does not expose. `nativeModule.category` surfaces the C++ handlers as actions with no TypeScript. See [Native C++ modules](plugins-native-modules.md). |
 
-## Three shapes a plugin can take
-
-| Shape | Manifest blocks | When to reach for it |
-|-------|-----------------|----------------------|
-| **A. Inject only** | `inject:` | The action belongs inside an existing category. Default choice. |
-| **B. Provide a new category** | `provides:` (with or without `inject:`) | The plugin opens a whole new domain - audio middleware, build pipelines, networking layers - that doesn't fit inside any built-in category. |
-| **C. Ship native C++** | `nativeModule:` (with `category:` to surface its handlers) | The plugin needs engine APIs ue-mcp's built-in handlers don't expose. The plugin ships a UE C++ module that registers handlers on the editor bridge; `nativeModule.category` surfaces them as actions with no TypeScript. |
-
-Shape A is overwhelmingly the right answer. An action that belongs inside an existing category is best discovered where agents are already working.
-
-Shape B is for genuinely new domains. If your plugin's actions don't fit anywhere in the built-in category list, owning a new top-level category is cleaner than forcing a misfit injection.
-
-Shape C is for capability that can't be expressed through orchestration of existing actions. The plugin ships C++ source that compiles into the user's project alongside the bridge, and registers handlers via `UEMCP::RegisterExternalHandler` from its `StartupModule`. Native handlers participate in the same dispatch path as built-in ones. See [Native C++ modules](plugins-native-modules.md).
+A plugin can combine them.
 
 ## What belongs in core and what belongs in a plugin
 
 Core is a provider-neutral bridge to engine modules and to the Epic plugins that ship with the engine, reached through public or reflected APIs. Core holds no third-party credentials and calls no third-party service itself.
 
-The exception is first-party infrastructure the server needs to run: the plugin registry client, feedback routing, the daemon extension host, and registry login (whose token the hosted plan also accepts).
+The exception is first-party infrastructure the server needs: the plugin registry client, feedback routing, the daemon extension host, and registry login.
 
 Everything else is a plugin:
 
 - Integrations with third-party Unreal plugins.
-- Provider-specific behaviour layered on a neutral core surface. For example, `p4_` actions injected into the `source_control` category, which itself works with any provider the editor supports.
+- Provider-specific behaviour on a neutral core surface. For example, `p4_` actions injected into `source_control`, which itself works with any provider the editor supports.
 - Opinionated workflows, test harnesses, demos and products built on the core surface.
 - Anything where ue-mcp itself would call an external service or hold a credential.
-- Anything that reaches undocumented interfaces or interfaces whose terms restrict that use.
+- Anything that reaches undocumented interfaces, or interfaces whose terms restrict that use.
 
-## Where to next
+## Pages
 
-- [Using plugins](plugins-using.md) - install, configure, introspect, and manage plugins in a project.
-- [Authoring a plugin](plugins-authoring.md) - scaffold, manifest, tasks, provided categories, and publishing.
-- [Native C++ modules](plugins-native-modules.md) - ship engine APIs the bridge doesn't expose.
-- [Guards](plugins-guards.md) - gate every bridge call: source control, access policy, audit.
-- [Validation and troubleshooting](plugins-troubleshooting.md) - the rules the loader enforces and common failures.
+- [Using plugins](plugins-using.md): install, update, configure, inspect and remove.
+- [Authoring a plugin](plugins-authoring.md): scaffold, manifest, tasks, provided categories, skills and publishing.
+- [Native C++ modules](plugins-native-modules.md): C++ handlers on the bridge.
+- [Guards](plugins-guards.md): gate every bridge call.
+- [Validation and troubleshooting](plugins-troubleshooting.md): the loader's rules and common failures.

@@ -19,6 +19,7 @@
  * The runner gives each kind its own editors, splits a kind's files across
  * them by measured time, and merges what they report.
  */
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -110,6 +111,74 @@ export function planShards(entries, timing, counts) {
   return plan;
 }
 
+/**
+ * The headless and `none` files, longest first: the queue the headless editors
+ * pull from. A fixed split by measured time left one editor 120 s behind the
+ * others when its files ran slower than recorded (1.4.11-beta.9), and could
+ * not use an editor started late, once memory freed (#1592).
+ */
+export function poolQueue(entries, timing) {
+  const files = entries.filter((e) => e.kind === "headless" || e.kind === "none").map((e) => e.file);
+  const weights = fileWeights(files, timing);
+  return { files: [...files].sort((a, b) => weights.get(b) - weights.get(a) || a.localeCompare(b)), weights };
+}
+
+/** The other kinds keep their own editors, split by measured time as before. */
+export function planFixedShards(entries, timing, counts) {
+  return planShards(entries.filter((e) => e.kind !== "headless" && e.kind !== "none"), timing, counts);
+}
+
+/**
+ * Measured work one headless editor runs before the pool replaces it with a fresh one. A delete
+ * scans every loaded object for referencers, and an editor that has run many files has many: one
+ * that ran all 125 headless files took 1534 s for 614 s measured, its deletes grown from 8 ms to
+ * 6 s each, most of its time (#1592). A launch costs about 30 s.
+ */
+export const POOL_EDITOR_WORK_MS = 150_000;
+
+/** Work an editor launch has to be worth, in measured ms: a launch and a stop cost about 30 s. */
+export const POOL_MIN_SHARE_MS = 60_000;
+
+/**
+ * Whether the pool should start another headless editor: files are queued, the
+ * cap allows it, and each editor would still get a share worth its launch.
+ */
+export function poolWantsEditor({ remainingMs, queued, editors, max }) {
+  if (queued === 0 || editors >= max) return false;
+  return editors === 0 || remainingMs / (editors + 1) >= POOL_MIN_SHARE_MS;
+}
+
+/**
+ * What the launcher does next: start an editor of `kind`, or wait (`kind` null).
+ * The pool's first editor goes before the fixed shards, since it holds most of the work.
+ */
+export function nextLaunch({ wantPool, poolEditors, fixedKind, running }) {
+  const poolFirst = wantPool && poolEditors === 0;
+  const kind = poolFirst ? "headless" : fixedKind ?? (wantPool ? "headless" : null);
+  if (kind) return { kind, poolFirst, done: false };
+  // Nothing running and nothing that can start: files still queued for a pool that
+  // stopped launching are reported as not run rather than waited on (#1609).
+  return { kind: null, done: running === 0 };
+}
+
+/**
+ * The next files for one headless editor, off the front of the queue. Batches
+ * shrink as the queue drains, so the editors finish together: a share of what
+ * is left, between 20 s and 120 s of measured time, and at least one file.
+ */
+export function nextBatch(queue, weights, editors, capMs = 120_000) {
+  const remaining = queue.reduce((sum, f) => sum + (weights.get(f) ?? 0), 0);
+  const target = Math.min(capMs, Math.max(20_000, remaining / (2 * Math.max(1, editors))));
+  const batch = [];
+  let ms = 0;
+  while (queue.length > 0 && (batch.length === 0 || ms < target)) {
+    const f = queue.shift();
+    batch.push(f);
+    ms += weights.get(f) ?? 0;
+  }
+  return { files: batch, weightMs: ms };
+}
+
 /** One test's identity in timing records and budgets. */
 export function testKey(file, fullName) {
   return `${file} > ${fullName}`;
@@ -194,28 +263,24 @@ export function mirror(src, dst, filter = () => true, keep = new Set()) {
 }
 
 /**
- * Peak private memory per editor, by kind, in MB: measured on the reference
- * machine under the suite's load (#1436). The runner reads free memory at
+ * Peak resident memory per editor, by kind, in MB, rounded up from the peak
+ * working sets the runner records in tests/.shards/last-run.json (render 4.48 GB,
+ * interactive 4.15 GB, base and scm 3.21 GB). The runner reads free memory at
  * launch and never starts an editor that would not fit beside the headroom.
  */
-export const EDITOR_PEAK_MB = { headless: 3600, base: 3600, scm: 3600, render: 5600, interactive: 5600 };
+export const EDITOR_PEAK_MB = { headless: 3600, base: 3300, scm: 3300, render: 4600, interactive: 4300 };
+
+/**
+ * The order editors take turns at the memory check: the longest shard first,
+ * so the one that ends the run is not the last to find room.
+ */
+export function launchOrder(plan) {
+  return [...plan].sort((a, b) => b.weightMs - a.weightMs || a.name.localeCompare(b.name));
+}
 
 /** Memory left for everything else on the machine: at least 4 GB, or 12% of it. */
 export function headroomMB(totalMB) {
   return Math.max(4096, Math.round(totalMB * 0.12));
-}
-
-/**
- * How many headless shards fit in the memory free now. The headless editors
- * run for most of the suite. The base, render, interactive and scm editors are
- * short and wait for memory at launch like any other, so no room is held back
- * for them: holding it on a 32 GB machine with 16 GB free left one headless
- * editor to run 116 files alone (1.4.11-beta.4, 752 s). At least one, at most `max`.
- */
-/** @param {{ freeMB: number, totalMB: number, max?: number }} opts */
-export function headlessShardCount({ freeMB, totalMB, max = 8 }) {
-  const fits = Math.floor((freeMB - headroomMB(totalMB)) / EDITOR_PEAK_MB.headless);
-  return Math.max(1, Math.min(max, fits));
 }
 
 /** Whether one more editor of this kind fits in the memory free now. */
@@ -279,4 +344,122 @@ export function undeployedSources(src, dst) {
   };
   walk(src);
   return out;
+}
+
+/**
+ * The folder one run stages the tracked tests/ue_mcp into. Each runner process
+ * gets its own, because the release starts the live and live-base lanes at the
+ * same moment and a shared folder had one lane deleting what the other wrote (#1603).
+ */
+export function trackedStageDir(shardRoot, pid = process.pid) {
+  return path.join(shardRoot, `_tracked-${pid}`);
+}
+
+/** Remove staging folders left by runners that are no longer alive, and the old shared one. */
+export function sweepStaleTrackedStages(shardRoot, alive = pidAlive) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(shardRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const removed = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const m = /^_tracked(?:-(\d+))?$/.exec(e.name);
+    if (!m || (m[1] && alive(Number(m[1])))) continue;
+    fs.rmSync(path.join(shardRoot, e.name), { recursive: true, force: true });
+    removed.push(e.name);
+  }
+  return removed;
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err?.code === "EPERM";
+  }
+}
+
+/**
+ * The tracked tests/ue_mcp, as git has it, written into `stage`: what every
+ * shard starts from, so a run never inherits content an earlier run or a
+ * developer left behind.
+ */
+export function stageTrackedProject(repoRoot, stage) {
+  fs.rmSync(stage, { recursive: true, force: true });
+  fs.mkdirSync(stage, { recursive: true });
+  const files = execFileSync("git", ["ls-files", "-z", "tests/ue_mcp"], { cwd: repoRoot });
+  execFileSync("git", ["checkout-index", "--stdin", "-z", "-f", `--prefix=${stage}${path.sep}`], { cwd: repoRoot, input: files });
+  return path.join(stage, "tests", "ue_mcp");
+}
+
+/** UTC log stamp, as the engine writes it: [2026.10.23-19.25.32:762]. */
+export function parseLogStamp(stamp) {
+  const m = /(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2}):(\d{3})/.exec(stamp);
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6], +m[7]) : null;
+}
+
+/** When and why an editor died, read from its own log. A log older than `sinceMs` is a previous session's. */
+export function deathOf(projectDir, sinceMs = 0) {
+  const logFile = path.join(projectDir, "Saved", "Logs", "ue_mcp.log");
+  if (!fs.existsSync(logFile)) return { atMs: Date.now(), reason: "it exited without a log" };
+  const mtimeMs = fs.statSync(logFile).mtimeMs;
+  if (mtimeMs < sinceMs - 1000) return { atMs: Date.now(), reason: "it exited before writing a log" };
+  const text = fs.readFileSync(logFile, "utf8");
+  const crash = /^\[([^\]]+)\]\[[^\]]*\]LogWindows: Error: (?:appError called: )?(.*(?:Assertion failed|Fatal error|Unhandled Exception|Ran out of memory|Out of memory|EXCEPTION_).*)$/m.exec(text);
+  if (crash) return { atMs: parseLogStamp(crash[1]) ?? mtimeMs, reason: `it crashed: ${crash[2].trim().slice(0, 240)}` };
+  const exit = /^\[([^\]]+)\]\[[^\]]*\]LogCore: Engine exit requested \(reason: ([^)]*)\)/m.exec(text);
+  if (exit) return { atMs: parseLogStamp(exit[1]) ?? mtimeMs, reason: `it quit: its log records an exit request (${exit[2]})` };
+  return { atMs: mtimeMs, reason: "it exited with no crash in its log, which is what an out-of-memory kill looks like" };
+}
+
+/** The readiness wait's own verdicts that mean the process is gone or going. */
+const STARTUP_DEATH_REASON = /crashed|exited during startup|process is gone/i;
+
+/**
+ * Wait for a launched editor to report ready, watching its process the whole
+ * time (#1609). Resolves with the ready result. Rejects with `startupDeath` and
+ * the cause from its log when the process exits first, and with `startupTimeout`
+ * when it is not ready within the budget, even if the wait itself never returns.
+ *
+ * @param {{ child: import("node:child_process").ChildProcess, wait: (signal: AbortSignal) => Promise<{ ready: boolean, reason?: string }>,
+ *   readyTimeoutS: number, graceMs?: number, projectDir: string, launchedAtMs: number, pollMs?: number }} opts
+ */
+export async function awaitEditorStartup({ child, wait, readyTimeoutS, graceMs = 30_000, projectDir, launchedAtMs, pollMs = 1000 }) {
+  const abort = new AbortController();
+  const timers = [];
+  let onExit = () => {};
+  const exited = new Promise((resolve) => {
+    onExit = () => resolve({ exited: true });
+    child.once("exit", onExit);
+    child.once("error", onExit);
+    timers.push(setInterval(() => {
+      if (!pidAlive(child.pid)) onExit();
+    }, pollMs));
+  });
+  const deadline = new Promise((resolve) => {
+    timers.push(setTimeout(() => resolve({ timedOut: true }), readyTimeoutS * 1000 + graceMs));
+  });
+  const died = () => {
+    const death = deathOf(projectDir, launchedAtMs);
+    return Object.assign(new Error(`the editor died during startup, ${death.reason}`), { startupDeath: true, death });
+  };
+  try {
+    const outcome = await Promise.race([wait(abort.signal).then((ready) => ({ ready })), exited, deadline]);
+    if (outcome.ready?.ready) return outcome.ready;
+    if (outcome.exited || !pidAlive(child.pid) || STARTUP_DEATH_REASON.test(outcome.ready?.reason ?? "")) throw died();
+    const reason = outcome.ready?.reason && !/still not ready after/.test(outcome.ready.reason) ? `: ${outcome.ready.reason}` : "";
+    throw Object.assign(
+      new Error(`the editor did not report ready within ${readyTimeoutS}s${reason}. Check for a modal dialog in its window or log.`),
+      { startupTimeout: true },
+    );
+  } finally {
+    abort.abort();
+    for (const t of timers) clearTimeout(t);
+    child.off("exit", onExit);
+    child.off("error", onExit);
+  }
 }

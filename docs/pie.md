@@ -1,6 +1,6 @@
 # PIE testing
 
-The `pie` tool records, replays and observes Play-In-Editor sessions, drives input on any player, runs multiplayer acceptance scenarios and turns a recording into a test that verifies a fix. It is built into ue-mcp: no plugin to install. Call it as `pie(action="...")`; the category is the namespace, so action names carry no prefix.
+The `pie` tool records, replays and observes Play-In-Editor sessions, drives input on any player, runs multiplayer acceptance scenarios and turns a recording into a test that verifies a fix. It is built into ue-mcp. Starting PIE itself is `editor(play_in_editor)`.
 
 For step-by-step test scripts with automatic and manual verdicts, see [Test scripts](pie-scripts.md).
 
@@ -23,21 +23,21 @@ What replay holds constant: the same Enhanced Input values at the same frame num
 
 ## Editor UI
 
-A **Record** button sits next to Play and Stop in the editor toolbar. Record arms the recorder and Record + Play also starts PIE. Its menu offers arm, disarm, stop and opening the panel.
+A **Record** button sits in the Play toolbar. Record arms the recorder. Its menu offers Record + Play, Arm Recorder, Disarm Recorder, Stop Recording and Open PIE Studio Panel.
 
-**Window > Tools > PIE Studio** opens a dockable panel:
+The **PIE Studio** tab, listed with the editor's tool tabs, is a dockable panel:
 
 - **Recorder**: state, recording id, frame count and elapsed time, with Record + Play, Arm, Disarm and Stop.
-- **Replayer** and **Observer**: state with Disarm and Stop.
-- **Time Scale**: a slider from 1% to 400% and presets (1%, 10%, 25%, 50%, 100%, 200%). It works during recording, replay or manual play and persists across PIE restarts. From an agent, use `editor(set_pie_time_scale)`.
-- **Recordings**: every saved recording with Replay and Delete. Replay arms the replayer with the active observation profiles, starts PIE and captures viewport frames.
-- **Observation Profiles**: profile list with checkboxes marking profiles active. Active profiles observe during replay, each writing its own output. Create, Edit (opens the asset editor), Delete and Refresh.
+- **Time Scale**: a slider from 1% to 400% and presets (1%, 10%, 25%, 50%, 100%, 200%). The panel reapplies the scale when PIE restarts. From an agent, use `editor(set_pie_time_scale)`.
+- **Recordings**: every saved recording with Replay and Delete. Replay arms the replayer with the active observation profiles and starts PIE. With **Capture GIF** on it also captures frames and encodes a GIF, listed with Open and Delete.
+- **Observation Profiles**: a checkbox marking each profile active, Edit, Delete, Create and Refresh.
+- **Live Debug**: replay progress, drift maxima and observed values while a replay or observation runs.
 
-State labels turn green while active. Lists refresh every 5 seconds.
+Active states show in green. Lists refresh every 5 seconds.
 
 ## Runtime module
 
-The editor half of `pie` lives in the bridge. The half that has to run inside game processes (input injection, the remote player control component, viewport capture) ships as the `UE_MCP_BridgeRuntime` module of the bridge plugin. It is a `DeveloperTool` module, so it loads in the editor and in separate-process PIE clients and is never part of a shipping build.
+The parts that run inside game processes (input injection, the remote player control component, viewport capture) ship as the bridge's `UE_MCP_BridgeRuntime` module. It is a `DeveloperTool` module: it loads in the editor and in separate-process PIE clients and is never part of a shipping build.
 
 ## Quick start
 
@@ -83,13 +83,13 @@ pie(action="record_read", id="some-recording", file="drift")
 | `record_stop` | Finalize immediately |
 | `record_status` | State, id, frame count, elapsed time |
 | `record_list` | List recordings, newest first |
-| `record_read` | Read an artifact (manifest, sequence, csv, drift) |
+| `record_read` | Read an artifact (`manifest`, `sequence`, `csv`, `drift`, `tracked`) |
 | `record_delete` | Delete a recording (`confirm=true`) |
 | `mark` | Insert a labelled marker into the active recording or replay |
 
 Recording starts on BeginPIE and finalizes on EndPIE. It discovers Enhanced Input actions from event bindings and active mapping contexts, including actions added after the pawn attaches. Per frame it writes pawn location, rotation, velocity and `speed2d`, the active montage and section, every input action value with `_pressed` and `_released` edges, labelled markers, and per-frame performance (game, render and GPU ms, memory). Velocity comes from `UCharacterMovementComponent` when present, then `GetVelocity()`, physics velocity, and position delta as fallbacks, so any `APawn` works.
 
-`record_arm` can also track reflection paths, actor positions, subsystem values (`sub:<Class>.<path>`) and skeletal bone or socket channels: `bone:<BoneOrSocket>.<channel>` in world space or `bonecs:<BoneOrSocket>.<channel>` in component space, with channels `x|y|z`, `pitch|yaw|roll` and `scalex|scaley|scalez`. Component space does not move when the actor does, which is what an animation assertion usually wants. A bone that the mesh does not have is absent from the row rather than sampled as zero.
+`record_arm` can also track reflection paths and subsystem values (`track_values`, with `sub:<Class>.<path>` for a subsystem), actor positions (`track_actors`), and skeletal bone or socket channels: `bone:<BoneOrSocket>.<channel>` in world space or `bonecs:<BoneOrSocket>.<channel>` in component space, with channels `x|y|z`, `pitch|yaw|roll` and `scalex|scaley|scalez`. Component space does not move when the actor does, which is what an animation assertion usually wants. A bone that the mesh does not have is absent from the row rather than sampled as zero.
 
 | Param | Default | Notes |
 |-------|---------|-------|
@@ -180,15 +180,13 @@ Unreal Insights traces are `editor(start_trace)` and `editor(stop_trace)`.
 
 A predicate binds a channel or event to an operator under a temporal quantifier: `{name, channel|event, op, value|min+max|tol, hold, from_s, to_s, within_s, after_event, severity}`. Operators are `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `approx`, `between`, `changed`, `increased`, `decreased` and `crossed`. `hold` is `always`, `never`, `eventually`, `at_end` or `once_then_always`. Channels are series columns (`pos_z`, `speed2d`, `game_ms`), tracked values by path (`t:Boss.Health`) and the pseudo-channels `$errors`, `$warnings`, `$frame` and `$time`. Events are `montage`, `marker` and `error`.
 
-A scenario file's `act` list (kinds `replay`, `inject_tape`, `drive`, `goto`, `face`, `follow` and `call`) is written by `scenario_scaffold` and checked by `scenario_validate`, but no action runs it yet. Its arrange steps `spawn`, `set` and `call` do run, in test scripts below; a `call` runs in the PIE instance that owns the actor. The actions that drive a player are `uat_run`'s step actions.
-
-A test script step takes the same arrange entries, applied by the code that applies a scenario's, and an `act` of the step actions `uat_run` drives in a step's `do` (`place`, `press`, `inject`, `hold`, `tape`, `console`, `capture`, `wait_ms`), run by the same executor. The step runs `arrange`, then `act`, then opens its `expect` window, so a script runs end to end with no agent: `place` the player at the door, `press` Interact, expect `Door.OpenAngle gt 80`. See [Arrange and act](pie-scripts.md#arrange-and-act).
+A scenario file's `act` list (kinds `replay`, `inject_tape`, `drive`, `goto`, `face`, `follow` and `call`) is written by `scenario_scaffold` and checked by `scenario_validate`, but no action runs it. Its arrange entries (`spawn`, `set`, `call`) run as a test script step's `arrange`, and `uat_run`'s step actions as its `act`. See [Arrange and act](pie-scripts.md#arrange-and-act).
 
 ### Observation profiles
 
 | Action | Purpose |
 |--------|---------|
-| `profile_create` | Create a profile data asset |
+| `profile_create` | Create a profile: tracked values, actors and widgets, pawn and montage sampling, drift thresholds |
 | `profile_read` | Read a profile |
 | `profile_update` | Update a profile |
 | `profile_delete` | Delete a profile (`confirm=true`) |
@@ -198,7 +196,7 @@ A test script step takes the same arrange entries, applied by the code that appl
 | `observe_stop` | Stop and write output |
 | `observe_status` | State, run id, frames sampled |
 | `observe_list` | List observation runs |
-| `observe_read` | Read an artifact; `file=series` returns per-channel time series with min, max, first, last and `first_frame_over` |
+| `observe_read` | Read an artifact (`manifest`, `csv`, `tracked`, `series`, `widgets`); `series` returns per-channel time series with min, max, first, last and `first_frame_over` |
 
 A profile is an observation profile data asset holding tracked values (each with an optional drift threshold), tracked actors, pawn state and montage capture flags, and drift thresholds. Create one in the Content Browser (Miscellaneous > Data Asset), from the panel, or through the tool:
 
@@ -210,7 +208,7 @@ pie(action="profile_create",
     tracked_actors=["BP_Hero_C", "BP_Boss_C"])
 ```
 
-Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `observation.csv`, and `tracked.jsonl` when actors are tracked. One recording replayed with different profiles investigates different systems. A test script run observes and records under its own run id (`script_<name>_<YYYYMMDD_HHMMSS>`) and adds `results.json` to its observation folder; see [Test scripts](pie-scripts.md).
+Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `observation.csv`, and `tracked.jsonl` when actors are tracked. One recording replayed with different profiles investigates different systems.
 
 ### Input injection
 
@@ -320,9 +318,15 @@ flows:
           time_scale: 0.01
 ```
 
-## Moved from the pie-studio plugin
+## Migrating from pie-studio
 
-These actions were part of the pie-studio plugin and are not part of the `pie` tool. Each has a core action:
+The `pie` tool replaces the pie-studio plugin. When `ue-mcp.yml` still lists `pie-studio`, the server does not load it and logs a warning; `ue-mcp plugin install pie-studio` is refused. Remove it once, then rebuild the project:
+
+```bash
+npx ue-mcp plugin remove pie-studio
+```
+
+This uninstalls the npm package, deletes `Plugins/PIE_Studio` and removes the entry from `ue-mcp.yml`. Saved observation profiles keep loading through a class redirect, and recordings under `Saved/MCPRecordings` keep working. Action names and parameters are unchanged except these, which moved to core actions:
 
 | pie-studio action | Core action |
 |---|---|
@@ -330,24 +334,5 @@ These actions were part of the pie-studio plugin and are not part of the `pie` t
 | `capture` | `editor(capture_screenshot, target="pie")`, `editor(capture_scene_png, world="pie")` |
 | `actor_spawn`, `actor_destroy` | `level(spawn_transient_actor, world="pie")`, `level(destroy_transient_actor)` |
 | `actor_set`, `actor_call` | `editor(set_object_property)`, `editor(invoke_object_function)` |
-| `snapshot`, `subsystem_state` | `editor(get_object_properties)` (`target="subsystem"` with `subsystemClass` for a subsystem), `editor(get_runtime_values)` |
-
-`pie(console)` takes `client` 1..N only. Client 0, the editor's own player, is `editor(execute_command, world="pie")`.
-
-## Migrating from pie-studio
-
-The `pie` tool replaces the pie-studio plugin. When a project's `ue-mcp.yml` still lists `pie-studio`, the server skips it, does not load it, and logs one warning naming the command below. `ue-mcp plugin install pie-studio` is refused for the same reason.
-
-Remove the plugin once:
-
-```bash
-npx ue-mcp plugin remove pie-studio
-```
-
-This uninstalls the npm package, deletes `Plugins/PIE_Studio` from the project and removes the entry from `ue-mcp.yml`. Rebuild the project afterwards.
-
-What carries over:
-
-- Saved observation profiles keep loading. A class redirect maps `/Script/PIE_Studio.MCPObservationProfile` to the core class.
-- Recordings under `Saved/MCPRecordings` keep working with every replay, analysis and test action.
-- Action names and parameters are unchanged, apart from the actions listed in [Moved from the pie-studio plugin](#moved-from-the-pie-studio-plugin).
+| `snapshot`, `subsystem_state` | `editor(get_object_properties)` (`target="subsystem"` with `subsystemClass`), `editor(get_runtime_values)` |
+| `console` on client 0 | `editor(execute_command, world="pie")` |

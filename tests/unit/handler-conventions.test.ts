@@ -119,7 +119,7 @@ const KNOWN_ORPHANS: Record<string, string> = {
   checkpoint_prepare_restore: "editor(restore) calls it before writing files back (#1482).",
   checkpoint_finish_restore: "editor(restore) calls it after writing files back (#1482).",
   checkpoint_diff_blueprint: "editor(list_changes) calls it per modified Blueprint package (#1482).",
-  checkpoint_diff_asset: "editor(list_changes) and editor(diff_checkpoint_asset) call it per changed package, through the checkpoint service.",
+  checkpoint_diff_asset: "editor(list_changes) and editor(diff_checkpoint_asset) call it through the checkpoint service, with a turn's changed packages as items.",
   checkpoint_open_native_diff: "editor(open_checkpoint_diff) calls it through the checkpoint service, after exporting the versions from the shadow history.",
   search_assets: "asset(search) supersedes it.",
   add_instances: "level(add_hismc_instances) is the shipped spelling.",

@@ -3,10 +3,12 @@
 // deterministic thumbnail of each version and the engine's diff window on request.
 #include "DiffHandlers.h"
 #include "CheckpointThumbnail.h"
+#include "DiffHandlers_Revision.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerLogCapture.h"
 #include "Runtime/Launch/Resources/Version.h"
+#include "UObject/ObjectVersion.h"
 
 #include "Algo/Sort.h"
 #include "AssetCompilingManager.h"
@@ -49,6 +51,7 @@
 #include "MaterialGraph/MaterialGraphNode.h"
 #include "MaterialGraph/MaterialGraphSchema.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpression.h"
 #include "Materials/MaterialFunction.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -234,6 +237,14 @@ namespace
 		return RB.Property;
 	}
 
+	/** A property path as the details panel labels it: the root's display name, "Hide when Full" for bHideWhenFull, and the rest of the path. */
+	FString CkDiffLabel(const FProperty* Root, const FString& Path)
+	{
+		const FString Name = Root->GetName();
+		const FString Display = Root->GetDisplayNameText().ToString();
+		return Path.StartsWith(Name, ESearchCase::CaseSensitive) ? Display + Path.Mid(Name.Len()) : Path;
+	}
+
 	/**
 	 * DiffUtils::CompareUnrelatedStructs, serialized: every FSingleObjectDiffEntry
 	 * with its path, type, the engine's message, and both values exported as text.
@@ -258,8 +269,13 @@ namespace
 			if (!Sink.Take()) continue;
 			TSharedPtr<FJsonObject> Rec = MakeShared<FJsonObject>();
 			if (!Group.IsEmpty()) Rec->SetStringField(TEXT("group"), Group);
-			Rec->SetStringField(TEXT("path"), Entry.Identifier.ToDisplayName());
-			if (Root) Rec->SetStringField(TEXT("property"), Root->GetName());
+			const FString Path = Entry.Identifier.ToDisplayName();
+			Rec->SetStringField(TEXT("path"), Path);
+			if (Root)
+			{
+				Rec->SetStringField(TEXT("property"), Root->GetName());
+				Rec->SetStringField(TEXT("label"), CkDiffLabel(Root, Path));
+			}
 			if (bHidden) Rec->SetBoolField(TEXT("hidden"), true);
 			Rec->SetStringField(TEXT("diffType"), CkDiffPropertyTypeName(Entry.DiffType));
 			Rec->SetStringField(TEXT("displayString"), DiffViewUtils::PropertyDiffMessage(Entry, ObjectName).ToString());
@@ -379,6 +395,60 @@ namespace
 		return O;
 	}
 
+	/** What a node's properties live on: a material node's expression, otherwise the node. */
+	const UObject* CkDiffNodeSubject(const UObject* Node)
+	{
+		const UMaterialGraphNode* MatNode = Cast<UMaterialGraphNode>(Node);
+		return MatNode && MatNode->MaterialExpression ? MatNode->MaterialExpression.Get() : Node;
+	}
+
+	/**
+	 * A material node's settings are on its expression, which UEdGraphNode::FindDiffs does not compare.
+	 * Every matched pair whose expressions differ in an editable property gets a NODE_PROPERTY result.
+	 */
+	void CkDiffMaterialExpressionResults(UEdGraph* OldGraph, UEdGraph* NewGraph, TArray<FDiffSingleResult>& Results)
+	{
+		if (!OldGraph || !NewGraph) return;
+		for (UEdGraphNode* NewNode : NewGraph->Nodes)
+		{
+			UMaterialGraphNode* NewMat = Cast<UMaterialGraphNode>(NewNode);
+			if (!NewMat || !NewMat->MaterialExpression) continue;
+			UMaterialGraphNode* OldMat = nullptr;
+			for (UEdGraphNode* OldNode : OldGraph->Nodes)
+			{
+				if (OldNode && OldNode->NodeGuid == NewNode->NodeGuid) { OldMat = Cast<UMaterialGraphNode>(OldNode); break; }
+			}
+			if (!OldMat || !OldMat->MaterialExpression || OldMat->MaterialExpression->GetClass() != NewMat->MaterialExpression->GetClass()) continue;
+			const bool bReported = Results.ContainsByPredicate([&](const FDiffSingleResult& R)
+			{
+				return (R.Diff == EDiffType::NODE_PROPERTY || R.Diff == EDiffType::OBJECT_PROPERTY)
+					&& ((R.Node1 == OldMat && R.Node2 == NewMat) || (R.Node1 == NewMat && R.Node2 == OldMat));
+			});
+			if (bReported) continue;
+			const UMaterialExpression* A = OldMat->MaterialExpression;
+			const UMaterialExpression* B = NewMat->MaterialExpression;
+			TArray<FSingleObjectDiffEntry> Entries;
+			DiffUtils::CompareUnrelatedObjects(A, B, Entries);
+			const bool bEditable = Entries.ContainsByPredicate([&](const FSingleObjectDiffEntry& E)
+			{
+				const FProperty* Root = CkDiffRootProperty(E, A->GetClass(), A, B->GetClass(), B);
+				return Root && Root->HasAnyPropertyFlags(CPF_Edit);
+			});
+			if (!bEditable) continue;
+			FDiffSingleResult R;
+			R.Diff = EDiffType::NODE_PROPERTY;
+			R.Category = EDiffType::MODIFICATION;
+			R.Node1 = OldMat;
+			R.Node2 = NewMat;
+			R.Object1 = A;
+			R.Object2 = B;
+			R.DisplayString = FText::Format(NSLOCTEXT("UEMCPCheckpointDiff", "MaterialNodeChanged", "Changed Node '{0}'"), NewMat->GetNodeTitle(ENodeTitleType::ListView));
+			R.ToolTip = FText::Format(NSLOCTEXT("UEMCPCheckpointDiff", "MaterialNodeChangedTip", "Properties of '{0}' changed"), NewMat->GetNodeTitle(ENodeTitleType::ListView));
+			R.OwningObjectPath = NewGraph->GetPathName();
+			Results.Add(R);
+		}
+	}
+
 	/**
 	 * FGraphDiffControl::DiffGraphs, serialized: every FDiffSingleResult with its
 	 * type, category, the engine's DisplayString and ToolTip, and the nodes and pins
@@ -390,6 +460,7 @@ namespace
 	{
 		TArray<FDiffSingleResult> Results;
 		FGraphDiffControl::DiffGraphs(OldGraph, NewGraph, Results);
+		CkDiffMaterialExpressionResults(OldGraph, NewGraph, Results);
 		Algo::SortBy(Results, &FDiffSingleResult::Diff);
 		for (const FDiffSingleResult& R : Results)
 		{
@@ -411,8 +482,8 @@ namespace
 			if (R.Pin2) Rec->SetObjectField(TEXT("pin2"), CkDiffPinJson(R.Pin2, Names));
 			if (R.Diff == EDiffType::NODE_PROPERTY || R.Diff == EDiffType::OBJECT_PROPERTY)
 			{
-				const UObject* A = R.Object1 ? R.Object1 : R.Node1;
-				const UObject* B = R.Object2 ? R.Object2 : R.Node2;
+				const UObject* A = R.Object1 ? R.Object1 : CkDiffNodeSubject(R.Node1);
+				const UObject* B = R.Object2 ? R.Object2 : CkDiffNodeSubject(R.Node2);
 				if (A && B)
 				{
 					TArray<TSharedPtr<FJsonValue>> Props;
@@ -507,6 +578,16 @@ namespace
 			Graph->Material->AssignExpressionCollection(Function->GetExpressionCollection());
 		}
 		Graph->RebuildGraph();
+		// RebuildGraph gives every node a fresh GUID, so DiffGraphs would match a node across versions by
+		// title alone, and a parameter's title shows its value. The expression's own GUID is saved with it.
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			UMaterialGraphNode* MatNode = Cast<UMaterialGraphNode>(Node);
+			if (MatNode && MatNode->MaterialExpression && MatNode->MaterialExpression->MaterialExpressionGuid.IsValid())
+			{
+				MatNode->NodeGuid = MatNode->MaterialExpression->MaterialExpressionGuid;
+			}
+		}
 		return Graph;
 	}
 
@@ -768,6 +849,18 @@ namespace
 			Side.Error = FString::Printf(TEXT("the package could not be loaded for diff: %s does not exist"), *File);
 			return Side;
 		}
+		// A file that is not a package can come back from the loader as an empty package, which keeps the
+		// file open; read the package tag first.
+		{
+			uint32 Tag = 0;
+			TUniquePtr<FArchive> Reader(IFileManager::Get().CreateFileReader(*File));
+			if (Reader && Reader->TotalSize() >= (int64)sizeof(Tag)) *Reader << Tag;
+			if (Tag != PACKAGE_FILE_TAG && Tag != PACKAGE_FILE_TAG_SWAPPED)
+			{
+				Side.Error = FString::Printf(TEXT("the package could not be loaded for diff: %s is not a package file"), *File);
+				return Side;
+			}
+		}
 		FMCPScopedLogCapture Capture({});
 		Side.Package = DiffUtils::LoadPackageForDiff(FPackagePath::FromLocalPath(File), OriginalPath);
 		if (!Side.Package)
@@ -798,6 +891,11 @@ namespace
 		if (W <= 0 || H <= 0 || Bytes.Num() < W * H * 4)
 		{
 			OutError = TEXT("the thumbnail came back empty");
+			return false;
+		}
+		if (MCPCkDiffIsBlankImage(Bytes, W, H))
+		{
+			OutError = TEXT("the thumbnail is one flat colour, a picture of nothing");
 			return false;
 		}
 		IImageWrapperModule& Module = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
@@ -860,13 +958,15 @@ namespace
 		Out.SetImageSize(Size, Size);
 		TArray<uint8>& Data = Out.AccessImageData();
 		Data.SetNumUninitialized(Size * Size * sizeof(FColor));
-		return Resource->ReadPixelsPtr(reinterpret_cast<FColor*>(Data.GetData()), FReadSurfaceDataFlags(), FIntRect(0, 0, Size, Size));
+		if (Resource->ReadPixelsPtr(reinterpret_cast<FColor*>(Data.GetData()), FReadSurfaceDataFlags(), FIntRect(0, 0, Size, Size))) return true;
+		Data.Reset();
+		return false;
 	}
 
 	/**
 	 * A picture of one version: rendered with ThumbnailTools::RenderThumbnail on
 	 * the object loaded for diff, or, where the class has no renderer, is a level,
-	 * or the render came back black, the thumbnail saved inside that version's package.
+	 * or the render is one flat colour, the thumbnail saved inside that version's package.
 	 */
 	TSharedPtr<FJsonObject> CkDiffThumbnail(UObject* Asset, const FString& File, const FString& OriginalPackage, const FString& OutFile)
 	{
@@ -874,6 +974,13 @@ namespace
 		if (OutFile.IsEmpty()) return nullptr;
 		FString Error;
 		const bool bLevel = Asset && Asset->IsA<UWorld>();
+		// A texture loaded for diff can still be building, with no resource for the renderer to draw.
+		if (UTexture* Texture = Cast<UTexture>(Asset))
+		{
+			Texture->BlockOnAnyAsyncBuild();
+			if (!Texture->GetResource()) Texture->UpdateResource();
+			Texture->BlockOnAnyAsyncBuild();
+		}
 		FThumbnailRenderingInfo* Info = (Asset && !bLevel) ? UThumbnailManager::Get().GetRenderingInfo(Asset) : nullptr;
 		if (Info && Info->Renderer)
 		{
@@ -890,16 +997,15 @@ namespace
 				ThumbnailTools::RenderThumbnail(Asset, CkDiffThumbnailSize, CkDiffThumbnailSize,
 					ThumbnailTools::EThumbnailTextureFlushMode::AlwaysFlush, nullptr, &Thumb);
 			}
-			if (MCPCkDiffIsBlankImage(Thumb.GetUncompressedImageData(), Thumb.GetImageWidth(), Thumb.GetImageHeight()))
-			{
-				Error = TEXT("the rendered picture came back black or empty");
-			}
-			else if (CkDiffWritePng(Thumb, OutFile, Error))
+			if (CkDiffWritePng(Thumb, OutFile, Error))
 			{
 				T->SetStringField(TEXT("file"), OutFile);
 				T->SetStringField(TEXT("source"), TEXT("rendered"));
 				return T;
 			}
+			// The Widget Blueprint renderer draws nothing for a Blueprint loaded for diff: it is not compiled
+			// (LOAD_DisableCompileOnLoad), so it has not been regenerated, and the target stays one flat colour.
+			Error = TEXT("Unreal's thumbnail renderer drew nothing for this version: ") + Error;
 		}
 		else
 		{
@@ -908,26 +1014,28 @@ namespace
 				: TEXT("an actor package has no thumbnail renderer");
 		}
 		// The thumbnail saved with this version, under the name it had in the project.
+		FString Saved = TEXT("this version's package has no saved thumbnail");
 		if (Asset)
 		{
 			const FName FullName(*FString::Printf(TEXT("%s %s.%s"), *Asset->GetClass()->GetName(), *OriginalPackage, *Asset->GetName()));
 			FThumbnailMap Map;
 			if (ThumbnailTools::LoadThumbnailsFromPackage(File, { FullName }, Map))
 			{
-				if (const FObjectThumbnail* Saved = Map.Find(FullName))
+				if (const FObjectThumbnail* Kept = Map.Find(FullName))
 				{
 					FString SaveError;
-					if (!Saved->IsEmpty() && CkDiffWritePng(*Saved, OutFile, SaveError))
+					if (!Kept->IsEmpty() && CkDiffWritePng(*Kept, OutFile, SaveError))
 					{
 						T->SetStringField(TEXT("file"), OutFile);
 						T->SetStringField(TEXT("source"), TEXT("saved"));
 						T->SetStringField(TEXT("note"), Error);
 						return T;
 					}
+					if (!Kept->IsEmpty()) Saved = TEXT("the thumbnail saved with this version: ") + SaveError;
 				}
 			}
 		}
-		T->SetStringField(TEXT("error"), Error + TEXT(", and this version's package has no saved thumbnail"));
+		T->SetStringField(TEXT("error"), Error + TEXT("; and ") + Saved);
 		return T;
 	}
 
@@ -966,7 +1074,7 @@ namespace
 		else if (Asset->IsA<UBlueprint>())
 		{
 			E.Tool = TEXT("SBlueprintDiff");
-			E.Note = TEXT("The Blueprint diff: graphs through FGraphDiffControl::DiffGraphs, components through DiffUtils::CompareUnrelatedSCS, My Blueprint variables, Defaults on the class default object and Class Settings, the last three through DiffUtils::CompareUnrelatedStructs.");
+			E.Note = TEXT("The Blueprint diff: the Blueprint type's own differences (a Widget Blueprint's widget tree) through UBlueprint::FindDiffs, graphs through FGraphDiffControl::DiffGraphs, components through DiffUtils::CompareUnrelatedSCS, My Blueprint variables, Defaults on the class default object and Class Settings, the last three through DiffUtils::CompareUnrelatedStructs.");
 			E.Native = TEXT("window");
 		}
 		else if (Asset->IsA<UMaterial>() || Asset->IsA<UMaterialFunction>())
@@ -1060,8 +1168,71 @@ namespace
 		CkDiffAddPropertySection(Sections, TEXT("Actors"), TEXT("DiffUtils::CompareUnrelatedObjects"), Records, Hidden);
 	}
 
-	void CkDiffBlueprint(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
+	/**
+	 * The Blueprint type's own diff, UBlueprint::FindDiffs, as FBlueprintTypeDiffControl runs it: the
+	 * category SBlueprintDiff names after the type ("Widget Blueprint"). An OBJECT_REQUEST_DIFF pairs two
+	 * subobjects (a widget in the widget tree and its slot), compared property by property under the
+	 * engine's label for the pair ("Widget WardMeter"); every other real result is listed as the engine
+	 * words it, and INFO_MESSAGE results become the section's notes. False when the type has no diff of
+	 * its own (the base UBlueprint answers false).
+	 */
+	bool CkDiffBlueprintType(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
 	{
+		TArray<FDiffSingleResult> Results;
+		FDiffResults Diffs(&Results);
+		if (!B->FindDiffs(A, Diffs)) return false;
+
+		TArray<TSharedPtr<FJsonValue>> Records;
+		TArray<TSharedPtr<FJsonValue>> Notes;
+		int32 Hidden = 0;
+		for (const FDiffSingleResult& R : Results)
+		{
+			const FString Display = Names.Clean(R.DisplayString.ToString());
+			if (R.Diff == EDiffType::INFO_MESSAGE)
+			{
+				if (!Display.IsEmpty()) Notes.Add(MakeShared<FJsonValueString>(Display));
+				continue;
+			}
+			if (R.Diff == EDiffType::OBJECT_REQUEST_DIFF)
+			{
+				// FindDiffs runs on the new version, so Object1 is the new subobject and Object2 the old one.
+				if (R.Object1 && R.Object2) CkDiffObjects(R.Object2, R.Object1, Display, Names, Records, Hidden, Sink);
+				continue;
+			}
+			// A custom object result is a heading; the property results that name the same objects are its differences.
+			if (R.Diff == EDiffType::CUSTOM_OBJECT) continue;
+			if (!R.IsRealDifference() || !Sink.Take()) continue;
+			TSharedPtr<FJsonObject> Rec = MakeShared<FJsonObject>();
+			Rec->SetStringField(TEXT("diffType"), CkDiffTypeName(R.Diff));
+			Rec->SetStringField(TEXT("category"), CkDiffCategoryName(R.Category));
+			Rec->SetStringField(TEXT("displayString"), Display);
+			const FString Tip = Names.Clean(R.ToolTip.ToString());
+			if (!Tip.IsEmpty() && Tip != Display) Rec->SetStringField(TEXT("toolTip"), Tip);
+			if (!R.OwningObjectPath.IsEmpty()) Rec->SetStringField(TEXT("owningObjectPath"), Names.Clean(R.OwningObjectPath));
+			if ((R.Diff == EDiffType::OBJECT_ADDED || R.Diff == EDiffType::OBJECT_REMOVED) && R.Object1)
+			{
+				TArray<TSharedPtr<FJsonValue>> Facts;
+				CkDiffFact(Facts, TEXT("Class"), R.Object1->GetClass()->GetName());
+				Rec->SetArrayField(TEXT("facts"), Facts);
+			}
+			Records.Add(MakeShared<FJsonValueObject>(Rec));
+		}
+		if (Records.Num() > 0 || Hidden > 0)
+		{
+			TSharedPtr<FJsonObject> S = CkDiffSection(B->GetClass()->GetDisplayNameText().ToString(), TEXT("properties"), TEXT("UBlueprint::FindDiffs"));
+			S->SetArrayField(TEXT("entries"), Records);
+			S->SetNumberField(TEXT("hiddenChanges"), Hidden);
+			if (Notes.Num()) S->SetArrayField(TEXT("notes"), Notes);
+			Sections.Add(MakeShared<FJsonValueObject>(S));
+		}
+		return true;
+	}
+
+	/** The Blueprint diff, SBlueprintDiff's categories in its order. True when the type's own diff ran (CkDiffBlueprintType). */
+	bool CkDiffBlueprint(UBlueprint* A, UBlueprint* B, const FCkDiffNames& Names, TArray<TSharedPtr<FJsonValue>>& Sections, FCkDiffSink& Sink)
+	{
+		const bool bTypeDiff = CkDiffBlueprintType(A, B, Names, Sections, Sink);
+
 		// Graphs, paired by path under the Blueprint as SBlueprintDiff pairs them.
 		TArray<UEdGraph*> GraphsA, GraphsB;
 		A->GetAllGraphs(GraphsA);
@@ -1200,6 +1371,7 @@ namespace
 			CkDiffObjects(A, B, FString(), Names, Records, Hidden, Sink);
 			CkDiffAddPropertySection(Sections, TEXT("Class Settings"), TEXT("DiffUtils::CompareUnrelatedObjects"), Records, Hidden);
 		}
+		return bTypeDiff;
 	}
 
 	void CkDiffDataTable(UDataTable* A, UDataTable* B, const FCkDiffNames& Names, TSharedPtr<FJsonObject> Result,
@@ -1307,6 +1479,27 @@ namespace
 
 TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAsset(const TSharedPtr<FJsonObject>& Params)
 {
+	TArray<UPackage*> Loaded;
+	ON_SCOPE_EXIT { CkDiffUnload(Loaded); };
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	if (!TryGetArrayParam(Params, TEXT("items"), Items)) return DiffCheckpointAssetOne(Params, Loaded);
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	for (const TSharedPtr<FJsonValue>& Item : *Items)
+	{
+		const TSharedPtr<FJsonObject>* ItemParams = nullptr;
+		TSharedPtr<FJsonValue> One = Item.IsValid() && Item->TryGetObject(ItemParams)
+			? DiffCheckpointAssetOne(*ItemParams, Loaded)
+			: MCPError(TEXT("each item is an object of checkpoint_diff_asset parameters"));
+		Results.Add(One.IsValid() ? One : MakeShared<FJsonValueNull>());
+	}
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetArrayField(TEXT("results"), Results);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAssetOne(const TSharedPtr<FJsonObject>& Params, TArray<UPackage*>& Loaded)
+{
 	FString OriginalFile;
 	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("originalFile"), OriginalFile)) return Err;
 	const FString FromFile = OptionalString(Params, TEXT("fromFile"), FString());
@@ -1322,9 +1515,6 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAsset(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("%s is not under a mounted content folder"), *OriginalFile));
 	}
 	const FPackagePath OriginalPath = FPackagePath::FromLocalPath(OriginalFile);
-
-	TArray<UPackage*> Loaded;
-	ON_SCOPE_EXIT { CkDiffUnload(Loaded); };
 
 	FCkDiffSide A, B;
 	if (!FromFile.IsEmpty())
@@ -1404,7 +1594,10 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointAsset(const TSharedPtr<FJson
 		UBlueprint* BPB = Cast<UBlueprint>(B.Asset);
 		if (BPA && BPB)
 		{
-			CkDiffBlueprint(BPA, BPB, Names, Sections, Sink);
+			const bool bTypeDiff = CkDiffBlueprint(BPA, BPB, Names, Sections, Sink);
+			// Says the type's own diff (the widget tree of a Widget Blueprint) was compared, so a reader can
+			// tell "no difference" from "not compared".
+			Result->GetObjectField(TEXT("engine"))->SetBoolField(TEXT("blueprintTypeDiff"), bTypeDiff);
 			TSharedPtr<FJsonValue> Semantic = DiffBlueprintObjects(BPA, BPB, PackageName, PackageName);
 			if (Semantic.IsValid() && Semantic->Type == EJson::Object)
 			{
@@ -1478,6 +1671,8 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 	const bool bCurrent = OptionalBool(Params, TEXT("current"), false);
 	const FString FromLabel = OptionalString(Params, TEXT("fromLabel"), TEXT("Before"));
 	const FString ToLabel = OptionalString(Params, TEXT("toLabel"), bCurrent ? TEXT("Current") : TEXT("After"));
+	const FString FromTime = OptionalString(Params, TEXT("fromTime"), FString());
+	const FString ToTime = OptionalString(Params, TEXT("toTime"), FString());
 
 	FString PackageName;
 	if (!FPackageName::TryConvertFilenameToLongPackageName(OriginalFile, PackageName))
@@ -1531,10 +1726,15 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 	else
 	{
 		const FCkDiffEngine Engine = CkDiffEngineFor(New, false);
-		FRevisionInfo OldRev;
-		OldRev.Revision = FromLabel;
-		FRevisionInfo NewRev;
-		NewRev.Revision = ToLabel;
+		// Without a checkpoint time, a version's file time; the current asset is as of now.
+		const FDateTime FromFileTime = IFileManager::Get().GetTimeStamp(*FromFile);
+		const FDateTime ToFileTime = bCurrent ? FDateTime::UtcNow() : IFileManager::Get().GetTimeStamp(*ToFile);
+		const FRevisionInfo OldRev = MCPCheckpointRevision(FromLabel, FromTime, FromFileTime == FDateTime::MinValue() ? FDateTime::UtcNow() : FromFileTime);
+		const FRevisionInfo NewRev = MCPCheckpointRevision(ToLabel, bCurrent ? FString() : ToTime, ToFileTime == FDateTime::MinValue() ? FDateTime::UtcNow() : ToFileTime);
+		TSharedPtr<FJsonObject> Revisions = MakeShared<FJsonObject>();
+		Revisions->SetObjectField(TEXT("before"), MCPCheckpointRevisionJson(OldRev));
+		Revisions->SetObjectField(TEXT("after"), MCPCheckpointRevisionJson(NewRev));
+		Result->SetObjectField(TEXT("revisions"), Revisions);
 		if (Engine.Native == TEXT("window"))
 		{
 			IAssetTools::Get().DiffAssets(Old, New, OldRev, NewRev);

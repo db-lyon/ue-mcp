@@ -97,6 +97,8 @@ describe("ue-mcp daemon", () => {
 
     const stopped = await daemon(["stop", project, "--json"]);
     expect(JSON.parse(stopped.stdout)).toEqual({ ok: true, stopped: s.pid });
+    // stop returns only once the process is gone.
+    expect(pidAlive(s.pid)).toBe(false);
     await waitGone(sb, project, s.pid);
     expect(fs.existsSync(discoveryFile(sb, project))).toBe(false);
     expect(JSON.parse((await daemon(["status", project, "--json"])).stdout)).toEqual({ ok: true, running: false });
@@ -194,6 +196,21 @@ describe("handoff", () => {
       expect(fs.existsSync(discoveryFile(sb, project))).toBe(false);
     } finally {
       await fake.stop();
+    }
+  });
+
+  it("a daemon whose record another live daemon took over stops itself", async () => {
+    covers("daemon.supersede");
+    const project = sb.makeProject("Superseded");
+    const d = await startDaemonCli(sb, project);
+    try {
+      // What a successor publishes: a live process that is not this daemon.
+      fs.writeFileSync(discoveryFile(sb, project), JSON.stringify({ ...readDiscovery(sb, project), pid: process.pid, token: "successor" }));
+      await waitFor(() => !pidAlive(d.pid), 20_000, `daemon pid ${d.pid} to stop`);
+      // It leaves the successor's record alone.
+      expect(readDiscovery(sb, project)).toMatchObject({ pid: process.pid, token: "successor" });
+    } finally {
+      fs.rmSync(discoveryFile(sb, project), { force: true });
     }
   });
 

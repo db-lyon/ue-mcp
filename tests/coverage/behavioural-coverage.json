@@ -2723,6 +2723,11 @@
           "test": "UE.MCP.Diff.CheckpointAsset.MaterialGraphPropertiesAndThumbnails"
         },
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/CheckpointAssetDiffTests.cpp",
+          "test": "UE.MCP.Diff.CheckpointAsset.WidgetTreeDefaultsAndGraph"
+        },
+        {
           "suite": "live",
           "file": "tests/live/checkpoint-asset-diff.test.ts",
           "test": "checkpoint_diff_asset reports a version it cannot load, with the reason"
@@ -3235,6 +3240,11 @@
         },
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/CheckpointAssetDiffTests.cpp",
+          "test": "UE.MCP.Diff.CheckpointAsset.WidgetTreeDefaultsAndGraph"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PCGHandlerTests.cpp",
           "test": "UE.MCP.PCG.Component.GraphAndParameterOverrides"
         },
@@ -3247,6 +3257,11 @@
           "suite": "live",
           "file": "tests/live/bcov-reflection.test.ts",
           "test": "inspect_save_game loads a slot the test wrote and reports its class"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-default-propagation.test.ts",
+          "test": "moves instances on the old default, keeps overrides, and a level save keeps both"
         },
         {
           "suite": "live",
@@ -3866,6 +3881,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/CheckpointAssetDiffTests.cpp",
           "test": "UE.MCP.Diff.CheckpointAsset.ActorBlueprintThumbnailsRender"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/CheckpointAssetDiffTests.cpp",
+          "test": "UE.MCP.Diff.CheckpointAsset.WidgetTreeDefaultsAndGraph"
         },
         {
           "suite": "automation",
@@ -6208,6 +6228,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/spatial-communication.test.ts",
           "test": "rejects reversed or overflowing focus framing before capture"
         }
@@ -7107,6 +7132,16 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "set_component_override_materials stores the material list"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-default-propagation.test.ts",
+          "test": "moves instances on the old default, keeps overrides, and a level save keeps both"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -7378,6 +7413,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-environment.test.ts",
           "test": "spawn_light places a point light at the requested location"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-default-propagation.test.ts",
+          "test": "moves instances on the old default, keeps overrides, and a level save keeps both"
         }
       ]
     },
@@ -8472,6 +8512,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "get_output_log and search_log find a line a Python script just logged"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -8649,6 +8694,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "script_run applies arrange, runs act, then judges the expectation from the end of act"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -11527,6 +11577,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-component-default-propagation.test.ts",
+          "test": "moves instances on the old default, keeps overrides, and a level save keeps both"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/crash-class-inputs.test.ts",
           "test": "deletes a map while it is the loaded one, and the editor carries on"
         },
@@ -12565,6 +12620,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "checkpoint_prepare_restore refuses during PIE"
         },
@@ -12675,6 +12735,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-session.test.ts",
           "test": "inject_input, inject_input_start, inject_input_update, inject_input_stop and inject_input_tape drive a bound action"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -13362,6 +13427,11 @@
           "suite": "live",
           "file": "tests/live/playtest-flow.test.ts",
           "test": "drafts, has the editor check the draft, and saves a script that reads back"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/playtest-flow.test.ts",
+          "test": "fails before drafting when the target path resolves to nothing, and saves no script (#1610)"
         }
       ]
     },
@@ -17981,6 +18051,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/blueprint-component-default-propagation.test.ts",
+          "test": "moves instances on the old default, keeps overrides, and a level save keeps both"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "a turn through the server"
         }
@@ -18180,6 +18255,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-diagnostics.test.ts",
           "test": "get_output_log and search_log find a line a Python script just logged"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },
@@ -18572,6 +18652,16 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "set_blueprint_component_property writes a mesh that the component readers return"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-default-propagation.test.ts",
+          "test": "moves instances on the old default, keeps overrides, and a level save keeps both"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-component-property-pie.test.ts",
+          "test": "reinstances the possessed pawn without binding any delegate twice, and the value reads back"
         }
       ]
     },

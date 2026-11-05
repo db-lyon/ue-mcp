@@ -6,8 +6,9 @@
 import type { DialogPromptFn, ElicitParams, ElicitResult } from "../core/types.js";
 import type { DisconnectCause } from "./disconnect.js";
 import type { DaemonEvent } from "./events.js";
-import type { UiManifest } from "./ui-bundles.js";
+import type { UiBundleInfo, UiManifest } from "./ui-bundles.js";
 import type { ModelProvider } from "../flow/model-provider.js";
+import type { FlowStepApprover } from "../flow/step-approval.js";
 import type { AssetDiff, ChangesResult, CheckpointResult, CheckpointState, NativeDiffResult, RestoreResult } from "../checkpoints/service.js";
 import type { DaemonSkill } from "../extensions/skills-list.js";
 import type { ContextProjection, ContextProjectionOptions } from "../server/context-projection.js";
@@ -61,6 +62,13 @@ export interface ExtensionManifest {
   api?: { min?: number; max?: number };
   /** The oldest ue-mcp the extension runs on. */
   ueMcp?: string;
+  /**
+   * The UI bundles it works with. The daemon serves the bundle named for the
+   * extension at its own version, or else the newest from `min` up to that
+   * version; never one newer. Without `min`, any older bundle qualifies.
+   * `root: false` keeps its bundle off /ui/, served only at /ui/ext/<name>/.
+   */
+  ui?: { min?: string; root?: boolean };
 }
 
 /** An extension the daemon did not load, and what it needs. */
@@ -168,6 +176,21 @@ export interface ActionResult {
   content: Array<{ type: string; text?: string }>;
 }
 
+/**
+ * Objects extensions share in process (feature "extension.services"). One
+ * provider holds an id at a time; `provide` throws while another does and
+ * returns the revoke. `watch` calls back now if the id is provided, on each
+ * provide, and with undefined on each revoke, and returns the unsubscribe.
+ * Extensions activate in directory order, so a consumer may load before its
+ * provider. A provider's services are revoked when it is disposed, and a
+ * disposed extension's watches stop first.
+ */
+export interface ExtensionServicesApi {
+  provide(id: string, impl: unknown): () => void;
+  get<T>(id: string): T | undefined;
+  watch<T>(id: string, cb: (impl: T | undefined) => void): () => void;
+}
+
 export interface DaemonExtensionApi {
   /** EXTENSION_API_VERSION of the daemon that loaded this extension. */
   apiVersion: number;
@@ -218,9 +241,33 @@ export interface DaemonExtensionApi {
    *                              category scope would advertise, and `context.call` runs one call
    *                              against that surface
    *   "actions.effects"          `actions.effects` lists each action's effect and whether it is destructive
+   *   "extension.versions"       `versions` names this extension's loaded, recorded and installed versions
+   *   "ui.scopedKeys"            a key from `ui.trustKey` verifies this extension's own bundles and
+   *                              bundles no loaded extension names, never another extension's
+   *   "ui.extensions"            `ui.own` gives this extension's own bundle, served at /ui/ext/<name>/
+   *   "extension.services"       `services` lets extensions provide and use each other's objects in process
+   *   "flows.stepApproval"       `flows.approveSteps` asks this extension before each task of a run that
+   *                              names it (POST /v1/flows/<name>/run with `stepApproval`)
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
+
+  /**
+   * Approve each flow step as it runs (feature "flows.stepApproval").
+   * `approveSteps` registers `approver` under this extension's name, replacing
+   * an earlier one, and returns the function that removes it. A run started
+   * with `stepApproval: { approver: <this extension's name>, token }` asks it
+   * before every task it creates, rollbacks excepted, with the task's
+   * resolved options and the run's token; a denial fails that step with the
+   * reason and the task never runs. A run naming an approver that is not
+   * registered fails its first step instead of running unapproved.
+   */
+  flows?: {
+    approveSteps(approver: FlowStepApprover): () => void;
+  };
+
+  /** Objects shared with other extensions in process (feature "extension.services"). */
+  services?: ExtensionServicesApi;
 
   /**
    * The model behind flow agent steps (`class_path: agent` and `agent_prompt`, and the
@@ -292,6 +339,15 @@ export interface DaemonExtensionApi {
     effects(categories?: string[]): ActionEffectInfo[];
   };
 
+  /**
+   * This extension's versions (feature "extension.versions", #1619): the one
+   * loaded, the one this project records, and every one installed on the
+   * machine, oldest first. Versions install side by side and each project
+   * loads its recorded one, so another project can install a newer one at any
+   * time; `ue-mcp extension use <name> <version> <project>` moves a project.
+   */
+  versions?(): { loaded: string; recorded: string | null; installed: string[] };
+
   editors(): EditorStatus[];
   /** Start, stop, restart or rebuild the editor, with the cause announced first. */
   editorOperation(op: "start" | "stop" | "restart" | "rebuild"): Promise<Record<string, unknown>>;
@@ -300,12 +356,23 @@ export interface DaemonExtensionApi {
   setBusy(busy: () => boolean): void;
 
   ui: {
-    /** Trust an Ed25519 public key (PEM) for UI bundles. */
+    /**
+     * Trust an Ed25519 public key (PEM) for UI bundles. A bundle named for a
+     * loaded extension verifies only against that extension's keys (feature "ui.scopedKeys").
+     */
     trustKey(pem: string): void;
     /** Verify a bundle directory and install it. Throws when it does not verify. */
     install(dir: string): UiManifest;
-    /** The bundle being served, or null. */
+    /**
+     * The bundle being served, or null. A bundle named for this extension is
+     * served only at its version or older (`ueMcpExtension.ui`).
+     */
     active(): UiManifest | null;
+    /**
+     * This extension's own bundle, newest in its version window, which the
+     * daemon serves at /ui/ext/<name>/ (feature "ui.extensions"), or null.
+     */
+    own?(): UiManifest | null;
   };
 
   /**
@@ -366,15 +433,24 @@ export interface DaemonHealth {
   extensions: Array<{ name: string; version: string }>;
   /** Extensions this daemon refused to load, with why; the client offers the update that fixes it. */
   refusedExtensions?: RefusedExtension[];
-  /** Version of the UI bundle being served, or null. */
+  /** Version of the UI bundle being served at /ui/, or null. */
   ui: string | null;
+  /**
+   * Each loaded extension's own bundle, in load order: name, version, `base`
+   * (/ui/ext/<name>/) and the signed `module` it declares (feature "ui.extensions").
+   */
+  uiBundles?: UiBundleInfo[];
   /**
    * What the HTTP API offers beyond apiVersion, for feature detection ("checkpoints", "skills",
    * "context.projection", "actions.effects", and:
    *   "install.pendingBuild"  GET /v1/install carries plugin.pendingBuild, a source bridge deployed
    *                           and not built yet, which the next start through ue-mcp builds first
    *   "editor.rebuild"        POST /v1/editor/rebuild stops the editor, builds, and starts it again
-   *                           only when the build passed; a failed step carries `reason`).
+   *                           only when the build passed; a failed step carries `reason`
+   *   "ui.scopedKeys"         a bundle named for a loaded extension is installed and served only
+   *                           when signed by a key that extension trusted
+   *   "ui.extensions"         GET /ui/ext/<name>/ serves each loaded extension's own bundle, listed
+   *                           in `uiBundles`; `ueMcpExtension.ui.root: false` keeps one off /ui/).
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];

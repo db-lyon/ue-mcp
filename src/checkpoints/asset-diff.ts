@@ -5,7 +5,9 @@
  * produces them: FSingleObjectDiffEntry from DiffUtils::CompareUnrelatedObjects
  * with both values exported as text, FDiffSingleResult from
  * FGraphDiffControl::DiffGraphs with its DisplayString and ToolTip, and
- * FSCSDiffEntry from DiffUtils::CompareUnrelatedSCS. Facts about each version
+ * FSCSDiffEntry from DiffUtils::CompareUnrelatedSCS, and the Blueprint type's own
+ * FDiffSingleResults from UBlueprint::FindDiffs (a Widget Blueprint's widget
+ * tree, each paired widget compared property by property). Facts about each version
  * (LOD counts, texture size) are context beside them, never a diff of their own.
  *
  * Each version also gets a picture rendered with ThumbnailTools::RenderThumbnail
@@ -13,29 +15,22 @@
  * same picture.
  */
 import { unifiedDiff } from "./text-diff.js";
+import * as path from "node:path";
 
 /** Bumped when the bridge's records or pictures change, so cached diffs are recomputed. */
-export const ASSET_DIFF_FORMAT = 3;
+export const ASSET_DIFF_FORMAT = 4;
 
 /**
- * Bumped when the bridge renders pictures differently, so a kept picture from an
- * older bridge is rendered again. 2: Actor Blueprints loaded for diff are drawn,
- * and a black render is no picture (#178 in ue-mcp-studio).
+ * Bumped when the bridge's pictures change, so a picture kept for a version is
+ * rendered again. 2: the bridge no longer writes a blank picture (a Blueprint
+ * loaded for diff is not compiled, so its renderer drew nothing but black).
+ * 3: an Actor Blueprint loaded for diff is drawn, rather than its saved thumbnail.
  */
-export const THUMBNAIL_FORMAT = 2;
+export const THUMBNAIL_FORMAT = 3;
 
-/** What is kept beside a version's picture. */
-export interface ThumbnailMeta {
-  source: "rendered" | "saved";
-  note?: string;
-  format?: number;
-}
-
-/** Whether a version's kept picture, if any, should be asked of the editor again. */
-export function thumbnailWanted(pngExists: boolean, meta: unknown): boolean {
-  if (!pngExists) return true;
-  const m = meta as ThumbnailMeta | null | undefined;
-  return !m || typeof m !== "object" || m.format !== THUMBNAIL_FORMAT;
+/** Where the picture (png) of a version, or what is known about it (json), is kept. */
+export function thumbnailFile(dir: string, version: string, ext: "png" | "json" = "png"): string {
+  return path.join(dir, `${version}.v${THUMBNAIL_FORMAT}.${ext}`);
 }
 
 /** How many packages one list_changes diffs up front; the rest are diffed on request, per path. */
@@ -56,6 +51,8 @@ export interface AssetDiffRecord {
   hidden?: boolean;
   /** FPropertySoftPath::ToDisplayName of a property record. */
   path?: string;
+  /** The path as the details panel labels it: "Hide when Full" for bHideWhenFull. */
+  label?: string;
   property?: string;
   /** Both values exported with FProperty::ExportText; null where the path does not exist on that side. */
   before?: string | null;
@@ -120,6 +117,8 @@ export interface AssetDiffSection {
   entries: AssetDiffRecord[];
   /** How many of the records are under properties the details panel does not show (marked hidden). */
   hiddenChanges?: number;
+  /** The engine's INFO_MESSAGE results for the section, such as what a Widget Blueprint diff does not cover. */
+  notes?: string[];
 }
 
 export interface AssetFact {
@@ -147,7 +146,15 @@ export interface AssetDiff {
   assetClass?: string;
   status?: "added" | "modified" | "deleted";
   /** Which of Unreal's diffs serves this class, and what these records are. */
-  engine?: { tool: string; note: string; native: "window" | "details" | "text"; nativeAvailable?: boolean; nativeReason?: string };
+  engine?: {
+    tool: string;
+    note: string;
+    native: "window" | "details" | "text";
+    nativeAvailable?: boolean;
+    nativeReason?: string;
+    /** A Blueprint: whether its type's own diff (UBlueprint::FindDiffs, a Widget Blueprint's widget tree) ran. Absent from bridges before it did. */
+    blueprintTypeDiff?: boolean;
+  };
   /** null: the version did not exist. */
   before?: AssetVersion | null;
   after?: AssetVersion | null;
@@ -180,9 +187,15 @@ function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/** A property record's name: its group, then the details panel's label for the path. */
+function recordName(r: AssetDiffRecord): string {
+  const name = r.label ?? r.path ?? r.displayString;
+  return r.group && r.group !== r.path && r.group !== name ? `${r.group} > ${name}` : name;
+}
+
 /** The record's own words, with the values when it has them. */
 export function describeRecord(r: AssetDiffRecord): string {
-  const label = r.path ? (r.group && r.group !== r.path ? `${r.group} ${r.path}` : r.path) : r.displayString;
+  const label = r.path ? recordName(r) : r.displayString;
   if (r.path && (r.before !== undefined || r.after !== undefined)) {
     if (r.diffType === "PropertyAddedToB") return `${label} added: ${short(r.after)}`;
     if (r.diffType === "PropertyAddedToA") return `${label} removed: ${short(r.before)}`;
@@ -226,6 +239,15 @@ export function summarizeAssetDiff(d: AssetDiff): string {
   }
   if (records.length === 0) {
     if (d.textDiff?.diff) return `${cls}: the engine's ${d.textDiff.format.toUpperCase()} export changed`;
+    if (!hidden && widgetTreeNotCompared(d)) return `${cls}: the file changed; this bridge does not compare the widget tree, so open Unreal's diff to see it`;
+    // No property differs, but a fact does (a sound's duration, a mesh's triangles): that is the change.
+    const before = new Map((d.before?.facts ?? []).map((f) => [f.name, f.value]));
+    const facts = (d.after?.facts ?? []).filter((f) => before.has(f.name) && before.get(f.name) !== f.value);
+    if (!hidden && facts.length) {
+      const shown = facts.slice(0, 2).map((f) => `${f.name}: ${short(before.get(f.name), 40)} to ${short(f.value, 40)}`);
+      const more = facts.length - shown.length;
+      return `${cls} changed. ${shown.join("; ")}${more > 0 ? `; and ${plural(more, "more fact")}` : ""}`;
+    }
     return hidden
       ? `${cls}: ${plural(hidden, "difference")}, all in properties the details panel does not show`
       : `${cls}: the file changed, and Unreal's diff finds no difference`;
@@ -238,7 +260,7 @@ export function summarizeAssetDiff(d: AssetDiff): string {
   const shown: string[] = [];
   for (const r of ordered) {
     const line = describeRecord(r);
-    const name = r.path ? (r.group && r.group !== r.path ? `${r.group} ${r.path}` : r.path) : line;
+    const name = r.path ? recordName(r) : line;
     if (shown.some((x) => x.startsWith(name))) continue;
     shown.push(line);
     if (shown.length === 2) break;
@@ -246,6 +268,11 @@ export function summarizeAssetDiff(d: AssetDiff): string {
   const total = records.length + (d.recordsDropped ?? 0);
   const rest = total - shown.length;
   return `${plural(total, "difference")}: ${shown.join("; ")}${rest > 0 ? `; and ${rest} more` : ""}${hiddenNote}`;
+}
+
+/** A Widget Blueprint diffed by a bridge that does not run UBlueprint::FindDiffs, which is where its widget tree is compared. */
+export function widgetTreeNotCompared(d: Pick<AssetDiff, "assetClass" | "engine">): boolean {
+  return /WidgetBlueprint/.test(d.assetClass ?? "") && d.engine?.blueprintTypeDiff === undefined;
 }
 
 /** Whether Unreal's own diff view can open this item, and why not, as the bridge decided it. */
