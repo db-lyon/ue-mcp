@@ -143,6 +143,33 @@ export function npmInvocation(
 }
 
 /**
+ * How to run a command found on PATH with an argv array. Windows resolves the
+ * name through PATHEXT the way a shell would: an executable runs directly, and
+ * a batch file shim (an npm-installed CLI, say) runs through cmd.exe on a line
+ * of checked, quoted tokens.
+ */
+export function commandInvocation(
+  name: string,
+  args: string[],
+  opts: { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv } = {},
+): Invocation {
+  if ((opts.platform ?? process.platform) !== "win32") return { command: name, args };
+  const env = opts.env ?? process.env;
+  const exts = (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+  for (const dir of (env.PATH ?? env.Path ?? "").split(";").filter(Boolean)) {
+    for (const ext of exts) {
+      const file = path.join(dir, name + ext.toLowerCase());
+      if (!fs.existsSync(file)) continue;
+      if (/^\.(bat|cmd)$/i.test(ext)) {
+        return windowsBatchInvocation(file, args.map((a, i) => cmdQuote(a, `${name} argument ${i + 1}`)));
+      }
+      return { command: file, args };
+    }
+  }
+  return { command: name, args };
+}
+
+/**
  * A package name, `name@range`, folder, tarball or URL handed to npm. It must
  * not read as an option, and must hold no control characters.
  */

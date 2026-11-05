@@ -5,13 +5,13 @@
  * Fetches a GitHub issue, creates a branch, launches Claude Code to
  * implement the fix, then pushes and opens a PR.  Never merges to main.
  */
-import { execSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { projectDirOf } from "../config/uproject-path.js";
 import { RESET, BOLD, DIM, RED, CYAN, YELLOW, ok } from "./ui/ansi.js";
+import { commandInvocation, spawnInvocation, spawnInvocationSync } from "../core/safe-spawn.js";
 import type { CliUsage } from "./cli-main.js";
 
 const fail = (msg: string) => {
@@ -22,16 +22,20 @@ const fail = (msg: string) => {
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
 function hasCommand(cmd: string): boolean {
-  try {
-    execSync(`${cmd} --version`, { windowsHide: true, stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
+  return spawnInvocationSync(commandInvocation(cmd, ["--version"]), { stdio: "ignore" }).status === 0;
 }
 
-function sh(cmd: string): string {
-  return execSync(cmd, { windowsHide: true, encoding: "utf-8" }).trim();
+/** Run a command from argv; its trimmed stdout, or a throw when it fails. */
+function runCmd(cmd: string, args: string[], stdio: "pipe" | "ignore" = "pipe"): string {
+  const r = spawnInvocationSync(commandInvocation(cmd, args), { encoding: "utf-8", stdio: ["ignore", stdio, "pipe"] });
+  if (r.error) throw r.error;
+  if (r.status !== 0) throw new Error(`${cmd} ${args[0]} exited ${r.status}: ${String(r.stderr ?? "").trim()}`);
+  return String(r.stdout ?? "").trim();
+}
+
+/** The issue number argument, digits only. */
+export function parseIssueNumber(arg: string | undefined): number | null {
+  return arg && /^[1-9]\d{0,9}$/.test(arg) ? Number(arg) : null;
 }
 
 /* ── Main ────────────────────────────────────────────────────────── */
@@ -60,9 +64,9 @@ async function resolve(argv: string[]): Promise<number> {
   // resolve never prompts, so CI needs nothing different. The flag stays accepted so existing scripts keep working.
   if (args.includes("--ci")) console.log(`  ${DIM}--ci changes nothing: resolve always runs unattended.${RESET}`);
   const issueArg = args.find((a) => !a.startsWith("-"));
-  const issueNum = Number(issueArg);
+  const issueNum = parseIssueNumber(issueArg);
 
-  if (!issueArg || isNaN(issueNum)) {
+  if (issueNum === null) {
     console.log("");
     console.log(`  ${BOLD}Usage:${RESET} npx ue-mcp resolve <issue-number>`);
     console.log(`  ${DIM}Example: npx ue-mcp resolve 16${RESET}`);
@@ -75,7 +79,7 @@ async function resolve(argv: string[]): Promise<number> {
   if (!hasCommand("claude")) fail("Claude Code is required. Install: npm i -g @anthropic-ai/claude-code");
 
   try {
-    sh("git rev-parse --git-dir");
+    runCmd("git", ["rev-parse", "--git-dir"]);
   } catch {
     fail("Not a git repository. Clone ue-mcp first.");
   }
@@ -84,7 +88,7 @@ async function resolve(argv: string[]): Promise<number> {
   // upstream, loudly.
   let repo: string;
   try {
-    const remote = sh("git remote get-url origin");
+    const remote = runCmd("git", ["remote", "get-url", "origin"]);
     const match = remote.match(/[/:]([^/]+\/[^/.]+?)(?:\.git)?$/);
     if (match && /^[\w.-]+\/[\w.-]+$/.test(match[1])) {
       repo = match[1];
@@ -104,9 +108,7 @@ async function resolve(argv: string[]): Promise<number> {
 
   let issue: { title: string; body: string; labels: { name: string }[] };
   try {
-    const raw = sh(
-      `gh issue view ${issueNum} --repo ${repo} --json title,body,labels`,
-    );
+    const raw = runCmd("gh", ["issue", "view", String(issueNum), "--repo", repo, "--json", "title,body,labels"]);
     issue = JSON.parse(raw);
   } catch {
     fail(`Could not fetch issue #${issueNum} from ${repo}`);
@@ -120,12 +122,12 @@ async function resolve(argv: string[]): Promise<number> {
 
   try {
     // Make sure we branch from latest main
-    execSync("git fetch origin main", { windowsHide: true, stdio: "ignore" });
-    execSync(`git checkout -b ${branch} origin/main`, { windowsHide: true, stdio: "pipe" });
+    runCmd("git", ["fetch", "origin", "main"], "ignore");
+    runCmd("git", ["checkout", "-b", branch, "origin/main"]);
   } catch {
     // Branch might already exist
     try {
-      execSync(`git checkout ${branch}`, { windowsHide: true, stdio: "pipe" });
+      runCmd("git", ["checkout", branch]);
     } catch {
       fail(`Could not create or switch to branch ${branch}`);
     }
@@ -165,11 +167,7 @@ async function resolve(argv: string[]): Promise<number> {
   console.log("");
 
   const exitCode = await new Promise<number | null>((resolve) => {
-    const child = spawn("claude", claudeArgs, {
-      windowsHide: true,
-      stdio: ["pipe", "inherit", "inherit"],
-      shell: true,
-    });
+    const child = spawnInvocation(commandInvocation("claude", claudeArgs), { stdio: ["pipe", "inherit", "inherit"] });
     child.stdin!.write(prompt);
     child.stdin!.end();
     child.on("exit", resolve);
@@ -187,7 +185,7 @@ async function resolve(argv: string[]): Promise<number> {
   // Check if there are commits on this branch beyond main
   let commitCount: number;
   try {
-    const log = sh(`git log origin/main..HEAD --oneline`);
+    const log = runCmd("git", ["log", "origin/main..HEAD", "--oneline"]);
     commitCount = log ? log.split("\n").length : 0;
   } catch {
     commitCount = 0;
@@ -203,7 +201,7 @@ async function resolve(argv: string[]): Promise<number> {
 
   // Push and create PR
   try {
-    execSync(`git push -u origin ${branch}`, { windowsHide: true, stdio: "pipe" });
+    runCmd("git", ["push", "-u", "origin", branch]);
     ok("Pushed to origin");
   } catch (e) {
     fail(`Push failed: ${e instanceof Error ? e.message : e}`);
@@ -223,7 +221,7 @@ async function resolve(argv: string[]): Promise<number> {
     fs.writeFileSync(requestFile, JSON.stringify({ title: prTitle, body: prBody, head: branch, base: "main" }));
     let prUrl: string;
     try {
-      prUrl = sh(`gh api repos/${repo}/pulls --method POST --input "${requestFile}" --jq .html_url`);
+      prUrl = runCmd("gh", ["api", `repos/${repo}/pulls`, "--method", "POST", "--input", requestFile, "--jq", ".html_url"]);
     } finally {
       fs.rmSync(path.dirname(requestFile), { recursive: true, force: true });
     }
