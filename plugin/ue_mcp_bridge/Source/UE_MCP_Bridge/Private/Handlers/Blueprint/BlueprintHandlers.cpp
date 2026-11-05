@@ -2257,16 +2257,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 
 				// The SCS node's AttachToName is what the details panel's Parent
 				// Socket writes, so a weapon or prop mesh can sit on a bone of the
-				// parent skeletal mesh from the moment it is added. The node comes
-				// from the new handle rather than a name lookup.
+				// parent skeletal mesh from the moment it is added. The node is
+				// looked up by the variable name the new handle ended up with.
 				if (!ParentSocket.IsEmpty())
 				{
 					const FSubobjectData* NewData = NewHandle.GetData();
-					USCS_Node* Node = NewData ? NewData->GetSCSNode() : nullptr;
-					if (!Node)
-					{
-						Node = MCPFindSCSNode(Blueprint->SimpleConstructionScript, ComponentName);
-					}
+					const FString NewVariableName = NewData ? NewData->GetVariableName().ToString() : ComponentName;
+					USCS_Node* Node = MCPFindSCSNode(Blueprint->SimpleConstructionScript, NewVariableName);
 					if (Node)
 					{
 						Node->Modify();
