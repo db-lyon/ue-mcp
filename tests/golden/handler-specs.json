@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1231,
+  "handlerCount": 1232,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -2359,6 +2359,30 @@
           "type": "string",
           "required": false,
           "description": "Material Parameter Collection asset a MaterialParameterCollection track animates (required for that track type)"
+        },
+        {
+          "name": "animation",
+          "type": "string",
+          "required": false,
+          "description": "AnimSequence, AnimComposite or AnimStreamable a SkeletalAnimation section plays. Without endSeconds the section spans the clip after offsets and play rate"
+        },
+        {
+          "name": "startFrameOffset",
+          "type": "integer",
+          "required": false,
+          "description": "SkeletalAnimation only: ticks (the sequence's tick resolution, 24000/s by default) trimmed from the clip's start. Half a display frame samples a Step-interpolated clip inside each key"
+        },
+        {
+          "name": "endFrameOffset",
+          "type": "integer",
+          "required": false,
+          "description": "SkeletalAnimation only: ticks trimmed from the clip's end"
+        },
+        {
+          "name": "playRate",
+          "type": "number",
+          "required": false,
+          "description": "SkeletalAnimation only: clip play rate, above 0 (default 1)"
         }
       ]
     },
@@ -11075,6 +11099,12 @@
           "type": "string",
           "required": false,
           "description": "skip (default) returns an existing asset untouched, error refuses"
+        },
+        {
+          "name": "displayRate",
+          "type": "any",
+          "required": false,
+          "description": "Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"
         }
       ],
       "contractExempt": "creates a Level Sequence asset"
@@ -40264,6 +40294,27 @@
           "type": "string",
           "required": false,
           "description": "scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"
+        }
+      ]
+    },
+    "set_sequence_display_rate": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "sequencePath",
+          "type": "string",
+          "required": true,
+          "description": "Level Sequence asset path",
+          "aliases": [
+            "assetPath",
+            "path"
+          ]
+        },
+        {
+          "name": "displayRate",
+          "type": "any",
+          "required": true,
+          "description": "Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"
         }
       ]
     },

@@ -69,6 +69,30 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Material Parameter Collection asset a MaterialParameterCollection track animates (required for that track type)"
+      },
+      {
+        "name": "animation",
+        "type": "string",
+        "required": false,
+        "description": "AnimSequence, AnimComposite or AnimStreamable a SkeletalAnimation section plays. Without endSeconds the section spans the clip after offsets and play rate"
+      },
+      {
+        "name": "startFrameOffset",
+        "type": "integer",
+        "required": false,
+        "description": "SkeletalAnimation only: ticks (the sequence's tick resolution, 24000/s by default) trimmed from the clip's start. Half a display frame samples a Step-interpolated clip inside each key"
+      },
+      {
+        "name": "endFrameOffset",
+        "type": "integer",
+        "required": false,
+        "description": "SkeletalAnimation only: ticks trimmed from the clip's end"
+      },
+      {
+        "name": "playRate",
+        "type": "number",
+        "required": false,
+        "description": "SkeletalAnimation only: clip play rate, above 0 (default 1)"
       }
     ]
   },
@@ -493,6 +517,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "skip (default) returns an existing asset untouched, error refuses"
+      },
+      {
+        "name": "displayRate",
+        "type": "any",
+        "required": false,
+        "description": "Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"
       }
     ],
     "contractExempt": "creates a Level Sequence asset"
@@ -3323,6 +3353,27 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "set_sequence_display_rate": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "sequencePath",
+        "type": "string",
+        "required": true,
+        "description": "Level Sequence asset path",
+        "aliases": [
+          "assetPath",
+          "path"
+        ]
+      },
+      {
+        "name": "displayRate",
+        "type": "any",
+        "required": true,
+        "description": "Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"
+      }
+    ]
+  },
   "set_sequence_keyframes": {
     "category": "editor",
     "params": [
@@ -3801,7 +3852,7 @@ export const handlerSpecs: HandlerSpecs = {
 
 /** The Params: clause of each spec'd bridge method. */
 export const paramsClauses: Readonly<Record<string, string>> = {
-  add_sequence_section: "Params: sequencePath (or assetPath, or path), trackType, actorLabel?, actorPath?, startSeconds?, endSeconds?, cameraActorLabel?, cameraActorPath?, materialParameterCollection?",
+  add_sequence_section: "Params: sequencePath (or assetPath, or path), trackType, actorLabel?, actorPath?, startSeconds?, endSeconds?, cameraActorLabel?, cameraActorPath?, materialParameterCollection?, animation?, startFrameOffset?, endFrameOffset?, playRate?",
   add_sequence_track: "Params: assetPath (or path), trackType, actorLabel?, actorPath?, materialParameterCollection?",
   add_trace_bookmark: "Params: bookmarkName",
   begin_editor_transaction: "Params: description? (or label)",
@@ -3820,7 +3871,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   close_window: "Params: windowId",
   configure_pie: "Params: numClients?, netMode?, runUnderOneProcess?, launchSeparateServer?, newWindowWidth?, newWindowHeight?, clientWindowWidth?, clientWindowHeight?, newWindowPosition?, centerNewWindow?",
   cook_content: "Params: platform?",
-  create_level_sequence: "Params: name, packagePath?, onConflict?",
+  create_level_sequence: "Params: name, packagePath?, onConflict?, displayRate?",
   create_new_level: "Params: levelPath, templateLevel?, onConflict?, worldPartition?",
   describe_object: "Params: objectPath (or path, or assetPath), includeProperties?, includeValues?, propertyNames?",
   discard_dirty: "Params: packages, dryRun?, allowContent?",
@@ -3910,6 +3961,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_runtime_visibility: "Params: hidden, actorLabels OR actorPaths OR actorClass, componentNames?, componentClasses?, affectActor?, affectComponents?, propagateToChildren?, matchSubclasses?, maxTargets?, dryRun?, world?, pieInstance?",
   set_scalability: "Params: level?",
   set_sequence_channel_keys: "Params: sequencePath (or assetPath, or path), trackType?, trackName?, trackIndex?, bindingGuid?, bindingName?, actorLabel?, actorPath?, sectionIndex?, channel, keyframes?, interpolation?, clearExisting?, defaultValue?, clearDefault?, parameterType?",
+  set_sequence_display_rate: "Params: sequencePath (or assetPath, or path), displayRate",
   set_sequence_keyframes: "Params: sequencePath (or assetPath, or path), trackType, actorLabel?, actorPath?, sectionIndex?, channel, keyframes, interpolation?",
   set_sequence_playback_range: "Params: sequencePath (or assetPath, or path), startSeconds, endSeconds",
   set_trace_channels: "Params: enable?, disable?",
@@ -3941,9 +3993,10 @@ export const schema: Record<string, z.ZodType> = {
   affectComponents: z.boolean().optional().describe("Hide or show matched components (default true with a component filter)"),
   allowContent: z.boolean().optional().describe("Also clear project and plugin content, including never-saved /Temp maps, whose unsaved edits are then lost when the editor closes (default false)"),
   allViewports: z.boolean().optional().describe("Redraw every level viewport rather than one (default false)"),
+  animation: z.string().optional().describe("AnimSequence, AnimComposite or AnimStreamable a SkeletalAnimation section plays. Without endSeconds the section spans the clip after offsets and play rate"),
   args: z.union([z.record(z.string(), z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))]))])), z.array(z.string()), z.array(z.object({ name: z.string(), value: z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))]))]).optional() })), z.string()], { error: "args must be an object mapping parameter name to value (e.g. {\"bEnabled\": true}), an array of positional strings, an entry list ([{\"name\": \"bEnabled\", \"value\": true}]), or a string" }).optional().describe("Function arguments: an object mapping parameter name to value (a struct value takes a JSON object such as {X,Y,Z} or export text), an entry list [{name, value}], or a JSON string of either (invoke_function, invoke_object_function, invoke_static_function). Positional arguments, as sys.argv[1:] or, with entryPoint, the call's arguments: a list of strings, a JSON array string, or one string. A parameter map is refused (run_python_file)"),
   asMain: z.boolean().optional().describe("Shorthand for runName __main__ (default false)"),
-  assetPath: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_keyframes, set_sequence_playback_range). Level Sequence asset path (add_sequence_track, get_sequence_info). Alias for objectPath (describe_object, get_property, set_property). Asset to open in its editor (open_asset). One exact package or object path to validate (validate_assets)"),
+  assetPath: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Level Sequence asset path (add_sequence_track, get_sequence_info). Alias for objectPath (describe_object, get_property, set_property). Asset to open in its editor (open_asset). One exact package or object path to validate (validate_assets)"),
   assetPaths: z.array(z.string()).optional().describe("Exact package or object paths to validate"),
   assetRegistryTimeoutSeconds: z.number().optional().describe("start only: how long to wait for that scan (default 180)"),
   bindingGuid: z.string().optional().describe("Look in this binding's tracks instead of the root tracks (get_sequence_channel_keys, remove_sequence_section, set_sequence_channel_keys). The possessable to retarget. Pass this or bindingName (rebind_possessable). Report only this binding (resolve_sequence_bindings)"),
@@ -3995,12 +4048,14 @@ export const schema: Record<string, z.ZodType> = {
   directory: z.string().optional().describe("Package path validated recursively (default /Game/). Not with assetPath or assetPaths"),
   disable: z.union([z.array(z.string()), z.string()]).optional().describe("Channels to turn off, as an array or a comma-separated string"),
   discardUnsaved: z.boolean().optional().describe("For a map: switch even though the open map has unsaved changes, discarding them (default false)"),
+  displayRate: z.unknown().optional().describe("Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"),
   dryRun: z.boolean().optional().describe("Report what would happen to each package and clear nothing (default false) (discard_dirty). Report the targets without touching them (default TRUE; pass false to apply) (set_runtime_visibility)"),
   durationS: z.number().min(1).max(600).optional().describe("Seconds before the toast fades (default 8)"),
   enable: z.union([z.array(z.string()), z.string()]).optional().describe("Channels to turn on, as an array or a comma-separated string"),
   enabled: z.boolean().optional().describe("true (default) ejects the debug camera if needed and poses it; false returns control to the player (pose_debug_camera). Hide editor-only overlays (default true); false shows them again (set_game_view). Realtime update on every level viewport (default true) (set_realtime)"),
   enabledOnly: z.boolean().optional().describe("Only channels that are currently on (default false)"),
   endFrame: z.number().optional().describe("Last display frame to render, inclusive. Not with endSeconds"),
+  endFrameOffset: z.number().int().optional().describe("SkeletalAnimation only: ticks trimmed from the clip's end"),
   endSeconds: z.number().optional().describe("Section end in seconds (default one second after the start) (add_sequence_section). Range end in seconds, exclusive (render_sequence_frames). Range end in seconds (set_sequence_playback_range)"),
   entryPoint: z.string().optional().describe("Function in the file to call after loading it under runName (default ue_mcp_entry, so its main guard does not fire); its return value comes back as result"),
   ev100: z.number().optional().describe("Fixed EV100 to pin the viewport to; implies fixed exposure"),
@@ -4094,7 +4149,7 @@ export const schema: Record<string, z.ZodType> = {
   packagePath: z.string().optional().describe("Destination folder (default /Game/Cinematics)"),
   packages: z.array(z.string()).optional().describe("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched"),
   parameterType: z.string().optional().describe("scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"),
-  path: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_keyframes, set_sequence_playback_range). Alias for assetPath (add_sequence_track, get_sequence_info, open_asset). Alias for objectPath (describe_object, get_property, set_property). Alias for filePath (run_python_file)"),
+  path: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Alias for assetPath (add_sequence_track, get_sequence_info, open_asset). Alias for objectPath (describe_object, get_property, set_property). Alias for filePath (run_python_file)"),
   paths: z.array(z.string()).optional().describe("Dotted property or function paths to evaluate per match. A function segment may carry literal arguments, e.g. GetBalance(gold, 2)"),
   pattern: z.string().optional().describe("Exact pattern of the policy to clear; omit to clear every policy (clear_dialog_policy). Substring matched against every registered console variable. Pass at least one of name, names and pattern (get_cvars). Case-insensitive substring of the library class name (list_function_libraries). Substring matched case-insensitively against the dialog title and message (set_dialog_policy)"),
   paused: z.boolean().optional().describe("true pauses the running trace, false resumes it (default true) (pause_insights_trace). true pauses, false resumes (set_pie_paused)"),
@@ -4103,6 +4158,7 @@ export const schema: Record<string, z.ZodType> = {
   pitch: z.number().optional().describe("Control-rotation pitch"),
   platform: z.string().optional().describe("Target platform (default Windows)"),
   playerIndex: z.number().optional().describe("Local player whose console runs a PIE command (default 0) (execute_command). Player index for target=playercontroller, playerpawn, or a LocalPlayer subsystem (default 0) (get_object_properties, invoke_object_function, set_object_property). 0-based player index (default 0) (get_pie_pawn). Local player whose debug camera is used (default 0) (pose_debug_camera). Player whose view target is set (default 0) (set_pie_view_target)"),
+  playRate: z.number().optional().describe("SkeletalAnimation only: clip play rate, above 0 (default 1)"),
   postEditChange: z.boolean().optional().describe("Fire PostEditChangeProperty after the write (default false)"),
   prefix: z.string().optional().describe("Purge sys.modules entries starting with this prefix; must be non-empty"),
   projection: z.string().optional().describe("perspective | top | bottom | left | right | front | back | orthoFreelook. Switched before the pose is applied"),
@@ -4135,11 +4191,12 @@ export const schema: Record<string, z.ZodType> = {
   section: z.string().optional().describe("Settings section, e.g. Physics, or a combined Engine.Physics"),
   sectionIndex: z.number().int().optional().describe("Section index on the track (default 0) (get_sequence_channel_keys, set_sequence_channel_keys). Index of the section to remove, as get_sequence_info lists them (remove_sequence_section). Target section index (default 0) (set_sequence_keyframes)"),
   sequenceAction: z.string().optional().describe("play (default) | pause | stop"),
-  sequencePath: z.string().optional().describe("Level Sequence asset path (add_sequence_section, get_sequence_channel_keys, rebind_possessable, remove_sequence_section, resolve_sequence_bindings, set_sequence_channel_keys, set_sequence_keyframes, set_sequence_playback_range). Report only actors playing this sequence (get_sequence_runtime_bindings). Level Sequence to open and drive; omit to drive the one already open (play_sequence). Level Sequence to render (render_sequence_frames). Level Sequence to open and scrub; omit to scrub the one already open (scrub_sequence)"),
+  sequencePath: z.string().optional().describe("Level Sequence asset path (add_sequence_section, get_sequence_channel_keys, rebind_possessable, remove_sequence_section, resolve_sequence_bindings, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Report only actors playing this sequence (get_sequence_runtime_bindings). Level Sequence to open and drive; omit to drive the one already open (play_sequence). Level Sequence to render (render_sequence_frames). Level Sequence to open and scrub; omit to scrub the one already open (scrub_sequence)"),
   severity: z.string().optional().describe("Severity-name substring: Error | Warning | PerformanceWarning | Info (get_message_log). Icon and colour of the toast (default info) (show_notification)"),
   showMouseCursor: z.boolean().optional().describe("Show the mouse cursor (default false for gameOnly, true otherwise)"),
   space: z.string().optional().describe("world (default) | component"),
   startFrame: z.number().optional().describe("First display frame to render. Not with startSeconds"),
+  startFrameOffset: z.number().int().optional().describe("SkeletalAnimation only: ticks (the sequence's tick resolution, 24000/s by default) trimmed from the clip's start. Half a display frame samples a Step-interpolated clip inside each key"),
   startSeconds: z.number().optional().describe("Section start in seconds (add_sequence_section). Range start in seconds (default the playback range) (render_sequence_frames). Range start in seconds (set_sequence_playback_range)"),
   steps: z.number().int().optional().describe("How many steps to apply (default 1)"),
   stopMovement: z.boolean().optional().describe("Stop the movement component so the move is not undone (default true)"),
