@@ -457,7 +457,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Profiling
 	Registry.RegisterHandler(TEXT("pie_perf_summary"), &PiePerfSummary, {
-		MCPParam::Optional(TEXT("recording_id"), EType::String, RecordingIdDoc),
+		MCPParam::Optional(TEXT("recording_id"), EType::String, TEXT("Recording id under the recordings root (default: the newest recording)")),
 		MCPParam::Optional(TEXT("recording_dir"), EType::String, RecordingDirDoc),
 	});
 

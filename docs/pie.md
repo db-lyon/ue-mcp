@@ -172,7 +172,7 @@ Steps in `sequence.json`:
 | `replay_analyze` | The lead from a finalized `drift.json`: first divergence, top channels, errors, bracketing images |
 | `replay_state` | The exact recorded pawn pose at `at_time` or `at_frame`, interpolated; `apply=true` teleports the live pawn to it |
 | `record_diff` | Compare two recordings without running PIE: position, rotation and velocity deltas plus `tracked_value_max_deltas` |
-| `perf_summary` | Frametime avg, p50, p99 and max, game, render and GPU ms, peak memory, and the worst hitches with timestamps |
+| `perf_summary` | Frametime avg, p50, p99 and max, game, render and GPU ms, peak memory, and the worst hitches with timestamps; the newest recording when none is named |
 
 ```text
 pie(action="record_diff", a_id="run-1", b_id="run-2", position_cm=5, rotation_deg=2)

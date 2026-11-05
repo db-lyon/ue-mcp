@@ -476,7 +476,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "recording_id",
         "type": "string",
         "required": false,
-        "description": "Recording id under the recordings root"
+        "description": "Recording id under the recordings root (default: the newest recording)"
       },
       {
         "name": "recording_dir",
@@ -2280,7 +2280,7 @@ export const schema: Record<string, z.ZodType> = {
   record: z.boolean().optional().describe("Record input so pie_script_replay can rerun it (default true)"),
   record_drift: z.boolean().optional().describe("Record drift against the source (default true)"),
   recording_dir: z.string().optional().describe("Recording or replay folder (resolves recording.csv) (pie_assert_eval). Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings) (pie_perf_summary, pie_replay_analyze, pie_replay_arm, pie_replay_run, pie_replay_state, pie_scenario_scaffold, pie_test_list, pie_test_run, pie_test_scaffold). Recordings root (default Saved/MCPRecordings) (pie_record_arm, pie_record_delete, pie_record_diff, pie_record_list, pie_record_read)"),
-  recording_id: z.string().optional().describe("Recording id under the recordings root"),
+  recording_id: z.string().optional().describe("Recording id under the recordings root (pie_assert_eval, pie_replay_analyze, pie_replay_arm, pie_replay_run, pie_replay_state, pie_scenario_scaffold, pie_test_list, pie_test_run, pie_test_scaffold). Recording id under the recordings root (default: the newest recording) (pie_perf_summary)"),
   request_id: z.string().optional().describe("injection_id or request_id a relayed call returned"),
   results_path: z.string().optional().describe("results.json of the run to replay, instead of a run id (pie_script_replay). results.json path, instead of a run id (pie_script_results)"),
   rng_seed: z.number().optional().describe("Seed the stream RNG for reproducible runs (pie_record_arm). Inline steps: RNG seed (pie_replay_arm, pie_replay_run)"),

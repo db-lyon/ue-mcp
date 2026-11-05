@@ -24643,7 +24643,7 @@
           "name": "recording_id",
           "type": "string",
           "required": false,
-          "description": "Recording id under the recordings root"
+          "description": "Recording id under the recordings root (default: the newest recording)"
         },
         {
           "name": "recording_dir",
