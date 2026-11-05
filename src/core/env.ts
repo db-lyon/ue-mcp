@@ -18,6 +18,8 @@ export const ENV_VARS = {
   bridgeTimeoutMs: "UE_MCP_BRIDGE_TIMEOUT_MS",
   /** `1` refuses a call with a parameter the action does not forward, instead of warning. */
   strictParams: "UE_MCP_STRICT_PARAMS",
+  /** Directory of the bridge's per-port session token files, read by the plugin too. Unset means ~/.ue-mcp/bridge. */
+  bridgeTokenDir: "UE_MCP_BRIDGE_TOKEN_DIR",
 
   // ── Config and context ─────────────────────────────────────────────
   /** Selects the `ue-mcp.<env>.yml` overlay merged over each project's config. */

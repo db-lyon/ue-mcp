@@ -18,6 +18,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import { bridgeSocketOptions, watchUpgradeRefusal } from "./lib/bridge-token.mjs";
 import { listRegistrations } from "./lib/cpp-registrations.mjs";
 import {
   assertLoopbackHost,
@@ -75,11 +76,21 @@ function discoverHandlers() {
 // ---------------------------------------------------------------------------
 function connect(url, timeoutMs = TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    let ws;
+    try {
+      ws = new WebSocket(url, bridgeSocketOptions(url));
+    } catch (err) {
+      reject(err);
+      return;
+    }
     const timer = setTimeout(() => {
       ws.terminate();
       reject(new Error(`Connection to ${url} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
+    watchUpgradeRefusal(ws, url, (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
 
     ws.on("open", () => {
       clearTimeout(timer);

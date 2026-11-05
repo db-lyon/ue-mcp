@@ -92,6 +92,7 @@ export class Sandbox {
       UE_MCP_USER_STATE: path.join(this.home, ".ue-mcp", "state.json"),
       UE_MCP_AUTH_DIR: path.join(this.home, ".ue-mcp"),
       UE_MCP_DAEMON_DIR: path.join(this.home, ".ue-mcp", "daemons"),
+      UE_MCP_BRIDGE_TOKEN_DIR: path.join(this.home, ".ue-mcp", "bridge"),
       UE_MCP_EXTENSIONS_DIR: path.join(this.home, ".ue-mcp", "extensions"),
       UE_MCP_PENDING_DIR: path.join(this.home, ".ue-mcp", "pending-feedback"),
       UE_MCP_REGISTRY_CACHE: path.join(this.home, ".ue-mcp", "registry-catalog.json"),
