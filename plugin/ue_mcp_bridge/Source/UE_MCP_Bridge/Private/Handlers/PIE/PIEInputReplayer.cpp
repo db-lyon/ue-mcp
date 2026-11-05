@@ -545,7 +545,15 @@ namespace MCPPIE
 	{
 		const FReplayStartGate& Gate = Pending.StartGate;
 		APlayerController* PC = TargetPlayerController.Get();
-		APawn* Pawn = bEjected ? EjectedPawn.Get() : (PC ? PC->GetPawn() : nullptr);
+		APawn* Pawn = nullptr;
+		if (bEjected)
+		{
+			Pawn = EjectedPawn.Get();
+		}
+		else if (PC)
+		{
+			Pawn = PC->GetPawn();
+		}
 		if (!Pawn)
 		{
 			GateRestSince = -1.0;
