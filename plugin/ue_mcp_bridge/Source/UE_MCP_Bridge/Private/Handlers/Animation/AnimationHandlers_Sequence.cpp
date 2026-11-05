@@ -78,6 +78,7 @@ namespace
 		Result->SetStringField(TEXT("class"), AnimSeq->GetClass()->GetName());
 		Result->SetNumberField(TEXT("sequenceLength"), AnimSeq->GetPlayLength());
 		Result->SetNumberField(TEXT("rateScale"), AnimSeq->RateScale);
+		Result->SetBoolField(TEXT("loop"), AnimSeq->bLoop);
 		Result->SetNumberField(TEXT("numberOfFrames"), AnimSeq->GetNumberOfSampledKeys());
 		const double SamplingRate = AnimSeq->GetSamplingFrameRate().AsDecimal();
 		Result->SetNumberField(TEXT("samplingFrameRate"), SamplingRate);
@@ -1741,6 +1742,7 @@ namespace
 	// Every field set_sequence_properties can write, as one comparable value.
 	struct FMCPSeqProps
 	{
+		bool bLoop = false;
 		bool bEnableRootMotion = false;
 		bool bForceRootLock = false;
 		bool bUseNormalizedRootMotionScale = false;
@@ -1753,6 +1755,7 @@ namespace
 		static FMCPSeqProps Read(const UAnimSequence* Seq)
 		{
 			FMCPSeqProps P;
+			P.bLoop = Seq->bLoop;
 			P.bEnableRootMotion = Seq->bEnableRootMotion;
 			P.bForceRootLock = Seq->bForceRootLock;
 			P.bUseNormalizedRootMotionScale = Seq->bUseNormalizedRootMotionScale;
@@ -1766,7 +1769,7 @@ namespace
 
 		bool operator==(const FMCPSeqProps& O) const
 		{
-			return bEnableRootMotion == O.bEnableRootMotion && bForceRootLock == O.bForceRootLock
+			return bLoop == O.bLoop && bEnableRootMotion == O.bEnableRootMotion && bForceRootLock == O.bForceRootLock
 				&& bUseNormalizedRootMotionScale == O.bUseNormalizedRootMotionScale && RootLock == O.RootLock
 				&& AdditiveType == O.AdditiveType && BasePoseType == O.BasePoseType
 				&& RefPoseSeq == O.RefPoseSeq && RefFrameIndex == O.RefFrameIndex;
@@ -1775,6 +1778,7 @@ namespace
 		TSharedPtr<FJsonObject> ToJson() const
 		{
 			TSharedPtr<FJsonObject> J = MakeShared<FJsonObject>();
+			J->SetBoolField(TEXT("loop"), bLoop);
 			J->SetBoolField(TEXT("enableRootMotion"), bEnableRootMotion);
 			J->SetBoolField(TEXT("forceRootLock"), bForceRootLock);
 			J->SetBoolField(TEXT("useNormalizedRootMotionScale"), bUseNormalizedRootMotionScale);
@@ -1840,7 +1844,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 	}
 
 	static const TArray<FString> Known = {
-		TEXT("enableRootMotion"), TEXT("forceRootLock"), TEXT("useNormalizedRootMotionScale"), TEXT("rootMotionRootLock"),
+		TEXT("loop"), TEXT("enableRootMotion"), TEXT("forceRootLock"), TEXT("useNormalizedRootMotionScale"), TEXT("rootMotionRootLock"),
 		TEXT("additiveAnimType"), TEXT("refPoseType"), TEXT("refPoseSeq"), TEXT("refFrameIndex"),
 	};
 	// Keys match case-insensitively, so AdditiveAnimType and additiveAnimType are the same write.
@@ -1871,8 +1875,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 		}
 		return FString();
 	};
-	TOptional<bool> EnableRootMotion, ForceRootLock, UseNormalized;
-	for (const FString& Err : { ReadBool(TEXT("enableRootMotion"), EnableRootMotion), ReadBool(TEXT("forceRootLock"), ForceRootLock),
+	TOptional<bool> Loop, EnableRootMotion, ForceRootLock, UseNormalized;
+	for (const FString& Err : { ReadBool(TEXT("loop"), Loop), ReadBool(TEXT("enableRootMotion"), EnableRootMotion), ReadBool(TEXT("forceRootLock"), ForceRootLock),
 		ReadBool(TEXT("useNormalizedRootMotionScale"), UseNormalized) })
 	{
 		if (!Err.IsEmpty()) return MCPError(Err);
@@ -2000,6 +2004,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 
 		const FMCPSeqProps Prev = FMCPSeqProps::Read(Seq);
 		Seq->Modify();
+		if (Loop.IsSet()) Seq->bLoop = Loop.GetValue();
 		if (EnableRootMotion.IsSet()) Seq->bEnableRootMotion = EnableRootMotion.GetValue();
 		if (ForceRootLock.IsSet()) Seq->bForceRootLock = ForceRootLock.GetValue();
 		if (UseNormalized.IsSet()) Seq->bUseNormalizedRootMotionScale = UseNormalized.GetValue();

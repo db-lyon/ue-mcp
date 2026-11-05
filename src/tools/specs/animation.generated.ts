@@ -5027,7 +5027,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "properties",
         "type": "object",
         "required": true,
-        "description": "{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call"
+        "description": "{loop?, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call"
       },
       {
         "name": "resolveFromMontages",
@@ -5655,7 +5655,7 @@ export const schema: Record<string, z.ZodType> = {
   position: z.object({ x: z.number().optional().describe("Horizontal axis value"), y: z.number().optional().describe("Vertical axis value") }).optional().describe("Sample position on the blendspace axes; wins over flat x and y (add_blend_sample). New sample position; wins over flat x and y, and an omitted axis keeps its value (set_blend_sample)"),
   prefix: z.string().optional().describe("Output name prefix"),
   profileName: z.string().optional().describe("Blend profile to create or edit"),
-  properties: z.record(z.string(), z.unknown()).optional().describe("{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call"),
+  properties: z.record(z.string(), z.unknown()).optional().describe("{loop?, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call"),
   props: z.record(z.string(), z.unknown()).optional().describe("EditAnywhere property values to set on the modifier before it runs"),
   rateScale: z.number().optional().describe("Playback rate scale"),
   recursive: z.boolean().optional().describe("Include subfolders (default true) (list_anim_assets, list_skeletal_meshes, scan_animation_tracks). With directory: include subfolders (default true) (read_anim_sequence)"),

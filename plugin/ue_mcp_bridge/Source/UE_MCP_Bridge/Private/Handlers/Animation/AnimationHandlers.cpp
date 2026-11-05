@@ -933,7 +933,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// v1.0.0-rc.2 - animation authoring gaps (#153, #154)
 	Registry.RegisterHandler(TEXT("set_sequence_properties"), &SetSequenceProperties, {
 		MCPParam::Required(TEXT("assetPaths"), EType::Array, TEXT("AnimSequences to write, or montages when resolveFromMontages is on")).Items(EType::String),
-		MCPParam::Required(TEXT("properties"), EType::Object, TEXT("{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call")),
+		MCPParam::Required(TEXT("properties"), EType::Object, TEXT("{loop?, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call")),
 		MCPParam::Optional(TEXT("resolveFromMontages"), EType::Boolean, TEXT("Resolve a montage to its first AnimSequence (default true)")),
 	});
 	Registry.RegisterHandler(TEXT("bake_root_motion_from_bone"), &BakeRootMotionFromBone, {

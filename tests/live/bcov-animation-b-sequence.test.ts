@@ -151,6 +151,15 @@ describe("sequence authoring", () => {
     expect(read.isAdditive).toBe(true);
   }, 120_000);
 
+  it("set_sequence_properties sets the loop flag (#1663)", async () => {
+    const before = Boolean((await readSequence(PROPS)).loop);
+    const written = await call("set_sequence_properties", { assetPaths: [PROPS], properties: { loop: !before } });
+    const entry = (written.results as Array<{ properties: Json; previousProperties: Json }>)[0];
+    expect(entry.properties.loop).toBe(!before);
+    expect(entry.previousProperties.loop).toBe(before);
+    expect((await readSequence(PROPS)).loop).toBe(!before);
+  }, 120_000);
+
   it("set_sync_markers authors markers and drops one by name", async () => {
     const markers = async (): Promise<string> =>
       JSON.stringify(await call("get_asset_properties", { assetPath: WALK, propertyName: "AuthoredSyncMarkers" }));

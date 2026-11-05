@@ -23,6 +23,18 @@ describe("animation.set_sequence_properties (#1230)", () => {
   });
 });
 
+describe("animation loop flag and blend sample rate scale (#1663)", () => {
+  it("set_sequence_properties writes and reports loop", () => {
+    const properties = handlerSpecs.set_sequence_properties.params.find((p) => p.name === "properties");
+    expect(properties?.description).toContain("loop?");
+    const source = readHandlerFile("AnimationHandlers_Sequence.cpp");
+    expect(source).toContain('TEXT("loop"), TEXT("enableRootMotion")');
+    expect(source).toContain("if (Loop.IsSet()) Seq->bLoop = Loop.GetValue();");
+    expect(source).toContain('J->SetBoolField(TEXT("loop"), bLoop);');
+    expect(source).toContain('Result->SetBoolField(TEXT("loop"), AnimSeq->bLoop);');
+  });
+});
+
 describe("animation.compose_pose_sequence (#1230)", () => {
   it("publishes the per-bone compose contract from its C++ spec", () => {
     const action = animationTool.actions.compose_pose_sequence;

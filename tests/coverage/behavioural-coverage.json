@@ -14477,6 +14477,11 @@
           "suite": "live",
           "file": "tests/live/bcov-animation-b-sequence.test.ts",
           "test": "set_sequence_properties makes the sequence additive"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-animation-b-sequence.test.ts",
+          "test": "set_sequence_properties sets the loop flag (#1663)"
         }
       ]
     },
@@ -20500,6 +20505,11 @@
           "suite": "live",
           "file": "tests/live/bcov-animation-b-sequence.test.ts",
           "test": "set_sequence_properties makes the sequence additive"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-animation-b-sequence.test.ts",
+          "test": "set_sequence_properties sets the loop flag (#1663)"
         }
       ]
     },
