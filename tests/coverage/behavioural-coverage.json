@@ -5818,6 +5818,19 @@
       ]
     },
     {
+      "method": "discard_dirty",
+      "category": "editor",
+      "registeredIn": "EditorHandlers.cpp",
+      "status": "covered",
+      "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/EditorDiscardDirtyTests.cpp",
+          "test": "UE.MCP.Editor.DiscardDirty.EngineMapClearsContentRefused"
+        }
+      ]
+    },
+    {
       "method": "disconnect_graph_pins",
       "category": "asset",
       "registeredIn": "AssetHandlers.cpp",
@@ -10493,6 +10506,11 @@
       "registeredIn": "EditorHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/EditorDiscardDirtyTests.cpp",
+          "test": "UE.MCP.Editor.DiscardDirty.EngineMapClearsContentRefused"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-asset-b-misc.test.ts",

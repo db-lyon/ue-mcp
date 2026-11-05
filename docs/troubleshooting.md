@@ -403,3 +403,7 @@ editor(action="search_log", query="error")
 ### Server and daemon logs
 
 The server writes to stderr, which your MCP client stores in its own log. The daemon writes `~/.ue-mcp/daemons/<key>.log`. Set `UE_MCP_LOG_LEVEL=debug` for more.
+
+### Editor refuses to close on the Entry map
+
+A dirty `/Engine/Maps/Entry` package can leave the editor at a Save Content prompt even though that startup map cannot be saved as project content. Use `editor(stop_editor, discardTransient=true)` to preflight and clear transient or engine map dirty flags before shutdown; project content remains protected.

@@ -205,6 +205,9 @@ private:
 	static TSharedPtr<FJsonValue> GetWorldState(const TSharedPtr<FJsonObject>& Params);
 	// Gracefully close the editor after dirty-package and PIE safety checks.
 	static TSharedPtr<FJsonValue> RequestEditorShutdown(const TSharedPtr<FJsonObject>& Params);
+	// Clear the dirty flag on named packages nobody can save, so a close does
+	// not stop on them; real content only with allowContent.
+	static TSharedPtr<FJsonValue> DiscardDirty(const TSharedPtr<FJsonObject>& Params);
 	// PIE runtime inspection/control (#739/#756/#757/#761/#764/#770/#777/#778).
 	static TSharedPtr<FJsonValue> ListPIEInstances(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> InvokeObjectFunction(const TSharedPtr<FJsonObject>& Params);

@@ -81,7 +81,10 @@ const BASELINE = {
   // 171: editor(render_mesh_studio) overwrites PNGs without backups; cancelling
   // releases its preview scene and cannot resume the job. Both explain this
   // in their result bodies; neither can supply an inverse that restores it.
-  mutationsWithoutRollback: 171,
+  // 170: editor(discard_dirty) clears named dirty flags; no action restores
+  // those flags, and closing the editor loses the unsaved contents. The
+  // handler reports that limit through MCPSetNoRollback.
+  mutationsWithoutRollback: 172,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.

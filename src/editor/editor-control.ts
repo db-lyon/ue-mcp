@@ -727,6 +727,63 @@ async function readDirtyPackages(port: number, host: string): Promise<string[] |
   return collectPackageNames(reply.result, LIST_DIRTY_KEYS);
 }
 
+/** What stop_editor's discardTransient did before the quit went out. */
+export interface DiscardTransientReport {
+  /** Transient and engine-map packages whose dirty flag was cleared. */
+  cleared: string[];
+  /** Dirty packages left alone because they are real content; the editor's save prompt still asks about them. */
+  kept: string[];
+  /** Why nothing could be discarded, when that is the case. */
+  note?: string;
+}
+
+/**
+ * Clear the dirty flag on every dirty package that nobody can save (the
+ * transient package, /Engine maps such as the /Engine/Maps/Entry startup map),
+ * and leave real content dirty. The classification is the editor's own: a dry
+ * run of editor(discard_dirty) over everything dirty says which packages it
+ * would clear without allowContent, and only those are then named. Real content
+ * keeps the guarantee that stop_editor never discards it.
+ */
+async function discardTransientPackages(port: number, host: string): Promise<DiscardTransientReport> {
+  const dirty = await readDirtyPackages(port, host);
+  if (dirty === null) {
+    return { cleared: [], kept: [], note: "The editor did not say what is dirty, so nothing was discarded." };
+  }
+  if (dirty.length === 0) return { cleared: [], kept: [] };
+
+  const dry = await callBridgeOnce(host, port, "discard_dirty", { packages: dirty, dryRun: true });
+  if (!dry.answered || dry.methodError || !dry.result) {
+    return {
+      cleared: [],
+      kept: dirty,
+      note: "This editor's plugin build has no discard_dirty, so nothing was discarded.",
+    };
+  }
+  const statusOf = (reply: BridgeReply, wanted: string): string[] => {
+    const items = reply.result?.packages;
+    if (!Array.isArray(items)) return [];
+    return items
+      .filter((i): i is { package: string; status: string } =>
+        !!i && typeof i === "object" && typeof (i as { package?: unknown }).package === "string"
+        && (i as { status?: unknown }).status === wanted)
+      .map((i) => i.package);
+  };
+  const disposable = statusOf(dry, "wouldClear");
+  const kept = dirty.filter((p) => !disposable.includes(p));
+  if (disposable.length === 0) return { cleared: [], kept };
+
+  const applied = await callBridgeOnce(host, port, "discard_dirty", { packages: disposable });
+  const cleared = statusOf(applied, "cleared");
+  return {
+    cleared,
+    kept,
+    ...(bridgeReplyAccepted(applied)
+      ? {}
+      : { note: `discard_dirty did not clear every disposable package: ${String(applied.result?.error ?? "no reply")}` }),
+  };
+}
+
 /**
  * Ask the editor to quit itself via the bridge, through the native
  * `request_editor_shutdown` handler, which is also the action a caller can
@@ -998,6 +1055,8 @@ export interface StopEditorResult {
   crashReporters?: CrashReporterCleanup;
   /** The editor this call asked to quit: its project and pid, so a stop that hit the wrong target shows it (#1278). */
   stopped?: { project: string | null; pid: number | null };
+  /** What discardTransient cleared before the quit, when it was asked for. */
+  discarded?: DiscardTransientReport;
 }
 
 /**
@@ -1085,7 +1144,10 @@ function unsavedWorkRefusal(dirty: string[]): string {
  * not sent in that case, so no save prompt is raised, nothing hangs, and
  * nothing is lost.
  *
- * There is deliberately no flag that discards.
+ * There is deliberately no flag that discards real content. discardTransient
+ * clears only packages nobody can save (the transient package and /Engine maps,
+ * as editor(discard_dirty) judges them); anything else still reaches the
+ * editor's own save prompt.
  *
  * What happens to a blocking dialog is the caller's choice, through the dialog
  * handling mode (resolveDialogMode in dialog-mode.ts):
@@ -1159,25 +1221,55 @@ async function waitForEditorExit(
   return false;
 }
 
-export async function stopEditor(
-  projectDir?: string,
-  opts: {
-    /** The live bridge session, which outranks the lockfile when it names this project's editor. */
-    connected?: ConnectedEditor | null;
+export interface StopEditorOptions {
+  /** The live bridge session, which outranks the lockfile when it names this project's editor. */
+  connected?: ConnectedEditor | null;
 
-    /**
-     * How long each poll of the confirm wait sleeps, in milliseconds.
-     *
-     * Internal, defaulted to a second, and not reachable from the tool schema:
-     * it exists so the waiting paths (the 20 polls for the port to close, and
-     * the 10 after a dialog was answered) can be exercised by a test in
-     * milliseconds instead of half a minute. Production passes nothing.
-     */
-    confirmPollMs?: number;
+  /**
+   * Before the quit, clear the dirty flag on packages nobody can save (the
+   * transient package, /Engine maps such as the /Engine/Maps/Entry startup
+   * map) through editor(discard_dirty). Real content stays dirty and the
+   * editor's save prompt still asks about it.
+   */
+  discardTransient?: boolean;
 
-    /** Seams for the crash reporter cleanup, for tests. Production passes nothing. */
-    crashReporters?: Partial<CrashReporterDeps>;
-  } = {},
+  /**
+   * How long each poll of the confirm wait sleeps, in milliseconds.
+   *
+   * Internal, defaulted to a second, and not reachable from the tool schema:
+   * it exists so the waiting paths (the 20 polls for the port to close, and
+   * the 10 after a dialog was answered) can be exercised by a test in
+   * milliseconds instead of half a minute. Production passes nothing.
+   */
+  confirmPollMs?: number;
+
+  /** Seams for the crash reporter cleanup, for tests. Production passes nothing. */
+  crashReporters?: Partial<CrashReporterDeps>;
+}
+
+/** The stop's result with what discardTransient cleared folded in. */
+function withDiscardReport(result: StopEditorResult, report: DiscardTransientReport): StopEditorResult {
+  const cleared = report.cleared.length === 0
+    ? " discardTransient found no transient or engine-map package to clear."
+    : ` Before the quit, discardTransient cleared the dirty flag on ${report.cleared.length} package${
+        report.cleared.length === 1 ? "" : "s"} nobody can save: ${report.cleared.join(", ")}.`;
+  return {
+    ...result,
+    message: `${result.message}${cleared}${report.note ? ` ${report.note}` : ""}`,
+    discarded: report,
+  };
+}
+
+export async function stopEditor(projectDir?: string, opts: StopEditorOptions = {}): Promise<StopEditorResult> {
+  const discard: { report?: DiscardTransientReport } = {};
+  const result = await stopOwnedEditor(projectDir, opts, discard);
+  return discard.report ? withDiscardReport(result, discard.report) : result;
+}
+
+async function stopOwnedEditor(
+  projectDir: string | undefined,
+  opts: StopEditorOptions,
+  discard: { report?: DiscardTransientReport },
 ): Promise<StopEditorResult> {
   const projectPath = projectDir ? findUProject(projectDir) : null;
   const confirmPollMs = opts.confirmPollMs ?? 1000;
@@ -1279,6 +1371,10 @@ export async function stopEditor(
     const candidates = await findProjectEditors(projectPath).catch(() => []);
     if (candidates.length === 1) exitPid = candidates[0].pid;
   }
+
+  // Only packages nobody can save, and only when asked: real content still
+  // reaches the editor's own save prompt below.
+  if (opts.discardTransient) discard.report = await discardTransientPackages(port, host);
 
   const shutdown = await requestNativeShutdown(port, host, false);
   const dirty = collectPackageNames(shutdown.result, SHUTDOWN_DIRTY_KEYS);
