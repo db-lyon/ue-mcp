@@ -11,6 +11,74 @@
 #include "Blueprint/UserWidget.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/CompilerResultsLog.h"
+#include "Editor.h"
+#include "Containers/Ticker.h"
+#include "UObject/WeakObjectPtrTemplates.h"
+#include "UE_MCP_BridgeModule.h"
+
+// ── Live widgets during a play session (#1553) ─────────────────────────────
+//
+// Compiling a Widget Blueprint while play runs reinstances every live widget
+// made from it, and a reinstanced widget is rebuilt from the class: content the
+// game added at runtime is gone. Handlers that can avoid the compile write the
+// live widgets directly and compile once play ends; the rest report it.
+namespace MCPWidgetPlaySession
+{
+	/** Lets an automation test stand in for a running play session. */
+	struct FTestOverride
+	{
+		TArray<TWeakObjectPtr<UUserWidget>> Widgets;
+	};
+
+	inline FTestOverride*& TestOverride()
+	{
+		static FTestOverride* Override = nullptr;
+		return Override;
+	}
+
+	/** Is a play or simulate session running, or a test standing in for one? */
+	inline bool IsActive()
+	{
+		return TestOverride() != nullptr || MCPIsPlayInEditorActive();
+	}
+
+	/** Live user widgets made from WidgetBP's class in a play world, nested
+	 *  ones included. */
+	inline TArray<UUserWidget*> LiveWidgets(const UWidgetBlueprint* WidgetBP)
+	{
+		TArray<UUserWidget*> Out;
+		const UClass* Generated = WidgetBP ? WidgetBP->GeneratedClass.Get() : nullptr;
+		if (!Generated) return Out;
+		if (FTestOverride* Override = TestOverride())
+		{
+			for (const TWeakObjectPtr<UUserWidget>& Weak : Override->Widgets)
+			{
+				if (UUserWidget* Widget = Weak.Get(); Widget && Widget->IsA(Generated)) Out.Add(Widget);
+			}
+			return Out;
+		}
+		for (TObjectIterator<UUserWidget> It; It; ++It)
+		{
+			UUserWidget* Widget = *It;
+			if (Widget->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) || !Widget->IsA(Generated)) continue;
+			const UWorld* World = Widget->GetWorld();
+			if (World && (World->WorldType == EWorldType::PIE || World->WorldType == EWorldType::Game)) Out.Add(Widget);
+		}
+		return Out;
+	}
+
+	/** Stands in for a play session holding Widgets for the life of the scope. */
+	struct FScopedTestPlaySession
+	{
+		FTestOverride Override;
+		explicit FScopedTestPlaySession(const TArray<UUserWidget*>& Widgets)
+		{
+			for (UUserWidget* Widget : Widgets) Override.Widgets.Add(Widget);
+			TestOverride() = &Override;
+		}
+		~FScopedTestPlaySession() { TestOverride() = nullptr; }
+	};
+}
 
 // ── Widget variable GUID metadata (#728, #799) ───────────────────────────────
 //
@@ -329,23 +397,6 @@ namespace MCPWidgetGuidMap
 		return Stuck;
 	}
 
-	/** User widgets in a play or simulate world made from WidgetBP's class,
-	 *  nested ones included. The compile reinstances every one of them. */
-	inline int32 CountLivePlayWidgets(const UWidgetBlueprint* WidgetBP)
-	{
-		const UClass* Generated = WidgetBP ? WidgetBP->GeneratedClass.Get() : nullptr;
-		if (!Generated) return 0;
-		int32 Count = 0;
-		for (TObjectIterator<UUserWidget> It; It; ++It)
-		{
-			const UUserWidget* Widget = *It;
-			if (Widget->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) || !Widget->IsA(Generated)) continue;
-			const UWorld* World = Widget->GetWorld();
-			if (World && (World->WorldType == EWorldType::PIE || World->WorldType == EWorldType::Game)) ++Count;
-		}
-		return Count;
-	}
-
 	/** Compiler errors a Widget Blueprint already had before a handler edits
 	 *  it, so an unrelated broken graph does not block the edit. */
 	struct FCompileBaseline
@@ -418,11 +469,11 @@ namespace MCPWidgetGuidMap
 		}
 
 		Report.bCompileAttempted = true;
-		if (MCPIsPlayInEditorActive())
+		if (MCPWidgetPlaySession::IsActive())
 		{
 			// Counted before the compile, which swaps these objects for new ones.
 			Report.bCompiledDuringPlay = true;
-			Report.LivePlayWidgets = CountLivePlayWidgets(WidgetBP);
+			Report.LivePlayWidgets = MCPWidgetPlaySession::LiveWidgets(WidgetBP).Num();
 		}
 		int32 NumErrors = 0;
 		Report.CompileMessages = CompileForErrors(WidgetBP, NumErrors);
@@ -472,6 +523,88 @@ namespace MCPWidgetGuidMap
 			TEXT("Nothing was compiled or saved. Open the asset in the UMG editor and delete and ")
 			TEXT("recreate one of %s."),
 			*AssetPath, *Report.DefectList(), *Report.UnusableList()));
+	}
+}
+
+// ── Compiles deferred until play ends (#1553) ──────────────────────────────
+namespace MCPWidgetPlaySession
+{
+	struct FDeferredCompile
+	{
+		TWeakObjectPtr<UWidgetBlueprint> WidgetBP;
+		MCPWidgetGuidMap::FCompileBaseline Baseline;
+	};
+
+	inline TArray<FDeferredCompile>& DeferredCompiles()
+	{
+		static TArray<FDeferredCompile> Pending;
+		return Pending;
+	}
+
+	inline bool IsDeferred(const UWidgetBlueprint* WidgetBP)
+	{
+		for (const FDeferredCompile& Entry : DeferredCompiles())
+		{
+			if (Entry.WidgetBP.Get() == WidgetBP) return true;
+		}
+		return false;
+	}
+
+	/** Compile and save every blueprint whose compile waited for play to end.
+	 *  An edit that does not compile stays in memory, unsaved, and is logged. */
+	inline void FlushDeferred()
+	{
+		TArray<FDeferredCompile> Pending = MoveTemp(DeferredCompiles());
+		DeferredCompiles().Reset();
+		for (const FDeferredCompile& Entry : Pending)
+		{
+			UWidgetBlueprint* WidgetBP = Entry.WidgetBP.Get();
+			if (!WidgetBP) continue;
+			const FString AssetPath = WidgetBP->GetPathName();
+			const MCPWidgetGuidMap::FSyncReport Report = MCPWidgetGuidMap::CompileChecked(WidgetBP, Entry.Baseline);
+			if (Report.WasRefused())
+			{
+				UE_LOG(LogMCPBridge, Warning, TEXT("Deferred widget compile refused for '%s': %s"), *AssetPath, *Report.DefectList());
+				continue;
+			}
+			FString SaveError;
+			if (!MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, Report, SaveError))
+			{
+				UE_LOG(LogMCPBridge, Warning, TEXT("Deferred widget compile for '%s' was not saved: %s"), *AssetPath, *SaveError);
+				continue;
+			}
+			UE_LOG(LogMCPBridge, Log, TEXT("Compiled and saved '%s' after play ended."), *AssetPath);
+		}
+	}
+
+	/** Bound once: flush on the tick after play shuts down, when the play world
+	 *  and its widgets are gone, so the compile reinstances nothing live. */
+	inline void EnsureFlushOnPlayEnd()
+	{
+		static bool bBound = false;
+		if (bBound) return;
+		bBound = true;
+		FEditorDelegates::ShutdownPIE.AddLambda([](bool)
+		{
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float)
+			{
+				FlushDeferred();
+				return false;
+			}));
+		});
+	}
+
+	/** Leave WidgetBP uncompiled and unsaved until play ends. */
+	inline void DeferCompile(UWidgetBlueprint* WidgetBP, const MCPWidgetGuidMap::FCompileBaseline& Baseline)
+	{
+		if (!WidgetBP) return;
+		WidgetBP->MarkPackageDirty();
+		WidgetBP->Status = BS_Dirty;
+		if (!IsDeferred(WidgetBP))
+		{
+			DeferredCompiles().Add({ WidgetBP, Baseline });
+		}
+		EnsureFlushOnPlayEnd();
 	}
 }
 
