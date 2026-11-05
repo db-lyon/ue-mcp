@@ -12700,6 +12700,18 @@
           "items": "string"
         },
         {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder, matched exactly"
+        },
+        {
+          "name": "folderPathPrefix",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder, matched with every folder nested under it"
+        },
+        {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
@@ -12730,6 +12742,12 @@
             ],
             [
               "classPathContainsAny"
+            ],
+            [
+              "folderPath"
+            ],
+            [
+              "folderPathPrefix"
             ]
           ]
         }

@@ -888,6 +888,18 @@ export const handlerSpecs: HandlerSpecs = {
         "items": "string"
       },
       {
+        "name": "folderPath",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder, matched exactly"
+      },
+      {
+        "name": "folderPathPrefix",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder, matched with every folder nested under it"
+      },
+      {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
@@ -918,6 +930,12 @@ export const handlerSpecs: HandlerSpecs = {
           ],
           [
             "classPathContainsAny"
+          ],
+          [
+            "folderPath"
+          ],
+          [
+            "folderPathPrefix"
           ]
         ]
       }
@@ -5136,7 +5154,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   convert_brushes_to_static_mesh: "Params: at least one of actorLabels/folderPath, recursiveFolder?, classFilter?, exactClass?, destinationPath?, dryRun?, allowSubtractive?, includeVolumes?",
   count_actors_by_class: "Params: world?, pieInstance?, topN?",
   delete_actor: "Params: actorLabel?, actorPath?",
-  delete_actors: "Params: at least one of labelPrefix/labelContains/nameContains/className/tag/classPathContains/classPathContainsAny, dryRun?",
+  delete_actors: "Params: at least one of labelPrefix/labelContains/nameContains/className/tag/classPathContains/classPathContainsAny/folderPath/folderPathPrefix, dryRun?",
   delete_exact_labeled_actors_in_levels: "Params: levels, dryRun?, onMissing?, restoreOriginalLevel?",
   destroy_transient_actor: "Params: world?, pieInstance?, actorPath?, actorLabel?, all?",
   detach_actor: "Params: childLabel?, childPath?",
@@ -5303,7 +5321,7 @@ export const schema: Record<string, z.ZodType> = {
   fogDensity: z.number().optional().describe("Fog density"),
   fogHeightFalloff: z.number().optional().describe("Fog height falloff"),
   fogInscatteringColor: z.record(z.string(), z.unknown()).optional().describe("Inscattering colour {r, g, b} in 0-255"),
-  folderPath: z.string().optional().describe("World Outliner folder, matched exactly (batch_set_actor_properties, bulk_set_component_property, get_world_outliner, query_components, remove_components_by_class, set_actor_hlod_layer, set_component_materials). World Outliner folder whose brushes are converted (convert_brushes_to_static_mesh). World Outliner folder; an empty string moves the actors to the root (set_actor_folder_path)"),
+  folderPath: z.string().optional().describe("World Outliner folder, matched exactly (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_world_outliner, query_components, remove_components_by_class, set_actor_hlod_layer, set_component_materials). World Outliner folder whose brushes are converted (convert_brushes_to_static_mesh). World Outliner folder; an empty string moves the actors to the root (set_actor_folder_path)"),
   folderPathPrefix: z.string().optional().describe("World Outliner folder, matched with every folder nested under it"),
   force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property)"),
   frame: z.string().optional().describe("Frame for translation and axis rotation: world | actor (default) | parent | component"),

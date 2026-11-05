@@ -6,9 +6,16 @@ describe("delete_actors class-path filters", () => {
     const action = levelTool.actions.delete_actors;
     expect(action.mapParams).toBeUndefined();
     expect(action.kind === "bridge" && action.paramSpec?.map((p) => p.name)).toEqual([
-      "labelPrefix", "labelContains", "nameContains", "className", "tag", "classPathContains", "classPathContainsAny", "dryRun",
+      "labelPrefix", "labelContains", "nameContains", "className", "tag", "classPathContains", "classPathContainsAny",
+      "folderPath", "folderPathPrefix", "dryRun",
     ]);
     expect(action.kind === "bridge" && action.paramChoices?.[0].branches.flat()).toContain("classPathContainsAny");
+  });
+
+  it("accepts an outliner folder as a selector on its own (#1529)", () => {
+    const action = levelTool.actions.delete_actors;
+    const branches = action.kind === "bridge" ? action.paramChoices?.[0].branches.flat() : [];
+    expect(branches).toEqual(expect.arrayContaining(["folderPath", "folderPathPrefix"]));
   });
 
   it("declares the class-path filters on the shared schema", () => {

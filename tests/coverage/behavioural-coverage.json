@@ -5346,6 +5346,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "folderPath deletes one folder, folderPathPrefix the folder and its children, never a sibling sharing the string"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
           "test": "spawn_grid places a grid get_actors_by_class finds, and delete_actors removes it"
         }
       ]
@@ -7080,6 +7085,11 @@
       "registeredIn": "LevelHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "folderPath deletes one folder, folderPathPrefix the folder and its children, never a sibling sharing the string"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",
@@ -14292,6 +14302,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "folderPath deletes one folder, folderPathPrefix the folder and its children, never a sibling sharing the string"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
           "test": "get_actors_by_component_class finds the actor carrying an added component"
         },
         {
@@ -18746,6 +18761,11 @@
       "registeredIn": "LevelHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "folderPath deletes one folder, folderPathPrefix the folder and its children, never a sibling sharing the string"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",

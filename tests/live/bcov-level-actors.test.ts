@@ -288,6 +288,47 @@ describe("level batch placement and deletion", () => {
   }, 120_000);
 });
 
+describe("delete_actors by outliner folder (#1529)", () => {
+  const ROOT = "BCov_DelFolder";
+  const placed: Array<[string, string]> = [
+    [`${PREFIX}FolderKeep`, `${ROOT}/Keep`],
+    [`${PREFIX}FolderGone`, `${ROOT}/Gone`],
+    [`${PREFIX}FolderDeep`, `${ROOT}/Gone/Deep`],
+    [`${PREFIX}FolderSibling`, `${ROOT}Sibling`],
+  ];
+  const exists = async (label: string): Promise<boolean> =>
+    Number((await call("get_actors_by_class", { className: "StaticMeshActor", labelPrefix: label })).count) > 0;
+
+  it("folderPath deletes one folder, folderPathPrefix the folder and its children, never a sibling sharing the string", async () => {
+    for (const [i, [label, folder]] of placed.entries()) {
+      await cube(label, { x: i * 150, y: 29000, z: 0 });
+      await call("set_actor_folder_path", { folderPath: folder, actorLabels: [label] });
+    }
+
+    const preview = await call("delete_actors", { folderPathPrefix: `${ROOT}/Gone`, dryRun: true });
+    expect(preview.matched).toBe(2);
+    expect(preview.deleted).toBe(0);
+    expect((preview.folderPaths as string[]).sort()).toEqual([`${ROOT}/Gone`, `${ROOT}/Gone/Deep`]);
+    expect(await exists(`${PREFIX}FolderGone`)).toBe(true);
+
+    const exact = await call("delete_actors", { folderPath: `${ROOT}/Gone` });
+    expect(exact.deleted).toBe(1);
+    expect(exact.labels).toEqual([`${PREFIX}FolderGone`]);
+    expect(await exists(`${PREFIX}FolderGone`)).toBe(false);
+    expect(await exists(`${PREFIX}FolderDeep`)).toBe(true);
+
+    const tree = await call("delete_actors", { folderPathPrefix: ROOT });
+    expect(tree.deleted).toBe(2);
+    expect(await exists(`${PREFIX}FolderKeep`)).toBe(false);
+    expect(await exists(`${PREFIX}FolderDeep`)).toBe(false);
+    expect(await exists(`${PREFIX}FolderSibling`)).toBe(true);
+
+    const none = await call("delete_actors", { folderPath: `${ROOT}/Missing` });
+    expect(none.matched).toBe(0);
+    expect(none.similarFolders).toEqual(expect.any(Array));
+  }, 120_000);
+});
+
 describe("level class queries", () => {
   it("count_actors_by_class counts the placed target points", async () => {
     const before = await call("count_actors_by_class");
