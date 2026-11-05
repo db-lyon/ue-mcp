@@ -1577,6 +1577,11 @@
           "test": "UE.MCP.Widget.CompileOutcome"
         },
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
+          "test": "UE.MCP.Widget.SetPropertyDuringPlay"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "add_widget, move_widget, reorder_child and remove_widget reshape the tree read_widget_tree reads"
@@ -2379,6 +2384,11 @@
       "registeredIn": "WidgetHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
+        },
         {
           "suite": "live",
           "file": "tests/live/blueprint-widget-reflection.test.ts",
@@ -3906,6 +3916,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
           "test": "UE.MCP.Widget.CompileOutcome"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
+          "test": "UE.MCP.Widget.SetPropertyDuringPlay"
         },
         {
           "suite": "live",
@@ -9321,6 +9336,11 @@
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "set_widget_property writes typed and reflected properties get_widget_details and get_widget_properties read"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
         }
       ]
     },
@@ -16014,6 +16034,11 @@
         {
           "suite": "live",
           "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
           "test": "builds a nested subtree in one call and removes it with the rollback"
         }
       ]
@@ -21229,6 +21254,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
+          "test": "UE.MCP.Widget.SetPropertyDuringPlay"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "audit_widget_accessibility flags a font below the minimum and clears once it is raised"
@@ -21237,6 +21267,11 @@
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "set_widget_property writes typed and reflected properties get_widget_details and get_widget_properties read"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
         }
       ]
     },
