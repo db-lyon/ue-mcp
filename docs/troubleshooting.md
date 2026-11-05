@@ -65,6 +65,15 @@ launching 0s -> loading modules and plugins 0.8s -> config init 1.8s
 
 There is no need to poll during or after it.
 
+### start_editor stops at the "modules are missing, rebuild?" prompt
+
+**Symptom:** `editor(start_editor)` returns early saying the editor is stopped at the engine's rebuild prompt, before the bridge loads.
+
+The reason names each missing module and who owns it:
+
+- **A project module or project plugin module** is reported as `Not built: <Module>`. Build with `project(build)`, fix what it reports, then answer the prompt or stop the editor.
+- **A module of an engine plugin** (its `.uplugin` sits under the engine's `Engine/Plugins` folder) is reported with the plugin name and its `.uplugin` path. A project build cannot compile it. Verify the engine install in the Epic Games Launcher, or disable that plugin for the project by adding `{"Name": "<Plugin>", "Enabled": false}` to the `Plugins` array of the `.uproject`, then start the editor again.
+
 ### A call timed out: did it happen or not?
 
 **Symptom:** a mutating call such as `widget(add_widget)` returns `timed out after 30s`, and reading the asset back shows the change is already there and saved.
