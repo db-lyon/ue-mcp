@@ -30,6 +30,21 @@ Every authoring action resolves its WidgetBlueprint from the path on every call.
 
 While PIE is running, the first two errors add a note to stop play and retry.
 
+## When an authoring edit does not compile
+
+Every authoring action that changes a Widget Blueprint compiles it before saving. The result carries `compileStatus` and `compiled`. When the compile fails, it also carries `compileErrors`, `compileMessages`, and how many of those errors the edit introduced (`introducedCompileErrors`) against how many the blueprint already had (`preexistingCompileErrors`).
+
+| Case | `success` | `saved` | What to do |
+|---|---|---|---|
+| The edit introduced errors | `false` | `false` | The edit stays applied in memory (`appliedInMemory: true`) and the package is dirty. Replay the result's `rollback` to undo it, discard it with `asset(reload_package)`, or fix the errors and save. |
+| The blueprint already had errors and the edit added none | `true` | `true` | The edit was saved. `compileWarning` lists the errors the blueprint had before the call. |
+
+The bridge knows which errors were already there only when the blueprint's last compile had failed: it compiles once before the edit and compares. Errors from graph changes that were never compiled count as introduced.
+
+The compile never saves on its own, whatever the editor's save-on-compile setting is.
+
+A refusal to compile is a different error: two widget variables share a GUID. Nothing is compiled or saved, and the message names the variables to recreate.
+
 ## Where the runtime actions stop
 
 The runtime actions are point-in-time: one read of the current state, or one
