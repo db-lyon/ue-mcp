@@ -325,6 +325,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches each re
 | DatasmithHandlers | Datasmith scene import and query |
 | MetaHumanHandlers | MetaHuman characters |
 | LockHandlers | Per-asset locks for concurrent agents |
+| BatchHandlers | `execute_batch`: several handlers run back to back as one game-thread job in one editor transaction |
 | DiffHandlers | Semantic Blueprint and asset diffing |
 | CheckpointHandlers | Checkpoint arming and restore |
 | SourceControlHandlers | Source control through the editor's provider |
