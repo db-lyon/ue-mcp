@@ -1,15 +1,20 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { resolveInside } from "../core/path-guard.js";
 
-/** Resolve a config file name to an absolute path, preferring DefaultEngine.ini-style names. */
+/**
+ * Resolve a config file name to an absolute path, preferring DefaultEngine.ini-style
+ * names. The result is always inside configDir; anything else throws.
+ */
 export function resolveConfigPath(configDir: string, configName: string): string {
-  if (path.isAbsolute(configName)) return configName;
+  if (typeof configName !== "string" || configName === "") throw new Error("Missing 'configName'");
+  if (path.isAbsolute(configName)) return resolveInside([configDir], configName);
   if (!configName.endsWith(".ini")) configName += ".ini";
   if (!configName.startsWith("Default")) {
-    const defaultPath = path.join(configDir, `Default${configName}`);
+    const defaultPath = resolveInside([configDir], `Default${configName}`);
     if (fs.existsSync(defaultPath)) return defaultPath;
   }
-  return path.join(configDir, configName);
+  return resolveInside([configDir], configName);
 }
 
 /** Recursively collect every .ini file under `dir`. */

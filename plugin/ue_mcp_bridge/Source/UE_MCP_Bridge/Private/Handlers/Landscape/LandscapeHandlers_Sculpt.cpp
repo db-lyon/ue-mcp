@@ -2423,7 +2423,8 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ExportHeightmap(const TSharedPtr<FJso
 	TSharedPtr<FJsonValue> Error;
 	if (!MCPLscResolve(World, Params, Landscape, Info, Error)) return Error;
 
-	const FString Resolved = MCPLscResolveFilePath(FilePath);
+	FString Resolved;
+	if (auto Err = MCPRequireWritablePath(MCPLscResolveFilePath(FilePath), Resolved)) return Err;
 	FString Format, FormatError;
 	if (!MCPLscResolveHeightmapFormat(Params, Resolved, Format, FormatError)) return MCPError(FormatError);
 

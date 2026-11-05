@@ -440,7 +440,8 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 			// File output is the escape valve for a result set too large to be
 			// worth paging through. The rows still exist; they just do not go
 			// through the model's context to get to disk.
-			const FString Absolute = FPaths::ConvertRelativePathToFull(OutputPath);
+			FString Absolute;
+			if (auto Err = MCPRequireWritablePath(OutputPath, Absolute)) return Err;
 			if (!FFileHelper::SaveStringToFile(MCPBulkReadSerializeRows(Rows), *Absolute))
 			{
 				return MCPError(FString::Printf(TEXT("Failed to write 'outputPath': %s"), *Absolute));

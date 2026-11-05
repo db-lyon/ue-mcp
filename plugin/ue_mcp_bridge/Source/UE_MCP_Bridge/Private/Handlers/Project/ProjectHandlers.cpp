@@ -189,6 +189,9 @@ TSharedPtr<FJsonValue> FProjectHandlers::CreateCppClass(const TSharedPtr<FJsonOb
 	NewClassPath /= DomainFolder;
 	if (!SubPath.IsEmpty())
 	{
+		// subPath stays inside the module's own source folder.
+		FString Contained;
+		if (auto Err = MCPRequirePathInside(NewClassPath / SubPath, { SelectedModule.ModuleSourcePath }, Contained)) return Err;
 		NewClassPath /= SubPath;
 	}
 	NewClassPath /= TEXT("");                                 // ensure trailing /

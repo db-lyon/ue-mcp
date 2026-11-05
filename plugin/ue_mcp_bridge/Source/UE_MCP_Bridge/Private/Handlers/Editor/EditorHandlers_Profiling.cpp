@@ -631,7 +631,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::StartInsightsTrace(const TSharedPtr<FJso
 		}
 		else
 		{
-			FilePath = FPaths::ConvertRelativePathToFull(FilePath);
+			FString Resolved;
+			if (auto Err = MCPRequireWritablePath(FilePath, Resolved)) return Err;
+			FilePath = Resolved;
 			if (!FilePath.EndsWith(TEXT(".utrace"))) FilePath += TEXT(".utrace");
 			IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), /*Tree=*/true);
 		}
@@ -1541,7 +1543,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::LaunchStandaloneGame(const TSharedPtr<FJ
 		}
 		else
 		{
-			TraceFile = FPaths::ConvertRelativePathToFull(TraceFile);
+			if (TraceFile.Contains(TEXT("\""))) return MCPError(TEXT("traceFile must not contain a quote character."));
+			FString Resolved;
+			if (auto Err = MCPRequireWritablePath(TraceFile, Resolved)) return Err;
+			TraceFile = Resolved;
 			if (!TraceFile.EndsWith(TEXT(".utrace"))) TraceFile += TEXT(".utrace");
 			IFileManager::Get().MakeDirectory(*FPaths::GetPath(TraceFile), /*Tree=*/true);
 		}
