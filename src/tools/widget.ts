@@ -74,6 +74,10 @@ export const widgetTool: ToolDef = categoryTool(
       ...specBp("mutate", "Remove widget from tree. Idempotent, and clears the widget's Widget Blueprint GUID metadata so later compiles stop reporting a deleted variable (#799).", "remove_widget"),
       timeoutMs: 120_000,
     },
+    rename_widget: {
+      ...specBp("mutate", "Rename a widget in place (#1679). It keeps its object, slot, sibling position and properties; the variable GUID, designer bindings, animation bindings, navigation rules, desired focus and graph get/set nodes move to the new name. Refuses a name another widget, variable or function holds, unless it is a BindWidget name on the native parent for a widget of the bound class, which is how a copied widget is fitted to a BindWidget contract. Reports referencesUpdated; idempotent by the new name; the rollback renames it back.", "rename_widget"),
+      timeoutMs: 120_000,
+    },
     move_widget:              specBp("mutate", "Reparent widget.", "move_widget"),
     set_root:                 specBp("mutate", "Replace WBP root with an existing widget by name (#365).", "set_root_widget"),
     wrap_root:                specBp("mutate", "Wrap the current root in a new panel widget (UMG 'Wrap With'). wrapperClass must be a UPanelWidget subclass (#365).", "wrap_root_widget"),
