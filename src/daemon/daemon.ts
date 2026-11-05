@@ -13,6 +13,7 @@
  *   POST /v1/shutdown   exit now
  *   POST /v1/handoff    exit once no call is in flight (a newer daemon is taking over)
  *   /v1/checkpoints     checkpoints per editor session, see checkpoint-routes.ts
+ *   /v1/journal         the mutation journal per editor session, see journal-routes.ts
  *   GET  /v1/skills     every skill a client of this project can load, see skills-list.ts
  *   GET  /v1/context/projection  what a strategy and category scope advertise, see context-projection.ts
  *   GET  /v1/actions    each action's effect and destructive flag, see action-effects.ts
@@ -64,7 +65,7 @@ import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access"];
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access", "journal"];
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
@@ -81,6 +82,7 @@ import { stopAllScriptWatches } from "../pie/script-watch.js";
 import { pluginRoutes } from "./plugin-routes.js";
 import { releaseStartLock, waitForStartTurn } from "./start-lock.js";
 import { checkpointRoute } from "./checkpoint-routes.js";
+import { journalRoute } from "./journal-routes.js";
 import { checkpointsFor, subscribeCheckpointEvents } from "../checkpoints/service.js";
 import { listDaemonSkills } from "../extensions/skills-list.js";
 import { ContextProjectionError, ContextProjector, enabledGraph } from "../server/context-projection.js";
@@ -813,6 +815,13 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
           res.writeHead(200, { "content-type": r.file.type, "cache-control": "private, max-age=31536000, immutable", "x-content-type-options": "nosniff" });
           streamFile(r.file.path, res);
         }, (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
+      return;
+    }
+    if (url.pathname === "/v1/journal" || url.pathname.startsWith("/v1/journal/")) {
+      const sub = url.pathname.slice("/v1/journal".length).replace(/\/+$/, "");
+      readBody(req)
+        .then((body) => journalRoute(rt.sessions, req.method ?? "GET", sub, url.searchParams, body))
+        .then((r) => (r ? json(res, r.status, r.body) : void res.writeHead(404).end()), (e) => json(res, 500, { error: e instanceof Error ? e.message : String(e) }));
       return;
     }
     if (url.pathname === "/v1/flows" || url.pathname.startsWith("/v1/flows/")) {
