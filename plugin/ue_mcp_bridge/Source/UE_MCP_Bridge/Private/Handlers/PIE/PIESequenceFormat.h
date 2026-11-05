@@ -83,6 +83,9 @@ namespace MCPPIE
 		TArray<FTrackedValueSpec> TrackedValues;
 		TArray<FString> TrackedActorIds;
 		TArray<FMarker> Markers;
+		// Attach-time problems the recording carries (unmatched actions,
+		// track_values that never resolved). Absent when empty.
+		TArray<FString> Warnings;
 		FString CSVFile = TEXT("recording.csv");
 		FString SequenceFile = TEXT("sequence.json");
 		FString DriftFile;
@@ -147,10 +150,15 @@ namespace MCPPIE
 
 	struct FDriftFrameEntry
 	{
-		uint64 Frame = 0;
+		uint64 Frame = 0;          // replay frame since attach (matches frames/frame_NNNNN.jpg)
+		uint64 SourceFrame = 0;    // source row it was compared with
+		double Time = 0.0;         // seconds on the source timeline
 		float PositionDeltaCm = 0.f;
 		float VelocityDeltaCms = 0.f;
 		float RotationDeltaDeg = 0.f;
+		// Signed replay minus source, so the direction of a difference reads.
+		FVector PositionDelta = FVector::ZeroVector;
+		FVector VelocityDelta = FVector::ZeroVector;
 	};
 
 	// Aggregated per-tracked-actor drift across all sampled frames.
@@ -169,7 +177,7 @@ namespace MCPPIE
 	{
 		bool bFound = false;
 		uint64 Frame = 0;
-		double Time = 0.0;        // seconds since replay attach
+		double Time = 0.0;        // seconds on the source timeline
 		FString Channel;          // "position" | "velocity" | "rotation" | tracked path
 		double Delta = 0.0;
 		double Threshold = 0.0;
@@ -207,6 +215,17 @@ namespace MCPPIE
 		TMap<FString, FActorDrift> ActorDrift;
 		TArray<FDriftFrameEntry> FramesOverThreshold;
 		FDriftSummary Summary;
+		// "time": replay frames are compared with the source row at the same
+		// time on the source timeline, after the settle delay is taken off.
+		FString Alignment;
+		double ReplayOffsetMs = 0.0;
+		// When the first input step fired on each timeline; offset_ms is the
+		// residual misalignment, reported apart from drift.
+		bool bHasInputOnset = false;
+		double SourceInputOnsetMs = 0.0;
+		double ReplayInputOnsetMs = 0.0;
+		// Replay trajectory, same columns and timeline as recording.csv.
+		FString ReplayCSVFile;
 	};
 
 	// CSV row used by both the recorder (writing) and the replayer / diff

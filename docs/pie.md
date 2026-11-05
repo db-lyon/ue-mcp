@@ -19,7 +19,7 @@ Stock Unreal is not deterministic. Chaos physics does not reproduce across runs,
 - The durable reproduction unit is a reproduction test (`test_scaffold`, `test_run`), not a recording.
 - `fixed_timestep=true` on replay uses a fixed `1/pin_fps` delta. Runs become more reproducible, not fully deterministic.
 
-What replay holds constant: the same Enhanced Input values at the same frame numbers, the same `t.MaxFPS` pin, the same `FMath::RandInit(seed)`, and CPU throttling suppressed for the session. What it does not: particles, Niagara, behavior trees, physics, and anything with its own `FRandomStream` or wall-clock time. `drift.json` reports how far a run diverged as numbers.
+What replay holds constant: the same Enhanced Input values at the same times, the same `t.MaxFPS` pin (restored when the session ends), the same `FMath::RandInit(seed)`, and CPU throttling suppressed for the session. What it does not: particles, Niagara, behavior trees, physics, and anything with its own `FRandomStream` or wall-clock time. `drift.json` reports how far a run diverged as numbers.
 
 ## Editor UI
 
@@ -107,12 +107,14 @@ Recording starts on BeginPIE and finalizes on EndPIE. It discovers Enhanced Inpu
 
 `record_arm` can also track reflection paths and subsystem values (`track_values`, with `sub:<Class>.<path>` for a subsystem), actor positions (`track_actors`), and skeletal bone or socket channels: `bone:<BoneOrSocket>.<channel>` in world space or `bonecs:<BoneOrSocket>.<channel>` in component space, with channels `x|y|z`, `pitch|yaw|roll` and `scalex|scaley|scalez`. Component space does not move when the actor does, which is what an animation assertion usually wants. A bone that the mesh does not have is absent from the row rather than sampled as zero.
 
+Every `track_values` path is checked when the pawn attaches. A path that does not end at a number (a struct such as `Velocity` or `RelativeRotation`, or a name that does not resolve) is still written as a column, but the manifest lists its type as `unresolved` and a warning names the failing segment: name a numeric field instead, such as `Velocity.X`. The same goes for an `actions` entry the player has no binding or mapping for. `record_status`, `record_stop` and the manifest carry these as `warnings`.
+
 | Param | Default | Notes |
 |-------|---------|-------|
-| `actions` | `[]` (all) | Whitelist of `UInputAction` asset paths |
+| `actions` | `[]` (all) | Whitelist of `UInputAction` paths, package (`/Game/Input/IA_Move`) or object form; a path that is not an InputAction fails the arm |
 | `axis_threshold` | `0.15` | Dead zone for edge detection |
 | `sample_hz` | `60` | Sample rate, and the default `pin_fps` |
-| `pin_fps` | `sample_hz` | `t.MaxFPS` pin; `0` skips it |
+| `pin_fps` | `sample_hz` | `t.MaxFPS` pin, restored with its priority when the recording ends; `0` skips it |
 | `capture_pawn_state` | `true` | Per-row location, rotation, velocity, `speed2d` |
 | `capture_montage` | `true` | Per-row `Montage:Section` |
 | `client_id` | `0` | Local player index in the selected world |
@@ -152,6 +154,8 @@ Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectIn
 | `encode_gif` | `false` | Also encode an animated GIF |
 | `client_id`, `pie_instance` | `0`, auto | Which player to drive |
 | `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for `frames_over_threshold`; also `tracked_default` and a per-path `tracked` map |
+
+Drift is compared by time. Steps fire `settle_ms` after the pawn attaches, so the replayer takes the settle delay off its clock and compares each frame with the source row at the same offset from the start of the recording. `drift.json` records `alignment`, `replay_offset_ms`, and `input_onset` (when the first input step fired on each timeline, and the `offset_ms` between them), so a timing offset is reported apart from drift. Each entry in `frames_over_threshold` has the replay `frame`, the `source_frame` it was compared with, its `time`, and signed `position_delta` and `velocity_delta` (replay minus source). The replay trajectory is written to `replay.csv` beside `drift.json`, on the source's timeline with the same columns as `recording.csv`; `replay_status.last_result.replay_csv_path` names it.
 
 With `capture_frame_every` set, replay saves JPEG frames under `<recording>/frames/` and composes a labelled contact sheet at `<recording>/captures/contact_<timestamp>.jpg`, a grid of keyframes with the frame index on each cell. `replay_status.last_result` returns `frame_dir`, `frame_count` and `contact_sheet_path`. GIF output is opt-in because a vision model cannot read GIF animation. For a frame of the live PIE viewport on demand, use `editor(capture_screenshot, target="pie")` or `editor(capture_scene_png, world="pie")`.
 
@@ -302,6 +306,7 @@ Without `pie_instance`, the tool prefers an eligible `GEditor->PlayWorld`, then 
   sequence.json        input sequence
   recording.csv        per-frame state
   drift.json           replay drift report
+  replay.csv           replay trajectory, same columns as recording.csv
   test.json            reproduction test, after test_scaffold
   frames/              per-frame viewport JPEGs
   captures/            contact sheets, and GIFs when encode_gif=true

@@ -36,8 +36,9 @@ namespace MCPPIE
 	public:
 		struct FConfig
 		{
-			// Optional whitelist of UInputAction asset paths. Empty = record all
-			// actions bound to the pawn's UEnhancedInputComponent.
+			// Optional whitelist of UInputAction asset paths, package or object
+			// form (normalized by SetConfig). Empty = record every action bound
+			// to the player.
 			TArray<FString> ActionPaths;
 			// Dotted reflection paths sampled to doubles per frame.
 			TArray<FString> TrackedValuePaths;
@@ -51,8 +52,13 @@ namespace MCPPIE
 
 		FPIEFrameSampler();
 
+		// Replaces the whole config, including the tracked value list (#1690).
 		void SetConfig(const FConfig& InConfig);
 		void Reset();
+
+		// "/Game/Input/IA_Move" -> "/Game/Input/IA_Move.IA_Move". Object paths
+		// and export text ("InputAction'/Game/...'") normalize to the object path.
+		static FString NormalizeActionPath(const FString& InPath);
 
 		// Walk the PIE world's first player and bind to its pawn's
 		// EnhancedInputComponent. Returns true once attached; subsequent
@@ -72,6 +78,12 @@ namespace MCPPIE
 		FString GetPawnClassPath() const { return PawnClassPath; }
 		FString GetPIEWorldPath() const { return PIEWorldPath; }
 
+		// Whitelisted action paths no bound action matched. Empty until attach.
+		TArray<FString> GetUnmatchedActionPaths() const;
+		// One line per problem found at attach: unmatched actions, tracked
+		// values that do not resolve to a numeric leaf. Empty when clean.
+		const TArray<FString>& GetWarnings() const { return Warnings; }
+
 		// Insert a marker label into the next emitted row's EdgeEvents.
 		// Multiple markers in the same frame are concatenated.
 		void QueueMarker(const FString& Label);
@@ -87,6 +99,9 @@ namespace MCPPIE
 		};
 
 		void DiscoverActions(APlayerController* PC, APawn* Pawn);
+		void SeedTrackedValues();
+		void ProbeTrackedValues(UWorld* PIEWorld, APawn* Pawn);
+		bool SampleTrackedValue(UWorld* PIEWorld, APawn* Pawn, const FString& Path, double& OutValue, FString* OutWhy) const;
 
 		FConfig Config;
 		bool bAttached = false;
@@ -96,6 +111,7 @@ namespace MCPPIE
 		TArray<FTrackedValueSpec> TrackedValues;
 		TArray<FTrackedAction> Tracked;
 		TArray<FString> PendingMarkerLabels;
+		TArray<FString> Warnings;
 		FVector PrevPawnLocation = FVector::ZeroVector;
 	};
 }
