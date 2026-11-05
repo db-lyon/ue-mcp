@@ -19,6 +19,7 @@
 #if UE_MCP_HAS_5_5_API
 
 #include "HandlerRegistry.h"
+#include "HandlerWorld.h"
 #include "Handlers/Landscape/LandscapeHandlers.h"
 #include "Editor.h"
 #include "EngineUtils.h"
@@ -96,7 +97,7 @@ namespace
 		{
 			if (!World) return;
 			GEditor->GetEditorWorldContext().SetCurrentWorld(OriginalWorld);
-			World->DestroyWorld(false);
+			MCPDestroyDisposableWorld(World);
 		}
 
 		bool Ready() const { return Landscape != nullptr; }

@@ -631,8 +631,7 @@ namespace
 		~FScopedSpatialNudgeTestWorld()
 		{
 			if (GEditor && TestWorld) GEditor->GetEditorWorldContext().SetCurrentWorld(OriginalWorld);
-			if (TestWorld) TestWorld->DestroyWorld(false);
-			if (TestPackage) TestPackage->SetDirtyFlag(false);
+			MCPDestroyDisposableWorld(TestWorld);
 		}
 
 		UWorld* Get() const { return TestWorld; }

@@ -126,7 +126,7 @@ bool FPackageSaveExtensionTest::RunTest(const FString& Parameters)
 	{
 		AssetPackage->SetDirtyFlag(false);
 	}
-	World->DestroyWorld(/*bInformEngineOfWorld=*/false);
+	MCPDestroyDisposableWorld(World);
 
 	return true;
 }

@@ -70,7 +70,7 @@ namespace
 
 			if (TestWorld)
 			{
-				TestWorld->DestroyWorld(false);
+				MCPDestroyDisposableWorld(TestWorld);
 			}
 		}
 

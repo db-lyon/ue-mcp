@@ -46,10 +46,9 @@ namespace
 			for (AActor* Actor : FActorRange(World))
 				if (Actor) Actor->RouteEndPlay(EEndPlayReason::LevelTransition);
 			GEngine->ShutdownWorldNetDriver(World);
-			World->DestroyWorld(true);
+			MCPDestroyDisposableWorld(World, /*bInformEngineOfWorld=*/true);
 			World->SetPhysicsScene(nullptr);
 			GEngine->DestroyWorldContext(World);
-			World->RemoveFromRoot();
 		}
 
 		UBoxComponent* Box(const FVector& Location, ECollisionResponse Response = ECR_Block)

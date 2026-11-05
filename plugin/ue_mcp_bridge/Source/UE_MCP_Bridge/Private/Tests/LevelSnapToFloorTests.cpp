@@ -13,6 +13,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerRegistry.h"
+#include "HandlerWorld.h"
 #include "Handlers/Level/LevelHandlers.h"
 #include "Components/StaticMeshComponent.h"
 #include "Editor.h"
@@ -63,7 +64,7 @@ namespace
 		{
 			if (!World) return;
 			GEditor->GetEditorWorldContext().SetCurrentWorld(OriginalWorld);
-			World->DestroyWorld(false);
+			MCPDestroyDisposableWorld(World);
 		}
 
 		bool Ready() const { return World && Mover; }
