@@ -4645,7 +4645,12 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ListEditLayers(const TSharedPtr<FJson
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), Landscape->GetActorLabel());
 	Result->SetStringField(TEXT("actorPath"), Landscape->GetPathName());
+	// From 5.7 every landscape uses edit layers and HasLayersContent is deprecated.
+#if UE_MCP_HAS_5_7_API
+	Result->SetBoolField(TEXT("hasLayersContent"), true);
+#else
 	Result->SetBoolField(TEXT("hasLayersContent"), Landscape->HasLayersContent());
+#endif
 	Result->SetNumberField(TEXT("count"), Rows.Num());
 	Result->SetArrayField(TEXT("editLayers"), Rows);
 	return MCPResult(Result);
@@ -4660,10 +4665,13 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::MergeEditLayers(const TSharedPtr<FJso
 	TSharedPtr<FJsonValue> Err;
 	ALandscape* Landscape = MCPLandscape::ResolveLandscape(World, Params, Err);
 	if (!Landscape) return Err;
+#if !UE_MCP_HAS_5_7_API
+	// From 5.7 every landscape uses edit layers and HasLayersContent is deprecated.
 	if (!Landscape->HasLayersContent())
 	{
 		return MCPError(FString::Printf(TEXT("Landscape '%s' has no edit layers, so there is nothing to merge"), *Landscape->GetActorLabel()));
 	}
+#endif
 
 	Landscape->ForceLayersFullUpdate();
 	if (bUpdateNow)
