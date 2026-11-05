@@ -7925,6 +7925,11 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/bcov-niagara.test.ts",
+          "test": "get_emitter_info reads an emitter inside a system by systemPath and emitterName (#1552)"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/niagara-depth.test.ts",
           "test": "reports the stage in the emitter's stack"
         }
@@ -11182,6 +11187,11 @@
           "suite": "live",
           "file": "tests/live/bcov-niagara.test.ts",
           "test": "list_niagara_modules and list_niagara_module_inputs find the stock SpawnRate module and its input"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-niagara.test.ts",
+          "test": "set_niagara_module_input on SpawnRate stops the placed system emitting"
         }
       ]
     },
