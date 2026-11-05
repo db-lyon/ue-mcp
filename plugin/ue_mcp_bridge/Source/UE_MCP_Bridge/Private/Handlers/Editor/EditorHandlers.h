@@ -159,6 +159,7 @@ private:
 	// makes a screenshot comparable between runs.
 	static TSharedPtr<FJsonValue> GetViewportState(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewMode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetBufferVisualization(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewportExposure(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetViewportView(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetGameView(const TSharedPtr<FJsonObject>& Params);

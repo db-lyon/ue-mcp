@@ -452,6 +452,13 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("viewMode"), EType::String, TEXT("Lit | Unlit | Wireframe | LightingOnly | DetailLighting | ShaderComplexity | ... get_viewport_state lists what this build supports")),
 		ViewportIndexParam(),
 	});
+	Registry.RegisterHandler(TEXT("set_buffer_visualization"), &SetBufferVisualization, {
+		MCPParam::Required(TEXT("buffer"), EType::String, TEXT("Buffer to show full screen: Velocity, SceneDepth, BaseColor, WorldNormal and the rest this engine defines (an unknown name lists them); Overview for the grid of all buffers; off to leave buffer visualization")),
+		MCPParam::Optional(TEXT("target"), EType::String, TEXT("editor (default) for a level viewport, pie for the running game viewport")).Enum({ TEXT("editor"), TEXT("pie") }),
+		MCPParam::Optional(TEXT("viewMode"), EType::String, TEXT("With buffer=off, the view mode to return to (default Lit)")),
+		ViewportIndexParam(),
+		PieInstanceParam(),
+	});
 	Registry.RegisterHandler(TEXT("set_viewport_exposure"), &SetViewportExposure, {
 		MCPParam::Optional(TEXT("ev100"), EType::Number, TEXT("Fixed EV100 to pin the viewport to; implies fixed exposure")),
 		MCPParam::Optional(TEXT("fixed"), EType::Boolean, TEXT("Use a fixed exposure rather than eye adaptation")),
