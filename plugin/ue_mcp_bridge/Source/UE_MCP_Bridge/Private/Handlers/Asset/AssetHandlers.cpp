@@ -1454,6 +1454,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject
 		Directory = TEXT("/Game/");
 	}
 	bool bSearchAll = OptionalBool(Params, TEXT("searchAll"));
+	// The same class filter list_assets takes, under either of its names (#1551).
+	FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
+	const FString TypeFilter = OptionalString(Params, TEXT("typeFilter"));
+	if (ClassFilter.IsEmpty()) ClassFilter = TypeFilter;
 
 	// T3: paged. This used to stop at `maxResults` matches and report only how
 	// many it had returned, so a caller searching a large root read the first
@@ -1462,8 +1466,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject
 	MCPPagination::FPageRequest Page;
 	if (auto Err = MCPPagination::ReadPageRequest(
 			Params,
-			FString::Printf(TEXT("search_assets|query=%s|directory=%s|searchAll=%d"),
-				*Query, *Directory, bSearchAll ? 1 : 0),
+			FString::Printf(TEXT("search_assets|query=%s|directory=%s|searchAll=%d|classFilter=%s"),
+				*Query, *Directory, bSearchAll ? 1 : 0, *ClassFilter),
 			/*DefaultLimit*/ 50, /*MaxLimit*/ 2000, Page))
 	{
 		return Err;
@@ -1494,6 +1498,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject
 	FString QueryLower = Query.ToLower();
 	for (const FAssetData& AssetData : AllAssets)
 	{
+		const FString ClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+		if (!ClassFilter.IsEmpty() && !ClassName.Contains(ClassFilter, ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
 		FString AssetPath = AssetData.GetObjectPathString();
 		FString AssetName = AssetData.AssetName.ToString();
 		if (!Query.IsEmpty())
@@ -1514,7 +1523,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject
 		TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
 		Item->SetStringField(TEXT("path"), AssetData.PackageName.ToString());
 		Item->SetStringField(TEXT("name"), AssetName);
-		Item->SetStringField(TEXT("className"), AssetData.AssetClassPath.GetAssetName().ToString());
+		Item->SetStringField(TEXT("className"), ClassName);
 		// The object path is the anchor: it names one asset even when a package
 		// holds several, and 'path' above reports the package for compatibility.
 		Rows.Add({ AssetPath, MakeShared<FJsonValueObject>(Item) });
@@ -1532,6 +1541,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("query"), Query);
 	Result->SetStringField(TEXT("searchScope"), bSearchAll ? (bHasDirectory ? Directory : TEXT("all")) : Directory);
+	if (!ClassFilter.IsEmpty()) Result->SetStringField(TEXT("classFilter"), ClassFilter);
 	MCPPagination::EmitPage(Page, Rows, TEXT("results"), Result);
 	Result->SetNumberField(TEXT("resultCount"), Result->GetIntegerField(TEXT("count")));
 
