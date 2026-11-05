@@ -310,6 +310,12 @@ function createTestBuildPlan(env = process.env, platform = process.platform) {
     buildArgs.push('-NoEngineChanges');
   }
 
+  // The same cap build_project honours, for a machine already short of memory.
+  const parallel = Number(env.UE_MCP_MAX_PARALLEL_ACTIONS);
+  if (Number.isInteger(parallel) && parallel > 0) {
+    buildArgs.push(`-MaxParallelActions=${parallel}`);
+  }
+
   return { ...engine, projectRoot, projectFile, buildArgs };
 }
 

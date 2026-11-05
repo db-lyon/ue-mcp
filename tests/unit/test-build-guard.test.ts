@@ -33,6 +33,12 @@ function createFakeEngine(name: string): string {
 }
 
 describe("UE-MCP test engine build guard", () => {
+  it("caps parallel actions when UE_MCP_MAX_PARALLEL_ACTIONS is set", () => {
+    const engineRoot = createFakeEngine("capped");
+    expect(createTestBuildPlan({ UE_MCP_TEST_ENGINE_ROOT: engineRoot, UE_MCP_MAX_PARALLEL_ACTIONS: "2" }).buildArgs).toContain("-MaxParallelActions=2");
+    expect(createTestBuildPlan({ UE_MCP_TEST_ENGINE_ROOT: engineRoot }).buildArgs.some((a: string) => a.startsWith("-MaxParallelActions"))).toBe(false);
+  });
+
   it("blocks engine writes by default on the fixed test target", () => {
     const engineRoot = createFakeEngine("dedicated");
     const plan = createTestBuildPlan({ UE_MCP_TEST_ENGINE_ROOT: engineRoot });
