@@ -627,10 +627,13 @@ namespace MCPPIE
 		const TSharedPtr<FJsonValue> TargetValue = Exp->TryGetField(TEXT("target"));
 		if (TargetValue.IsValid() && !TargetValue->IsNull())
 		{
-			if (IsScriptRelativeOp(Out.Expect.Op))
+			// On decreasing and increasing, target is the least change from
+			// the value at step start ("x dropped by at least 300").
+			if (IsScriptRelativeOp(Out.Expect.Op)
+				&& (TargetValue->Type != EJson::Number || TargetValue->AsNumber() <= 0.0))
 			{
 				Field = TEXT("expect.target");
-				OutError = FString::Printf(TEXT("%s.expect.target does not apply to op '%s', which compares against the value at step start"), *Where, *Op);
+				OutError = FString::Printf(TEXT("%s.expect.target on op '%s' is the least change from the value at step start, a number above 0"), *Where, *Op);
 				return false;
 			}
 			if (TargetValue->Type == EJson::Boolean)
@@ -822,8 +825,8 @@ namespace MCPPIE
 	{
 		switch (Expect.Op)
 		{
-		case EScriptExpectOp::Decreasing: return Current < AtStart;
-		case EScriptExpectOp::Increasing: return Current > AtStart;
+		case EScriptExpectOp::Decreasing: return Expect.bHasTarget ? AtStart - Current >= Expect.Target : Current < AtStart;
+		case EScriptExpectOp::Increasing: return Expect.bHasTarget ? Current - AtStart >= Expect.Target : Current > AtStart;
 		case EScriptExpectOp::Eq:
 		{
 			const double Tolerance = FMath::Max(1e-4, 1e-4 * FMath::Max(FMath::Abs(Current), FMath::Abs(Expect.Target)));

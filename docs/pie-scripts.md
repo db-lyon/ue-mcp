@@ -24,7 +24,7 @@ Every action on this page is in the `pie` category.
 | `act` | array | Optional. Run after `arrange`: the step actions `uat_run` takes in a step's `do` (see [Arrange and act](#arrange-and-act)). |
 | `expect.value` | string | Required in `expect`. For `decreasing`, `increasing`, `eq`, `gt` and `lt`: a tracked value path, or its last segment. For `exists`: an actor id. For `visible`: a widget class or name. |
 | `expect.op` | string | Required in `expect`. One of the ops below. |
-| `expect.target` | number or boolean | Required for `eq`, `gt` and `lt`. Optional for `visible` and `exists`, default `true`; `false` asks for the opposite. Refused for `decreasing` and `increasing`. A boolean given to `eq`, `gt` or `lt` is read as 1 or 0. |
+| `expect.target` | number or boolean | Required for `eq`, `gt` and `lt`. Optional for `visible` and `exists`, default `true`; `false` asks for the opposite. Optional for `decreasing` and `increasing`: a number above 0, the least change from the value at step start. A boolean given to `eq`, `gt` or `lt` is read as 1 or 0. |
 | `expect.within_ms` | integer | How long the step has to meet its expectation, in game milliseconds from the moment it starts, or from the end of its `act` when it has one. 0 or absent uses the run's `default_within_ms`. |
 
 A manual step takes no `expect`, and a step that has one is refused. An auto step without `expect` passes as soon as it starts (once its `act` ends, when it has one), with `evidence.reason` set to `no expectation`.
@@ -37,8 +37,8 @@ An auto step is checked on every observed frame from the frame it starts. It pas
 
 | Op | Holds when |
 |---|---|
-| `decreasing` | The value is lower than the first value observed in the step. |
-| `increasing` | The value is higher than the first value observed in the step. |
+| `decreasing` | The value is lower than the first value observed in the step, by at least `target` when given (`target: 300` on `pos_x`: x dropped by 300 or more). |
+| `increasing` | The value is higher than the first value observed in the step, by at least `target` when given. |
 | `eq` | The value is within 0.0001 of `target`, or within 0.01% of the larger of the two magnitudes when that is more. |
 | `gt` | The value is greater than `target`. |
 | `lt` | The value is less than `target`. |

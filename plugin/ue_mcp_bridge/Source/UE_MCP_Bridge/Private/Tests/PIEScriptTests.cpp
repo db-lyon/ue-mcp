@@ -75,6 +75,9 @@ bool FPIEScriptEvaluatorTest::RunTest(const FString& /*Parameters*/)
 	TestFalse(TEXT("decreasing: equal does not hold"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Decreasing, TEXT("H")), 100.0, 100.0));
 	TestTrue(TEXT("increasing: higher holds"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Increasing, TEXT("H")), 1.0, 2.0));
 	TestFalse(TEXT("increasing: lower does not hold"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Increasing, TEXT("H")), 1.0, 0.5));
+	TestTrue(TEXT("decreasing by at least 300: 320 holds"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Decreasing, TEXT("X"), true, 300.0), -1000.0, -1320.0));
+	TestFalse(TEXT("decreasing by at least 300: 200 does not"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Decreasing, TEXT("X"), true, 300.0), -1000.0, -1200.0));
+	TestTrue(TEXT("increasing by at least 2: exactly 2 holds"), EvaluateScriptCondition(MakeExpect(EScriptExpectOp::Increasing, TEXT("H"), true, 2.0), 1.0, 3.0));
 
 	const FScriptExpect Eq = MakeExpect(EScriptExpectOp::Eq, TEXT("H"), true, 1000.0);
 	TestTrue(TEXT("eq: within relative epsilon"), EvaluateScriptCondition(Eq, 0.0, 1000.05));
@@ -132,7 +135,9 @@ bool FPIEScriptStepParsingTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("missing value error"), Err.Contains(TEXT("value")));
 	TestFalse(TEXT("eq needs target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"eq\"}}"), Def, Err));
 	TestTrue(TEXT("target error"), Err.Contains(TEXT("target")));
-	TestFalse(TEXT("relative op takes no target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"increasing\",\"target\":1}}"), Def, Err));
+	TestTrue(TEXT("relative op takes a least-change target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"increasing\",\"target\":1}}"), Def, Err));
+	TestFalse(TEXT("relative op refuses a zero target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"decreasing\",\"target\":0}}"), Def, Err));
+	TestFalse(TEXT("relative op refuses a boolean target"), Parse(TEXT("{\"instruction\":\"x\",\"expect\":{\"value\":\"H\",\"op\":\"decreasing\",\"target\":true}}"), Def, Err));
 	TestFalse(TEXT("manual with expect refused"), Parse(TEXT("{\"instruction\":\"x\",\"judge\":\"manual\",\"expect\":{\"value\":\"H\",\"op\":\"gt\",\"target\":1}}"), Def, Err));
 	TestFalse(TEXT("bad judge refused"), Parse(TEXT("{\"instruction\":\"x\",\"judge\":\"robot\"}"), Def, Err));
 	TestFalse(TEXT("missing instruction refused"), Parse(TEXT("{\"judge\":\"auto\"}"), Def, Err));
