@@ -13273,20 +13273,27 @@
         {
           "name": "otherPath",
           "type": "string",
-          "required": true,
-          "description": "Blueprint to compare against (B)"
+          "required": false,
+          "description": "Blueprint to compare against (B). Give this or against"
         },
         {
-          "name": "fromRevision",
+          "name": "against",
           "type": "string",
           "required": false,
-          "description": "Reserved for source-control revision diffing, which is not implemented; passing it is refused"
-        },
+          "description": "An earlier state of assetPath to diff from, with assetPath as it is now as the other side: checkpoint:<id> (an editor(checkpoint) id, resolved by the server), revision:<rev>, or a bare id, tried as a checkpoint and then as a source control revision. A revision is the provider's id, a unique prefix of 7 or more characters of it, its number, or head. Give this or otherPath"
+        }
+      ],
+      "choices": [
         {
-          "name": "toRevision",
-          "type": "string",
-          "required": false,
-          "description": "Reserved for source-control revision diffing, which is not implemented; passing it is refused"
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "otherPath"
+            ],
+            [
+              "against"
+            ]
+          ]
         }
       ]
     },

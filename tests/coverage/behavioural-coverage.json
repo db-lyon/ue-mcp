@@ -816,6 +816,11 @@
           "suite": "live",
           "file": "tests/live/blueprint-self-function-call.test.ts",
           "test": "still binds a function the parent class declares"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
         }
       ]
     },
@@ -4029,6 +4034,11 @@
           "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "checkpoint_arm with enabled false stops recording"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
         }
       ]
     },
@@ -5450,6 +5460,11 @@
           "suite": "live",
           "file": "tests/live/single-editor.test.ts",
           "test": "gates nothing: an untargeted change runs, as it always did"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
         }
       ]
     },
@@ -5844,6 +5859,11 @@
           "suite": "live",
           "file": "tests/live/bcov-blueprint-assets.test.ts",
           "test": "duplicate_blueprint copies members, and diff_blueprint reports what changed on the copy"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
         }
       ]
     },
@@ -18356,6 +18376,11 @@
           "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "checkpoint_arm with enabled false stops recording"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
         }
       ]
     },
@@ -21876,6 +21901,11 @@
         {
           "suite": "live",
           "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
           "test": "history lists the revision a submit just recorded"
         },
         {
@@ -21979,6 +22009,11 @@
         {
           "suite": "live",
           "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
           "test": "history lists the revision a submit just recorded"
         },
         {
@@ -22056,6 +22091,11 @@
       "registeredIn": "SourceControlHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
+        },
         {
           "suite": "live",
           "file": "tests/live/source-control-provider.test.ts",
