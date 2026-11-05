@@ -6756,6 +6756,11 @@
           "suite": "live",
           "file": "tests/live/bcov-widget-editor-utility.test.ts",
           "test": "create_editor_utility_widget makes a utility widget run_editor_utility_widget opens"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-widget-runtime.test.ts",
+          "test": "find_object with world=pie finds the GameInstance-owned widget and the LocalPlayer subsystems (#1543)"
         }
       ]
     },

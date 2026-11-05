@@ -1659,6 +1659,26 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 
 namespace
 {
+	// The world a live object plays in (#1543). Most runtime objects sit under a
+	// UWorld, but UMG widgets are outered to the GameInstance, and a LocalPlayer
+	// and its subsystems hang off the engine, so a typed-outer UWorld misses
+	// them. The first world, GameInstance or LocalPlayer up the outer chain
+	// decides; a GameInstance answers with the world it is playing.
+	UWorld* FindPlayingWorld(UObject* Obj)
+	{
+		for (UObject* It = Obj; It; It = It->GetOuter())
+		{
+			if (UWorld* World = Cast<UWorld>(It)) return World;
+			if (UGameInstance* GameInstance = Cast<UGameInstance>(It)) return GameInstance->GetWorld();
+			if (ULocalPlayer* LocalPlayer = Cast<ULocalPlayer>(It))
+			{
+				UGameInstance* GameInstance = LocalPlayer->GetGameInstance();
+				return GameInstance ? GameInstance->GetWorld() : nullptr;
+			}
+		}
+		return nullptr;
+	}
+
 	TSharedPtr<FJsonObject> DescribeLiveObject(UObject* Obj)
 	{
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -1668,7 +1688,7 @@ namespace
 		Entry->SetStringField(TEXT("classPath"), Obj->GetClass()->GetPathName());
 		Entry->SetStringField(TEXT("outerPath"), Obj->GetOuter() ? Obj->GetOuter()->GetPathName() : FString());
 		Entry->SetBoolField(TEXT("isDefaultObject"), Obj->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject));
-		if (UWorld* OwningWorld = Obj->GetTypedOuter<UWorld>())
+		if (UWorld* OwningWorld = FindPlayingWorld(Obj))
 		{
 			Entry->SetStringField(TEXT("world"), OwningWorld->GetPathName());
 			Entry->SetStringField(TEXT("worldType"), MCPDescribeWorldType(OwningWorld));
@@ -1782,7 +1802,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::FindLiveObjects(const TSharedPtr<FJsonOb
 			}
 			if (!bUnderOuter) return;
 		}
-		if (bScopeToWorld && Obj->GetTypedOuter<UWorld>() != ScopeWorld) return;
+		if (bScopeToWorld && FindPlayingWorld(Obj) != ScopeWorld) return;
 
 		// The object's full path is the page anchor: it is the one string that
 		// names this instance across two separate enumerations, and it is what
