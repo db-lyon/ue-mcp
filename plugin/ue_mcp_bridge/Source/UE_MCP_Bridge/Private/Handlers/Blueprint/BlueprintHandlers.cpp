@@ -340,6 +340,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("trackName"), EType::String, TEXT("Track name within the timeline")),
 		MCPParam::Optional(TEXT("trackType"), EType::String, TEXT("float (default), vector, color or event")),
 		MCPParam::Optional(TEXT("keyframes"), EType::Array, TEXT("[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color")).Items(EType::Object),
+		MCPParam::Optional(TEXT("curveAssetPath"), EType::String, TEXT("Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color")),
 	});
 	// #1654: the inverse of creating a timeline, as the editor's own removal does it.
 	Registry.RegisterHandler(TEXT("remove_timeline"), &RemoveTimeline, {

@@ -1471,6 +1471,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-blueprint-members.test.ts",
+          "test": "add_timeline_track binds an existing curve asset as an external curve (#1650)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-members.test.ts",
           "test": "add_timeline_track stores a track that a second add sees as taken"
         },
         {
@@ -3844,6 +3849,11 @@
       "registeredIn": "AssetHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-members.test.ts",
+          "test": "add_timeline_track binds an existing curve asset as an external curve (#1650)"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-material-instance.test.ts",
