@@ -2,7 +2,8 @@
 #include "HandlerUtils.h"
 #include "ShaderCompiler.h"
 #include "MaterialShared.h"
-#include "Misc/ScopeLock.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/UObjectIterator.h"
 
 TSharedPtr<FJsonValue> FEditorHandlers::GetShaderCompileStatus(const TSharedPtr<FJsonObject>& Params)
 {
@@ -10,21 +11,20 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetShaderCompileStatus(const TSharedPtr<
 	const int32 OutstandingJobs = GShaderCompilingManager ? GShaderCompilingManager->GetNumRemainingJobs() : 0;
 	const bool IsCompiling = GShaderCompilingManager && GShaderCompilingManager->IsCompiling();
 	TSet<uint32> PendingShaderMaps;
-	TSet<FString> PendingMaterials;
+	TSet<const FMaterial*> PendingMaterials;
 	if (GShaderCompilingManager)
 	{
-		// The array can change on the async loading thread. Only inspect maps
-		// still owned by the compiler; completed maps also remain in this array.
-		FScopeLock Lock(&FMaterialShaderMap::AllMaterialShaderMapsGuard);
-		for (const FMaterialShaderMap* Map : FMaterialShaderMap::AllMaterialShaderMaps)
+		// The engine's shader map list is private, so read each loaded material's
+		// resource for the active platform. Instances sharing a parent resource count once.
+		for (TObjectIterator<UMaterialInterface> It; It; ++It)
 		{
-			if (!Map || Map->GetCompilingId() == 0 || !GShaderCompilingManager->IsCompilingShaderMap(Map->GetCompilingId())) continue;
-			PendingShaderMaps.Add(Map->GetCompilingId());
-#if UE_MCP_HAS_5_8_API
-			PendingMaterials.Add(Map->GetMaterialPath());
-#else
-			PendingMaterials.Add(Map->GetFriendlyName());
-#endif
+			const UMaterialInterface* Material = *It;
+			const FMaterialResource* Resource = Material->GetMaterialResource(GMaxRHIShaderPlatform);
+			if (!Resource || PendingMaterials.Contains(Resource)) continue;
+			const uint32 Id = Resource->GetGameThreadCompilingShaderMapId();
+			if (Id == 0 || !GShaderCompilingManager->IsCompilingShaderMap(Id)) continue;
+			PendingShaderMaps.Add(Id);
+			PendingMaterials.Add(Resource);
 		}
 	}
 	const bool Idle = !IsCompiling && OutstandingJobs == 0 && PendingShaderMaps.IsEmpty();
@@ -37,7 +37,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetShaderCompileStatus(const TSharedPtr<
 	Result->SetBoolField(TEXT("idle"), Idle);
 	Result->SetBoolField(TEXT("waitUntilIdle"), WaitUntilIdle);
 	Result->SetStringField(TEXT("state"), Idle ? TEXT("idle") : (WaitUntilIdle ? TEXT("waiting") : TEXT("compiling")));
-	// As with PCG generation, the server polls this short game-thread read
-	// between ticks. The handler never sleeps or finishes compilation itself.
+	// The server polls this short game-thread read between ticks when
+	// waitUntilIdle is set; the handler never sleeps or blocks on compilation.
 	return MCPResult(Result);
 }
