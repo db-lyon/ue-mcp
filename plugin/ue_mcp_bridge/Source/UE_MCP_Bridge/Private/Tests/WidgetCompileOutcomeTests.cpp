@@ -19,7 +19,7 @@
 #include "Misc/Guid.h"
 #include "UObject/Package.h"
 #include "WidgetBlueprint.h"
-#include "WidgetBlueprintGeneratedClass.h"
+#include "Blueprint/WidgetBlueprintGeneratedClass.h"
 #include "Tests/MCPScopedTestMount.h"
 
 namespace MCPWidgetCompileOutcomeTests
