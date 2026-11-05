@@ -1626,6 +1626,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "aim_actor_at dirties the package and is one undo step"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
           "test": "aim_actor_at turns the actor toward a world point"
         }
       ]
@@ -6861,6 +6866,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "aim_actor_at dirties the package and is one undo step"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
           "test": "aim_actor_at turns the actor toward a world point"
         },
         {
@@ -9149,6 +9159,11 @@
       "registeredIn": "EditorHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "aim_actor_at dirties the package and is one undo step"
+        },
         {
           "suite": "live",
           "file": "tests/live/viewport-transactions.test.ts",
@@ -12240,6 +12255,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-world.test.ts",
           "test": "undo reverses a move_actor and redo re-applies it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "aim_actor_at dirties the package and is one undo step"
         },
         {
           "suite": "live",
@@ -22031,6 +22051,11 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-world.test.ts",
           "test": "undo reverses a move_actor and redo re-applies it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "aim_actor_at dirties the package and is one undo step"
         }
       ]
     },

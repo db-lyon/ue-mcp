@@ -179,6 +179,17 @@ describe("level transforms and reads", () => {
     expect(rotation.pitch).toBeCloseTo(0, 1);
   }, 120_000);
 
+  it("aim_actor_at dirties the package and is one undo step", async () => {
+    await call("move_actor", { actorLabel: AIM, rotation: { pitch: 0, yaw: 0, roll: 0 } });
+    const aimed = await call("aim_actor_at", { actorLabel: AIM, targetPoint: { x: 1000, y: 23000, z: 100 } });
+    expect(aimed.packageDirty).toBe(true);
+    expect(typeof aimed.package).toBe("string");
+    expect((await call("get_undo_state")).undoDescription).toBe("Aim Actor");
+
+    expect((await call("undo")).changed).toBe(true);
+    expect(((await details(AIM)).rotation as { yaw: number }).yaw).toBeCloseTo(0, 1);
+  }, 120_000);
+
   it("get_relative_transform reports the target in the reference frame", async () => {
     await cube(REF, { x: 2000, y: 22000, z: 100 });
     await cube(TGT, { x: 2100, y: 22050, z: 100 });
