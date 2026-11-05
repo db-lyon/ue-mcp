@@ -350,7 +350,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Cinematics"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	// Parsed before the asset exists, so a bad rate creates nothing (#1641).
-	TSharedPtr<FJsonValue> DisplayRateValue = Params->TryGetField(TEXT("displayRate"));
+	TSharedPtr<FJsonValue> DisplayRateValue = TryGetParam(Params, TEXT("displayRate"));
 	if (DisplayRateValue.IsValid() && DisplayRateValue->IsNull()) DisplayRateValue.Reset();
 	FFrameRate DisplayRate;
 	if (DisplayRateValue.IsValid())
@@ -1366,7 +1366,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetDisplayRate(const TSharedPtr<FJson
 	// Every parameter is read before anything can fail (#1057).
 	FString Path;
 	const bool bHasPath = TryGetStringParam(Params, TEXT("sequencePath"), Path);
-	const TSharedPtr<FJsonValue> RateValue = Params->TryGetField(TEXT("displayRate"));
+	const TSharedPtr<FJsonValue> RateValue = TryGetParam(Params, TEXT("displayRate"));
 
 	TSharedPtr<FJsonValue> LoadErr;
 	ULevelSequence* Sequence = UEMCP::SequencerTracks::LoadSequence(Path, bHasPath, LoadErr);
