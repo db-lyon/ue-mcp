@@ -68,7 +68,9 @@ export function resolveInside(roots: string[], input: string, opts: { base?: str
   throw new PathOutsideRootsError(input, resolved, allowed);
 }
 
-const MODULE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** Unreal module, plugin and target names are identifiers. */
+export const UE_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const MODULE_NAME = UE_IDENTIFIER_RE;
 
 /** Unreal module names are identifiers. Throws on anything else, separators and '..' included. */
 export function requireModuleName(name: string, field = "moduleName"): string {

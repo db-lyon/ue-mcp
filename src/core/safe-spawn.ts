@@ -10,6 +10,9 @@
 import { spawn, spawnSync, type ChildProcess, type SpawnOptions, type SpawnSyncOptions, type SpawnSyncReturns } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { UE_IDENTIFIER_RE } from "./path-guard.js";
+
+export { UE_IDENTIFIER_RE };
 
 /** A value that cannot be passed to a child process as given. */
 export class UnsafeArgumentError extends Error {
@@ -27,8 +30,6 @@ export interface Invocation {
   windowsVerbatimArguments?: boolean;
 }
 
-/** Unreal module, target and project names: UnrealBuildTool accepts nothing else. */
-export const UE_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const BUILD_CONFIGURATIONS = ["Debug", "DebugGame", "Development", "Shipping", "Test"] as const;
 const PLATFORM_RE = /^[A-Za-z0-9]+$/;
 

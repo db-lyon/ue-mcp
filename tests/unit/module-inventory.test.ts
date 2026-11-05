@@ -154,6 +154,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "extensions/package-paths.ts": "Resolves a manifest path inside the package it is handed. Pure path logic over its arguments.",
   "core/open-url.ts": "Opens a URL in the system browser. No editor is involved.",
   "core/spawn-outside-tree.ts": "Starts a process through a trampoline that exits. Pure process plumbing over its arguments.",
+  "bridge/bridge-token.ts": "Reads the session token file for the port it is handed. Pure filesystem plumbing over its arguments.",
   "core/path-guard.ts": "Resolves a path against the folders it is handed and refuses one outside them. Pure logic over its arguments.",
   "core/private-file.ts": "Writes the owner-only file it is handed. Pure filesystem plumbing over its arguments.",
   "core/safe-spawn.ts": "Builds argv invocations and checks the values they carry. Pure process plumbing over its arguments.",

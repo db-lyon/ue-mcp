@@ -1,13 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isInside as inside, UE_IDENTIFIER_RE } from "../core/path-guard.js";
 
 /** Unreal plugin names: what UnrealBuildTool accepts, and never a path. */
-export const UE_PLUGIN_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-function inside(base: string, abs: string): boolean {
-  const rel = path.relative(base, abs);
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
-}
+export const UE_PLUGIN_NAME_RE = UE_IDENTIFIER_RE;
 
 /**
  * A path a plugin manifest names, resolved inside the plugin's package. A
