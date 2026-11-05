@@ -487,6 +487,10 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 		MCPParam::Optional(TEXT("interpolation"), EType::String, TEXT("Interpolation of keys without their own interp: linear (default) | constant | cubic")),
 	});
+	Registry.RegisterHandler(TEXT("read_anim_curve_keys"), &ReadAnimCurveKeys, {
+		AssetPath(TEXT("AnimSequence asset path")),
+		MCPParam::Optional(TEXT("curveName"), EType::String, TEXT("Float curve to read (case-insensitive); omit for every curve")),
+	});
 	Registry.RegisterHandler(TEXT("apply_animation_modifier"), &ApplyAnimationModifier, {
 		AssetPath(TEXT("AnimSequence asset path")),
 		MCPParam::Required(TEXT("modifierClass"), EType::String, TEXT("UAnimationModifier subclass: a short name such as DistanceCurveModifier, or a /Script path")).Alias(TEXT("modifier")),

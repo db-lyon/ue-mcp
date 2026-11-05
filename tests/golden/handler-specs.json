@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1220,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -27372,6 +27372,26 @@
           "aliases": [
             "path"
           ]
+        }
+      ]
+    },
+    "read_anim_curve_keys": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "AnimSequence asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "curveName",
+          "type": "string",
+          "required": false,
+          "description": "Float curve to read (case-insensitive); omit for every curve"
         }
       ]
     },

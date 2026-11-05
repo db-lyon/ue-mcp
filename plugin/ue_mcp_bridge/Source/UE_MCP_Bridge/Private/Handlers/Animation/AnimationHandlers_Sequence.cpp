@@ -1379,6 +1379,77 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetAnimCurveKeys(const TSharedPtr<FJs
 	return MCPResult(Result);
 }
 
+// read_anim_curve_keys (#1644): every key of one float curve, or of all of
+// them, in the {time, value, interp} shape set_anim_curve_keys takes, so a read
+// can be replayed as a write.
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimCurveKeys(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	TSharedPtr<FJsonValue> PathErr = RequireString(Params, TEXT("assetPath"), AssetPath);
+	const bool bHasCurveName = HasParam(Params, TEXT("curveName"));
+	const FString CurveName = OptionalString(Params, TEXT("curveName"));
+	if (PathErr) return PathErr;
+	if (bHasCurveName && CurveName.IsEmpty())
+	{
+		return MCPError(TEXT("'curveName' must be a non-empty string; omit it to read every curve"));
+	}
+
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
+	UAnimSequence* Seq = Cast<UAnimSequence>(LoadedAsset);
+	if (!Seq)
+	{
+		return LoadedAsset
+			? MCPAssetWrongTypeError(AssetPath, LoadedAsset, TEXT("AnimSequence"))
+			: MCPAssetNotFoundError(AssetPath);
+	}
+	const IAnimationDataModel* Model = Seq->GetDataModel();
+	if (!Model) return MCPError(TEXT("AnimSequence has no animation data model"));
+
+	const TArray<FFloatCurve>& Curves = Model->GetCurveData().FloatCurves;
+	TArray<TSharedPtr<FJsonValue>> CurvesArr;
+	TArray<FString> AllNames;
+	for (const FFloatCurve& Curve : Curves)
+	{
+		const FString Name = Curve.GetName().ToString();
+		AllNames.Add(Name);
+		if (bHasCurveName && !Name.Equals(CurveName, ESearchCase::IgnoreCase)) continue;
+
+		TArray<TSharedPtr<FJsonValue>> KeysArr;
+		for (const FRichCurveKey& Key : Curve.FloatCurve.Keys)
+		{
+			TSharedPtr<FJsonObject> KeyJson = MakeShared<FJsonObject>();
+			KeyJson->SetNumberField(TEXT("time"), Key.Time);
+			KeyJson->SetNumberField(TEXT("value"), Key.Value);
+			KeyJson->SetStringField(TEXT("interp"),
+				Key.InterpMode == RCIM_Constant ? TEXT("constant")
+				: (Key.InterpMode == RCIM_Cubic ? TEXT("cubic") : TEXT("linear")));
+			KeysArr.Add(MakeShared<FJsonValueObject>(KeyJson));
+		}
+
+		TSharedPtr<FJsonObject> CurveJson = MakeShared<FJsonObject>();
+		CurveJson->SetStringField(TEXT("name"), Name);
+		CurveJson->SetNumberField(TEXT("keyCount"), KeysArr.Num());
+		CurveJson->SetArrayField(TEXT("keys"), KeysArr);
+		// The value a keyless curve evaluates to.
+		CurveJson->SetNumberField(TEXT("defaultValue"), Curve.FloatCurve.GetDefaultValue());
+		CurvesArr.Add(MakeShared<FJsonValueObject>(CurveJson));
+	}
+
+	if (bHasCurveName && CurvesArr.Num() == 0)
+	{
+		return MCPError(FString::Printf(
+			TEXT("AnimSequence '%s' has no float curve named '%s'. Curves on it: %s"),
+			*AssetPath, *CurveName, AllNames.Num() > 0 ? *FString::Join(AllNames, TEXT(", ")) : TEXT("(none)")));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), Seq->GetPathName());
+	Result->SetNumberField(TEXT("sequenceLength"), Seq->GetPlayLength());
+	Result->SetNumberField(TEXT("curveCount"), CurvesArr.Num());
+	Result->SetArrayField(TEXT("curves"), CurvesArr);
+	return MCPResult(Result);
+}
+
 // ─── #712 apply_animation_modifier ──────────────────────────────────
 // Instantiate a UAnimationModifier subclass and run it on an AnimSequence.
 // The headline case is DistanceCurveModifier (bakes a Distance curve from root
