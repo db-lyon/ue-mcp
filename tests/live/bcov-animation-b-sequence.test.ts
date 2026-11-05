@@ -231,5 +231,17 @@ describe("sequence authoring", () => {
     read = await call("read_blendspace", { assetPath: BLENDSPACE });
     expect((read.samples as Sample[])[walkIndex].sampleValue.x).toBe(150);
     expect((read.samples as Sample[])[walkIndex].animation).toContain("AS_BCovBlendWalk");
+
+    // #1663: per-sample rate scale, written alone and read back.
+    type RatedSample = Sample & { rateScale: number };
+    expect((read.samples as RatedSample[])[walkIndex].rateScale).toBe(1);
+    const rated = await call("set_blend_sample", { assetPath: BLENDSPACE, sampleIndex: walkIndex, rateScale: 1.5 });
+    expect(rated.rateScale).toBe(1.5);
+    expect(rated.previousRateScale).toBe(1);
+    read = await call("read_blendspace", { assetPath: BLENDSPACE });
+    expect((read.samples as RatedSample[])[walkIndex].rateScale).toBe(1.5);
+    expect((read.samples as RatedSample[])[walkIndex].sampleValue.x).toBe(150);
+    const refused = await callBridge(bridge, "set_blend_sample", { assetPath: BLENDSPACE, sampleIndex: walkIndex, rateScale: 0 });
+    expect(succeeded(refused)).toBe(false);
   }, 120_000);
 });

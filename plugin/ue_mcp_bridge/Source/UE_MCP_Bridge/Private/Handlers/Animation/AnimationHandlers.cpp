@@ -306,7 +306,8 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("x"), EType::Number, TEXT("New horizontal axis value when position is omitted")),
 		MCPParam::Optional(TEXT("y"), EType::Number, TEXT("New vertical axis value when position is omitted")),
 		MCPParam::Optional(TEXT("animation"), EType::String, TEXT("AnimSequence to swap into the sample")),
-	}, MCPSpec::AtLeastOne({ { TEXT("position") }, { TEXT("x") }, { TEXT("y") }, { TEXT("animation") } }));
+		MCPParam::Optional(TEXT("rateScale"), EType::Number, TEXT("Per-sample playback rate, 0.01 to 64 (FBlendSample::RateScale)")),
+	}, MCPSpec::AtLeastOne({ { TEXT("position") }, { TEXT("x") }, { TEXT("y") }, { TEXT("animation") }, { TEXT("rateScale") } }));
 	Registry.RegisterHandler(TEXT("read_blendspace"), &ReadBlendspace, {
 		AssetPath(TEXT("BlendSpace or BlendSpace1D asset path")),
 	});
@@ -2528,6 +2529,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadBlendspace(const TSharedPtr<FJson
 		ValueObj->SetNumberField(TEXT("x"), Sample.SampleValue.X);
 		ValueObj->SetNumberField(TEXT("y"), Sample.SampleValue.Y);
 		SampleObj->SetObjectField(TEXT("sampleValue"), ValueObj);
+		SampleObj->SetNumberField(TEXT("rateScale"), Sample.RateScale);
 
 		SamplesArray.Add(MakeShared<FJsonValueObject>(SampleObj));
 	}
@@ -3346,7 +3348,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddBlendSample(const TSharedPtr<FJson
 TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJsonObject>& Params)
 {
 	// The flat x and y are read only without position (#1057).
-	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("sampleIndex"), TEXT("position"), TEXT("x"), TEXT("y"), TEXT("animation") });
+	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("sampleIndex"), TEXT("position"), TEXT("x"), TEXT("y"), TEXT("animation"), TEXT("rateScale") });
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
@@ -3372,6 +3374,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	// needs, and this action is its own inverse.
 	const FVector PrevPos = Existing.SampleValue;
 	const FString PrevAnimPath = Existing.Animation ? Existing.Animation->GetPathName() : FString();
+	const float PrevRateScale = Existing.RateScale;
+
+	// Validated before anything is written. The range is the property's clamp.
+	double NewRateScale = 0.0;
+	const bool bHasRateScale = TryGetNumberParam(Params, TEXT("rateScale"), NewRateScale);
+	if (bHasRateScale && (!FMath::IsFinite(NewRateScale) || NewRateScale < 0.01 || NewRateScale > 64.0))
+	{
+		return MCPError(FString::Printf(TEXT("rateScale %g is outside 0.01..64"), NewRateScale));
+	}
 
 	const TSharedPtr<FJsonObject>* PosObj = nullptr;
 	bool bHasPos = false;
@@ -3415,9 +3426,23 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 		bUpdated = true;
 	}
 
+	if (bHasRateScale)
+	{
+		// SampleData is protected and UBlendSpace has no rate setter, so the
+		// array is reached through its reflected property (#1663).
+		FArrayProperty* SampleDataProp = FindFProperty<FArrayProperty>(UBlendSpace::StaticClass(), TEXT("SampleData"));
+		if (!SampleDataProp)
+		{
+			return MCPError(TEXT("UBlendSpace::SampleData is not reflected in this engine version"));
+		}
+		TArray<FBlendSample>* SampleData = SampleDataProp->ContainerPtrToValuePtr<TArray<FBlendSample>>(BlendSpace);
+		(*SampleData)[SampleIndex].RateScale = static_cast<float>(NewRateScale);
+		bUpdated = true;
+	}
+
 	if (!bUpdated)
 	{
-		return MCPError(TEXT("Nothing to update - provide position {x,y} and/or animation"));
+		return MCPError(TEXT("Nothing to update - provide position {x,y}, animation and/or rateScale"));
 	}
 
 	// #710: retriangulate so the edited sample interpolates at runtime.
@@ -3440,6 +3465,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	Result->SetNumberField(TEXT("previousX"), PrevPos.X);
 	Result->SetNumberField(TEXT("previousY"), PrevPos.Y);
 	Result->SetStringField(TEXT("previousAnimation"), PrevAnimPath);
+	Result->SetNumberField(TEXT("rateScale"), Updated.RateScale);
+	Result->SetNumberField(TEXT("previousRateScale"), PrevRateScale);
 
 	// This action is its own inverse: the same sampleIndex with the position and
 	// animation it held. The index is stable because nothing here adds or removes
@@ -3449,6 +3476,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	Rollback->SetNumberField(TEXT("sampleIndex"), SampleIndex);
 	Rollback->SetNumberField(TEXT("x"), PrevPos.X);
 	Rollback->SetNumberField(TEXT("y"), PrevPos.Y);
+	// The replay carries rateScale only when this call wrote it, and only when the
+	// prior value is one the action accepts.
+	const bool bPrevRateReplayable = PrevRateScale >= 0.01f && PrevRateScale <= 64.0f;
+	if (bHasRateScale && bPrevRateReplayable)
+	{
+		Rollback->SetNumberField(TEXT("rateScale"), PrevRateScale);
+	}
 	if (!PrevAnimPath.IsEmpty())
 	{
 		Rollback->SetStringField(TEXT("animation"), PrevAnimPath);
@@ -3459,12 +3493,18 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	// set_blend_sample needs an animation path and has no form that clears one,
 	// so omitting the field leaves whatever this call assigned in place.
 	const bool bAssignedToEmptySample = PrevAnimPath.IsEmpty() && Updated.Animation != nullptr;
-	Result->SetBoolField(TEXT("rollbackLossy"), bAssignedToEmptySample);
+	const bool bRateNotReplayable = bHasRateScale && !bPrevRateReplayable;
+	Result->SetBoolField(TEXT("rollbackLossy"), bAssignedToEmptySample || bRateNotReplayable);
 	if (bAssignedToEmptySample)
 	{
 		Result->SetStringField(TEXT("rollbackNote"),
 			TEXT("The sample held no animation before this call. The replay restores its position, but set_blend_sample requires an animation path and cannot clear one, ")
 			TEXT("so the animation this call assigned stays on the sample."));
+	}
+	else if (bRateNotReplayable)
+	{
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The sample's previous rateScale %g is outside 0.01..64, which set_blend_sample refuses, so the replay does not restore it."), PrevRateScale));
 	}
 	return MCPResult(Result);
 }

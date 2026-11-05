@@ -14,7 +14,7 @@ export const animationTool: ToolDef = categoryTool(
     scan_animation_tracks: specBp("read", "Scan AnimSequence bone-track counts.", "scan_animation_tracks"),
     read_blendspace:      specBp("read", "Read blendspace.", "read_blendspace"),
     add_blend_sample:     specBp("mutate", "Append a sample to a BlendSpace (#248).", "add_blend_sample"),
-    set_blend_sample:     specBp("mutate", "Move an existing BlendSpace sample or swap its animation (#272).", "set_blend_sample"),
+    set_blend_sample:     specBp("mutate", "Move an existing BlendSpace sample, swap its animation (#272), or set its per-sample rateScale (#1663). Runs ResampleData and PostEditChange, so the grid is rebuilt; read_blendspace reports each sample's rateScale.", "set_blend_sample"),
     list:                 specBp("read", "List anim assets (AnimSequence, AnimMontage, AnimBlueprint, BlendSpace). directory scopes the read to one folder and is now honoured; it was advertised and ignored, so a scoped call used to get the whole project back.", "list_anim_assets"),
     create_montage:       specBp("mutate", "Create montage.", "create_anim_montage"),
     author_montages_batch: specBp("mutate", "Batch-author montages in one call: idempotent create, slot name, blend/rate/length properties, sections and notifies, then save. Every item reports success plus the failing stage (validate|create|slot|properties|sections|notifies|save) and error, so one bad item does not hide the rest. Newly created montages come back as a delete_asset_batch rollback. Each montage still holds the single segment create_montage builds.", "author_montages_batch"),

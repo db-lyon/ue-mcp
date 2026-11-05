@@ -4491,6 +4491,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "AnimSequence to swap into the sample"
+      },
+      {
+        "name": "rateScale",
+        "type": "number",
+        "required": false,
+        "description": "Per-sample playback rate, 0.01 to 64 (FBlendSample::RateScale)"
       }
     ],
     "choices": [
@@ -4508,6 +4514,9 @@ export const handlerSpecs: HandlerSpecs = {
           ],
           [
             "animation"
+          ],
+          [
+            "rateScale"
           ]
         ]
       }
@@ -5464,7 +5473,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   scan_animation_tracks: "Params: directory?, recursive?, assetPaths?, skeletonPath?, targetTrackCount?, includeTrackNames?",
   set_anim_blueprint_skeleton: "Params: assetPath, skeletonPath",
   set_anim_curve_keys: "Params: assetPath (or path), curveName, keys, interpolation?",
-  set_blend_sample: "Params: assetPath (or path), sampleIndex, at least one of position/x/y/animation",
+  set_blend_sample: "Params: assetPath (or path), sampleIndex, at least one of position/x/y/animation/rateScale",
   set_bone_keyframes: "Params: assetPath (or path), boneName, keyframes",
   set_bone_retargeting: "Params: skeletonPath, at least one of mode/restore, bones?, bone?, includeChildren?",
   set_control_rig_preview_mesh: "Params: assetPath (or path), skeletalMeshPath",
@@ -5657,7 +5666,7 @@ export const schema: Record<string, z.ZodType> = {
   profileName: z.string().optional().describe("Blend profile to create or edit"),
   properties: z.record(z.string(), z.unknown()).optional().describe("{loop?, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?: RefPose|AnimFirstFrame|Zero, additiveAnimType?: None|LocalSpaceBase|RotationOffsetMeshSpace, refPoseType?: None|RefPose|AnimScaled|AnimFrame|LocalAnimFrame, refPoseSeq?, refFrameIndex?}. An unknown key or value refuses the whole call"),
   props: z.record(z.string(), z.unknown()).optional().describe("EditAnywhere property values to set on the modifier before it runs"),
-  rateScale: z.number().optional().describe("Playback rate scale"),
+  rateScale: z.number().optional().describe("Per-sample playback rate, 0.01 to 64 (FBlendSample::RateScale) (set_blend_sample). Playback rate scale (set_montage_properties)"),
   recursive: z.boolean().optional().describe("Include subfolders (default true) (list_anim_assets, list_skeletal_meshes, scan_animation_tracks). With directory: include subfolders (default true) (read_anim_sequence)"),
   reduceKeys: z.literal(false).optional().describe("Key reduction is not supported yet; omit or pass false"),
   remove: z.union([z.array(z.string()), z.boolean()]).optional().describe("Curve names to remove (edit_curve_metadata). true to unregister instead of register (default false) (register_compatible_skeleton)"),

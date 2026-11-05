@@ -33,6 +33,21 @@ describe("animation loop flag and blend sample rate scale (#1663)", () => {
     expect(source).toContain('J->SetBoolField(TEXT("loop"), bLoop);');
     expect(source).toContain('Result->SetBoolField(TEXT("loop"), AnimSeq->bLoop);');
   });
+
+  it("set_blend_sample takes rateScale alone, validates it first, and read_blendspace reports it", () => {
+    const params = handlerSpecs.set_blend_sample.params.map((p) => p.name);
+    expect(params).toContain("rateScale");
+    expect(handlerSpecs.set_blend_sample.choices?.[0].branches).toContainEqual(["rateScale"]);
+    const source = readHandlerFile("AnimationHandlers.cpp");
+    expect(source).toContain('SampleObj->SetNumberField(TEXT("rateScale"), Sample.RateScale);');
+    expect(source).toContain("(*SampleData)[SampleIndex].RateScale = static_cast<float>(NewRateScale);");
+    // The range check comes before the sample is modified.
+    expect(source.indexOf("rateScale %g is outside 0.01..64")).toBeLessThan(source.indexOf("(*SampleData)[SampleIndex].RateScale"));
+    // The grid is rebuilt after the write, so no separate PostEditChange call is needed.
+    const write = source.indexOf("(*SampleData)[SampleIndex].RateScale");
+    expect(source.indexOf("BlendSpace->ResampleData();", write)).toBeGreaterThan(write);
+    expect(source.indexOf("BlendSpace->PostEditChange();", write)).toBeGreaterThan(write);
+  });
 });
 
 describe("animation.compose_pose_sequence (#1230)", () => {

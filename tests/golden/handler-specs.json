@@ -34350,6 +34350,12 @@
           "type": "string",
           "required": false,
           "description": "AnimSequence to swap into the sample"
+        },
+        {
+          "name": "rateScale",
+          "type": "number",
+          "required": false,
+          "description": "Per-sample playback rate, 0.01 to 64 (FBlendSample::RateScale)"
         }
       ],
       "choices": [
@@ -34367,6 +34373,9 @@
             ],
             [
               "animation"
+            ],
+            [
+              "rateScale"
             ]
           ]
         }
