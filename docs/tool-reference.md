@@ -39,7 +39,7 @@ level(action="get_component_tree", args={actorLabel: "BP_Hero"}, omit="component
 
 `components.name` keeps the name of every component in the array. `components[].name` means the same thing. Two paths into the same array produce one array of two-key objects.
 
-A path that matches nothing is listed in `fieldsNotFound`. If no path matched at all, the filter is not applied and the full result comes back with the same report.
+A path that matches nothing is listed in `fieldsNotFound`, beside `available`, the result's own top-level keys. If no path matched at all, the filter is not applied and the full result comes back with the same report. A list sent JSON-encoded as text (`"[\"a\",\"b\"]"`) or a quoted path (`"\"a\""`) is read as the paths it encodes.
 
 #### Parameters that went nowhere
 
