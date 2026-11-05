@@ -28,6 +28,12 @@
  */
 namespace MCPPIE
 {
+	/**
+	 * Removes the launch parameters a windowless acceptance run adds (its t.MaxFPS / t.IdleWhenNotForeground
+	 * -ExecCmds entry and one -RenderOffscreen per entry), so a value an earlier run leaked is not grown again.
+	 */
+	FString StripUatLaunchParameters(const FString& LaunchParameters);
+
 	class FPIEUatRunner
 	{
 	public:
@@ -44,6 +50,7 @@ namespace MCPPIE
 		/** Live state, then the final verdict once finished. */
 		TSharedPtr<FJsonObject> Status() const;
 
+		/** Restores Play settings a run changed and never put back because the editor stopped mid-run. */
 		void Init();
 		void Shutdown();
 

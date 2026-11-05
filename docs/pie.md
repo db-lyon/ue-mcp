@@ -2,6 +2,10 @@
 
 The `pie` tool records, replays and observes Play-In-Editor sessions, drives input on any player, runs multiplayer acceptance scenarios and turns a recording into a test that verifies a fix. It is built into ue-mcp. Starting PIE itself is `editor(play_in_editor)`.
 
+## Where PIE plays
+
+Every PIE launch the bridge makes (`editor(play_in_editor)`, `replay_run`, `test_run`, script runs, acceptance runs and the PIE Studio panel buttons) plays where the editor's Play button would: the play mode last chosen in the Play menu, which is the active level viewport by default. `editor(configure_pie, playMode=viewport|new_window|standalone)` changes it for the Play button and the bridge alike, and `editor(get_pie_config)` reads it. With no visible level viewport the engine opens a new window instead. Standalone runs the game as a separate process with no PIE world in the editor, so actions that drive the PIE world play in the viewport when it is set. Each launch reports `playMode`, `playModeRequested` and, when they differ, `playModeNote`.
+
 For step-by-step test scripts with automatic and manual verdicts, see [Test scripts](pie-scripts.md).
 
 Three systems run independently and can all run in the same PIE session:
@@ -285,7 +289,7 @@ The pawn is resolved again every frame, so a drive keeps going after `OpenLevel`
 
 With Run Under One Process off, every client is a separate process the editor cannot reach directly. The tool attaches a replicated control component to each remote player's controller on the server and relays commands over the game connection. `inject_input`, `inject_input_start` and `inject_input_tape` take `client` 1..N; `inject_input_update` and `inject_input_stop` route by the returned id. `console` takes `client` 1..N only. The editor's own player console is `editor(execute_command, world="pie")`.
 
-`uat_run` opens the scenario's map, starts PIE with its players, waits for every remote player to join, and runs each step: drive input or console on any player, then judge the step from the host log and each client's own log file. A dedicated server needs `one_process: true`, its default. When the run ends it stops PIE, restores the play settings and writes `report.md` and `report.json` to `report_dir`.
+`uat_run` opens the scenario's map, starts PIE with its players, waits for every remote player to join, and runs each step: drive input or console on any player, then judge the step from the host log and each client's own log file. A dedicated server needs `one_process: true`, its default. When the run ends it stops PIE, restores the play settings, saves them, and writes `report.md` and `report.json` to `report_dir`. The settings it overrides are first written to `Saved/UE_MCP/pie-uat-play-settings.json`, so a run the editor never finished (a crash or a forced quit) is undone on the next editor start.
 
 ```json
 {
@@ -311,7 +315,7 @@ Step actions, each with `client`: `tape {action, values, hz}` (`hz` default 60, 
 
 `expect` rules take `min` and `max` match counts, and `since: "run"` judges every line since PIE started instead of only the step's own lines. By default a rule reads only lines logged after its step began, so a line printed before the step, or one printed every 10 s against a 4 s `window_ms`, is not seen; use `since: "run"` or a longer window. A pattern that is not a valid regex is refused when the scenario is loaded. A missed expectation's detail names how many lines it searched and, when the line was logged earlier in the run, how many times and an example. A step passes when every expectation is met and no `forbid` pattern matched in its window. It ends early once its expectations are met unless it forbids something, in which case it watches the whole window.
 
-`pie.windowless: true` launches separate-process clients with `-RenderOffscreen`: they render every frame as in a window but open no window and never take focus. Their frame rate is pinned to `pie.client_fps` (default 60).
+`pie.windowless: true` launches separate-process clients with `-RenderOffscreen`: they render every frame as in a window but open no window and never take focus. Their frame rate is pinned to `pie.client_fps` (default 60). Those launch parameters go in for the run only: a value an earlier run left behind is stripped before the next run adds its own, and on editor start.
 
 ### PIE inspection and session log
 

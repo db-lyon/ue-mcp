@@ -10,6 +10,7 @@
 #include "Handlers/PIE/PIEInputReplayer.h"
 #include "Handlers/PIE/PIEPredicateEvaluator.h"
 #include "Editor.h"
+#include "HandlerPlaySession.h"
 #include "Editor/EditorEngine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -216,10 +217,10 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieTestRun(const TSharedPtr<FJsonObject>& P
 		}
 		FString Err, Msg;
 		if (!FPIEInputReplayer::Get().Arm(Cfg, Err, Msg)) return MCPError(Err);
-		FRequestPlaySessionParams PlayParams;
-		GEditor->RequestPlaySession(PlayParams);
+		const MCPPlaySession::FLaunch Launch = MCPPlaySession::Request(/*bNeedsEditorWorld=*/true);
 
 		auto Started = MCPSuccess();
+		MCPPlaySession::WriteLaunch(Launch, Started);
 		Started->SetBoolField(TEXT("started"), true);
 		Started->SetStringField(TEXT("test_path"), TestPath);
 		Started->SetStringField(TEXT("poll"), TEXT("Poll replay_status until pie_active=false, then call test_run again to evaluate."));

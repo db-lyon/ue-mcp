@@ -899,6 +899,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::RequiredField(TEXT("y"), EType::Number, TEXT("Screen Y in pixels")),
 		}),
 		MCPParam::Optional(TEXT("centerNewWindow"), EType::Boolean, TEXT("Center new PIE windows; false places them at newWindowPosition")),
+		MCPParam::Optional(TEXT("playMode"), EType::String, TEXT("viewport | new_window | standalone: where the Play button and every bridge PIE launch play. Actions that drive the PIE world play in the viewport when this is standalone")),
 	}, MCPSpec::ContractExempt(TEXT("writes the editor's Play settings")));
 	Registry.RegisterHandler(TEXT("get_pie_config"), &GetPieConfig, NoParams);
 	Registry.RegisterHandler(TEXT("pie_set_player_view"), &PieSetPlayerView, {

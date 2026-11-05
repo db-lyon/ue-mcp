@@ -11,6 +11,7 @@
 #include "UObject/GCObjectScopeGuard.h"
 #include "HandlerFunctionCall.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerPlaySession.h"
 #include "JsonSerializer.h"
 #include "Containers/Ticker.h"
 #include "Editor.h"
@@ -408,8 +409,8 @@ static TSharedPtr<FJsonValue> MCPRunPieControl(
 		// that makes the answer below true rather than assumed.
 		const bool bAlreadyQueued = GEditor->IsPlaySessionRequestQueued();
 
-		FRequestPlaySessionParams SessionParams;
-		GEditor->RequestPlaySession(SessionParams);
+		const MCPPlaySession::FLaunch Launch = MCPPlaySession::Request(/*bNeedsEditorWorld=*/false);
+		MCPPlaySession::WriteLaunch(Launch, Result);
 		Result->SetStringField(TEXT("action"), Action);
 		// A REQUEST: UEditorEngine::RequestPlaySession stores the params to be
 		// acted on next tick, so PIE is not running yet and isPlaying still
@@ -422,6 +423,11 @@ static TSharedPtr<FJsonValue> MCPRunPieControl(
 		Result->SetStringField(TEXT("startNote"), bAlreadyQueued
 			? TEXT("A play session was already queued and this call replaced that request rather than adding one. It begins on a later editor tick; poll pie_control(pieAction=status) until isPlaying is true before doing anything that needs the PIE world.")
 			: TEXT("The play session is queued and begins on a later editor tick. Poll pie_control(pieAction=status) until isPlaying is true before doing anything that needs the PIE world."));
+		if (Launch.Used == EMCPPlayMode::Standalone)
+		{
+			Result->SetStringField(TEXT("startNote"),
+				TEXT("The editor plays standalone, so the game launches as a separate process with no PIE world in this editor and isPlaying stays false. configure_pie(playMode=viewport) plays inside the editor."));
+		}
 
 		// No rollback, and stopping is not one. The request is deferred, so at
 		// the moment a rollback would run PlayWorld is still null and
@@ -2077,6 +2083,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	FIntPoint PrevNewWindowPosition = FIntPoint::ZeroValue;
 	GetIntPointPropOn(Settings, TEXT("NewWindowPosition"), PrevNewWindowPosition);
 	const bool bPrevCenterNewWindow = GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true);
+	// #1526: where every PIE launch lands, the Play button included.
+	const EMCPPlayMode PrevPlayMode = MCPPlaySession::EditorPlayMode();
 
 	int32 ClientW = 0, ClientH = 0;
 	const bool bHasClientW = TryGetNumberParam(Params, TEXT("clientWindowWidth"), ClientW);
@@ -2175,10 +2183,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 		SetBoolPropOn(Settings, TEXT("CenterNewWindow"), bCenterNewWindow);
 		bAny = true;
 	}
+	FString PlayModeName;
+	if (TryGetStringParam(Params, TEXT("playMode"), PlayModeName) && !PlayModeName.IsEmpty())
+	{
+		EMCPPlayMode Mode = EMCPPlayMode::Viewport;
+		if (!MCPPlaySession::ParsePlayMode(PlayModeName, Mode))
+		{
+			return MCPError(FString::Printf(TEXT("Unknown playMode '%s'. Use viewport | new_window | standalone."), *PlayModeName));
+		}
+		MCPPlaySession::SetEditorPlayMode(Mode);
+		bAny = true;
+	}
 
 	if (!bAny)
 	{
-		return MCPError(TEXT("Nothing to configure - provide numClients / netMode / runUnderOneProcess / launchSeparateServer / newWindowWidth / newWindowHeight / clientWindowWidth / clientWindowHeight / newWindowPosition / centerNewWindow"));
+		return MCPError(TEXT("Nothing to configure - provide numClients / netMode / runUnderOneProcess / launchSeparateServer / newWindowWidth / newWindowHeight / clientWindowWidth / clientWindowHeight / newWindowPosition / centerNewWindow / playMode"));
 	}
 
 	Settings->SaveConfig();
@@ -2197,6 +2216,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("clientWindowHeight"), GetIntPropOn(Settings, TEXT("ClientWindowHeight"), 0));
 	Result->SetObjectField(TEXT("newWindowPosition"), IntPointToJson(NewWindowPosition));
 	Result->SetBoolField(TEXT("centerNewWindow"), GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true));
+	Result->SetStringField(TEXT("playMode"), MCPPlaySession::PlayModeName(MCPPlaySession::EditorPlayMode()));
 
 	Result->SetNumberField(TEXT("previousNumClients"), PrevNumClients);
 	Result->SetStringField(TEXT("previousNetMode"), PrevNetMode);
@@ -2208,6 +2228,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	Result->SetNumberField(TEXT("previousClientWindowHeight"), PrevClientWindowHeight);
 	Result->SetObjectField(TEXT("previousNewWindowPosition"), IntPointToJson(PrevNewWindowPosition));
 	Result->SetBoolField(TEXT("previousCenterNewWindow"), bPrevCenterNewWindow);
+	Result->SetStringField(TEXT("previousPlayMode"), MCPPlaySession::PlayModeName(PrevPlayMode));
 	const bool bChanged =
 		GetIntPropOn(Settings, TEXT("PlayNumberOfClients"), 1) != PrevNumClients
 		|| PrevNetMode != NetModeNameFromValue(GetEnumPropOn(Settings, TEXT("PlayNetMode")))
@@ -2218,7 +2239,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 		|| GetIntPropOn(Settings, TEXT("ClientWindowWidth"), 0) != PrevClientWindowWidth
 		|| GetIntPropOn(Settings, TEXT("ClientWindowHeight"), 0) != PrevClientWindowHeight
 		|| NewWindowPosition != PrevNewWindowPosition
-		|| GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true) != bPrevCenterNewWindow;
+		|| GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true) != bPrevCenterNewWindow
+		|| MCPPlaySession::EditorPlayMode() != PrevPlayMode;
 	Result->SetBoolField(TEXT("changed"), bChanged);
 
 	// Self-inverse: the same handler with every field's previous value. The
@@ -2235,6 +2257,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	if (PrevClientWindowHeight > 0) Payload->SetNumberField(TEXT("clientWindowHeight"), PrevClientWindowHeight);
 	Payload->SetObjectField(TEXT("newWindowPosition"), IntPointToJson(PrevNewWindowPosition));
 	Payload->SetBoolField(TEXT("centerNewWindow"), bPrevCenterNewWindow);
+	Payload->SetStringField(TEXT("playMode"), MCPPlaySession::PlayModeName(PrevPlayMode));
 	MCPSetRollback(Result, TEXT("configure_pie"), Payload);
 	// This handler ignores a non-positive numClients / newWindowWidth /
 	// newWindowHeight, so a previous value of zero cannot be written back and
@@ -2560,5 +2583,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetPieConfig(const TSharedPtr<FJsonObjec
 	GetIntPointPropOn(Settings, TEXT("NewWindowPosition"), NewWindowPosition);
 	Result->SetObjectField(TEXT("newWindowPosition"), IntPointToJson(NewWindowPosition));
 	Result->SetBoolField(TEXT("centerNewWindow"), GetBoolPropOn(Settings, TEXT("CenterNewWindow"), true));
+	Result->SetStringField(TEXT("playMode"), MCPPlaySession::PlayModeName(MCPPlaySession::EditorPlayMode()));
 	return MCPResult(Result);
 }

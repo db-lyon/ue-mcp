@@ -9553,6 +9553,12 @@
           "type": "boolean",
           "required": false,
           "description": "Center new PIE windows; false places them at newWindowPosition"
+        },
+        {
+          "name": "playMode",
+          "type": "string",
+          "required": false,
+          "description": "viewport | new_window | standalone: where the Play button and every bridge PIE launch play. Actions that drive the PIE world play in the viewport when this is standalone"
         }
       ],
       "contractExempt": "writes the editor's Play settings"

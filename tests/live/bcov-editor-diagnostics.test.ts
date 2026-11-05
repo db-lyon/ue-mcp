@@ -241,4 +241,26 @@ describe("PIE settings", () => {
     expect(after.numClients).toBe(before.numClients);
     expect(after.netMode).toBe(before.netMode);
   }, 60_000);
+
+  it("configure_pie playMode writes the play mode get_pie_config reads, and its rollback restores it (#1526)", async () => {
+    const before = await call("get_pie_config", {});
+    expect(["viewport", "new_window", "standalone"]).toContain(before.playMode);
+    const wanted = before.playMode === "new_window" ? "viewport" : "new_window";
+    const set = await call("configure_pie", { playMode: wanted });
+    try {
+      expect(set.previousPlayMode).toBe(before.playMode);
+      expect(set.playMode).toBe(wanted);
+      expect(set.changed).toBe(true);
+      expect((await call("get_pie_config", {})).playMode).toBe(wanted);
+    } finally {
+      const rollback = set.rollback as { method: string; payload: Json };
+      expect(rollback.payload.playMode).toBe(before.playMode);
+      await call(rollback.method, rollback.payload);
+    }
+    expect((await call("get_pie_config", {})).playMode).toBe(before.playMode);
+
+    const bad = await callBridge(bridge, "configure_pie", { playMode: "sideways" });
+    expect(succeeded(bad)).toBe(false);
+    expect((await call("get_pie_config", {})).playMode).toBe(before.playMode);
+  }, 60_000);
 });
