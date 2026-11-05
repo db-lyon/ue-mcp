@@ -2887,7 +2887,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "method",
         "type": "string",
         "required": false,
-        "description": "AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets"
+        "description": "AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets | BoundingBox (one box fitted to the whole mesh)"
       },
       {
         "name": "maxConvexHulls",
@@ -2966,6 +2966,18 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Mark the collision customized so a reimport keeps it (default true)"
+      },
+      {
+        "name": "weldFirst",
+        "type": "boolean",
+        "required": false,
+        "description": "Weld coincident edges before fitting, so unwelded faces fit as one island rather than one shape each (default true)"
+      },
+      {
+        "name": "weldTolerance",
+        "type": "number",
+        "required": false,
+        "description": "How close two edges must be to weld (default 1e-6)"
       },
       {
         "name": "lodType",
@@ -6302,7 +6314,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   fixup_redirectors: "Params: paths, dryRun?, save?, allowProjectWide?",
   force_reload_asset: "Params: assetPath (or path), discardUnsaved?",
   generate_lightmap_uvs: "Params: assetPath (or path), lodIndex?, enable?, sourceChannel?, destinationChannel?, minLightmapResolution?, lightmapResolution?, setLightmapCoordinateIndex?, force?, save?, dryRun?, rasterSize?",
-  generate_mesh_collision: "Params: assetPath (or path), op?, method?, maxConvexHulls?, hullTargetFaceCount?, maxShapeCount?, minThickness?, autoDetectSpheres?, autoDetectBoxes?, autoDetectCapsules?, simplifyHulls?, removeFullyContainedShapes?, decompositionErrorTolerance?, decompositionSearchFactor?, sweptHullAxis?, markAsCustomized?, lodType?, lodIndex?, save?, dryRun?",
+  generate_mesh_collision: "Params: assetPath (or path), op?, method?, maxConvexHulls?, hullTargetFaceCount?, maxShapeCount?, minThickness?, autoDetectSpheres?, autoDetectBoxes?, autoDetectCapsules?, simplifyHulls?, removeFullyContainedShapes?, decompositionErrorTolerance?, decompositionSearchFactor?, sweptHullAxis?, markAsCustomized?, weldFirst?, weldTolerance?, lodType?, lodIndex?, save?, dryRun?",
   generate_skeletal_mesh_lods: "Params: assetPath OR assetPaths OR directory, recursive?, lodCount, trianglePercentages?, regenerateImported?, skipExisting?, dryRun?, save?",
   get_asset_dependencies: "Params: packages?, packagePath?, hard?, soft?",
   get_asset_properties: "Params: assetPath (or path), propertyName?, includeValues?, valueFormat?, expandDepth?, expandExternal?, maxExpandedObjects?",
@@ -6572,7 +6584,7 @@ export const schema: Record<string, z.ZodType> = {
   maxShapeCount: z.number().int().optional().describe("Cap on the shapes produced (default 0, uncapped)"),
   maxTextureSize: z.number().int().min(0).max(32768).optional().describe("Maximum texture size; 0 uses the source size"),
   meshType: z.string().optional().describe("skeletal (default) | static"),
-  method: z.string().optional().describe("StandardQEM | VolumePreserving | AttributeAware (default) | AttributeAwareV2 (apply_mesh_simplify). AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets (generate_mesh_collision). xatlas (default) | patchBuilder | expMap | conformal | spectralConformal | planar | box | cylinder (unwrap_uvs)"),
+  method: z.string().optional().describe("StandardQEM | VolumePreserving | AttributeAware (default) | AttributeAwareV2 (apply_mesh_simplify). AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets | BoundingBox (one box fitted to the whole mesh) (generate_mesh_collision). xatlas (default) | patchBuilder | expMap | conformal | spectralConformal | planar | box | cylinder (unwrap_uvs)"),
   minLightmapResolution: z.number().optional().describe("Packing resolution floor (default 64)"),
   minPieceTriangles: z.number().int().optional().describe("Discard pieces with fewer triangles than this (default 4)"),
   minThickness: z.number().optional().describe("Thinnest a shape may be, in centimetres (default 1)"),
@@ -6729,8 +6741,8 @@ export const schema: Record<string, z.ZodType> = {
   vertexCount: z.number().int().optional().describe("Vertex count to reduce to, at least 4 (simplifyMode vertexCount or editorVertexCount)"),
   vertexIndices: z.array(z.number().int()).optional().describe("Source MeshDescription vertex IDs to read (1-256)"),
   weldAlongPlane: z.boolean().optional().describe("Weld the two halves along the plane (default true)"),
-  weldFirst: z.boolean().optional().describe("Weld coincident boundary edges before filling (default true)"),
-  weldTolerance: z.number().optional().describe("How close two boundary edges must be to weld (default 1e-6)"),
+  weldFirst: z.boolean().optional().describe("Weld coincident boundary edges before filling (default true) (apply_mesh_hole_fill). Weld coincident edges before fitting, so unwelded faces fit as one island rather than one shape each (default true) (generate_mesh_collision)"),
+  weldTolerance: z.number().optional().describe("How close two boundary edges must be to weld (default 1e-6) (apply_mesh_hole_fill). How close two edges must be to weld (default 1e-6) (generate_mesh_collision)"),
   where: z.array(z.object({ field: z.string().describe("Dot path into the row, e.g. props.CullDistance.Max, className or suspect"), op: z.string().optional().describe("eq (default), ne, lt, lte, gt, gte, contains, notContains, startsWith, endsWith, in, notIn, exists, notExists, isNull, isNotNull, isTrue, isFalse"), value: z.unknown().optional().describe("Operand the op compares against") })).optional().describe("Predicates evaluated in the editor (max 24)"),
   whereMode: z.string().optional().describe("all (default) | any"),
   width: z.number().int().optional().describe("Pixel width, 1-8192 (default 512)"),
