@@ -789,6 +789,11 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("outputPath"), EType::String, TEXT("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png")).Alias(TEXT("filename")),
 		MCPParam::Optional(TEXT("location"), EType::Vec3, TEXT("Camera location")),
 		MCPParam::Optional(TEXT("rotation"), EType::Rotator, TEXT("Camera rotation")),
+		MCPParam::Optional(TEXT("captureTransform"), EType::Object, TEXT("Camera pose as one object, the shape epic_capture_viewport takes. Each field conflicts with the matching top-level location or rotation")).WithFields({
+			MCPParam::OptionalField(TEXT("location"), EType::Vec3, TEXT("Camera location")),
+			MCPParam::OptionalField(TEXT("rotation"), EType::Rotator, TEXT("Camera rotation")),
+			MCPParam::OptionalField(TEXT("scale"), EType::Vec3, TEXT("Accepted for shape compatibility; a camera has no scale, so it is not applied")),
+		}),
 		MCPParam::Optional(TEXT("focusActorLabel"), EType::String, TEXT("Frame the camera on this actor's bounds")),
 		MCPParam::Optional(TEXT("focusActorPath"), EType::String, TEXT("Full object path of the actor to frame. Wins over focusActorLabel")),
 		MCPParam::Optional(TEXT("focusDirection"), EType::Vec3, TEXT("Framing direction from the focus actor (default front and above)")),
@@ -5033,6 +5038,25 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 
 	FVector Location = OptionalVec3(Params, TEXT("location"));
 	FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
+	// #1458: captureTransform carries the same pose as one object. A field given
+	// both ways is refused rather than one silently winning.
+	const TSharedPtr<FJsonObject>* CaptureTransform = nullptr;
+	if (TryGetObjectParam(Params, TEXT("captureTransform"), CaptureTransform) && CaptureTransform && CaptureTransform->IsValid())
+	{
+		const TSharedPtr<FJsonObject>* Sub = nullptr;
+		if ((*CaptureTransform)->TryGetObjectField(TEXT("location"), Sub) && Sub && Sub->IsValid())
+		{
+			if (HasParam(Params, TEXT("location"))) return MCPError(TEXT("Pass the camera location once: location or captureTransform.location, not both"));
+			Location = FVector::ZeroVector;
+			ReadVec3Fields(*Sub, Location);
+		}
+		if ((*CaptureTransform)->TryGetObjectField(TEXT("rotation"), Sub) && Sub && Sub->IsValid())
+		{
+			if (HasParam(Params, TEXT("rotation"))) return MCPError(TEXT("Pass the camera rotation once: rotation or captureTransform.rotation, not both"));
+			Rotation = FRotator::ZeroRotator;
+			ReadRotatorFields(*Sub, Rotation);
+		}
+	}
 	const double FocusMargin = OptionalNumber(Params, TEXT("focusMargin"), 1.5);
 	if (!FMath::IsFinite(FocusMargin) || FocusMargin <= 0.0)
 	{

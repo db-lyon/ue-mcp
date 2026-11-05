@@ -7497,6 +7497,32 @@
           "description": "Camera rotation"
         },
         {
+          "name": "captureTransform",
+          "type": "object",
+          "required": false,
+          "description": "Camera pose as one object, the shape epic_capture_viewport takes. Each field conflicts with the matching top-level location or rotation",
+          "fields": [
+            {
+              "name": "location",
+              "type": "vec3",
+              "required": false,
+              "description": "Camera location"
+            },
+            {
+              "name": "rotation",
+              "type": "rotator",
+              "required": false,
+              "description": "Camera rotation"
+            },
+            {
+              "name": "scale",
+              "type": "vec3",
+              "required": false,
+              "description": "Accepted for shape compatibility; a camera has no scale, so it is not applied"
+            }
+          ]
+        },
+        {
           "name": "focusActorLabel",
           "type": "string",
           "required": false,

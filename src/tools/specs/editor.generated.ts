@@ -230,6 +230,32 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Camera rotation"
       },
       {
+        "name": "captureTransform",
+        "type": "object",
+        "required": false,
+        "description": "Camera pose as one object, the shape epic_capture_viewport takes. Each field conflicts with the matching top-level location or rotation",
+        "fields": [
+          {
+            "name": "location",
+            "type": "vec3",
+            "required": false,
+            "description": "Camera location"
+          },
+          {
+            "name": "rotation",
+            "type": "rotator",
+            "required": false,
+            "description": "Camera rotation"
+          },
+          {
+            "name": "scale",
+            "type": "vec3",
+            "required": false,
+            "description": "Accepted for shape compatibility; a camera has no scale, so it is not applied"
+          }
+        ]
+      },
+      {
         "name": "focusActorLabel",
         "type": "string",
         "required": false,
@@ -3782,7 +3808,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   build_lighting: "Params: quality?",
   cancel_editor_transaction: "Params: index?",
   cancel_mesh_studio_render: "Params: jobId",
-  capture_scene_png: "Params: outputPath (or filename), location?, rotation?, focusActorLabel?, focusActorPath?, focusDirection?, focusMargin?, world?, pieInstance?, width?, height?, fov?, fullyLoadTextures?",
+  capture_scene_png: "Params: outputPath (or filename), location?, rotation?, captureTransform?, focusActorLabel?, focusActorPath?, focusDirection?, focusMargin?, world?, pieInstance?, width?, height?, fov?, fullyLoadTextures?",
   capture_screenshot: "Params: filename (or outputPath), target?, pieInstance?, worldPath?",
   check_for_crashes: "Params: none",
   clear_dialog_policy: "Params: pattern?",
@@ -3931,6 +3957,7 @@ export const schema: Record<string, z.ZodType> = {
   captureLog: z.boolean().optional().describe("false drops everything the script logged except its errors (default true)"),
   captureMode: z.enum(["beauty","matte","both"]).optional().describe("beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)"),
   captures: z.array(z.object({ id: z.string().describe("Unique filename stem: letters, digits, underscore or hyphen"), meshPath: z.string().optional().describe("StaticMesh or SkeletalMesh asset path"), parts: z.array(z.object({ meshPath: z.string().describe("StaticMesh or SkeletalMesh asset path"), relativeTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Translation in centimetres, default zero"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Pitch, yaw and roll in degrees, default zero"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Scale, default one") }).optional().describe("Transform relative to the assembly origin") })).optional().describe("1-64 meshes forming one assembly"), aspect: z.object({ width: z.number().min(0.01).max(100).describe("Positive relative width"), height: z.number().min(0.01).max(100).describe("Positive relative height") }).optional().describe("Inventory aspect ratio; the longer output edge equals resolution") })).optional().describe("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts"),
+  captureTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Camera location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Camera rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Accepted for shape compatibility; a camera has no scale, so it is not applied") }).optional().describe("Camera pose as one object, the shape epic_capture_viewport takes. Each field conflicts with the matching top-level location or rotation"),
   category: z.string().optional().describe("Case-insensitive substring the log category must contain (get_output_log). Settings category, e.g. Engine (open_settings)"),
   centerNewWindow: z.boolean().optional().describe("Center new PIE windows; false places them at newWindowPosition"),
   channel: z.string().optional().describe("Channel name (Location.X, a parameter name such as Intensity or Tint.R); omit for every channel on the section (get_sequence_channel_keys). Channel name: Location.X, a parameter name such as Intensity, or Tint.R for a vector or color parameter (set_sequence_channel_keys). Location.X/Y/Z or Rotation.X/Y/Z (also x/y/z, yaw/pitch/roll) on a Transform track; the float channel on Fade or Float (set_sequence_keyframes)"),

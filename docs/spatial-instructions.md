@@ -136,6 +136,10 @@ time, the texture-loading setting and the focus target. Keep it beside the image
 SceneCapture2D, so do not use the viewport's pixel hit test to locate a point in
 a headless capture.
 
+Place the capture camera with `location` and `rotation`, or with one
+`captureTransform: {location, rotation}` object, the shape
+`editor(epic_capture_viewport)` takes. Giving a field both ways is refused.
+
 Frame the capture so the contact region fills half to three quarters of the
 shot, light it, and take matching views from several angles: front, side, top,
 three-quarter. Do not infer 3D contact from one image.
