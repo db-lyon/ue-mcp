@@ -1027,7 +1027,7 @@ namespace
 						else
 						{
 							return MCPError(FString::Printf(
-								TEXT("Value '%s' is not valid for slot property '%s' (type %s)%s%s. Use UE struct text, e.g. `(Value=1.0,SizeRule=Fill)` for Size or `(Left=8,Top=8,Right=8,Bottom=8)` for Padding."),
+								TEXT("Value '%s' is not valid for slot property '%s' (type %s)%s%s. Use UE struct text, e.g. `(Value=1.0,SizeRule=Fill)` for Size or `(Left=8,Top=8,Right=8,Bottom=8)` for Padding, or a JSON object."),
 								*PropertyValue, *SlotPropName, *LeafProp->GetCPPType(), LeafError.IsEmpty() ? TEXT("") : TEXT(": "), *LeafError));
 						}
 					}
@@ -1139,9 +1139,66 @@ namespace
 			else
 			{
 				return MCPError(FString::Printf(
-					TEXT("Value '%s' is not valid for property '%s' (type %s)%s%s. Use UE's text format (e.g. `(X=64,Y=64)` for FVector2D)."),
+					TEXT("Value '%s' is not valid for property '%s' (type %s)%s%s. Use UE's text format (e.g. `(X=64,Y=64)` for FVector2D) or a JSON object."),
 					*PropertyValue, *FinalProp->GetName(), *FinalProp->GetCPPType(), SetError.IsEmpty() ? TEXT("") : TEXT(": "), *SetError));
 			}
+		}
+		return nullptr;
+	}
+
+	/** A JSON object or array value: the property (slot.* on the slot, dotted
+	 *  paths into structs) is filled field by field. OutValueText is the value
+	 *  as UE export text once written. Returns the refusal, or nullptr (#1540). */
+	TSharedPtr<FJsonValue> MCPWidgetApplyJsonProperty(
+		UWidgetBlueprint* WidgetBP, UWidget* FoundWidget, const FString& PropertyName, const TSharedPtr<FJsonValue>& Value,
+		FMCPWidgetPropertyCapture& Capture, FString& OutValueText)
+	{
+		const bool bSlot = PropertyName.StartsWith(TEXT("slot."), ESearchCase::IgnoreCase);
+		UObject* Target = bSlot ? static_cast<UObject*>(FoundWidget->Slot) : static_cast<UObject*>(FoundWidget);
+		if (!Target)
+		{
+			return MCPError(FString::Printf(TEXT("Widget '%s' has no slot (it is the root, or not inside a panel), so '%s' cannot be set"),
+				*FoundWidget->GetName(), *PropertyName));
+		}
+		const FString Path = bSlot ? PropertyName.Mid(5) : PropertyName;
+
+		FProperty* Prop = nullptr;
+		void* Addr = nullptr;
+		UObject* LeafOwner = nullptr;
+		FString ResolveError;
+		if (!MCPJsonProperty::ResolveDottedPath(Target, Path, Prop, Addr, LeafOwner, ResolveError))
+		{
+			return MCPError(FString::Printf(TEXT("Property '%s' not found on %s: %s"), *Path, *Target->GetClass()->GetName(), *ResolveError));
+		}
+		UObject* Owner = LeafOwner ? LeafOwner : Target;
+
+		// #200: a slot write that is not recorded is lost to the compile.
+		WidgetBP->Modify();
+		if (WidgetBP->WidgetTree) WidgetBP->WidgetTree->Modify();
+		FoundWidget->Modify();
+		Target->Modify();
+		if (Owner != Target) Owner->Modify();
+
+		FString PreviousText;
+		Prop->ExportText_Direct(PreviousText, Addr, Addr, Owner, PPF_None);
+		FString SetError;
+		if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(Prop, Addr, Value, Owner, SetError))
+		{
+			return MCPError(FString::Printf(
+				TEXT("The JSON value does not fit '%s' (type %s): %s. Give an object whose keys are its fields, e.g. {\"Left\":8,\"Top\":8,\"Right\":8,\"Bottom\":8} for a margin, or the UE text form (Left=8,Top=8,Right=8,Bottom=8)."),
+				*PropertyName, *Prop->GetCPPType(), *SetError));
+		}
+		Prop->ExportText_Direct(OutValueText, Addr, Addr, Owner, PPF_None);
+		if (bSlot) FoundWidget->Slot->SynchronizeProperties();
+		else FoundWidget->PostEditChange();
+
+		Capture.PreviousPropertyValue = PreviousText;
+		Capture.bCapturedPreviousValue = true;
+		Capture.bCapturedOnFlatWidgetProperty = !bSlot && !Path.Contains(TEXT("."));
+		if (Capture.bCapturedOnFlatWidgetProperty)
+		{
+			Capture.FlatWidgetPropertyName = Path;
+			Capture.bFlatCaptureWasStringProperty = Prop->IsA<FStrProperty>();
 		}
 		return nullptr;
 	}
@@ -1335,9 +1392,15 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
+	// `propertyValue` is a spec alias, resolved by the registry (#1057). An object
+	// or array fills a struct or array field by field; anything else is text (#1540).
 	FString PropertyValue;
-	// `propertyValue` is a spec alias, resolved by the registry (#1057).
-	if (auto Err = RequireString(Params, TEXT("value"), PropertyValue)) return Err;
+	TSharedPtr<FJsonValue> StructuredValue = TryGetParam(Params, TEXT("value"));
+	if (!StructuredValue.IsValid() || (StructuredValue->Type != EJson::Object && StructuredValue->Type != EJson::Array))
+	{
+		StructuredValue.Reset();
+		if (auto Err = RequireString(Params, TEXT("value"), PropertyValue)) return Err;
+	}
 
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);
@@ -1355,7 +1418,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	}
 
 	FMCPWidgetPropertyCapture Capture;
-	bool bPropertySet = MCPWidgetApplyTypedProperty(FoundWidget, PropertyName, PropertyValue);
+	if (StructuredValue.IsValid())
+	{
+		if (auto Refusal = MCPWidgetApplyJsonProperty(WidgetBP, FoundWidget, PropertyName, StructuredValue, Capture, PropertyValue))
+		{
+			return Refusal;
+		}
+	}
+	bool bPropertySet = StructuredValue.IsValid() || MCPWidgetApplyTypedProperty(FoundWidget, PropertyName, PropertyValue);
 
 	// ── Slot properties (slot.anchors, slot.alignment, slot.position, slot.autoSize, slot.*) ──
 	// Case-insensitive: "Slot.padding" and "slot.padding" both route here (#364).

@@ -401,7 +401,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		AssetPath(),
 		WidgetName(),
 		PropertyName(),
-		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value as UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8)")).Alias(TEXT("propertyValue")),
+		MCPParam::Required(TEXT("value"), EType::Any, TEXT("New value: UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8), or a JSON object or array that fills a struct or array field by field. An enum takes its short, full or prefixed name or an enumerator number")).Alias(TEXT("propertyValue")),
 	});
 	Registry.RegisterHandler(TEXT("set_widget_style"), &SetWidgetStyle, {
 		AssetPath(),

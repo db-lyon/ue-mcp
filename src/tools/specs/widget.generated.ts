@@ -1498,7 +1498,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "value",
         "type": "any",
         "required": true,
-        "description": "New value as UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8)",
+        "description": "New value: UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8), or a JSON object or array that fills a struct or array field by field. An enum takes its short, full or prefixed name or an enumerator number",
         "aliases": [
           "propertyValue"
         ]
@@ -1720,7 +1720,7 @@ export const schema: Record<string, z.ZodType> = {
   typeName: z.string().optional().describe("Alias for widgetClass"),
   userIndex: z.number().int().optional().describe("Local player user index (default 0)"),
   userTag: z.string().optional().describe("User tag scoping a Started binding"),
-  value: z.unknown().optional().describe("The keyed number (add_widget_animation_key). Value for the child interaction: true, false or toggle for a CheckBox, a number for a Slider or SpinBox, text for a text box, an option or index for a ComboBoxString (invoke_runtime_function). New value as UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8) (set_widget_property). JSON object mirroring the style struct, or a scalar (set_widget_style)"),
+  value: z.unknown().optional().describe("The keyed number (add_widget_animation_key). Value for the child interaction: true, false or toggle for a CheckBox, a number for a Slider or SpinBox, text for a text box, an option or index for a ComboBoxString (invoke_runtime_function). New value: UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8), or a JSON object or array that fills a struct or array field by field. An enum takes its short, full or prefixed name or an enumerator number (set_widget_property). JSON object mirroring the style struct, or a scalar (set_widget_style)"),
   viewportOnly: z.boolean().optional().describe("Only widgets currently added to the viewport"),
   widgetBlueprintPath: z.string().optional().describe("Alias for assetPath"),
   widgetClass: z.string().optional().describe("Widget class: a short name (TextBlock, CanvasPanel), a full path, or a Widget Blueprint path (add_widget). Alias for wrapperClass (wrap_root_widget)"),
