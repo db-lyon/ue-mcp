@@ -22425,6 +22425,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-asset-a-import.test.ts",
+          "test": "import_file imports PNGs that get_texture_info, compare_textures and export_texture read"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-asset-b-misc.test.ts",
           "test": "set_texture_settings writes the settings get_texture_info reports"
         }

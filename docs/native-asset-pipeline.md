@@ -81,7 +81,7 @@ This assigns the reference; it does not retarget geometry or reconcile bone hier
 
 ## Export for a DCC round-trip
 
-`asset(export)` writes static and skeletal meshes to `.fbx`, DataTables to `json` or `csv`, and MaterialInstance parameters to `.json`: parent lineage, scalar/vector/texture overrides, effective inherited values, layer associations and parameter indexes. `asset(export_texture)` writes a Texture2D to PNG.
+`asset(export)` writes static and skeletal meshes to `.fbx`, DataTables to `json` or `csv`, and MaterialInstance parameters to `.json`: parent lineage, scalar/vector/texture overrides, effective inherited values, layer associations and parameter indexes. `asset(export_texture)` writes a Texture2D to PNG from its source image, and reports that image's width and height, which can differ from the platform size after a size cap.
 
 For example, export `/Game/Props/MI_Prop.MI_Prop` with `outputPath="Saved/Export/MI_Prop.json"` and `format="json"`. Relative paths resolve against the project directory. `replaceExisting` defaults true; false refuses an existing file. `dryRun=true` on `asset(export)` validates the path and asset-specific format rules without writing. Registered exporter availability is checked only when exporting. Results report the output path, class and file size, plus the exported material data in `readBack`. The source asset is unchanged; overwritten disk files need a backup to restore.
 
