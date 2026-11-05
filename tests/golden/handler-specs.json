@@ -7300,6 +7300,17 @@
       ],
       "contractExempt": "cancels the open undo transaction and restores what it touched"
     },
+    "cancel_mesh_studio_render": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "description": "Job id returned by render_mesh_studio; already-finished jobs are returned unchanged"
+        }
+      ]
+    },
     "cancel_skeleton_edit": {
       "category": "animation",
       "params": [
@@ -13296,6 +13307,30 @@
         }
       ]
     },
+    "discard_dirty": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "packages",
+          "type": "array",
+          "required": true,
+          "description": "Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched",
+          "items": "string"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would happen to each package and clear nothing (default false)"
+        },
+        {
+          "name": "allowContent",
+          "type": "boolean",
+          "required": false,
+          "description": "Also clear project and plugin content, including never-saved /Temp maps, whose unsaved edits are then lost when the editor closes (default false)"
+        }
+      ]
+    },
     "disconnect_graph_pins": {
       "category": "asset",
       "params": [
@@ -17273,6 +17308,17 @@
           "type": "string",
           "required": true,
           "description": "StaticMesh or SkeletalMesh asset path"
+        }
+      ]
+    },
+    "get_mesh_studio_render": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "description": "Job id returned by render_mesh_studio"
         }
       ]
     },
@@ -26338,6 +26384,60 @@
       "category": "pie",
       "params": []
     },
+    "pie_view_trace": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "playerIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Local player index in the selected PIE world (default 0)"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "PIE instance id; omitted selects the active PIE world"
+        },
+        {
+          "name": "distance",
+          "type": "number",
+          "required": false,
+          "description": "Positive trace distance in cm (default 1000)"
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "Collision channel, including project-renamed channels (default Visibility)"
+        },
+        {
+          "name": "sweepRadius",
+          "type": "number",
+          "required": false,
+          "description": "Also sweep a sphere of this radius in cm when positive"
+        },
+        {
+          "name": "traceComplex",
+          "type": "boolean",
+          "required": false,
+          "description": "Trace per-triangle collision (default false)"
+        },
+        {
+          "name": "ignoreActors",
+          "type": "array",
+          "required": false,
+          "description": "Actor labels or paths to skip",
+          "items": "string"
+        },
+        {
+          "name": "ignorePawn",
+          "type": "boolean",
+          "required": false,
+          "description": "Ignore the viewing player's pawn (default true)"
+        }
+      ]
+    },
     "place_actor": {
       "category": "level",
       "params": [
@@ -31706,6 +31806,150 @@
         }
       ]
     },
+    "render_mesh_studio": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "captures",
+          "type": "array",
+          "required": true,
+          "description": "1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts",
+          "items": "object",
+          "fields": [
+            {
+              "name": "id",
+              "type": "string",
+              "required": true,
+              "description": "Unique filename stem: letters, digits, underscore or hyphen"
+            },
+            {
+              "name": "meshPath",
+              "type": "string",
+              "required": false,
+              "description": "StaticMesh or SkeletalMesh asset path"
+            },
+            {
+              "name": "parts",
+              "type": "array",
+              "required": false,
+              "description": "1-64 meshes forming one assembly",
+              "items": "object",
+              "fields": [
+                {
+                  "name": "meshPath",
+                  "type": "string",
+                  "required": true,
+                  "description": "StaticMesh or SkeletalMesh asset path"
+                },
+                {
+                  "name": "relativeTransform",
+                  "type": "object",
+                  "required": false,
+                  "description": "Transform relative to the assembly origin",
+                  "fields": [
+                    {
+                      "name": "location",
+                      "type": "vec3",
+                      "required": false,
+                      "description": "Translation in centimetres, default zero"
+                    },
+                    {
+                      "name": "rotation",
+                      "type": "rotator",
+                      "required": false,
+                      "description": "Pitch, yaw and roll in degrees, default zero"
+                    },
+                    {
+                      "name": "scale",
+                      "type": "vec3",
+                      "required": false,
+                      "description": "Scale, default one"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "aspect",
+              "type": "object",
+              "required": false,
+              "description": "Inventory aspect ratio; the longer output edge equals resolution",
+              "fields": [
+                {
+                  "name": "width",
+                  "type": "number",
+                  "required": true,
+                  "description": "Positive relative width",
+                  "minimum": 0.01,
+                  "maximum": 100
+                },
+                {
+                  "name": "height",
+                  "type": "number",
+                  "required": true,
+                  "description": "Positive relative height",
+                  "minimum": 0.01,
+                  "maximum": 100
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "outputDir",
+          "type": "string",
+          "required": true,
+          "description": "Absolute or project-relative directory for <id>.png and a job-specific JSON manifest"
+        },
+        {
+          "name": "resolution",
+          "type": "integer",
+          "required": false,
+          "description": "Longest image edge in pixels (default 512); shorter edge at least 32",
+          "minimum": 64,
+          "maximum": 4096
+        },
+        {
+          "name": "viewDirection",
+          "type": "vec3",
+          "required": false,
+          "description": "Direction from subject toward camera (default 1,-1.35,0.9), finite and nonzero"
+        },
+        {
+          "name": "lightingPreset",
+          "type": "string",
+          "required": false,
+          "description": "Studio lighting preset (default studio)",
+          "enum": [
+            "studio"
+          ]
+        },
+        {
+          "name": "cubemapPath",
+          "type": "string",
+          "required": false,
+          "description": "Skylight TextureCube (default /Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap)"
+        },
+        {
+          "name": "captureMode",
+          "type": "string",
+          "required": false,
+          "description": "beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)",
+          "enum": [
+            "beauty",
+            "matte",
+            "both"
+          ]
+        },
+        {
+          "name": "fullyLoadTextures",
+          "type": "boolean",
+          "required": false,
+          "description": "Wait across real editor frames for requested texture mips (default true); a 60s item timeout reports blocked"
+        }
+      ],
+      "contractExempt": "starts a latent preview-world render job and writes PNGs and a manifest"
+    },
     "render_sequence_frames": {
       "category": "editor",
       "params": [
@@ -34427,6 +34671,82 @@
               "animation"
             ]
           ]
+        }
+      ]
+    },
+    "set_blueprint_component_properties_batch": {
+      "category": "blueprint",
+      "params": [
+        {
+          "name": "items",
+          "type": "array",
+          "required": false,
+          "description": "Explicit [{assetPath, componentName, properties:{name:value}}]; mutually exclusive with directory",
+          "items": "object",
+          "fields": [
+            {
+              "name": "assetPath",
+              "type": "string",
+              "required": true,
+              "description": "Blueprint asset path"
+            },
+            {
+              "name": "componentName",
+              "type": "string",
+              "required": true,
+              "description": "Component instance name, property name or unambiguous class"
+            },
+            {
+              "name": "properties",
+              "type": "object",
+              "required": true,
+              "description": "Property name to JSON value or Unreal export text; null clears references"
+            }
+          ]
+        },
+        {
+          "name": "directory",
+          "type": "string",
+          "required": false,
+          "description": "Select Blueprint assets under this content path instead of items"
+        },
+        {
+          "name": "classFilter",
+          "type": "string",
+          "required": false,
+          "description": "Directory mode: only Blueprints deriving from this actor class"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "Directory mode: component instance name, property name or unambiguous component class"
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": false,
+          "description": "Directory mode: property map applied to each matching Blueprint"
+        },
+        {
+          "name": "recursive",
+          "type": "boolean",
+          "required": false,
+          "description": "Directory mode: include subdirectories (default true)"
+        },
+        {
+          "name": "maxBlueprints",
+          "type": "integer",
+          "required": false,
+          "description": "Maximum candidate Blueprints, default 200, maximum 2000; overflow refuses the batch",
+          "minimum": 1,
+          "maximum": 2000
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Validate values on transient copies without editing, compiling or saving (default false)"
         }
       ]
     },
@@ -41409,6 +41729,96 @@
         }
       ]
     },
+    "shape_trace": {
+      "category": "level",
+      "params": [
+        {
+          "name": "shape",
+          "type": "string",
+          "required": true,
+          "description": "sphere | box | capsule"
+        },
+        {
+          "name": "radius",
+          "type": "number",
+          "required": false,
+          "description": "Positive sphere or capsule radius in cm"
+        },
+        {
+          "name": "halfExtent",
+          "type": "vec3",
+          "required": false,
+          "description": "Positive box half extents in cm; axis aligned"
+        },
+        {
+          "name": "halfHeight",
+          "type": "number",
+          "required": false,
+          "description": "Capsule half height in cm, including caps; at least radius"
+        },
+        {
+          "name": "start",
+          "type": "vec3",
+          "required": false,
+          "description": "Ray start"
+        },
+        {
+          "name": "end",
+          "type": "vec3",
+          "required": false,
+          "description": "Ray end; pass end or direction and distance"
+        },
+        {
+          "name": "direction",
+          "type": "vec3",
+          "required": false,
+          "description": "Ray direction, normalised internally"
+        },
+        {
+          "name": "distance",
+          "type": "number",
+          "required": false,
+          "description": "Ray length when direction is given (default 200000)"
+        },
+        {
+          "name": "traceComplex",
+          "type": "boolean",
+          "required": false,
+          "description": "Trace per-triangle collision (default false)"
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "Collision channel (default Visibility)"
+        },
+        {
+          "name": "ignoreActors",
+          "type": "array",
+          "required": false,
+          "description": "Actor labels to skip",
+          "items": "string"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        },
+        {
+          "name": "multi",
+          "type": "boolean",
+          "required": false,
+          "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
+        }
+      ]
+    },
     "show_notification": {
       "category": "editor",
       "params": [
@@ -43788,416 +44198,6 @@
           "type": "string",
           "required": false,
           "description": "Name for the new wrapper widget"
-        }
-      ]
-    },
-    "cancel_mesh_studio_render": {
-      "category": "editor",
-      "params": [
-        {
-          "name": "jobId",
-          "type": "string",
-          "required": true,
-          "description": "Job id returned by render_mesh_studio; already-finished jobs are returned unchanged"
-        }
-      ]
-    },
-    "get_mesh_studio_render": {
-      "category": "editor",
-      "params": [
-        {
-          "name": "jobId",
-          "type": "string",
-          "required": true,
-          "description": "Job id returned by render_mesh_studio"
-        }
-      ]
-    },
-    "render_mesh_studio": {
-      "category": "editor",
-      "params": [
-        {
-          "name": "captures",
-          "type": "array",
-          "required": true,
-          "description": "1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts",
-          "items": "object",
-          "fields": [
-            {
-              "name": "id",
-              "type": "string",
-              "required": true,
-              "description": "Unique filename stem: letters, digits, underscore or hyphen"
-            },
-            {
-              "name": "meshPath",
-              "type": "string",
-              "required": false,
-              "description": "StaticMesh or SkeletalMesh asset path"
-            },
-            {
-              "name": "parts",
-              "type": "array",
-              "required": false,
-              "description": "1-64 meshes forming one assembly",
-              "items": "object",
-              "fields": [
-                {
-                  "name": "meshPath",
-                  "type": "string",
-                  "required": true,
-                  "description": "StaticMesh or SkeletalMesh asset path"
-                },
-                {
-                  "name": "relativeTransform",
-                  "type": "object",
-                  "required": false,
-                  "description": "Transform relative to the assembly origin",
-                  "fields": [
-                    {
-                      "name": "location",
-                      "type": "vec3",
-                      "required": false,
-                      "description": "Translation in centimetres, default zero"
-                    },
-                    {
-                      "name": "rotation",
-                      "type": "rotator",
-                      "required": false,
-                      "description": "Pitch, yaw and roll in degrees, default zero"
-                    },
-                    {
-                      "name": "scale",
-                      "type": "vec3",
-                      "required": false,
-                      "description": "Scale, default one"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "name": "aspect",
-              "type": "object",
-              "required": false,
-              "description": "Inventory aspect ratio; the longer output edge equals resolution",
-              "fields": [
-                {
-                  "name": "width",
-                  "type": "number",
-                  "required": true,
-                  "description": "Positive relative width",
-                  "minimum": 0.01,
-                  "maximum": 100
-                },
-                {
-                  "name": "height",
-                  "type": "number",
-                  "required": true,
-                  "description": "Positive relative height",
-                  "minimum": 0.01,
-                  "maximum": 100
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "outputDir",
-          "type": "string",
-          "required": true,
-          "description": "Absolute or project-relative directory for <id>.png and a job-specific JSON manifest"
-        },
-        {
-          "name": "resolution",
-          "type": "integer",
-          "required": false,
-          "description": "Longest image edge in pixels (default 512); shorter edge at least 32",
-          "minimum": 64,
-          "maximum": 4096
-        },
-        {
-          "name": "viewDirection",
-          "type": "vec3",
-          "required": false,
-          "description": "Direction from subject toward camera (default 1,-1.35,0.9), finite and nonzero"
-        },
-        {
-          "name": "lightingPreset",
-          "type": "string",
-          "required": false,
-          "description": "Studio lighting preset (default studio)",
-          "enum": [
-            "studio"
-          ]
-        },
-        {
-          "name": "cubemapPath",
-          "type": "string",
-          "required": false,
-          "description": "Skylight TextureCube (default /Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap)"
-        },
-        {
-          "name": "captureMode",
-          "type": "string",
-          "required": false,
-          "description": "beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)",
-          "enum": [
-            "beauty",
-            "matte",
-            "both"
-          ]
-        },
-        {
-          "name": "fullyLoadTextures",
-          "type": "boolean",
-          "required": false,
-          "description": "Wait across real editor frames for requested texture mips (default true); a 60s item timeout reports blocked"
-        }
-      ],
-      "contractExempt": "starts a latent preview-world render job and writes PNGs and a manifest"
-    },
-    "set_blueprint_component_properties_batch": {
-      "category": "blueprint",
-      "params": [
-        {
-          "name": "items",
-          "type": "array",
-          "required": false,
-          "description": "Explicit [{assetPath, componentName, properties:{name:value}}]; mutually exclusive with directory",
-          "items": "object",
-          "fields": [
-            {
-              "name": "assetPath",
-              "type": "string",
-              "required": true,
-              "description": "Blueprint asset path"
-            },
-            {
-              "name": "componentName",
-              "type": "string",
-              "required": true,
-              "description": "Component instance name, property name or unambiguous class"
-            },
-            {
-              "name": "properties",
-              "type": "object",
-              "required": true,
-              "description": "Property name to JSON value or Unreal export text; null clears references"
-            }
-          ]
-        },
-        {
-          "name": "directory",
-          "type": "string",
-          "required": false,
-          "description": "Select Blueprint assets under this content path instead of items"
-        },
-        {
-          "name": "classFilter",
-          "type": "string",
-          "required": false,
-          "description": "Directory mode: only Blueprints deriving from this actor class"
-        },
-        {
-          "name": "componentName",
-          "type": "string",
-          "required": false,
-          "description": "Directory mode: component instance name, property name or unambiguous component class"
-        },
-        {
-          "name": "properties",
-          "type": "object",
-          "required": false,
-          "description": "Directory mode: property map applied to each matching Blueprint"
-        },
-        {
-          "name": "recursive",
-          "type": "boolean",
-          "required": false,
-          "description": "Directory mode: include subdirectories (default true)"
-        },
-        {
-          "name": "maxBlueprints",
-          "type": "integer",
-          "required": false,
-          "description": "Maximum candidate Blueprints, default 200, maximum 2000; overflow refuses the batch",
-          "minimum": 1,
-          "maximum": 2000
-        },
-        {
-          "name": "dryRun",
-          "type": "boolean",
-          "required": false,
-          "description": "Validate values on transient copies without editing, compiling or saving (default false)"
-        }
-      ]
-    },
-    "pie_view_trace": {
-      "category": "pie",
-      "params": [
-        {
-          "name": "playerIndex",
-          "type": "integer",
-          "required": false,
-          "description": "Local player index in the selected PIE world (default 0)"
-        },
-        {
-          "name": "pieInstance",
-          "type": "integer",
-          "required": false,
-          "description": "PIE instance id; omitted selects the active PIE world"
-        },
-        {
-          "name": "distance",
-          "type": "number",
-          "required": false,
-          "description": "Positive trace distance in cm (default 1000)"
-        },
-        {
-          "name": "channel",
-          "type": "string",
-          "required": false,
-          "description": "Collision channel, including project-renamed channels (default Visibility)"
-        },
-        {
-          "name": "sweepRadius",
-          "type": "number",
-          "required": false,
-          "description": "Also sweep a sphere of this radius in cm when positive"
-        },
-        {
-          "name": "traceComplex",
-          "type": "boolean",
-          "required": false,
-          "description": "Trace per-triangle collision (default false)"
-        },
-        {
-          "name": "ignoreActors",
-          "type": "array",
-          "required": false,
-          "description": "Actor labels or paths to skip",
-          "items": "string"
-        },
-        {
-          "name": "ignorePawn",
-          "type": "boolean",
-          "required": false,
-          "description": "Ignore the viewing player's pawn (default true)"
-        }
-      ]
-    },
-    "shape_trace": {
-      "category": "level",
-      "params": [
-        {
-          "name": "shape",
-          "type": "string",
-          "required": true,
-          "description": "sphere | box | capsule"
-        },
-        {
-          "name": "radius",
-          "type": "number",
-          "required": false,
-          "description": "Positive sphere or capsule radius in cm"
-        },
-        {
-          "name": "halfExtent",
-          "type": "vec3",
-          "required": false,
-          "description": "Positive box half extents in cm; axis aligned"
-        },
-        {
-          "name": "halfHeight",
-          "type": "number",
-          "required": false,
-          "description": "Capsule half height in cm, including caps; at least radius"
-        },
-        {
-          "name": "start",
-          "type": "vec3",
-          "required": false,
-          "description": "Ray start"
-        },
-        {
-          "name": "end",
-          "type": "vec3",
-          "required": false,
-          "description": "Ray end; pass end or direction and distance"
-        },
-        {
-          "name": "direction",
-          "type": "vec3",
-          "required": false,
-          "description": "Ray direction, normalised internally"
-        },
-        {
-          "name": "distance",
-          "type": "number",
-          "required": false,
-          "description": "Ray length when direction is given (default 200000)"
-        },
-        {
-          "name": "traceComplex",
-          "type": "boolean",
-          "required": false,
-          "description": "Trace per-triangle collision (default false)"
-        },
-        {
-          "name": "channel",
-          "type": "string",
-          "required": false,
-          "description": "Collision channel (default Visibility)"
-        },
-        {
-          "name": "ignoreActors",
-          "type": "array",
-          "required": false,
-          "description": "Actor labels to skip",
-          "items": "string"
-        },
-        {
-          "name": "world",
-          "type": "string",
-          "required": false,
-          "description": "World scope: editor (default) | pie"
-        },
-        {
-          "name": "pieInstance",
-          "type": "integer",
-          "required": false,
-          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
-        },
-        {
-          "name": "multi",
-          "type": "boolean",
-          "required": false,
-          "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
-        }
-      ]
-    },
-    "discard_dirty": {
-      "category": "editor",
-      "params": [
-        {
-          "name": "packages",
-          "type": "array",
-          "required": true,
-          "description": "Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched",
-          "items": "string"
-        },
-        {
-          "name": "dryRun",
-          "type": "boolean",
-          "required": false,
-          "description": "Report what would happen to each package and clear nothing (default false)"
-        },
-        {
-          "name": "allowContent",
-          "type": "boolean",
-          "required": false,
-          "description": "Also clear project and plugin content, including never-saved /Temp maps, whose unsaved edits are then lost when the editor closes (default false)"
         }
       ]
     }
