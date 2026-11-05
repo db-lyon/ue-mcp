@@ -4,6 +4,7 @@ import {
   assetDiffError,
   assetDiffFromBridge,
   describeRecord,
+  graphPictureId,
   nativeDiffOf,
   summarizeAssetDiff,
   type AssetDiff,
@@ -184,6 +185,44 @@ describe("an asset diff's summary", () => {
     }, "Content/M.uasset", (side, t) => (t && "file" in t ? { id: side.repeat(1), url: "", source: "rendered" } : t ? { error: String(t.error) } : undefined));
     expect(d.before?.thumbnail).toEqual({ id: "before", url: "", source: "rendered" });
     expect(d.after?.thumbnail).toEqual({ error: "no renderer" });
+  });
+
+  it("pictures a graph-only Blueprint change by its graph, keeping the class picture beside it (#1569)", () => {
+    const d = assetDiffFromBridge({
+      status: "modified",
+      assetClass: "Blueprint",
+      before: { class: "Blueprint", facts: [], thumbnail: { file: "a.png", source: "rendered" }, graphPicture: { file: "ga.png", graph: "EventGraph" } },
+      after: { class: "Blueprint", facts: [], thumbnail: { file: "b.png", source: "rendered" }, graphPicture: { file: "gb.png", graph: "EventGraph" } },
+      sections: [{ category: "Graph: EventGraph", kind: "graph", engineSource: "FGraphDiffControl::DiffGraphs", entries: [{ displayString: "Added Node Print String", diffType: "NODE_ADDED" }] }],
+    }, "Content/BP.uasset",
+    (side) => ({ id: side, url: "", source: "rendered" }),
+    (side, g) => ({ id: `graph-${side}`, url: "", source: "graph", graph: String(g.graph) }));
+    expect(d.before?.thumbnail).toEqual({ id: "graph-before", url: "", source: "graph", graph: "EventGraph" });
+    expect(d.after?.thumbnail).toEqual({ id: "graph-after", url: "", source: "graph", graph: "EventGraph" });
+    expect(d.after?.classThumbnail).toEqual({ id: "after", url: "", source: "rendered" });
+  });
+
+  it("says why a graph-only change shows the class picture when the graph could not be drawn", () => {
+    const d = assetDiffFromBridge({
+      status: "modified",
+      assetClass: "Blueprint",
+      before: { class: "Blueprint", facts: [], thumbnail: { file: "a.png" }, graphPicture: { graph: "EventGraph", error: "the editor runs without rendering, so the graph cannot be drawn" } },
+      after: { class: "Blueprint", facts: [], thumbnail: { error: "Unreal's thumbnail renderer drew nothing" }, graphPicture: { graph: "EventGraph", error: "the editor runs without rendering, so the graph cannot be drawn" } },
+      sections: [],
+    }, "Content/BP.uasset",
+    (side, t) => (t && "file" in t ? { id: side, url: "", source: "rendered" } : t ? { error: String(t.error) } : undefined),
+    (_side, g) => ({ error: String(g.error) }));
+    const before = d.before?.thumbnail;
+    expect(before && "id" in before ? before.note : undefined).toMatch(/^the editor runs without rendering.*a graph edit does not change it\.$/);
+    expect(d.before?.classThumbnail).toBeUndefined();
+    const after = d.after?.thumbnail;
+    expect(after && "error" in after ? after.error : undefined).toMatch(/^Unreal's thumbnail renderer drew nothing; the editor runs without rendering/);
+  });
+
+  it("names a graph picture for its pair and side, in the form the picture route serves", () => {
+    expect(graphPictureId("5\ncontent/bp.uasset\na\nb", "before")).toMatch(/^[0-9a-f]{40}$/);
+    expect(graphPictureId("k", "before")).not.toBe(graphPictureId("k", "after"));
+    expect(graphPictureId("k", "after")).not.toBe(graphPictureId("j", "after"));
   });
 
   it("summarizes an error and a deferred diff in the same words everywhere", () => {

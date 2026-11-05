@@ -34,6 +34,7 @@ import {
   assetDiffDeferred,
   assetDiffError,
   assetDiffFromBridge,
+  graphPictureId,
   type AssetDiff,
   type AssetThumbnail,
 } from "./asset-diff.js";
@@ -52,6 +53,8 @@ interface DiffJob {
   a: string | null;
   b: string | null;
   cacheFile: string;
+  /** The cache key of the pair, which a graph picture's id is made from: it pictures the pair, not one version. */
+  key: string;
   fromFile: string | null;
   toFile: string | null;
   params: Json;
@@ -480,7 +483,7 @@ export class SessionCheckpoints {
       } catch {
         // Not diffed yet.
       }
-      jobs.push({ index: i, c, a, b, cacheFile, fromFile: null, toFile: null, params: {} });
+      jobs.push({ index: i, c, a, b, cacheFile, key, fromFile: null, toFile: null, params: {} });
     }
     if (!jobs.length) return { diffs, unknownMethod: false };
 
@@ -505,12 +508,17 @@ export class SessionCheckpoints {
         }
         const fromThumbnail = want(job.a);
         const toThumbnail = want(job.b);
+        // Drawn only for a graph-only Blueprint change, and only on a cache miss, so always asked for.
+        const graphs = job.a && job.b
+          ? { fromGraphPicture: thumb(graphPictureId(job.key, "before")), toGraphPicture: thumb(graphPictureId(job.key, "after")) }
+          : {};
         job.params = {
           originalFile: path.join(this.projectDir, job.c.path),
           ...(job.fromFile ? { fromFile: job.fromFile } : {}),
           ...(job.toFile ? { toFile: job.toFile } : {}),
           ...(fromThumbnail ? { fromThumbnail } : {}),
           ...(toThumbnail ? { toThumbnail } : {}),
+          ...graphs,
         };
         ready.push(job);
       }
@@ -584,7 +592,20 @@ export class SessionCheckpoints {
         }
         return { error: "No picture was kept for this version." };
       };
-      const diff = assetDiffFromBridge(raw, job.c.path, picture);
+      const graphPicture = (side: "before" | "after", g: Json): AssetThumbnail | undefined => {
+        const graph = typeof g.graph === "string" && g.graph ? g.graph : undefined;
+        if (typeof g.file === "string" && fs.existsSync(g.file)) {
+          return {
+            id: graphPictureId(job.key, side),
+            url: "",
+            source: "graph",
+            ...(graph ? { graph } : {}),
+            note: `The ${graph ?? "changed"} graph of this version, framed on the changed nodes, which are highlighted.`,
+          };
+        }
+        return typeof g.error === "string" && g.error ? { error: g.error } : undefined;
+      };
+      const diff = assetDiffFromBridge(raw, job.c.path, picture, graphPicture);
       fs.mkdirSync(repo.diffsDir, { recursive: true });
       fs.writeFileSync(job.cacheFile, JSON.stringify(diff));
       return this.withUrls(diff);
@@ -596,8 +617,8 @@ export class SessionCheckpoints {
   /** Picture URLs on the daemon, for this session. */
   private withUrls(d: AssetDiff): AssetDiff {
     for (const v of [d.before, d.after]) {
-      if (v?.thumbnail && "id" in v.thumbnail) {
-        v.thumbnail.url = `/v1/checkpoints/thumbnails/${v.thumbnail.id}.png?editor=${encodeURIComponent(this.session.name)}`;
+      for (const t of [v?.thumbnail, v?.classThumbnail]) {
+        if (t && "id" in t) t.url = `/v1/checkpoints/thumbnails/${t.id}.png?editor=${encodeURIComponent(this.session.name)}`;
       }
     }
     return d;
