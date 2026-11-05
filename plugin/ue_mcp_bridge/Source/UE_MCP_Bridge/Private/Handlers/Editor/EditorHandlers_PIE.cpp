@@ -2007,8 +2007,20 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 		}
 	}
 
+	// #1490: the call may replace the world (a level load run through Python),
+	// and the old one is then collected. Keep only a weak handle and its path;
+	// a strong guard would trip the world-leak check on map change.
+	const TWeakObjectPtr<UWorld> WorldBefore(World);
+	const FString WorldPathBefore = World->GetPathName();
+	World = nullptr;
+
 	FGCObjectScopeGuard CDOGuard(CDO);
 	CDO->ProcessEvent(Func, ParamBuf.GetData());
+
+	// Re-resolve for the reply. A weak handle compares by object index and
+	// serial, so a new world allocated at the old address still reads as replaced.
+	UWorld* WorldAfter = ResolveWorldFromParams(Params, *WorldScope);
+	const bool bWorldReplaced = !WorldBefore.IsValid() || WorldBefore.Get() != WorldAfter;
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("className"), LibClass->GetName());
@@ -2016,9 +2028,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 	// #971: say which world the call actually ran against and which parameter
 	// carried it. "subsystem unavailable" from a static that looks a
 	// GameInstance subsystem up off its context is unreadable without this.
-	Result->SetStringField(TEXT("world"), WorldLabel);
-	Result->SetStringField(TEXT("worldPath"), World->GetPathName());
-	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
+	Result->SetStringField(TEXT("world"), WorldAfter
+		? (WorldAfter->IsPlayInEditor() ? TEXT("PIE") : TEXT("editor"))
+		: WorldLabel);
+	Result->SetStringField(TEXT("worldPath"), WorldAfter ? WorldAfter->GetPathName() : FString());
+	Result->SetStringField(TEXT("netMode"), WorldAfter ? DescribePIENetMode(WorldAfter) : FString());
+	Result->SetBoolField(TEXT("worldReplaced"), bWorldReplaced);
+	if (bWorldReplaced)
+	{
+		Result->SetStringField(TEXT("previousWorldPath"), WorldPathBefore);
+	}
 	if (!FilledWcParam.IsEmpty())
 	{
 		Result->SetStringField(TEXT("worldContextParam"), FilledWcParam);
