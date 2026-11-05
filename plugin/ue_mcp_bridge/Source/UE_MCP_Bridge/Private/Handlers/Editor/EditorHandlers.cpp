@@ -5305,6 +5305,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunAutomationTests(const TSharedPtr<FJso
 	TArray<FAutomationTestInfo> AllTests;
 	Framework.GetValidTestNames(AllTests);
 
+	// #1488: a test that tears its world down with DestroyWorld alone leaves a
+	// dirty /Temp world, which blocks level(load) and prompts on shutdown.
+	const TSet<FName> DirtyWorldsBefore = MCPDirtyWorldPackageNames();
+
 	TArray<TSharedPtr<FJsonValue>> Results;
 	int32 Ran = 0, Passed = 0, Failed = 0, Abandoned = 0;
 	for (const FAutomationTestInfo& Info : AllTests)
@@ -5388,9 +5392,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunAutomationTests(const TSharedPtr<FJso
 		Results.Add(MakeShared<FJsonValueObject>(R));
 	}
 
+	const TArray<FString> TempWorldsCleared = MCPSweepAbandonedTempWorlds(DirtyWorldsBefore);
+
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("filter"), NameFilter);
 	Result->SetNumberField(TEXT("discovered"), AllTests.Num());
+	TArray<TSharedPtr<FJsonValue>> ClearedJson;
+	for (const FString& Name : TempWorldsCleared) ClearedJson.Add(MakeShared<FJsonValueString>(Name));
+	Result->SetArrayField(TEXT("tempWorldsCleared"), ClearedJson);
 	Result->SetNumberField(TEXT("ran"), Ran);
 	Result->SetNumberField(TEXT("passed"), Passed);
 	Result->SetNumberField(TEXT("failed"), Failed);
