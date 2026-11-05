@@ -10,9 +10,10 @@ class UClass;
 class UObject;
 
 /**
- * Draft-time checks for test scripts: pie_script_create and pie_script_update
- * refuse a step the observer could never read, or whose op and target cannot
- * hold for the value's type, before the script is saved rather than when it runs.
+ * Draft-time checks for test scripts: a step the observer could never read, or
+ * whose op and target cannot hold for the value's type. pie_script_validate
+ * reports them; pie_script_create and pie_script_update save anyway and return
+ * them as warnings, refusing only what cannot be written (bBlocksSave).
  *
  * Values resolve the way the observer resolves them at run time: a profile
  * tracked value (exact path or last segment), else a dotted reflection path on
@@ -34,6 +35,9 @@ namespace MCPPIE
 		FString Field;
 		FString Message;
 		TArray<FString> Candidates;
+		// The script cannot be written with this issue (a step that does not parse, a missing map).
+		// Every other issue is a warning: script_create and script_update save with it.
+		bool bBlocksSave = false;
 	};
 
 	enum class EScriptValueKind : uint8 { Number, Integer, Boolean, Enum };
@@ -101,6 +105,13 @@ namespace MCPPIE
 	TSharedRef<FJsonObject> ScriptWatchableValuesToJson(const FString& TargetClass, const FString& ProfilePath, int32 Limit);
 
 	TSharedRef<FJsonObject> ScriptIssueToJson(const FScriptStepIssue& Issue);
+	TArray<TSharedPtr<FJsonValue>> ScriptIssuesToJson(const TArray<FScriptStepIssue>& Issues);
 	// { success: false, errorCode: INVALID_SCRIPT_STEPS, error, errors: [{ step, field, message, candidates? }] }.
-	TSharedPtr<FJsonObject> ScriptIssuesErrorObject(const TArray<FScriptStepIssue>& Issues);
+	// Lead opens the error text, ahead of the count and the messages.
+	TSharedPtr<FJsonObject> ScriptIssuesErrorObject(const TArray<FScriptStepIssue>& Issues,
+		const TCHAR* Lead = TEXT("The script cannot be checked as written"));
+
+	// Issues that block a save, and the rest (warnings), each in their original order.
+	void SplitScriptIssues(const TArray<FScriptStepIssue>& Issues, TArray<FScriptStepIssue>& OutBlocking,
+		TArray<FScriptStepIssue>& OutWarnings);
 }

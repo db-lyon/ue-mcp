@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { warn } from "./log.js";
 
 /**
  * Runs in a short-lived node process: start the target detached, then exit as
@@ -35,7 +36,9 @@ export function spawnOutsideTree(command: string, args: string[], options: Outsi
     ? ("ignore" as const)
     : (["ignore", options.output, options.output] as const);
   if (process.platform !== "win32") {
-    spawn(command, args, { detached: true, windowsHide: true, stdio: stdio as never, env: options.env }).unref();
+    spawn(command, args, { detached: true, windowsHide: true, stdio: stdio as never, env: options.env })
+      .on("error", failed)
+      .unref();
     return;
   }
   spawn(process.execPath, ["-e", TRAMPOLINE, command, JSON.stringify(args)], {
@@ -43,5 +46,12 @@ export function spawnOutsideTree(command: string, args: string[], options: Outsi
     windowsHide: true,
     stdio: stdio as never,
     env: options.env,
-  }).unref();
+  })
+    .on("error", failed)
+    .unref();
+
+  // A spawn that fails reports it as an 'error' event, which would otherwise end this process.
+  function failed(e: Error): void {
+    warn("spawn", `could not start ${command}`, e);
+  }
 }

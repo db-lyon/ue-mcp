@@ -47,6 +47,11 @@
       "summary": "ue-mcp init --install binary --binaries <local> installs prebuilt bridge binaries"
     },
     {
+      "id": "cli.init.feedback-mode",
+      "group": "cli",
+      "summary": "ue-mcp init --feedback-mode <mode> stores the project's feedback approval mode, and the plan reports the mode in effect and its scope"
+    },
+    {
       "id": "cli.init.rerun",
       "group": "cli",
       "summary": "running ue-mcp init a second time is idempotent"
@@ -162,6 +167,11 @@
       "summary": "ue-mcp extension install unpacks an extension archive into the extensions directory"
     },
     {
+      "id": "cli.extension.use",
+      "group": "cli",
+      "summary": "ue-mcp extension use moves one project to an installed extension version and restarts its daemon"
+    },
+    {
       "id": "cli.extension.remove",
       "group": "cli",
       "summary": "ue-mcp extension remove deletes one installed extension and nothing else"
@@ -185,6 +195,11 @@
       "id": "cli.auth",
       "group": "cli",
       "summary": "ue-mcp auth signs in to GitHub with the device flow and caches the token"
+    },
+    {
+      "id": "cli.auth.json",
+      "group": "cli",
+      "summary": "ue-mcp auth --json prints the device code and the outcome as JSON lines"
     },
     {
       "id": "cli.login",
@@ -230,6 +245,11 @@
       "id": "cli.dialog.mode",
       "group": "cli",
       "summary": "ue-mcp dialog mode reads and sets how blocking editor dialogs are handled"
+    },
+    {
+      "id": "cli.playtest.mode",
+      "group": "cli",
+      "summary": "ue-mcp playtest mode reads, sets and clears who starts playtest runs, per user or per project"
     },
     {
       "id": "cli.context.status",
@@ -310,6 +330,11 @@
       "id": "server.checkpoints",
       "group": "server",
       "summary": "editor(checkpoint, list_checkpoints, list_changes, restore) record and restore files written through the server with no editor running"
+    },
+    {
+      "id": "server.playtest-mode",
+      "group": "server",
+      "summary": "under playtest mode manual an MCP session's pie(script_run) and pie(script_replay) are refused without reaching the editor, directly and through the micro gateway; automatic runs them"
     },
     {
       "id": "server.startup.lean.in-process",
@@ -512,6 +537,11 @@
       "summary": "a newer daemon takes over from an older one for the same project"
     },
     {
+      "id": "daemon.supersede",
+      "group": "daemon",
+      "summary": "a daemon stops itself once its discovery record names another live daemon"
+    },
+    {
       "id": "daemon.start-lock",
       "group": "daemon",
       "summary": "concurrent starts leave exactly one daemon per project"
@@ -532,6 +562,11 @@
       "summary": "a daemon extension registers the model flow agent steps run on with api.models.register"
     },
     {
+      "id": "daemon.extension-versions",
+      "group": "daemon",
+      "summary": "a daemon loads the extension version its project records, migrating the unversioned install, while other projects keep theirs"
+    },
+    {
       "id": "daemon.ui-bundles",
       "group": "daemon",
       "summary": "the daemon serves only signed UI bundles at /ui"
@@ -547,9 +582,39 @@
       "summary": "the daemon reports and applies bridge updates over /v1/update"
     },
     {
+      "id": "daemon.editor-rebuild",
+      "group": "daemon",
+      "summary": "a source bridge an update deployed is built: /v1/install names the owed build, /v1/editor/start builds before launching and refuses on a failed build, and /v1/editor/rebuild stops, builds and gives a failed step's reason"
+    },
+    {
       "id": "daemon.checkpoints",
       "group": "daemon",
       "summary": "the daemon's /v1/checkpoints routes create, list, diff, restore and clear checkpoints, arm the editor's save recording and publish checkpoint events, without touching the project's .git"
+    },
+    {
+      "id": "daemon.skills",
+      "group": "daemon",
+      "summary": "the daemon lists ue-mcp's packaged skills and the project's own, with owner and location, over /v1/skills and api.skills"
+    },
+    {
+      "id": "daemon.checkpoints.asset-diff",
+      "group": "daemon",
+      "summary": "each changed package gets an asset diff from the editor on the versions the shadow history exports, cached per pair of versions, its pictures served by blob id, the first 25 diffed and the rest named and diffed on request, and Unreal's own diff opened with both versions"
+    },
+    {
+      "id": "daemon.context-projection",
+      "group": "daemon",
+      "summary": "the daemon reports the instructions and tools a context strategy and category scope advertise over /v1/context/projection and api.context.project, and api.context.call runs a call against that surface"
+    },
+    {
+      "id": "daemon.actions-effects",
+      "group": "daemon",
+      "summary": "the daemon lists every action's effect and destructive flag over /v1/actions and api.actions.effects"
+    },
+    {
+      "id": "daemon.modes-playtest",
+      "group": "daemon",
+      "summary": "a daemon extension reads and sets the project's playtest mode through api.modes, and its own callAction is not gated by it"
     },
     {
       "id": "package.dist-server",
@@ -570,6 +635,11 @@
       "id": "exports.daemon",
       "group": "daemon",
       "summary": "the ue-mcp/daemon export resolves for daemon extensions"
+    },
+    {
+      "id": "exports.context-measurement",
+      "group": "daemon",
+      "summary": "the built package exports parseContextMeasurement and scopeBucket from ue-mcp/daemon and ships schemas/context-measurement.schema.json"
     },
     {
       "id": "plugin.load.inject",

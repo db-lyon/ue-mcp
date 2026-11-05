@@ -10,6 +10,9 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "UnrealEngine.h"
+#include "FileHelpers.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "Templates/UniquePtr.h"
 #include "HandlerResult.h"
 #include "HandlerParams.h"
@@ -50,6 +53,66 @@ inline UWorld* GetEditorWorld()
 {
 	if (!GEditor) return nullptr;
 	return GEditor->GetEditorWorldContext().World();
+}
+
+/** A level path as its package name: "/Game/Maps/L_X.L_X" and "/Game/Maps/L_X" both give "/Game/Maps/L_X". */
+inline FString MCPMapPackageName(FString Map)
+{
+	Map.TrimStartAndEndInline();
+	if (int32 Dot = INDEX_NONE; Map.FindChar(TEXT('.'), Dot))
+	{
+		Map.LeftInline(Dot);
+	}
+	return Map;
+}
+
+/** Does Map name a level asset on disk? An empty error means yes. */
+inline FString MCPCheckMapExists(const FString& Map)
+{
+	const FString Package = MCPMapPackageName(Map);
+	FString File;
+	if (Package.IsEmpty() || !FPackageName::TryConvertLongPackageNameToFilename(Package, File, FPackageName::GetMapPackageExtension()) || !FPaths::FileExists(File))
+	{
+		return FString::Printf(TEXT("map %s does not exist"), *Package);
+	}
+	return FString();
+}
+
+/** Opens Map in the editor unless it is already the editor world. Never prompts:
+ *  unsaved changes in the open level, or a running PIE session, are errors. */
+inline bool MCPLoadMapIfNeeded(const FString& InMap, FString& OutError)
+{
+	const FString Map = MCPMapPackageName(InMap);
+	UWorld* EditorWorld = GetEditorWorld();
+	UPackage* Current = EditorWorld ? EditorWorld->GetOutermost() : nullptr;
+	if (Current && Current->GetName() == Map)
+	{
+		return true;
+	}
+	if (MCPIsPlayInEditorActive())
+	{
+		OutError = FString::Printf(TEXT("play-in-editor is running in %s; stop it so the run can open %s"),
+			Current ? *Current->GetName() : TEXT("another level"), *Map);
+		return false;
+	}
+	if (Current && Current->IsDirty())
+	{
+		OutError = FString::Printf(TEXT("map %s has unsaved changes; save or discard them before a run opens %s"), *Current->GetName(), *Map);
+		return false;
+	}
+	OutError = MCPCheckMapExists(Map);
+	if (!OutError.IsEmpty())
+	{
+		return false;
+	}
+	FString File;
+	FPackageName::TryConvertLongPackageNameToFilename(Map, File, FPackageName::GetMapPackageExtension());
+	if (!FEditorFileUtils::LoadMap(File, /*LoadAsTemplate*/ false, /*bShowProgress*/ false))
+	{
+		OutError = FString::Printf(TEXT("map %s failed to load"), *Map);
+		return false;
+	}
+	return true;
 }
 
 /** Get the active PIE/Game world if one is running, or nullptr. */

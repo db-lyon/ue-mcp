@@ -101,4 +101,19 @@ describe("the playtest flow on tests/ue_mcp", () => {
     const check = body(await callBridge(bridge, "pie_script_validate", { steps }));
     expect(check.valid, JSON.stringify(check.errors)).toBe(true);
   }, 360_000);
+
+  it("fails before drafting when the target path resolves to nothing, and saves no script (#1610)", async () => {
+    const missing = "/Game/NoSuchFolder/NoSuchAsset";
+    const asked = prompts.length;
+    const result = await server.call("flow", {
+      action: "run",
+      flowName: "playtest",
+      params: { target: missing, name: "TS_LivePlaytestMissing", package_path: DIR },
+      timeoutMs: 120_000,
+    });
+    expect(result.text).toContain(`playtest target ${missing} does not exist`);
+    if (!REAL_KEY) expect(prompts.length).toBe(asked);
+    const read = await callBridge(bridge, "pie_script_read", { path: `${DIR}/TS_LivePlaytestMissing` });
+    expect(read.ok === false || body(read).success === false, JSON.stringify(read)).toBe(true);
+  }, 180_000);
 });

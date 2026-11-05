@@ -6,17 +6,17 @@ import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/a
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import type { CliUsage } from "./cli-main.js";
-import { getInstalledHooks } from "../config/user-state.js";
+import { getInstalledHooks, type FeedbackMode } from "../config/user-state.js";
 import { coreSkillsInstalled } from "../extensions/skills.js";
 import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../integrations/claude-code/mcp-client-config.js";
-import { deriveProjectPort } from "../bridge/port.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
-import { readEnv } from "../core/env.js";
 import {
   CATEGORIES,
   ENRICHABLE_CATEGORIES,
+  FEEDBACK_MODES,
   apply,
+  bridgePort,
   plan,
   type ContextStrategy,
   type InitChoices,
@@ -81,6 +81,10 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
   if (context !== undefined && context !== "micro" && context !== "lean" && context !== "full") {
     throw new Error(`--context must be micro, lean or full, not '${context}'`);
   }
+  const feedbackMode = flagValue(argv, "--feedback-mode");
+  if (feedbackMode !== undefined && !(FEEDBACK_MODES as readonly string[]).includes(feedbackMode)) {
+    throw new Error(`--feedback-mode must be interactive, auto-approve or defer, not '${feedbackMode}'`);
+  }
   const native = flagBool(argv, "native-tools");
   const exclude = list(flagValue(argv, "--native-exclude"));
   return {
@@ -90,6 +94,7 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
     contextStrategy: context as ContextStrategy | undefined,
     clients: list(flagValue(argv, "--clients")),
     feedback: flagBool(argv, "feedback"),
+    feedbackMode: feedbackMode as FeedbackMode | undefined,
     promptHook: flagBool(argv, "hook"),
     skills: flagBool(argv, "skills"),
     install: install as InitChoices["install"],
@@ -214,14 +219,11 @@ async function init(argv: string[]): Promise<number | void> {
 
   ok(`Found UE ${project.engineAssociation ?? "?"} project "${project.projectName}"`);
   // The port this worktree will use, so checkouts on one machine are visibly distinct.
-  const derivedPort = deriveProjectPort(path.dirname(project.projectPath!));
-  const envPort = Number.parseInt(readEnv("port") ?? "", 10);
-  const pinnedPort = Number.isFinite(envPort) && envPort > 0 ? envPort : project.config.bridge?.port;
-  const portOrigin = Number.isFinite(envPort) && envPort > 0 ? "pinned by UE_MCP_PORT" : "pinned by ue-mcp.bridge.port";
+  const port = bridgePort(project);
   info(
-    pinnedPort
-      ? `Bridge port for this worktree: ${DIM}${pinnedPort}${RESET} (${portOrigin}; ${derivedPort} is what the project path derives)`
-      : `Bridge port for this worktree: ${DIM}${derivedPort}${RESET} (derived from the project path; pin with ue-mcp.bridge.port if needed)`,
+    port.pinnedBy
+      ? `Bridge port for this worktree: ${DIM}${port.port}${RESET} (${port.pinnedBy === "env" ? "pinned by UE_MCP_PORT" : "pinned by ue-mcp.bridge.port"}; ${port.derivedPort} is what the project path derives)`
+      : `Bridge port for this worktree: ${DIM}${port.port}${RESET} (derived from the project path; pin with ue-mcp.bridge.port if needed)`,
   );
   console.log("");
 
@@ -397,6 +399,7 @@ export const usage: CliUsage = {
     { name: "--native-exclude", value: "<categories>", description: "Categories that skip native Epic tools" },
     { name: "--command", value: "<cmd>", description: "Launcher the client config uses instead of npx" },
     ...toggle("feedback", "Enable the feedback(submit) tool"),
+    { name: "--feedback-mode", value: "<interactive|auto-approve|defer>", description: "Feedback approval mode for this project" },
     ...toggle("hook", "Install the feedback nudge hook"),
     ...toggle("skills", "Install the bundled Claude Code skills"),
     ...toggle("native-tools", "Wrap native Epic tools"),

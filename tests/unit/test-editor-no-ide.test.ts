@@ -7,7 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
-import { NO_IDE_ARG, TEST_EDITOR_ARGS } from "../../scripts/test-editor-args.mjs";
+import { NO_BACKGROUND_THROTTLE_ARG, NO_IDE_ARG, TEST_EDITOR_ARGS } from "../../scripts/test-editor-args.mjs";
 import { readUeMcpConfig } from "../../src/config/project.js";
 
 const ROOT = path.resolve(__dirname, "..", "..");
@@ -19,6 +19,11 @@ describe("test editors open no IDE", () => {
       "-ini:EditorSettings:[/Script/SourceCodeAccess.SourceCodeAccessSettings]:PreferredAccessor=NullSourceCodeAccessor",
     );
     expect(TEST_EDITOR_ARGS).toContain(NO_IDE_ARG);
+  });
+
+  it("test editors are not throttled in the background, where they always are", () => {
+    expect(TEST_EDITOR_ARGS).toContain(NO_BACKGROUND_THROTTLE_ARG);
+    expect(readUeMcpConfig(path.join(ROOT, "tests", "ue_mcp")).editor?.launchArgs).toContain(NO_BACKGROUND_THROTTLE_ARG);
   });
 
   it("every script that spawns an editor passes it", () => {

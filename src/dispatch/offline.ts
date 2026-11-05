@@ -125,7 +125,7 @@ export const LOCAL_ACTIONS: Record<string, string> = {
   // Checkpoints (#1482). The shadow history is on disk; the editor is consulted only when it is connected.
   "editor.checkpoint": "Commits the shadow history on disk. A connected editor is asked for its dirty packages and re-armed for save recording.",
   "editor.list_checkpoints": "Reads the shadow history on disk.",
-  "editor.list_changes": "Diffs checkpoints in the shadow history on disk. Blueprint diffs are added only when an editor is connected.",
+  "editor.list_changes": "Diffs checkpoints in the shadow history on disk. Asset diffs are added only when an editor is connected; without one each package says so.",
   "editor.restore": "Writes files back from the shadow history. A connected editor reloads them; without one there is nothing loaded to reload.",
   "editor.clear_checkpoints": "Deletes the shadow history on disk.",
 
@@ -145,6 +145,8 @@ export const LOCAL_ACTIONS: Record<string, string> = {
  */
 export const EDITOR_BOUND_LOCAL_ACTIONS: Record<string, string> = {
   "asset.search": "Wraps the search_assets bridge method, resolving content roots first.",
+  "editor.diff_checkpoint_asset": "Exports two versions from the shadow history and calls checkpoint_diff_asset, which loads them in the editor to diff them.",
+  "editor.open_checkpoint_diff": "Exports versions from the shadow history and calls checkpoint_open_native_diff, which opens Unreal's diff window.",
   "asset.migrate": "Calls the migrate bridge method from a module-level helper, then rescans the destination editor.",
   "asset.lock": "Calls the acquire_lock bridge method. The lock registry lives in the editor.",
   "asset.unlock": "Calls the release_lock bridge method. The lock registry lives in the editor.",

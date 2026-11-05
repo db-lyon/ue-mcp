@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { userDir } from "../core/user-dir.js";
 import { readEnv } from "../core/env.js";
@@ -53,6 +53,15 @@ export async function readUserAuth(): Promise<UserAuth | null> {
   try {
     const raw = await fs.readFile(authFile(), "utf-8");
     return JSON.parse(raw) as UserAuth;
+  } catch {
+    return null;
+  }
+}
+
+/** readUserAuth for synchronous callers such as init's plan. */
+export function readUserAuthSync(): UserAuth | null {
+  try {
+    return JSON.parse(readFileSync(authFile(), "utf-8")) as UserAuth;
   } catch {
     return null;
   }

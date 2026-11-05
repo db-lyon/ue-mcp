@@ -3,7 +3,8 @@
  * check it against the level the way pie(script_create) will, hand the
  * refusal back to the model, and save it once it passes.
  *
- *   1 playtest.gather  the target Blueprint, its input mappings, what PIE can watch
+ *   1 playtest.gather  the target Blueprint, its input mappings, what PIE can watch;
+ *                      a target path that resolves to nothing fails the flow here
  *   2 playtest.draft   agent step: no tools, a token budget, schema SCRIPT_DRAFT_SCHEMA
  *   3 playtest.check   pie(script_validate); a refusal becomes the next prompt's feedback
  *   4-7                two more draft and check rounds, each only when the last was refused
@@ -159,6 +160,15 @@ export class PlaytestGatherTask extends UeMcpTask<{ target?: string; context?: s
     const values = await read(self, "pie_script_values", { ...(blueprint ? { target: blueprint } : {}), ...(profile ? { profile } : {}), limit: 600 });
     if (values.success === false) {
       return { success: false, error: new Error(`pie(script_values) failed: ${String(values.error ?? "no answer")}`), data: { values } };
+    }
+    // A path that resolves to nothing fails here, before a model drafts a playtest of something else (#1610).
+    const resolved = values.target && typeof values.target === "object" ? (values.target as Record<string, unknown>) : null;
+    if (resolvedBy === "path" && resolved?.found === false) {
+      return {
+        success: false,
+        error: new Error(`playtest target ${target} does not exist: no asset or actor class resolves at that path.`),
+        data: { target, values: { target: resolved } },
+      };
     }
 
     const prompt = [
@@ -353,7 +363,8 @@ export function playtestFlow(): Record<string, unknown> {
         "Draft a PIE test script for a target with the flow model and save it. params: target (asset path or description), "
         + "context? (what to test), profile?, name?, package_path?. Gathers the target Blueprint, its input mappings and the "
         + `values PIE can watch, drafts with an agent step, checks the draft with pie(script_validate) and returns refusals to the model up to ${PLAYTEST_RETRIES} times, `
-        + "then saves it with pie(script_create). Fails with the last errors when every draft is refused. Needs a model: a daemon "
+        + "then saves it with pie(script_create). Fails before drafting when target is a path that resolves to nothing, and with the "
+        + "last errors when every draft is refused. Needs a model: a daemon "
         + "extension's provider, or ANTHROPIC_API_KEY.",
       steps,
     },

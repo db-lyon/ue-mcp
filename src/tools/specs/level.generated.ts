@@ -3967,6 +3967,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Close at loopPosition rather than after the last key"
+      },
+      {
+        "name": "markEdited",
+        "type": "boolean",
+        "required": false,
+        "description": "Value for bSplineHasBeenEdited (default true), which keeps these points when the owner's construction script reruns; false clears it"
       }
     ],
     "choices": [
@@ -5097,7 +5103,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_light_properties: "Params: actorLabel?, actorPath?, intensity?, color?, rotation?, mobility?, recaptureSky?, volumetricScatteringIntensity?, sourceRadius?, innerConeAngle?, outerConeAngle?",
   set_nanite_settings: "Params: assetPath (or meshPath), enabled?, positionPrecision?",
   set_post_process_settings: "Params: actorLabel?, actorPath?, componentName?, propertyName?, settings, enableOverrides?",
-  set_spline_points: "Params: actorLabel OR actorPath, points, componentName?, closedLoop?, loopPosition?, loopPositionOverride?",
+  set_spline_points: "Params: actorLabel OR actorPath, points, componentName?, closedLoop?, loopPosition?, loopPositionOverride?, markEdited?",
   set_streaming_sublevel_properties: "Params: levelName (or levelPath), initiallyLoaded?, initiallyVisible?, location?, editorVisible?",
   set_volume_properties: "Params: actorLabel?, actorPath?, properties",
   set_water_body_property: "Params: actorLabel?, actorPath?, propertyName, value",
@@ -5240,6 +5246,7 @@ export const schema: Record<string, z.ZodType> = {
   loop: z.boolean().optional().describe("Loop the preview animation (default true)"),
   loopPosition: z.number().optional().describe("Input key a closed loop closes at, with loopPositionOverride"),
   loopPositionOverride: z.boolean().optional().describe("Close at loopPosition rather than after the last key"),
+  markEdited: z.boolean().optional().describe("Value for bSplineHasBeenEdited (default true), which keeps these points when the owner's construction script reruns; false clears it"),
   matchComponentSubclasses: z.boolean().optional().describe("Also match subclasses of componentClass (default true)"),
   matchSubclasses: z.boolean().optional().describe("Match subclasses of the class filter (default true)"),
   material: z.string().optional().describe("Alias for materialPath (add_post_process_blendable). Material applied at slot 0 (place_actor). One material path applied to every slot (set_component_materials)"),

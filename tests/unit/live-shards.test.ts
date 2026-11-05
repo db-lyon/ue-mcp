@@ -7,8 +7,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  balance, buildOutputFilter, editorFits, headlessShardCount, liveFiles, mirror, overBudget, planShards, readKind,
-  splitAtDeath, timingFromReports, undeployedSources,
+  balance, buildOutputFilter, editorFits, launchOrder, liveFiles, mirror, nextBatch, overBudget, planFixedShards, planShards, poolQueue,
+  poolWantsEditor, readKind, splitAtDeath, timingFromReports, undeployedSources,
 } from "../../scripts/live-shards.mjs";
 import { liveShardProjectDir, LIVE_SHARD_ROOT } from "../../scripts/bridge-target.mjs";
 
@@ -44,6 +44,43 @@ describe("shard planning", () => {
     expect(plan.map((s) => s.name)).toEqual(["h1", "h2", "r1", "i1"]);
     expect(plan.flatMap((s) => s.files)).not.toContain("l1");
     expect(plan.filter((s) => s.kind === "headless").flatMap((s) => s.files).sort()).toEqual(["h1", "h2", "h3", "n1"]);
+  });
+});
+
+
+describe("the headless pool", () => {
+  const entries = [
+    { file: "a", kind: "headless" }, { file: "b", kind: "headless" }, { file: "c", kind: "none" },
+    { file: "r", kind: "render" }, { file: "x", kind: "base" }, { file: "l", kind: "lifecycle" },
+  ];
+  const timing = { files: { a: { durationMs: 10_000 }, b: { durationMs: 90_000 }, c: { durationMs: 40_000 }, r: { durationMs: 5_000 } } };
+
+  it("queues the headless and none files longest first, and plans the other kinds as fixed shards", () => {
+    expect(poolQueue(entries, timing).files).toEqual(["b", "c", "a"]);
+    expect(planFixedShards(entries, timing, {}).map((s) => s.name)).toEqual(["b1", "r1"]);
+  });
+
+  it("hands out batches that shrink as the queue drains, and always at least one file", () => {
+    const weights = new Map(Array.from({ length: 30 }, (_, i) => [`f${i}`, 10_000]));
+    const queue = [...weights.keys()];
+    // 300 s left across 3 editors: a sixth of it each time, 50 s.
+    expect(nextBatch(queue, weights, 3).files).toHaveLength(5);
+    // What is left is small: the 20 s floor.
+    queue.splice(0, 22);
+    expect(nextBatch(queue, weights, 3).files).toHaveLength(2);
+    const big = new Map([["huge", 500_000]]);
+    expect(nextBatch(["huge"], big, 4).files).toEqual(["huge"]);
+    expect(nextBatch([], big, 4).files).toEqual([]);
+  });
+
+  it("caps a batch at 120 s, so an editor started late still finds work", () => {
+    const weights = new Map(Array.from({ length: 100 }, (_, i) => [`f${i}`, 10_000]));
+    expect(nextBatch([...weights.keys()], weights, 1).weightMs).toBe(120_000);
+  });
+
+  it("caps a batch at what is left of the editor's share before it is replaced", () => {
+    const weights = new Map(Array.from({ length: 100 }, (_, i) => [`f${i}`, 10_000]));
+    expect(nextBatch([...weights.keys()], weights, 1, 30_000).weightMs).toBe(30_000);
   });
 });
 
@@ -108,21 +145,29 @@ describe("shard copies", () => {
 });
 
 describe("memory decides the editor count", () => {
-  it("fits headless shards into what is free after the headroom; the short editors queue for memory", () => {
-    // 32 GB, 28 GB free: 28672 - 4096 headroom = 24576, six of 3600.
-    expect(headlessShardCount({ freeMB: 28672, totalMB: 32768 })).toBe(6);
-    // A 32 GB desktop with 16 GB free runs three, not the one a held-back turn left room for.
-    expect(headlessShardCount({ freeMB: 16383, totalMB: 32679 })).toBe(3);
-  });
-
-  it("still runs one headless shard on a busy machine, and never more than the cap", () => {
-    expect(headlessShardCount({ freeMB: 5000, totalMB: 32768 })).toBe(1);
-    expect(headlessShardCount({ freeMB: 500_000, totalMB: 524_288, max: 8 })).toBe(8);
+  it("starts a headless editor while each would still get a launch's worth of the queue", () => {
+    expect(poolWantsEditor({ remainingMs: 10_000, queued: 1, editors: 0, max: 8 })).toBe(true);
+    expect(poolWantsEditor({ remainingMs: 400_000, queued: 90, editors: 3, max: 8 })).toBe(true);
+    expect(poolWantsEditor({ remainingMs: 100_000, queued: 20, editors: 2, max: 8 })).toBe(false);
+    expect(poolWantsEditor({ remainingMs: 400_000, queued: 90, editors: 2, max: 2 })).toBe(false);
+    expect(poolWantsEditor({ remainingMs: 0, queued: 0, editors: 0, max: 8 })).toBe(false);
   });
 
   it("holds an editor back until it fits beside the headroom", () => {
     expect(editorFits("headless", 8000, 32768)).toBe(true);
     expect(editorFits("render", 8000, 32768)).toBe(false);
+    // The 13.8 GB a 32 GB desktop has free with its usual apps open, less one render editor:
+    // an interactive editor fits beside it.
+    expect(editorFits("interactive", 13_800 - 4_600, 32679)).toBe(true);
+  });
+
+  it("launches the longest shard first, so the run's last editor is not the last to find room", () => {
+    const plan = [
+      { name: "h1", kind: "headless", weightMs: 215_000 }, { name: "h2", kind: "headless", weightMs: 214_000 },
+      { name: "b1", kind: "base", weightMs: 15_000 }, { name: "r1", kind: "render", weightMs: 103_000 },
+      { name: "i1", kind: "interactive", weightMs: 35_000 }, { name: "s1", kind: "scm", weightMs: 4_000 },
+    ];
+    expect(launchOrder(plan).map((s) => s.name)).toEqual(["h1", "h2", "r1", "i1", "b1", "s1"]);
   });
 
   it("gives the base shard only the files that need it", () => {

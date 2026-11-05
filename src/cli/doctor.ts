@@ -12,7 +12,7 @@ import * as path from "node:path";
 import { execSync } from "node:child_process";
 
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { isNewer } from "../core/version-check.js";
+import { distTagForVersion, isNewer } from "../core/version-check.js";
 import {
   NPX_AGE_GATE_OVERRIDE,
   UE_MCP_LAUNCH,
@@ -36,7 +36,9 @@ export interface DoctorReport {
   registryLatest: string | null;
   npmGlobal: { version: string | null; dir: string | null };
   localShadow: { version: string; dir: string } | null; // nearest node_modules/ue-mcp from cwd up
-  effectiveNpx: string | null;    // what `npx ue-mcp` would run: shadow ?? global
+  effectiveNpx: string | null;    // what `npx ue-mcp` would run: shadow ?? global ?? registry latest
+  /** Where effectiveNpx comes from; with nothing installed npx fetches the registry's latest. */
+  effectiveNpxSource?: "local" | "global" | "registry" | null;
   runningServers: Array<{
     pid: number;
     version: string | null;
@@ -431,12 +433,15 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
     );
     return { ...s, servesTarget };
   });
+  const latest = registryLatest();
+  const effectiveNpxSource = shadow ? "local" : global.version ? "global" : latest ? "registry" : null;
   return {
     selfVersion: packageVersion(),
-    registryLatest: registryLatest(),
+    registryLatest: latest,
     npmGlobal: global,
     localShadow: shadow,
-    effectiveNpx: shadow ? shadow.version : global.version,
+    effectiveNpx: shadow ? shadow.version : global.version ?? latest,
+    effectiveNpxSource,
     runningServers: servers,
     targetProjectDir,
     bridgePlugin: uproject
@@ -485,8 +490,9 @@ export function formatDoctor(d: DoctorReport): string {
   }
 
   const effLabel = d.effectiveNpx ?? "unknown";
+  const effSource = d.effectiveNpxSource === "registry" ? `  ${DIM}(registry latest; nothing installed)${RESET}` : "";
   const effMismatch = behindLatest(d.effectiveNpx, latest);
-  lines.push(row("effective (npx):", effMismatch ? `${RED}${effLabel}  (behind latest ${latest})${RESET}` : `${GREEN}${effLabel}${RESET}`));
+  lines.push(row("effective (npx):", effMismatch ? `${RED}${effLabel}  (behind latest ${latest})${RESET}` : `${GREEN}${effLabel}${RESET}${effSource}`));
 
   // Show servers, putting the one serving the target project first and naming
   // the project each serves so an unrelated dev server can't be mistaken for it.
@@ -539,6 +545,13 @@ export function formatDoctor(d: DoctorReport): string {
     problems.push(
       `npm global is ${d.npmGlobal.version}, latest is ${latest}. The running server is fine, but the next launch via bare \`npx ue-mcp\` would be stale. ` +
       `Run \`ue-mcp update\` (or npm i -g ue-mcp@latest).`,
+    );
+  }
+  const bridgeVersion = d.bridgePlugin?.version;
+  if (bridgeVersion && d.bridgePlugin?.installKind === "binary" && d.effectiveNpx && isNewer(bridgeVersion, d.effectiveNpx)) {
+    problems.push(
+      `The bridge is ${bridgeVersion}, but a bare \`npx ue-mcp\` runs ${d.effectiveNpx}. ` +
+      `Run commands as \`npx ue-mcp@${distTagForVersion(bridgeVersion)} <command>\` to stay on the bridge's channel.`,
     );
   }
   for (const pin of d.pinnedConfigs ?? []) {

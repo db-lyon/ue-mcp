@@ -73,6 +73,8 @@ export interface ChangeEntry {
   large?: true;
   diff?: string;
   blueprintDiff?: unknown;
+  /** A package's diff from the editor, built on Unreal's own diff code: see asset-diff.ts. */
+  assetDiff?: import("./asset-diff.js").AssetDiff;
 }
 
 export interface RestoreRefusal {
@@ -171,6 +173,10 @@ export class ShadowRepo {
   readonly root: string;
   readonly gitdir: string;
   readonly largeDir: string;
+  /** Pictures of package versions, one PNG per blob id, rendered by the editor. */
+  readonly thumbsDir: string;
+  /** Asset diffs already computed, per path and pair of versions. */
+  readonly diffsDir: string;
   readonly pendingRoot: string;
   readonly largeFileBytes: number;
   private readonly commits = new Map<string, Commit>();
@@ -185,6 +191,8 @@ export class ShadowRepo {
     this.gitdir = path.join(this.root, "shadow.git");
     this.largeDir = path.join(this.root, "shadow-large");
     this.pendingRoot = path.join(this.root, "shadow-pending");
+    this.thumbsDir = path.join(this.root, "shadow-thumbs");
+    this.diffsDir = path.join(this.root, "shadow-diffs");
     this.largeFileBytes = opts.largeFileBytes && opts.largeFileBytes > 0 ? opts.largeFileBytes : DEFAULT_LARGE_FILE_BYTES;
   }
 
@@ -214,7 +222,7 @@ export class ShadowRepo {
 
   /** Delete the history, the plain copies and everything pending. */
   clear(): void {
-    for (const dir of [this.gitdir, this.largeDir, this.pendingRoot]) fs.rmSync(dir, { recursive: true, force: true });
+    for (const dir of [this.gitdir, this.largeDir, this.pendingRoot, this.thumbsDir, this.diffsDir]) fs.rmSync(dir, { recursive: true, force: true });
     this.commits.clear();
     this.trees.clear();
     this.tracked.clear();
@@ -665,6 +673,29 @@ export class ShadowRepo {
       }
     }
     return entry;
+  }
+
+  /**
+   * The version of a path at checkpoint `id`, or on disk now when `id` is null:
+   * its blob id, null when it did not exist, undefined when nothing recorded it.
+   * Reading the disk stores that version, so exportVersion can write it out.
+   */
+  async versionOf(id: string | null, key: string): Promise<string | null | undefined> {
+    if (id === null) {
+      const cache = this.readStatCache();
+      const state = await this.diskState(key, cache);
+      this.writeStatCache(cache);
+      return state;
+    }
+    const chain = await this.chain();
+    const i = await this.resolve(chain, id);
+    const at = await this.stateAt(chain, i, fold(key), null);
+    return at ? at.state : undefined;
+  }
+
+  /** The bytes of one version, from versionOf, written to `dest`. */
+  async exportVersion(version: string, dest: string): Promise<void> {
+    await this.writeState(version, dest);
   }
 
   /** The bytes of a path at a checkpoint, written to `dest`, for a diff the editor runs. False when it did not exist. */

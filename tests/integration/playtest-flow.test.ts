@@ -16,6 +16,7 @@ import { call, startDaemonCli, writeExtension, type Discovery } from "./daemon-f
 type Json = Record<string, unknown>;
 
 const BP = "/Game/Hero/BP_Hero";
+const MISSING = "/Game/NoSuchFolder/NoSuchAsset";
 const BAD = { steps: [{ instruction: "Lose health", expect: { value: "Helth", op: "decreasing" } }] };
 const GOOD = { steps: [{ instruction: "Lose health", expect: { value: "Health", op: "decreasing", within_ms: 3000 } }, { instruction: "It feels fair", judge: "manual" }] };
 const NO_MODEL = "No model is configured for flow agent steps.";
@@ -28,7 +29,7 @@ function editorLike(created: Json[]): Record<string, (p: Json) => unknown> {
     list_input_assets: () => ({ success: true, inputMappingContexts: [{ path: "/Game/Input/IMC_Default" }], inputActions: [] }),
     read_imc: (p) => ({ success: true, imcPath: p.imcPath, mappings: [{ key: "SpaceBar", inputAction: "/Game/Input/IA_Jump" }] }),
     pie_script_values: (p) => ({
-      success: true, pawn: { class: "/Game/Hero/BP_Hero.BP_Hero_C" }, target: { requested: p.target, found: true, is_player_pawn: true },
+      success: true, pawn: { class: "/Game/Hero/BP_Hero.BP_Hero_C" }, target: { requested: p.target, found: p.target !== MISSING, ...(p.target !== MISSING ? { is_player_pawn: true } : {}) },
       values: [{ path: "Health", kind: "number", type: "float" }], actors: [], widgets: [], profile_values: [], spawned_classes: [],
     }),
     pie_script_validate: (p) => {
@@ -152,6 +153,43 @@ describe("the playtest flow", () => {
       expect(failed.text).toContain("Helth");
       expect(created).toHaveLength(0);
       expect(bridge.calls.filter((c) => c.method === "pie_script_validate").length).toBe(2 + 3);
+    } finally {
+      await server.close();
+      await bridge.stop();
+      await api.stop();
+    }
+  }, 120_000);
+
+  it("fails before drafting when the target path resolves to nothing, and saves no script", async () => {
+    covers("flow.playtest");
+    const project = sb.makeProject("PlaytestMissing");
+    const created: Json[] = [];
+    const bridge = await FakeBridge.start({ projectDir: path.dirname(project), handlers: editorLike(created), answerAnything: false });
+    const api = await FakeHttp.start((req) => {
+      const body = JSON.parse(req.body) as { model: string };
+      return {
+        json: {
+          id: "msg_fake", type: "message", role: "assistant", model: body.model,
+          content: [{ type: "text", text: JSON.stringify(GOOD) }],
+          stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      };
+    });
+    const server = await McpServer.start(sb, {
+      projects: [project], port: null,
+      env: { ANTHROPIC_API_KEY: "sk-ant-fake-integration", ANTHROPIC_BASE_URL: api.origin },
+    });
+    try {
+      const r = await server.call("flow", { action: "run", flowName: "playtest", params: { target: MISSING } });
+      expect(r.text).toContain(`playtest target ${MISSING} does not exist`);
+      expect(r.text).not.toMatch(/"success":\s*true/);
+      expect(api.requests.filter((q) => q.url.endsWith("/v1/messages"))).toHaveLength(0);
+      expect(bridge.calls.some((c) => c.method === "pie_script_validate")).toBe(false);
+      expect(created).toHaveLength(0);
+
+      const described = json<{ success: boolean }>(await server.call("flow", { action: "run", flowName: "playtest", params: { target: "the hero" } }));
+      expect(described.success).toBe(true);
+      expect(created).toHaveLength(1);
     } finally {
       await server.close();
       await bridge.stop();

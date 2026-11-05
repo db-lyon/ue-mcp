@@ -26,6 +26,39 @@ let dir: string;
 let armed: string | null = null;
 const prepared: string[][] = [];
 const finished: Json[][] = [];
+/** What the fake editor read from each version it was handed to diff, and the native diffs it was asked to open. */
+const diffed: Array<{ original: string; from: string | null; to: string | null }> = [];
+const opened: Json[] = [];
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=", "base64");
+
+/** What checkpoint_diff_asset answers: the versions it was handed, read back, and a picture written for each one asked for. */
+function fakeAssetDiff(p: Json): Json {
+  const readSide = (f: unknown) => (typeof f === "string" && fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null);
+  const from = readSide(p.fromFile);
+  const to = readSide(p.toFile);
+  diffed.push({ original: path.basename(String(p.originalFile)), from, to });
+  const side = (content: string | null, thumb: unknown) => {
+    if (content === null) return null;
+    if (typeof thumb === "string") fs.writeFileSync(thumb, PNG);
+    return { class: "Blueprint", facts: [{ name: "Content", value: content }], ...(typeof thumb === "string" ? { thumbnail: { file: thumb, source: "rendered" } } : {}) };
+  };
+  return {
+    success: true,
+    packageName: `/Game/${path.basename(String(p.originalFile), ".uasset")}`,
+    status: from === null ? "added" : to === null ? "deleted" : "modified",
+    assetClass: "Blueprint",
+    engine: { tool: "SBlueprintDiff", note: "fake", native: "window", nativeAvailable: true },
+    before: side(from, p.fromThumbnail),
+    after: side(to, p.toThumbnail),
+    sections: from && to ? [{
+      category: "Defaults",
+      kind: "properties",
+      engineSource: "DiffUtils::CompareUnrelatedObjects",
+      entries: [{ displayString: "Content changed value in Door", diffType: "PropertyValueChanged", path: "Content", property: "Content", before: from, after: to }],
+    }] : [],
+    recordCount: from && to ? 1 : 0,
+  };
+}
 
 const file = (rel: string) => path.join(dir, rel);
 const write = (rel: string, content: string) => {
@@ -86,6 +119,11 @@ beforeAll(async () => {
         };
       },
       checkpoint_diff_blueprint: () => ({ success: true, isBlueprint: false }),
+      checkpoint_diff_asset: (p) => (Array.isArray(p.items) ? { success: true, results: (p.items as Json[]).map(fakeAssetDiff) } : fakeAssetDiff(p)),
+      checkpoint_open_native_diff: (p) => {
+        opened.push({ ...p, fromContent: typeof p.fromFile === "string" && fs.existsSync(p.fromFile) ? fs.readFileSync(p.fromFile, "utf8") : null });
+        return { success: true, opened: "window", windowTitle: `Diff of ${path.basename(String(p.originalFile))}` };
+      },
     },
   });
   d = await startDaemonCli(sb, project, { UE_MCP_PORT: undefined });
@@ -177,6 +215,57 @@ describe("checkpoints through the daemon", () => {
     expect(list.body.repository).toBe(file("Saved/UE_MCP_Bridge/shadow.git"));
   });
 
+  it("give each package an asset diff from the editor, with a picture of each version the daemon serves", async () => {
+    covers("daemon.checkpoints.asset-diff");
+    const health = await call(d, "GET", "/v1/health");
+    expect(health.body.features).toContain("checkpoints.assetDiff");
+    // The changes listed in the turn above already asked the editor once per package.
+    const changes = await call(d, "GET", `/v1/checkpoints/changes?from=${start}&to=${end}`);
+    expect(changes.status).toBe(200);
+    expect(changes.body.assetDiffs).toEqual({ limit: 25, diffed: 2, deferred: [] });
+    // The editor was handed each version's bytes, exported from the shadow history.
+    expect(diffed.map((x) => [x.original, x.from, x.to]).sort()).toEqual([["BP_Door.uasset", "door v1", "door v2"], ["M_Wall.uasset", "wall v1", "wall v2"]]);
+    const door = (changes.body.changes as Json[]).find((c) => c.path === "Content/BP_Door.uasset")!;
+    expect(door.assetDiff).toMatchObject({ state: "ready", status: "modified", assetClass: "Blueprint", nativeDiff: { available: true } });
+    expect(door.assetDiff.summary).toBe("1 difference: Content door v1 to door v2");
+    const ini = (changes.body.changes as Json[]).find((c) => c.path === "Config/DefaultGame.ini")!;
+    expect(ini.assetDiff).toBeUndefined();
+
+    // The pictures, by blob id, served as PNG.
+    const thumb = door.assetDiff.before.thumbnail;
+    expect(thumb).toMatchObject({ source: "rendered" });
+    expect(thumb.id).toMatch(/^[0-9a-f]{40}$/);
+    expect(door.assetDiff.after.thumbnail.id).not.toBe(thumb.id);
+    const res = await fetch(`${base(d)}${thumb.url}`, { headers: bearer(d) });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(Buffer.from(await res.arrayBuffer()).equals(PNG)).toBe(true);
+    expect((await fetch(`${base(d)}/v1/checkpoints/thumbnails/${"0".repeat(40)}.png`, { headers: bearer(d) })).status).toBe(404);
+
+    // The same two versions again: answered from the cache, the same answer, the editor not asked.
+    const again = await call(d, "GET", `/v1/checkpoints/asset-diff?from=${start}&to=${end}&path=Content/BP_Door.uasset`);
+    expect(again.status).toBe(200);
+    expect(again.body).toEqual(door.assetDiff);
+    expect(diffed).toHaveLength(2);
+    expect((await call(d, "GET", `/v1/checkpoints/asset-diff?from=${start}&to=${end}&path=Config/DefaultGame.ini`)).status).toBe(400);
+    expect((await call(d, "GET", `/v1/checkpoints/asset-diff?from=${start}&to=${end}`)).status).toBe(400);
+
+    // Unreal's own diff: both versions exported, labelled with the checkpoints.
+    const native = await call(d, "POST", "/v1/checkpoints/native-diff", { path: "Content/BP_Door.uasset", from: start, to: end });
+    expect(native.status, JSON.stringify(native.body)).toBe(200);
+    expect(native.body).toMatchObject({ opened: "window", windowTitle: "Diff of BP_Door.uasset", path: "Content/BP_Door.uasset" });
+    expect(opened.at(-1)).toMatchObject({ fromContent: "door v1", fromLabel: `Checkpoint ${start.slice(0, 7)}: turn start`, toLabel: `Checkpoint ${end.slice(0, 7)}: turn end` });
+    // The diff window dates each side with its checkpoint's time, not an unset date (#1606).
+    const taken = new Map(((await call(d, "GET", "/v1/checkpoints")).body.checkpoints as Json[]).map((c) => [c.id, c.createdAt]));
+    expect(opened.at(-1)).toMatchObject({ fromTime: taken.get(start), toTime: taken.get(end) });
+    expect(Number.isNaN(Date.parse(String(opened.at(-1)!.fromTime)))).toBe(false);
+    const current = await call(d, "POST", "/v1/checkpoints/native-diff", { path: "Content/BP_Door.uasset", from: start });
+    expect(current.status).toBe(200);
+    expect(opened.at(-1)).toMatchObject({ current: true, toLabel: "Current", fromTime: taken.get(start) });
+    expect(opened.at(-1)!.toTime).toBeUndefined();
+    expect(opened.at(-1)!.toFile).toBeUndefined();
+  });
+
   it("restore a subset to the turn's start, tell the editor what to reload, and keep the rest", async () => {
     covers("daemon.checkpoints");
     const before = (await call(d, "GET", "/v1/health")).body.lastEventId as number;
@@ -227,6 +316,28 @@ describe("checkpoints through the daemon", () => {
     const forced = await call(d, "POST", "/v1/checkpoints/restore", { checkpoint: start, paths: ["Content/M_Wall.uasset"], force: true });
     expect(forced.body.restored).toEqual([{ path: "Content/M_Wall.uasset", action: "written" }]);
     expect(read("Content/M_Wall.uasset")).toBe("wall v1");
+  });
+
+  it("diff the first 25 packages of a large turn and name the rest, each diffed on request", async () => {
+    covers("daemon.checkpoints.asset-diff");
+    const a = (await call(d, "POST", "/v1/checkpoints", { label: "big start" })).body.id as string;
+    for (let i = 0; i < 27; i++) editorSave(`Content/Bulk/B_${String(i).padStart(2, "0")}.uasset`, `bulk ${i}`);
+    const b = (await call(d, "POST", "/v1/checkpoints", { label: "big end" })).body.id as string;
+    const sent = bridge.calls.length;
+    const r = await call(d, "GET", `/v1/checkpoints/changes?from=${a}&to=${b}`);
+    expect(r.body.assetDiffs.diffed).toBe(25);
+    // One editor call for all 25, so the editor unloads the versions, a full garbage collection, once.
+    const diffCalls = bridge.calls.slice(sent).filter((c) => c.method === "checkpoint_diff_asset");
+    expect(diffCalls).toHaveLength(1);
+    expect(diffCalls[0].params.items).toHaveLength(25);
+    expect(r.body.assetDiffs.deferred).toEqual(["Content/Bulk/B_25.uasset", "Content/Bulk/B_26.uasset"]);
+    const late = (r.body.changes as Json[]).find((c) => c.path === "Content/Bulk/B_26.uasset")!;
+    expect(late.assetDiff).toMatchObject({ state: "deferred" });
+    expect(late.assetDiff.summary).toMatch(/Not diffed yet/);
+    const one = await call(d, "GET", `/v1/checkpoints/asset-diff?from=${a}&to=${b}&path=Content/Bulk/B_26.uasset`);
+    expect(one.body).toMatchObject({ state: "ready", status: "added", before: null });
+    expect(one.body.after.facts).toEqual([{ name: "Content", value: "bulk 26" }]);
+    expect(one.body.summary).toMatch(/^New Blueprint/);
   });
 
   it("answer bad input with 400 and an unknown editor with 404", async () => {

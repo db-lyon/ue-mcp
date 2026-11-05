@@ -19,7 +19,7 @@ import {
   removeMigrateTarget,
 } from "../surface/target-params.js";
 import type { InProcessCallOptions, ToolContext, ToolDef } from "../core/types.js";
-import { dispatchCategoryCall, type DispatchDeps, type ToolResult } from "../dispatch/server-dispatch.js";
+import { dispatchCategoryCall, dispatchFlowCall, type DispatchDeps, type ToolResult } from "../dispatch/server-dispatch.js";
 import { DialogGuard, guardFor, sessionGuardDeps } from "../editor/dialog-guard.js";
 import { info, warn, error } from "../core/log.js";
 import { GuardRegistry } from "../flow/guard.js";
@@ -74,6 +74,17 @@ export interface Runtime {
     action: string,
     args?: Record<string, unknown>,
     opts?: InProcessCallOptions,
+  ): Promise<ToolResult>;
+  /**
+   * Run one call to a tool as a client would send it, in process, through the
+   * same dispatch and with the same prompts as callAction. The flow tool goes
+   * through the flow dispatch. `envelope` says the tool takes action + args;
+   * `loadView` swaps in a projection's load for the addressed session.
+   */
+  callTool(
+    tool: ToolDef,
+    input: Record<string, unknown>,
+    opts?: InProcessCallOptions & { envelope?: boolean; loadView?: (load: SessionLoad) => SessionLoad },
   ): Promise<ToolResult>;
 }
 
@@ -272,6 +283,32 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
   syncEditorTargeting();
   for (const s of sessions.list()) watchParity(s);
 
+  /** Dispatch deps for a call made in process: the caller's own prompts, or nobody. */
+  const inProcessDeps = (
+    opts: InProcessCallOptions & { loadView?: (load: SessionLoad) => SessionLoad },
+  ): DispatchDeps => {
+    const prompt = opts.dialogPrompt;
+    return {
+      sessions,
+      loads,
+      lockingCfg,
+      // The caller's own prompt is who a dialog this call meets is put to.
+      dialogGuardFor: prompt
+        ? (forSession) => {
+            const guard = guardFor(
+              forSession,
+              sessionGuardDeps(forSession, true, undefined, { prompt, askWaitMs: opts.dialogWaitMs }),
+            );
+            guard.startWatching();
+            return guard;
+          }
+        : dialogGuardFor,
+      elicit: () => opts.elicit,
+      client: () => undefined,
+      ...(opts.loadView ? { loadView: opts.loadView } : {}),
+    };
+  };
+
   return {
     sessions,
     loads,
@@ -307,26 +344,12 @@ export async function createRuntime(projectArgs: string[]): Promise<Runtime> {
       // The full graph, not the advertised one: in micro mode only the gateway is advertised.
       const tool = primaryLoad.surface.tools.find((t) => t.name === category);
       if (!tool) return Promise.reject(new Error(`unknown category '${category}'`));
-      const prompt = opts.dialogPrompt;
-      const deps: DispatchDeps = {
-        sessions,
-        loads,
-        lockingCfg,
-        // The caller's own prompt is who a dialog this call meets is put to.
-        dialogGuardFor: prompt
-          ? (forSession) => {
-              const guard = guardFor(
-                forSession,
-                sessionGuardDeps(forSession, true, undefined, { prompt, askWaitMs: opts.dialogWaitMs }),
-              );
-              guard.startWatching();
-              return guard;
-            }
-          : dialogGuardFor,
-        elicit: () => opts.elicit,
-        client: () => undefined,
-      };
-      return dispatchCategoryCall(deps, tool, false, { ...args, action }, {});
+      return dispatchCategoryCall(inProcessDeps(opts), tool, false, { ...args, action }, {});
+    },
+    callTool(tool, input, opts = {}) {
+      const deps = inProcessDeps(opts);
+      if (tool === flowTool) return dispatchFlowCall(deps, flowTool, baseCtx, input);
+      return dispatchCategoryCall(deps, tool, opts.envelope ?? false, input, {});
     },
     logSummary() {
       const disabled = primaryLoad.surface.disabled;

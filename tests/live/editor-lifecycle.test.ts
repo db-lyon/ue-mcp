@@ -105,6 +105,17 @@ async function ensureRunning(): Promise<void> {
   await startEditor();
 }
 
+/** Every advertised `epic_*` action, as category.action, read off tools/list. */
+async function advertisedEpicActions(): Promise<string[]> {
+  const tools = await server.listTools();
+  return tools.flatMap((t) => {
+    // The action enum is either the property's own or the first member of an anyOf beside a plain string.
+    const action = (t.inputSchema as { properties?: { action?: { enum?: string[]; anyOf?: Array<{ enum?: string[] }> } } }).properties?.action;
+    const actions = [...(action?.enum ?? []), ...(action?.anyOf ?? []).flatMap((m) => m.enum ?? [])];
+    return actions.filter((a) => a.startsWith("epic_")).map((a) => `${t.name}.${a}`);
+  }).sort();
+}
+
 /** Crash reporter pids, any project. Windows only. */
 function crashReporterPids(): number[] {
   const out = execFileSync(
@@ -216,6 +227,31 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
     expect(again.success).toBe(false);
     expect(again.alreadyRunning).toBe(true);
   }, START_TIMEOUT_S * 1000 * 2);
+
+  it("advertises the same epic_* actions after the editor restarts (#1538)", async () => {
+    await ensureRunning();
+    // The Python toolsets register after the bridge answers, so an editor the test before this one
+    // just launched has not advertised them yet; the snapshot is taken once they are in.
+    let before: string[] = [];
+    await waitFor("the late epic_* toolsets before the restart", async () => {
+      before = await advertisedEpicActions();
+      return before.some((a) => a.startsWith("level."));
+    }, 420_000).catch(() => undefined);
+    expect(before.filter((a) => a.startsWith("level.")).length, before.join(", ")).toBeGreaterThan(0);
+
+    await stopEditor();
+    const started = await startEditor();
+    expect(started.isError, started.text).toBe(false);
+
+    // Toolsets that register late arrive through a re-read, not on the handshake.
+    let after: string[] = [];
+    await waitFor("every epic_* action to come back", async () => {
+      after = await advertisedEpicActions();
+      return after.length === before.length;
+    }, 420_000).catch(() => undefined);
+    expect(after.filter((a) => !before.includes(a))).toEqual([]);
+    expect(before.filter((a) => !after.includes(a))).toEqual([]);
+  }, START_TIMEOUT_S * 1000 * 2 + 2 * 420_000);
 
   it.skipIf(!WINDOWS)(
     "stop_editor after a real crash ends the crash reporter, and the build that follows links (#1221)",

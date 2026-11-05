@@ -12,6 +12,7 @@ import {
   describeCrashReporterCleanup,
   endProjectCrashReporters,
   listProjectModuleBinaries,
+  listRecordedEditorPids,
   monitoredPid,
   selectProjectCrashReporters,
   type CrashReporterDeps,
@@ -75,6 +76,17 @@ describe("which crash reporters belong to this project", () => {
       new Map([[12, "C:\\Work\\Game\\Binaries\\Win64\\UnrealEditor-Game.dll"]]),
     );
     expect(matches).toEqual([]);
+  });
+
+  it("claims one watching an editor this project recorded that has exited, with no path or binary to go on", () => {
+    const matches = selectProjectCrashReporters([reporter(14, "-MONITOR=600 -RespawnedInstance")], PROJECT, new Set(), null, new Set([600]));
+    expect(matches).toEqual([
+      { pid: 14, image: "CrashReportClientEditor.exe", reason: "it watched editor pid 600 of this project, which has exited" },
+    ]);
+    // The same recorded pid still running is a live editor's companion.
+    expect(selectProjectCrashReporters([reporter(14, "-MONITOR=600")], PROJECT, new Set([600]), null, new Set([600]))).toEqual([]);
+    // A pid this project never recorded settles nothing by itself.
+    expect(selectProjectCrashReporters([reporter(14, "-MONITOR=601")], PROJECT, new Set(), null, new Set([600]))).toEqual([]);
   });
 
   it("leaves another project's reporter alone", () => {
@@ -150,6 +162,22 @@ describe("ending this project's crash reporters", () => {
     expect(probed).toBe(false);
   });
 
+  it("ends a crashed editor's companion by the pid the project recorded, without asking who holds the binaries", async () => {
+    let probed = false;
+    const d = deps({
+      listCrashReporters: async () => [reporter(50, "-MONITOR=51 -RespawnedInstance")],
+      listProjectEditorPids: () => new Set([51]),
+      findHolders: async () => {
+        probed = true;
+        return new Map();
+      },
+    });
+    const result = await endProjectCrashReporters(PROJECT, d);
+    expect(d.ended).toEqual([50]);
+    expect(result.ended.map((m) => m.pid)).toEqual([50]);
+    expect(probed).toBe(false);
+  });
+
   it("reports a reporter it could not end instead of throwing", async () => {
     const d = deps({
       listCrashReporters: async () => [reporter(40, `"C:/Work/Game/Saved/Crashes/UECC-4"`)],
@@ -214,5 +242,23 @@ describe("the project's module binaries", () => {
       "Plugins/Group/Y/Binaries/Win64/UnrealEditor-Y.dll",
       "Plugins/X/Binaries/Win64/UnrealEditor-X.dll",
     ]);
+  });
+});
+
+describe("the editor pids a project recorded", () => {
+  const made: string[] = [];
+  afterEach(() => {
+    for (const dir of made.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("reads port.json and every instance record, whether or not the editor is still running", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-crc-"));
+    made.push(dir);
+    const state = path.join(dir, "Saved", "UE_MCP_Bridge");
+    fs.mkdirSync(path.join(state, "instances"), { recursive: true });
+    fs.writeFileSync(path.join(state, "port.json"), JSON.stringify({ port: 9877, pid: 4100 }));
+    fs.writeFileSync(path.join(state, "instances", "4200.json"), JSON.stringify({ port: 9878, pid: 4200 }));
+    expect([...listRecordedEditorPids(dir)].sort()).toEqual([4100, 4200]);
+    expect([...listRecordedEditorPids(path.join(dir, "missing"))]).toEqual([]);
   });
 });

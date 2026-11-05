@@ -5,7 +5,10 @@
  *   GET    /v1/checkpoints           ?editor&limit   state and history, newest first
  *   PUT    /v1/checkpoints/enabled   { editor?, enabled: true | false | null }
  *   POST   /v1/checkpoints           { editor?, label? }
- *   GET    /v1/checkpoints/changes   ?editor&from&to
+ *   GET    /v1/checkpoints/changes   ?editor&from&to&assetDiffs&blueprintDiffs
+ *   GET    /v1/checkpoints/asset-diff ?editor&from&to&path      one package's asset diff
+ *   GET    /v1/checkpoints/thumbnails/<id>.png ?editor           a picture an asset diff names
+ *   POST   /v1/checkpoints/native-diff { editor?, path, from, to? }   Unreal's own diff, in the editor
  *   POST   /v1/checkpoints/restore   { editor?, checkpoint, paths?, force? }
  *   DELETE /v1/checkpoints           ?editor
  *
@@ -19,6 +22,8 @@ import { CheckpointError, checkpointsFor, type SessionCheckpoints } from "../che
 export interface RouteResult {
   status: number;
   body: unknown;
+  /** A file to send as the body instead, with its content type. */
+  file?: { path: string; type: string };
 }
 
 type Json = Record<string, unknown>;
@@ -66,7 +71,27 @@ export async function checkpointRoute(
       if (!from) throw new RouteError(400, "from is required: the checkpoint id to compare against");
       return ok(await resolveSession(sessions, query.get("editor")).changes(from, query.get("to"), {
         blueprintDiffs: query.get("blueprintDiffs") !== "false",
+        assetDiffs: query.get("assetDiffs") !== "false",
       }));
+    }
+    if (sub === "/asset-diff" && method === "GET") {
+      const from = query.get("from");
+      const file = query.get("path");
+      if (!from) throw new RouteError(400, "from is required: the checkpoint id to compare against");
+      if (!file) throw new RouteError(400, "path is required: the project-relative path of the package");
+      return ok(await resolveSession(sessions, query.get("editor")).assetDiff(from, query.get("to"), file));
+    }
+    const thumb = /^\/thumbnails\/([0-9a-f]{40})\.png$/.exec(sub);
+    if (thumb && method === "GET") {
+      const found = resolveSession(sessions, query.get("editor")).thumbnail(thumb[1]);
+      if (!found) throw new RouteError(404, "No such picture");
+      return { status: 200, body: null, file: { path: found.file, type: found.type } };
+    }
+    if (sub === "/native-diff" && method === "POST") {
+      if (typeof b.path !== "string" || !b.path) throw new RouteError(400, "path is required: the project-relative path of the package");
+      if (typeof b.from !== "string" || !b.from) throw new RouteError(400, "from is required: the checkpoint id to compare against");
+      if (b.to !== undefined && b.to !== null && typeof b.to !== "string") throw new RouteError(400, "to is a checkpoint id");
+      return ok(await resolveSession(sessions, b.editor).openNativeDiff(b.path, b.from, (b.to as string | null | undefined) ?? null));
     }
     if (sub === "/restore" && method === "POST") {
       if (typeof b.checkpoint !== "string" || !b.checkpoint) throw new RouteError(400, "checkpoint is required: the id to restore to");

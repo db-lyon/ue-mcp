@@ -5,6 +5,7 @@ ue-mcp:
   editor:
     launchArgs:
       - "-ini:EditorSettings:[/Script/SourceCodeAccess.SourceCodeAccessSettings]:PreferredAccessor=NullSourceCodeAccessor"
+      - "-ini:EditorSettings:[/Script/UnrealEd.EditorPerformanceSettings]:bThrottleCPUWhenNotForeground=False"
 
 # Fixture for the live tests (npm run test:live), which is the only thing
 # that runs this flow. tests/ue_mcp is the one project that suite is allowed to

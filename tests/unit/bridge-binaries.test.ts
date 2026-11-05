@@ -33,8 +33,9 @@ function prebuilt(dir: string, platform = "Win64"): string {
   const root = path.join(dir, "UE_MCP_Bridge");
   fs.mkdirSync(path.join(root, "Binaries", platform), { recursive: true });
   fs.mkdirSync(path.join(root, "Source"), { recursive: true });
-  fs.writeFileSync(path.join(root, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: "1.2.3" }));
+  fs.writeFileSync(path.join(root, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: "1.2.3", Modules: [{ Name: "UE_MCP_Bridge", Type: "Editor" }] }));
   fs.writeFileSync(path.join(root, "Binaries", platform, "UnrealEditor-UE_MCP_Bridge.dll"), "bin");
+  fs.writeFileSync(path.join(root, "Binaries", platform, "UnrealEditor.modules"), JSON.stringify({ BuildId: "1", Modules: { UE_MCP_Bridge: "UnrealEditor-UE_MCP_Bridge.dll" } }));
   fs.writeFileSync(path.join(root, "Source", "Stray.cpp"), "//");
   return dir;
 }

@@ -89,6 +89,7 @@ beforeAll(async () => {
       api.route("POST", "/modes", (req) => {
         if (req.body?.feedback !== undefined) api.modes.setFeedback(req.body.feedback ?? undefined);
         if (req.body?.dialog !== undefined) api.modes.setDialog(req.body.dialog ?? undefined);
+        if (req.body?.playtest !== undefined) api.modes.setPlaytest(req.body.playtest ?? undefined);
         return { body: api.modes.get() };
       });
       api.route("POST", "/status", async () => {
@@ -106,6 +107,41 @@ beforeAll(async () => {
     ueMcpExtension: { name: "future", api: { min: 99, max: 99 } },
   }));
   fs.writeFileSync(path.join(future, "index.js"), "export function activate() {}");
+
+  // One that needs a ue-mcp newer than this one.
+  const ahead = path.join(sandbox, "extensions", "ahead");
+  fs.mkdirSync(ahead, { recursive: true });
+  fs.writeFileSync(path.join(ahead, "package.json"), JSON.stringify({
+    name: "ahead-ext", version: "2.0.0", type: "module", main: "index.js",
+    ueMcpExtension: { name: "ahead", api: { min: 1, max: 99 }, ueMcp: "999.0.0" },
+  }));
+  fs.writeFileSync(path.join(ahead, "index.js"), "export function activate() {}");
+
+  // Two that talk through a service, and one that provides a service and then fails to activate.
+  // Load order follows the directory listing, so the consumer may activate before or after the provider.
+  const plain = (name: string, body: string) => {
+    const dir = path.join(sandbox, "extensions", name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({
+      name: `${name}-ext`, version: "1.0.0", type: "module", main: "index.js",
+      ueMcpExtension: { name, api: { min: 1, max: 3 } },
+    }));
+    fs.writeFileSync(path.join(dir, "index.js"), `export function activate(api) {${body}}`);
+  };
+  plain("consumer", `
+    const seen = [];
+    let greeter;
+    api.services.watch("greeter", (impl) => { greeter = impl; seen.push(impl ? "provided" : "revoked"); });
+    api.route("GET", "/greet", () => ({ body: {
+      greeting: greeter ? greeter.greet("consumer") : null,
+      viaGet: api.services.get("greeter")?.greet("get") ?? null,
+      unknown: api.services.get("nothing") ?? null,
+      broken: api.services.get("broken.svc") ?? null,
+      seen,
+    } }));
+  `);
+  plain("provider", `api.services.provide("greeter", { greet: (who) => "hello " + who });`);
+  plain("broken", `api.services.provide("broken.svc", {}); throw new Error("activation fails after providing");`);
 
   daemon = await startDaemon({
     projects: [uproject],
@@ -126,7 +162,16 @@ afterAll(async () => {
 describe("extensions", () => {
   it("loads the compatible extension and skips the other", async () => {
     const health = await (await fetch(`${base}/v1/health`, { headers: auth })).json();
-    expect(health.extensions).toEqual([{ name: "sample", version: "0.1.0" }]);
+    expect(health.extensions).toEqual(expect.arrayContaining([{ name: "sample", version: "0.1.0" }, { name: "consumer", version: "1.0.0" }, { name: "provider", version: "1.0.0" }]));
+    expect(health.extensions).toHaveLength(3);
+  });
+
+  it("refuses an extension that needs a newer ue-mcp, and says which in health", async () => {
+    const health = await (await fetch(`${base}/v1/health`, { headers: auth })).json();
+    expect(health.refusedExtensions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "ahead", version: "2.0.0", needsUeMcp: "999.0.0", reason: expect.stringContaining("needs ue-mcp 999.0.0 or later") }),
+    ]));
+    expect(health.extensions.map((x: { name: string }) => x.name)).not.toContain("ahead");
   });
 
   it("serves its routes, with path params and a per-project data dir", async () => {
@@ -155,9 +200,17 @@ describe("modes, for an extension", () => {
   const modes = async (body: unknown) =>
     (await fetch(`${base}/v1/ext/sample/modes`, { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify(body) })).json();
 
-  it("sets this project's feedback and dialog modes and reads them back, then clears them", async () => {
-    expect(await modes({ feedback: "defer", dialog: "auto" })).toEqual({ feedback: { mode: "defer", project: true }, dialog: { mode: "auto", project: true } });
-    expect(await modes({ feedback: null, dialog: null })).toMatchObject({ feedback: { project: false }, dialog: { project: false } });
+  it("sets this project's feedback, dialog and playtest modes and reads them back, then clears them", async () => {
+    expect(await modes({ feedback: "defer", dialog: "auto", playtest: "manual" })).toEqual({
+      feedback: { mode: "defer", project: true },
+      dialog: { mode: "auto", project: true },
+      playtest: { mode: "manual", project: true },
+    });
+    expect(await modes({ feedback: null, dialog: null, playtest: null })).toMatchObject({
+      feedback: { project: false },
+      dialog: { project: false },
+      playtest: { mode: null, project: false },
+    });
   });
 });
 
@@ -225,6 +278,16 @@ describe("UI bundles", () => {
   it("refuses a bundle signed by a key nobody trusted", () => {
     const other = crypto.generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString();
     expect(() => daemon.ui.install(bundle("client", "0.9.0", undefined, other))).toThrow(/signature/);
+  });
+
+  it("refuses a bundle named for a loaded extension unless that extension trusted its key", async () => {
+    const other = crypto.generateKeyPairSync("ed25519");
+    daemon.ui.trustKey(other.publicKey.export({ type: "spki", format: "pem" }).toString(), "future");
+    const otherPem = other.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    expect(() => daemon.ui.install(bundle("sample", "0.1.0", undefined, otherPem))).toThrow(/signature does not verify/);
+    const res = await (await fetch(`${base}/v1/ext/sample/features`, { headers: auth })).json();
+    expect(res.features).toContain("ui.scopedKeys");
+    expect((await (await fetch(`${base}/v1/health`, { headers: auth })).json()).features).toContain("ui.scopedKeys");
   });
 
   it("refuses a bundle with a file changed after signing", () => {
@@ -310,5 +373,28 @@ describe("test script events", () => {
     expect(seen[1].data).toMatchObject({ runId: "run-x", awaiting: [{ index: 1 }] });
     expect(seen[2].data).toMatchObject({ seq: 7, summary: { passed: 2 } });
     expect(seen.every((e) => !("type" in e.data))).toBe(true);
+  });
+});
+
+describe("extension services", () => {
+  it("lets one extension use what another provides, whichever activates first", async () => {
+    const res = await (await fetch(`${base}/v1/ext/consumer/greet`, { headers: auth })).json();
+    expect(res).toEqual({ greeting: "hello consumer", viaGet: "hello get", unknown: null, broken: null, seen: ["provided"] });
+    const features = await (await fetch(`${base}/v1/ext/sample/features`, { headers: auth })).json();
+    expect(features.features).toContain("extension.services");
+  });
+});
+
+// Last: it stops the daemon.
+describe("extension services on shutdown", () => {
+  it("revokes each extension's services after disposing it", async () => {
+    const { ExtensionServices } = await import("../../src/daemon/extension-services.js");
+    const revoked = vi.spyOn(ExtensionServices.prototype, "revokeOwner");
+    try {
+      await daemon.close();
+      expect(revoked.mock.calls.map((c) => c[0])).toEqual(expect.arrayContaining(["sample", "consumer", "provider"]));
+    } finally {
+      revoked.mockRestore();
+    }
   });
 });

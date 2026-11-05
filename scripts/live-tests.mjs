@@ -15,8 +15,13 @@
  * starts or stops that editor, except in --lifecycle.
  *
  * Flags:
- *   --shards <n>      Most headless shards; fewer start when memory is short.
- *   --shard <name>    Run one shard of the plan (h1, r1, b1, ...).
+ *   --shards <n>      Most headless editors; fewer start when memory is short.
+ *   --shard <name>    Run one shard of the plan (r1, i1, b1, s1), or `headless` for the headless pool.
+ *   --kinds a,b       Run only the files of these kinds (headless, none, base, render, interactive, scm).
+ *   --stage-build     Snapshot tests/ue_mcp's build output for the shards to copy, and exit.
+ *   --staged-build    Copy the snapshot --stage-build took instead of taking one now. The release
+ *                     runner stages after its build, because the lifecycle cases it runs beside the
+ *                     shards relink tests/ue_mcp and hold its DLL locked.
  *   --files a,b       Run only files whose path contains one of these.
  *   --files-from <f>  Run only the files a selection lists: the JSON scripts/select-tests.ts
  *                     writes (its `live` array), or one path per line. An empty list runs nothing.
@@ -78,12 +83,21 @@ const ATTACH = argv.includes("--attach") || LIFECYCLE || RECORD_GOLDEN || ONLY !
 const SHARDS_FLAG = flagValue("--shards") ?? process.env.UE_MCP_LIVE_SHARDS ?? null;
 const HEADLESS_SHARDS = SHARDS_FLAG === null ? null : Number(SHARDS_FLAG);
 
+if (argv.includes("--stage-build")) {
+  const { stageBuildOutput, STAGED_BUILD_DIR } = await import("./live-sharded-run.mjs");
+  const copied = stageBuildOutput(REPO_ROOT);
+  console.error(`[live] staged tests/ue_mcp's build output at ${STAGED_BUILD_DIR} (${copied} file(s) copied)`);
+  process.exit(0);
+}
+
 if (!ATTACH) {
   const { runSharded } = await import("./live-sharded-run.mjs");
   try {
     process.exit(await runSharded({
       repoRoot: REPO_ROOT,
       headless: HEADLESS_SHARDS,
+      kinds: flagValue("--kinds")?.split(",").filter(Boolean) ?? null,
+      stagedBuild: argv.includes("--staged-build"),
       render: Number(flagValue("--render-shards") ?? 1),
       interactive: Number(flagValue("--interactive-shards") ?? 1),
       scm: 1,
@@ -99,6 +113,10 @@ if (!ATTACH) {
     process.exit(1);
   }
 }
+
+// The attached editor shares the developer's per-user layout; close what the run opens in it.
+const { guardUserLayoutsUntilExit } = await import("./user-layout-guard.mjs");
+guardUserLayoutsUntilExit((msg) => console.error(`[live] ${msg}`));
 
 const HOST = process.env.UE_MCP_LIVE_HOST ?? process.env.UE_MCP_TEST_HOST ?? "127.0.0.1";
 const CONNECT_TIMEOUT_MS = 5000;

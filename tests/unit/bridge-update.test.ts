@@ -129,8 +129,9 @@ describe("applyUpdate from a release", () => {
     const t = { version, engine: "5.7", platform: "Win64" };
     const src = path.join(fixture.root, `release-${version}`, "UE_MCP_Bridge");
     fs.mkdirSync(path.join(src, "Binaries", "Win64"), { recursive: true });
-    fs.writeFileSync(path.join(src, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: version }));
+    fs.writeFileSync(path.join(src, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: version, Modules: [{ Name: "UE_MCP_Bridge", Type: "Editor" }] }));
     fs.writeFileSync(path.join(src, "Binaries", "Win64", "UnrealEditor-UE_MCP_Bridge.dll"), `new ${version}`);
+    fs.writeFileSync(path.join(src, "Binaries", "Win64", "UnrealEditor.modules"), JSON.stringify({ BuildId: "1", Modules: { UE_MCP_Bridge: "UnrealEditor-UE_MCP_Bridge.dll" } }));
     const zip = path.join(fixture.root, binaryArchiveName(t));
     execFileSync(tar, ["-a", "-c", "-f", zip, "-C", path.dirname(src), "UE_MCP_Bridge"]);
     const bytes = fs.readFileSync(zip);
@@ -185,6 +186,16 @@ describe("applyUpdate from a release", () => {
     expect(readInstallMarker(pluginDir)?.version).toBe("1.0.0");
   });
 
+  it("leaves a newer binary bridge alone when no version is asked for", async () => {
+    // `npx ue-mcp update` runs the stable line; a beta bridge is not its to replace.
+    const { uproject, pluginDir } = binaryProject("99.0.0-beta.1");
+    const result = await applyUpdate(uproject, { editorRunning: false });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("newer than this ue-mcp");
+    expect(result.error).toContain("npx ue-mcp@beta update");
+    expect(readInstallMarker(pluginDir)?.version).toBe("99.0.0-beta.1");
+  });
+
   it("moves a source install only to the version of the package deploying it", async () => {
     const uproject = fixture.makeProject("Src", { engine: "5.7" });
     const pluginDir = path.join(path.dirname(uproject), "Plugins", "UE_MCP_Bridge");
@@ -237,7 +248,7 @@ describe.runIf(process.platform === "win32")("swapInPlace against a loaded DLL",
     fs.writeFileSync(path.join(staging, "Binaries", "Win64", "UnrealEditor-UE_MCP_Bridge.dll"), "new module");
     fs.writeFileSync(path.join(staging, "UE_MCP_Bridge.uplugin"), "{}");
 
-    const old = swapInPlace(staging, pluginDir, "1");
+    const old = swapInPlace(staging, pluginDir, { stamp: "1" });
 
     expect(fs.readFileSync(dll, "utf-8")).toBe("new module");
     expect(old).toEqual([`${dll}.old-1`]);

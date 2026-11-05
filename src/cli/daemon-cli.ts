@@ -12,6 +12,10 @@ import { findUProject } from "../config/uproject-path.js";
 import { readLiveDiscovery } from "../daemon/discovery.js";
 import { runDaemon } from "../daemon/daemon.js";
 import { ensureDaemon } from "../daemon/shim.js";
+import { waitForExit } from "../daemon/supersede-watch.js";
+
+/** How long `daemon stop` waits for the process to exit. */
+const STOP_WAIT_MS = 30_000;
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { fail, ok } from "./ui/ansi.js";
 import type { CliUsage } from "./cli-main.js";
@@ -88,8 +92,15 @@ export async function run(argv: string[]): Promise<number | void> {
 
   if (sub === "stop") {
     await fetch(`http://127.0.0.1:${d.port}/v1/shutdown`, { method: "POST", headers: auth }).catch(() => undefined);
+    // Return once the process is gone, so a start right after never runs beside it.
+    if (!(await waitForExit(d.pid, STOP_WAIT_MS))) {
+      const error = `daemon pid ${d.pid} did not exit within ${STOP_WAIT_MS / 1000}s`;
+      if (json) out({ ok: false, pid: d.pid, error });
+      else fail(error);
+      return 1;
+    }
     if (json) out({ ok: true, stopped: d.pid });
-    else ok(`asked daemon pid ${d.pid} to stop`);
+    else ok(`stopped daemon pid ${d.pid}`);
     return 0;
   }
 

@@ -111,5 +111,6 @@ public:
 	static TSharedPtr<FJsonValue> PieScriptStop(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieScriptVerdict(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieScriptResults(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieScriptRuns(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieScriptReplay(const TSharedPtr<FJsonObject>& Params);
 };

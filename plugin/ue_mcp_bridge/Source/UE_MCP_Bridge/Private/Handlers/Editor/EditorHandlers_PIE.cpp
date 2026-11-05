@@ -1115,6 +1115,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	int32 Matched = 0;
+	int32 MatchedActors = 0;
 
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
@@ -1137,9 +1138,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 		// #1113: componentName roots the read at the component with that
 		// instance name (case-insensitive); actors without one are skipped, and
 		// classFilter then matches the actor class or that component's class.
-		UActorComponent* ComponentMatch = nullptr;
+		// The roots this actor contributes: the actor itself, or every component the filter matches, one row each.
+		TArray<UActorComponent*> ComponentMatches;
 		if (!ComponentName.IsEmpty())
 		{
+			UActorComponent* ComponentMatch = nullptr;
 			for (UActorComponent* Comp : Actor->GetComponents())
 			{
 				if (Comp && Comp->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
@@ -1150,54 +1153,57 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 			}
 			if (!ComponentMatch) continue;
 			if (!ClassMatches(Actor->GetClass()) && !ClassMatches(ComponentMatch->GetClass())) continue;
+			ComponentMatches.Add(ComponentMatch);
 		}
-		else
+		else if (!ClassFilter.IsEmpty() && !ClassMatches(Actor->GetClass()))
 		{
-			bool bActorMatch = ClassFilter.IsEmpty() || ClassMatches(Actor->GetClass());
-			if (!bActorMatch)
+			// An actor with two matching components (two ISMs) answers for both, not the first one found.
+			for (UActorComponent* Comp : Actor->GetComponents())
 			{
-				for (UActorComponent* Comp : Actor->GetComponents())
-				{
-					if (Comp && ClassMatches(Comp->GetClass()))
-					{
-						ComponentMatch = Comp;
-						bActorMatch = true;
-						break;
-					}
-				}
+				if (Comp && ClassMatches(Comp->GetClass())) ComponentMatches.Add(Comp);
 			}
-			if (!bActorMatch) continue;
+			if (ComponentMatches.Num() == 0) continue;
+			// GetComponents is a set; name order keeps the rows stable between calls.
+			ComponentMatches.Sort([](const UActorComponent& A, const UActorComponent& B) { return A.GetName() < B.GetName(); });
 		}
 
-		++Matched;
-		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
-		Row->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
-		Row->SetStringField(TEXT("actorClass"), Actor->GetClass()->GetName());
-		if (ComponentMatch)
+		++MatchedActors;
+		auto EmitRow = [&](UActorComponent* ComponentMatch)
 		{
-			Row->SetStringField(TEXT("componentName"), ComponentMatch->GetName());
-			Row->SetStringField(TEXT("componentClass"), ComponentMatch->GetClass()->GetName());
-		}
+			++Matched;
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+			Row->SetStringField(TEXT("actorClass"), Actor->GetClass()->GetName());
+			if (ComponentMatch)
+			{
+				Row->SetStringField(TEXT("componentName"), ComponentMatch->GetName());
+				Row->SetStringField(TEXT("componentClass"), ComponentMatch->GetClass()->GetName());
+			}
 
-		TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
-		TSharedPtr<FJsonObject> Errors = MakeShared<FJsonObject>();
-		UObject* ResolveRoot = ComponentMatch ? (UObject*)ComponentMatch : (UObject*)Actor;
-		for (const FString& Path : Paths)
-		{
-			FString Err;
-			ResolvePath(ResolveRoot, Path, Values, *Path, Err);
-			if (!Err.IsEmpty()) Errors->SetStringField(Path, Err);
-		}
-		Row->SetObjectField(TEXT("values"), Values);
-		if (Errors->Values.Num() > 0) Row->SetObjectField(TEXT("errors"), Errors);
-		Rows.Add(MakeShared<FJsonValueObject>(Row));
+			TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
+			TSharedPtr<FJsonObject> Errors = MakeShared<FJsonObject>();
+			UObject* ResolveRoot = ComponentMatch ? (UObject*)ComponentMatch : (UObject*)Actor;
+			for (const FString& Path : Paths)
+			{
+				FString Err;
+				ResolvePath(ResolveRoot, Path, Values, *Path, Err);
+				if (!Err.IsEmpty()) Errors->SetStringField(Path, Err);
+			}
+			Row->SetObjectField(TEXT("values"), Values);
+			if (Errors->Values.Num() > 0) Row->SetObjectField(TEXT("errors"), Errors);
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		};
+		if (ComponentMatches.Num() == 0) EmitRow(nullptr);
+		for (UActorComponent* ComponentMatch : ComponentMatches) EmitRow(ComponentMatch);
 	}
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("world"), World == (UWorld*)GEditor->PlayWorld ? TEXT("pie") : TEXT("editor"));
 	Result->SetStringField(TEXT("classFilter"), ClassFilter);
 	if (!ComponentName.IsEmpty()) Result->SetStringField(TEXT("componentName"), ComponentName);
+	// matched counts rows: one per matching actor, or per matching component of an actor whose class does not match.
 	Result->SetNumberField(TEXT("matched"), Matched);
+	Result->SetNumberField(TEXT("matchedActors"), MatchedActors);
 	Result->SetArrayField(TEXT("rows"), Rows);
 	return MCPResult(Result);
 }

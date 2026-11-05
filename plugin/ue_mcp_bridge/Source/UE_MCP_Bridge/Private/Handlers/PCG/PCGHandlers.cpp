@@ -145,6 +145,62 @@ namespace
 		return FString();
 	}
 
+	/** Whether Value is a field object ({AttributeName: "Mesh"}) for an instanced object property, written into the object it holds. */
+	static bool IsInstancedFieldObject(const FProperty* Prop, const TSharedPtr<FJsonValue>& Value)
+	{
+		return Prop && CastField<FObjectProperty>(Prop) && Prop->HasAnyPropertyFlags(CPF_InstancedReference | CPF_PersistentInstance)
+			&& Value.IsValid() && Value->Type == EJson::Object && !Value->AsObject()->HasField(TEXT("instanceClass"));
+	}
+
+	/**
+	 * Replaces each {Key: {Field: value}} whose Key is an instanced object property (a spawner's MeshSelectorParameters)
+	 * with {Key.Field: value}, so the fields land in the subobject the settings own and each is captured and read back
+	 * on its own. Nested field objects for a further instanced property are expanded the same way.
+	 */
+	static void ExpandInstancedFieldObjects(UObject* Settings, TArray<TPair<FString, TSharedPtr<FJsonValue>>>& Props)
+	{
+		TArray<TPair<FString, TSharedPtr<FJsonValue>>> Out;
+		TArray<TPair<FString, TSharedPtr<FJsonValue>>> Pending = MoveTemp(Props);
+		for (int32 i = 0; i < Pending.Num(); ++i)
+		{
+			FProperty* Leaf = nullptr;
+			void* Addr = nullptr;
+			UObject* Owner = nullptr;
+			FString Err;
+			const bool bResolved = MCPJsonProperty::ResolveDottedPath(Settings, Pending[i].Key, Leaf, Addr, Owner, Err);
+			if (!bResolved || !IsInstancedFieldObject(Leaf, Pending[i].Value))
+			{
+				Out.Add(Pending[i]);
+				continue;
+			}
+			const FString Prefix = Pending[i].Key + TEXT(".");
+			const TSharedPtr<FJsonObject> Fields = Pending[i].Value->AsObject();
+			for (const auto& Field : Fields->Values) Pending.Emplace(Prefix + FString(*Field.Key), Field.Value);
+		}
+		Props = MoveTemp(Out);
+	}
+
+	/**
+	 * For a dotted key that did not resolve through an instanced subobject, the subobject's class and the property
+	 * that selects it (MeshSelectorParameters follows MeshSelectorType), else empty.
+	 */
+	static FString InstancedPathHint(UObject* Settings, const FString& Key)
+	{
+		int32 Dot = INDEX_NONE;
+		if (!Key.FindChar(TEXT('.'), Dot)) return FString();
+		const FString Head = Key.Left(Dot);
+		const FObjectProperty* Prop = CastField<FObjectProperty>(MCPJsonProperty::FindMemberProperty(Settings->GetClass(), Head));
+		if (!Prop || !Prop->HasAnyPropertyFlags(CPF_InstancedReference | CPF_PersistentInstance)) return FString();
+		const UObject* Held = Prop->GetObjectPropertyValue_InContainer(Settings);
+		FString Hint = FString::Printf(TEXT(" '%s' holds %s."), *Prop->GetName(), Held ? *FString::Printf(TEXT("a %s"), *Held->GetClass()->GetName()) : TEXT("nothing"));
+		FString TypeName = Prop->GetName();
+		if (TypeName.RemoveFromEnd(TEXT("Parameters")) && Settings->GetClass()->FindPropertyByName(FName(*(TypeName + TEXT("Type")))))
+		{
+			Hint += FString::Printf(TEXT(" Its class follows %sType: write that in the same call to switch it."), *TypeName);
+		}
+		return Hint;
+	}
+
 	// The refusal for one {Key: Value} setting written to Target, or empty when
 	// it hands no path to an instanced object property. Resolves only; writes nothing.
 	static FString InstancedPathRefusal(UObject* Target, const FString& NodeName, const FString& Key, const TSharedPtr<FJsonValue>& Value)
@@ -154,6 +210,8 @@ namespace
 		UObject* LeafOwner = nullptr;
 		FString ResolveErr;
 		if (!MCPJsonProperty::ResolveDottedPath(Target, Key, LeafProp, LeafAddr, LeafOwner, ResolveErr)) return FString();
+		// A field object is written into the subobject the settings own, not handed a path.
+		if (IsInstancedFieldObject(LeafProp, Value)) return FString();
 		const FString Hit = FindInstancedPathWrite(LeafProp, Value, Key);
 		if (Hit.IsEmpty()) return FString();
 		return FString::Printf(
@@ -341,10 +399,18 @@ namespace
 		void* LeafAddr = nullptr;
 		UObject* LeafOwner = nullptr;
 		FString ResolveErr;
-		if (!MCPJsonProperty::ResolveDottedPath(Settings, Key, Leaf, LeafAddr, LeafOwner, ResolveErr) || !Leaf || !LeafAddr
-			|| !WritesPCGSelector(Leaf, Value))
+		const bool bResolved = MCPJsonProperty::ResolveDottedPath(Settings, Key, Leaf, LeafAddr, LeafOwner, ResolveErr) && Leaf && LeafAddr;
+		// A dotted path may write into a subobject these settings own, never into one another object owns.
+		if (bResolved && LeafOwner && LeafOwner != Settings && !LeafOwner->IsIn(Settings))
 		{
-			return MCPJsonProperty::SetDottedPropertyFromJson(Settings, Key, Value, OutError);
+			OutError = FString::Printf(TEXT("'%s' is inside %s, which these settings do not own, so it is not written"), *Key, *LeafOwner->GetPathName());
+			return false;
+		}
+		if (!bResolved || !WritesPCGSelector(Leaf, Value))
+		{
+			const bool bOk = MCPJsonProperty::SetDottedPropertyFromJson(Settings, Key, Value, OutError);
+			if (!bOk) OutError += InstancedPathHint(Settings, Key);
+			return bOk;
 		}
 		if (const FStructProperty* Selector = AsSelectorProp(Leaf)) return SetPCGSelectorFromJson(Selector, LeafAddr, Value, OutError);
 		if (const FArrayProperty* AP = CastField<FArrayProperty>(Leaf))
@@ -446,6 +512,9 @@ namespace
 		FDateTime StartedUtc;
 		FDateTime FinishedUtc;
 		bool bBound = false;
+		// The run settled as not_started, then the component started or finished a generation shortly after:
+		// Generate deferred its start, so the run is that generation.
+		bool bDeferredStart = false;
 		// Every generation that ended once observed, whoever started it (#1365).
 		int64 FinishCount = 0;
 		FString LastFinishState;
@@ -486,6 +555,25 @@ namespace
 		return Comp->IsGenerating() || Comp->IsCleaningUp() || CountPCGLocalComponents(Comp).Generating > 0;
 	}
 
+	/** How long after settling as not_started a run still claims a generation the component starts or finishes. */
+	constexpr double PCGDeferredStartWindowSeconds = 30.0;
+
+	/** Whether Run settled as not_started recently enough that a generation now is the one its Generate deferred. */
+	static bool PCGRunAwaitsDeferredStart(const FPCGRunRecord& Run)
+	{
+		return Run.State == TEXT("not_started")
+			&& (FDateTime::UtcNow() - Run.FinishedUtc).GetTotalSeconds() <= PCGDeferredStartWindowSeconds;
+	}
+
+	static void StartObservedPCGRun(UPCGComponent* Comp)
+	{
+		FPCGRunRecord* Run = PCGRuns().Find(TWeakObjectPtr<UPCGComponent>(Comp));
+		if (!Comp || !Run || !PCGRunAwaitsDeferredStart(*Run)) return;
+		Run->State = TEXT("generating");
+		Run->FinishedUtc = FDateTime();
+		Run->bDeferredStart = true;
+	}
+
 	static void FinishPCGRun(UPCGComponent* Comp, const FString& State)
 	{
 		FPCGRunRecord* Run = PCGRuns().Find(TWeakObjectPtr<UPCGComponent>(Comp));
@@ -495,6 +583,14 @@ namespace
 			++Run->FinishCount;
 			Run->LastFinishState = State;
 			Run->LastFinishUtc = FDateTime::UtcNow();
+		}
+		// A deferred generation that finished without its start being observed is still this run's.
+		if (State != TEXT("cleaned") && PCGRunAwaitsDeferredStart(*Run))
+		{
+			Run->State = State;
+			Run->FinishedUtc = FDateTime::UtcNow();
+			Run->bDeferredStart = true;
+			return;
 		}
 		if (Run->State != TEXT("generating")) return;
 		// force_regenerate_pcg queues a cleanup ahead of its Generate; that
@@ -516,6 +612,7 @@ namespace
 		{
 			// Bound once per component, weakly on the component itself.
 			// ponytail: never unbound; ends if the bridge module can unload while components live.
+			Comp->OnPCGGraphStartGeneratingDelegate.AddWeakLambda(Comp, [](UPCGComponent* C) { StartObservedPCGRun(C); });
 			Comp->OnPCGGraphGeneratedDelegate.AddWeakLambda(Comp, [](UPCGComponent* C) { FinishPCGRun(C, TEXT("generated")); });
 			Comp->OnPCGGraphCancelledDelegate.AddWeakLambda(Comp, [](UPCGComponent* C) { FinishPCGRun(C, TEXT("cancelled")); });
 			Comp->OnPCGGraphCleanedDelegate.AddWeakLambda(Comp, [](UPCGComponent* C) { FinishPCGRun(C, TEXT("cleaned")); });
@@ -533,6 +630,7 @@ namespace
 		Run.State = TEXT("generating");
 		Run.StartedUtc = FDateTime::UtcNow();
 		Run.FinishedUtc = FDateTime();
+		Run.bDeferredStart = false;
 		return Run.Id;
 	}
 
@@ -556,6 +654,17 @@ namespace
 		Obj->SetStringField(TEXT("startedUtc"), Run->StartedUtc.ToIso8601());
 		if (Run->State == TEXT("generating")) Obj->SetField(TEXT("finishedUtc"), MakeShared<FJsonValueNull>());
 		else Obj->SetStringField(TEXT("finishedUtc"), Run->FinishedUtc.ToIso8601());
+		if (Run->bDeferredStart) Obj->SetBoolField(TEXT("deferredStart"), true);
+		if (Run->State == TEXT("not_started"))
+		{
+			// Generate had nothing to start; say what the component already holds.
+			Obj->SetBoolField(TEXT("componentGenerated"), Comp->bGenerated);
+			if (Run->FinishCount > 0)
+			{
+				Obj->SetStringField(TEXT("lastFinishState"), Run->LastFinishState);
+				Obj->SetStringField(TEXT("lastFinishUtc"), Run->LastFinishUtc.ToIso8601());
+			}
+		}
 		return MakeShared<FJsonValueObject>(Obj);
 	}
 
@@ -833,6 +942,22 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("graphPath"), EType::String, TEXT("Graph holding nodeName, for a node in a subgraph (default: the component's graph)")),
 		MCPParam::Optional(TEXT("includeLocalComponents"), EType::Boolean, TEXT("Also read a partitioned component's local components (default true)")),
 	}, ActorChoice);
+	// A component's graph and its parameter overrides, on a placed actor or on a Blueprint's component template,
+	// which is the write a construction script rerun keeps.
+	const FMCPParamSpec SpecBlueprintPath = MCPParam::Optional(TEXT("blueprintPath"), EType::String, TEXT("Blueprint whose PCG component template is written; every placed instance rebuilds from it"));
+	const FMCPParamSpec SpecComponentName = MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("PCG component: the Blueprint's component variable name or the placed actor's component name (default: the only PCG component)"));
+	const FMCPSpecRules ComponentTargetChoice = MCPSpec::ExactlyOne({ { TEXT("blueprintPath") }, { TEXT("actorLabel") }, { TEXT("actorPath") } });
+	Registry.RegisterHandler(TEXT("get_pcg_component_parameters"), &GetComponentParameters, {
+		SpecBlueprintPath, SpecActorLabel, SpecActorPath, SpecComponentName,
+	}, ComponentTargetChoice);
+	Registry.RegisterHandler(TEXT("set_pcg_component_parameters"), &SetComponentParameters, {
+		SpecBlueprintPath, SpecActorLabel, SpecActorPath, SpecComponentName,
+		MCPParam::Required(TEXT("overrides"), EType::Object, TEXT("{parameterName: value}; null clears that override")),
+	}, ComponentTargetChoice);
+	Registry.RegisterHandler(TEXT("set_pcg_component_graph"), &SetComponentGraph, {
+		SpecBlueprintPath, SpecActorLabel, SpecActorPath, SpecComponentName,
+		MCPParam::Required(TEXT("graphPath"), EType::String, TEXT("PCGGraph or PCGGraphInstance assigned through UPCGComponent::SetGraph; \"\" clears it")),
+	}, ComponentTargetChoice);
 	// #1318: the graph's own pins, on its input or output node.
 	Registry.RegisterHandler(TEXT("set_pcg_graph_pins"), &SetGraphPins, {
 		GraphPath(),
@@ -957,6 +1082,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGGraph(const TSharedPtr<FJsonObject>&
 		TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
 		NodeObj->SetStringField(TEXT("name"), Node->GetName());
 		NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(EPCGNodeTitleType::ListView).ToString());
+		MCPPCG::SetPinLabelFields(Node, NodeObj);
 		NodeArray.Add(MakeShared<FJsonValueObject>(NodeObj));
 	}
 
@@ -973,17 +1099,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGGraph(const TSharedPtr<FJsonObject>&
 		if (!Node) return Obj;
 		Obj->SetStringField(TEXT("name"), Node->GetName());
 		Obj->SetStringField(TEXT("title"), Node->GetNodeTitle(EPCGNodeTitleType::ListView).ToString());
-		TArray<TSharedPtr<FJsonValue>> InPins, OutPins;
-		for (const TObjectPtr<UPCGPin>& P : Node->GetInputPins())
-		{
-			if (P) InPins.Add(MakeShared<FJsonValueString>(P->Properties.Label.ToString()));
-		}
-		for (const TObjectPtr<UPCGPin>& P : Node->GetOutputPins())
-		{
-			if (P) OutPins.Add(MakeShared<FJsonValueString>(P->Properties.Label.ToString()));
-		}
-		Obj->SetArrayField(TEXT("inputPins"), InPins);
-		Obj->SetArrayField(TEXT("outputPins"), OutPins);
+		MCPPCG::SetPinLabelFields(Node, Obj);
 		return Obj;
 	};
 	if (const UPCGNode* InputNode = Graph->GetInputNode())
@@ -1198,11 +1314,20 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 
 	if (ResolvedSourcePinLabel == NAME_None)
 	{
-		return MCPError(TEXT("No suitable output pin found on source node"));
+		return MCPError(FString::Printf(TEXT("Source node '%s' has no output pins."), *SourceNodeName));
 	}
 	if (ResolvedTargetPinLabel == NAME_None)
 	{
-		return MCPError(TEXT("No suitable input pin found on target node"));
+		return MCPError(FString::Printf(TEXT("Target node '%s' has no input pins."), *TargetNodeName));
+	}
+	// A label the node does not have is refused with the labels it does have.
+	if (!MCPPCG::HasPinLabel(SourceNode->GetOutputPins(), ResolvedSourcePinLabel))
+	{
+		return MCPPCG::PinNotFoundError(SourceNode, ResolvedSourcePinLabel, /*bOutput*/ true);
+	}
+	if (!MCPPCG::HasPinLabel(TargetNode->GetInputPins(), ResolvedTargetPinLabel))
+	{
+		return MCPPCG::PinNotFoundError(TargetNode, ResolvedTargetPinLabel, /*bOutput*/ false);
 	}
 
 	// Idempotency, and a correctness guard on the rollback: if this edge is
@@ -1333,6 +1458,15 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 	if (!SourceNode) return MCPPCG::NodeNotFoundError(Graph, SourceNodeName, TEXT("Source node"));
 	UPCGNode* TargetNode = MCPPCG::FindNode(Graph, TargetNodeName);
 	if (!TargetNode) return MCPPCG::NodeNotFoundError(Graph, TargetNodeName, TEXT("Target node"));
+	// A label the node does not have would otherwise read as already disconnected.
+	if (!SourcePinLabel.IsEmpty() && !MCPPCG::HasPinLabel(SourceNode->GetOutputPins(), FName(*SourcePinLabel)))
+	{
+		return MCPPCG::PinNotFoundError(SourceNode, FName(*SourcePinLabel), /*bOutput*/ true);
+	}
+	if (!TargetPinLabel.IsEmpty() && !MCPPCG::HasPinLabel(TargetNode->GetInputPins(), FName(*TargetPinLabel)))
+	{
+		return MCPPCG::PinNotFoundError(TargetNode, FName(*TargetPinLabel), /*bOutput*/ false);
+	}
 
 	if (auto Blocked = MCPAssetWriteBlockedError(Graph, AssetPath, TEXT("disconnect nodes in this PCG graph"))) return Blocked;
 	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "DisconnectPCGNodes", "Disconnect PCG Nodes"));
@@ -1607,6 +1741,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 		// Wrap the string value in a JsonValueString so we run through the same path.
 		PropertiesToSet.Add(TPair<FString, TSharedPtr<FJsonValue>>(PropertyName, MakeShared<FJsonValueString>(PropertyValue)));
 	}
+	// {MeshSelectorParameters: {AttributeName: "Mesh"}} writes into the selector the node owns, one field per key.
+	ExpandInstancedFieldObjects(Settings, PropertiesToSet);
 
 	// JSON object order must not decide which selector receives the dotted fields.
 	PropertiesToSet.StableSort([](const auto& A, const auto& B)
@@ -2198,6 +2334,14 @@ TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponentDetails(const TSharedPtr<FJs
 		CompObj->SetStringField(TEXT("componentName"), PCGComp->GetName());
 		CompObj->SetNumberField(TEXT("seed"), PCGComp->Seed);
 		CompObj->SetBoolField(TEXT("activated"), PCGComp->bActivated);
+		// A component the Blueprint's construction script builds is rebuilt from its template on every rerun.
+		const bool bBlueprintOwned = PCGComp->CreationMethod == EComponentCreationMethod::SimpleConstructionScript
+			|| PCGComp->CreationMethod == EComponentCreationMethod::UserConstructionScript;
+		CompObj->SetBoolField(TEXT("blueprintOwned"), bBlueprintOwned);
+		if (bBlueprintOwned)
+		{
+			CompObj->SetStringField(TEXT("warning"), TEXT("Built by the Blueprint's construction script: graph or parameter edits on this placed actor can be discarded on reconstruction. Write them to the Blueprint with set_component_graph or set_component_parameters and blueprintPath."));
+		}
 
 		// Completion status. bGenerated is always false on a partitioned
 		// component; there the local component counts carry the state.
@@ -3059,6 +3203,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 			{
 				PropertiesToSet.Emplace(FString(*Pair.Key), Pair.Value);
 			}
+			ExpandInstancedFieldObjects(NodeSettings, PropertiesToSet);
 			PropertiesToSet.StableSort([](const auto& A, const auto& B)
 			{
 				return IsSpawnerInstancedTypeKey(A.Key) && !IsSpawnerInstancedTypeKey(B.Key);
@@ -3356,6 +3501,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 		}
 		NodeObj->SetNumberField(TEXT("posX"), PosX);
 		NodeObj->SetNumberField(TEXT("posY"), PosY);
+		// Read only: import_graph ignores them, and wires connections by these labels.
+		MCPPCG::SetPinLabelFields(Node, NodeObj);
 
 		const UPCGSettings* Settings = Node->GetSettings();
 		if (Settings)

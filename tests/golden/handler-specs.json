@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1206,
+  "handlerCount": 1210,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -17540,6 +17540,51 @@
         }
       ]
     },
+    "get_pcg_component_parameters": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": false,
+          "description": "Blueprint whose PCG component template is written; every placed instance rebuilds from it"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Editor label of the actor holding the PCG component; a label naming several actors is refused"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "PCG component: the Blueprint's component variable name or the placed actor's component name (default: the only PCG component)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "blueprintPath"
+            ],
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
     "get_pcg_components": {
       "category": "pcg",
       "params": []
@@ -25506,6 +25551,12 @@
           "description": "Observation profile asset path"
         },
         {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open"
+        },
+        {
           "name": "default_within_ms",
           "type": "integer",
           "required": false,
@@ -25676,6 +25727,12 @@
           "description": "Observation profile asset path; overrides the script's"
         },
         {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is"
+        },
+        {
           "name": "record",
           "type": "boolean",
           "required": false,
@@ -25752,6 +25809,30 @@
         }
       ],
       "contractExempt": "Arms the observer and recorder and can start PIE"
+    },
+    "pie_script_runs": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "script",
+          "type": "string",
+          "required": false,
+          "description": "Test script asset path: only that script's runs"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most runs, newest first (default 50)",
+          "minimum": 1
+        },
+        {
+          "name": "include_steps",
+          "type": "boolean",
+          "required": false,
+          "description": "Each run's per-step results (default true)"
+        }
+      ]
     },
     "pie_script_status": {
       "category": "pie",
@@ -25830,6 +25911,12 @@
           "description": "Observation profile asset path; empty clears it"
         },
         {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level the script plays in; empty clears it"
+        },
+        {
           "name": "default_within_ms",
           "type": "integer",
           "required": false,
@@ -25859,6 +25946,12 @@
           "type": "string",
           "required": false,
           "description": "Observation profile asset path the script would use"
+        },
+        {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level the script would play in"
         },
         {
           "name": "manual_only",
@@ -37905,6 +37998,108 @@
         }
       ]
     },
+    "set_pcg_component_graph": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": false,
+          "description": "Blueprint whose PCG component template is written; every placed instance rebuilds from it"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Editor label of the actor holding the PCG component; a label naming several actors is refused"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "PCG component: the Blueprint's component variable name or the placed actor's component name (default: the only PCG component)"
+        },
+        {
+          "name": "graphPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph or PCGGraphInstance assigned through UPCGComponent::SetGraph; \"\" clears it"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "blueprintPath"
+            ],
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
+    "set_pcg_component_parameters": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": false,
+          "description": "Blueprint whose PCG component template is written; every placed instance rebuilds from it"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Editor label of the actor holding the PCG component; a label naming several actors is refused"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "PCG component: the Blueprint's component variable name or the placed actor's component name (default: the only PCG component)"
+        },
+        {
+          "name": "overrides",
+          "type": "object",
+          "required": true,
+          "description": "{parameterName: value}; null clears that override"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "blueprintPath"
+            ],
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
     "set_pcg_graph_instance_overrides": {
       "category": "pcg",
       "params": [
@@ -39637,6 +39832,12 @@
           "type": "boolean",
           "required": false,
           "description": "Close at loopPosition rather than after the last key"
+        },
+        {
+          "name": "markEdited",
+          "type": "boolean",
+          "required": false,
+          "description": "Value for bSplineHasBeenEdited (default true), which keeps these points when the owner's construction script reruns; false clears it"
         }
       ],
       "choices": [

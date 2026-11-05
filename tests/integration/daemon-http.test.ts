@@ -9,6 +9,7 @@ import * as path from "node:path";
 import WebSocket from "ws";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
+import { writeBridgeTree } from "../helpers/bridge-tree-fixture.js";
 import { FakeBridge } from "../fake-bridge.js";
 import { FakeHttp, McpServer, PACKAGE_VERSION, Sandbox, stopSandboxDaemons, waitFor } from "./harness.js";
 import { base, bearer, call, discoveryFile, readSse, startDaemonCli, type Discovery } from "./daemon-fakes.js";
@@ -58,10 +59,7 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(pluginDir, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: "1.0.0" }));
   fs.writeFileSync(path.join(pluginDir, "Binaries", PLATFORM, "old.bin"), "1.0.0");
   fs.writeFileSync(path.join(pluginDir, ".ue-mcp-install.json"), JSON.stringify({ kind: "binary", engine: "5.6", platform: PLATFORM, version: "1.0.0" }));
-  const build = sb.path("build99", "UE_MCP_Bridge");
-  fs.mkdirSync(path.join(build, "Binaries", PLATFORM), { recursive: true });
-  fs.writeFileSync(path.join(build, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: "99.0.0" }));
-  fs.writeFileSync(path.join(build, "Binaries", PLATFORM, "new.bin"), "99.0.0");
+  writeBridgeTree(sb.path("build99", "UE_MCP_Bridge"), "99.0.0", PLATFORM, "99.0.0");
 
   d = await startDaemonCli(sb, project, {
     UE_MCP_NPM_REGISTRY: fake.origin,
@@ -146,6 +144,21 @@ describe("events", () => {
     expect(events.find((e) => e.type === "client.disconnected")!.data).toMatchObject({ clients: 0 });
   });
 
+  it("answers at once, and starts over with a gap for an id from an earlier daemon", async () => {
+    covers("daemon.events");
+    const newest = (await call(d, "GET", "/v1/health")).body.lastEventId as number;
+    // Headers arrive with no event to send.
+    const ctrl = new AbortController();
+    const quiet = await fetch(`${base(d)}/v1/events`, { headers: { ...bearer(d), "last-event-id": String(newest) }, signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(3_000)]) });
+    expect(quiet.status).toBe(200);
+    expect(quiet.headers.get("content-type")).toBe("text/event-stream");
+    ctrl.abort();
+    // A restarted daemon numbers from 1 again; a client still holding the old daemon's id gets a gap and the whole backlog.
+    const events = await readSse(`${base(d)}/v1/events`, { ...bearer(d), "last-event-id": String(newest + 100_000) }, (es) => es.some((e) => e.type === "gap") && es.some((e) => e.type !== "gap"), 5_000);
+    expect(events[0].type).toBe("gap");
+    expect(Number(events[1].id)).toBeLessThanOrEqual(newest);
+  });
+
   it("reports an editor attaching and going away", async () => {
     covers("daemon.events");
     const live = sb.makeProject("Live");
@@ -182,6 +195,15 @@ describe("flows", () => {
     expect(plan.status, plan.text).toBe(200);
     expect(plan.text).toContain("shell");
     expect(fs.existsSync(path.join(projectDir, "flow-ran.txt"))).toBe(false);
+
+    // flows.stepApproval: a run that asks an approver nobody registered fails closed, and a malformed spec is refused.
+    const health = await call(d, "GET", "/v1/health");
+    expect(health.body.features).toContain("flows.stepApproval");
+    const unapproved = await call(d, "POST", "/v1/flows/integ_touch/run", { stepApproval: { approver: "nobody", token: "t" } });
+    expect(unapproved.text).toMatch(/needs approval from nobody/);
+    expect(unapproved.text).not.toMatch(/"success":\s*true/);
+    expect(fs.existsSync(path.join(projectDir, "flow-ran.txt"))).toBe(false);
+    expect((await call(d, "POST", "/v1/flows/integ_touch/run", { stepApproval: { approver: "nobody" } })).status).toBe(400);
 
     const progress = readSse(`${base(d)}/v1/flows/events`, bearer(d), (es) => es.some((e) => /completed|finished|failed/.test(e.type) && e.data?.flowName === "integ_touch" && !e.data?.stepId && !e.data?.step));
     await new Promise((r) => setTimeout(r, 300));
@@ -230,7 +252,7 @@ describe("bridge updates", () => {
     expect(applied.status, applied.text).toBe(200);
     expect(applied.body).toMatchObject({ ok: true, kind: "binary", version: "99.0.0", state: "applied" });
     const pluginDir = path.join(projectDir, "Plugins", "UE_MCP_Bridge");
-    expect(fs.readFileSync(path.join(pluginDir, "Binaries", PLATFORM, "new.bin"), "utf8")).toBe("99.0.0");
+    expect(fs.readFileSync(path.join(pluginDir, "Binaries", PLATFORM, "UnrealEditor-UE_MCP_Bridge.dll"), "utf8")).toBe("99.0.0");
     expect(fs.existsSync(path.join(pluginDir, "Binaries", PLATFORM, "old.bin"))).toBe(false);
     expect(JSON.parse(fs.readFileSync(path.join(pluginDir, ".ue-mcp-install.json"), "utf8"))).toMatchObject({ kind: "binary", version: "99.0.0" });
     const events = await readSse(`${base(d)}/v1/events`, { ...bearer(d), "last-event-id": String(last) }, (es) => es.some((e) => e.type === "update.applied"));
@@ -239,7 +261,7 @@ describe("bridge updates", () => {
     const bad = await call(d, "POST", "/v1/update/apply", { version: "100.0.0", binaries: sb.path("nothing-here") });
     expect(bad.status).toBe(500);
     expect(bad.body).toMatchObject({ ok: false });
-    expect(fs.readFileSync(path.join(pluginDir, "Binaries", PLATFORM, "new.bin"), "utf8")).toBe("99.0.0");
+    expect(fs.readFileSync(path.join(pluginDir, "Binaries", PLATFORM, "UnrealEditor-UE_MCP_Bridge.dll"), "utf8")).toBe("99.0.0");
   });
 });
 

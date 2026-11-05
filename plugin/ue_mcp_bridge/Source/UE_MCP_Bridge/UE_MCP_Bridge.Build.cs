@@ -140,6 +140,9 @@ public class UE_MCP_Bridge : ModuleRules
 				"WorkspaceMenuStructure",
 				"EditorStyle",
 				"Kismet",
+				// Checkpoint asset diffs: FGraphDiffControl and FRevisionInfo.
+				"GraphEditor",
+				"AssetDefinition",
 				"UE_MCP_BridgeRuntime",
 			}
 		);

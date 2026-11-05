@@ -41,8 +41,11 @@ afterEach(() => {
 function prebuiltPlugin(dir: string): string {
   const bin = path.join(dir, "Binaries", unrealPlatform());
   fs.mkdirSync(bin, { recursive: true });
-  fs.writeFileSync(path.join(dir, "UE_MCP_Bridge.uplugin"), JSON.stringify({ FileVersion: 3, VersionName: packageVersion() }));
-  fs.writeFileSync(path.join(bin, "UnrealEditor-UE_MCP_Bridge.bin"), "bin");
+  fs.writeFileSync(path.join(dir, "UE_MCP_Bridge.uplugin"), JSON.stringify({
+    FileVersion: 3, VersionName: packageVersion(), Modules: [{ Name: "UE_MCP_Bridge", Type: "Editor" }],
+  }));
+  fs.writeFileSync(path.join(bin, "UnrealEditor-UE_MCP_Bridge.dll"), "bin");
+  fs.writeFileSync(path.join(bin, "UnrealEditor.modules"), JSON.stringify({ BuildId: "1", Modules: { UE_MCP_Bridge: "UnrealEditor-UE_MCP_Bridge.dll" } }));
   return dir;
 }
 

@@ -108,6 +108,8 @@ namespace MCPPIE
 		FString AssetPath;
 		FString Description;
 		FString Profile;
+		// Level opened before PIE; empty plays whatever level is open.
+		FString Map;
 		int32 DefaultWithinMs = 5000;
 		TArray<FScriptStepDef> Steps;
 	};
@@ -227,6 +229,7 @@ namespace MCPPIE
 		FString ScriptName;
 		FString Description;
 		FString Profile;
+		FString Map;
 		FString OutputDir;
 		FString ResultsPath;
 		FString RecordingId;

@@ -4,6 +4,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
+#include "HandlerWorld.h"
 #include "Handlers/PIE/MCPPIETestScript.h"
 #include "Handlers/PIE/MCPPIEObservationProfile.h"
 #include "Handlers/PIE/PIEScriptRunner.h"
@@ -11,6 +12,7 @@
 #include "Handlers/PIE/PIESequenceFormat.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
+#include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 
@@ -38,6 +40,7 @@ namespace
 		R->SetStringField(TEXT("name"), Asset->GetName());
 		R->SetStringField(TEXT("description"), Asset->Description);
 		R->SetStringField(TEXT("profile"), Asset->Profile);
+		R->SetStringField(TEXT("map"), Asset->Map);
 		R->SetNumberField(TEXT("default_within_ms"), Asset->DefaultWithinMs);
 		R->SetBoolField(TEXT("manual_only"), Asset->bManualOnly);
 		R->SetArrayField(TEXT("steps"), ScriptStepDefsToJson(Steps));
@@ -54,6 +57,7 @@ namespace
 		P->SetArrayField(TEXT("steps"), ScriptStepDefsToJson(Steps));
 		P->SetStringField(TEXT("description"), Asset->Description);
 		P->SetStringField(TEXT("profile"), Asset->Profile);
+		P->SetStringField(TEXT("map"), Asset->Map);
 		P->SetNumberField(TEXT("default_within_ms"), Asset->DefaultWithinMs);
 		P->SetBoolField(TEXT("manual_only"), Asset->bManualOnly);
 		return P;
@@ -74,11 +78,11 @@ namespace
 		return Profile.IsEmpty() || LoadObject<UMCPPIEObservationProfile>(nullptr, *Profile) != nullptr;
 	}
 
-	// The checks script_create and script_update share: the profile exists, and each step is one
-	// the observer can check against the level and that profile. Issues already found (parse
-	// failures) come in through Issues. Returns the structured refusal, or null.
-	TSharedPtr<FJsonValue> CheckTestScript(const TArray<FScriptStepDef>& Steps, const FString& Profile, bool bManualOnly,
-		TArray<FScriptStepIssue>& Issues)
+	// The checks script_create, script_update and script_validate share: the profile and map exist,
+	// and each step is one the observer can check against the level and that profile. Issues already
+	// found (parse failures) come in through Issues, and every finding is added to it.
+	void CheckTestScript(const TArray<FScriptStepDef>& Steps, const FString& Profile, const FString& Map,
+		bool bManualOnly, TArray<FScriptStepIssue>& Issues)
 	{
 		TSet<int32> Failed;
 		for (const FScriptStepIssue& I : Issues)
@@ -98,12 +102,44 @@ namespace
 			Issue.Candidates = RankScriptCandidates(Profile, Profiles);
 			Issues.Add(MoveTemp(Issue));
 		}
-		else if (Steps.Num() > 0)
+		const FString MapError = Map.IsEmpty() ? FString() : MCPCheckMapExists(Map);
+		if (!MapError.IsEmpty())
 		{
-			ValidateScriptSteps(Steps, bManualOnly, MakeEditorScriptValidationContext(Profile), Issues, Failed);
+			TArray<FString> Maps;
+			FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+			TArray<FAssetData> Assets;
+			ARM.Get().GetAssetsByClass(UWorld::StaticClass()->GetClassPathName(), Assets, true);
+			for (const FAssetData& A : Assets) Maps.Add(A.PackageName.ToString());
+			FScriptStepIssue Issue;
+			Issue.Field = TEXT("map");
+			Issue.Message = FString::Printf(TEXT("Map not found: %s is not a level asset"), *MCPMapPackageName(Map));
+			Issue.bBlocksSave = true;
+			Issue.Candidates = RankScriptCandidates(MCPMapPackageName(Map), Maps);
+			Issues.Add(MoveTemp(Issue));
 		}
-		if (Issues.Num() == 0) return nullptr;
-		return MakeShared<FJsonValueObject>(ScriptIssuesErrorObject(Issues));
+		if (TestScriptProfileExists(Profile) && MapError.IsEmpty() && Steps.Num() > 0)
+		{
+			FScriptValidationContext Ctx = MakeEditorScriptValidationContext(Profile);
+			const UWorld* Open = GetEditorWorld();
+			if (!Map.IsEmpty() && (!Open || Open->GetOutermost()->GetName() != MCPMapPackageName(Map)))
+			{
+				// Actors live in the script's level, which is not the one open, so they resolve when the run opens it.
+				Ctx.ResolveActor = [](const FString&) { FScriptLookup L; L.bFound = true; return L; };
+			}
+			ValidateScriptSteps(Steps, bManualOnly, Ctx, Issues, Failed);
+		}
+	}
+
+	// script_create and script_update refuse only what cannot be written; every other finding is
+	// returned with the save as warnings, since a value may only resolve once PIE runs.
+	TSharedPtr<FJsonValue> RefuseUnsavableScript(const TArray<FScriptStepIssue>& Issues, TArray<FScriptStepIssue>& OutWarnings)
+	{
+		TArray<FScriptStepIssue> Blocking;
+		SplitScriptIssues(Issues, Blocking, OutWarnings);
+		if (Blocking.Num() == 0) return nullptr;
+		TSharedPtr<FJsonObject> Obj = ScriptIssuesErrorObject(Blocking, TEXT("The script cannot be saved as written"));
+		Obj->SetArrayField(TEXT("warnings"), ScriptIssuesToJson(OutWarnings));
+		return MakeShared<FJsonValueObject>(Obj);
 	}
 
 	FString ScriptVerdictForStatus(EScriptStepStatus Status)
@@ -159,6 +195,78 @@ namespace
 		R->SetNumberField(TEXT("last_seq"), Run.NextSeq - 1);
 		R->SetObjectField(TEXT("summary"), ScriptSummaryToJson(SummarizeScriptRun(Run), Run.bReplay));
 	}
+
+	// One run as script_runs lists it, and script_list's last_run without the steps: its results.json minus the events.
+	TSharedRef<FJsonObject> ScriptRunListRow(const TSharedPtr<FJsonObject>& Results, const FString& ResultsPath, bool bLive, bool bSteps)
+	{
+		TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
+		static const TCHAR* const Fields[] = {
+			TEXT("run_id"), TEXT("script"), TEXT("script_name"), TEXT("state"), TEXT("mode"), TEXT("started_at"),
+			TEXT("ended_at"), TEXT("stop_reason"), TEXT("replay_of"), TEXT("recording_id"), TEXT("observation_run_id") };
+		for (const TCHAR* Field : Fields)
+		{
+			FString Value;
+			if (Results->TryGetStringField(Field, Value) && !Value.IsEmpty()) Row->SetStringField(Field, Value);
+		}
+		const TSharedPtr<FJsonObject>* Summary = nullptr;
+		if (Results->TryGetObjectField(TEXT("summary"), Summary)) Row->SetObjectField(TEXT("summary"), *Summary);
+		Row->SetStringField(TEXT("results_path"), ResultsPath);
+		Row->SetBoolField(TEXT("live"), bLive);
+		const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
+		if (bSteps && Results->TryGetArrayField(TEXT("steps"), Steps)) Row->SetArrayField(TEXT("steps"), *Steps);
+		return Row;
+	}
+
+	struct FScriptRunListEntry
+	{
+		// The script's package path, empty for an inline run.
+		FString Script;
+		FString StartedAt;
+		FDateTime Written;
+		TSharedRef<FJsonObject> Row;
+	};
+
+	// Every script run the editor knows, newest first: the one it holds while it is active,
+	// then each results.json under Saved/MCPObservations.
+	TArray<FScriptRunListEntry> ListScriptRunEntries(bool bSteps)
+	{
+		TArray<FScriptRunListEntry> Out;
+		TSet<FString> Seen;
+		auto Add = [&Out, &Seen, bSteps](const TSharedPtr<FJsonObject>& Results, const FString& ResultsPath, bool bLive, const FDateTime& Written)
+		{
+			FString RunId, Script, StartedAt;
+			if (!Results.IsValid() || !Results->TryGetStringField(TEXT("run_id"), RunId) || RunId.IsEmpty() || Seen.Contains(RunId)) return;
+			Seen.Add(RunId);
+			Results->TryGetStringField(TEXT("script"), Script);
+			Results->TryGetStringField(TEXT("started_at"), StartedAt);
+			Out.Add({ Script.IsEmpty() ? FString() : FPackageName::ObjectPathToPackageName(Script), StartedAt, Written,
+				ScriptRunListRow(Results, ResultsPath, bLive, bSteps) });
+		};
+		const FPIEScriptRunner& Runner = FPIEScriptRunner::Get();
+		const FScriptRun* Held = Runner.GetRun();
+		if (Held && Runner.IsActive())
+		{
+			Add(ScriptRunToResultsJson(*Held), Held->ResultsPath, true, FDateTime::UtcNow());
+		}
+		const FString Root = DefaultScriptObservationsRoot();
+		TArray<FString> Dirs;
+		IFileManager::Get().FindFiles(Dirs, *(Root / TEXT("*")), false, true);
+		for (const FString& Dir : Dirs)
+		{
+			const FString Path = Root / Dir / TEXT("results.json");
+			// An observation with no script run has no results.json.
+			const FDateTime Written = IFileManager::Get().GetTimeStamp(*Path);
+			if (Written == FDateTime::MinValue()) continue;
+			Add(LoadJsonFile(Path), Path, false, Written);
+		}
+		Out.StableSort([](const FScriptRunListEntry& A, const FScriptRunListEntry& B)
+		{
+			// started_at is ISO 8601 UTC, so it orders as text; a run that never started orders by its file.
+			if (A.StartedAt != B.StartedAt) return A.StartedAt > B.StartedAt;
+			return A.Written > B.Written;
+		});
+		return Out;
+	}
 }
 
 void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
@@ -174,6 +282,7 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 	// One step: {instruction, judge auto|manual, agent_judgeable, resolve_in_pie, arrange, act, expect {value, op, target, within_ms}}.
 	// The shape is validated in the handler, so the replay actions' inline steps and these share one key type.
 	const TCHAR* const StepsShape = TEXT("{instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}");
+	const TCHAR* const MapDoc = TEXT("Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open");
 	const TCHAR* const ManualOnlyDoc = TEXT("Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)");
 
 	Registry.RegisterHandler(TEXT("pie_script_create"), &PieScriptCreate, {
@@ -182,6 +291,7 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("steps"), EType::Array, *FString::Printf(TEXT("Steps, run in order: %s"), StepsShape)).Items(EType::Object),
 		MCPParam::Optional(TEXT("description"), EType::String, TEXT("What the script tests")),
 		MCPParam::Optional(TEXT("profile"), EType::String, TEXT("Observation profile asset path")),
+		MCPParam::Optional(TEXT("map"), EType::String, MapDoc),
 		MCPParam::Optional(TEXT("default_within_ms"), EType::Integer, TEXT("Default auto-step window in game ms (default 5000)")).Min(1),
 		MCPParam::Optional(TEXT("manual_only"), EType::Boolean, ManualOnlyDoc),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("When the asset exists: skip (default), update or replace (overwrite it), error")).Enum({
@@ -195,12 +305,14 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("steps"), EType::Array, *FString::Printf(TEXT("Replacement steps: %s"), StepsShape)).Items(EType::Object),
 		MCPParam::Optional(TEXT("description"), EType::String, TEXT("What the script tests")),
 		MCPParam::Optional(TEXT("profile"), EType::String, TEXT("Observation profile asset path; empty clears it")),
+		MCPParam::Optional(TEXT("map"), EType::String, TEXT("Level the script plays in; empty clears it")),
 		MCPParam::Optional(TEXT("default_within_ms"), EType::Integer, TEXT("Default auto-step window in game ms")).Min(1),
 		MCPParam::Optional(TEXT("manual_only"), EType::Boolean, ManualOnlyDoc),
 	});
 	Registry.RegisterHandler(TEXT("pie_script_validate"), &PieScriptValidate, {
 		MCPParam::Required(TEXT("steps"), EType::Array, *FString::Printf(TEXT("Steps to check, as script_create takes them: %s"), StepsShape)).Items(EType::Object),
 		MCPParam::Optional(TEXT("profile"), EType::String, TEXT("Observation profile asset path the script would use")),
+		MCPParam::Optional(TEXT("map"), EType::String, TEXT("Level the script would play in")),
 		MCPParam::Optional(TEXT("manual_only"), EType::Boolean, ManualOnlyDoc),
 	});
 	Registry.RegisterHandler(TEXT("pie_script_values"), &PieScriptValues, {
@@ -220,6 +332,7 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("steps"), EType::Array, *FString::Printf(TEXT("Inline steps instead of a script asset: %s"), StepsShape)).Items(EType::Object),
 		MCPParam::Optional(TEXT("name"), EType::String, TEXT("Name for an inline run (default inline)")),
 		MCPParam::Optional(TEXT("profile"), EType::String, TEXT("Observation profile asset path; overrides the script's")),
+		MCPParam::Optional(TEXT("map"), EType::String, TEXT("Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is")),
 		MCPParam::Optional(TEXT("record"), EType::Boolean, TEXT("Record input so pie_script_replay can rerun it (default true)")),
 		MCPParam::Optional(TEXT("start_pie"), EType::Boolean, TEXT("Start PIE when it is not running (default false)")),
 		MCPParam::Optional(TEXT("block_on_manual"), EType::Boolean, TEXT("Hold the run at each manual block until every step in it has a verdict (default true)")),
@@ -258,6 +371,11 @@ void FPIEHandlers::RegisterScriptHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("run_id"), EType::String, RunIdDoc),
 		MCPParam::Optional(TEXT("results_path"), EType::String, TEXT("results.json path, instead of a run id")),
 	});
+	Registry.RegisterHandler(TEXT("pie_script_runs"), &PieScriptRuns, {
+		MCPParam::Optional(TEXT("script"), EType::String, TEXT("Test script asset path: only that script's runs")),
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Most runs, newest first (default 50)")).Min(1),
+		MCPParam::Optional(TEXT("include_steps"), EType::Boolean, TEXT("Each run's per-step results (default true)")),
+	});
 	Registry.RegisterHandler(TEXT("pie_script_replay"), &PieScriptReplay, {
 		MCPParam::Optional(TEXT("run_id"), EType::String, TEXT("Finished run to replay (default the last run)")),
 		MCPParam::Optional(TEXT("results_path"), EType::String, TEXT("results.json of the run to replay, instead of a run id")),
@@ -280,6 +398,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptCreate(const TSharedPtr<FJsonObjec
 	TSharedPtr<FJsonValue> StepsErr = RequireArray(Params, TEXT("steps"), StepsArr);
 	const FString Description = OptionalString(Params, TEXT("description"));
 	const FString Profile = OptionalString(Params, TEXT("profile"));
+	const FString Map = OptionalString(Params, TEXT("map")).TrimStartAndEnd();
 	const int32 DefaultWithinMs = OptionalInt(Params, TEXT("default_within_ms"), 5000);
 	const bool bManualOnly = OptionalBool(Params, TEXT("manual_only"), false);
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip")).ToLower();
@@ -294,7 +413,9 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptCreate(const TSharedPtr<FJsonObjec
 	TArray<FScriptStepDef> Steps;
 	TArray<FScriptStepIssue> Issues;
 	ParseScriptStepsJsonIssues(*StepsArr, Steps, Issues);
-	if (TSharedPtr<FJsonValue> Refusal = CheckTestScript(Steps, Profile, bManualOnly, Issues)) return Refusal;
+	CheckTestScript(Steps, Profile, Map, bManualOnly, Issues);
+	TArray<FScriptStepIssue> Warnings;
+	if (TSharedPtr<FJsonValue> Refusal = RefuseUnsavableScript(Issues, Warnings)) return Refusal;
 
 	const FString AssetPath = PackagePath / Name;
 	if (OnConflict == TEXT("update") || OnConflict == TEXT("replace"))
@@ -306,6 +427,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptCreate(const TSharedPtr<FJsonObjec
 			ScriptStepsToAsset(Steps, Existing);
 			Existing->Description = Description;
 			Existing->Profile = Profile;
+			Existing->Map = Map;
 			Existing->DefaultWithinMs = DefaultWithinMs;
 			Existing->bManualOnly = bManualOnly;
 			auto Result = MCPSuccess();
@@ -321,6 +443,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptCreate(const TSharedPtr<FJsonObjec
 				MCPSetRollback(Result, TEXT("pie_script_update"), Inverse);
 			}
 			TestScriptFieldsToJson(Existing, AssetPath, Result);
+			Result->SetArrayField(TEXT("warnings"), ScriptIssuesToJson(Warnings));
 			return MCPResult(Result);
 		}
 	}
@@ -333,6 +456,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptCreate(const TSharedPtr<FJsonObjec
 	ScriptStepsToAsset(Steps, Script);
 	Script->Description = Description;
 	Script->Profile = Profile;
+	Script->Map = Map;
 	Script->DefaultWithinMs = DefaultWithinMs;
 	Script->bManualOnly = bManualOnly;
 	FString SaveError;
@@ -344,6 +468,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptCreate(const TSharedPtr<FJsonObjec
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	TestScriptFieldsToJson(Script, AssetPath, Result);
+	Result->SetArrayField(TEXT("warnings"), ScriptIssuesToJson(Warnings));
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("path"), AssetPath);
 	Payload->SetBoolField(TEXT("confirm"), true);
@@ -376,6 +501,9 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptUpdate(const TSharedPtr<FJsonObjec
 	const bool bHasDescription = TryGetStringParam(Params, TEXT("description"), Description);
 	FString Profile;
 	const bool bHasProfile = TryGetStringParam(Params, TEXT("profile"), Profile);
+	FString Map;
+	const bool bHasMap = TryGetStringParam(Params, TEXT("map"), Map);
+	Map.TrimStartAndEndInline();
 	int32 DefaultWithinMs = 0;
 	const bool bHasWithin = TryGetNumberParam(Params, TEXT("default_within_ms"), DefaultWithinMs);
 	bool bManualOnly = false;
@@ -386,19 +514,18 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptUpdate(const TSharedPtr<FJsonObjec
 	UMCPPIETestScript* Script = LoadTestScriptAsset(Path);
 	if (!Script) return MCPError(FString::Printf(TEXT("Test script not found: %s"), *Path));
 
-	// The script as it would stand after the update is checked whenever its steps, profile or
+	// The script as it will stand after the update is checked whenever its steps, profile, map or
 	// manual_only change; a description or window change alone leaves the steps as they were.
 	TArray<FScriptStepDef> Steps;
-	if (bHasSteps || bHasProfile || bHasManualOnly)
+	TArray<FScriptStepIssue> Warnings;
+	if (bHasSteps || bHasProfile || bHasMap || bHasManualOnly)
 	{
 		TArray<FScriptStepIssue> Issues;
 		if (bHasSteps) ParseScriptStepsJsonIssues(*StepsArr, Steps, Issues);
 		else ScriptStepsFromAsset(Script, Steps);
-		if (TSharedPtr<FJsonValue> Refusal = CheckTestScript(Steps, bHasProfile ? Profile : Script->Profile,
-			bHasManualOnly ? bManualOnly : Script->bManualOnly, Issues))
-		{
-			return Refusal;
-		}
+		CheckTestScript(Steps, bHasProfile ? Profile : Script->Profile,
+			bHasMap ? Map : Script->Map, bHasManualOnly ? bManualOnly : Script->bManualOnly, Issues);
+		if (TSharedPtr<FJsonValue> Refusal = RefuseUnsavableScript(Issues, Warnings)) return Refusal;
 	}
 
 	const FString Before = TestScriptStateKey(Script);
@@ -406,6 +533,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptUpdate(const TSharedPtr<FJsonObjec
 	if (bHasSteps) ScriptStepsToAsset(Steps, Script);
 	if (bHasDescription) Script->Description = Description;
 	if (bHasProfile) Script->Profile = Profile;
+	if (bHasMap) Script->Map = Map;
 	if (bHasWithin) Script->DefaultWithinMs = DefaultWithinMs;
 	if (bHasManualOnly) Script->bManualOnly = bManualOnly;
 
@@ -421,6 +549,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptUpdate(const TSharedPtr<FJsonObjec
 		MCPSetRollback(Result, TEXT("pie_script_update"), Inverse);
 	}
 	TestScriptFieldsToJson(Script, Path, Result);
+	Result->SetArrayField(TEXT("warnings"), ScriptIssuesToJson(Warnings));
 	return MCPResult(Result);
 }
 
@@ -430,21 +559,20 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptValidate(const TSharedPtr<FJsonObj
 	const TArray<TSharedPtr<FJsonValue>>* StepsArr = nullptr;
 	TSharedPtr<FJsonValue> StepsErr = RequireArray(Params, TEXT("steps"), StepsArr);
 	const FString Profile = OptionalString(Params, TEXT("profile"));
+	const FString Map = OptionalString(Params, TEXT("map")).TrimStartAndEnd();
 	const bool bManualOnly = OptionalBool(Params, TEXT("manual_only"), false);
 	if (StepsErr) return StepsErr;
 
 	TArray<FScriptStepDef> Steps;
 	TArray<FScriptStepIssue> Issues;
 	ParseScriptStepsJsonIssues(*StepsArr, Steps, Issues);
-	const TSharedPtr<FJsonValue> Refusal = CheckTestScript(Steps, Profile, bManualOnly, Issues);
+	CheckTestScript(Steps, Profile, Map, bManualOnly, Issues);
 
-	// The same checks script_create runs, answered rather than refused, so a caller can draft in a loop.
+	// The same checks script_create runs, every finding reported as an error, so a caller can draft in a loop.
 	auto Result = MCPSuccess();
-	Result->SetBoolField(TEXT("valid"), !Refusal.IsValid());
-	TArray<TSharedPtr<FJsonValue>> Errors;
-	for (const FScriptStepIssue& I : Issues) Errors.Add(MakeShared<FJsonValueObject>(ScriptIssueToJson(I)));
-	Result->SetArrayField(TEXT("errors"), Errors);
-	if (Refusal.IsValid()) Result->SetStringField(TEXT("summary"), Refusal->AsObject()->GetStringField(TEXT("error")));
+	Result->SetBoolField(TEXT("valid"), Issues.Num() == 0);
+	Result->SetArrayField(TEXT("errors"), ScriptIssuesToJson(Issues));
+	if (Issues.Num() > 0) Result->SetStringField(TEXT("summary"), ScriptIssuesErrorObject(Issues)->GetStringField(TEXT("error")));
 	Result->SetArrayField(TEXT("steps"), ScriptStepDefsToJson(Steps));
 	return MCPResult(Result);
 }
@@ -498,6 +626,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptDelete(const TSharedPtr<FJsonObjec
 	Recreate->SetArrayField(TEXT("steps"), ScriptStepDefsToJson(Steps));
 	Recreate->SetStringField(TEXT("description"), Script->Description);
 	Recreate->SetStringField(TEXT("profile"), Script->Profile);
+	Recreate->SetStringField(TEXT("map"), Script->Map);
 	Recreate->SetNumberField(TEXT("default_within_ms"), Script->DefaultWithinMs);
 	Recreate->SetBoolField(TEXT("manual_only"), Script->bManualOnly);
 
@@ -520,6 +649,13 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptList(const TSharedPtr<FJsonObject>
 	TArray<FAssetData> Assets;
 	ARM.Get().GetAssetsByClass(UMCPPIETestScript::StaticClass()->GetClassPathName(), Assets, true);
 
+	// Each script's newest run, from the list script_runs answers with.
+	TMap<FString, TSharedRef<FJsonObject>> LastRuns;
+	for (const FScriptRunListEntry& E : ListScriptRunEntries(false))
+	{
+		if (!E.Script.IsEmpty() && !LastRuns.Contains(E.Script)) LastRuns.Add(E.Script, E.Row);
+	}
+
 	TArray<TSharedPtr<FJsonValue>> Items;
 	for (const FAssetData& A : Assets)
 	{
@@ -529,6 +665,11 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptList(const TSharedPtr<FJsonObject>
 		Item->SetStringField(TEXT("path"), PackageName);
 		Item->SetStringField(TEXT("object_path"), A.GetObjectPathString());
 		Item->SetStringField(TEXT("name"), A.AssetName.ToString());
+		FString Map;
+		A.GetTagValue(GET_MEMBER_NAME_CHECKED(UMCPPIETestScript, Map), Map);
+		Item->SetStringField(TEXT("map"), Map);
+		if (const TSharedRef<FJsonObject>* Last = LastRuns.Find(PackageName)) Item->SetObjectField(TEXT("last_run"), *Last);
+		else Item->SetField(TEXT("last_run"), MakeShared<FJsonValueNull>());
 		Items.Add(MakeShared<FJsonValueObject>(Item));
 	}
 
@@ -551,6 +692,9 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptRun(const TSharedPtr<FJsonObject>&
 	const FString Name = OptionalString(Params, TEXT("name"));
 	FString Profile;
 	const bool bHasProfile = TryGetStringParam(Params, TEXT("profile"), Profile);
+	FString Map;
+	const bool bHasMap = TryGetStringParam(Params, TEXT("map"), Map);
+	Map.TrimStartAndEndInline();
 	const bool bRecord = OptionalBool(Params, TEXT("record"), true);
 	const bool bStartPIE = OptionalBool(Params, TEXT("start_pie"), false);
 	const bool bBlockOnManual = OptionalBool(Params, TEXT("block_on_manual"), true);
@@ -585,6 +729,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptRun(const TSharedPtr<FJsonObject>&
 	}
 	if (!Name.IsEmpty()) Cfg.Script.Name = Name;
 	if (bHasProfile) Cfg.Script.Profile = Profile;
+	if (bHasMap) Cfg.Script.Map = Map;
 	if (bHasWithin) Cfg.Script.DefaultWithinMs = DefaultWithinMs;
 	Cfg.bManualMode = bManual;
 	Cfg.bRecord = bRecord && !bManual;
@@ -603,6 +748,7 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptRun(const TSharedPtr<FJsonObject>&
 	ScriptRunFieldsToJson(*Run, Result, 0);
 	Result->SetBoolField(TEXT("pie_started"), Run->bStartedPIE);
 	Result->SetBoolField(TEXT("pie_running"), GEditor && GEditor->PlayWorld != nullptr);
+	if (!Run->Map.IsEmpty()) Result->SetStringField(TEXT("map"), Run->Map);
 	Result->SetStringField(TEXT("message"), Msg);
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("run_id"), Run->RunId);
@@ -872,6 +1018,33 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieScriptResults(const TSharedPtr<FJsonObje
 	Obj->SetBoolField(TEXT("live"), false);
 	Obj->SetStringField(TEXT("results_path"), ResultsPath);
 	return MCPResult(Obj);
+}
+
+TSharedPtr<FJsonValue> FPIEHandlers::PieScriptRuns(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+	const FString Script = OptionalString(Params, TEXT("script"));
+	const int32 Limit = OptionalInt(Params, TEXT("limit"), 50);
+	const bool bSteps = OptionalBool(Params, TEXT("include_steps"), true);
+	if (Limit < 1) return MCPError(TEXT("limit must be at least 1"));
+	const FString Wanted = Script.IsEmpty() ? FString() : FPackageName::ObjectPathToPackageName(Script);
+
+	TArray<TSharedPtr<FJsonValue>> Runs;
+	int32 Total = 0;
+	for (const FScriptRunListEntry& E : ListScriptRunEntries(bSteps))
+	{
+		if (!Wanted.IsEmpty() && E.Script != Wanted) continue;
+		++Total;
+		if (Runs.Num() < Limit) Runs.Add(MakeShared<FJsonValueObject>(E.Row));
+	}
+
+	auto Result = MCPSuccess();
+	if (!Wanted.IsEmpty()) Result->SetStringField(TEXT("script"), Wanted);
+	Result->SetArrayField(TEXT("runs"), Runs);
+	Result->SetNumberField(TEXT("count"), Runs.Num());
+	Result->SetNumberField(TEXT("total"), Total);
+	Result->SetStringField(TEXT("observations_dir"), DefaultScriptObservationsRoot());
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPIEHandlers::PieScriptReplay(const TSharedPtr<FJsonObject>& Params)

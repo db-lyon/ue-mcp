@@ -41,6 +41,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   },
   { name: "feedback", summary: "Review and file deferred feedback", load: () => import("./feedback-cli.js"), ownHelp: true },
   { name: "dialog", summary: "Set how blocking editor dialogs are handled", load: () => import("./dialog-cli.js"), ownHelp: true },
+  { name: "playtest", summary: "Set who starts playtest runs", load: () => import("./playtest-cli.js"), ownHelp: true },
   { name: "resolve", summary: "Work a GitHub issue into a pull request", load: () => import("./resolve.js") },
   { name: "build", summary: "Build a project's editor target", load: () => import("./build-cli.js") },
   { name: "plugin", summary: "Install, create and publish plugins", load: () => import("./plugin-cli.js") },

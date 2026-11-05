@@ -11,7 +11,7 @@
 #include "Containers/Ticker.h"
 #include "Dom/JsonValue.h"
 #include "Editor.h"
-#include "FileHelpers.h"
+#include "HandlerWorld.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
@@ -799,41 +799,6 @@ namespace MCPPIE
 		}
 	}
 
-	namespace
-	{
-		/** Opens the scenario's map unless it is already the editor world. Never prompts: a dirty map is an error. */
-		bool LoadMapIfNeeded(FString Map, FString& OutError)
-		{
-			if (int32 Dot = INDEX_NONE; Map.FindChar(TEXT('.'), Dot))
-			{
-				Map.LeftInline(Dot);
-			}
-			UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
-			UPackage* Current = EditorWorld ? EditorWorld->GetOutermost() : nullptr;
-			if (Current && Current->GetName() == Map)
-			{
-				return true;
-			}
-			if (Current && Current->IsDirty())
-			{
-				OutError = FString::Printf(TEXT("map %s has unsaved changes; save or discard them before a run opens %s"), *Current->GetName(), *Map);
-				return false;
-			}
-			FString File;
-			if (!FPackageName::TryConvertLongPackageNameToFilename(Map, File, FPackageName::GetMapPackageExtension()) || !FPaths::FileExists(File))
-			{
-				OutError = FString::Printf(TEXT("map %s does not exist"), *Map);
-				return false;
-			}
-			if (!FEditorFileUtils::LoadMap(File, /*LoadAsTemplate*/ false, /*bShowProgress*/ false))
-			{
-				OutError = FString::Printf(TEXT("map %s failed to load"), *Map);
-				return false;
-			}
-			return true;
-		}
-	}
-
 	bool FPIEUatRunner::IsRunning() const
 	{
 		return Impl->State != FImpl::EState::Idle && Impl->State != FImpl::EState::Finished;
@@ -970,7 +935,7 @@ namespace MCPPIE
 		}
 
 		FString Map;
-		if (Scenario->TryGetStringField(TEXT("map"), Map) && !Map.IsEmpty() && !LoadMapIfNeeded(Map, OutError))
+		if (Scenario->TryGetStringField(TEXT("map"), Map) && !Map.IsEmpty() && !MCPLoadMapIfNeeded(Map, OutError))
 		{
 			return false;
 		}

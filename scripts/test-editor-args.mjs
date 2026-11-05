@@ -9,4 +9,10 @@
  */
 export const NO_IDE_ARG = "-ini:EditorSettings:[/Script/SourceCodeAccess.SourceCodeAccessSettings]:PreferredAccessor=NullSourceCodeAccessor";
 
-export const TEST_EDITOR_ARGS = [NO_IDE_ARG];
+/**
+ * A test editor is never the foreground window, and a throttled one ticks a few
+ * times a second, so every call that waits on the game thread waits for a tick.
+ */
+export const NO_BACKGROUND_THROTTLE_ARG = "-ini:EditorSettings:[/Script/UnrealEd.EditorPerformanceSettings]:bThrottleCPUWhenNotForeground=False";
+
+export const TEST_EDITOR_ARGS = [NO_IDE_ARG, NO_BACKGROUND_THROTTLE_ARG];

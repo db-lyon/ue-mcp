@@ -45,6 +45,8 @@ export interface GitHubRepo {
 
 /** ue-mcp core. Everything that is not plugin-owned lands here. */
 export const CORE_REPO: GitHubRepo = { owner: "db-lyon", repo: "ue-mcp" };
+/** Where a user files a gap by hand, when the feedback category is disabled. */
+export const CORE_ISSUES_URL = `https://github.com/${CORE_REPO.owner}/${CORE_REPO.repo}/issues`;
 
 /** The plugin registry's origin: UE_MCP_REGISTRY, else the public registry. */
 export function registryBase(): string {

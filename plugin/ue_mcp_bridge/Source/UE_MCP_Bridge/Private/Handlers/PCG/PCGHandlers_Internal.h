@@ -147,6 +147,45 @@ namespace MCPPCG
 		}
 		return Out;
 	}
+
+	/** Sets inputPins and outputPins, each the node's pin labels, on Obj: the labels connect_nodes takes. */
+	inline void SetPinLabelFields(const UPCGNode* Node, const TSharedPtr<FJsonObject>& Obj)
+	{
+		if (!Node) return;
+		Obj->SetArrayField(TEXT("inputPins"), PinLabelsJson(Node->GetInputPins()));
+		Obj->SetArrayField(TEXT("outputPins"), PinLabelsJson(Node->GetOutputPins()));
+	}
+
+	inline bool HasPinLabel(const TArray<TObjectPtr<UPCGPin>>& Pins, FName Label)
+	{
+		return Pins.ContainsByPredicate([Label](const TObjectPtr<UPCGPin>& Pin) { return Pin && Pin->Properties.Label == Label; });
+	}
+
+	/**
+	 * The refusal for a pin label Node does not have on that side, listing the labels it does have, and saying so
+	 * when the label is a pin on the other side.
+	 */
+	inline TSharedPtr<FJsonValue> PinNotFoundError(const UPCGNode* Node, FName Label, bool bOutput)
+	{
+		const TArray<TObjectPtr<UPCGPin>>& Pins = bOutput ? Node->GetOutputPins() : Node->GetInputPins();
+		const TArray<TObjectPtr<UPCGPin>>& Other = bOutput ? Node->GetInputPins() : Node->GetOutputPins();
+		TArray<FString> Labels;
+		for (const UPCGPin* Pin : Pins) if (Pin) Labels.Add(Pin->Properties.Label.ToString());
+		const TCHAR* Side = bOutput ? TEXT("output") : TEXT("input");
+		FString Message = FString::Printf(TEXT("Node '%s' has no %s pin '%s'. Its %s pins: %s."), *Node->GetName(), Side, *Label.ToString(), Side,
+			Labels.Num() > 0 ? *FString::Join(Labels, TEXT(", ")) : TEXT("none"));
+		if (HasPinLabel(Other, Label))
+		{
+			Message += FString::Printf(TEXT(" '%s' is one of its %s pins."), *Label.ToString(), bOutput ? TEXT("input") : TEXT("output"));
+		}
+		TSharedPtr<FJsonObject> Err = MCPErrorObject(Message);
+		Err->SetStringField(TEXT("reason"), TEXT("pin_not_found"));
+		Err->SetStringField(TEXT("nodeName"), Node->GetName());
+		Err->SetStringField(TEXT("pinSide"), Side);
+		Err->SetArrayField(TEXT("validPins"), PinLabelsJson(Pins));
+		return MakeShared<FJsonValueObject>(Err);
+	}
+
 	/** A user-parameter value as JSON: bool and numbers natively, anything else (enums included) as export text. */
 	inline TSharedPtr<FJsonValue> ParamValueJson(const FProperty* Property, const void* ValueAddr)
 	{

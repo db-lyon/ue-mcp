@@ -137,3 +137,19 @@ function scanForDescriptor(dir: string, depth: number): string | null {
   }
   return null;
 }
+
+/** The installed bridge's version and kind, from its marker or descriptor; null when absent. */
+export function installedBridge(projectDir: string): { version: string; kind: InstallKind | null; pluginDir: string } | null {
+  const located = resolvePluginDir(projectDir);
+  if (!located) return null;
+  let version = readInstallMarker(located.dir)?.version ?? null;
+  if (!version) {
+    try {
+      const v = JSON.parse(fs.readFileSync(path.join(located.dir, `${BRIDGE_PLUGIN_NAME}.uplugin`), "utf-8")).VersionName;
+      version = typeof v === "string" && v.length > 0 ? v : null;
+    } catch {
+      version = null;
+    }
+  }
+  return version ? { version, kind: installKindOf(located.dir), pluginDir: located.dir } : null;
+}

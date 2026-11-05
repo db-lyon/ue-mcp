@@ -174,6 +174,9 @@ void FDiffHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}
 	// Internal to editor(list_changes) (#1482): no spec, no category action of its own.
 	Registry.RegisterHandler(TEXT("checkpoint_diff_blueprint"), &FDiffHandlers::DiffCheckpointBlueprint);
+	// Internal to editor(list_changes), diff_checkpoint_asset and open_checkpoint_diff.
+	Registry.RegisterHandlerWithTimeout(TEXT("checkpoint_diff_asset"), &FDiffHandlers::DiffCheckpointAsset, 300.f);
+	Registry.RegisterHandlerWithTimeout(TEXT("checkpoint_open_native_diff"), &FDiffHandlers::OpenCheckpointNativeDiff, 120.f);
 	{
 		// Exposed as asset(diff), so its spec generates into the asset surface.
 		FMCPHandlerRegistry::FCategoryScope AssetScope(Registry, TEXT("asset"));

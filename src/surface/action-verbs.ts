@@ -44,3 +44,24 @@ export const MUTATE_PREFIXES = [
   "bake", "generate", "build",
 ];
 
+/**
+ * Leading verbs that mean "this call destroys or overwrites something".
+ *
+ * A fallback for clients that ask whether to confirm a call, read only when an
+ * action does not declare `destructive` itself. Deliberately small: a verb
+ * that only sometimes destroys (set, move, rename) stays out, and an action
+ * the list gets wrong declares the answer on its spec instead.
+ */
+export const DESTRUCTIVE_VERBS: ReadonlySet<string> = new Set([
+  "delete", "remove", "clear", "discard", "revert", "reset", "purge", "wipe",
+  "destroy", "drop", "overwrite", "replace", "restore", "uninstall",
+]);
+
+/** Qualifiers a name can lead with before its verb: `epic_delete_asset`, `bulk_remove_x`. */
+const VERB_QUALIFIERS: ReadonlySet<string> = new Set(["epic", "bulk", "batch"]);
+
+/** The verb an action name leads with, past any qualifier. */
+export function leadingVerb(action: string): string {
+  const segments = action.toLowerCase().split(/[._]/).filter(Boolean);
+  return segments.find((s) => !VERB_QUALIFIERS.has(s)) ?? "";
+}

@@ -16,6 +16,7 @@ import { createRequire } from "node:module";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
+import { writeBridgeTree } from "../helpers/bridge-tree-fixture.js";
 import { FakeHttp, PACKAGE_VERSION, plain, REPO_ROOT, runCli, Sandbox, type CliOptions, type CliResult } from "./harness.js";
 
 const IS_WINDOWS = process.platform === "win32";
@@ -82,10 +83,7 @@ const pluginDir = (uproject: string) => path.join(path.dirname(uproject), "Plugi
 
 /** A prebuilt plugin tree as a release ships it, built for this platform. */
 function prebuilt(dir: string): string {
-  const root = path.join(dir, "UE_MCP_Bridge");
-  fs.mkdirSync(path.join(root, "Binaries", PLATFORM), { recursive: true });
-  fs.writeFileSync(path.join(root, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: PACKAGE_VERSION }));
-  fs.writeFileSync(path.join(root, "Binaries", PLATFORM, "UnrealEditor-UE_MCP_Bridge.dll"), "dll");
+  writeBridgeTree(path.join(dir, "UE_MCP_Bridge"), PACKAGE_VERSION, PLATFORM);
   return dir;
 }
 
