@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1220,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -35059,6 +35059,45 @@
           "type": "object",
           "required": false,
           "description": "Several writes at once, as a map of property path to value. Applied as one batch: a rejected write puts the others back"
+        }
+      ]
+    },
+    "set_buffer_visualization": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "buffer",
+          "type": "string",
+          "required": true,
+          "description": "Buffer to show full screen: Velocity, SceneDepth, BaseColor, WorldNormal and the rest this engine defines (an unknown name lists them); Overview for the grid of all buffers; off to leave buffer visualization"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": false,
+          "description": "editor (default) for a level viewport, pie for the running game viewport",
+          "enum": [
+            "editor",
+            "pie"
+          ]
+        },
+        {
+          "name": "viewMode",
+          "type": "string",
+          "required": false,
+          "description": "With buffer=off, the view mode to return to (default Lit)"
+        },
+        {
+          "name": "viewportIndex",
+          "type": "number",
+          "required": false,
+          "description": "Level viewport to act on (default the active one)"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
         }
       ]
     },
