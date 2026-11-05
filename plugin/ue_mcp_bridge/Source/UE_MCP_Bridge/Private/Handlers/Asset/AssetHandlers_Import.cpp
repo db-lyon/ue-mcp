@@ -4560,8 +4560,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportTexture(const TSharedPtr<FJsonObjec
 	Result->SetBoolField(TEXT("overwroteExistingFile"), bOutputExisted);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("path"), AbsPath);
-	Result->SetNumberField(TEXT("width"), Texture->GetSizeX());
-	Result->SetNumberField(TEXT("height"), Texture->GetSizeY());
+	// The exporter writes source mip 0, so report that size. Platform data reads
+	// as the 32 x 32 placeholder while the texture is still compiling (#1550).
+	const bool bFromSource = Texture->Source.IsValid();
+	if (!bFromSource) FTextureCompilingManager::Get().FinishCompilation({ Texture });
+	Result->SetNumberField(TEXT("width"), bFromSource ? Texture->Source.GetSizeX() : Texture->GetSizeX());
+	Result->SetNumberField(TEXT("height"), bFromSource ? Texture->Source.GetSizeY() : Texture->GetSizeY());
 	Result->SetNumberField(TEXT("sizeBytes"), (double)Size);
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
