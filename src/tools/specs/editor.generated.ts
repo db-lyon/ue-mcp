@@ -481,6 +481,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Center new PIE windows; false places them at newWindowPosition"
+      },
+      {
+        "name": "playMode",
+        "type": "string",
+        "required": false,
+        "description": "viewport | new_window | standalone: where the Play button and every bridge PIE launch play. Actions that drive the PIE world play in the viewport when this is standalone"
       }
     ],
     "contractExempt": "writes the editor's Play settings"
@@ -3951,7 +3957,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   clear_dialog_policy: "Params: pattern?",
   close_sequence: "Params: none",
   close_window: "Params: windowId",
-  configure_pie: "Params: numClients?, netMode?, runUnderOneProcess?, launchSeparateServer?, newWindowWidth?, newWindowHeight?, clientWindowWidth?, clientWindowHeight?, newWindowPosition?, centerNewWindow?",
+  configure_pie: "Params: numClients?, netMode?, runUnderOneProcess?, launchSeparateServer?, newWindowWidth?, newWindowHeight?, clientWindowWidth?, clientWindowHeight?, newWindowPosition?, centerNewWindow?, playMode?",
   cook_content: "Params: platform?",
   create_level_sequence: "Params: name, packagePath?, onConflict?, displayRate?",
   create_new_level: "Params: levelPath, templateLevel?, onConflict?, worldPartition?",
@@ -4245,6 +4251,7 @@ export const schema: Record<string, z.ZodType> = {
   pitch: z.number().optional().describe("Control-rotation pitch"),
   platform: z.string().optional().describe("Target platform (default Windows)"),
   playerIndex: z.number().optional().describe("Local player whose console runs a PIE command (default 0) (execute_command). Player index for target=playercontroller, playerpawn, or a LocalPlayer subsystem (default 0) (get_object_properties, invoke_object_function, set_object_property). 0-based player index (default 0) (get_pie_pawn). Local player whose debug camera is used (default 0) (pose_debug_camera). Player whose view target is set (default 0) (set_pie_view_target)"),
+  playMode: z.string().optional().describe("viewport | new_window | standalone: where the Play button and every bridge PIE launch play. Actions that drive the PIE world play in the viewport when this is standalone"),
   playRate: z.number().optional().describe("SkeletalAnimation only: clip play rate, above 0 (default 1)"),
   postEditChange: z.boolean().optional().describe("Fire PostEditChangeProperty after the write (default false)"),
   prefix: z.string().optional().describe("Purge sys.modules entries starting with this prefix; must be non-empty"),

@@ -513,7 +513,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "folderPathPrefix",
         "type": "string",
         "required": false,
-        "description": "World Outliner folder prefix"
+        "description": "World Outliner folder, matched with every folder nested under it"
       },
       {
         "name": "matchSubclasses",
@@ -725,7 +725,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "folderPathPrefix",
         "type": "string",
         "required": false,
-        "description": "World Outliner folder prefix"
+        "description": "World Outliner folder, matched with every folder nested under it"
       },
       {
         "name": "matchSubclasses",
@@ -889,6 +889,38 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "create_outliner_folder": {
+    "category": "level",
+    "params": [
+      {
+        "name": "folderPath",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder to create, such as Props/Lights"
+      },
+      {
+        "name": "folderPaths",
+        "type": "array",
+        "required": false,
+        "description": "World Outliner folders; combined with folderPath",
+        "items": "string"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "folderPath"
+          ],
+          [
+            "folderPaths"
+          ]
+        ]
+      }
+    ],
+    "contractExempt": "The contract value is a valid folder name, so the call would create a folder in the editor world"
+  },
   "delete_actor": {
     "category": "level",
     "params": [
@@ -953,6 +985,18 @@ export const handlerSpecs: HandlerSpecs = {
         "items": "string"
       },
       {
+        "name": "folderPath",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder, matched exactly"
+      },
+      {
+        "name": "folderPathPrefix",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder, matched with every folder nested under it"
+      },
+      {
         "name": "dryRun",
         "type": "boolean",
         "required": false,
@@ -983,6 +1027,12 @@ export const handlerSpecs: HandlerSpecs = {
           ],
           [
             "classPathContainsAny"
+          ],
+          [
+            "folderPath"
+          ],
+          [
+            "folderPathPrefix"
           ]
         ]
       }
@@ -1036,6 +1086,43 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "boolean",
         "required": false,
         "description": "Reopen the map that was open before the call (default true)"
+      }
+    ]
+  },
+  "delete_outliner_folder": {
+    "category": "level",
+    "params": [
+      {
+        "name": "folderPath",
+        "type": "string",
+        "required": false,
+        "description": "World Outliner folder to delete, with the empty folders under it"
+      },
+      {
+        "name": "folderPaths",
+        "type": "array",
+        "required": false,
+        "description": "World Outliner folders; combined with folderPath",
+        "items": "string"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Report what would be deleted without deleting (default false)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "folderPath"
+          ],
+          [
+            "folderPaths"
+          ]
+        ]
       }
     ]
   },
@@ -1660,7 +1747,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "folderPathPrefix",
         "type": "string",
         "required": false,
-        "description": "World Outliner folder prefix"
+        "description": "World Outliner folder, matched with every folder nested under it"
       },
       {
         "name": "editorHidden",
@@ -2408,7 +2495,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "folderPathPrefix",
         "type": "string",
         "required": false,
-        "description": "World Outliner folder prefix"
+        "description": "World Outliner folder, matched with every folder nested under it"
       },
       {
         "name": "fields",
@@ -2831,7 +2918,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "folderPathPrefix",
         "type": "string",
         "required": false,
-        "description": "World Outliner folder prefix"
+        "description": "World Outliner folder, matched with every folder nested under it"
       },
       {
         "name": "matchSubclasses",
@@ -3319,7 +3406,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "folderPathPrefix",
         "type": "string",
         "required": false,
-        "description": "World Outliner folder prefix"
+        "description": "World Outliner folder, matched with every folder nested under it"
       },
       {
         "name": "matchSubclasses",
@@ -3542,7 +3629,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "folderPathPrefix",
         "type": "string",
         "required": false,
-        "description": "World Outliner folder prefix"
+        "description": "World Outliner folder, matched with every folder nested under it"
       },
       {
         "name": "matchSubclasses",
@@ -4684,7 +4771,7 @@ export const handlerSpecs: HandlerSpecs = {
             "name": "folderPathPrefix",
             "type": "string",
             "required": false,
-            "description": "World Outliner folder prefix"
+            "description": "World Outliner folder, matched with every folder nested under it"
           },
           {
             "name": "matchSubclasses",
@@ -5314,9 +5401,11 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   clear_level_script: "Params: dryRun?, save?",
   convert_brushes_to_static_mesh: "Params: at least one of actorLabels/folderPath, recursiveFolder?, classFilter?, exactClass?, destinationPath?, dryRun?, allowSubtractive?, includeVolumes?",
   count_actors_by_class: "Params: world?, pieInstance?, topN?",
+  create_outliner_folder: "Params: at least one of folderPath/folderPaths",
   delete_actor: "Params: actorLabel?, actorPath?",
-  delete_actors: "Params: at least one of labelPrefix/labelContains/nameContains/className/tag/classPathContains/classPathContainsAny, dryRun?",
+  delete_actors: "Params: at least one of labelPrefix/labelContains/nameContains/className/tag/classPathContains/classPathContainsAny/folderPath/folderPathPrefix, dryRun?",
   delete_exact_labeled_actors_in_levels: "Params: levels, dryRun?, onMissing?, restoreOriginalLevel?",
+  delete_outliner_folder: "Params: at least one of folderPath/folderPaths, dryRun?",
   destroy_transient_actor: "Params: world?, pieInstance?, actorPath?, actorLabel?, all?",
   detach_actor: "Params: childLabel?, childPath?",
   detach_component: "Params: childLabel?, childPath?, childComponentName?",
@@ -5465,7 +5554,7 @@ export const schema: Record<string, z.ZodType> = {
   direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally (line_trace, shape_trace). Trace direction (default straight down) (snap_instances_to_surface)"),
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   distance: z.number().optional().describe("Ray length when direction is given (default 200000)"),
-  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, rename_actor_object, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
+  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, rename_actor_object, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Report what would be deleted without deleting (default false) (delete_outliner_folder). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
   duplicateTransformTolerance: z.number().optional().describe("Centimetre bucket for duplicate-transform detection"),
   editorHidden: z.boolean().optional().describe("Only editor-hidden (true) or only visible (false) actors"),
   editorVisible: z.boolean().optional().describe("Editor viewport visibility"),
@@ -5485,11 +5574,12 @@ export const schema: Record<string, z.ZodType> = {
   fogDensity: z.number().optional().describe("Fog density"),
   fogHeightFalloff: z.number().optional().describe("Fog height falloff"),
   fogInscatteringColor: z.record(z.string(), z.unknown()).optional().describe("Inscattering colour {r, g, b} in 0-255"),
-  folderPath: z.string().optional().describe("World Outliner folder, matched exactly (batch_set_actor_properties, bulk_set_component_property, get_world_outliner, query_components, remove_components_by_class, set_actor_hlod_layer, set_component_materials). World Outliner folder whose brushes are converted (convert_brushes_to_static_mesh). World Outliner folder; an empty string moves the actors to the root (set_actor_folder_path)"),
-  folderPathPrefix: z.string().optional().describe("World Outliner folder prefix"),
+  folderPath: z.string().optional().describe("World Outliner folder, matched exactly (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_world_outliner, query_components, remove_components_by_class, set_actor_hlod_layer, set_component_materials). World Outliner folder whose brushes are converted (convert_brushes_to_static_mesh). World Outliner folder to create, such as Props/Lights (create_outliner_folder). World Outliner folder to delete, with the empty folders under it (delete_outliner_folder). World Outliner folder; an empty string moves the actors to the root (set_actor_folder_path)"),
+  folderPathPrefix: z.string().optional().describe("World Outliner folder, matched with every folder nested under it"),
+  folderPaths: z.array(z.string()).optional().describe("World Outliner folders; combined with folderPath"),
   force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property)"),
   frame: z.string().optional().describe("Frame for translation and axis rotation: world | actor (default) | parent | component"),
-  fromComponents: z.object({ componentClass: z.string().optional().describe("Component class the components must be"), componentNameContains: z.string().optional().describe("Case-insensitive substring over the component name"), actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"), labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"), labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"), tag: z.string().optional().describe("Actor must carry this tag"), classFilter: z.string().optional().describe("Actor class, resolved as a class or matched as a substring"), folderPath: z.string().optional().describe("World Outliner folder, matched exactly"), folderPathPrefix: z.string().optional().describe("World Outliner folder prefix"), matchSubclasses: z.boolean().optional().describe("Match subclasses of classFilter (default true)"), space: z.string().optional().describe("local (default, the component's own orientation) | world (axis-aligned bounds)"), offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Offset added to the computed point"), extentFraction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Fraction of the box extent added per axis, such as {z: 0.72}"), inheritRotation: z.boolean().optional().describe("Spawn with the component's rotation (default false)") }).optional().describe("One spawn per matched component, placed from its bounds"),
+  fromComponents: z.object({ componentClass: z.string().optional().describe("Component class the components must be"), componentNameContains: z.string().optional().describe("Case-insensitive substring over the component name"), actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"), labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"), labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"), tag: z.string().optional().describe("Actor must carry this tag"), classFilter: z.string().optional().describe("Actor class, resolved as a class or matched as a substring"), folderPath: z.string().optional().describe("World Outliner folder, matched exactly"), folderPathPrefix: z.string().optional().describe("World Outliner folder, matched with every folder nested under it"), matchSubclasses: z.boolean().optional().describe("Match subclasses of classFilter (default true)"), space: z.string().optional().describe("local (default, the component's own orientation) | world (axis-aligned bounds)"), offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Offset added to the computed point"), extentFraction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Fraction of the box extent added per axis, such as {z: 0.72}"), inheritRotation: z.boolean().optional().describe("Spawn with the component's rotation (default false)") }).optional().describe("One spawn per matched component, placed from its bounds"),
   globalGravityZ: z.number().optional().describe("Global gravity Z"),
   graphPath: z.string().optional().describe("PCG graph for a PCGVolume"),
   grid: z.string().optional().describe("Streaming grid for cellSize and loadingRange, by name; needed when the map has several"),
