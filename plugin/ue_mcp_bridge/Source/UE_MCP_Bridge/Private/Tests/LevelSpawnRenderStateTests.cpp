@@ -127,7 +127,7 @@ bool FLevelSpawnedStaticMeshDrawsTest::RunTest(const FString& Parameters)
 		Request->SetStringField(TEXT("value"), TEXT("/Engine/BasicShapes/Cube"));
 		const TSharedPtr<FJsonObject> Response = MCPSpawnRenderTestRun(Registry, TEXT("set_component_property"), Request);
 		TestTrue(TEXT("set_component_property StaticMesh succeeds"), Response.IsValid() && Response->GetBoolField(TEXT("success")));
-		TestEqual(TEXT("the component holds the cube"), Component->GetStaticMesh(), Cube);
+		TestTrue(TEXT("the component holds the cube"), Component->GetStaticMesh() == Cube);
 		TestTrue(TEXT("the bounds are the cube's"), Component->Bounds.SphereRadius > 50.0);
 		if (Response.IsValid())
 		{
@@ -151,7 +151,7 @@ bool FLevelSpawnedStaticMeshDrawsTest::RunTest(const FString& Parameters)
 			const FString Error = Response->GetStringField(TEXT("error"));
 			TestTrue(TEXT("and names the real parameter"), Error.Contains(TEXT("NewMesh")));
 		}
-		TestEqual(TEXT("the refused call changed nothing"), Component->GetStaticMesh(), Cube);
+		TestTrue(TEXT("the refused call changed nothing"), Component->GetStaticMesh() == Cube);
 	}
 
 	// The real name still works, and the call reports the setter's verdict.
@@ -164,7 +164,7 @@ bool FLevelSpawnedStaticMeshDrawsTest::RunTest(const FString& Parameters)
 		Request->SetObjectField(TEXT("args"), Args);
 		const TSharedPtr<FJsonObject> Response = MCPSpawnRenderTestRun(Registry, TEXT("invoke_object_function"), Request);
 		TestTrue(TEXT("SetStaticMesh with NewMesh succeeds"), Response.IsValid() && Response->GetBoolField(TEXT("success")));
-		TestEqual(TEXT("the component holds the sphere"), Component->GetStaticMesh(), Sphere);
+		TestTrue(TEXT("the component holds the sphere"), Component->GetStaticMesh() == Sphere);
 	}
 
 	MCPSpawnRenderTestDestroy(Registry, Actor);
