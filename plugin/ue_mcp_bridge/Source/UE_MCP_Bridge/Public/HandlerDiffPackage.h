@@ -5,6 +5,7 @@
 // editor shows them and are unloaded once it closes (#1483).
 
 #include "CoreMinimal.h"
+#include "Dom/JsonValue.h"
 
 class ISourceControlRevision;
 class ISourceControlState;
@@ -60,6 +61,9 @@ namespace MCPDiffPackage
 
 	/** Keep Asset's package loaded until its asset editor closes, then unload it. */
 	UE_MCP_BRIDGE_API void KeepUntilEditorCloses(UObject* Asset);
+
+	/** The packages' names as a JSON array, for a result to report what it keeps loaded. */
+	UE_MCP_BRIDGE_API TArray<TSharedPtr<FJsonValue>> PackageNames(const TArray<UPackage*>& Packages);
 
 	/** How many diff packages are kept for an open window or editor, for tests. */
 	UE_MCP_BRIDGE_API int32 KeptCount();

@@ -1734,6 +1734,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 			MCPDiffPackage::KeepUntilEditorCloses(Only);
 			bKeep = true;
 			Result->SetBoolField(TEXT("unloadsOnClose"), true);
+			Result->SetArrayField(TEXT("tempPackages"), MCPDiffPackage::PackageNames(Temp));
 		}
 	}
 	else
@@ -1790,6 +1791,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::OpenCheckpointNativeDiff(const TSharedPtr<
 			MCPDiffPackage::KeepUntilClosed(Window.ToSharedRef(), Temp);
 			bKeep = true;
 			Result->SetBoolField(TEXT("unloadsOnClose"), true);
+			Result->SetArrayField(TEXT("tempPackages"), MCPDiffPackage::PackageNames(Temp));
 		}
 		Window->BringToFront(true);
 		if (TSharedPtr<FGenericWindow> Native = Window->GetNativeWindow()) Native->HACK_ForceToFront();

@@ -1186,6 +1186,7 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::Diff(const TSharedPtr<FJsonObject
 			Window->BringToFront(true);
 			Result->SetStringField(TEXT("windowTitle"), Window->GetTitle().ToString());
 			Result->SetBoolField(TEXT("unloadsOnClose"), true);
+			Result->SetArrayField(TEXT("tempPackages"), MCPDiffPackage::PackageNames({ Old.Package }));
 		}
 		else
 		{

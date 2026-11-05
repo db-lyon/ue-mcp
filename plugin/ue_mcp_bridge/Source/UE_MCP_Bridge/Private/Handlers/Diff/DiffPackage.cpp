@@ -236,6 +236,16 @@ namespace MCPDiffPackage
 		}
 	}
 
+	TArray<TSharedPtr<FJsonValue>> PackageNames(const TArray<UPackage*>& Packages)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const UPackage* Package : Packages)
+		{
+			if (Package) Out.Add(MakeShared<FJsonValueString>(Package->GetName()));
+		}
+		return Out;
+	}
+
 	int32 KeptCount()
 	{
 		int32 Count = 0;

@@ -212,4 +212,30 @@ describe("source control with a provider (#1357)", () => {
     const history = await call("source_control_history", { path: PROBE_REL, limit: 1 });
     expect(String((history.revisions as Json[])[0].description)).toContain("upstream probe change");
   });
+
+  it("diff compares against a named older revision, by id and by prefix (#1483)", async (ctx) => {
+    if (!ready) ctx.skip(skipReason);
+    const history = await call("source_control_history", { path: PROBE_REL, limit: 5 });
+    const revisions = history.revisions as Json[];
+    if (revisions.length < 2) ctx.skip("the probe has one revision; the sync case stages the second");
+    const older = String(revisions[1].revision);
+    const now = fs.readFileSync(probe, "utf8");
+
+    const latest = await call("source_control_diff", { path: PROBE_REL });
+    expect((latest.against as Json).revision).toBe(String(revisions[0].revision));
+
+    const byId = await call("source_control_diff", { path: PROBE_REL, revision: older });
+    expect(byId.success, String(byId.error)).toBe(true);
+    expect((byId.against as Json).revision).toBe(older);
+    expect(byId.identical).toBe(false);
+    expect(String(byId.diff)).toContain(`+${now.split(/\r?\n/)[0]}`);
+
+    if (older.length > 8) {
+      const byPrefix = await call("source_control_diff", { path: PROBE_REL, revision: older.slice(0, 8) });
+      expect((byPrefix.against as Json).revision).toBe(older);
+    }
+    const missing = await callBridge(bridge, "source_control_diff", { path: PROBE_REL, revision: "zzzzzzzz" });
+    expect(body(missing).success).toBe(false);
+    expect(String(body(missing).error)).toContain("no revision zzzzzzzz");
+  });
 });
