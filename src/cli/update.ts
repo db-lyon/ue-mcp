@@ -1,4 +1,5 @@
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { PLAIN_SEMVER_RE, runNpmSync } from "../core/safe-spawn.js";
 import * as fs from "node:fs";
 
 import * as path from "node:path";
@@ -18,16 +19,30 @@ import type { CliUsage } from "./cli-main.js";
 
 /** The version behind the `latest` dist-tag, which is the stable line. */
 function getLatestVersion(): string | null {
-  try {
-    return execSync("npm view ue-mcp version", { windowsHide: true, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-  } catch {
-    return null;
-  }
+  return latestFromNpmView(npmText(["view", "ue-mcp", "version"]));
+}
+
+/** npm's answer, used only when it is a version number, since it becomes an install argument. */
+export function latestFromNpmView(out: string | null): string | null {
+  const v = out?.trim().split(/\r?\n/).pop()?.trim();
+  return v && PLAIN_SEMVER_RE.test(v) ? v : null;
+}
+
+/** npm's stdout, or null when it did not run cleanly. */
+function npmText(args: string[]): string | null {
+  const r = runNpmSync(args, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+  return r.status === 0 ? String(r.stdout ?? "").trim() : null;
+}
+
+/** Run npm with the terminal attached; true when it exited cleanly. */
+function npmInherit(args: string[], cwd?: string): boolean {
+  return runNpmSync(args, { stdio: "inherit", cwd }).status === 0;
 }
 
 function isGlobalInstall(): boolean {
   try {
-    const globalRoot = execSync("npm root -g", { windowsHide: true, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    const globalRoot = npmText(["root", "-g"]);
+    if (!globalRoot) return false;
     const norm = (p: string) => path.resolve(p).toLowerCase();
     return norm(packageRoot()).startsWith(norm(globalRoot));
   } catch {
@@ -178,14 +193,13 @@ async function update(argv: string[]) {
   } else {
     console.log(`  ${YELLOW}Updating ue-mcp ${installed} -> ${wanted}...${RESET}`);
     console.log("");
-    const cmd = isGlobalInstall() ? `npm install -g ue-mcp@${wanted}` : `npm install ue-mcp@${wanted}`;
-    try {
-      execSync(cmd, { windowsHide: true, stdio: "inherit" });
+    const args = isGlobalInstall() ? ["install", "-g", `ue-mcp@${wanted}`] : ["install", `ue-mcp@${wanted}`];
+    if (npmInherit(args)) {
       console.log("");
       ok(`Updated to ${wanted}`);
-    } catch {
+    } else {
       console.log("");
-      fail(`npm install failed. Try manually: ${cmd}`);
+      fail(`npm install failed. Try manually: npm ${args.join(" ")}`);
       process.exit(1);
     }
   }
@@ -199,11 +213,10 @@ async function update(argv: string[]) {
     console.log("");
     console.log(`  ${YELLOW}Local shadow detected: node_modules/ue-mcp@${preDoctor.localShadow.version} (npx runs this, not the global).${RESET}`);
     step(`Aligning the local copy to ${aligned} in ${shadowProjectRoot}...`);
-    try {
-      execSync(`npm install ue-mcp@${aligned}`, { windowsHide: true, stdio: "inherit", cwd: shadowProjectRoot });
+    if (PLAIN_SEMVER_RE.test(aligned) && npmInherit(["install", `ue-mcp@${aligned}`], shadowProjectRoot)) {
       ok(`Local copy aligned to ${aligned}`);
       console.log(`  ${DIM}Cleaner long-term: drop ue-mcp from this project's package.json and pin .mcp.json to \`${UE_MCP_LAUNCH}\`.${RESET}`);
-    } catch {
+    } else {
       fail(`Could not update the local copy. Remove node_modules/ue-mcp manually, or pin .mcp.json to \`${UE_MCP_LAUNCH}\`.`);
     }
   }

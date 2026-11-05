@@ -109,33 +109,37 @@ export function windowsBatchInvocation(script: string, tokens: string[]): Invoca
   };
 }
 
-/** npm's own entry script, so npm runs under node with no shell in between. */
-export function findNpmCli(env: NodeJS.ProcessEnv = process.env, execPath: string = process.execPath): string | null {
-  const candidates: string[] = [];
-  const fromEnv = env.npm_execpath;
-  if (fromEnv) {
-    if (path.basename(fromEnv) === "npm-cli.js") candidates.push(fromEnv);
-    else candidates.push(path.join(path.dirname(fromEnv), "npm-cli.js"));
+/**
+ * npm as the shell would have found it: the first `npm.cmd` on PATH. Returned
+ * as npm's own entry script when one sits beside it, so npm runs under node
+ * with no shell; otherwise the `npm.cmd` itself.
+ */
+export function findWindowsNpm(env: NodeJS.ProcessEnv = process.env): { npmCli: string } | { npmCmd: string } | null {
+  const pathVar = env.PATH ?? env.Path ?? "";
+  for (const dir of pathVar.split(";").filter(Boolean)) {
+    const cmd = path.join(dir, "npm.cmd");
+    if (!fs.existsSync(cmd)) continue;
+    const cli = path.join(dir, "node_modules", "npm", "bin", "npm-cli.js");
+    return fs.existsSync(cli) ? { npmCli: cli } : { npmCmd: cmd };
   }
-  const nodeDir = path.dirname(execPath);
-  candidates.push(path.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js"));
-  candidates.push(path.join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"));
-  return candidates.find((c) => fs.existsSync(c)) ?? null;
+  return null;
 }
 
 /**
- * How to run `npm <args>` without a shell. Arguments starting with `-` are the
- * caller's own flags; a package name or spec from elsewhere goes through
- * `assertPackageSpec` first.
+ * How to run `npm <args>` without a shell. Off Windows `npm` is a real
+ * executable and takes argv directly. On Windows it is a batch file, so npm's
+ * entry script runs under node, and only an npm.cmd with none beside it goes
+ * through cmd.exe, on a line of checked tokens. Arguments starting with `-` are
+ * the caller's own flags; a name from elsewhere goes through `assertPackageSpec`.
  */
 export function npmInvocation(
   args: string[],
-  opts: { platform?: NodeJS.Platform; npmCli?: string | null } = {},
+  opts: { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv } = {},
 ): Invocation {
-  const npmCli = opts.npmCli === undefined ? findNpmCli() : opts.npmCli;
-  if (npmCli) return { command: process.execPath, args: [npmCli, ...args] };
   if ((opts.platform ?? process.platform) !== "win32") return { command: "npm", args };
-  return windowsBatchInvocation("npm.cmd", args.map((a, i) => cmdQuote(a, `npm argument ${i + 1}`)));
+  const found = findWindowsNpm(opts.env);
+  if (found && "npmCli" in found) return { command: process.execPath, args: [found.npmCli, ...args] };
+  return windowsBatchInvocation(found?.npmCmd ?? "npm.cmd", args.map((a, i) => cmdQuote(a, `npm argument ${i + 1}`)));
 }
 
 /**
