@@ -140,6 +140,15 @@ describe("static mesh geometry", () => {
     expect((read.settings as { BuildScale3D: Vec }).BuildScale3D.x).toBeCloseTo(2, 4);
     const measured = await call("measure_mesh_geometry", { assetPath: SCALED });
     expect((measured.dimensions as Vec).x).toBeCloseTo(200, 0);
+    // The editor keeps mesh bounds at the source size under BuildScale3D, and the result says so (#1652).
+    expect((set.renderBounds as { boxExtent: Vec }).boxExtent.x).toBeCloseTo(100, 0);
+    const meshExtent = (set.bounds as { boxExtent: Vec }).boxExtent.x;
+    const reported = (await call("get_mesh_bounds", { assetPath: SCALED })).boxExtent as Vec;
+    expect(reported.x).toBeCloseTo(meshExtent, 1);
+    expect(set.boundsMatchRender).toBe(Math.abs(meshExtent - 100) < 0.5);
+    if (set.boundsMatchRender === false) {
+      expect(String((set.warnings as string[])[0])).toContain("scale_mesh_geometry");
+    }
   }, 180_000);
 
   it("recenter_pivot shifts the mesh by the offset it reports", async () => {

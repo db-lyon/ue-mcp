@@ -8175,6 +8175,11 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-a-mesh.test.ts",
           "test": "get_mesh_geometry and get_mesh_bounds describe the 100 cm cube"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-asset-b-mesh.test.ts",
+          "test": "set_static_mesh_build_settings rescales the build, read back and measured"
         }
       ]
     },

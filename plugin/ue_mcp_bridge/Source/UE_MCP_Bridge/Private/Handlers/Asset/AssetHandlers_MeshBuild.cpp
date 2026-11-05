@@ -4,6 +4,7 @@
 #include "HandlerPackageSave.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/EngineTypes.h"
+#include "StaticMeshResources.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -81,6 +82,17 @@ namespace
 		{
 			if (MCPIsBuildSettingField(*It)) Out->SetField(It->GetName(), MCPBuildSettingToJson(*It, &Settings));
 		}
+		return Out;
+	}
+
+	/** Bounds in the shape get_mesh_bounds answers with, so the two compare field for field. */
+	TSharedPtr<FJsonObject> MCPMeshBoxToJson(const FBox& Box)
+	{
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+		Out->SetObjectField(TEXT("min"), MCPVec3ToJsonObject(Box.Min));
+		Out->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(Box.Max));
+		Out->SetObjectField(TEXT("boxExtent"), MCPVec3ToJsonObject(Box.GetExtent()));
+		Out->SetObjectField(TEXT("boxCenter"), MCPVec3ToJsonObject(Box.GetCenter()));
 		return Out;
 	}
 }
@@ -198,6 +210,27 @@ TSharedPtr<FJsonValue> FAssetMeshBuildHandlers::SetStaticMeshBuildSettings(const
 	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("rebuilt"), true);
 	Result->SetObjectField(TEXT("settings"), MCPBuildSettingsToJson(Mesh->GetSourceModel(LodIndex).BuildSettings));
+	// The editor takes mesh bounds from the source mesh description, which BuildScale3D never touches (#1652),
+	// so a rebuild scales the render vertices and leaves the bounds at the source size. Report both.
+	if (!Mesh->GetSourceModel(0).BuildSettings.BuildScale3D.Equals(FVector::OneVector, UE_KINDA_SMALL_NUMBER))
+	{
+		const FBox MeshBounds = Mesh->GetBoundingBox();
+		Result->SetObjectField(TEXT("bounds"), MCPMeshBoxToJson(MeshBounds));
+		if (const FStaticMeshRenderData* RenderData = Mesh->GetRenderData())
+		{
+			const FBox RenderBounds = RenderData->Bounds.GetBox();
+			Result->SetObjectField(TEXT("renderBounds"), MCPMeshBoxToJson(RenderBounds));
+			const double Tolerance = FMath::Max(0.01, RenderBounds.GetExtent().GetMax() * 0.001);
+			const bool bMatch = RenderBounds.GetExtent().Equals(MeshBounds.GetExtent(), Tolerance);
+			Result->SetBoolField(TEXT("boundsMatchRender"), bMatch);
+			if (!bMatch)
+			{
+				TArray<FString> Warnings;
+				Warnings.Add(TEXT("BuildScale3D scaled the render vertices, but the editor computes mesh bounds (get_mesh_bounds, actor bounds, culling) from the unscaled source geometry, so they keep the source size. Use scale_mesh_geometry to bake the scale into the geometry and leave BuildScale3D at 1."));
+				Result->SetArrayField(TEXT("warnings"), MCPStringListToJson(Warnings));
+			}
+		}
+	}
 	if (bSave)
 	{
 		FString SaveError;
