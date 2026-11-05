@@ -2393,6 +2393,11 @@
           "suite": "live",
           "file": "tests/live/blueprint-widget-reflection.test.ts",
           "test": "builds a nested subtree in one call and removes it with the rollback"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "takes long, prefixed and numeric enum values, refuses bad ones, and fills structs from JSON"
         }
       ]
     },
@@ -9341,6 +9346,11 @@
           "suite": "live",
           "file": "tests/live/blueprint-widget-reflection.test.ts",
           "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "takes long, prefixed and numeric enum values, refuses bad ones, and fills structs from JSON"
         }
       ]
     },
@@ -16040,6 +16050,11 @@
           "suite": "live",
           "file": "tests/live/blueprint-widget-reflection.test.ts",
           "test": "builds a nested subtree in one call and removes it with the rollback"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "takes long, prefixed and numeric enum values, refuses bad ones, and fills structs from JSON"
         }
       ]
     },
@@ -21272,6 +21287,11 @@
           "suite": "live",
           "file": "tests/live/blueprint-widget-reflection.test.ts",
           "test": "build_tree and set_widget_property set alignment on SizeBox, WidgetSwitcher and box slots"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/blueprint-widget-reflection.test.ts",
+          "test": "takes long, prefixed and numeric enum values, refuses bad ones, and fills structs from JSON"
         }
       ]
     },
