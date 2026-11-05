@@ -37,6 +37,7 @@ const PER_SESSION: Record<string, string> = {
   "editor/playtest-mode.ts": "Resolves the playtest mode for the project it is handed, from that project's stored preference.",
   "sessions/session.ts": "The registry of editors itself.",
   "pie/script-watch.ts": "Follows one script run through the ToolContext of the call that started it, so it polls that call's editor.",
+  "pie/drive-wait.ts": "Follows one pawn drive through the ToolContext of the call that started it, so it polls that call's editor.",
   "sessions/session-surface.ts": "One tool graph per editor, and the union advertised from them.",
   "config/session-env.ts": "Reports which environment variables flatten the registered editors.",
   "dispatch/editor-gate.ts": "Routes a call to an editor and refuses an untargeted change.",
