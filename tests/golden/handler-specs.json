@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1222,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -24357,6 +24357,149 @@
         }
       ],
       "contractExempt": "starts and stops Play In Editor"
+    },
+    "pie_drive_pawn": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "direction",
+          "type": "vec3",
+          "required": false,
+          "description": "World direction to push movement input in every frame"
+        },
+        {
+          "name": "targetLocation",
+          "type": "vec3",
+          "required": false,
+          "description": "World point to steer toward; the drive ends as arrived within acceptanceRadius"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "input (default): movement input on the pawn; navigate: a navmesh move from the player controller, needs targetLocation",
+          "enum": [
+            "input",
+            "navigate"
+          ]
+        },
+        {
+          "name": "durationSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Real seconds to drive before ending as completed or timeout (default 5, at most 600)",
+          "minimum": 0,
+          "maximum": 600
+        },
+        {
+          "name": "scale",
+          "type": "number",
+          "required": false,
+          "description": "Movement input scale (default 1)",
+          "minimum": -1,
+          "maximum": 1
+        },
+        {
+          "name": "sampleEvery",
+          "type": "number",
+          "required": false,
+          "description": "Seconds between track samples; 0 samples every frame (default 0.1)",
+          "minimum": 0
+        },
+        {
+          "name": "acceptanceRadius",
+          "type": "number",
+          "required": false,
+          "description": "Distance in cm from targetLocation that counts as arrived (default 50)",
+          "minimum": 0
+        },
+        {
+          "name": "planar",
+          "type": "boolean",
+          "required": false,
+          "description": "Steer and measure arrival on the XY plane (default true); false for flying or swimming pawns"
+        },
+        {
+          "name": "stopOnMapChange",
+          "type": "boolean",
+          "required": false,
+          "description": "End the drive as map_changed when the player arrives in another level (default false: keep driving there)"
+        },
+        {
+          "name": "playerIndex",
+          "type": "integer",
+          "required": false,
+          "description": "Local player index in the PIE world (default 0)"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back"
+        },
+        {
+          "name": "driveId",
+          "type": "string",
+          "required": false,
+          "description": "Caller-chosen drive id (minted when absent)"
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Return only when the drive ends, with its whole track (default true)"
+        },
+        {
+          "name": "timeoutSeconds",
+          "type": "number",
+          "required": false,
+          "description": "Longest wait=true waits (default durationSeconds + 30)",
+          "minimum": 0
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "direction"
+            ],
+            [
+              "targetLocation"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "Drives the PIE player's pawn over later frames; pie(drive_stop) ends it"
+    },
+    "pie_drive_status": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "driveId",
+          "type": "string",
+          "required": false,
+          "description": "Drive id from drive_pawn (default: the most recent drive)"
+        },
+        {
+          "name": "includeSamples",
+          "type": "boolean",
+          "required": false,
+          "description": "Include the sampled track (default true)"
+        }
+      ]
+    },
+    "pie_drive_stop": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "driveId",
+          "type": "string",
+          "required": false,
+          "description": "Drive id from drive_pawn (default: the most recent drive)"
+        }
+      ],
+      "contractExempt": "Ends a running pawn drive"
     },
     "pie_inject_input": {
       "category": "pie",

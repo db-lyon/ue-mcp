@@ -2,6 +2,7 @@ import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { specBp, schema as specSchema } from "./specs/pie.generated.js";
 import { scriptRunFollowUp, scriptStatusFollowUp } from "../pie/script-watch.js";
+import { driveFollowUp } from "../pie/drive-wait.js";
 
 export const pieTool: ToolDef = categoryTool(
   "pie",
@@ -13,6 +14,12 @@ export const pieTool: ToolDef = categoryTool(
     inject_input_update:  specBp("mutate", "Change the value of a running hold.", "pie_inject_input_update"),
     inject_input_stop:    specBp("mutate", "Stop a hold or tape by id; alreadyStopped when it had ended.", "pie_inject_input_stop"),
     inject_input_tape:    specBp("mutate", "Play a per-frame value array through an input action; returns injection_id.", "pie_inject_input_tape"),
+    drive_pawn: {
+      ...specBp("mutate", "Walk the PIE player's pawn: movement input every frame along direction or toward targetLocation, or mode=navigate for a navmesh move to targetLocation. Ends as completed, arrived, timeout, no_path, nav_ended, map_changed (stopOnMapChange), stopped or pie_ended. The pawn is found again every frame, so a drive carries on through a level change. With wait (default true) answers once it ends with a sampled track of location, rotation, controlRotation, velocity and map, plus mapChanges, distanceTravelled and the navPath taken; wait=false returns driveId at once.", "pie_drive_pawn"),
+      followUp: driveFollowUp,
+    },
+    drive_status:         specBp("read", "A pawn drive's state and sampled track; includeSamples=false for the summary only.", "pie_drive_status"),
+    drive_stop:           specBp("mutate", "End a pawn drive now and return its track; alreadyStopped when it had ended.", "pie_drive_stop"),
     clients:              specBp("read", "List a networked PIE session's players: client 0 is the editor's own player, 1..N remote players in join order with ready and log_file.", "pie_clients"),
     console:              specBp("mutate", "Run a console command in a remote player's own process (client 1..N). The editor's own PIE player is editor(execute_command, world=\"pie\").", "pie_console"),
     remote_result:        specBp("read", "Whether a request relayed to a remote player ran: reported, ok, finished, error.", "pie_remote_result"),
