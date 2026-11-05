@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Foliage actions against fixtures the file builds: a FoliageType asset, its
  * instances in the open level, and a procedural spawner simulated over a

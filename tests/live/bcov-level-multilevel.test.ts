@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Level actions that need a map of their own, run in scratch maps under /Game/MCPTest/BCov/Level: streaming
  * sub-levels and the current edit level, world settings, navmesh projection, exact-label deletes across maps
@@ -153,6 +154,8 @@ describe("exact-label deletes across maps", () => {
     await cube("BCov_Level_DelMe", { x: 0, y: 0, z: 100 });
     await cube("BCov_Level_Keep", { x: 300, y: 0, z: 100 });
     await call("save_level");
+    // The action refuses while any package is dirty; earlier files in the run can leave some.
+    await call("save_all_dirty", {});
   }, 300_000);
 
   it("delete_exact_labeled_actors_in_levels previews, then deletes and saves only the named actor", async () => {

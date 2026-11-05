@@ -11,7 +11,7 @@
  *
  * The bridge port is discovered, not assumed: see scripts/bridge-target.mjs.
  *
- * Usage:  node scripts/smoke-test.js [--host 127.0.0.1] [--port <port>] [--timeout 5000]
+ * Usage:  node scripts/smoke-test.js [--host 127.0.0.1] [--port <port>] [--timeout 5000] [--uncovered]
  */
 
 import fs from "fs";
@@ -19,6 +19,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
 import { listRegistrations } from "./lib/cpp-registrations.mjs";
+import { closeEditorTabWindows, guardUserLayoutsUntilExit } from "./user-layout-guard.mjs";
 import {
   assertLoopbackHost,
   bridgePortCandidates,
@@ -60,7 +61,14 @@ const DIM = "\x1b[2m";
 // 1. Discover handler names from C++ sources
 // ---------------------------------------------------------------------------
 function discoverHandlers() {
-  return listRegistrations().map(({ method, file }) => ({ method, file }));
+  const all = listRegistrations().map(({ method, file }) => ({ method, file }));
+  if (!args.includes("--uncovered")) return all;
+  // --uncovered: only actions no behavioural test dispatches. The live and UE.MCP.* tests
+  // listed in the coverage inventory already call the rest and assert their effect, which
+  // is a stronger check than "it answered".
+  const inventory = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "tests", "coverage", "behavioural-coverage.json"), "utf-8"));
+  const covered = new Set(Object.values(inventory.actions).filter((a) => a.status === "covered").map((a) => a.method));
+  return all.filter((h) => !covered.has(h.method));
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +249,8 @@ async function teardown(ws, idGen) {
   await rpcRaw(ws, "save_level", {}, idGen());
   // SCRATCH now unloaded; safe to delete.
   await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());
+  // open_settings, open_tab and the imports leave floating windows the editor would save as open.
+  await closeEditorTabWindows(async (method, params) => (await rpcRaw(ws, method, params, idGen())).result);
 }
 
 function rpcCall(ws, method, id) {
@@ -291,6 +301,8 @@ function rpcCall(ws, method, id) {
 // 3. Main
 // ---------------------------------------------------------------------------
 async function main() {
+  // The sweep calls open_settings and open_tab on an editor that stays open; keep those tabs out of the shared layout.
+  guardUserLayoutsUntilExit((msg) => console.error(msg));
   // Discover
   const handlers = discoverHandlers();
   if (handlers.length === 0) {

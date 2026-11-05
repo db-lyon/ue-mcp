@@ -1,0 +1,42 @@
+{
+ "version": "1.4.4",
+ "engine": "5.8",
+ "platform": "Win64",
+ "zip": "UE_MCP_Bridge-1.4.4-UE5.8-Win64.zip",
+ "zipSha256": "216cd2767d3fc82393b54482bd9f206e5ae561369f86bf9b7868a31444bbceb1",
+ "nested": true,
+ "files": [
+  {
+   "path": "Binaries/Win64/UnrealEditor-UE_MCP_Bridge.dll",
+   "size": 17139200,
+   "sha256": "1613c5eae1291e8c8dca16445131f33d0219ba2b945ccf84408db805b1a0ed24"
+  },
+  {
+   "path": "Binaries/Win64/UnrealEditor-UE_MCP_Bridge.pdb",
+   "size": 237424640,
+   "sha256": "a8b69be129024b26c2bb9973e8fb458422ab0336384251c4ed52e199f2c9d667"
+  },
+  {
+   "path": "Binaries/Win64/UnrealEditor-UE_MCP_BridgeStatus.dll",
+   "size": 208384,
+   "sha256": "c27ff84d79d75c8b3a67ce4a75f51fd5aaed630eb2d1ae22de57d96cb1d7b21e"
+  },
+  {
+   "path": "Binaries/Win64/UnrealEditor-UE_MCP_BridgeStatus.pdb",
+   "size": 8654848,
+   "sha256": "9863945655b95ce6756c9db89d7c27b550cb6b7b3345513c684570c759dc563c"
+  },
+  {
+   "path": "Binaries/Win64/UnrealEditor.modules",
+   "size": 170,
+   "sha256": "b1ab00df657b69747d5c2cdf346ef8d1486d3a9515fafe66b285aea6a1e33b13",
+   "text": "{\r\n\t\"BuildId\": \"55116800\",\r\n\t\"Modules\": \r\n\t{\r\n\t\t\"UE_MCP_Bridge\": \"UnrealEditor-UE_MCP_Bridge.dll\",\r\n\t\t\"UE_MCP_BridgeStatus\": \"UnrealEditor-UE_MCP_BridgeStatus.dll\"\r\n\t}\r\n}"
+  },
+  {
+   "path": "UE_MCP_Bridge.uplugin",
+   "size": 1685,
+   "sha256": "a20e12cbde957c0740fea74e240e109ac26b2287503bb3688a124db3200ce342",
+   "text": "{\r\n\t\"FileVersion\": 3,\r\n\t\"Version\": 1,\r\n\t\"VersionName\": \"1.4.4\",\r\n\t\"FriendlyName\": \"UE MCP Bridge\",\r\n\t\"Description\": \"C++ WebSocket bridge for UE-MCP, providing 1914+ editor actions over the MCP protocol\",\r\n\t\"Category\": \"Developer Tools\",\r\n\t\"CreatedBy\": \"UE-MCP\",\r\n\t\"CreatedByURL\": \"\",\r\n\t\"DocsURL\": \"\",\r\n\t\"MarketplaceURL\": \"\",\r\n\t\"SupportURL\": \"\",\r\n\t\"EngineVersion\": \"5.8.0\",\r\n\t\"CanContainContent\": false,\r\n\t\"Installed\": true,\r\n\t\"Modules\": [\r\n\t\t{\r\n\t\t\t\"Name\": \"UE_MCP_BridgeStatus\",\r\n\t\t\t\"Type\": \"Editor\",\r\n\t\t\t\"LoadingPhase\": \"PostConfigInit\"\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"UE_MCP_Bridge\",\r\n\t\t\t\"Type\": \"Editor\",\r\n\t\t\t\"LoadingPhase\": \"PostEngineInit\"\r\n\t\t}\r\n\t],\r\n\t\"Plugins\": [\r\n\t\t{\r\n\t\t\t\"Name\": \"PythonScriptPlugin\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"DataValidation\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"EditorScriptingUtilities\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"EnhancedInput\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"GameplayAbilities\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"GameplayTagsEditor\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"Niagara\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"PCG\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"IKRig\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"ControlRig\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"PoseSearch\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"Chooser\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"PropertyBindingUtils\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"Metasound\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"Synthesis\",\r\n\t\t\t\"Enabled\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"Fab\",\r\n\t\t\t\"Enabled\": true,\r\n\t\t\t\"Optional\": true\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"Name\": \"StateTree\",\r\n\t\t\t\"Enabled\": true\r\n\t\t}\r\n\t]\r\n}"
+  }
+ ]
+}

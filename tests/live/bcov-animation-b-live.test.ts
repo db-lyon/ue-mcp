@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Live skeletal actor edits on a placed two-component actor, each read back:
  * editor animation preview, leader pose rebinding and the transient

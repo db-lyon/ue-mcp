@@ -31,6 +31,7 @@
 // LevelHandlers.cpp::RegisterHandlers.
 
 #include "LevelHandlers.h"
+#include "HandlerCheckpoint.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerCommitSave.h"
@@ -210,6 +211,7 @@ namespace
 		// write the same package differently.
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
 		SaveArgs.Error = &Diagnostics;
+		MCPCheckpointRecordBeforeWrite(FileName);
 		const FSavePackageResultStruct SaveResult =
 			UPackage::Save(Package, nullptr, *FileName, SaveArgs);
 

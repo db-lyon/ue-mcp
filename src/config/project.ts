@@ -50,6 +50,8 @@ export interface UeMcpConfig {
   editor?: {
     path?: string;
     buildToolPath?: string;
+    /** Extra command-line arguments start_editor and restart_editor pass to this project's editor. */
+    launchArgs?: string[];
   };
   /** Per-project equivalent of UE_MCP_ENV (#817): the `ue-mcp.<env>.yml`
    *  overlay this project merges. The env var still wins. */
@@ -84,6 +86,8 @@ export interface UeMcpConfig {
     /** Daemon only: open the client UI in the system browser when the editor crashes. Default false. */
     openBrowserOnCrash?: boolean;
   };
+  /** Checkpoints (#1482): `on`/`off`, or `{ enabled, largeFileBytes }`. Off by default. See src/checkpoints/service.ts. */
+  checkpoints?: boolean | "on" | "off" | { enabled?: boolean | "on" | "off"; largeFileBytes?: number };
   /** Play In Editor. `allowIgnoreBlueprintErrors` pre-authorizes
    *  editor(play_in_editor_ignore_blueprint_errors) so it stops asking for
    *  per-launch approval. Off by default. */

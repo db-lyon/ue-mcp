@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Asset graph authoring on a Mutable CustomizableObject, every edit read back
  * through read_asset_graph: create the object, add a node, connect and

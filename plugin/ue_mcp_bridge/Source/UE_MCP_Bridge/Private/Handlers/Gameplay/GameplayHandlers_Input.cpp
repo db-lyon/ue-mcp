@@ -1142,7 +1142,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetImcMappingAction(const TSharedPtr<F
 //
 // So context and action creation, mapping CRUD, per-mapping trigger and
 // modifier authoring, applied-context readback and Blueprint event nodes were
-// all already covered. Runtime input INJECTION is covered too, in pie-studio.
+// all already covered. Runtime input INJECTION is covered too, in the pie category.
 //
 // What was genuinely missing, and is what this section adds:
 //

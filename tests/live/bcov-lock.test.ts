@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Asset locks: acquire_lock, release_lock and release_session_locks, each read
  * back through list_locks. The paths are virtual; nothing is created on disk.

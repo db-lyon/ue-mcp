@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * AnimBlueprint and state machine authoring read back through read_anim_blueprint,
  * read_anim_graph and read_state_machine: state animation, transition blend and

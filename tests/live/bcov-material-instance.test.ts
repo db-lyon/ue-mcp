@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Material instance authoring read back through read_material_instance and
  * list_material_static_switches, plus recompile cascades and a parameter

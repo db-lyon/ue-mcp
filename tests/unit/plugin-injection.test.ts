@@ -106,28 +106,28 @@ describe("mergeInjectionsIntoTool", () => {
 describe("nativeHandlerSurface", () => {
   const BUILTINS = new Set(["gameplay", "pcg", "editor"]);
   const manifestWith = (nativeModule: Record<string, unknown>) =>
-    PluginManifestSchema.parse({ actionPrefix: "pie", nativeModule });
+    PluginManifestSchema.parse({ actionPrefix: "recorder", nativeModule });
 
   it("returns null when nativeModule has no category (bridge-only, back-compat)", () => {
     const manifest = manifestWith({
-      uePluginName: "PIE_Studio",
+      uePluginName: "Sample_Recorder",
       minBridgeApi: 1,
-      source: "ue/Plugins/PIE_Studio",
+      source: "ue/Plugins/Sample_Recorder",
       handlers: { record_arm: { description: "Arm" } },
     });
-    expect(nativeHandlerSurface(manifest, "pie-studio", BUILTINS)).toBeNull();
+    expect(nativeHandlerSurface(manifest, "sample-recorder", BUILTINS)).toBeNull();
   });
 
   it("returns null when there is no nativeModule at all", () => {
-    const manifest = PluginManifestSchema.parse({ actionPrefix: "pie" });
-    expect(nativeHandlerSurface(manifest, "pie-studio", BUILTINS)).toBeNull();
+    const manifest = PluginManifestSchema.parse({ actionPrefix: "recorder" });
+    expect(nativeHandlerSurface(manifest, "sample-recorder", BUILTINS)).toBeNull();
   });
 
   it("injects into a built-in category with prefixed actions", () => {
     const manifest = manifestWith({
-      uePluginName: "PIE_Studio",
+      uePluginName: "Sample_Recorder",
       minBridgeApi: 1,
-      source: "ue/Plugins/PIE_Studio",
+      source: "ue/Plugins/Sample_Recorder",
       category: "gameplay",
       handlers: {
         record_arm: { description: "Arm the recorder" },
@@ -137,13 +137,13 @@ describe("nativeHandlerSurface", () => {
         },
       },
     });
-    const result = nativeHandlerSurface(manifest, "pie-studio", BUILTINS);
+    const result = nativeHandlerSurface(manifest, "sample-recorder", BUILTINS);
     expect(result?.kind).toBe("inject");
     if (result?.kind !== "inject") throw new Error("expected inject");
     const { plan, taskRegistrations } = result;
 
     expect(plan.category).toBe("gameplay");
-    expect(plan.prefix).toBe("pie");
+    expect(plan.prefix).toBe("recorder");
     // Plan actions are keyed by the BARE handler name; the prefix is applied
     // by mergeInjectionsIntoTool, matching the rest of the inject pipeline.
     expect(Object.keys(plan.actions).sort()).toEqual(["apply_damage", "record_arm"]);
@@ -153,44 +153,44 @@ describe("nativeHandlerSurface", () => {
     });
     // Dispatch tasks register under `<category>.<prefix>_<handler>`.
     expect(taskRegistrations.map((r) => r.name).sort()).toEqual([
-      "gameplay.pie_apply_damage",
-      "gameplay.pie_record_arm",
+      "gameplay.recorder_apply_damage",
+      "gameplay.recorder_record_arm",
     ]);
   });
 
   it("provisions a NEW category with unprefixed actions when category isn't built-in", () => {
     const manifest = manifestWith({
-      uePluginName: "PIE_Studio",
+      uePluginName: "Sample_Recorder",
       minBridgeApi: 1,
-      source: "ue/Plugins/PIE_Studio",
-      category: "pie",
+      source: "ue/Plugins/Sample_Recorder",
+      category: "recorder",
       categoryDescription: "PIE test automation",
       handlers: {
         record_arm: { description: "Arm the recorder" },
         replay_arm: { description: "Arm replay" },
       },
     });
-    const result = nativeHandlerSurface(manifest, "pie-studio", BUILTINS);
+    const result = nativeHandlerSurface(manifest, "sample-recorder", BUILTINS);
     expect(result?.kind).toBe("provide");
     if (result?.kind !== "provide") throw new Error("expected provide");
     const { plan, taskRegistrations } = result;
 
-    expect(plan.category).toBe("pie");
+    expect(plan.category).toBe("recorder");
     expect(plan.description).toBe("PIE test automation");
     // Provided-category actions are NOT prefixed - the category is the namespace.
     expect(Object.keys(plan.spec.actions).sort()).toEqual(["record_arm", "replay_arm"]);
     // Dispatch registers under `<category>.<handler>` (no prefix).
     expect(taskRegistrations.map((r) => r.name).sort()).toEqual([
-      "pie.record_arm",
-      "pie.replay_arm",
+      "recorder.record_arm",
+      "recorder.replay_arm",
     ]);
   });
 
   it("lifts surfaced params optional in the shared category and keeps required on the action (#1270)", () => {
     const manifest = manifestWith({
-      uePluginName: "PIE_Studio",
+      uePluginName: "Sample_Recorder",
       minBridgeApi: 1,
-      source: "ue/Plugins/PIE_Studio",
+      source: "ue/Plugins/Sample_Recorder",
       category: "gameplay",
       handlers: {
         inject_input: {
@@ -198,28 +198,28 @@ describe("nativeHandlerSurface", () => {
         },
       },
     });
-    const result = nativeHandlerSurface(manifest, "pie-studio", BUILTINS);
+    const result = nativeHandlerSurface(manifest, "sample-recorder", BUILTINS);
     if (result?.kind !== "inject") throw new Error("expected inject");
     const { tool } = mergeInjectionsIntoTool(fakePcg(), [result.plan]);
     expect(tool.schema.action_path.isOptional()).toBe(true);
-    expect(tool.actions.pie_inject_input.paramSpec).toEqual([
+    expect(tool.actions.recorder_inject_input.paramSpec).toEqual([
       { name: "action_path", type: "string", required: true, description: "" },
     ]);
   });
 
-  it("inject plan merges into the host built-in category as pie_-prefixed", () => {
+  it("inject plan merges into the host built-in category as recorder_-prefixed", () => {
     const manifest = manifestWith({
-      uePluginName: "PIE_Studio",
+      uePluginName: "Sample_Recorder",
       minBridgeApi: 1,
-      source: "ue/Plugins/PIE_Studio",
+      source: "ue/Plugins/Sample_Recorder",
       category: "pcg",
       handlers: { record_arm: { description: "Arm the recorder" } },
     });
-    const result = nativeHandlerSurface(manifest, "pie-studio", BUILTINS);
+    const result = nativeHandlerSurface(manifest, "sample-recorder", BUILTINS);
     if (result?.kind !== "inject") throw new Error("expected inject");
     const { tool, added } = mergeInjectionsIntoTool(fakePcg(), [result.plan]);
-    expect(added).toEqual(["pie_record_arm"]);
-    expect(tool.actions.pie_record_arm?.description).toBe("Arm the recorder");
+    expect(added).toEqual(["recorder_record_arm"]);
+    expect(tool.actions.recorder_record_arm?.description).toBe("Arm the recorder");
   });
 });
 

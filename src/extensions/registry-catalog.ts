@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { debug, warn } from "../core/log.js";
 import { userDir } from "../core/user-dir.js";
 import { readEnv } from "../core/env.js";
+import { isSuperseded } from "./superseded.js";
 
 /**
  * Read-only client for the ue-mcp plugin registry (plugins.ue-mcp.com).
@@ -44,6 +45,8 @@ export interface GitHubRepo {
 
 /** ue-mcp core. Everything that is not plugin-owned lands here. */
 export const CORE_REPO: GitHubRepo = { owner: "db-lyon", repo: "ue-mcp" };
+/** Where a user files a gap by hand, when the feedback category is disabled. */
+export const CORE_ISSUES_URL = `https://github.com/${CORE_REPO.owner}/${CORE_REPO.repo}/issues`;
 
 /** The plugin registry's origin: UE_MCP_REGISTRY, else the public registry. */
 export function registryBase(): string {
@@ -65,7 +68,7 @@ export function feedbackBase(): string {
   return (readEnv("feedback") ?? "https://feedback.ue-mcp.com").replace(/\/+$/, "");
 }
 
-/** `https://github.com/db-lyon/pie-studio(.git)` -> `{owner, repo}`. */
+/** `https://github.com/owner/repo(.git)` -> `{owner, repo}`. */
 export function parseGitHubRepo(url: string | null | undefined): GitHubRepo | null {
   if (!url) return null;
   const cleaned = url
@@ -150,6 +153,10 @@ function writeDiskCache(base: string, plugins: RegistryPlugin[]): void {
   }
 }
 
+/** Drop plugins that ship in core now, so nothing offers or routes to them. */
+function withoutSuperseded(plugins: RegistryPlugin[]): RegistryPlugin[] {
+  return plugins.filter((p) => !isSuperseded(p.slug) && !(p.packageName && isSuperseded(p.packageName)));
+}
 
 /**
  * Fetch the published catalog. Returns [] when the registry is unreachable
@@ -176,14 +183,15 @@ export async function fetchRegistryCatalog(
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = (await res.json()) as { plugins?: RegistryPlugin[] } | RegistryPlugin[];
     const rows = Array.isArray(json) ? json : (json.plugins ?? []);
-    const plugins = rows.filter(
+    const plugins = withoutSuperseded(rows.filter(
       (r): r is RegistryPlugin => !!r && typeof r.slug === "string" && (r.status === undefined || r.status === "published"),
-    );
+    ));
     memoryCache = { at: Date.now(), base, plugins };
     writeDiskCache(base, plugins);
     return plugins;
   } catch (e) {
-    const cached = readDiskCache(base);
+    const raw = readDiskCache(base);
+    const cached = raw ? withoutSuperseded(raw) : null;
     if (cached) {
       debug("registry", `catalog fetch failed, using cached copy (${cached.length} plugins)`, e);
       memoryCache = { at: Date.now(), base, plugins: cached };

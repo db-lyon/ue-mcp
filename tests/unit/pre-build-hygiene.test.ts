@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { findLiveCodingPatches, findOrphanedSources, runHygiene } from "../../scripts/pre-build-hygiene.mjs";
+import { ensureTestBuildConfiguration, findLiveCodingPatches, findOrphanedSources, runHygiene, TEST_BUILD_CONFIGURATION } from "../../scripts/pre-build-hygiene.mjs";
 import { touchBuildRules } from "../../src/editor/deployer.js";
 
 let root: string;
@@ -180,5 +181,45 @@ describe("the build actually runs the hygiene checks", () => {
     expect(buildScript).toContain("binariesDir");
     expect(buildScript).toContain("sourceDir");
     expect(buildScript).toContain("deployedDir");
+  });
+});
+
+describe("the test project builds as unity", () => {
+  let root: string;
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-buildcfg-"));
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  it("writes the project BuildConfiguration.xml that turns off the working set, once", () => {
+    expect(ensureTestBuildConfiguration(root)).toBe(true);
+    const written = fs.readFileSync(path.join(root, "Saved", "UnrealBuildTool", "BuildConfiguration.xml"), "utf8");
+    expect(written).toBe(TEST_BUILD_CONFIGURATION);
+    expect(written).toMatch(/<SourceFileWorkingSet>\s*<Provider>None<\/Provider>/);
+    expect(ensureTestBuildConfiguration(root)).toBe(false);
+  });
+
+  it("replaces the empty default UnrealBuildTool generates", () => {
+    const file = path.join(root, "Saved", "UnrealBuildTool", "BuildConfiguration.xml");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "<Configuration/>");
+    expect(ensureTestBuildConfiguration(root)).toBe(true);
+    expect(fs.readFileSync(file, "utf8")).toBe(TEST_BUILD_CONFIGURATION);
+  });
+
+  it("is ensured by build.js before the build starts", () => {
+    const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const script = fs.readFileSync(path.join(REPO, "scripts", "build.js"), "utf8");
+    const call = script.indexOf("ensureTestBuildConfiguration(projectRoot)");
+    expect(call).toBeGreaterThan(-1);
+    expect(call).toBeLessThan(script.indexOf("Starting build..."));
+  });
+});
+
+describe("the build script itself", () => {
+  it("parses, so npm run build can start at all", () => {
+    const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const r = spawnSync(process.execPath, ["--check", path.join(REPO, "scripts", "build.js")], { encoding: "utf8" });
+    expect(r.status, r.stderr).toBe(0);
   });
 });

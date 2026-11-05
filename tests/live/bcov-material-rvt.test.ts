@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Runtime virtual texture authoring: the asset, its bound volume, landscape
  * assignment and the sampler/output nodes, each read back through

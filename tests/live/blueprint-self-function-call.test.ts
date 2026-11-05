@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * `blueprint(add_node)` binding a function the Blueprint declares itself
  * (#996, gap 1).

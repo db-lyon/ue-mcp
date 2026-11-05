@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * StateTree property bindings: an evaluator output bound into a state task's
  * instance data, found through list_bindable_sources and read back through

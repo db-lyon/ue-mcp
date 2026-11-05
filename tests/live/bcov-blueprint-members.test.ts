@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Blueprint member authoring read back through the listing actions: variables
  * and their metadata, functions, locals, macros, dispatchers, interfaces,

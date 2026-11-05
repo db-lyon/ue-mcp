@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * AnimSequence, skeleton and blendspace authoring, each read back: bone keys,
  * curves, notifies, root motion, sequence properties, sync markers, pose and

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * EQS authoring and execution, against a real editor.
  *

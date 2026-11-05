@@ -107,7 +107,7 @@ export function bridgeActionMap(): Map<string, Map<string, string>> {
 }
 
 /** Bridge methods a TS span dispatches, by method name or by category action. */
-function tsDispatches(
+export function tsDispatches(
   source: string,
   masked: string,
   spans: Span[],
@@ -152,7 +152,7 @@ function tsDispatches(
 }
 
 /** Same-file helpers whose body dispatches a bridge call, so a method literal handed to one is a dispatch. */
-function forwardingHelpers(masked: string, helpers: FileHelpers): Set<string> {
+export function forwardingHelpers(masked: string, helpers: FileHelpers): Set<string> {
   const out = new Set<string>();
   for (const [name, span] of helpers.spans) {
     if (/\b(?:callBridge|call)\s*\(/.test(masked.slice(span.start, span.end))) out.add(name);
@@ -224,7 +224,7 @@ function cppAsserts(masked: string, spans: Span[]): boolean {
   return false;
 }
 
-function cppDispatches(
+export function cppDispatches(
   source: string,
   masked: string,
   spans: Span[],

@@ -2,14 +2,19 @@
 /**
  * Prebuilt bridge binaries, built on this machine and attached to a release.
  *
- *   node scripts/binaries.mjs build [--engines 5.7,5.8] [--out dist-binaries]
+ *   node scripts/binaries.mjs build [--engines 5.7,5.8] [--out dist-binaries] [--from-test-build]
  *   node scripts/binaries.mjs upload [--out dist-binaries]
  *
- * build runs Unreal's own `RunUAT BuildPlugin` once per installed engine and
- * packages each result as UE_MCP_Bridge-<version>-UE<engine>-<platform>.zip,
- * the name `ue-mcp init` asks for, without Source or Intermediate. It writes
+ * build compiles the plugin's editor modules once per installed engine, in a
+ * host project kept between runs so only changed files recompile, and packages
+ * each as UE_MCP_Bridge-<version>-UE<engine>-<platform>.zip, the name
+ * `ue-mcp init` asks for: the editor binaries, Resources and the installed
+ * descriptor, as BuildPlugin packages them less Source and Intermediate. It writes
  * UE_MCP_Bridge-<version>-manifest.json with each zip's SHA-256, which the
  * installer checks before installing anything.
+ *
+ * --from-test-build packages the engine tests/ue_mcp builds against from that build, when it is
+ * current, instead of compiling the plugin for it a second time (the release runner passes it).
  *
  * upload attaches the zips and the manifest to the draft GitHub release for the
  * version in package.json. It refuses a published release: binaries ship with
@@ -19,9 +24,10 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { isSameOrUnder, protectedEngineRoots } from "./build-utils.js";
+import { isSameOrUnder, protectedEngineRoots, resolveTestEngine } from "./build-utils.js";
+import { undeployedSources } from "./live-shards.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN = path.join(ROOT, "plugin", "ue_mcp_bridge", "UE_MCP_Bridge.uplugin");
@@ -71,7 +77,172 @@ function zipDir(parent, folder, zipPath) {
   execFileSync(tar, ["-a", "-c", "-f", zipPath, "-C", parent, folder], { stdio: "inherit" });
 }
 
-function build() {
+/** Engine/Build/Build.version as major.minor.0, which BuildPlugin stamps into a packaged descriptor. */
+function engineVersion(root) {
+  const v = JSON.parse(fs.readFileSync(path.join(root, "Engine", "Build", "Build.version"), "utf-8"));
+  return `${v.MajorVersion}.${v.MinorVersion}.0`;
+}
+
+/** Make dst match src file for file, touching only what differs, so UBT's dependency check sees real edits only. */
+function syncTree(src, dst, skip) {
+  fs.mkdirSync(dst, { recursive: true });
+  const want = new Set();
+  for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
+    if (skip.includes(ent.name)) continue;
+    want.add(ent.name);
+    const a = path.join(src, ent.name);
+    const b = path.join(dst, ent.name);
+    if (ent.isDirectory()) {
+      syncTree(a, b, []);
+    } else {
+      const same = fs.existsSync(b) && fs.statSync(b).size === fs.statSync(a).size && fs.readFileSync(a).equals(fs.readFileSync(b));
+      if (!same) fs.copyFileSync(a, b);
+    }
+  }
+  for (const ent of fs.readdirSync(dst, { withFileTypes: true })) {
+    if (skip.includes(ent.name) || want.has(ent.name)) continue;
+    fs.rmSync(path.join(dst, ent.name), { recursive: true, force: true });
+  }
+}
+
+function runAsync(cmd, args, logFile) {
+  return new Promise((resolve) => {
+    const log = fs.openSync(logFile, "w");
+    // A .bat runs under cmd, and the engine path has spaces: quote every piece and pass the line verbatim.
+    const child = process.platform === "win32"
+      ? spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `"${[cmd, ...args].map((x) => `"${x}"`).join(" ")}"`], {
+          stdio: ["ignore", log, log],
+          windowsVerbatimArguments: true,
+        })
+      : spawn(cmd, args, { stdio: ["ignore", log, log] });
+    child.on("close", (code) => {
+      fs.closeSync(log);
+      resolve(code);
+    });
+  });
+}
+
+/**
+ * One engine: the plugin's editor modules, compiled in a host project kept between runs, so a
+ * release recompiles only the files that changed. The zip carries the editor binaries alone, so
+ * the UnrealGame builds BuildPlugin also makes are not compiled here.
+ */
+async function buildEngine(engine) {
+  const batch = path.join(engine.root, "Engine", "Build", "BatchFiles");
+  const script = process.platform === "win32" ? path.join(batch, "Build.bat") : path.join(batch, process.platform === "darwin" ? "Mac" : "Linux", "Build.sh");
+  if (!fs.existsSync(script)) {
+    console.warn(`skip UE ${engine.version}: no ${script}`);
+    return null;
+  }
+  // A short root: UBT refuses action paths over Windows' 260 characters.
+  const stage = path.join(arg("--stage", path.join(os.tmpdir(), "uemcpb")), `UE${engine.version}`);
+  const host = path.join(stage, "Host");
+  const hostProject = path.join(host, "Host.uproject");
+  const hostPlugin = path.join(host, "Plugins", "UE_MCP_Bridge");
+  fs.mkdirSync(host, { recursive: true });
+  if (!fs.existsSync(hostProject)) {
+    fs.writeFileSync(hostProject, JSON.stringify({ FileVersion: 3, Plugins: [{ Name: "UE_MCP_Bridge", Enabled: true }] }, null, "\t"));
+  }
+  syncTree(path.dirname(PLUGIN), hostPlugin, ["Binaries", "Intermediate"]);
+
+  const manifest = path.join(stage, "Manifest.xml");
+  fs.rmSync(manifest, { force: true });
+  const started = Date.now();
+  const logFile = path.join(out, `build-UE${engine.version}.log`);
+  console.log(`== UE ${engine.version}: compiling (log ${logFile})`);
+  const code = await runAsync(script, [
+    "UnrealEditor", platform, "Development",
+    `-Project=${hostProject}`, `-plugin=${path.join(hostPlugin, path.basename(PLUGIN))}`, `-manifest=${manifest}`, "-nohotreload",
+    // Its own host project and intermediates, so it needs no claim on UBT's single-instance lock.
+    // An editor of the same engine launched beside it still waits for it in its AutoSDK step
+    // (236 s in #1592), so the release packages the test engine from tests/ue_mcp instead.
+    "-NoMutex",
+    // Each engine's UBT its own log: two in parallel otherwise fight over %LOCALAPPDATA%/UnrealBuildTool/Log.txt.
+    `-log=${path.join(stage, "UBT.log")}`,
+  ], logFile);
+  if (code !== 0) throw new Error(`UE ${engine.version}: compile failed (exit ${code}); see ${logFile}`);
+
+  // UBT writes the manifest as UTF-16 with a byte order mark.
+  const manifestText = fs.readFileSync(manifest).toString("utf16le").replace(/^﻿/, "");
+  const products = [...manifestText.matchAll(/<string>([^<]+)<\/string>/g)]
+    .map((m) => path.resolve(m[1]))
+    .filter((f) => isSameOrUnder(f, path.join(hostPlugin, "Binaries")));
+  return packageEngine(engine, stage, hostPlugin, products, started);
+}
+
+/**
+ * Zip one engine's build: what BuildPlugin would package, less the Source and Intermediate the
+ * installer strips anyway. `products` are the build's files under pluginDir/Binaries.
+ */
+function packageEngine(engine, stage, hostPlugin, products, started) {
+  const pkgRoot = path.join(stage, "pkg");
+  const pkg = path.join(pkgRoot, "UE_MCP_Bridge");
+  fs.rmSync(pkgRoot, { recursive: true, force: true });
+  if (!products.some((f) => f.endsWith(".modules"))) throw new Error(`UE ${engine.version}: the build manifest lists no .modules file`);
+  for (const f of products) {
+    const to = path.join(pkg, path.relative(hostPlugin, f));
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(f, to);
+  }
+  for (const dir of ["Resources", "Content", "Shaders", path.join("Binaries", "ThirdParty")]) {
+    const from = path.join(hostPlugin, dir);
+    if (fs.existsSync(from)) fs.cpSync(from, path.join(pkg, dir), { recursive: true });
+  }
+  const descriptor = JSON.parse(fs.readFileSync(PLUGIN, "utf-8"));
+  delete descriptor.EnabledByDefault;
+  // UE's descriptor writer leaves out flags that are false.
+  for (const k of ["IsBetaVersion", "IsExperimentalVersion"]) if (descriptor[k] === false) delete descriptor[k];
+  descriptor.EngineVersion = engineVersion(engine.root);
+  descriptor.Installed = true;
+  fs.writeFileSync(path.join(pkg, path.basename(PLUGIN)), JSON.stringify(descriptor, null, "\t"));
+
+  const zip = path.join(out, zipName(engine.version));
+  zipDir(pkgRoot, "UE_MCP_Bridge", zip);
+  console.log(`== UE ${engine.version}: ${zipName(engine.version)} in ${Math.round((Date.now() - started) / 1000)} s`);
+  return { engine: engine.version, platform, file: zipName(engine.version), sha256: sha256(zip), size: fs.statSync(zip).size };
+}
+
+/**
+ * The engine tests/ue_mcp builds against, packaged from that build instead of compiled a second
+ * time (#1592): the editor modules are the same compile of the same source by the same engine,
+ * and the duplicate held that engine's build tool for minutes, which stalls every editor of that
+ * engine at launch. Only when the deployed plugin matches plugin/ and its binaries are newer than
+ * its source; otherwise null, and the engine compiles in the host project as before.
+ */
+async function packageFromTestBuild(engine) {
+  let testEngine;
+  try {
+    testEngine = resolveTestEngine();
+  } catch {
+    return null;
+  }
+  if (path.resolve(testEngine.engineRoot).toLowerCase() !== path.resolve(engine.root).toLowerCase()) return null;
+  const testPlugin = path.join(ROOT, "tests", "ue_mcp", "Plugins", "UE_MCP_Bridge");
+  const binDir = path.join(testPlugin, "Binaries", platform);
+  const modulesFile = path.join(binDir, "UnrealEditor.modules");
+  if (!fs.existsSync(modulesFile)) return null;
+  const undeployed = undeployedSources(path.dirname(PLUGIN), testPlugin).filter((f) => !f.startsWith("Binaries/") && !f.startsWith("Intermediate/") && !f.endsWith(".uplugin"));
+  if (undeployed.length > 0) {
+    console.log(`== UE ${engine.version}: tests/ue_mcp has an older plugin than plugin/ (${undeployed[0]}), compiling instead`);
+    return null;
+  }
+  const { tsImport } = await import("tsx/esm/api");
+  const { checkPluginFreshness } = await tsImport("../src/editor/bridge-freshness.ts", import.meta.url);
+  if (checkPluginFreshness(path.join(ROOT, "tests", "ue_mcp", "ue_mcp.uproject")).stale) {
+    console.log(`== UE ${engine.version}: the tests/ue_mcp bridge binary is older than its source, compiling instead`);
+    return null;
+  }
+  // The modules the build registered and their symbols; never a Live Coding patch beside them.
+  const modules = Object.values(JSON.parse(fs.readFileSync(modulesFile, "utf-8")).Modules ?? {});
+  const products = [modulesFile, ...modules.flatMap((dll) => [dll, dll.replace(/\.dll$/i, ".pdb")].map((f) => path.join(binDir, f)))]
+    .filter((f) => fs.existsSync(f));
+  const stage = path.join(arg("--stage", path.join(os.tmpdir(), "uemcpb")), `UE${engine.version}`);
+  fs.mkdirSync(stage, { recursive: true });
+  console.log(`== UE ${engine.version}: packaging the tests/ue_mcp build`);
+  return packageEngine(engine, stage, testPlugin, products, Date.now());
+}
+
+async function build() {
   // Binaries carry the descriptor they were built from; it must already name this version.
   const descriptor = JSON.parse(fs.readFileSync(PLUGIN, "utf-8")).VersionName;
   if (descriptor !== version) {
@@ -90,48 +261,15 @@ function build() {
   if (found.length === 0) throw new Error("no engines to build against; set UE_MCP_BINARY_ENGINES or install one");
   fs.mkdirSync(out, { recursive: true });
 
-  const assets = [];
-  for (const engine of found) {
-    const uat = path.join(engine.root, "Engine", "Build", "BatchFiles", process.platform === "win32" ? "RunUAT.bat" : "RunUAT.sh");
-    if (!fs.existsSync(uat)) {
-      console.warn(`skip UE ${engine.version}: no ${uat}`);
-      continue;
-    }
-    // Staged under a short root: BuildPlugin nests a host project inside the package, and UBT
-    // refuses action paths over Windows' 260 characters.
-    const stage = path.join(arg("--stage", path.join(os.tmpdir(), "uemcpb")), `UE${engine.version}`);
-    const pkg = path.join(stage, "UE_MCP_Bridge");
-    fs.rmSync(stage, { recursive: true, force: true });
-    console.log(`\n== UE ${engine.version}: BuildPlugin -> ${pkg}`);
-    const started = Date.now();
-    const hadFilter = fs.existsSync(path.join(path.dirname(PLUGIN), "Config"));
-    const uatArgs = ["BuildPlugin", `-Plugin=${PLUGIN}`, `-Package=${pkg}`, `-TargetPlatforms=${platform}`, "-Rocket"];
-    // A .bat runs under cmd, and the engine path has spaces: quote every piece and pass the line verbatim.
-    const r = process.platform === "win32"
-      ? spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `"${[uat, ...uatArgs].map((x) => `"${x}"`).join(" ")}"`], {
-          stdio: "inherit",
-          windowsVerbatimArguments: true,
-        })
-      : spawnSync(uat, uatArgs, { stdio: "inherit" });
-    // BuildPlugin writes a template Config/FilterPlugin.ini into the source plugin when it has none.
-    if (!hadFilter) fs.rmSync(path.join(path.dirname(PLUGIN), "Config"), { recursive: true, force: true });
-    if (r.status !== 0) throw new Error(`BuildPlugin failed for UE ${engine.version} (exit ${r.status})`);
+  // Engines in parallel: each is one editor target, and an incremental one is mostly linking.
+  const fromTestBuild = process.argv.includes("--from-test-build");
+  const assets = (await Promise.all(found.map(async (e) => (fromTestBuild ? await packageFromTestBuild(e) : null) ?? buildEngine(e)))).filter(Boolean);
 
-    // The installer strips these too; leaving them out keeps the download small.
-    for (const dir of ["Source", "Intermediate", "HostProject"]) fs.rmSync(path.join(pkg, dir), { recursive: true, force: true });
-    if (!fs.existsSync(path.join(pkg, "Binaries", platform))) throw new Error(`UE ${engine.version}: no Binaries/${platform} in the package`);
-
-    const zip = path.join(out, zipName(engine.version));
-    zipDir(stage, "UE_MCP_Bridge", zip);
-    fs.rmSync(stage, { recursive: true, force: true });
-    assets.push({ engine: engine.version, platform, file: zipName(engine.version), sha256: sha256(zip), size: fs.statSync(zip).size });
-    console.log(`== UE ${engine.version}: ${zipName(engine.version)} in ${Math.round((Date.now() - started) / 60000)} min`);
-  }
-
-  // Merge with a manifest from an earlier run, so engines can be built one at a time.
+  // Merge with a manifest from an earlier run of the same version, so engines can be built one at a time.
   const manifestPath = path.join(out, manifestName());
-  const previous = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, "utf-8")).assets : [];
-  const merged = [...previous.filter((a) => !assets.some((b) => b.file === a.file)), ...assets].sort((a, b) => a.file.localeCompare(b.file));
+  const previous = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, "utf-8")) : null;
+  const kept = previous?.version === version ? previous.assets.filter((a) => !assets.some((b) => b.file === a.file)) : [];
+  const merged = [...kept, ...assets].sort((a, b) => a.file.localeCompare(b.file));
   fs.writeFileSync(manifestPath, JSON.stringify({ version, assets: merged }, null, 2) + "\n");
   console.log(`\nmanifest: ${manifestPath} (${merged.length} asset(s))`);
 }
@@ -159,7 +297,7 @@ function upload() {
 
 const command = process.argv[2];
 try {
-  if (command === "build") build();
+  if (command === "build") await build();
   else if (command === "upload") upload();
   else {
     console.error("usage: node scripts/binaries.mjs <build|upload> [--engines 5.7,5.8] [--out dir]");

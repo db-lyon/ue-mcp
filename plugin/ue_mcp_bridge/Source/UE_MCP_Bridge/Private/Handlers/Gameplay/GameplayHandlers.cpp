@@ -262,7 +262,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("project_point_to_navigation"), &ProjectPointToNavigation, {
 		MCPParam::Required(TEXT("location"), EType::Vec3, TEXT("World point to project onto the navmesh")),
 	});
-	// Enhanced Input asset authoring stays here. pie-studio owns PIE-time
+	// Enhanced Input asset authoring stays here. the pie category owns PIE-time
 	// inject/record/replay; authoring InputAction / InputMappingContext
 	// assets and editing IMC mappings is core ue-mcp.
 	Registry.RegisterHandler(TEXT("create_input_action"), &CreateInputAction, {
@@ -771,9 +771,9 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("behaviorClass"), EType::String, TEXT("Behavior definition asset path or class path")),
 		InstanceProperties(),
 	});
-	// read_imc through get_pie_subsystem_state moved to pie-studio
+	// read_imc through get_pie_subsystem_state moved to the pie category
 	Registry.RegisterHandler(TEXT("get_navmesh_details"), &GetNavmeshDetails, {});
-	// apply_damage_in_pie moved to pie-studio
+	// apply_damage_in_pie moved to the pie category
 }
 
 // ── #416: SmartObject slot authoring (reflection-only) ────────────────

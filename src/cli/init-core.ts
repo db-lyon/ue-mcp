@@ -28,7 +28,7 @@ import {
   syncPluginSkills,
 } from "../extensions/skills.js";
 import { installClaudeHooks, uninstallClaudeHooks } from "../integrations/claude-code/hook-installer.js";
-import { getInstalledHooks } from "../config/user-state.js";
+import { getFeedbackModeScopes, getInstalledHooks, setFeedbackMode, type FeedbackMode } from "../config/user-state.js";
 import {
   detectMcpClients,
   isProjectScopedClient,
@@ -39,6 +39,9 @@ import {
 } from "../integrations/claude-code/mcp-client-config.js";
 import { packageVersion } from "../core/package-root.js";
 import { warn as logWarn } from "../core/log.js";
+import { readEnv } from "../core/env.js";
+import { deriveProjectPort } from "../bridge/port.js";
+import { readUserAuthSync } from "../feedback/github-auth.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -71,6 +74,19 @@ export const CATEGORIES: ToolCategory[] = [
   { name: "gas",        label: "gas",           description: "Gameplay Ability System abilities, effects, attributes", requiredPlugins: ["GameplayAbilities"] },
   { name: "networking", label: "networking",    description: "replication, dormancy, RPCs" },
   { name: "demo",       label: "demo",          description: "tutorial / demo project scaffolding" },
+  // Plugins these reach are optional: the handlers report "not available" when
+  // one is off, so they are not forced on through requiredPlugins.
+  { name: "pie",            label: "pie testing",    description: "record, replay and diff PIE sessions, input injection, test scripts" },
+  { name: "statetree",      label: "statetree",      description: "StateTree states, tasks, conditions, transitions, bindings" },
+  { name: "chooser",        label: "chooser",        description: "ChooserTable rows and columns (Motion Matching selection)" },
+  { name: "dataflow",       label: "dataflow",       description: "Dataflow graphs, Chaos geometry and simulation assets (UE 5.8+)" },
+  { name: "conversation",   label: "conversation",   description: "Conversation dialogue graphs, speakers, entry points (UE 5.8+)" },
+  { name: "epic",           label: "epic toolsets",  description: "Unreal AI Toolset Registry discovery and direct dispatch (UE 5.8+)" },
+  { name: "fab",            label: "fab",            description: "Fab library sync, download cache, content import" },
+  { name: "datasmith",      label: "datasmith",      description: "Datasmith scene import and metadata queries" },
+  { name: "metahuman",      label: "metahuman",      description: "MetaHumanCharacter assets" },
+  { name: "source_control", label: "source control", description: "provider status, checkout, history, diff, submit" },
+  { name: "plugins",    label: "plugins",       alwaysOn: true },
   // feedback has its own toggle: enabling it gives the agent a tool that can
   // post to a public issue tracker, behind user approval.
   { name: "feedback",   label: "feedback",      alwaysOn: true },
@@ -112,6 +128,8 @@ export interface InitChoices {
    */
   clients?: string[];
   feedback?: boolean;
+  /** Feedback approval mode to store for this project, as `feedback mode <mode> --editor` does. Unset keeps it. */
+  feedbackMode?: FeedbackMode;
   promptHook?: boolean;
   skills?: boolean;
   /** auto picks binary when there is no toolchain and keeps whatever is installed. */
@@ -122,6 +140,46 @@ export interface InitChoices {
   pin?: boolean;
   /** Replaces npx in written client configs. */
   command?: string | null;
+}
+
+/** The bridge port a project uses, and what decided it. */
+export interface BridgePort {
+  port: number;
+  /** What the project path derives, which is the port when nothing pins one. */
+  derivedPort: number;
+  /** "env" for UE_MCP_PORT, "config" for ue-mcp.bridge.port, null when derived. */
+  pinnedBy: "env" | "config" | null;
+}
+
+export function bridgePort(project: ProjectContext): BridgePort {
+  const derivedPort = deriveProjectPort(project.projectDir!);
+  const envPort = Number.parseInt(readEnv("port") ?? "", 10);
+  if (Number.isFinite(envPort) && envPort > 0) return { port: envPort, derivedPort, pinnedBy: "env" };
+  const configPort = project.config.bridge?.port;
+  if (configPort) return { port: configPort, derivedPort, pinnedBy: "config" };
+  return { port: derivedPort, derivedPort, pinnedBy: null };
+}
+
+export const FEEDBACK_MODES: readonly FeedbackMode[] = ["interactive", "auto-approve", "defer"];
+
+/** The feedback approval mode in effect, and which setting decided it. */
+export interface PlannedFeedbackMode {
+  mode: FeedbackMode;
+  /** env is UE_MCP_FEEDBACK_MODE, project the per-project setting, user the per-user one, default when nothing is set. */
+  scope: "env" | "project" | "user" | "default";
+  /** The project-scoped mode apply() stores, or null when it leaves it alone. */
+  set: FeedbackMode | null;
+}
+
+/** The effective feedback mode for a project, counting a mode about to be stored for it. */
+export function feedbackModeOf(projectDir: string, set: FeedbackMode | null = null): PlannedFeedbackMode {
+  const env = (readEnv("feedbackMode") ?? "").trim().toLowerCase() as FeedbackMode;
+  if (FEEDBACK_MODES.includes(env)) return { mode: env, scope: "env", set };
+  const scopes = getFeedbackModeScopes(projectDir);
+  const project = set ?? scopes.project;
+  if (project) return { mode: project, scope: "project", set };
+  if (scopes.user) return { mode: scopes.user, scope: "user", set };
+  return { mode: "interactive", scope: "default", set };
 }
 
 export interface PlannedClient {
@@ -159,10 +217,18 @@ export interface InitPlan {
   clients: PlannedClient[];
   launch: ServerLaunch;
   feedback: boolean;
+  feedbackMode: PlannedFeedbackMode;
   promptHook: boolean;
   skills: boolean;
   /** Reasons apply() would refuse to run. */
   blockers: string[];
+  /** The optional tool categories, in the order init offers them. */
+  categories: Array<Pick<ToolCategory, "name" | "label" | "description" | "requiredPlugins">>;
+  /** Categories that can carry native Unreal tools (engine 5.8 and later). */
+  nativeCategories: string[];
+  bridge: BridgePort;
+  /** The GitHub account feedback issues author as, from `ue-mcp auth`; null when not signed in. */
+  feedbackAuth: { login: string | null };
 }
 
 function readUpluginVersion(pluginDir: string): string | null {
@@ -300,9 +366,14 @@ export function plan(choices: InitChoices, hooks: ProbeHooks = DEFAULT_PROBE_HOO
     clients,
     launch: { pin: choices.pin ? version : null, command: choices.command ?? null },
     feedback,
+    feedbackMode: feedbackModeOf(projectDir, choices.feedbackMode ?? null),
     promptHook,
     skills,
     blockers,
+    categories: CATEGORIES.filter((c) => !c.alwaysOn).map(({ name, label, description, requiredPlugins }) => ({ name, label, description, requiredPlugins })),
+    nativeCategories: ENRICHABLE_CATEGORIES,
+    bridge: bridgePort(project),
+    feedbackAuth: { login: readUserAuthSync()?.login ?? null },
   };
 }
 
@@ -561,6 +632,18 @@ export async function apply(p: InitPlan): Promise<InitResult> {
       target: configPath,
       detail: scaffolded ? "ue-mcp.yml created" : "tool surface and content roots",
     });
+
+    // 7. The project's feedback approval mode, a per-user setting kept in ~/.ue-mcp/state.json.
+    if (p.feedbackMode.set) {
+      const before = getFeedbackModeScopes(projectDir).project;
+      if (before !== p.feedbackMode.set) setFeedbackMode(p.feedbackMode.set, projectDir);
+      steps.push({
+        id: "feedback-mode",
+        status: before === p.feedbackMode.set ? "unchanged" : "changed",
+        target: projectDir,
+        detail: `feedback mode ${p.feedbackMode.set}`,
+      });
+    }
 
     return done(true);
   } catch (e) {

@@ -2,6 +2,8 @@ import { ALL_TOOLS } from "../../tools.js";
 import { SIGNATURE_LEGEND } from "../action-signature.js";
 import { unionKnowledge, type SessionSurface } from "../../sessions/session-surface.js";
 import type { ContextStrategy } from "./lean-context.js";
+import type { ToolDef } from "../../core/types.js";
+import { CORE_ISSUES_URL } from "../../extensions/registry-catalog.js";
 
 /**
  * Counts and the category list, derived rather than transcribed (#817, plan
@@ -17,29 +19,47 @@ import type { ContextStrategy } from "./lean-context.js";
  * `tools.ts` is a leaf as far as this module is concerned: nothing in the tool
  * graph imports these instructions, so the import closes no cycle.
  */
-const CATEGORY_COUNT = ALL_TOOLS.length;
-const ACTION_COUNT = ALL_TOOLS.reduce((n, t) => n + Object.keys(t.actions).length, 0);
+/** The numbers and category list one instruction text quotes, read off a tool graph. */
+interface SurfaceFacts {
+  categoryCount: number;
+  actionCount: number;
+  /**
+   * Unreal's own toolset registry, wrapped. Every wrapped tool is spelled
+   * `epic_<name>` and nothing else is, so the split is readable off the same
+   * graph rather than transcribed.
+   *
+   * These stopped being a bolt-on when they became declared actions: they are
+   * inside actionCount now. Saying "N actions, PLUS the wrapped Epic tools"
+   * therefore advertises a surface epicActionCount larger than the one that
+   * ships, which is exactly what this text and the landing site both did. Quote
+   * ownActionCount whenever the wrapped tools are named separately.
+   */
+  epicActionCount: number;
+  ownActionCount: number;
+  /** Every category name, wrapped so the block reads the way it always has. */
+  categories: string;
+  /** Whether feedback(submit) can run; when not, no section tells the agent to call it. */
+  feedback: boolean;
+}
 
-/**
- * Unreal's own toolset registry, wrapped. Every wrapped tool is spelled
- * `epic_<name>` and nothing else is, so the split is readable off the same
- * graph rather than transcribed.
- *
- * These stopped being a bolt-on when they became declared actions: they are
- * inside ACTION_COUNT now. Saying "N actions, PLUS the wrapped Epic tools"
- * therefore advertises a surface EPIC_ACTION_COUNT larger than the one that
- * ships, which is exactly what this text and the landing site both did. Quote
- * OWN_ACTION_COUNT whenever the wrapped tools are named separately.
- */
-const EPIC_ACTION_COUNT = ALL_TOOLS.reduce(
-  (n, t) => n + Object.keys(t.actions).filter((a) => a.startsWith("epic_")).length,
-  0,
-);
-const OWN_ACTION_COUNT = ACTION_COUNT - EPIC_ACTION_COUNT;
+function surfaceFacts(tools: readonly ToolDef[], feedback = true): SurfaceFacts {
+  const actionCount = tools.reduce((n, t) => n + Object.keys(t.actions).length, 0);
+  const epicActionCount = tools.reduce(
+    (n, t) => n + Object.keys(t.actions).filter((a) => a.startsWith("epic_")).length,
+    0,
+  );
+  return {
+    categoryCount: tools.length,
+    actionCount,
+    epicActionCount,
+    ownActionCount: actionCount - epicActionCount,
+    categories: categoryList(tools, epicActionCount),
+    feedback,
+  };
+}
 
-/** Every category name, wrapped so the block reads the way it always has. */
-function categoryList(): string {
-  const names = ALL_TOOLS.map((t) => t.name);
+function categoryList(tools: readonly ToolDef[], epicActionCount: number): string {
+  const names = tools.map((t) => t.name);
   const lines: string[] = [];
   let line = "";
   for (const name of names) {
@@ -54,11 +74,9 @@ function categoryList(): string {
   if (line) lines.push(line);
   return lines.join("\n").replace(
     /\bepic\b(?![\w-])/,
-    `epic (the registry itself; its ${EPIC_ACTION_COUNT} wrapped tools sit on the categories they belong to)`,
+    `epic (the registry itself; its ${epicActionCount} wrapped tools sit on the categories they belong to)`,
   );
 }
-
-const CATEGORIES = categoryList();
 
 const SPATIAL_GUIDANCE = `For spatial edits, resolve target + frame + viewpoint + operation + amount + constraints.
 Character left/right uses actor axes; screen left/right needs the camera viewpoint.
@@ -68,7 +86,44 @@ Echo the resolved interpretation. Ask only for missing context that changes the 
 After applying, check readback and matching, lit close views with the pose held fixed.
 A successful transform write is not visual verification. Do not infer 3D contact from one image.`;
 
-export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${CATEGORY_COUNT} category tools covering ${ACTION_COUNT} actions: ${OWN_ACTION_COUNT} of ue-mcp's own, plus ${EPIC_ACTION_COUNT} official Unreal 5.8 tools wrapped in-process as \`epic_*\` actions (UE 5.8+; see the epic category).
+const FULL_FEEDBACK = `═══ FEEDBACK ═══
+If you had to use editor(action="execute_python") as a workaround because a native tool
+couldn't handle the task, keep a mental note of what you did and why. When your task is
+complete, tell the user:
+  "I had to use custom Python scripts to [describe what]. Would you like to submit
+   feedback to help improve ue-mcp?"
+If the user agrees, call feedback(action="submit") with:
+  • title - short, generic description of the gap (no project-specific details)
+  • summary - what was attempted and why the native tool fell short
+  • pythonWorkaround - the Python code that was used
+  • idealTool - what tool/action should handle this natively
+This creates a GitHub issue so the maintainers can add proper support.
+
+Not every gap belongs to ue-mcp core. Plugins listed in the plugin registry own
+their own surfaces and their own trackers. submit checks the plugin registry
+and aims the issue at the owning repo on its own, and the approval prompt lets
+the user change it - do NOT set the repo parameter yourself unless the user
+names a repo. feedback(action="route") answers "where would this land?" without
+posting anything.
+`;
+
+const LEAN_FEEDBACK = `═══ FEEDBACK ═══
+If you had to fall back to editor(action="execute_python") because a native tool could not
+do the job, tell the user when done and offer to feedback(action="submit") the gap. submit
+routes the issue to the tracker that owns the surface (core, or the plugin that provides it)
+by checking the plugin registry; feedback(action="route") previews that without posting.
+`;
+
+/** The FEEDBACK section when no editor this server drives can run feedback(submit). */
+const FEEDBACK_DISABLED = `═══ FEEDBACK ═══
+The feedback category is disabled in this project, so do not call it.
+If you had to use editor(action="execute_python") as a workaround because a native tool
+couldn't handle the task, tell the user what you did and why when your task is complete,
+and that a native tool for it can be requested at ${CORE_ISSUES_URL}.
+`;
+
+function fullInstructions(f: SurfaceFacts): string {
+  return `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${f.categoryCount} category tools covering ${f.actionCount} actions: ${f.ownActionCount} of ue-mcp's own, plus ${f.epicActionCount} official Unreal 5.8 tools wrapped in-process as \`epic_*\` actions (UE 5.8+; see the epic category).
 
 Every category tool takes "action" (the operation) and "args" (that action's parameters): level(action="place_actor", args={actorClass: "PointLight"}). Call project(action="get_status") first.
 
@@ -86,7 +141,7 @@ Every category tool takes "action" (the operation) and "args" (that action's par
 Every category tool lists one signature per action in its description.
 ${SIGNATURE_LEGEND}
 Categories:
-${CATEGORIES}.
+${f.categories}.
 
 ═══ TIPS ═══
 • Start with level(action="get_outliner") or asset(action="list") to discover what's in the project.
@@ -138,31 +193,14 @@ DO suggest a new flow IF AND ONLY IF all three are true:
 In that case say: "This sequence (X -> Y -> Z) might be worth registering
 as a flow in ue-mcp.yml. Want me to draft one?" Then STOP. Wait.
 
-═══ FEEDBACK ═══
-If you had to use editor(action="execute_python") as a workaround because a native tool
-couldn't handle the task, keep a mental note of what you did and why. When your task is
-complete, tell the user:
-  "I had to use custom Python scripts to [describe what]. Would you like to submit
-   feedback to help improve ue-mcp?"
-If the user agrees, call feedback(action="submit") with:
-  • title - short, generic description of the gap (no project-specific details)
-  • summary - what was attempted and why the native tool fell short
-  • pythonWorkaround - the Python code that was used
-  • idealTool - what tool/action should handle this natively
-This creates a GitHub issue so the maintainers can add proper support.
-
-Not every gap belongs to ue-mcp core. Plugins listed in the plugin registry own
-their own surfaces and their own trackers. submit checks the plugin registry
-and aims the issue at the owning repo on its own, and the approval prompt lets
-the user change it - do NOT set the repo parameter yourself unless the user
-names a repo. feedback(action="route") answers "where would this land?" without
-posting anything.
-`;
+${f.feedback ? FULL_FEEDBACK : FEEDBACK_DISABLED}`;
+}
 
 // Compact instructions used when context.strategy = "lean". The per-action
 // catalog is intentionally omitted: agents pull it on demand via the `catalog`
 // tool or a category's `describe` action.
-export const SERVER_INSTRUCTIONS_LEAN = `UE-MCP (lean mode): Unreal Engine editor bridge (C++ plugin). ${CATEGORY_COUNT} category tools covering ${ACTION_COUNT} actions; the per-action catalog is loaded on demand to keep context small.
+function leanInstructions(f: SurfaceFacts): string {
+  return `UE-MCP (lean mode): Unreal Engine editor bridge (C++ plugin). ${f.categoryCount} category tools covering ${f.actionCount} actions; the per-action catalog is loaded on demand to keep context small.
 
 Every category tool takes "action" (the operation) and "args" (that action's parameters). Start with project(action="get_status").
 
@@ -170,7 +208,7 @@ Every category tool takes "action" (the operation) and "args" (that action's par
 Tool descriptions are trimmed in lean mode. Find the action you need with:
 - catalog(action="search", query="spawn actor") - matching action signatures across every category
 - catalog(action="describe", category="level", method="nudge_component") - one action's parameters with descriptions, including nested fields
-- catalog(action="list_categories") - the ${CATEGORY_COUNT} categories with one-line summaries
+- catalog(action="list_categories") - the ${f.categoryCount} categories with one-line summaries
 - <category>(action="describe") - that category's signatures, a page at a time (args={offset} for the next)
 
 ${SIGNATURE_LEGEND}
@@ -180,26 +218,23 @@ Each category's "action" parameter is still an enum, so unknown actions are reje
 ${SPATIAL_GUIDANCE}
 
 ═══ CATEGORIES ═══
-${CATEGORIES}.
+${f.categories}.
 
 ═══ FLOWS ═══
 Before chaining 3+ tool calls, check the \`flows\` field from project(action="get_status")
 and run a matching flow with flow(action="run", flowName="<name>") instead of rebuilding it.
 
-═══ FEEDBACK ═══
-If you had to fall back to editor(action="execute_python") because a native tool could not
-do the job, tell the user when done and offer to feedback(action="submit") the gap. submit
-routes the issue to the tracker that owns the surface (core, or the plugin that provides it)
-by checking the plugin registry; feedback(action="route") previews that without posting.
-
+${f.feedback ? LEAN_FEEDBACK : FEEDBACK_DISABLED}
 This lean surface is selected by context.strategy: lean in ue-mcp.yml or
 UE_MCP_CONTEXT_STRATEGY=lean. The default is micro; full lists every signature inline.
 `;
+}
 
 // Smallest surface (context.strategy = "micro", the default since #1172). The
 // entire ue-mcp API is reached through one gateway tool, mirroring the native
 // MCP toolset gateway (list_toolsets / describe_toolset / call_tool).
-export const SERVER_INSTRUCTIONS_MICRO = `UE-MCP (micro mode): Unreal Engine editor bridge (C++ plugin). The entire surface (${CATEGORY_COUNT} categories, ${ACTION_COUNT} actions) is reached through a single gateway tool to keep context tiny.
+function microInstructions(f: SurfaceFacts): string {
+  return `UE-MCP (micro mode): Unreal Engine editor bridge (C++ plugin). The entire surface (${f.categoryCount} categories, ${f.actionCount} actions) is reached through a single gateway tool to keep context tiny.
 
 ═══ HOW TO USE ═══
 - tools(action="search", query="rotate clockwise") - find action signatures by intent
@@ -217,7 +252,7 @@ ${SPATIAL_GUIDANCE}
 In micro mode invoke it through tools(action="call", category="level", method="nudge_component", args={ ... }).
 
 ═══ CATEGORIES ═══
-${CATEGORIES}.
+${f.categories}.
 
 ═══ FLOWS ═══
 flow(action="run", flowName="<name>") runs a named sequence; see the \`flows\` field
@@ -226,6 +261,23 @@ from tools(action="call", category="project", method="get_status").
 This micro surface is the default. context.strategy: lean or full in ue-mcp.yml (or
 UE_MCP_CONTEXT_STRATEGY) advertises the category tools directly instead.
 `;
+}
+
+const DECLARED = surfaceFacts(ALL_TOOLS);
+
+export const SERVER_INSTRUCTIONS = fullInstructions(DECLARED);
+export const SERVER_INSTRUCTIONS_LEAN = leanInstructions(DECLARED);
+export const SERVER_INSTRUCTIONS_MICRO = microInstructions(DECLARED);
+
+/**
+ * One strategy's base text. Without `scope` it quotes the declared graph and is
+ * exactly what the server sends. With it, the counts and the category list are
+ * read off those tools instead, for a surface narrowed to some categories.
+ */
+export function strategyInstructions(strategy: ContextStrategy, scope?: readonly ToolDef[], feedback = true): string {
+  const facts = scope || !feedback ? surfaceFacts(scope ?? ALL_TOOLS, feedback) : DECLARED;
+  return strategy === "micro" ? microInstructions(facts) : strategy === "lean" ? leanInstructions(facts) : fullInstructions(facts);
+}
 
 /**
  * Targeting block, appended to whichever instruction variant is in use, and
@@ -288,6 +340,16 @@ function buildPluginWarningBlock(surfaces: SessionSurface[]): string {
 }
 
 /**
+ * Whether some editor can run feedback(submit): it is in scope and at least one
+ * session has not disabled it. With no sessions nothing says otherwise.
+ */
+export function feedbackAvailable(surfaces: SessionSurface[], scope?: readonly ToolDef[]): boolean {
+  if (scope && !scope.some((t) => t.name === "feedback")) return false;
+  if (surfaces.length === 0) return true;
+  return surfaces.some((s) => !s.disabled.has("feedback") && s.tools.some((t) => t.name === "feedback"));
+}
+
+/**
  * The instructions sent at initialize: the strategy's base text, then plugin
  * knowledge and load warnings across every session (they cannot be
  * renegotiated later), then targeting only when there is more than one editor.
@@ -297,13 +359,15 @@ export function composeServerInstructions(
   surfaces: SessionSurface[],
   sessionNames: string[],
   activeName: string,
+  /** Narrow the text to these categories: their counts, their list, their plugin knowledge. */
+  scope?: readonly ToolDef[],
 ): string {
-  const knowledgeBlock = buildKnowledgeBlock(unionKnowledge(surfaces));
-  const baseInstructions = strategy === "micro"
-    ? SERVER_INSTRUCTIONS_MICRO
-    : strategy === "lean"
-      ? SERVER_INSTRUCTIONS_LEAN
-      : SERVER_INSTRUCTIONS;
+  const knowledge = unionKnowledge(surfaces);
+  const inScope = scope ? new Set(scope.map((t) => t.name)) : null;
+  const knowledgeBlock = buildKnowledgeBlock(
+    inScope ? Object.fromEntries(Object.entries(knowledge).filter(([category]) => inScope.has(category))) : knowledge,
+  );
+  const baseInstructions = strategyInstructions(strategy, scope, feedbackAvailable(surfaces, scope));
   const withKnowledge = knowledgeBlock
     ? `${baseInstructions}\n\n═══ PLUGIN KNOWLEDGE ═══\n${knowledgeBlock}`
     : baseInstructions;

@@ -14,7 +14,7 @@
     "fixCommit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
     "moveTo": {
       "type": "string",
-      "enum": ["ue-mcp-studio", "ue-mcp-studio-plugin", "pie-studio", "voxel-plugin-tools", "perforce", "meshy", "fab-editor"]
+      "enum": ["ue-mcp-studio", "ue-mcp-studio-plugin", "voxel-plugin-tools", "perforce", "meshy", "fab-editor"]
     },
     "questions": { "type": "array", "items": { "type": "string", "maxLength": 300 }, "maxItems": 4 },
     "summary": { "type": "string", "maxLength": 700 },

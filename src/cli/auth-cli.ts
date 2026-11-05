@@ -22,7 +22,7 @@ import {
   warn,
 } from "./ui/ansi.js";
 import { singleSelect } from "./ui/select.js";
-import { isMainModule } from "./cli-main.js";
+import { isMainModule, type CliUsage } from "./cli-main.js";
 
 /**
  * Sign in, or reuse a cached sign-in. True when a token is cached afterwards.
@@ -107,9 +107,61 @@ export async function runFeedbackAuthStep(opts: { ask?: boolean } = {}): Promise
   return false;
 }
 
+/** One line of `ue-mcp auth --json`. */
+export type AuthEvent =
+  | { event: "code"; verificationUri: string; userCode: string; expiresAt: number; interval: number }
+  | { event: "signed-in"; login: string; cached: boolean }
+  | { event: "failed"; reason: "denied" | "expired" | "timeout" | "error"; message?: string };
+
+/**
+ * The device flow for a caller with no terminal, such as an editor's setup page:
+ * one JSON object per line, the code to enter first, then how it ended.
+ */
+export async function runFeedbackAuthJson(emit: (e: AuthEvent) => void): Promise<boolean> {
+  const cached = await readUserAuth();
+  if (cached) {
+    emit({ event: "signed-in", login: cached.login, cached: true });
+    return true;
+  }
+  const failed = (e: unknown): false => {
+    emit({ event: "failed", reason: "error", message: e instanceof Error ? e.message : String(e) });
+    return false;
+  };
+  let pending;
+  try {
+    pending = await startDeviceFlow();
+  } catch (e) {
+    return failed(e);
+  }
+  emit({ event: "code", verificationUri: pending.verification_uri, userCode: pending.user_code, expiresAt: pending.expires_at, interval: pending.interval });
+  let result;
+  try {
+    result = await pollDeviceFlow(pending);
+  } catch (e) {
+    return failed(e);
+  }
+  if (result.kind === "auth") {
+    emit({ event: "signed-in", login: result.auth.login, cached: false });
+    return true;
+  }
+  emit({ event: "failed", reason: result.kind });
+  return false;
+}
+
+export const usage: CliUsage = {
+  usage: "ue-mcp auth [--json]",
+  summary: "Sign in to GitHub so feedback issues author as your account.",
+  flags: [
+    { name: "--json", description: "Print one JSON object per line: the code to enter, then the outcome" },
+  ],
+};
+
 /** Entry point for `ue-mcp auth`. init.ts runs the same step inline. */
-export async function run(): Promise<number | void> {
-  return (await runFeedbackAuthStep({ ask: false })) ? 0 : 1;
+export async function run(argv: string[] = []): Promise<number | void> {
+  const authorized = argv.includes("--json")
+    ? await runFeedbackAuthJson((e) => process.stdout.write(JSON.stringify(e) + "\n"))
+    : await runFeedbackAuthStep({ ask: false });
+  return authorized ? 0 : 1;
 }
 
 // Also runnable as `node dist/cli/auth-cli.js`, only when executed directly.

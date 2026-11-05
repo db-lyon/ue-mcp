@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Static mesh edits on copies of engine meshes, each read back through a
  * second action: sockets, material slots, navigation, build settings, the

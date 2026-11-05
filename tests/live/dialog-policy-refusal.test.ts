@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * `editor(set_dialog_policy)` refusing a button label passed as the response (#1421).
  *

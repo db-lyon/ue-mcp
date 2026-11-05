@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * UMG animation authoring read back through get_widget_animation and
  * read_widget_animations: create and delete, property tracks and keys, event

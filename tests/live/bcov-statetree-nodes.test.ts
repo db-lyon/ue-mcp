@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * StateTree nodes: tasks, enter conditions, transitions and their conditions,
  * clearing a state, evaluators, global tasks, node-type discovery and a

@@ -86,6 +86,8 @@ bool FMCPAssetNestedArrayPathTest::RunTest(const FString& Parameters)
 	const FString ClipPath = FString(MCPNestedPathTestRoot) + TEXT("DT_Clip");
 	UPackage* ClipPackage = CreatePackage(*ClipPath);
 	UDataTable* Clip = NewObject<UDataTable>(ClipPackage, FName(TEXT("DT_Clip")), RF_Public | RF_Standalone);
+	// A table with no row struct logs an error when it is emptied, which fails whichever test is running when it is collected.
+	Clip->RowStruct = FTableRowBase::StaticStruct();
 	const FGCRootScope KeepClipAlive(Clip);
 
 	FString PackageFileName;

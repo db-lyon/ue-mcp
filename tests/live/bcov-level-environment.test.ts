@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Level lights, volumes, post process, fog, runtime virtual texture volumes and water read back through
  * another action. Every actor is labelled BCov_Level_Env* in the open map and deleted afterwards. Refs #1223.

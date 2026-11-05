@@ -122,6 +122,13 @@ export const LOCAL_ACTIONS: Record<string, string> = {
   "editor.build_project": "Runs UnrealBuildTool out of process, which requires the editor to be STOPPED because it cannot link while an editor holds the module DLLs.",
   "project.build": "Runs UnrealBuildTool out of process, which requires the editor to be STOPPED because it cannot link while an editor holds the module DLLs.",
 
+  // Checkpoints (#1482). The shadow history is on disk; the editor is consulted only when it is connected.
+  "editor.checkpoint": "Commits the shadow history on disk. A connected editor is asked for its dirty packages and re-armed for save recording.",
+  "editor.list_checkpoints": "Reads the shadow history on disk.",
+  "editor.list_changes": "Diffs checkpoints in the shadow history on disk. Asset diffs are added only when an editor is connected; without one each package says so.",
+  "editor.restore": "Writes files back from the shadow history. A connected editor reloads them; without one there is nothing loaded to reload.",
+  "editor.clear_checkpoints": "Deletes the shadow history on disk.",
+
   // Reporting and introspection that never touch the editor.
   "feedback.submit": "Posts to a GitHub tracker. It needs the network and a user approval prompt, not an editor.",
   "feedback.route": "Answers where an issue would land from the plugin registry on disk.",
@@ -138,6 +145,8 @@ export const LOCAL_ACTIONS: Record<string, string> = {
  */
 export const EDITOR_BOUND_LOCAL_ACTIONS: Record<string, string> = {
   "asset.search": "Wraps the search_assets bridge method, resolving content roots first.",
+  "editor.diff_checkpoint_asset": "Exports two versions from the shadow history and calls checkpoint_diff_asset, which loads them in the editor to diff them.",
+  "editor.open_checkpoint_diff": "Exports versions from the shadow history and calls checkpoint_open_native_diff, which opens Unreal's diff window.",
   "asset.migrate": "Calls the migrate bridge method from a module-level helper, then rescans the destination editor.",
   "asset.lock": "Calls the acquire_lock bridge method. The lock registry lives in the editor.",
   "asset.unlock": "Calls the release_lock bridge method. The lock registry lives in the editor.",

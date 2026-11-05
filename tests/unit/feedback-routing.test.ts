@@ -12,10 +12,10 @@ import { ALL_TOOLS } from "../../src/tools.js";
  */
 const CATALOG: RegistryPlugin[] = [
   {
-    slug: "pie-studio",
-    name: "PIE Studio",
-    packageName: "pie-studio",
-    repoUrl: "https://github.com/db-lyon/pie-studio",
+    slug: "sample-recorder",
+    name: "Sample Recorder",
+    packageName: "sample-recorder",
+    repoUrl: "https://github.com/db-lyon/sample-recorder",
     repoPrivate: false,
     tagline: "Record, replay, observe, and inject input in Play-In-Editor sessions.",
     category: "editor",
@@ -46,15 +46,15 @@ const CATALOG: RegistryPlugin[] = [
   },
 ];
 
-function installedPieStudio(overrides: Partial<PluginInfo> = {}): PluginInfo {
+function installedSampleRecorder(overrides: Partial<PluginInfo> = {}): PluginInfo {
   return {
-    name: "pie-studio",
+    name: "sample-recorder",
     version: "1.0.0",
-    actionPrefix: "pie",
+    actionPrefix: "recorder",
     status: "active",
     degraded: [],
     injected: {},
-    provided: { pie: ["replay", "record", "observe", "inject_input"] },
+    provided: { recorder: ["replay", "record", "observe", "inject_input"] },
     knowledge: {},
     flows: [],
     tasks: [],
@@ -71,24 +71,24 @@ describe("feedback routing", () => {
 
   it("routes a report about a plugin-provided category to that plugin's repo", async () => {
     const d = await routeFeedback({
-      title: "pie(replay) diverges from the recorded run after 200 frames",
+      title: "recorder(replay) diverges from the recorded run after 200 frames",
       summary:
         "Replaying a recorded PIE session drifts from the capture: the pawn ends up several metres from where it was recorded, and the observation profile reports no divergence.",
-      idealTool: "pie(action=replay)",
+      idealTool: "recorder(action=replay)",
       catalog: CATALOG,
       tools: ALL_TOOLS,
-      installed: [installedPieStudio()],
+      installed: [installedSampleRecorder()],
     });
 
     expect(d.target).toBe("plugin");
-    expect(repoSlug(d.repo)).toBe("db-lyon/pie-studio");
+    expect(repoSlug(d.repo)).toBe("db-lyon/sample-recorder");
     expect(d.candidate?.confidence).toBe("certain");
-    expect(d.candidate?.reasons.join(" ")).toContain("provides the 'pie' category");
+    expect(d.candidate?.reasons.join(" ")).toContain("provides the 'recorder' category");
   });
 
   it("routes on registry keywords alone when the plugin is not installed", async () => {
     const d = await routeFeedback({
-      title: "pie(inject_input) drops the first frame of a tape",
+      title: "recorder(record) drops the first frame of a tape",
       summary:
         "Injecting a recorded input tape loses the very first frame, so a jump queued on frame 0 never fires during the replayed session.",
       catalog: CATALOG,
@@ -97,7 +97,7 @@ describe("feedback routing", () => {
     });
 
     expect(d.target).toBe("plugin");
-    expect(repoSlug(d.repo)).toBe("db-lyon/pie-studio");
+    expect(repoSlug(d.repo)).toBe("db-lyon/sample-recorder");
     expect(d.candidate?.installed).toBe(false);
   });
 
@@ -105,17 +105,17 @@ describe("feedback routing", () => {
     const d = await routeFeedback({
       title: "editor(play_in_editor) never returns on a cold editor start",
       summary:
-        "Starting PIE through editor(play_in_editor) hangs until the asset registry scan finishes, and the call times out before that happens.",
+        "Starting PIE through editor(play_in_editor) to feed the recorder hangs until the asset registry scan finishes, and the call times out before that happens.",
       catalog: CATALOG,
       tools: ALL_TOOLS,
-      installed: [installedPieStudio()],
+      installed: [installedSampleRecorder()],
     });
 
     expect(d.target).toBe("core");
     expect(repoSlug(d.repo)).toBe("db-lyon/ue-mcp");
     expect(d.coreAnchor).toContain("play_in_editor");
     // The match is still reported so the user can override it at the prompt.
-    expect(d.suggestions.some((s) => s.slug === "pie-studio")).toBe(true);
+    expect(d.suggestions.some((s) => s.slug === "sample-recorder")).toBe(true);
     expect(d.note).toBeTruthy();
   });
 
@@ -127,7 +127,7 @@ describe("feedback routing", () => {
       idealTool: "blueprint(action=set_class_default)",
       catalog: CATALOG,
       tools: ALL_TOOLS,
-      installed: [installedPieStudio()],
+      installed: [installedSampleRecorder()],
     });
 
     expect(d.target).toBe("core");
@@ -177,7 +177,7 @@ describe("feedback routing", () => {
     });
 
     expect(d.target).toBe("plugin");
-    expect(repoSlug(d.repo)).toBe("db-lyon/pie-studio");
+    expect(repoSlug(d.repo)).toBe("db-lyon/sample-recorder");
   });
 
   it("routes on a call to a category core does not have, even from a tag term", async () => {
@@ -211,7 +211,7 @@ describe("feedback routing", () => {
 
   it("matches a two-token plugin name spelled out in prose", async () => {
     const d = await routeFeedback({
-      title: "PIE Studio contact sheet is blank when capture_frame_every is 1",
+      title: "Sample Recorder contact sheet is blank when capture_frame_every is 1",
       summary:
         "Every captured frame comes out fully black, so the generated contact sheet is unusable for reading what happened during the run.",
       catalog: CATALOG,
@@ -220,7 +220,7 @@ describe("feedback routing", () => {
     });
 
     expect(d.target).toBe("plugin");
-    expect(repoSlug(d.repo)).toBe("db-lyon/pie-studio");
+    expect(repoSlug(d.repo)).toBe("db-lyon/sample-recorder");
   });
 
   it("honours an explicit repo that a registered plugin owns", async () => {
@@ -239,12 +239,12 @@ describe("feedback routing", () => {
 
   it("refuses an explicit repo no registered plugin owns", async () => {
     const d = await routeFeedback({
-      title: "pie(replay) diverges from the recorded run",
+      title: "recorder(replay) diverges from the recorded run",
       summary: "Replaying a recorded PIE session drifts badly from the original capture.",
       explicitRepo: "someone-else/private-thing",
       catalog: CATALOG,
       tools: ALL_TOOLS,
-      installed: [installedPieStudio()],
+      installed: [installedSampleRecorder()],
     });
 
     expect(d.target).toBe("core");
@@ -254,16 +254,16 @@ describe("feedback routing", () => {
 
   it("falls back to core when the matched plugin has no public tracker", async () => {
     const d = await routeFeedback({
-      title: "pie(replay) diverges from the recorded run after 200 frames",
+      title: "recorder(replay) diverges from the recorded run after 200 frames",
       summary: "Replaying a recorded PIE session drifts from the capture by several metres.",
-      idealTool: "pie(action=replay)",
+      idealTool: "recorder(action=replay)",
       catalog: [{ ...CATALOG[0], repoUrl: undefined }],
-      installed: [installedPieStudio()],
+      installed: [installedSampleRecorder()],
     });
 
     expect(d.target).toBe("core");
     expect(d.note).toContain("no public issue tracker");
-    expect(d.suggestions[0]?.slug).toBe("pie-studio");
+    expect(d.suggestions[0]?.slug).toBe("sample-recorder");
   });
 
   it("routes to a locally loaded plugin the registry has never seen", async () => {
@@ -274,7 +274,7 @@ describe("feedback routing", () => {
       idealTool: "voxeltools(action=carve_sphere)",
       catalog: [],
       installed: [
-        installedPieStudio({
+        installedSampleRecorder({
           name: "ue-mcp-voxeltools",
           actionPrefix: "voxeltools",
           provided: { voxeltools: ["carve_sphere"] },
@@ -290,7 +290,7 @@ describe("feedback routing", () => {
 
   it("degrades to core when the registry is unreachable and nothing is installed", async () => {
     const d = await routeFeedback({
-      title: "pie(replay) diverges from the recorded run after 200 frames",
+      title: "recorder(replay) diverges from the recorded run after 200 frames",
       summary: "Replaying a recorded PIE session drifts from the capture by several metres.",
       catalog: [],
       installed: [],
@@ -308,9 +308,9 @@ describe("feedback routing", () => {
 
 describe("registry-catalog helpers", () => {
   it("parses github repo URLs in every shape the registry stores them", () => {
-    expect(parseGitHubRepo("https://github.com/db-lyon/pie-studio")).toEqual({ owner: "db-lyon", repo: "pie-studio" });
-    expect(parseGitHubRepo("git+https://github.com/db-lyon/pie-studio.git")).toEqual({ owner: "db-lyon", repo: "pie-studio" });
-    expect(parseGitHubRepo("git@github.com:db-lyon/pie-studio.git")).toEqual({ owner: "db-lyon", repo: "pie-studio" });
+    expect(parseGitHubRepo("https://github.com/db-lyon/sample-recorder")).toEqual({ owner: "db-lyon", repo: "sample-recorder" });
+    expect(parseGitHubRepo("git+https://github.com/db-lyon/sample-recorder.git")).toEqual({ owner: "db-lyon", repo: "sample-recorder" });
+    expect(parseGitHubRepo("git@github.com:db-lyon/sample-recorder.git")).toEqual({ owner: "db-lyon", repo: "sample-recorder" });
     expect(parseGitHubRepo("https://gitlab.com/x/y")).toBeNull();
     expect(parseGitHubRepo(undefined)).toBeNull();
   });
@@ -322,8 +322,8 @@ describe("registry-catalog helpers", () => {
   });
 
   it("builds a prefilled new-issue URL and caps the body length", () => {
-    const url = newIssueUrl({ owner: "db-lyon", repo: "pie-studio" }, "title here", "x".repeat(9000));
-    expect(url.startsWith("https://github.com/db-lyon/pie-studio/issues/new?")).toBe(true);
+    const url = newIssueUrl({ owner: "db-lyon", repo: "sample-recorder" }, "title here", "x".repeat(9000));
+    expect(url.startsWith("https://github.com/db-lyon/sample-recorder/issues/new?")).toBe(true);
     expect(url).toContain("title=title%20here");
     expect(url.length).toBeLessThan(6500);
   });
@@ -336,7 +336,7 @@ describe("feedback routing of plugin-injected actions", () => {
 
   function installedPerforce(): PluginInfo {
     return {
-      ...installedPieStudio(),
+      ...installedSampleRecorder(),
       name: "ue-mcp-perforce",
       actionPrefix: "p4",
       injected: { source_control: ["p4_reconcile"] },

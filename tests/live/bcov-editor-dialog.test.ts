@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Dialog policies: set_dialog_policy, get_dialog_policy and clear_dialog_policy,
  * read back through get_dialog_policy. The pattern matches no real prompt.

@@ -1,3 +1,4 @@
+// @live-editor interactive
 /**
  * The dialog gate, end to end, against a real modal in the disposable project.
  *

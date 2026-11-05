@@ -264,7 +264,7 @@ export const schema: Record<string, z.ZodType> = {
   password: z.string().optional().describe("Password or ticket for providers that log in (Perforce); sent to the provider only, never echoed"),
   path: z.string().optional().describe("One asset path or file to diff against its latest repository revision (source_control_diff). One asset path or file whose revision history to read (source_control_history)"),
   paths: z.array(z.string()).optional().describe("Asset or package paths (/Game/X), content folders, or files on disk (absolute or relative to the project) (source_control_add, source_control_checkout, source_control_get_status, source_control_mark_for_delete, source_control_revert, source_control_submit). Folders or files to look under (default the project's Content, Config, Source and Plugins folders and its .uproject) (source_control_list_changes). Folders or files to sync to the latest revision (default the project's Content, Config, Source and Plugins folders and its .uproject) (source_control_sync)"),
-  restoreFrom: z.record(z.unknown()).optional().describe("File to saved copy, as mark_for_delete's rollback carries it: a deleted file the provider cannot revert is put back from its copy and marked for add"),
+  restoreFrom: z.record(z.string(), z.unknown()).optional().describe("File to saved copy, as mark_for_delete's rollback carries it: a deleted file the provider cannot revert is put back from its copy and marked for add"),
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */

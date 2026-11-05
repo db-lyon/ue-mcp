@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { ToolDef, ToolContext } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
 import { toolGraphOf } from "../surface/target-params.js";
-import { directive } from "../core/directive.js";
+import { directive, type DirectiveResponse } from "../core/directive.js";
+import { CORE_ISSUES_URL } from "../extensions/registry-catalog.js";
 import { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } from "../editor/editor-control.js";
 import { buildProjectAction } from "./project/install.js";
 import { startProgress } from "../cli/ui/progress.js";
@@ -11,12 +12,93 @@ import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../edi
 import { progressRenderingNote } from "../dispatch/client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../dispatch/workaround-tracker.js";
 import { searchToolGraph } from "../surface/context/tool-search.js";
-import { evaluateGate, gateRefusalMessage, type GateCandidate } from "../dispatch/python-gate.js";
+import { evaluateGate, gateRefusalMessage, relevantCandidates, type GateCandidate } from "../dispatch/python-gate.js";
 import { checkBridgeParity } from "../bridge/bridge-parity.js";
 import { absentToolset, registeredMethodsOf } from "../surface/registered-surface.js";
 import { PLUGIN_UPGRADE_POINTER } from "../bridge/bridge.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 import { specBp, schema as specSchema } from "./specs/editor.generated.js";
+import { checkpointActions, checkpointSchema } from "./checkpoints.js";
+
+/** Whether the addressed editor can run feedback(submit): its category is not disabled. */
+export function feedbackEnabled(ctx: ToolContext): boolean {
+  return ctx.getToolGraph ? ctx.getToolGraph().some((t) => t.name === "feedback") : true;
+}
+
+/**
+ * What the agent is told after a Python workaround. With the feedback category
+ * disabled it never names feedback(submit), which would only fail: the gap is
+ * reported to the user with the issue tracker to file it at.
+ */
+export function workaroundDirective(n: number, result: unknown, canSubmit: boolean): DirectiveResponse {
+  const head = [
+    `[AGENT DIRECTIVE - MANDATORY]`,
+    `execute_python was used as a workaround (${n} time(s) this session).`,
+    `This means a native ue-mcp tool could not handle the task.`,
+    ``,
+  ];
+  const fields = [
+    `  title  - short description of the gap`,
+    `  summary - what was attempted and why the native tool fell short`,
+    `  pythonWorkaround - the Python code above`,
+    `  idealTool - what tool/action should handle this natively`,
+  ];
+  if (!canSubmit) {
+    return directive(
+      [
+        ...head,
+        `YOUR NEXT MESSAGE TO THE USER must include:`,
+        `"I had to use execute_python to <describe what you did and why>.`,
+        ` A native tool for this can be requested at ${CORE_ISSUES_URL}."`,
+        ``,
+        `The feedback category is disabled in this project, so do not call it.`,
+        `Keep a record of the gap for the user with:`,
+        ...fields,
+        ``,
+        `Do NOT skip this step. Do NOT defer it to "later."`,
+      ].join("\n"),
+      result,
+      {
+        kind: "workaround.feedback",
+        requiredActions: ["surface_workaround_to_user", "point_user_to_issue_tracker"],
+        context: {
+          workaroundCount: n,
+          feedbackDisabled: true,
+          issueTracker: CORE_ISSUES_URL,
+          expectedFields: ["title", "summary", "pythonWorkaround", "idealTool"],
+        },
+      },
+    );
+  }
+  return directive(
+    [
+      ...head,
+      `YOUR NEXT MESSAGE TO THE USER must include:`,
+      `"I had to use execute_python to <describe what you did and why>.`,
+      ` Would you like to submit feedback so this can become a native tool?"`,
+      ``,
+      `If the user agrees, call feedback(action="submit") with:`,
+      ...fields,
+      ``,
+      `Do NOT skip this step. Do NOT defer it to "later."`,
+    ].join("\n"),
+    result,
+    {
+      kind: "workaround.feedback",
+      requiredActions: [
+        "surface_workaround_to_user",
+        "ask_if_user_wants_to_submit_feedback",
+        "on_agreement_call_feedback_submit",
+      ],
+      context: {
+        workaroundCount: n,
+        feedbackTool: "feedback",
+        feedbackAction: "submit",
+        expectedFields: ["title", "summary", "pythonWorkaround", "idealTool"],
+      },
+    },
+  );
+}
 
 /**
  * Which gate candidates dispatch to a bridge method the connected plugin does
@@ -129,7 +211,7 @@ export const editorTool: ToolDef = categoryTool(
     execute_python: {
       kind: "handler",
       effect: "unknown",
-      description: "GATED LAST RESORT. execute_python is unreachable until a semantic tool search over your taskSummary has been run AND every candidate it returns is EXPLICITLY ruled out with a stated reason. Flow: (1) call with taskSummary (+code) - it returns the candidate actions AND the exact ruledOut array to send back; (2) re-call with the same taskSummary/code PLUS that ruledOut=[{action, reason}], each reason at least 12 characters saying why that candidate does not fit. The action field accepts the bare name, tool(action) or tool.action, and rulings are remembered for the session so rewording the taskSummary never asks you to justify the same action twice. A candidate the running plugin does not register cannot do the task, so it needs no ruling: it is listed under notInRunningPlugin with the upgrade command instead. Python runs only once every candidate is ruled out. Params: code, taskSummary (required), ruledOut?, resultVariable? (name of a top-level variable to return as `result`, separate from print()/log; #732) (#704, #938, #960, #1167)",
+      description: "GATED LAST RESORT. execute_python is unreachable until a semantic tool search over your taskSummary has been run AND every candidate it returns is EXPLICITLY ruled out with a stated reason. Flow: (1) call with taskSummary (+code) - it returns the candidate actions AND the exact ruledOut array to send back; (2) re-call with the same taskSummary/code PLUS that ruledOut=[{action, reason}], each reason at least 12 characters saying why that candidate does not fit. The action field accepts the bare name, tool(action) or tool.action, and rulings are remembered for the session so rewording the taskSummary never asks you to justify the same action twice. A candidate the running plugin does not register cannot do the task, so it needs no ruling: it is listed under notInRunningPlugin with the upgrade command instead. Python runs only once every candidate is ruled out. Candidates are the search hits that bear on the summary: when it names a subsystem (PCG, Niagara, MetaSound), another subsystem's actions that only share a word are not candidates, nor is a hit scoring under half the best one. Params: code, taskSummary (required), ruledOut?, resultVariable? (name of a top-level variable to return as `result`, separate from print()/log; #732) (#704, #938, #960, #1167)",
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
         const code = (params.code as string) ?? "";
         const taskSummary = ((params.taskSummary as string) ?? "").trim();
@@ -148,8 +230,14 @@ export const editorTool: ToolDef = categoryTool(
           };
         }
 
-        // Candidates = meaningful matches (a name/phrase hit), capped at 5.
-        const candidates = searchToolGraph(toolGraphOf(ctx), taskSummary, 5).filter((h) => h.score >= 4);
+        // Candidates = meaningful matches (a name/phrase hit) that bear on the summary, capped at 5. A summary
+        // naming a subsystem is not asked to rule out another subsystem's actions that share a word.
+        const graph = toolGraphOf(ctx);
+        const candidates = relevantCandidates(
+          searchToolGraph(graph, taskSummary, 20).filter((h) => h.score >= 4),
+          taskSummary,
+          graph.map((t) => t.name),
+        ).slice(0, 5);
         if (candidates.length > 0) {
           // #938 / #960: matching is spelling-insensitive and rulings persist
           // for the session, so the strings this refusal prints are exactly the
@@ -213,47 +301,15 @@ export const editorTool: ToolDef = categoryTool(
         }
 
         const n = workaroundCount(ctx);
-        return directive(
-          [
-            `[AGENT DIRECTIVE - MANDATORY]`,
-            `execute_python was used as a workaround (${n} time(s) this session).`,
-            `This means a native ue-mcp tool could not handle the task.`,
-            ``,
-            `YOUR NEXT MESSAGE TO THE USER must include:`,
-            `"I had to use execute_python to <describe what you did and why>.`,
-            ` Would you like to submit feedback so this can become a native tool?"`,
-            ``,
-            `If the user agrees, call feedback(action="submit") with:`,
-            `  title  - short description of the gap`,
-            `  summary - what was attempted and why the native tool fell short`,
-            `  pythonWorkaround - the Python code above`,
-            `  idealTool - what tool/action should handle this natively`,
-            ``,
-            `Do NOT skip this step. Do NOT defer it to "later."`,
-          ].join("\n"),
-          result,
-          {
-            kind: "workaround.feedback",
-            requiredActions: [
-              "surface_workaround_to_user",
-              "ask_if_user_wants_to_submit_feedback",
-              "on_agreement_call_feedback_submit",
-            ],
-            context: {
-              workaroundCount: n,
-              feedbackTool: "feedback",
-              feedbackAction: "submit",
-              expectedFields: ["title", "summary", "pythonWorkaround", "idealTool"],
-            },
-          },
-        );
+        return workaroundDirective(n, result, feedbackEnabled(ctx));
       },
     },
     run_python_file: specBp("mutate", "Run a Python file from disk with __file__/__name__ populated (#142). Pass entryPoint to load the file WITHOUT firing its `if __name__ == \"__main__\"` guard and then call one named function in it, which is how a Tools/ script holding several stages behind a main() is driven a stage at a time; `args` are then that call's positional arguments rather than sys.argv, `kwargs` its keyword arguments, and its return value comes back as `result` with no resultVariable needed. Pass asMain=true (or runName=\"__main__\") to run the file through runpy as __main__ with sys.argv set to the file plus args, so a main guard that starts a tick callback does fire; runName also sets the module name an entryPoint load uses. captureLog=false drops everything the script logged except its errors, and maxLogChars keeps only the tail: a script that prints a few hundred lines otherwise returns tens of KB to a caller that wanted one value. A script that needs a line trace against the PIE world calls unreal.MCPTraceLibrary.line_trace(start, end, 'pie', pie_instance, 'WorldStatic', trace_complex), which returns hit, impact_point, impact_normal, distance, actor_path, component_name and physical_material without a round trip; the engine's SystemLibrary traces take a TraceTypeQuery, not a CollisionChannel (#1283). (#142/#732/#995)", "run_python_file"),
-    purge_python_modules: specBp("mutate", "Purge cached embedded-Python modules whose name starts with a prefix, so the editor drops stale code after you edit a Python tool on disk. Returns the purged module names + count (#719).", "purge_python_modules"),
+    purge_python_modules: { ...specBp("mutate", "Purge cached embedded-Python modules whose name starts with a prefix, so the editor drops stale code after you edit a Python tool on disk. Returns the purged module names + count (#719).", "purge_python_modules"), destructive: false },
     close_sequence: specBp("mutate", "Close the currently open Level Sequence editor (Sequencer). Do this before bulk-deleting actors a sequence may possess - open sequences re-resolve possessables by name during destruction and can mis-bind. Returns wasOpen + closedSequence (#718).", "close_sequence"),
     open_tab: specBp("mutate", "Open a registered editor tab by ID so its UI can be screenshotted as evidence (e.g. 'ProjectSettings', 'OutputLog', 'ContentBrowserTab1') (#727).", "open_tab"),
     open_settings: specBp("mutate", "Open (and navigate) a settings viewer for visual settings evidence. section takes a bare name with category, or a combined 'Engine.Physics' (#727).", "open_settings"),
+    show_notification: specBp("mutate", "Show a toast in the editor's notification area (bottom right), the way the editor reports a finished build or a failed save. severity picks the icon and colour (info default, success, warning, error); durationS is how long it stays before fading (default 8). hyperlinkText with hyperlinkUrl adds a link that opens the URL in the default browser; only http and https URLs are accepted. Returns onScreen, read back from the notification windows, so a toast Slate accepted but never drew is visible as onScreen=false.", "show_notification"),
     set_property: specBp("mutate", "Set UObject property. Saves the package to disk by default; pass save=false to leave it dirty in-memory (batch many writes, then editor(save_dirty)/asset(save)) (#674). TMap values take either { \"Key\": value } or, for struct keys, [{ key: {...}, value: ... }] - exactly what get_property/describe_object return under `value`. A write that cannot store every entry it was given fails and leaves the old value in place; containers report elementCount on success (#820). SkeletalMeshAsset/SkinnedAsset on a skinned mesh component go through SetSkinnedAssetAndUpdate, since a raw write crashes the next pose evaluation; for a placed actor use level(set_component_skeletal_mesh) (#1099). An Instanced or EditInlineNew object property takes {instanceClass, properties}: a new subobject of that class is created with the owning object as its outer and its fields set from properties, e.g. RootMotionModifier = {instanceClass: \"RootMotionModifier_Scale\", properties: {Scale: {x:0,y:0,z:0}}} (#1292).", "set_property"),
     get_property: specBp("read", "Read UObject property. propertyName takes the dotted, indexed (`Rules[1]`) and keyed (`Rules[Id=Axe]`) paths asset(set_property) does. `value` is structured JSON and is always safe to write straight back with set_property; `valueText` is UE export text and for a struct-keyed TMap does not read back, so valueTextRoundTrips reports whether it can be reused (#820).", "get_property"),
     describe_object: specBp("read", "Describe a UObject and optionally list/read properties. Per property, `value` is the round-trippable structured form and valueTextRoundTrips flags export text that is not (#820).", "describe_object"),
@@ -339,7 +395,7 @@ export const editorTool: ToolDef = categoryTool(
     find_object: specBp("read", "Resolve or search for a live UObject instance and report the objectPath that addresses it, which is what invoke_object_function / get_object_properties / set_object_property need. Pass objectPath to check one path (returns found/isValid rather than failing when it is gone), or className and/or nameContains to search every loaded object. className takes a short name (StaticMeshActor), a /Script path, a generated class name (WBP_Hud_C) or a Blueprint asset path. This is how you get the path of something spawned at runtime, an editor utility widget or a UMG widget, which no naming convention predicts. The search is paged: pass back nextCursor as cursor to read the next page (#802).", "find_object"),
     teleport_runtime_actor: specBp("mutate", "Move a live PIE actor and have it STAY moved. A plain SetActorLocation on a Character is undone by CharacterMovement on the next tick, so this stops the movement component, teleports, and stops it again. Pass actorLabel or actorPath. Reports actualLocation read back from the actor rather than what was requested. world defaults to pie (#770/#777).", "teleport_runtime_actor"),
     set_runtime_visibility: specBp("mutate", "Hide or show live PIE actors and their scene components, capturing an exact rollback snapshot. PIE-only: world must be 'pie' (the default) and pieInstance picks the world when several are running (see list_pie_instances). Provide exactly ONE actor selector - actorLabels[], actorPaths[] (the unambiguous one) or actorClass; a label matching several actors is refused rather than resolved at random. hidden=true hides, hidden=false shows. componentNames[]/componentClasses[] narrow to matching SceneComponents and imply affectComponents; with no component filter the actor itself is the target. affectActor/affectComponents override that split, propagateToChildren (default true) also takes each matched component's descendants, matchSubclasses (default true) widens class matching, and maxTargets bounds how far the expansion may go. dryRun defaults to TRUE: the call reports what it would change and mutates nothing until dryRun=false. Returns hidden, dryRun, mutationPerformed, matchedActors, targetCount, changed, alreadyDesired, worldPath, pieInstance, netMode, targets[], and on a real mutation a rollbackToken to hand to restore_runtime_visibility.", "set_runtime_visibility"),
-    restore_runtime_visibility: specBp("mutate", "Put back the exact visibility state set_runtime_visibility captured, addressed by the rollbackToken from its response. Run set_runtime_visibility with dryRun=false first; a dry run issues no token. The token belongs to one PIE session and expires with it, so restore before play ends. world, if passed, must be 'pie', and pieInstance must match the token's session. Returns restored, rollbackToken, targetCount, changed, alreadyRestored, worldPath, pieInstance, netMode.", "restore_runtime_visibility"),
+    restore_runtime_visibility: { ...specBp("mutate", "Put back the exact visibility state set_runtime_visibility captured, addressed by the rollbackToken from its response. Run set_runtime_visibility with dryRun=false first; a dry run issues no token. The token belongs to one PIE session and expires with it, so restore before play ends. world, if passed, must be 'pie', and pieInstance must match the token's session. Returns restored, rollbackToken, targetCount, changed, alreadyRestored, worldPath, pieInstance, netMode.", "restore_runtime_visibility"), destructive: false },
     invoke_static_function: specBp("unknown", "Call a project static BlueprintCallable editor UFUNCTION by className, functionName and args, returning its result in returnValues. Works on any reflected class, including actor component classes and UBlueprintFunctionLibrary subclasses (no actor instance). invoke_function needs an actor/component target; this targets the library class CDO instead, so it reaches static *_BlueprintOnly libraries (Voxel sculpt/query/stamp), GeometryScript, Kismet math, any function library. world/pieInstance pick WHICH world fills the context param, so a static that looks a GameInstance subsystem up off its context can be exercised against a live PIE session (#971); the result names the world it ran against and the parameter that carried it. Returns return/out params under returnValues, with a TArray/TSet/TMap return as real JSON and everything else as export text (#885). A project library works the same way: className takes the short name with or without its U (or /Script/Module.Class), args are keyed by parameter name, and every non-const reference out-param comes back under its own name in returnValues, an FString unquoted and whole. Example: void UMyLibrary::PlanZone(const FString& ZoneId, bool bDryRun, FString& OutManifestJson, FString& OutError) is className='MyLibrary', functionName='PlanZone', args={ZoneId:'A1', bDryRun:true}, read returnValues.OutManifestJson and returnValues.OutError. Discover libraries + functions with list_function_libraries.", "invoke_static_function"),
     invoke_function: specBp("unknown", "Call a BlueprintCallable / Exec UFUNCTION on a target actor or one of its components. world=editor (the default) runs the function on the actor placed in the level, no PIE session needed, and reports which instance ran it as resolvedActorLabel/resolvedActorPath. actorLabel is matched against placed actors by editor label first, then internal object name, then full object path; a miss is an error naming what was searched (#806). Returns out/return params under returnValues; a TArray/TSet/TMap return comes back as real JSON and everything else as export text (#885). A PIE target is called in its own instance's context with normal RPC routing (callContext=playInstance, #1217). An editor-world target runs under the editor script-execution guard, which forces every actor callspace to Local, so a UFUNCTION(Server) executes locally instead of being sent; the result warns when that happened, and deferToNextTick=true queues the call for the next engine tick where it routes normally, at the cost of returning before it runs (#973). A component redirects the call to that subobject (#382), and actorArgs fills UObject* parameters from actor labels (#383). See #228/#229.", "invoke_function"),
     list_function_libraries: specBp("read", "Enumerate UBlueprintFunctionLibrary subclasses on this build. Filter by name with pattern (case-insensitive substring, e.g. 'GeometryScript' / 'Kismet' / 'Animation'). Returns name, module, and (by default) every static BlueprintCallable function on the library with its tooltip. Use to discover what's available for editor.invoke_function (#455).", "list_function_libraries"),
@@ -389,7 +445,7 @@ export const editorTool: ToolDef = categoryTool(
     set_realtime: specBp("mutate", "Toggle realtime update on the level editor viewports so the editor-world sim (Niagara, anims) ticks - otherwise capture_scene_png renders an unticked, empty sim (#537).", "set_realtime"),
     get_viewport: specBp("read", "Get viewport camera.", "get_viewport_info"),
     hit_test_viewport_pixel: specBp("read", "Ray-cast from a screen pixel through the active editor viewport and return the first hit. Builds the ray from the live viewport's projection matrix (no FOV/aspect guessing). width and height override the viewport size when picking from a different-resolution screenshot. Returns hit + actorLabel/actorClass/componentName/componentClass/materialPath/location/impactPoint/normal/distance/faceIndex/boneName/physicalMaterial (#418).", "hit_test_viewport_pixel"),
-    get_runtime_values: specBp("read", "Bulk runtime read across the active world. For each actor/component matching classFilter, resolves every path against the (actor|component) root and returns rows of {actorLabel, actorClass, componentName?, componentClass?, values, errors?}. Paths support property hops, sub-object hops, and BlueprintCallable getter calls at any segment (e.g. 'PowerConnector.GetRequired' reaches a UFUNCTION on a UObject sub-object). A getter that takes arguments is written with them inline, 'GetMirroredTallyWeight(overclock)' or 'GetBalance(gold, 2)', which is what makes a keyed accessor readable across every matched instance in one call; the literals are coerced by the same rules invoke_object_function's args use, so FName/FString/int/float/bool/enum all read (#969). classFilter matches actor class OR component class - omit to match everything. componentName roots every path at the component with that instance name (case-insensitive) and skips actors without one, so two components of the same class are addressable apart (#1113). The first segment of a path may also name a component by instance name (case-insensitive) or by class when only one component has it ('CharacterMovementComponent.GroundFriction'); a segment that resolves to nothing lists the actor's components with their classes and the properties it could have been (#1204). To enumerate a live actor's components, use level(query_components, world='pie', actorLabelContains=...). A path whose result is a TArray/TSet/TMap comes back as real JSON rather than one string (#885). World defaults to PIE if running, else editor (#414).", "get_runtime_values"),
+    get_runtime_values: specBp("read", "Bulk runtime read across the active world. For each actor/component matching classFilter, resolves every path against the (actor|component) root and returns rows of {actorLabel, actorClass, componentName?, componentClass?, values, errors?}. Paths support property hops, sub-object hops, and BlueprintCallable getter calls at any segment (e.g. 'PowerConnector.GetRequired' reaches a UFUNCTION on a UObject sub-object). A getter that takes arguments is written with them inline, 'GetMirroredTallyWeight(overclock)' or 'GetBalance(gold, 2)', which is what makes a keyed accessor readable across every matched instance in one call; the literals are coerced by the same rules invoke_object_function's args use, so FName/FString/int/float/bool/enum all read (#969). classFilter matches actor class OR component class - omit to match everything. An actor whose own class does not match answers with one row per matching component, so two InstancedStaticMeshComponents on one actor are two rows; matched counts rows and matchedActors the actors. componentName roots every path at the component with that instance name (case-insensitive) and skips actors without one, so two components of the same class are addressable apart (#1113). The first segment of a path may also name a component by instance name (case-insensitive) or by class when only one component has it ('CharacterMovementComponent.GroundFriction'); a segment that resolves to nothing lists the actor's components with their classes and the properties it could have been (#1204). To enumerate a live actor's components, use level(query_components, world='pie', actorLabelContains=...). A path whose result is a TArray/TSet/TMap comes back as real JSON rather than one string (#885). World defaults to PIE if running, else editor (#414).", "get_runtime_values"),
     set_viewport: specBp("mutate", "Set the viewport camera, its projection and its orthographic zoom. The projection is switched BEFORE the requested pose is applied, because the viewport keeps a separate transform cache per projection and writing the pose first would hand back the camera from the mode you just left. Every value is validated before anything is written, and the rollback restores the projection and zoom as well as the location and rotation. Acts on the active level viewport (#1029). When the viewport is piloting an actor or locked to a Sequencer camera the pose snaps back on the next tick, so the result carries cameraLock {kind: pilot|cinematic, actorLabel, actorPath} and a warning (#1361).", "set_viewport_camera"),
     focus_on_actor: specBp("mutate", "Focus on actor. Pass actorLabel or actorPath (#983).", "focus_viewport_on_actor"),
     create_sequence: specBp("mutate", "Create Level Sequence.", "create_level_sequence"),
@@ -423,7 +479,7 @@ export const editorTool: ToolDef = categoryTool(
     get_crash_info: specBp("read", "Get crash details.", "get_crash_info"),
     check_for_crashes: specBp("read", "Check for recent crashes.", "check_for_crashes"),
     set_dialog_policy: specBp("mutate", "Arm an answer, in advance, for dialogs whose title or message contains a pattern. READ THIS BEFORE USING IT: an armed policy presses the button for you, so from then on a matching prompt is answered and dismissed and the user never sees the question. On a save prompt that means unsaved work can be discarded without anyone reading the warning. Nothing arms a policy on your behalf - the plugin ships none and no other action arms one - so every policy in effect is one somebody typed here deliberately, and this is the only way the bridge ever answers a dialog by itself. Covers the Slate modal windows the editor raises itself (the shutdown \"Save Content\" prompt among them, whose buttons are Save Selected / Don't Save / Cancel). A response keyword (yes/no/ok/cancel/retry/continue/yesall/noall) resolves to whichever of the dialog's buttons carries that meaning, so response='no' presses \"Don't Save\"; pass buttonLabel to name a button literally instead. On a plain message dialog buttonLabel answers with the button it names (buttonLabel=\"Yes\" answers Yes); where that dialog has no such button, a label or response answers with the nearest one it offers (yes is OK on an OK/Cancel dialog, no is Cancel), and one with no equivalent there leaves the dialog for a person (#1334). A policy set here answers a matching dialog whoever raised it, and answers one that is already on screen. To read a dialog instead of pre-answering it, use editor(list_dialogs) and then editor(respond_to_dialog).", "set_dialog_policy"),
-    clear_dialog_policy: specBp("mutate", "Clear dialog policies.", "clear_dialog_policy"),
+    clear_dialog_policy: { ...specBp("mutate", "Clear dialog policies.", "clear_dialog_policy"), destructive: false },
     get_dialog_policy: specBp("read", "Get the dialog policies currently armed, each with its response and literal buttonLabel. Every one was armed by a caller through set_dialog_policy: the plugin arms none of its own, so an empty list means nothing will answer any dialog on its own.", "get_dialog_policy"),
     list_dialogs: specBp("read", "Read the modal dialog blocking the editor, in full: its exact title, its COMPLETE message text (never truncated - messageTruncated is always false), every button label in the order the dialog lays them out, and a `choices` array pairing each button with the exact editor(respond_to_dialog) call that presses it. When the dialog asks a question per row (the \"Save Content\" prompt is a checkbox per unsaved package), an `items` array reports each tickable row: its index, its label, its cells (asset name, package path, class path) and whether it is currently ticked. No button is marked recommended and none is reordered; choosing is yours. Also reports which armed policy matches and which button that policy would press, if any. `blocksGameThread` says whether the editor is actually held: true only for a window on Slate's modal stack, which is what parks the game thread and refuses every other action. A prompt the editor raised without AddModalWindow comes back with `blocksGameThread` false and `detectedBy` parentedWindow - it is reported, because an unanswered question must not be quit out from under, and nothing is refused for it (#1118). `notTreatedAsDialogs` names any window the walk considered and rejected, with the reason: a standalone Message Log or an undocked Output Log is a regular parented window like a dialog is, and used to block every action for the life of the session with no button that could answer it (#1078). A window in that list is NOT blocking anything. Also reports `windows`: every open modal and floating window with the windowId editor(list_windows), press_window_button and close_window take. Runs even while a dialog is blocking the editor, when every other handler times out, so this is the way to see what the editor is asking.", "list_dialogs"),
     respond_to_dialog: specBp("mutate", "Press one named button on the active modal dialog, releasing the game thread. This is the deliberate way to answer a dialog: read it with editor(list_dialogs) first, then name the button you chose. Runs even while the dialog is blocking the editor. ONLY IN auto MODE. The dialog handling mode decides who answers, and it is enforced here: under interactive the question is put to the person in an elicitation form (raised on the call AFTER the one that hands the dialog back, so its text is read somewhere nothing truncates it) and only their button is pressed, under defer they answer it in the Unreal Editor window, and in both this call is refused with the dialog named. editor(list_dialogs) stays available in every mode, so the dialog can always be READ. Pass dialogAction='close' (or 'escape') to destroy the dialog window when no button label fits, which ends the modal without answering the question. It is NOT called 'action': that name is this tool's own dispatch field, so a call writing action='close' selects a nonexistent editor action and never reaches the dialog (#1078). Pass items to tick or untick the dialog's own rows before the button is pressed, which is what makes \"Save Selected\" mean something: read them from editor(list_dialogs) and send [{index, checked}] for the ones you want changed. The ticks and the press happen in this one call, so a modal is never left holding a selection nobody pressed anything on.", "respond_to_dialog"),
@@ -439,7 +495,7 @@ export const editorTool: ToolDef = categoryTool(
     pose_debug_camera: specBp("mutate", "Eject and aim the PIE debug camera (ToggleDebugCamera free camera) for verification shots. Moving the DebugCameraController actor is overridden by its free camera, so this poses what the camera follows: the spectator pawn (moved with its velocity stopped) and the control rotation. location and rotation set the pose, lookAtActorLabel/lookAtActorPath aim at an actor's bounds center, enabled=false returns control to the player. Reports the camera location and rotation read back from the camera manager and a rollback to the previous state (#1250).", "pose_debug_camera"),
     set_pie_view_target: specBp("mutate", "Make an actor the running PIE player's view target (PlayerController SetViewTargetWithBlend, run in that instance's context), so a spawned CameraActor frames capture_screenshot(target=pie) even in a map with no possessed pawn, which pie_set_player_view cannot do. Select the actor with actorLabel or actorPath in the PIE world; playerIndex picks the player, blendTime blends instead of cutting. Reports the view target read back, pendingViewTarget while blending, the previous target, and a rollback to it (#1203).", "set_pie_view_target"),
     pie_set_player_view: specBp("mutate", "Point the running PIE player's view (control rotation) at a pitch/yaw/roll so a capture frames the intended direction. Requires PIE (#671).", "pie_set_player_view"),
-    stage_game_input: specBp("mutate", "Stage input for the running game: set input mode (gameOnly|gameAndUI|uiOnly) and mouse cursor so injected/simulated input reaches the pawn. This only sets the mode - the injection itself is provided by plugins listed in the plugin registry, not here. Requires PIE (#671).", "stage_game_input"),
+    stage_game_input: specBp("mutate", "Stage input for the running game: set input mode (gameOnly|gameAndUI|uiOnly) and mouse cursor so injected/simulated input reaches the pawn. This only sets the mode; pie(inject_input) injects the input. Requires PIE (#671).", "stage_game_input"),
     run_automation_tests: specBp("mutate", "Run registered Automation tests matching a filter and return per-test pass/fail plus error lines. Runs them synchronously through the test framework rather than the console queue, and suspends the editor's unfocused-CPU throttle for the duration - otherwise an unfocused editor drops to a few FPS and the framework's interactive-frame-rate gate never opens, leaving tests queued forever (#765). A test whose latent commands are still queued when latentTimeoutSeconds runs out is reported as abandoned, with the reason: latent work needs engine frames, and this runs on the game thread, so a test that starts PIE (CQTest multi-client network tests, for instance) belongs in the editor's Automation window or -ExecCmds=\"Automation RunTests <name>\" at launch. Such a test used to terminate the editor outright (#993) (#693).", "run_automation_tests"),
     list_dirty_packages: specBp("read", "Enumerate currently-dirty content + map packages, read from the editor's own dirty-package lists (the same ones Save All uses). Includes a never-saved /Temp world, because an unsaved new map is exactly the unsaved work a caller needs to see before closing or reloading (#340).", "list_dirty_packages"),
     get_world_state: specBp("read", "One atomic read of which world is open and what is unsaved. Returns editorWorldName, editorWorldPackage, persistentLevelPackage, worldPackageDirty, a sorted dirtyPackages list with counts, and the editor/play/simulate mode. level(get_current) plus editor(list_dirty_packages) is two calls, so the editor can change between them and neither result proves which world the other described; this answers both in one game-thread dispatch. Read-only, and fails closed rather than reporting an empty world as a clean one (#920/#921).", "get_world_state"),
@@ -478,6 +534,7 @@ export const editorTool: ToolDef = categoryTool(
           : result;
       },
     },
+    ...checkpointActions,
     ...epicActions,
   },
   {
@@ -504,5 +561,6 @@ export const editorTool: ToolDef = categoryTool(
     waitForAssetRegistry: z.boolean().optional().describe("play_in_editor / play_in_editor_ignore_blueprint_errors start: block until AssetRegistry finishes the initial scan (default true)"),
     assetRegistryTimeoutSeconds: z.number().optional().describe("play_in_editor / play_in_editor_ignore_blueprint_errors start: wait budget for the AssetRegistry scan (default 180s)"),
     className: z.string().optional().describe("invoke_static_function: reflected class declaring a static UFUNCTION - short name or /Script/Module.Class path. find_object: class to search for, including Blueprint generated classes (#802)"),
+    ...checkpointSchema,
   },
 );

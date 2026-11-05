@@ -42,8 +42,15 @@ export function usesArgsEnvelope(tool: ToolDef): boolean {
   return !tool.options?.nestedParamsKey && !tool.options?.flatSurface && "action" in tool.schema;
 }
 
-const ARGS_SCHEMA = z
-  .record(z.unknown())
+/**
+ * An object of any keys and values, advertised as it was before zod 4 added
+ * `propertyNames: {type: "string"}` to every string-keyed record.
+ */
+export function unknownRecord(): z.ZodRecord<z.ZodString, z.ZodUnknown> {
+  return z.record(z.string(), z.unknown()).meta({ propertyNames: undefined });
+}
+
+const ARGS_SCHEMA = unknownRecord()
   .optional()
   .describe("The action's parameters, named as its signature names them.");
 
@@ -61,7 +68,17 @@ export function envelopeShape(tool: ToolDef): Record<string, z.ZodType> {
  * parameters stripped by the MCP layer before the handler sees them.
  */
 export function envelopeInputSchema(tool: ToolDef): z.ZodTypeAny {
-  return z.object(envelopeShape(tool)).passthrough();
+  // zod 4 advertises pass-through as `additionalProperties: {}`; keep `true`.
+  return z.object(envelopeShape(tool)).passthrough().meta({ additionalProperties: true });
+}
+
+/**
+ * The advertised input schema of a tool without the envelope. It strips
+ * unknown keys, which zod 4 no longer advertises; `additionalProperties: false`
+ * keeps tools/list as it was.
+ */
+export function strippingInputSchema(shape: Record<string, z.ZodTypeAny>): z.ZodTypeAny {
+  return z.object(shape).meta({ additionalProperties: false });
 }
 
 /**
@@ -133,9 +150,9 @@ export function flatValidationMessage(tool: ToolDef, flat: Record<string, unknow
 /** "object" or "array" when a schema only takes that structured shape, else null. A schema that also takes a string, or any value, is left alone. */
 function structuredShape(schema: z.ZodTypeAny | undefined, depth = 0): "object" | "array" | null {
   if (!schema || depth > 8) return null;
-  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return structuredShape(schema.unwrap(), depth + 1);
-  if (schema instanceof z.ZodDefault) return structuredShape(schema._def.innerType, depth + 1);
-  if (schema instanceof z.ZodEffects) return structuredShape(schema.innerType(), depth + 1);
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return structuredShape(schema.unwrap() as z.ZodTypeAny, depth + 1);
+  if (schema instanceof z.ZodDefault) return structuredShape(schema.unwrap() as z.ZodTypeAny, depth + 1);
+  if (schema instanceof z.ZodPipe) return structuredShape(schema.in as z.ZodTypeAny, depth + 1);
   if (schema instanceof z.ZodObject || schema instanceof z.ZodRecord) return "object";
   if (schema instanceof z.ZodArray || schema instanceof z.ZodTuple) return "array";
   if (schema instanceof z.ZodUnion) {

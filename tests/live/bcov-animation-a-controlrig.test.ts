@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Control Rig authoring on a copy of the engine tutorial mesh: blueprint
  * variables, and the LevelSequence edit session from begin through capture,

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * `editor(open_asset)` on the map that is already loaded (#1218).
  *
@@ -17,6 +18,9 @@ let bridge: EditorBridge;
 
 beforeAll(async () => {
   bridge = await getBridge();
+  // MCP_Home is not checked in; demo_go_home creates and saves it on a fresh project.
+  const home = await callBridge(bridge, "demo_go_home", {});
+  expect(home.ok, home.error).toBe(true);
 });
 
 afterAll(() => {

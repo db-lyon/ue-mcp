@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * query_zone_graph reads the ZoneShape actors and built ZoneGraphData of the
  * editor world: a placed shape is counted, and removing it takes it back out.

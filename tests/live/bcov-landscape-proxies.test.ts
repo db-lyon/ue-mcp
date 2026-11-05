@@ -1,3 +1,4 @@
+// @live-editor render
 /**
  * World Partition landscape proxies: proxy lookup by position and the
  * physical-material collision refresh, on a level copied from the engine's

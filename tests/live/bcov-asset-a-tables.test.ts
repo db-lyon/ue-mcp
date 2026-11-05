@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Table and type authoring, each read back through a second action: curve
  * tables, string tables, a data table row, user-defined enums and structs,

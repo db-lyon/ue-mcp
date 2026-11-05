@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Play In Editor runtime actions, each read back from the running session:
  * the player pawn and view, input mode, time dilation, PIE instances, live
@@ -159,8 +160,11 @@ describe("a running PIE session", () => {
     const dest = { x: HOME.x + 400, y: HOME.y + 200, z: HOME.z + 900 };
     const moved = await call("teleport_runtime_actor", { actorLabel: CHAR, location: dest });
     expect(moved.teleported).toBe(true);
-    await sleep(300);
-    const at = vec(((await charRow())!.values as Json).K2_GetActorLocation);
+    let at = vec(((await charRow())!.values as Json).K2_GetActorLocation);
+    for (let i = 0; i < 40 && Math.hypot(at.x - dest.x, at.y - dest.y, at.z - dest.z) >= 25; i++) {
+      await sleep(50);
+      at = vec(((await charRow())!.values as Json).K2_GetActorLocation);
+    }
     expect(Math.hypot(at.x - dest.x, at.y - dest.y, at.z - dest.z)).toBeLessThan(25);
   }, 60_000);
 });

@@ -73,8 +73,12 @@ nav:
     - Runtime Inspection: runtime-widget-inspection.md
     - Runtime Interaction: runtime-widget-interaction.md
     - Layout Diagnostics: runtime-widget-layout-diagnostics.md
+  - PIE testing:
+    - pie.md
+    - Test scripts: pie-scripts.md
   - Flows:
     - flows.md
+  - Checkpoints: checkpoints.md
   - Plugins:
     - plugins.md
     - Registry (plugins.ue-mcp.com): https://plugins.ue-mcp.com
@@ -83,7 +87,6 @@ nav:
     - Native Modules: plugins-native-modules.md
     - Guards: plugins-guards.md
     - Troubleshooting: plugins-troubleshooting.md
-    - PIE Studio: pie-record-replay.md
   - Configuration: configuration.md
   - ue-mcp.yml Reference: config-file.md
   - Neon Shrine Demo: neon-shrine-demo.md

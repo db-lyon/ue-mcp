@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Networking: every CDO replication setter on a throwaway Actor Blueprint, each
  * read back through get_networking_info, get_cdo_properties or reflect_class.

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * The engine toolset registry readers: status, the toolset listing and one
  * toolset's description, cross-checked against each other. The test project

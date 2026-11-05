@@ -1,3 +1,4 @@
+// @live-editor scm
 /**
  * Source control category with a provider configured (#1357), against the test
  * project's editor.

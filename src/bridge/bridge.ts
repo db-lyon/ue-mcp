@@ -249,6 +249,9 @@ export interface AbandonedCall {
 /** How many abandoned calls to remember. Oldest are dropped first. */
 const ABANDONED_HISTORY = 32;
 
+/** Gaps between toolset re-reads after a handshake, about seven minutes in all (#1538). */
+const TOOLSET_REREAD_MS = [2_000, 5_000, 10_000, 20_000, 30_000, 60_000, 60_000, 120_000, 120_000];
+
 /**
  * How the port the bridge is about to use was chosen.
  *
@@ -317,6 +320,8 @@ export interface IBridge {
   readonly epicToolsets?: readonly string[] | null;
   /** Re-read epicToolsets from the editor. */
   refreshEpicToolsets?(): Promise<readonly string[] | null>;
+  /** The toolsets the surface declares, which a read after the handshake waits for (#1538). */
+  expectEpicToolsets?(names: readonly string[]): void;
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   connect(timeoutMs?: number): Promise<void>;
   /**
@@ -347,6 +352,8 @@ export class EditorBridge implements IBridge {
   private readonly registeredListeners = new Set<(actions: readonly string[] | null) => void>();
   private toolsets: readonly string[] | null = null;
   private toolsetsInFlight: Promise<readonly string[] | null> | null = null;
+  private expectedToolsets: readonly string[] = [];
+  private toolsetTimer: ReturnType<typeof setTimeout> | null = null;
 
   get registeredActions(): readonly string[] | null {
     return this.registered;
@@ -382,6 +389,39 @@ export class EditorBridge implements IBridge {
     });
     this.toolsetsInFlight = run;
     return run;
+  }
+
+  expectEpicToolsets(names: readonly string[]): void {
+    this.expectedToolsets = [...new Set(names)];
+    // Expectations that arrive after the handshake's read start the follow-up themselves.
+    const have = this.toolsets;
+    if (this.ws && !this.toolsetTimer && !this.toolsetsInFlight && have && have.length > 0
+      && this.expectedToolsets.some((t) => !have.includes(t))) {
+      this.followEpicToolsets(this.ws);
+    }
+  }
+
+  /**
+   * Read the toolsets after a handshake, then again on a backoff until every
+   * expected one is listed. Python toolsets register after the bridge answers
+   * on an editor that is still starting, and a list read once stays short (#1538).
+   */
+  private followEpicToolsets(ws: WebSocket, attempt = 0): void {
+    this.toolsetTimer = null;
+    if (this.ws !== ws) return;
+    void this.refreshEpicToolsets().then((names) => {
+      if (this.ws !== ws || attempt >= TOOLSET_REREAD_MS.length) return;
+      if (!this.registered?.includes("epic_list_toolsets")) return;
+      // An absent registry will not gain toolsets.
+      if (names !== null && (names.length === 0 || this.expectedToolsets.every((t) => names.includes(t)))) return;
+      this.toolsetTimer = setTimeout(() => this.followEpicToolsets(ws, attempt + 1), TOOLSET_REREAD_MS[attempt]);
+      this.toolsetTimer.unref?.();
+    });
+  }
+
+  private stopFollowingToolsets(): void {
+    if (this.toolsetTimer) clearTimeout(this.toolsetTimer);
+    this.toolsetTimer = null;
   }
 
   private setToolsets(names: readonly string[] | null): void {
@@ -890,6 +930,7 @@ export class EditorBridge implements IBridge {
    */
   private closeSocket(reason: string, opts?: { graceful?: boolean }): void {
     this.targetGeneration += 1;
+    this.stopFollowingToolsets();
     for (const [, pending] of this.pending) {
       clearTimeout(pending.timer);
       pending.reject(new McpError(ErrorCode.CONNECTION_LOST, reason));
@@ -951,7 +992,8 @@ export class EditorBridge implements IBridge {
             ? [...capabilities.actions].sort()
             : null);
           // Read off the handshake's critical path; a failure leaves it unknown.
-          queueMicrotask(() => void this.refreshEpicToolsets());
+          this.stopFollowingToolsets();
+          queueMicrotask(() => this.followEpicToolsets(ws));
         }
 
         const mismatch = describeProtocolMismatch(capabilities);
@@ -1084,6 +1126,7 @@ export class EditorBridge implements IBridge {
       this.pending.clear();
       this.ws = null;
       this.capabilities = null;
+      this.stopFollowingToolsets();
       this.setConnected(false, detail);
     });
 

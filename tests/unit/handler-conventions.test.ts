@@ -74,7 +74,11 @@ const BASELINE = {
   // 141: datasmith(import) creates an asset set and actors, and datasmith(reimport) rewrites them from source (#1383).
   // 145: metahuman(set_wardrobe, request_rig, request_textures, assemble) replace or create character data with no inverse (#1354).
   // 147: source_control(sync) moves the workspace to other revisions, and source_control(connect) changes no files (#1357).
-  mutationsWithoutRollback: 147,
+  // 168: the pie category's input already delivered, consoles run in another process, finished recordings,
+  // replays, observations and script runs, deleted recordings and scripts, written test and scenario files,
+  // and recorded verdicts, none of which has an inverse.
+  // 169: editor(show_notification) shows a toast that fades by itself (db-lyon/ue-mcp-studio#43).
+  mutationsWithoutRollback: 169,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.
@@ -111,6 +115,12 @@ const KNOWN_ORPHANS: Record<string, string> = {
     "editor(play_in_editor_ignore_blueprint_errors) calls it only after its approval gate, so no action "
     + "declares it and play_in_editor's pie_control never reads an authorization (#1057).",
   request_editor_shutdown: "editor(stop_editor) drives it through the lifecycle path.",
+  checkpoint_arm: "The checkpoint service calls it on every connect and checkpoint to point save recording at a fresh generation (#1482).",
+  checkpoint_prepare_restore: "editor(restore) calls it before writing files back (#1482).",
+  checkpoint_finish_restore: "editor(restore) calls it after writing files back (#1482).",
+  checkpoint_diff_blueprint: "editor(list_changes) calls it per modified Blueprint package (#1482).",
+  checkpoint_diff_asset: "editor(list_changes) and editor(diff_checkpoint_asset) call it through the checkpoint service, with a turn's changed packages as items.",
+  checkpoint_open_native_diff: "editor(open_checkpoint_diff) calls it through the checkpoint service, after exporting the versions from the shadow history.",
   search_assets: "asset(search) supersedes it.",
   add_instances: "level(add_hismc_instances) is the shipped spelling.",
   list_sockets: "asset(list_sockets) reaches it under a different bridge name.",

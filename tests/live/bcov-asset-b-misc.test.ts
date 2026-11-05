@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Asset-level operations read back through a second action: texture import and
  * settings, enum and struct listing, moves, searches, the dirty-package sweep,
@@ -8,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
+import { callBridge, closeEditorTabWindows, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const DIR = "/Game/MCPTest/BCov/AssetB/Misc";
@@ -61,6 +62,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
+  if (bridge) await closeEditorTabWindows(bridge);
   if (scratch) rmSync(scratch, { recursive: true, force: true });
   if (bridge) {
     await callBridge(bridge, "delete_folder", { path: DIR, force: true });

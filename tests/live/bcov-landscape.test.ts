@@ -1,3 +1,4 @@
+// @live-editor render
 /**
  * Landscape actions against a small landscape the file creates and deletes:
  * creation and listings, heights, point and region queries, heightmap IO,

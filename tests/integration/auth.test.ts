@@ -85,4 +85,28 @@ describe("ue-mcp auth", () => {
     expect(second - first).toBeGreaterThanOrEqual(1400);
     expect(JSON.parse(fs.readFileSync(path.join(dir, "auth.json"), "utf8")).token).toBe("gho_slow");
   });
+
+  it("--json prints the code, then the account, one JSON object per line", async () => {
+    covers("cli.auth.json");
+    github.script({ tokens: [{ error: "authorization_pending" }, { access_token: "gho_json" }] });
+    const dir = authDir("json");
+    const run = (d: string) => runCli(sb, ["auth", "--json"], { env: { ...serviceEnv({ github }), UE_MCP_AUTH_DIR: d } });
+    const r = await run(dir);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    const lines = r.stdout.trim().split(/\r?\n/).map((l) => JSON.parse(l));
+    expect(lines).toEqual([
+      { event: "code", verificationUri: `${github.origin}/login/device`, userCode: "WDJB-MJHT", expiresAt: expect.any(Number), interval: expect.any(Number) },
+      { event: "signed-in", login: "octo", cached: false },
+    ]);
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "auth.json"), "utf8")).token).toBe("gho_json");
+
+    const again = await run(dir);
+    expect(again.code).toBe(0);
+    expect(JSON.parse(again.stdout)).toEqual({ event: "signed-in", login: "octo", cached: true });
+
+    github.script({ tokens: [{ error: "access_denied" }] });
+    const denied = await run(authDir("json-denied"));
+    expect(denied.code).toBe(1);
+    expect(denied.stdout.trim().split(/\r?\n/).map((l) => JSON.parse(l)).at(-1)).toEqual({ event: "failed", reason: "denied" });
+  });
 });

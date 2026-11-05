@@ -541,14 +541,14 @@ export const schema: Record<string, z.ZodType> = {
   recursive: z.boolean().optional().describe("Scan directory recursively (default true)"),
   save: z.boolean().optional().describe("Save each changed FoliageType package (default true) (batch_set_foliage_settings_where). Save the spawner package after a change (default true) (set_procedural_foliage_spawner_types)"),
   seed: z.number().int().optional().describe("Random seed for scatter placement (default 0)"),
-  settings: z.record(z.unknown()).optional().describe("Property name to value, dotted paths supported (batch_set_foliage_settings_where). Property name to value, applied to the new FoliageType (create_foliage_type). Property name to value; each is imported as text onto the FoliageType (set_foliage_type_settings)"),
+  settings: z.record(z.string(), z.unknown()).optional().describe("Property name to value, dotted paths supported (batch_set_foliage_settings_where). Property name to value, applied to the new FoliageType (create_foliage_type). Property name to value; each is imported as text onto the FoliageType (set_foliage_type_settings)"),
   skipCollision: z.boolean().optional().describe("Skip the type's CollisionWithWorld test (default false)"),
   spawnerPath: z.string().optional().describe("Clear every volume in the open level bound to this ProceduralFoliageSpawner (clear_procedural_foliage). ProceduralFoliageSpawner asset path (read_procedural_foliage_spawner, set_procedural_foliage_spawner_types). Run every volume in the open level bound to this ProceduralFoliageSpawner (simulate_procedural_foliage)"),
   startIndex: z.number().int().optional().describe("Skip this many matching instances first"),
   traceDown: z.number().optional().describe("How far below each candidate the ground trace ends, in centimetres (default 100000)"),
   traceUp: z.number().optional().describe("How far above each candidate the ground trace starts, in centimetres (default 10000)"),
-  transforms: z.array(z.record(z.unknown())).optional().describe("Place one instance per entry at exactly {location, rotation?, scale?} (add_foliage_instances). Remove the instance nearest each location, within matchTolerance (remove_foliage_instances)"),
-  where: z.array(z.record(z.unknown())).optional().describe("Predicate over each type's current values: [{field, op, value}]"),
+  transforms: z.array(z.record(z.string(), z.unknown())).optional().describe("Place one instance per entry at exactly {location, rotation?, scale?} (add_foliage_instances). Remove the instance nearest each location, within matchTolerance (remove_foliage_instances)"),
+  where: z.array(z.record(z.string(), z.unknown())).optional().describe("Predicate over each type's current values: [{field, op, value}]"),
   whereMode: z.string().optional().describe("all (default) | any"),
 };
 

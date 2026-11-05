@@ -304,7 +304,7 @@ describe("stop_editor never presses a button and never arms one", () => {
     );
     openBridges.push(bridge);
 
-    await stopEditor(makeProject(bridge.port));
+    await stopEditor(makeProject(bridge.port), { confirmPollMs: 10 });
 
     for (const forbidden of BUTTON_PRESSING_METHODS) {
       expect(bridge.methods()).not.toContain(forbidden);
@@ -400,7 +400,7 @@ describe("stop_editor reports a blocking dialog in full", () => {
     );
     openBridges.push(bridge);
 
-    await stopEditor(makeProject(bridge.port));
+    await stopEditor(makeProject(bridge.port), { confirmPollMs: 10 });
 
     // No probe before the quit.
     expect(bridge.methods()[0]).toBe("request_editor_shutdown");
@@ -596,7 +596,7 @@ describe("a state.json that parses to something that is not a state object", () 
 
     // The point is that a malformed state file does not throw. What the stop
     // then decides is the ordinary path, not this case.
-    const result = await stopEditor(projectDir);
+    const result = await stopEditor(projectDir, { confirmPollMs: 10 });
 
     expect(result.success).toBe(false);
     expect(typeof result.message).toBe("string");

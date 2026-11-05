@@ -18,10 +18,10 @@ import type { RegistryPlugin } from "../../src/extensions/registry-catalog.js";
 
 const CATALOG: RegistryPlugin[] = [
   {
-    slug: "pie-studio",
-    name: "PIE Studio",
-    packageName: "pie-studio",
-    repoUrl: "https://github.com/db-lyon/pie-studio",
+    slug: "sample-recorder",
+    name: "Sample Recorder",
+    packageName: "sample-recorder",
+    repoUrl: "https://github.com/db-lyon/sample-recorder",
     repoPrivate: false,
     tagline: "Record, replay, observe, and inject input in Play-In-Editor sessions.",
     tags: ["testing", "replay", "input-injection"],
@@ -47,22 +47,22 @@ vi.mock("../../src/feedback/github-auth.js", () => ({
 const { feedbackTool } = await import("../../src/tools/feedback.js");
 const { clearCoreSurfaceCache } = await import("../../src/feedback/feedback-routing.js");
 
-const PIE_REPO = { owner: "db-lyon", repo: "pie-studio" };
+const RECORDER_REPO = { owner: "db-lyon", repo: "sample-recorder" };
 const CORE = { owner: "db-lyon", repo: "ue-mcp" };
 
-const pieTitle = "pie(replay) diverges from the recorded run after 200 frames";
-const pieSummary =
+const recorderTitle = "recorder(replay) diverges from the recorded run after 200 frames";
+const recorderSummary =
   "Replaying a recorded PIE session drifts from the capture: the pawn ends up several metres from where it was recorded, and the profile reports no divergence at all.";
 
-function pieStudioPlugin(): PluginInfo {
+function sampleRecorderPlugin(): PluginInfo {
   return {
-    name: "pie-studio",
+    name: "sample-recorder",
     version: "1.0.0",
-    actionPrefix: "pie",
+    actionPrefix: "recorder",
     status: "active",
     degraded: [],
     injected: {},
-    provided: { pie: ["replay", "record", "observe"] },
+    provided: { recorder: ["replay", "record", "observe"] },
     knowledge: {},
     flows: [],
     tasks: [],
@@ -115,11 +115,11 @@ describe("feedback(submit) plugin routing", () => {
     mockReadUserAuth.mockResolvedValue(CACHED_USER);
     mockSubmitFeedback.mockResolvedValue({
       kind: "submitted",
-      url: "https://github.com/db-lyon/pie-studio/issues/7",
+      url: "https://github.com/db-lyon/sample-recorder/issues/7",
       number: 7,
       authoredBy: "tester",
       authoredAs: "user",
-      repo: "db-lyon/pie-studio",
+      repo: "db-lyon/sample-recorder",
     });
   });
 
@@ -135,22 +135,22 @@ describe("feedback(submit) plugin routing", () => {
       return { action: "accept" } as ElicitResult;
     });
 
-    const r = await submit(makeCtx(elicit, [pieStudioPlugin()]), {
-      title: pieTitle,
-      summary: pieSummary,
-      idealTool: "pie(action=replay)",
+    const r = await submit(makeCtx(elicit, [sampleRecorderPlugin()]), {
+      title: recorderTitle,
+      summary: recorderSummary,
+      idealTool: "recorder(action=replay)",
     });
 
     // The user is told, at consent time, which public tracker this goes to.
-    expect(promptShown).toContain("db-lyon/pie-studio");
-    expect(promptShown).toContain("PIE Studio");
+    expect(promptShown).toContain("db-lyon/sample-recorder");
+    expect(promptShown).toContain("Sample Recorder");
 
     const [, body, labels, opts] = mockSubmitFeedback.mock.calls[0];
-    expect(opts).toEqual({ useBot: false, repo: PIE_REPO });
+    expect(opts).toEqual({ useBot: false, repo: RECORDER_REPO });
     // Core category labels are meaningless on a plugin repo.
     expect(labels).toEqual(["agent-feedback"]);
     expect(body).toContain("## Routing");
-    expect((r as { target_repo?: string }).target_repo).toBe("db-lyon/pie-studio");
+    expect((r as { target_repo?: string }).target_repo).toBe("db-lyon/sample-recorder");
   });
 
   it("offers a tracker field and honours a flip back to core without changing the body", async () => {
@@ -162,14 +162,14 @@ describe("feedback(submit) plugin routing", () => {
       return { action: "accept", content: { destination: "db-lyon/ue-mcp" } } as ElicitResult;
     });
 
-    await submit(makeCtx(elicit, [pieStudioPlugin()]), {
-      title: pieTitle,
-      summary: pieSummary,
-      idealTool: "pie(action=replay)",
+    await submit(makeCtx(elicit, [sampleRecorderPlugin()]), {
+      title: recorderTitle,
+      summary: recorderSummary,
+      idealTool: "recorder(action=replay)",
     });
 
     expect((schema.destination as { enum?: string[] }).enum).toEqual([
-      "db-lyon/pie-studio",
+      "db-lyon/sample-recorder",
       "db-lyon/ue-mcp",
     ]);
 
@@ -185,14 +185,14 @@ describe("feedback(submit) plugin routing", () => {
       content: { destination: "someone-else/elsewhere" },
     } as ElicitResult);
 
-    await submit(makeCtx(elicit, [pieStudioPlugin()]), {
-      title: pieTitle,
-      summary: pieSummary,
-      idealTool: "pie(action=replay)",
+    await submit(makeCtx(elicit, [sampleRecorderPlugin()]), {
+      title: recorderTitle,
+      summary: recorderSummary,
+      idealTool: "recorder(action=replay)",
     });
 
     const [, , , opts] = mockSubmitFeedback.mock.calls[0];
-    expect(opts).toEqual({ useBot: false, repo: PIE_REPO });
+    expect(opts).toEqual({ useBot: false, repo: RECORDER_REPO });
   });
 
   it("keeps a core report on core and adds no tracker field", async () => {
@@ -202,7 +202,7 @@ describe("feedback(submit) plugin routing", () => {
       return { action: "accept" } as ElicitResult;
     });
 
-    await submit(makeCtx(elicit, [pieStudioPlugin()]), {
+    await submit(makeCtx(elicit, [sampleRecorderPlugin()]), {
       title: "blueprint(set_class_default) does not save the asset",
       summary:
         "Setting a class default marks the blueprint dirty but never saves it, so the change is lost unless a separate save call runs afterwards.",
@@ -218,22 +218,22 @@ describe("feedback(submit) plugin routing", () => {
   it("hands back a prefilled URL when the plugin tracker refuses the issue", async () => {
     mockSubmitFeedback.mockResolvedValue({
       kind: "repo_unavailable",
-      repo: "db-lyon/pie-studio",
+      repo: "db-lyon/sample-recorder",
       status: 410,
       message: "Issues are disabled for this repo",
     });
     const elicit = vi.fn<ElicitFn>().mockResolvedValue({ action: "accept" } as ElicitResult);
 
-    const r = await submit(makeCtx(elicit, [pieStudioPlugin()]), {
-      title: pieTitle,
-      summary: pieSummary,
-      idealTool: "pie(action=replay)",
+    const r = await submit(makeCtx(elicit, [sampleRecorderPlugin()]), {
+      title: recorderTitle,
+      summary: recorderSummary,
+      idealTool: "recorder(action=replay)",
     });
 
     expect(isDirectiveResponse(r)).toBe(true);
     if (!isDirectiveResponse(r)) return;
     expect((r.result as { code?: string }).code).toBe("repo_unavailable");
-    expect((r.result as { manual_url?: string }).manual_url).toContain("db-lyon/pie-studio/issues/new");
+    expect((r.result as { manual_url?: string }).manual_url).toContain("db-lyon/sample-recorder/issues/new");
     // It must NOT silently re-file somewhere the user never approved.
     expect(mockSubmitFeedback).toHaveBeenCalledTimes(1);
   });
@@ -242,10 +242,10 @@ describe("feedback(submit) plugin routing", () => {
     process.env.UE_MCP_FEEDBACK_ROUTING = "off";
     const elicit = vi.fn<ElicitFn>().mockResolvedValue({ action: "accept" } as ElicitResult);
 
-    await submit(makeCtx(elicit, [pieStudioPlugin()]), {
-      title: pieTitle,
-      summary: pieSummary,
-      idealTool: "pie(action=replay)",
+    await submit(makeCtx(elicit, [sampleRecorderPlugin()]), {
+      title: recorderTitle,
+      summary: recorderSummary,
+      idealTool: "recorder(action=replay)",
     });
 
     const [, , , opts] = mockSubmitFeedback.mock.calls[0];
@@ -257,21 +257,21 @@ describe("feedback(submit) plugin routing", () => {
     process.env.UE_MCP_PENDING_DIR = tmp;
     process.env.UE_MCP_FEEDBACK_MODE = "defer";
     try {
-      const r = await submit(makeCtx(undefined, [pieStudioPlugin()]), {
-        title: pieTitle,
-        summary: pieSummary,
-        idealTool: "pie(action=replay)",
+      const r = await submit(makeCtx(undefined, [sampleRecorderPlugin()]), {
+        title: recorderTitle,
+        summary: recorderSummary,
+        idealTool: "recorder(action=replay)",
       });
 
-      expect((r as { target_repo?: string }).target_repo).toBe("db-lyon/pie-studio");
+      expect((r as { target_repo?: string }).target_repo).toBe("db-lyon/sample-recorder");
       const files = fs.readdirSync(tmp);
       const entry = JSON.parse(fs.readFileSync(path.join(tmp, files[0]), "utf-8")) as {
         repo: string;
         routing: string;
         labels: string[];
       };
-      expect(entry.repo).toBe("db-lyon/pie-studio");
-      expect(entry.routing).toContain("PIE Studio");
+      expect(entry.repo).toBe("db-lyon/sample-recorder");
+      expect(entry.routing).toContain("Sample Recorder");
       expect(entry.labels).toEqual(["agent-feedback"]);
       expect(mockSubmitFeedback).not.toHaveBeenCalled();
     } finally {
@@ -285,7 +285,7 @@ describe("feedback(submit) plugin routing", () => {
     process.env.UE_MCP_FEEDBACK_MODE = "auto-approve";
     try {
       mockSubmitFeedback
-        .mockResolvedValueOnce({ kind: "repo_unavailable", repo: "db-lyon/pie-studio", status: 403, message: "no" })
+        .mockResolvedValueOnce({ kind: "repo_unavailable", repo: "db-lyon/sample-recorder", status: 403, message: "no" })
         .mockResolvedValueOnce({
           kind: "submitted",
           url: "https://github.com/db-lyon/ue-mcp/issues/9",
@@ -295,10 +295,10 @@ describe("feedback(submit) plugin routing", () => {
           repo: "db-lyon/ue-mcp",
         });
 
-      const r = (await submit(makeCtx(undefined, [pieStudioPlugin()]), {
-        title: pieTitle,
-        summary: pieSummary,
-        idealTool: "pie(action=replay)",
+      const r = (await submit(makeCtx(undefined, [sampleRecorderPlugin()]), {
+        title: recorderTitle,
+        summary: recorderSummary,
+        idealTool: "recorder(action=replay)",
       })) as Record<string, unknown>;
 
       expect(mockSubmitFeedback).toHaveBeenCalledTimes(2);
@@ -318,15 +318,15 @@ describe("feedback(route)", () => {
 
   it("reports the plugin tracker without posting anything", async () => {
     mockSubmitFeedback.mockReset();
-    const r = await route(makeCtx(undefined, [pieStudioPlugin()]), {
-      title: pieTitle,
-      summary: pieSummary,
-      idealTool: "pie(action=replay)",
+    const r = await route(makeCtx(undefined, [sampleRecorderPlugin()]), {
+      title: recorderTitle,
+      summary: recorderSummary,
+      idealTool: "recorder(action=replay)",
     });
 
     expect(r.target).toBe("plugin");
-    expect(r.target_repo).toBe("db-lyon/pie-studio");
-    expect((r.matched_plugin as { name: string }).name).toBe("PIE Studio");
+    expect(r.target_repo).toBe("db-lyon/sample-recorder");
+    expect((r.matched_plugin as { name: string }).name).toBe("Sample Recorder");
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
 
@@ -338,9 +338,9 @@ describe("feedback(route)", () => {
 
   it("says so when routing is switched off", async () => {
     process.env.UE_MCP_FEEDBACK_ROUTING = "off";
-    const r = await route(makeCtx(undefined, [pieStudioPlugin()]), {
-      title: pieTitle,
-      summary: pieSummary,
+    const r = await route(makeCtx(undefined, [sampleRecorderPlugin()]), {
+      title: recorderTitle,
+      summary: recorderSummary,
     });
     expect(r.routing_enabled).toBe(false);
     expect(r.target_repo).toBe("db-lyon/ue-mcp");

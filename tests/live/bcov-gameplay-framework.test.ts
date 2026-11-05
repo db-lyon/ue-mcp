@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Game framework Blueprints, the world's default game mode, AI perception,
  * StateTree and SmartObject authoring, each write read back through another

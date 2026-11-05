@@ -170,8 +170,8 @@ export const schema: Record<string, z.ZodType> = {
   bPlaceInEngine: z.boolean().optional().describe("Use Engine Plugins directory rather than Game Plugins directory location. Only some Templates allow placing in Engine. See the TemplateInfo's bCanBePlacedInEng…"),
   dependencyName: z.string().optional().describe("The name of the plugin to add as a dependency."),
   description: z.string().optional().describe("A description for the new plugin."),
-  newDescriptor: z.record(z.unknown()).optional().describe("The new descriptor field values to apply."),
+  newDescriptor: z.record(z.string(), z.unknown()).optional().describe("The new descriptor field values to apply."),
   pluginName: z.string().optional().describe("Name of the Game Feature Plugin."),
   relativePluginLocation: z.string().optional().describe("Parent directory for the new plugin relative to template's default location. This should be empty unless you wish to specify a subdirectory."),
-  templateInfo: z.record(z.unknown()).optional().describe("The plugin template to create from."),
+  templateInfo: z.record(z.string(), z.unknown()).optional().describe("The plugin template to create from."),
 };

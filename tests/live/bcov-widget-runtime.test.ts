@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Live widget actions in a Play-In-Editor session: a widget added to the
  * viewport, found by the runtime listing and inspection reads, driven through a

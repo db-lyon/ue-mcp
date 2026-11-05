@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Play-In-Editor gameplay runtime: applying and removing a mapping context on
  * the live player, reading the action value it binds, and an impulse moving a

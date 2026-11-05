@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Mass entity config authoring: trait discovery, then a config created,
  * reordered, trimmed and validated, each step read back through

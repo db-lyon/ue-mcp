@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Collision and physics body settings on a placed actor and on a Blueprint
  * component template, each read back from the component itself: the placed

@@ -1,0 +1,1527 @@
+{
+  "recordedAt": "2026-10-27T23:13:54.159Z",
+  "machine": {
+    "cpus": 24,
+    "memoryAtStart": {
+      "freeMB": 13687,
+      "totalMB": 32679
+    }
+  },
+  "wallS": 535.295,
+  "shards": [
+    {
+      "name": "h2",
+      "kind": "headless",
+      "files": 59,
+      "plannedMs": 214712,
+      "queuedS": 2.607,
+      "launchS": 26.749,
+      "testsS": 323.065,
+      "memoryAtReady": {
+        "workingSetMB": 3219,
+        "privateMB": 3226,
+        "peakWorkingSetMB": 3291
+      },
+      "memoryAtEnd": {
+        "workingSetMB": 3622,
+        "privateMB": 3506,
+        "peakWorkingSetMB": 3622
+      }
+    },
+    {
+      "name": "h1",
+      "kind": "headless",
+      "files": 59,
+      "plannedMs": 214961,
+      "queuedS": 1.38,
+      "launchS": 32.643,
+      "testsS": 265.858,
+      "memoryAtReady": {
+        "workingSetMB": 3262,
+        "privateMB": 3280,
+        "peakWorkingSetMB": 3262
+      },
+      "memoryAtEnd": {
+        "workingSetMB": 3786,
+        "privateMB": 3596,
+        "peakWorkingSetMB": 3819
+      }
+    },
+    {
+      "name": "r1",
+      "kind": "render",
+      "files": 12,
+      "plannedMs": 103478,
+      "queuedS": 314.17,
+      "launchS": 25.207,
+      "testsS": 139.71,
+      "memoryAtReady": {
+        "workingSetMB": 4137,
+        "privateMB": 4978,
+        "peakWorkingSetMB": 4227
+      },
+      "memoryAtEnd": {
+        "workingSetMB": 4595,
+        "privateMB": 6313,
+        "peakWorkingSetMB": 4607
+      }
+    },
+    {
+      "name": "i1",
+      "kind": "interactive",
+      "files": 2,
+      "plannedMs": 35405,
+      "queuedS": 364.57,
+      "launchS": 27.902,
+      "testsS": 50.151,
+      "memoryAtReady": {
+        "workingSetMB": 4106,
+        "privateMB": 4969,
+        "peakWorkingSetMB": 4173
+      },
+      "memoryAtEnd": {
+        "workingSetMB": 4047,
+        "privateMB": 4953,
+        "peakWorkingSetMB": 4258
+      }
+    },
+    {
+      "name": "b1",
+      "kind": "base",
+      "files": 1,
+      "plannedMs": 14676,
+      "queuedS": 452.152,
+      "launchS": 17.817,
+      "testsS": 18.752,
+      "memoryAtReady": {
+        "workingSetMB": 3187,
+        "privateMB": 3037,
+        "peakWorkingSetMB": 3255
+      },
+      "memoryAtEnd": {
+        "workingSetMB": 3023,
+        "privateMB": 2828,
+        "peakWorkingSetMB": 3303
+      }
+    },
+    {
+      "name": "s1",
+      "kind": "scm",
+      "files": 1,
+      "plannedMs": 4427,
+      "queuedS": 491.196,
+      "launchS": 21.483,
+      "testsS": 6.382,
+      "memoryAtReady": {
+        "workingSetMB": 3200,
+        "privateMB": 3170,
+        "peakWorkingSetMB": 3239
+      },
+      "memoryAtEnd": {
+        "workingSetMB": 3040,
+        "privateMB": 2979,
+        "peakWorkingSetMB": 3327
+      }
+    }
+  ],
+  "deaths": [],
+  "totals": {
+    "passed": 988,
+    "failed": 0,
+    "skipped": 0
+  },
+  "files": {
+    "tests/live/addressing.test.ts": {
+      "durationMs": 15112
+    },
+    "tests/live/animation-skeleton-create.test.ts": {
+      "durationMs": 3363
+    },
+    "tests/live/bcov-animation-a-blueprint.test.ts": {
+      "durationMs": 6481
+    },
+    "tests/live/bcov-animation-a-controlrig.test.ts": {
+      "durationMs": 11934
+    },
+    "tests/live/bcov-animation-a-sequence.test.ts": {
+      "durationMs": 4147
+    },
+    "tests/live/bcov-animation-b-live.test.ts": {
+      "durationMs": 3487
+    },
+    "tests/live/bcov-animation-b-montage.test.ts": {
+      "durationMs": 3720
+    },
+    "tests/live/bcov-animation-b-motion.test.ts": {
+      "durationMs": 6865
+    },
+    "tests/live/bcov-animation-b-sequence.test.ts": {
+      "durationMs": 6890
+    },
+    "tests/live/bcov-asset-a-mesh.test.ts": {
+      "durationMs": 2719
+    },
+    "tests/live/bcov-asset-a-tables.test.ts": {
+      "durationMs": 4823
+    },
+    "tests/live/bcov-asset-b-misc.test.ts": {
+      "durationMs": 5878
+    },
+    "tests/live/bcov-asset-b-tables.test.ts": {
+      "durationMs": 3644
+    },
+    "tests/live/bcov-audio-metasound.test.ts": {
+      "durationMs": 1853
+    },
+    "tests/live/bcov-audio-wave.test.ts": {
+      "durationMs": 4830
+    },
+    "tests/live/bcov-blueprint-assets.test.ts": {
+      "durationMs": 6123
+    },
+    "tests/live/bcov-blueprint-components.test.ts": {
+      "durationMs": 5228
+    },
+    "tests/live/bcov-chooser.test.ts": {
+      "durationMs": 1680
+    },
+    "tests/live/bcov-editor-dialog.test.ts": {
+      "durationMs": 477
+    },
+    "tests/live/bcov-epic.test.ts": {
+      "durationMs": 1914
+    },
+    "tests/live/bcov-foliage.test.ts": {
+      "durationMs": 2820
+    },
+    "tests/live/bcov-gameplay-framework.test.ts": {
+      "durationMs": 3615
+    },
+    "tests/live/bcov-gameplay-input.test.ts": {
+      "durationMs": 1826
+    },
+    "tests/live/bcov-gameplay-mass.test.ts": {
+      "durationMs": 1541
+    },
+    "tests/live/bcov-gameplay-nav.test.ts": {
+      "durationMs": 1317
+    },
+    "tests/live/bcov-gameplay-zonegraph.test.ts": {
+      "durationMs": 486
+    },
+    "tests/live/bcov-gas.test.ts": {
+      "durationMs": 3214
+    },
+    "tests/live/bcov-level-actors.test.ts": {
+      "durationMs": 2150
+    },
+    "tests/live/bcov-level-environment.test.ts": {
+      "durationMs": 927
+    },
+    "tests/live/bcov-lock.test.ts": {
+      "durationMs": 653
+    },
+    "tests/live/bcov-material-designer.test.ts": {
+      "durationMs": 1440
+    },
+    "tests/live/bcov-pcg.test.ts": {
+      "durationMs": 2598
+    },
+    "tests/live/bcov-pie-assets.test.ts": {
+      "durationMs": 6440
+    },
+    "tests/live/bcov-pie-scripts.test.ts": {
+      "durationMs": 13793
+    },
+    "tests/live/bcov-reflection.test.ts": {
+      "durationMs": 5121
+    },
+    "tests/live/bcov-statetree-lifecycle.test.ts": {
+      "durationMs": 1415
+    },
+    "tests/live/bcov-widget-tree.test.ts": {
+      "durationMs": 5109
+    },
+    "tests/live/blueprint-delete-graph.test.ts": {
+      "durationMs": 1996
+    },
+    "tests/live/blueprint-find-nodes.test.ts": {
+      "durationMs": 2688
+    },
+    "tests/live/blueprint-get-connections.test.ts": {
+      "durationMs": 2215
+    },
+    "tests/live/blueprint-guid-addressing.test.ts": {
+      "durationMs": 2276
+    },
+    "tests/live/blueprint-self-function-call.test.ts": {
+      "durationMs": 1875
+    },
+    "tests/live/checkpoints.test.ts": {
+      "durationMs": 11328
+    },
+    "tests/live/cpp-correctness.test.ts": {
+      "durationMs": 9063
+    },
+    "tests/live/crash-class-inputs.test.ts": {
+      "durationMs": 17223
+    },
+    "tests/live/deep-inspection.test.ts": {
+      "durationMs": 1572
+    },
+    "tests/live/ergonomics.test.ts": {
+      "durationMs": 3786
+    },
+    "tests/live/gas-effect-components.test.ts": {
+      "durationMs": 2834
+    },
+    "tests/live/golden-connected.test.ts": {
+      "durationMs": 7510
+    },
+    "tests/live/ik-retargeter-ops.test.ts": {
+      "durationMs": 3662
+    },
+    "tests/live/input-mapping-settings.test.ts": {
+      "durationMs": 11547
+    },
+    "tests/live/level-roots-and-templates.test.ts": {
+      "durationMs": 582
+    },
+    "tests/live/material-function-refs.test.ts": {
+      "durationMs": 3860
+    },
+    "tests/live/open-asset-map-routing.test.ts": {
+      "durationMs": 4245
+    },
+    "tests/live/pcg-subgraph-assign.test.ts": {
+      "durationMs": 1618
+    },
+    "tests/live/pie-runtime-controls.test.ts": {
+      "durationMs": 1151
+    },
+    "tests/live/playtest-flow.test.ts": {
+      "durationMs": 4699
+    },
+    "tests/live/sequencer-datasmith-metahuman.test.ts": {
+      "durationMs": 1504
+    },
+    "tests/live/skeleton-uv-metasound.test.ts": {
+      "durationMs": 10924
+    },
+    "tests/live/animation-authoring-gaps.test.ts": {
+      "durationMs": 15988
+    },
+    "tests/live/asset-reimport-source.test.ts": {
+      "durationMs": 3280
+    },
+    "tests/live/bcov-animation-a-live.test.ts": {
+      "durationMs": 571
+    },
+    "tests/live/bcov-animation-a-montage.test.ts": {
+      "durationMs": 5961
+    },
+    "tests/live/bcov-animation-a-posesearch.test.ts": {
+      "durationMs": 6791
+    },
+    "tests/live/bcov-animation-a-retarget.test.ts": {
+      "durationMs": 11253
+    },
+    "tests/live/bcov-animation-a-skeleton.test.ts": {
+      "durationMs": 4058
+    },
+    "tests/live/bcov-animation-b-graph.test.ts": {
+      "durationMs": 10973
+    },
+    "tests/live/bcov-animation-b-rig.test.ts": {
+      "durationMs": 18018
+    },
+    "tests/live/bcov-asset-a-graph.test.ts": {
+      "durationMs": 2745
+    },
+    "tests/live/bcov-asset-a-registry.test.ts": {
+      "durationMs": 11685
+    },
+    "tests/live/bcov-asset-b-mesh.test.ts": {
+      "durationMs": 3772
+    },
+    "tests/live/bcov-asset-b-skeletal.test.ts": {
+      "durationMs": 2882
+    },
+    "tests/live/bcov-audio-routing.test.ts": {
+      "durationMs": 6383
+    },
+    "tests/live/bcov-blueprint-graph.test.ts": {
+      "durationMs": 8124
+    },
+    "tests/live/bcov-blueprint-members.test.ts": {
+      "durationMs": 7012
+    },
+    "tests/live/bcov-demo.test.ts": {
+      "durationMs": 9225
+    },
+    "tests/live/bcov-editor-pie.test.ts": {
+      "durationMs": 1377
+    },
+    "tests/live/bcov-editor-profiling.test.ts": {
+      "durationMs": 1519
+    },
+    "tests/live/bcov-fab.test.ts": {
+      "durationMs": 2769
+    },
+    "tests/live/bcov-gameplay-ai.test.ts": {
+      "durationMs": 5382
+    },
+    "tests/live/bcov-gameplay-physics.test.ts": {
+      "durationMs": 2641
+    },
+    "tests/live/bcov-gameplay-pie.test.ts": {
+      "durationMs": 3127
+    },
+    "tests/live/bcov-level-instances.test.ts": {
+      "durationMs": 4215
+    },
+    "tests/live/bcov-level-multilevel.test.ts": {
+      "durationMs": 11083
+    },
+    "tests/live/bcov-material-instance.test.ts": {
+      "durationMs": 6728
+    },
+    "tests/live/bcov-material-rvt.test.ts": {
+      "durationMs": 4917
+    },
+    "tests/live/bcov-networking.test.ts": {
+      "durationMs": 3345
+    },
+    "tests/live/bcov-pie-script-act.test.ts": {
+      "durationMs": 6483
+    },
+    "tests/live/bcov-pie-session.test.ts": {
+      "durationMs": 9684
+    },
+    "tests/live/bcov-statetree-bindings.test.ts": {
+      "durationMs": 1917
+    },
+    "tests/live/bcov-statetree-nodes.test.ts": {
+      "durationMs": 4384
+    },
+    "tests/live/bcov-statetree-runtime.test.ts": {
+      "durationMs": 6158
+    },
+    "tests/live/bcov-statetree-states.test.ts": {
+      "durationMs": 2468
+    },
+    "tests/live/bcov-widget-animation.test.ts": {
+      "durationMs": 3493
+    },
+    "tests/live/bcov-widget-editor-utility.test.ts": {
+      "durationMs": 5646
+    },
+    "tests/live/bcov-widget-navigation.test.ts": {
+      "durationMs": 3035
+    },
+    "tests/live/bcov-widget-runtime.test.ts": {
+      "durationMs": 3014
+    },
+    "tests/live/blueprint-widget-reflection.test.ts": {
+      "durationMs": 6088
+    },
+    "tests/live/collection-entry-edits.test.ts": {
+      "durationMs": 4466
+    },
+    "tests/live/context-projection.test.ts": {
+      "durationMs": 2439
+    },
+    "tests/live/coverage.test.ts": {
+      "durationMs": 77
+    },
+    "tests/live/dialog-policy-refusal.test.ts": {
+      "durationMs": 481
+    },
+    "tests/live/dispatch-leak.test.ts": {
+      "durationMs": 14266
+    },
+    "tests/live/editor-windows.test.ts": {
+      "durationMs": 2598
+    },
+    "tests/live/eqs.test.ts": {
+      "durationMs": 5836
+    },
+    "tests/live/gas-abilities.test.ts": {
+      "durationMs": 9129
+    },
+    "tests/live/handler-specs.test.ts": {
+      "durationMs": 802
+    },
+    "tests/live/material-instance-load.test.ts": {
+      "durationMs": 2787
+    },
+    "tests/live/niagara-depth.test.ts": {
+      "durationMs": 9893
+    },
+    "tests/live/open-asset-loaded-map.test.ts": {
+      "durationMs": 802
+    },
+    "tests/live/pcg-generated-output.test.ts": {
+      "durationMs": 3317
+    },
+    "tests/live/pcg-io-node-settings.test.ts": {
+      "durationMs": 4356
+    },
+    "tests/live/pcg-settings-pin-refresh.test.ts": {
+      "durationMs": 4275
+    },
+    "tests/live/perception-bt.test.ts": {
+      "durationMs": 14198
+    },
+    "tests/live/playtest-mode.test.ts": {
+      "durationMs": 3536
+    },
+    "tests/live/single-editor.test.ts": {
+      "durationMs": 4014
+    },
+    "tests/live/source-control.test.ts": {
+      "durationMs": 624
+    },
+    "tests/live/viewport-transactions.test.ts": {
+      "durationMs": 4772
+    },
+    "tests/live/checkpoint-asset-diff.test.ts": {
+      "durationMs": 26455
+    },
+    "tests/live/dialog-gate.test.ts": {
+      "durationMs": 22035
+    },
+    "tests/live/asset-native-pipeline.test.ts": {
+      "durationMs": 32888
+    },
+    "tests/live/bcov-asset-a-import.test.ts": {
+      "durationMs": 7689
+    },
+    "tests/live/bcov-editor-diagnostics.test.ts": {
+      "durationMs": 3441
+    },
+    "tests/live/bcov-editor-sequence.test.ts": {
+      "durationMs": 4361
+    },
+    "tests/live/bcov-editor-world.test.ts": {
+      "durationMs": 3163
+    },
+    "tests/live/bcov-landscape-proxies.test.ts": {
+      "durationMs": 30677
+    },
+    "tests/live/bcov-landscape.test.ts": {
+      "durationMs": 7364
+    },
+    "tests/live/bcov-material-graph.test.ts": {
+      "durationMs": 24026
+    },
+    "tests/live/bcov-niagara.test.ts": {
+      "durationMs": 11458
+    },
+    "tests/live/editor-show-notification.test.ts": {
+      "durationMs": 492
+    },
+    "tests/live/material-niagara-font.test.ts": {
+      "durationMs": 6817
+    },
+    "tests/live/spatial-communication.test.ts": {
+      "durationMs": 5366
+    },
+    "tests/live/bcov-project.test.ts": {
+      "durationMs": 17111
+    },
+    "tests/live/source-control-provider.test.ts": {
+      "durationMs": 5088
+    }
+  },
+  "tests": {
+    "tests/live/addressing.test.ts > two sessions, one of them a live editor registers the project whose editor is not running, and reports both": 248,
+    "tests/live/addressing.test.ts > two sessions, one of them a live editor documents targeting in the instructions, which one editor does not": 0,
+    "tests/live/addressing.test.ts > two sessions, one of them a live editor names the serving editor on a response": 48,
+    "tests/live/addressing.test.ts > gating beyond one editor refuses an untargeted change and names both editors": 6,
+    "tests/live/addressing.test.ts > gating beyond one editor refuses an untargeted lifecycle action, which is the one that closes a window": 4,
+    "tests/live/addressing.test.ts > gating beyond one editor serves an untargeted read from the active session": 58,
+    "tests/live/addressing.test.ts > gating beyond one editor runs a targeted change in the editor that was named": 43,
+    "tests/live/addressing.test.ts > the union surface keeps disabled categories out of lean catalog discovery": 2552,
+    "tests/live/addressing.test.ts > the union surface discovers only actions enabled in the addressed session": 393,
+    "tests/live/addressing.test.ts > the union surface advertises the live editor's toolsets even though the other project has none": 19,
+    "tests/live/addressing.test.ts > the union surface advertises a category one project disabled, and refuses it for that project": 12,
+    "tests/live/addressing.test.ts > the union surface keeps the same category working for the editor that did not disable it": 46,
+    "tests/live/addressing.test.ts > identity reports the project the connected editor actually has open": 0,
+    "tests/live/addressing.test.ts > identity refuses to connect a session whose port was pinned for another project": 3,
+    "tests/live/addressing.test.ts > identity accepts the same pin for the project it was chosen for": 75,
+    "tests/live/addressing.test.ts > two editors of one project registers one session for the project however the path is spelled": 24,
+    "tests/live/addressing.test.ts > two editors of one project keeps a per-process instance record next to the port lockfile": 1,
+    "tests/live/addressing.test.ts > two editors of one project stamps the port lockfile with the process that owns it": 0,
+    "tests/live/addressing.test.ts > the no-project default bridge dispatches bridge actions with no project argument at all": 2646,
+    "tests/live/animation-skeleton-create.test.ts > animation.create_skeleton creates, assigns, saves, reloads, and precisely replays a factory skeleton": 930,
+    "tests/live/animation-skeleton-create.test.ts > animation.create_skeleton restores the duplicate before deleting the disposable skeleton": 47,
+    "tests/live/bcov-animation-a-blueprint.test.ts > anim blueprint authoring create_anim_blueprint targets the skeleton, and add_state plus add_transition build a readable state machine": 530,
+    "tests/live/bcov-animation-a-blueprint.test.ts > anim blueprint authoring add_motion_matching_node and add_pose_history_node place nodes inspect_anim_nodes reads back": 284,
+    "tests/live/bcov-animation-a-blueprint.test.ts > anim blueprint authoring bind_anim_node_function binds a blueprint function into the node's update slot": 427,
+    "tests/live/bcov-animation-a-blueprint.test.ts > blendspace authoring create_blendspace sets both axes and add_blend_sample places a sample at its position": 100,
+    "tests/live/bcov-animation-a-blueprint.test.ts > blendspace authoring create_blendspace_1d sets its one axis and takes a sample on it": 73,
+    "tests/live/bcov-animation-a-controlrig.test.ts > control rig authoring list_control_rig_variables lists a variable added to the rig": 777,
+    "tests/live/bcov-animation-a-controlrig.test.ts > control rig authoring begin_control_rig_edit opens an FK session over the source frames": 1056,
+    "tests/live/bcov-animation-a-controlrig.test.ts > control rig authoring capture_control_rig_pose snapshots the named control's live transform": 667,
+    "tests/live/bcov-animation-a-controlrig.test.ts > control rig authoring apply_control_rig_edits keys a translation offset that read_control_rig_edit reads back": 3310,
+    "tests/live/bcov-animation-a-controlrig.test.ts > control rig authoring bake_control_rig_edit writes the edited range to a new AnimSequence carrying the offset": 1183,
+    "tests/live/bcov-animation-a-sequence.test.ts > animation sequence authoring create_sequence makes a sequence with the requested frames, and add_curve plus both notify kinds land on it": 156,
+    "tests/live/bcov-animation-a-sequence.test.ts > animation sequence authoring compare_curves_to_morph_targets reports the added curve as one with no morph target": 4,
+    "tests/live/bcov-animation-a-sequence.test.ts > animation sequence authoring create_anim_composite makes an AnimComposite on the skeleton": 51,
+    "tests/live/bcov-animation-a-sequence.test.ts > animation sequence authoring get_bone_transforms reads the reference pose, and bake_keyframes_batch writes a pelvis track the bone track reads back": 142,
+    "tests/live/bcov-animation-a-sequence.test.ts > animation sequence authoring bake_root_motion_from_bone moves the pelvis travel onto the root and analyze_animation measures it": 148,
+    "tests/live/bcov-animation-a-sequence.test.ts > animation sequence authoring apply_animation_modifier registers the modifier and bakes its curve, and list_anim_modifiers lists it": 65,
+    "tests/live/bcov-animation-b-live.test.ts > live skeletal actor preview_animation switches the components' editor tick on and off": 32,
+    "tests/live/bcov-animation-b-live.test.ts > live skeletal actor rebind_leader_pose makes the other component follow the body, and a replay finds it bound": 16,
+    "tests/live/bcov-animation-b-live.test.ts > live skeletal actor set_live_post_process_anim_blueprint sets and clears the override": 41,
+    "tests/live/bcov-animation-b-montage.test.ts > montage authoring read_anim_montage reports the montage's sequence and default section": 10,
+    "tests/live/bcov-animation-b-montage.test.ts > montage authoring set_montage_slot renames the slot on the track": 35,
+    "tests/live/bcov-animation-b-montage.test.ts > montage authoring set_montage_properties writes rate scale and blend times": 37,
+    "tests/live/bcov-animation-b-montage.test.ts > montage authoring set_montage_sequence swaps the clip the slot plays": 32,
+    "tests/live/bcov-animation-b-montage.test.ts > montage authoring list_montage_segments and remove_montage_segment track an appended segment": 69,
+    "tests/live/bcov-animation-b-montage.test.ts > montage authoring remove_montage_section drops an added section": 62,
+    "tests/live/bcov-animation-b-motion.test.ts > motion matching content read_mirror_data_table lists the left and right bone pairs": 12,
+    "tests/live/bcov-animation-b-motion.test.ts > motion matching content read_pose_search_schema reports the sample rate, skeleton and mirror table": 4,
+    "tests/live/bcov-animation-b-motion.test.ts > motion matching content set_pose_search_schema swaps the database's schema": 50,
+    "tests/live/bcov-animation-b-motion.test.ts > motion matching content set_pose_search_clips replaces the clip list": 36,
+    "tests/live/bcov-animation-b-motion.test.ts > motion matching content set_pose_search_database_settings writes the cost biases": 35,
+    "tests/live/bcov-animation-b-motion.test.ts > motion matching content set_motion_matching_chooser drives the node's database pin from a chooser": 328,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring set_bone_keyframes writes a track that sample_pose evaluates back": 68,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring scan_animation_tracks lists the bone tracks of the scanned sequence": 4,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring set_anim_curve_keys adds a keyed curve and remove_anim_curve takes it away": 143,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring remove_anim_notify and remove_anim_notify_state drop what was added": 196,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring set_root_motion_settings writes the root motion flags": 45,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring set_sequence_properties makes the sequence additive": 48,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring set_sync_markers authors markers and drops one by name": 108,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring measure_natural_speed reports a forward speed for the walk cycle": 12,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring list_skeletal_meshes finds the mesh copied into the folder": 6,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring remove_virtual_bone takes an added virtual bone off the skeleton": 72,
+    "tests/live/bcov-animation-b-sequence.test.ts > sequence authoring populate_blendspace sets the axis and samples, and set_blend_sample moves one": 106,
+    "tests/live/bcov-asset-a-mesh.test.ts > mesh reads get_mesh_geometry and get_mesh_bounds describe the 100 cm cube": 26,
+    "tests/live/bcov-asset-a-mesh.test.ts > mesh reads get_static_mesh_build_settings reads back a changed build setting": 64,
+    "tests/live/bcov-asset-a-mesh.test.ts > mesh reads add_socket adds a socket list_sockets reports at its location": 27,
+    "tests/live/bcov-asset-a-mesh.test.ts > collision generate_mesh_collision clears and rebuilds the simple collision get_mesh_collision reports": 97,
+    "tests/live/bcov-asset-a-mesh.test.ts > geometry edits apply_mesh_simplify writes a mesh with fewer triangles": 149,
+    "tests/live/bcov-asset-a-mesh.test.ts > geometry edits apply_mesh_remesh writes a mesh with a different triangle count": 228,
+    "tests/live/bcov-asset-a-mesh.test.ts > geometry edits apply_mesh_mirror reflects a cut half so the bounds change": 116,
+    "tests/live/bcov-asset-a-mesh.test.ts > geometry edits apply_mesh_fracture cuts open pieces and apply_mesh_hole_fill closes one": 256,
+    "tests/live/bcov-asset-a-tables.test.ts > curve tables create_curvetable, add_curvetable_row, add_curvetable_key and get_curvetable_keys round-trip": 167,
+    "tests/live/bcov-asset-a-tables.test.ts > curve tables import_curvetable replaces the rows from CSV text": 72,
+    "tests/live/bcov-asset-a-tables.test.ts > string tables create_stringtable, import_stringtable and get_stringtable_entry round-trip": 90,
+    "tests/live/bcov-asset-a-tables.test.ts > data table rows add_datatable_row writes a row get_datatable_row reads back": 90,
+    "tests/live/bcov-asset-a-tables.test.ts > user-defined enums and structs create_user_defined_enum and edit_user_defined_enum change the enumerators": 455,
+    "tests/live/bcov-asset-a-tables.test.ts > user-defined enums and structs create_user_defined_struct and edit_user_defined_struct change the members": 1328,
+    "tests/live/bcov-asset-a-tables.test.ts > data assets create_data_asset writes the properties it is given": 37,
+    "tests/live/bcov-asset-a-tables.test.ts > data assets bulk_upsert_data_assets creates, then updates, a batch": 86,
+    "tests/live/bcov-asset-a-tables.test.ts > data assets get_primary_asset_ids lists a PrimaryAssetLabel created under /Game": 38,
+    "tests/live/bcov-asset-b-misc.test.ts > textures import_texture creates a texture whose import source read_import_sources names": 38,
+    "tests/live/bcov-asset-b-misc.test.ts > textures import_texture_batch imports every item": 67,
+    "tests/live/bcov-asset-b-misc.test.ts > textures set_texture_settings writes the settings get_texture_info reports": 16,
+    "tests/live/bcov-asset-b-misc.test.ts > textures set_texture_settings_by_type applies each profile's compression, sRGB and LOD group": 31,
+    "tests/live/bcov-asset-b-misc.test.ts > user-defined types list_enum_values lists the enumerators an enum was created with": 209,
+    "tests/live/bcov-asset-b-misc.test.ts > user-defined types rename_struct_field renames a member list_struct_fields reports, keeping its guid": 698,
+    "tests/live/bcov-asset-b-misc.test.ts > moving assets move_asset puts the asset at its new path": 517,
+    "tests/live/bcov-asset-b-misc.test.ts > moving assets move_folder moves every asset under the folder": 527,
+    "tests/live/bcov-asset-b-misc.test.ts > searching search_assets finds an asset by name in a directory": 158,
+    "tests/live/bcov-asset-b-misc.test.ts > searching reindex_assets_fts rescans a folder and search_assets_fts ranks its asset": 138,
+    "tests/live/bcov-asset-b-misc.test.ts > saving and rollback save_all_dirty writes a package left dirty by an unsaved edit": 148,
+    "tests/live/bcov-asset-b-misc.test.ts > saving and rollback bulk_restore_data_assets replays an upsert's rollback, restoring updates and deleting creations": 967,
+    "tests/live/bcov-asset-b-misc.test.ts > input mapping and graphs read_imc reports a mapping added to the context": 92,
+    "tests/live/bcov-asset-b-misc.test.ts > input mapping and graphs remove_graph_node deletes a node read_asset_graph no longer lists": 42,
+    "tests/live/bcov-asset-b-tables.test.ts > data table rows set_datatable_row appends a row and update_datatable_row merges into it": 89,
+    "tests/live/bcov-asset-b-tables.test.ts > data table rows rename_datatable_row moves the row to its new name": 50,
+    "tests/live/bcov-asset-b-tables.test.ts > data table rows remove_datatable_row drops the row": 44,
+    "tests/live/bcov-asset-b-tables.test.ts > data table rows reimport_datatable replaces the table from JSON": 57,
+    "tests/live/bcov-asset-b-tables.test.ts > curve table rows set_curvetable_keys replaces a row's keys": 42,
+    "tests/live/bcov-asset-b-tables.test.ts > curve table rows list_curvetable_rows lists every row and honours rowFilter": 24,
+    "tests/live/bcov-asset-b-tables.test.ts > curve table rows rename_curvetable_row and remove_curvetable_row change the row set": 77,
+    "tests/live/bcov-asset-b-tables.test.ts > string table entries set_stringtable_entry writes an entry that read_stringtable and list_stringtable_keys report": 91,
+    "tests/live/bcov-asset-b-tables.test.ts > string table entries remove_stringtable_entry drops the entry": 74,
+    "tests/live/bcov-asset-b-tables.test.ts > string table entries import_stringtable_csv merges the CSV's entries into the table": 60,
+    "tests/live/bcov-asset-b-tables.test.ts > migrate copies a saved package into another project's Content folder": 1330,
+    "tests/live/bcov-audio-metasound.test.ts > MetaSound authoring create_metasound_source makes a source whose document declares its interfaces and audio output": 48,
+    "tests/live/bcov-audio-metasound.test.ts > MetaSound authoring metasound_add_graph_input and metasound_add_graph_output declare typed members": 44,
+    "tests/live/bcov-audio-metasound.test.ts > MetaSound authoring the four connect forms each land the edge they name": 183,
+    "tests/live/bcov-audio-metasound.test.ts > MetaSound authoring metasound_set_input_default writes a graph input default and a node input default": 83,
+    "tests/live/bcov-audio-metasound.test.ts > MetaSound authoring metasound_disconnect drops one edge, then clears a graph output": 100,
+    "tests/live/bcov-audio-metasound.test.ts > MetaSound authoring metasound_rename_member renames a graph input and keeps its edge": 49,
+    "tests/live/bcov-audio-wave.test.ts > audio import and PCM import_audio brings in a SoundWave with the file's length and channel count": 153,
+    "tests/live/bcov-audio-wave.test.ts > audio import and PCM extract_sound_wave_pcm decodes the samples that were written": 27,
+    "tests/live/bcov-audio-wave.test.ts > ambient sound actor spawn_ambient_sound places an AmbientSound playing the wave": 51,
+    "tests/live/bcov-audio-wave.test.ts > SoundCue graphs create_sound_cue makes an empty cue the listing and the graph read both see": 51,
+    "tests/live/bcov-audio-wave.test.ts > SoundCue graphs list_sound_assets lists only the sounds under the directory": 16,
+    "tests/live/bcov-audio-wave.test.ts > SoundCue graphs soundcue_author stamps a mixer root with two wave players under it": 41,
+    "tests/live/bcov-audio-wave.test.ts > SoundCue graphs adds, connects, disconnects and removes a node, read back after each step": 149,
+    "tests/live/bcov-blueprint-assets.test.ts > whole Blueprint assets duplicate_blueprint copies members, and diff_blueprint reports what changed on the copy": 238,
+    "tests/live/bcov-blueprint-assets.test.ts > whole Blueprint assets reparent_blueprint changes the parent the dependency and override readers see": 245,
+    "tests/live/bcov-blueprint-assets.test.ts > whole Blueprint assets get_blueprint_dependencies lists a class an object variable references": 126,
+    "tests/live/bcov-blueprint-assets.test.ts > user-defined enum reorder_enum_values and set_enum_metadata show up in read_user_defined_enum": 132,
+    "tests/live/bcov-blueprint-assets.test.ts > user-defined struct reorder_struct_fields reverses the members read_user_defined_struct lists": 176,
+    "tests/live/bcov-blueprint-assets.test.ts > user-defined struct set_struct_field_default stores a member default": 137,
+    "tests/live/bcov-blueprint-assets.test.ts > user-defined struct edit_struct_metadata writes the struct and member tooltips": 147,
+    "tests/live/bcov-blueprint-components.test.ts > SCS components add_component, reparent_component and remove_component change the hierarchy read_blueprint reports": 589,
+    "tests/live/bcov-blueprint-components.test.ts > SCS components set_blueprint_component_property writes a mesh that the component readers return": 131,
+    "tests/live/bcov-blueprint-components.test.ts > SCS components set_component_override_materials stores the material list": 118,
+    "tests/live/bcov-blueprint-components.test.ts > SCS components run_construction_script spawns the class and reports its components": 6,
+    "tests/live/bcov-blueprint-components.test.ts > SCS components flush_blueprint_component_templates keeps a graph-free Blueprint's SCS intact": 14,
+    "tests/live/bcov-blueprint-components.test.ts > inherited component overrides flush_inheritable_component_handler keeps a live override record": 583,
+    "tests/live/bcov-blueprint-components.test.ts > class defaults set_capsule_size resizes the Character capsule": 123,
+    "tests/live/bcov-blueprint-components.test.ts > class defaults set_class_default writes through a subobject path": 47,
+    "tests/live/bcov-blueprint-components.test.ts > class defaults set_actor_tick_settings changes PrimaryActorTick on the CDO": 36,
+    "tests/live/bcov-blueprint-components.test.ts > class defaults set_cdo_property and get_cdo_properties round-trip on the test Blueprint's class": 18,
+    "tests/live/bcov-chooser.test.ts > chooser authoring chooser_create makes an empty table chooser_describe reads": 41,
+    "tests/live/bcov-chooser.test.ts > chooser authoring chooser_add_column adds a float range column chooser_describe lists": 42,
+    "tests/live/bcov-chooser.test.ts > chooser authoring chooser_add_row, chooser_set_row and chooser_delete_row reshape the rows chooser_list_rows reads": 130,
+    "tests/live/bcov-chooser.test.ts > chooser authoring chooser_list_object_references finds the row output and chooser_remap_object_references repoints it": 102,
+    "tests/live/bcov-editor-dialog.test.ts > dialog policies set_dialog_policy arms a policy get_dialog_policy lists and clear_dialog_policy removes": 117,
+    "tests/live/bcov-epic.test.ts > epic toolset registry epic_status reports the registry available with as many toolsets as the listing": 448,
+    "tests/live/bcov-epic.test.ts > epic toolset registry epic_list_toolsets names each toolset with its tools, and nameFilter narrows the list": 704,
+    "tests/live/bcov-epic.test.ts > epic toolset registry epic_describe_toolset returns the toolset the listing named, with the same tools": 439,
+    "tests/live/bcov-foliage.test.ts > foliage types create_foliage_type makes a type whose settings set_foliage_type_settings changes and get reads back": 75,
+    "tests/live/bcov-foliage.test.ts > foliage types add_foliage_type_to_level puts the type in the palette list_foliage_types shows, and remove takes it out": 55,
+    "tests/live/bcov-foliage.test.ts > foliage instances add_foliage_instances places exact transforms that get, sample and remove all see": 116,
+    "tests/live/bcov-foliage.test.ts > procedural foliage set_procedural_foliage_spawner_types fills the spawner list read_procedural_foliage_spawner returns": 65,
+    "tests/live/bcov-foliage.test.ts > procedural foliage simulate_procedural_foliage places instances on the slab and clear_procedural_foliage removes them": 87,
+    "tests/live/bcov-gameplay-framework.test.ts > game framework Blueprints create_game_mode, create_game_state, create_player_controller, create_player_state and create_hud make Blueprints of the right parent": 708,
+    "tests/live/bcov-gameplay-framework.test.ts > game framework Blueprints set_world_game_mode writes the WorldSettings default game mode get_world_settings reads": 37,
+    "tests/live/bcov-gameplay-framework.test.ts > game framework Blueprints get_game_framework_info reports the editor world, which has no authority game mode or game state": 9,
+    "tests/live/bcov-gameplay-framework.test.ts > AI perception add_perception_component and configure_ai_perception_sense author senses read_perception reports": 443,
+    "tests/live/bcov-gameplay-framework.test.ts > StateTree create_state_tree compiles an asset list_state_trees lists": 24,
+    "tests/live/bcov-gameplay-framework.test.ts > StateTree add_state_tree_component adds a component get_state_tree_runtime reads its tree from": 262,
+    "tests/live/bcov-gameplay-framework.test.ts > SmartObjects create_smart_object_definition and the slot actions author slots list_smart_object_slots reads back": 240,
+    "tests/live/bcov-gameplay-framework.test.ts > SmartObjects add_smart_object_component adds a SmartObjectComponent read_blueprint lists": 193,
+    "tests/live/bcov-gameplay-input.test.ts > Enhanced Input authoring create_input_action and create_input_mapping_context make assets list_input_assets and read_input_action report": 132,
+    "tests/live/bcov-gameplay-input.test.ts > Enhanced Input authoring list_imc_mappings reads back the mappings a context carries": 89,
+    "tests/live/bcov-gameplay-input.test.ts > Enhanced Input authoring set_action_triggers replaces the action's own triggers and modifiers, and clear empties them": 62,
+    "tests/live/bcov-gameplay-input.test.ts > Enhanced Input authoring set_player_mappable_settings attaches settings read_input_action points at": 75,
+    "tests/live/bcov-gameplay-input.test.ts > Enhanced Input authoring validate_input flags the 2D action a single key drives, and the action nothing maps": 34,
+    "tests/live/bcov-gameplay-mass.test.ts > Mass entity config list_mass_types reports loaded trait classes and filters them by name": 37,
+    "tests/live/bcov-gameplay-mass.test.ts > Mass entity config ensure_mass_entity_config, reorder_mass_traits and remove_mass_trait change the order read_mass_entity_config reads": 138,
+    "tests/live/bcov-gameplay-mass.test.ts > Mass entity config validate_mass_entity_config walks the config's traits": 8,
+    "tests/live/bcov-gameplay-nav.test.ts > navmesh build and queries rebuild_navigation builds a navmesh project_point_to_navigation, get_navmesh_info and get_navmesh_details see": 597,
+    "tests/live/bcov-gameplay-nav.test.ts > navmesh build and queries find_nav_path returns a straight path across the open floor": 17,
+    "tests/live/bcov-gameplay-nav.test.ts > navmesh build and queries spawn_nav_modifier_volume cuts a hole that projection misses and the path routes around": 67,
+    "tests/live/bcov-gameplay-nav.test.ts > nav invokers list_nav_invokers finds an actor carrying a NavigationInvokerComponent": 67,
+    "tests/live/bcov-gameplay-zonegraph.test.ts > ZoneGraph query_zone_graph counts a placed ZoneShape and drops it once removed": 84,
+    "tests/live/bcov-gas.test.ts > GAS blueprint authoring create_gameplay_ability and create_gameplay_cue make blueprints get_gas_info classifies": 315,
+    "tests/live/bcov-gas.test.ts > GAS blueprint authoring set_ability_tags writes the container the ability CDO then reads back": 81,
+    "tests/live/bcov-gas.test.ts > GAS blueprint authoring add_ability_system_component and set_asc_defaults wire an ASC that later calls find": 345,
+    "tests/live/bcov-gas.test.ts > GAS blueprint authoring set_effect_modifier adds a modifier the effect CDO then carries": 173,
+    "tests/live/bcov-gas.test.ts > GAS on a live editor-world ASC init_asc registers the attribute set and get_attribute lists it": 36,
+    "tests/live/bcov-gas.test.ts > GAS on a live editor-world ASC set_attribute moves the base value get_attribute reads": 33,
+    "tests/live/bcov-gas.test.ts > GAS on a live editor-world ASC set_live_attribute_value writes the registered set get_live_attribute_value reads": 50,
+    "tests/live/bcov-gas.test.ts > GAS on a live editor-world ASC add_loose_gameplay_tag and remove_loose_gameplay_tag move the ASC's owned tags": 84,
+    "tests/live/bcov-gas.test.ts > GAS on a live editor-world ASC apply_effect puts an infinite effect on the ASC and remove_effect takes it off": 98,
+    "tests/live/bcov-level-actors.test.ts > level actor tags, folders and mobility add_actor_tag, remove_actor_tag, set_actor_tags and list_actor_tags agree": 134,
+    "tests/live/bcov-level-actors.test.ts > level actor tags, folders and mobility set_actor_folder_path moves the actor into a folder and back to the root": 66,
+    "tests/live/bcov-level-actors.test.ts > level actor tags, folders and mobility set_actor_mobility changes the root component mobility": 68,
+    "tests/live/bcov-level-actors.test.ts > level actor tags, folders and mobility set_actor_material writes slot 0 of the mesh component": 32,
+    "tests/live/bcov-level-actors.test.ts > level component properties set_component_property writes a value get_component_details reads back": 67,
+    "tests/live/bcov-level-actors.test.ts > level component properties bulk_set_component_property writes every matched actor's component": 100,
+    "tests/live/bcov-level-actors.test.ts > level component properties remove_component_from_actor removes a component the tree no longer lists": 67,
+    "tests/live/bcov-level-actors.test.ts > level attachment attach_component and detach_component change the child root's attach parent": 117,
+    "tests/live/bcov-level-actors.test.ts > level attachment detach_actor clears an actor attachment": 66,
+    "tests/live/bcov-level-actors.test.ts > level transforms and reads aim_actor_at turns the actor toward a world point": 50,
+    "tests/live/bcov-level-actors.test.ts > level transforms and reads get_relative_transform reports the target in the reference frame": 50,
+    "tests/live/bcov-level-actors.test.ts > level transforms and reads get_actor_bounds and read_actor_motion report the placed cube": 33,
+    "tests/live/bcov-level-actors.test.ts > level transforms and reads resolve_actor finds the actor by its internal name": 33,
+    "tests/live/bcov-level-actors.test.ts > level selection and editor visibility select_actors sets the selection get_selected_actors reads": 259,
+    "tests/live/bcov-level-actors.test.ts > level selection and editor visibility set_editor_visibility hides and shows an actor in the editor": 63,
+    "tests/live/bcov-level-actors.test.ts > level batch placement and deletion batch_translate offsets every listed actor": 82,
+    "tests/live/bcov-level-actors.test.ts > level batch placement and deletion place_actors_batch spawns tagged actors and attaches the child": 68,
+    "tests/live/bcov-level-actors.test.ts > level batch placement and deletion spawn_grid places a grid get_actors_by_class finds, and delete_actors removes it": 69,
+    "tests/live/bcov-level-actors.test.ts > level class queries count_actors_by_class counts the placed target points": 83,
+    "tests/live/bcov-level-actors.test.ts > level class queries get_actors_by_component_class finds the actor carrying an added component": 50,
+    "tests/live/bcov-level-actors.test.ts > level export and splines export_actor_fbx writes the mesh and a metadata sidecar": 51,
+    "tests/live/bcov-level-actors.test.ts > level export and splines get_spline_info reads the points set_spline_points wrote": 65,
+    "tests/live/bcov-level-environment.test.ts > lights spawn_light places a point light at the requested location": 67,
+    "tests/live/bcov-level-environment.test.ts > lights set_light_properties writes intensity and colour": 51,
+    "tests/live/bcov-level-environment.test.ts > volumes and post process spawn_volume places a blocking volume list_volumes lists with the requested extent": 49,
+    "tests/live/bcov-level-environment.test.ts > volumes and post process set_volume_properties resizes the brush and writes a property": 67,
+    "tests/live/bcov-level-environment.test.ts > volumes and post process add_post_process_blendable adds the material to the volume's blendables": 38,
+    "tests/live/bcov-level-environment.test.ts > fog and virtual texture volumes set_fog_properties writes the fog component": 62,
+    "tests/live/bcov-level-environment.test.ts > fog and virtual texture volumes get_runtime_virtual_texture_summary lists a placed runtime virtual texture volume": 34,
+    "tests/live/bcov-level-environment.test.ts > water get_water_state describes the placed zone and lake": 28,
+    "tests/live/bcov-level-environment.test.ts > water set_water_body_property writes a WaterBodyComponent property": 32,
+    "tests/live/bcov-level-environment.test.ts > water rebuild_water_zone resizes the zone and its water mesh tiles": 34,
+    "tests/live/bcov-lock.test.ts > asset locks acquire_lock holds a path, refuses a second session and release_lock frees it": 116,
+    "tests/live/bcov-lock.test.ts > asset locks release_session_locks frees every path a session holds and leaves other sessions alone": 134,
+    "tests/live/bcov-material-designer.test.ts > material designer create_material_designer makes a model with a Base Color slot": 54,
+    "tests/live/bcov-material-designer.test.ts > material designer add_material_designer_layer, set_material_designer_value and remove_material_designer_layer round-trip": 125,
+    "tests/live/bcov-pcg.test.ts > PCG graphs and components list_pcg_graphs pages to both graphs the test created": 5,
+    "tests/live/bcov-pcg.test.ts > PCG graphs and components get_pcg_components reports the volume with the graph it was given": 15,
+    "tests/live/bcov-pcg.test.ts > PCG graphs and components toggle_pcg_graph swaps the component's graph and swaps it back": 67,
+    "tests/live/bcov-pcg.test.ts > PCG graphs and components cleanup_pcg clears what a generation produced": 100,
+    "tests/live/bcov-pcg.test.ts > PCG instance nodes unwrap_pcg_instance_nodes gives an instance node its own settings": 117,
+    "tests/live/bcov-pcg.test.ts > PCG level assets export_level_to_pcg_asset writes a data asset update_pcg_level_assets re-exports": 337,
+    "tests/live/bcov-pie-assets.test.ts > observation profiles profile_create, profile_read, profile_update, profile_list and profile_delete round-trip one asset": 877,
+    "tests/live/bcov-pie-assets.test.ts > test scripts script_create, script_read, script_update, script_list and script_delete round-trip one asset": 827,
+    "tests/live/bcov-pie-assets.test.ts > test scripts script_create refuses a step whose expectation cannot be evaluated": 23,
+    "tests/live/bcov-pie-assets.test.ts > test scripts script_create saves a value the observer cannot read, warning with the step, the value and the closest candidates": 716,
+    "tests/live/bcov-pie-assets.test.ts > test scripts script_create saves an op or target the value's type cannot meet, with a warning": 704,
+    "tests/live/bcov-pie-assets.test.ts > test scripts resolve_in_pie silences the warning for a value that only exists once PIE runs, and is stored on the step": 854,
+    "tests/live/bcov-pie-assets.test.ts > test scripts script_create warns about a script with no auto step unless it is manual_only": 792,
+    "tests/live/bcov-pie-assets.test.ts > draft checks without saving script_validate answers the checks script_create runs, and saves nothing": 38,
+    "tests/live/bcov-pie-assets.test.ts > draft checks without saving script_values lists what a script can name, each of which script_validate accepts": 26,
+    "tests/live/bcov-pie-assets.test.ts > manual runs script_run mode=manual starts no PIE, takes verdicts in any order and writes results.json": 106,
+    "tests/live/bcov-pie-assets.test.ts > manual runs script_runs lists a script's runs newest first with their steps, and script_list names each script's last run": 178,
+    "tests/live/bcov-pie-assets.test.ts > scenarios scenario_validate accepts a well-formed scenario and names each problem in a broken one": 14,
+    "tests/live/bcov-pie-assets.test.ts > multiplayer readers with no session clients reports a session that is not networked": 8,
+    "tests/live/bcov-pie-assets.test.ts > multiplayer readers with no session console points the editor's own player at execute_command and needs a remote player otherwise": 16,
+    "tests/live/bcov-pie-assets.test.ts > multiplayer readers with no session remote_result names a request that was never relayed": 8,
+    "tests/live/bcov-pie-assets.test.ts > multiplayer readers with no session uat_status reports no run in progress": 9,
+    "tests/live/bcov-pie-scripts.test.ts > a script run with auto and manual steps script_run evaluates auto steps live, holds at the manual step, and takes its verdict": 588,
+    "tests/live/bcov-pie-scripts.test.ts > a script run with auto and manual steps script_status returns the run's events after since_seq, in order": 30,
+    "tests/live/bcov-pie-scripts.test.ts > a script run with auto and manual steps script_results reads results.json with every step's status, evidence and verdict": 179,
+    "tests/live/bcov-pie-scripts.test.ts > a script run with auto and manual steps script_replay re-evaluates the auto steps on the run's recording and reports what regressed": 11254,
+    "tests/live/bcov-pie-scripts.test.ts > stopping a run script_stop ends a run early and leaves the unsettled steps pending": 612,
+    "tests/live/bcov-pie-scripts.test.ts > agent verdicts verdict with source agent needs evidence, honours agent_judgeable, and is counted apart from human verdicts": 696,
+    "tests/live/bcov-reflection.test.ts > enum authoring create_enum seeds entries and set_enum_entries replaces them, both read back through reflect_enum": 533,
+    "tests/live/bcov-reflection.test.ts > enum authoring reflect_enum describes a native enum by short name": 3,
+    "tests/live/bcov-reflection.test.ts > class and instance reflection reflect_class lists the Blueprint's own variable and its parent chain": 10,
+    "tests/live/bcov-reflection.test.ts > class and instance reflection list_classes with a Blueprint parentFilter returns that class and its Blueprint child only": 10,
+    "tests/live/bcov-reflection.test.ts > class and instance reflection reflect_instance reads a Blueprint default written through set_cdo_property": 15,
+    "tests/live/bcov-reflection.test.ts > class and instance reflection is_class_loaded separates a loaded native class, a loaded Blueprint class and a missing one": 29,
+    "tests/live/bcov-reflection.test.ts > gameplay tags and save games list_gameplay_tags filters by prefix over the project's declared tags": 12,
+    "tests/live/bcov-reflection.test.ts > gameplay tags and save games inspect_save_game loads a slot the test wrote and reports its class": 208,
+    "tests/live/bcov-statetree-lifecycle.test.ts > statetree lifecycle set_state_tree_schema gives a bare tree editor data, a schema and a root state": 51,
+    "tests/live/bcov-statetree-lifecycle.test.ts > statetree lifecycle compile_state_tree compiles and saves the repaired tree": 52,
+    "tests/live/bcov-statetree-lifecycle.test.ts > statetree lifecycle validate_state_tree validates against the schema read_state_tree reports": 19,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree create_widget_blueprint makes an asset list_widget_blueprints reports": 44,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree add_widget, move_widget, reorder_child and remove_widget reshape the tree read_widget_tree reads": 1342,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree wrap_root_widget puts a panel above the root and set_root_widget swaps the root back": 325,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree set_widget_property writes typed and reflected properties get_widget_details and get_widget_properties read": 300,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree set_widget_style writes a style struct get_widget_details reads back": 161,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree bulk_set_widget_properties applies several writes get_widget_properties reads back": 176,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree list_widget_classes reports native panels and this blueprint's generated class": 17,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree extract_widget_subtree plans by default and then lifts the subtree into a new blueprint": 175,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree list_widget_bindings reads a designer binding and clear_widget_binding removes it": 148,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree audit_widget_accessibility flags a font below the minimum and clears once it is raised": 311,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree get_bind_widget_contract reads the parent's contract and checks this tree against it": 7,
+    "tests/live/bcov-widget-tree.test.ts > widget blueprint tree audit_commonui reports the plugin state the loaded widget classes agree with": 15,
+    "tests/live/blueprint-delete-graph.test.ts > addressing a graph the way list_graphs names one (#1010) removes a graph and reports what went with it": 249,
+    "tests/live/blueprint-delete-graph.test.ts > addressing a graph the way list_graphs names one (#1010) is idempotent, like the other deletes": 3,
+    "tests/live/blueprint-delete-graph.test.ts > addressing a graph the way list_graphs names one (#1010) refuses to delete an event graph without force": 33,
+    "tests/live/blueprint-delete-graph.test.ts > a subgraph that something still owns (#1010) points at delete_node instead of orphaning the owning node": 285,
+    "tests/live/blueprint-find-nodes.test.ts > finding every reference to a variable (#1015) reports both reads and the write": 18,
+    "tests/live/blueprint-find-nodes.test.ts > finding every reference to a variable (#1015) narrows to reads or to writes": 19,
+    "tests/live/blueprint-find-nodes.test.ts > finding every reference to a variable (#1015) does not report a different member": 17,
+    "tests/live/blueprint-find-nodes.test.ts > finding every reference to a variable (#1015) reports a graph selector list_graphs also reports": 32,
+    "tests/live/blueprint-find-nodes.test.ts > finding nodes by title and class (#998) matches a title substring case-insensitively": 17,
+    "tests/live/blueprint-find-nodes.test.ts > finding nodes by title and class (#998) matches an exact node class": 16,
+    "tests/live/blueprint-find-nodes.test.ts > finding nodes by title and class (#998) treats the filters as alternatives rather than a conjunction": 18,
+    "tests/live/blueprint-find-nodes.test.ts > finding nodes by title and class (#998) refuses a call that names no filter": 15,
+    "tests/live/blueprint-find-nodes.test.ts > finding nodes by title and class (#998) says how much it walked": 18,
+    "tests/live/blueprint-get-connections.test.ts > reading data edges (#996 gap 2) names both ends of a data edge": 16,
+    "tests/live/blueprint-get-connections.test.ts > reading data edges (#996 gap 2) carries the pin type, which a title cannot": 4,
+    "tests/live/blueprint-get-connections.test.ts > reading data edges (#996 gap 2) distinguishes the two same-titled nodes by GUID": 34,
+    "tests/live/blueprint-get-connections.test.ts > filtering and addressing (#996 gap 2) returns only exec edges when asked, and only data edges when asked": 33,
+    "tests/live/blueprint-get-connections.test.ts > filtering and addressing (#996 gap 2) reports each edge once rather than from both ends": 16,
+    "tests/live/blueprint-get-connections.test.ts > filtering and addressing (#996 gap 2) refuses a graph name the Blueprint does not have": 16,
+    "tests/live/blueprint-guid-addressing.test.ts > the fixture is actually ambiguous by title (#996) has two getters with the same title and different GUIDs": 0,
+    "tests/live/blueprint-guid-addressing.test.ts > connect_pins accepts a node GUID (#996) wires the second getter, which no title could name": 124,
+    "tests/live/blueprint-guid-addressing.test.ts > delete_node accepts a node GUID (#996) deletes the getter it was given and leaves the other": 136,
+    "tests/live/blueprint-self-function-call.test.ts > calling a function the Blueprint declares itself (#996) is a real call site, not an unbound stub": 25,
+    "tests/live/blueprint-self-function-call.test.ts > calling a function the Blueprint declares itself (#996) carries the function's name as its title rather than 'None'": 3,
+    "tests/live/blueprint-self-function-call.test.ts > the paths that already worked (#996) still binds a function the parent class declares": 133,
+    "tests/live/checkpoints.test.ts > the bridge recorder checkpoint_arm records a new package as absent and an existing one as a copy, once per generation": 367,
+    "tests/live/checkpoints.test.ts > the bridge recorder checkpoint_diff_blueprint diffs a checkpoint's copy against the loaded Blueprint": 257,
+    "tests/live/checkpoints.test.ts > the bridge recorder checkpoint_prepare_restore and checkpoint_finish_restore put a package back and reload it in place": 1016,
+    "tests/live/checkpoints.test.ts > the bridge recorder checkpoint_finish_restore unloads a package whose file a restore deleted": 201,
+    "tests/live/checkpoints.test.ts > the bridge recorder checkpoint_arm with enabled false stops recording": 187,
+    "tests/live/checkpoints.test.ts > the bridge recorder checkpoint_prepare_restore refuses during PIE": 184,
+    "tests/live/checkpoints.test.ts > a turn through the server records a Blueprint, a material, a level and a config edit in one checkpoint": 1083,
+    "tests/live/checkpoints.test.ts > a turn through the server restores the Blueprint and the config, keeps the material and the level, and the editor shows both": 2248,
+    "tests/live/checkpoints.test.ts > a turn through the server leaves the project's own .git alone": 1,
+    "tests/live/cpp-correctness.test.ts > the index answers from a real engine reports what it scanned, and serves the second call from cache": 90,
+    "tests/live/cpp-correctness.test.ts > the index answers from a real engine resolves an engine class to the header you would actually include": 133,
+    "tests/live/cpp-correctness.test.ts > the index answers from a real engine resolves plugin types, which is most of what gets asked": 26,
+    "tests/live/cpp-correctness.test.ts > the index answers from a real engine resolves a qualified member to its declaration": 136,
+    "tests/live/cpp-correctness.test.ts > the index answers from a real engine separates a misspelled member from a misspelled class": 33,
+    "tests/live/cpp-correctness.test.ts > the index answers from a real engine says nothing rather than noise for a name with no neighbour": 120,
+    "tests/live/cpp-correctness.test.ts > the index answers from a real engine aggregates a batch into the whole edit a caller has to make": 165,
+    "tests/live/cpp-correctness.test.ts > suggest_build_deps against the real Build.cs reports only the modules the file does not already list": 128,
+    "tests/live/cpp-correctness.test.ts > suggest_build_deps against the real Build.cs omits Core and CoreUObject, which every module already has": 36,
+    "tests/live/cpp-correctness.test.ts > lint_cpp_header catches the mistakes an agent actually makes, in one pass": 397,
+    "tests/live/cpp-correctness.test.ts > lint_cpp_header passes a header that is correct": 292,
+    "tests/live/cpp-correctness.test.ts > lint_cpp_header accepts a forward declaration in place of an include": 170,
+    "tests/live/cpp-correctness.test.ts > lint_cpp_header does not demand an include for a symbol named only in a comment": 299,
+    "tests/live/cpp-correctness.test.ts > find_example_usage finds uses, and says which kind of install it was able to search": 637,
+    "tests/live/cpp-correctness.test.ts > find_example_usage never returns a comment or a declaration as an example of use": 534,
+    "tests/live/cpp-correctness.test.ts > find_example_usage reads the Runtime tree once, and finishes inside its budget": 632,
+    "tests/live/crash-class-inputs.test.ts > the currently loaded map survives every reference to the loaded world and keeps it loaded": 372,
+    "tests/live/crash-class-inputs.test.ts > the currently loaded map duplicates the loaded map into a new asset without switching to it": 62,
+    "tests/live/crash-class-inputs.test.ts > the currently loaded map deletes a map while it is the loaded one, and the editor carries on": 2292,
+    "tests/live/crash-class-inputs.test.ts > an asset open in its editor survives every reference to a Blueprint whose editor is open": 3080,
+    "tests/live/crash-class-inputs.test.ts > an asset open in its editor compiles an open Blueprint and reports it compiled": 152,
+    "tests/live/crash-class-inputs.test.ts > an asset open in its editor duplicates an open Blueprint into a second readable asset": 164,
+    "tests/live/crash-class-inputs.test.ts > an asset open in its editor renames an open Blueprint: the new path reads, the old one does not": 983,
+    "tests/live/crash-class-inputs.test.ts > an asset open in its editor deletes an open Blueprint and closes its editor rather than leaving it on a dead object": 1639,
+    "tests/live/crash-class-inputs.test.ts > an asset mid-PIE survives every editor-world reference while PIE runs, and PIE is still answerable after": 751,
+    "tests/live/crash-class-inputs.test.ts > an asset mid-PIE deletes an asset during PIE and both worlds survive it": 456,
+    "tests/live/crash-class-inputs.test.ts > a null, empty or missing reference is refused, not crashed on, when the reference is missing": 325,
+    "tests/live/crash-class-inputs.test.ts > a null, empty or missing reference is refused, not crashed on, when the reference is empty": 358,
+    "tests/live/crash-class-inputs.test.ts > a null, empty or missing reference is refused, not crashed on, when the reference is null": 328,
+    "tests/live/crash-class-inputs.test.ts > a null, empty or missing reference is refused, not crashed on, when the reference is whitespace": 328,
+    "tests/live/crash-class-inputs.test.ts > a null, empty or missing reference is refused, not crashed on, when the reference is not a path": 326,
+    "tests/live/deep-inspection.test.ts > material usage flags come from the engine (#1004) reports more flags than the hand-written list could name": 0,
+    "tests/live/deep-inspection.test.ts > material usage flags come from the engine (#1004) includes the enumerators the old table could not reach": 0,
+    "tests/live/deep-inspection.test.ts > material usage flags come from the engine (#1004) names a real bUsedWith property for every flag": 1,
+    "tests/live/deep-inspection.test.ts > material usage flags come from the engine (#1004) gets the irregular plural right": 0,
+    "tests/live/deep-inspection.test.ts > material usage flags come from the engine (#1004) accepts a usage name set_usage can also take": 32,
+    "tests/live/deep-inspection.test.ts > console variables are read from the running editor (#1006) reports the value, its default and the priority it was set at": 10,
+    "tests/live/deep-inspection.test.ts > console variables are read from the running editor (#1006) puts a name this build does not have under notFound rather than failing": 9,
+    "tests/live/deep-inspection.test.ts > console variables are read from the running editor (#1006) caps a pattern search and says that it did": 19,
+    "tests/live/deep-inspection.test.ts > run_python_file calls one function in a file (#995) calls the named function and returns its value": 18,
+    "tests/live/deep-inspection.test.ts > run_python_file calls one function in a file (#995) does not fire the file's __main__ guard": 15,
+    "tests/live/deep-inspection.test.ts > run_python_file calls one function in a file (#995) passes args and kwargs to the call": 16,
+    "tests/live/deep-inspection.test.ts > run_python_file calls one function in a file (#995) fails loudly when the named function is not there": 17,
+    "tests/live/deep-inspection.test.ts > run_python_file calls one function in a file (#995) suppresses the log on captureLog=false but still reports its size": 17,
+    "tests/live/deep-inspection.test.ts > run_python_file calls one function in a file (#995) keeps the tail under maxLogChars and marks the truncation": 18,
+    "tests/live/ergonomics.test.ts > describe_action against a running server answers with the parameters and bridge method of a real action": 244,
+    "tests/live/ergonomics.test.ts > describe_action against a running server suggests the intended action for a typo instead of failing bare": 43,
+    "tests/live/ergonomics.test.ts > describe_action against a running server describes a whole category in one call, with each action's class": 55,
+    "tests/live/ergonomics.test.ts > describe_action against a running server covers the Epic actions this editor enriched the surface with": 49,
+    "tests/live/ergonomics.test.ts > field selection on a live read returns the unfiltered shape first, so the filtered ones mean something": 58,
+    "tests/live/ergonomics.test.ts > field selection on a live read keeps only the named field of every element": 102,
+    "tests/live/ergonomics.test.ts > field selection on a live read drops a named field and keeps the rest of the result": 64,
+    "tests/live/ergonomics.test.ts > field selection on a live read returns the full result and says so when no path matched": 52,
+    "tests/live/ergonomics.test.ts > field selection on a live read never lets the routing parameters reach the editor": 69,
+    "tests/live/ergonomics.test.ts > path repair on a live call resolves a directory written with backslashes and reports the repair": 142,
+    "tests/live/ergonomics.test.ts > path repair on a live call keeps the repair report visible through a narrow selection": 67,
+    "tests/live/ergonomics.test.ts > path repair on a live call says nothing about repairs on a call that needed none": 68,
+    "tests/live/ergonomics.test.ts > unknown action errors names the closest spelling instead of listing every action": 21,
+    "tests/live/gas-effect-components.test.ts > create_gameplay_effect durationPolicy (#1423) writes Infinite onto the class defaults": 123,
+    "tests/live/gas-effect-components.test.ts > create_gameplay_effect durationPolicy (#1423) writes HasDuration with its magnitude": 121,
+    "tests/live/gas-effect-components.test.ts > create_gameplay_effect durationPolicy (#1423) refuses an unknown policy before creating anything": 6,
+    "tests/live/gas-effect-components.test.ts > add_effect_component (#1423) adds a component that get_gas_info then lists": 49,
+    "tests/live/gas-effect-components.test.ts > add_effect_component (#1423) is idempotent on the class": 20,
+    "tests/live/gas-effect-components.test.ts > add_effect_component (#1423) writes properties onto the component it adds": 44,
+    "tests/live/gas-effect-components.test.ts > add_effect_component (#1423) refuses a class that is not a GameplayEffectComponent": 6,
+    "tests/live/gas-effect-components.test.ts > remove_effect_component (#1423) removes the component add_effect_component added, through its rollback record": 59,
+    "tests/live/gas-effect-components.test.ts > remove_effect_component (#1423) is idempotent when the class is not there": 9,
+    "tests/live/gas-effect-components.test.ts > set_effect_granted_tags (#1423) grants the tag through a TargetTags component, read back off the effect": 46,
+    "tests/live/gas-effect-components.test.ts > set_effect_granted_tags (#1423) refuses an unregistered tag": 3,
+    "tests/live/gas-effect-components.test.ts > set_effect_granted_tags (#1423) clears the grant when written empty": 48,
+    "tests/live/golden-connected.test.ts > golden baseline: single editor, editor connected advertises exactly what it advertises with no editor attached": 6,
+    "tests/live/golden-connected.test.ts > golden baseline: single editor, editor connected records a surface worth guarding": 1,
+    "tests/live/golden-connected.test.ts > golden baseline: single editor, editor connected advertises no targeting parameter, because this is one editor": 1,
+    "tests/live/golden-connected.test.ts > golden baseline: single editor, editor connected carries nothing from the recording machine, including its port": 7,
+    "tests/live/golden-connected.test.ts > golden baseline: single editor, editor connected keeps every category the editor-down half advertises": 4,
+    "tests/live/golden-connected.test.ts > golden baseline: single editor, editor connected is deterministic: two recordings in one run are byte-identical": 2333,
+    "tests/live/golden-connected.test.ts > golden baseline: single editor, editor connected orders the enrichment-injected actions canonically, in the recording and in the file": 4,
+    "tests/live/golden-connected.test.ts > golden baseline: single editor, editor connected records the same bytes from a catalog enumerated in a different order": 6,
+    "tests/live/golden-connected.test.ts > golden baseline: single editor, editor connected matches the committed baseline": 2,
+    "tests/live/golden-connected.test.ts > golden baseline: the editor-down half, with an editor running still matches the committed baseline": 2301,
+    "tests/live/ik-retargeter-ops.test.ts > reading the op settings (#1000) built a retargeter with an op stack": 0,
+    "tests/live/ik-retargeter-ops.test.ts > reading the op settings (#1000) reports the settings struct type alongside the values": 0,
+    "tests/live/ik-retargeter-ops.test.ts > reading the op settings (#1000) reports bEnabled, which lives on the settings struct rather than the op": 0,
+    "tests/live/ik-retargeter-ops.test.ts > writing the op settings (#1000/#1034) turns an op off and reads the new state back": 87,
+    "tests/live/ik-retargeter-ops.test.ts > writing the op settings (#1000/#1034) says which op it changed and which properties landed": 17,
+    "tests/live/ik-retargeter-ops.test.ts > writing the op settings (#1000/#1034) refuses a setting the op does not have, and changes nothing": 43,
+    "tests/live/ik-retargeter-ops.test.ts > writing the op settings (#1000/#1034) refuses an op name the stack does not have, and names the ones it does": 16,
+    "tests/live/ik-retargeter-ops.test.ts > writing the op settings (#1000/#1034) refuses an entry that changes nothing": 16,
+    "tests/live/ik-retargeter-ops.test.ts > writing a named setting (#1000) writes an enum setting and reads the new value back": 63,
+    "tests/live/ik-retargeter-ops.test.ts > writing a named setting (#1000) writes a bool setting": 63,
+    "tests/live/ik-retargeter-ops.test.ts > writing a named setting (#1000) writes a float setting": 54,
+    "tests/live/ik-retargeter-ops.test.ts > writing a named setting (#1000) refuses a value the enum does not have": 23,
+    "tests/live/ik-retargeter-ops.test.ts > writing one chain's FK settings (#1034) has a chain to write to": 16,
+    "tests/live/ik-retargeter-ops.test.ts > writing one chain's FK settings (#1034) sets the named chain's rotation mode": 59,
+    "tests/live/ik-retargeter-ops.test.ts > writing one chain's FK settings (#1034) leaves the chain's other settings alone": 48,
+    "tests/live/ik-retargeter-ops.test.ts > writing one chain's FK settings (#1034) names what it applied": 33,
+    "tests/live/ik-retargeter-ops.test.ts > writing one chain's FK settings (#1034) refuses a chain the op does not have": 26,
+    "tests/live/input-mapping-settings.test.ts > per-mapping player settings reports inheritance and edits one row with preview, rollback and clear": 2339,
+    "tests/live/input-mapping-settings.test.ts > per-mapping player settings round-trips default settings fields when rolling back an override patch": 2087,
+    "tests/live/input-mapping-settings.test.ts > per-mapping player settings owns independent override subobjects on two rows of the same context": 2210,
+    "tests/live/input-mapping-settings.test.ts > per-mapping player settings duplicates triggers, modifiers and mappable settings as independent subobjects": 2860,
+    "tests/live/input-mapping-settings.test.ts > per-mapping player settings validates InputAction previews without changing the existing settings": 1997,
+    "tests/live/level-roots-and-templates.test.ts > rootless actors (#1251) refuses to move an actor with no root": 34,
+    "tests/live/level-roots-and-templates.test.ts > rootless actors (#1251) makes an added scene component the root, after which the actor moves": 34,
+    "tests/live/level-roots-and-templates.test.ts > rootless actors (#1251) names the mobility mismatch when a Static child meets a Movable parent": 33,
+    "tests/live/level-roots-and-templates.test.ts > level templates (#1252) refuses a template that does not exist and leaves the open map alone": 49,
+    "tests/live/level-roots-and-templates.test.ts > level templates (#1252) refuses to load a level that does not exist": 17,
+    "tests/live/material-function-refs.test.ts > material function node references connects nodes by the names they were given": 1879,
+    "tests/live/material-function-refs.test.ts > material function node references refuses a name that matches no node instead of using the first one": 329,
+    "tests/live/open-asset-map-routing.test.ts > open_asset on another map (#1422) opens it by its package path as the editor world and reports World": 890,
+    "tests/live/open-asset-map-routing.test.ts > open_asset on another map (#1422) opens it by its object path as the editor world and reports World": 867,
+    "tests/live/pcg-subgraph-assign.test.ts > assigning a subgraph builds its parameters (#1253) reports the subgraph's pins and its parameter bag": 65,
+    "tests/live/pcg-subgraph-assign.test.ts > assigning a subgraph builds its parameters (#1253) overrides a parameter and reports the previous state": 32,
+    "tests/live/pcg-subgraph-assign.test.ts > assigning a subgraph builds its parameters (#1253) refuses an unknown parameter with nothing changed": 19,
+    "tests/live/pcg-subgraph-assign.test.ts > assigning a subgraph builds its parameters (#1253) clears an override with null": 33,
+    "tests/live/pcg-subgraph-assign.test.ts > assigning a subgraph builds its parameters (#1253) clears the subgraph with an empty path": 31,
+    "tests/live/pie-runtime-controls.test.ts > PIE runtime controls set_pie_paused unpauses a game the console paused, and reports the previous state (#1215)": 38,
+    "tests/live/pie-runtime-controls.test.ts > PIE runtime controls set_pie_view_target makes a spawned camera the player's view target (#1203)": 59,
+    "tests/live/pie-runtime-controls.test.ts > PIE runtime controls pose_debug_camera places the debug camera and hands control back (#1250)": 27,
+    "tests/live/playtest-flow.test.ts > the playtest flow on tests/ue_mcp drafts, has the editor check the draft, and saves a script that reads back": 496,
+    "tests/live/sequencer-datasmith-metahuman.test.ts > sequencer channels and bindings keys an MPC parameter channel through its proxy and samples the constant hold (#1407)": 110,
+    "tests/live/sequencer-datasmith-metahuman.test.ts > sequencer channels and bindings removes a section with an undo rollback that restores it (#1232)": 119,
+    "tests/live/sequencer-datasmith-metahuman.test.ts > sequencer channels and bindings reports a binding stale once its actor is deleted, and rebinds it keeping the guid (#1356)": 98,
+    "tests/live/sequencer-datasmith-metahuman.test.ts > sequencer channels and bindings lists level sequence actors with their bound objects (#1232)": 16,
+    "tests/live/sequencer-datasmith-metahuman.test.ts > datasmith (#1383) imports a scene, finds its actors by tag with metadata, and reimports a source change": 83,
+    "tests/live/sequencer-datasmith-metahuman.test.ts > metahuman (#1354) creates a character, sets body constraints with a rollback, and refuses cloud steps it cannot run": 134,
+    "tests/live/skeleton-uv-metasound.test.ts > UV channels measures every channel, which get_mesh_geometry could not": 105,
+    "tests/live/skeleton-uv-metasound.test.ts > UV channels adds a channel, and the read reflects it": 250,
+    "tests/live/skeleton-uv-metasound.test.ts > UV channels dryRun changes nothing": 235,
+    "tests/live/skeleton-uv-metasound.test.ts > UV channels reports UV health as named issues rather than a bare score": 116,
+    "tests/live/skeleton-uv-metasound.test.ts > UV channels transforms a channel and the measured bounds move with it": 160,
+    "tests/live/skeleton-uv-metasound.test.ts > UV channels unwrap dryRun reports the method it would use and writes nothing": 199,
+    "tests/live/skeleton-uv-metasound.test.ts > UV channels exports a layout image whose island count matches the read": 353,
+    "tests/live/skeleton-uv-metasound.test.ts > UV channels generate_lightmap_uvs rebuilds rather than only setting a flag": 151,
+    "tests/live/skeleton-uv-metasound.test.ts > skeleton editing sessions opens a session over a working copy and cancels without touching disk": 58,
+    "tests/live/skeleton-uv-metasound.test.ts > skeleton editing sessions cancelling a closed session reports alreadyClosed, so a rollback replays": 37,
+    "tests/live/skeleton-uv-metasound.test.ts > skeleton editing sessions validates the whole batch before mutating anything": 86,
+    "tests/live/skeleton-uv-metasound.test.ts > skeleton properties with no UPROPERTY writes and restores bone translation retargeting": 153,
+    "tests/live/skeleton-uv-metasound.test.ts > skeleton properties with no UPROPERTY authors a blend profile, which is a subobject set_property cannot create": 88,
+    "tests/live/skeleton-uv-metasound.test.ts > skeleton properties with no UPROPERTY curve metadata edits are idempotent in both directions": 197,
+    "tests/live/skeleton-uv-metasound.test.ts > skeleton properties with no UPROPERTY registers and unregisters a compatible skeleton, closing the loop diff opens": 114,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection lists the node classes an add_node call can name": 35,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection names the asset that is missing rather than failing anonymously": 27,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection refuses a path that is not a MetaSound, naming what it found instead": 20,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection distinguishes a path that names no MetaSound from one that does": 26,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection authors a graph into an asset whose document is actually initialized": 26,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection reads back the nodes and connections that were authored, by id": 25,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection hands back the same node id metasound_add_node returned": 66,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection lists connections in metasound_connect's own parameter names": 92,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection reports a graph with no variables as normal rather than as an error": 30,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection finds a node by class name and reports what did not match": 63,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection inspects one node down to vertex types, defaults and connection state": 70,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection reports a graph input's authored default when the input node is inspected": 60,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection lists a node's pins and counts the ones nothing drives": 94,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection diagnoses the graph, naming the node in each problem": 56,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection refuses a node id that is not in the graph, listing the ones that are": 37,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection refuses a page the document does not hold, listing the pages it does": 25,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection removes a node, capturing the class it removed off the page it read": 115,
+    "tests/live/skeleton-uv-metasound.test.ts > MetaSound introspection answers for a variable this graph never declared instead of asserting": 24,
+    "tests/live/animation-authoring-gaps.test.ts > animation authoring gaps transform_bone_tracks rotates a track by the given yaw and the readback matches (#1227)": 117,
+    "tests/live/animation-authoring-gaps.test.ts > animation authoring gaps compose_pose_sequence blends the layered bones at frame 0 and eases back to the base (#1230)": 85,
+    "tests/live/animation-authoring-gaps.test.ts > animation authoring gaps generate_skeletal_mesh_lods builds the requested LODs and skips a mesh already there (#1372)": 1871,
+    "tests/live/animation-authoring-gaps.test.ts > animation authoring gaps renames and removes a retarget pose, and keeps the default pose (#1288)": 168,
+    "tests/live/animation-authoring-gaps.test.ts > animation authoring gaps set_control_rig_preview_mesh sets the preview mesh and it survives a reload (#1369)": 720,
+    "tests/live/asset-reimport-source.test.ts > an asset nothing can reimport (#1008) is refused promptly rather than wedging the editor": 6,
+    "tests/live/asset-reimport-source.test.ts > an asset nothing can reimport (#1008) leaves the editor able to take the next call": 15,
+    "tests/live/asset-reimport-source.test.ts > repointing an imported asset at a new source (#1008) records the new file and says that it did": 18,
+    "tests/live/asset-reimport-source.test.ts > repointing an imported asset at a new source (#1008) reports no repoint when no file was named": 16,
+    "tests/live/asset-reimport-source.test.ts > repointing an imported asset at a new source (#1008) refuses a file that is not there": 15,
+    "tests/live/bcov-animation-a-live.test.ts > live skeletal reads list_bones lists the placed mesh's whole reference skeleton with parents": 33,
+    "tests/live/bcov-animation-a-live.test.ts > live skeletal reads get_bone_transform puts the root bone at the actor's location in world space": 32,
+    "tests/live/bcov-animation-a-live.test.ts > live skeletal reads get_live_bone_transforms reads the evaluated pose, world space offset by the actor and component space not": 33,
+    "tests/live/bcov-animation-a-montage.test.ts > montage authoring create_anim_montage makes a montage whose one slot plays the source sequence": 31,
+    "tests/live/bcov-animation-a-montage.test.ts > montage authoring add_montage_segment appends a trimmed segment and add_montage_section anchors a section to it": 75,
+    "tests/live/bcov-animation-a-montage.test.ts > montage authoring author_montages_batch creates a montage with its slot, blend, section and notify": 79,
+    "tests/live/bcov-animation-a-posesearch.test.ts > pose search authoring create_mirror_data_table derives the left and right bone pairs": 39,
+    "tests/live/bcov-animation-a-posesearch.test.ts > pose search authoring create_pose_search_schema binds the mirror table, and the pose and trajectory channel adds land on it": 113,
+    "tests/live/bcov-animation-a-posesearch.test.ts > pose search authoring create_pose_search_database uses the schema, add_pose_search_sequence adds a clip, and build_pose_search_index indexes it": 80,
+    "tests/live/bcov-animation-a-posesearch.test.ts > pose search authoring create_pose_search_normalization_set holds the given database": 37,
+    "tests/live/bcov-animation-a-retarget.test.ts > IK rig and retargeting configure_ik_rig sets the retarget root and upserts a chain": 59,
+    "tests/live/bcov-animation-a-retarget.test.ts > IK rig and retargeting auto_align_retarget_pose aligns a hand-rotated target arm back to the identical source": 128,
+    "tests/live/bcov-animation-a-retarget.test.ts > IK rig and retargeting batch_retarget_animations bakes the source clip onto the target mesh": 1343,
+    "tests/live/bcov-animation-a-skeleton.test.ts > skeleton edits add_virtual_bone adds a virtual bone between two real bones": 37,
+    "tests/live/bcov-animation-a-skeleton.test.ts > skeleton edits commit_skeleton_edit writes a bone added in the session to the mesh and its skeleton": 113,
+    "tests/live/bcov-animation-a-skeleton.test.ts > skeleton edits list_animation_sockets lists a mesh socket and a skeleton socket with their bones": 51,
+    "tests/live/bcov-animation-a-skeleton.test.ts > skeleton edits get_physics_asset_info lists the tutorial mesh's physics bodies by bone": 15,
+    "tests/live/bcov-animation-b-graph.test.ts > anim blueprint reads read_anim_blueprint reports the skeleton and the variables added": 4,
+    "tests/live/bcov-animation-b-graph.test.ts > anim blueprint reads read_anim_graph lists the state machine node in the AnimGraph": 16,
+    "tests/live/bcov-animation-b-graph.test.ts > anim blueprint reads read_state_machine lists the states and transitions authored": 16,
+    "tests/live/bcov-animation-b-graph.test.ts > state machine authoring set_state_animation puts the clip in the state": 133,
+    "tests/live/bcov-animation-b-graph.test.ts > state machine authoring set_transition_blend writes the crossfade and logic": 102,
+    "tests/live/bcov-animation-b-graph.test.ts > state machine authoring set_transition_condition wires the variable into the rule graph": 241,
+    "tests/live/bcov-animation-b-graph.test.ts > state machine authoring set_state_machine_entry points the entry at a state and keeps it": 215,
+    "tests/live/bcov-animation-b-graph.test.ts > state machine authoring remove_transition removes the transition between two states": 136,
+    "tests/live/bcov-animation-b-graph.test.ts > state machine authoring remove_state removes the state and its transitions": 221,
+    "tests/live/bcov-animation-b-graph.test.ts > state machine authoring remove_state_machine removes a second machine and leaves the first": 394,
+    "tests/live/bcov-animation-b-graph.test.ts > state machine authoring set_anim_blueprint_skeleton retargets the blueprint to another skeleton": 128,
+    "tests/live/bcov-animation-b-rig.test.ts > IK rig and retargeter read_ik_rig reports the chain and the source mesh": 16,
+    "tests/live/bcov-animation-b-rig.test.ts > IK rig and retargeter set_ik_rig_mesh points the rig at another mesh": 31,
+    "tests/live/bcov-animation-b-rig.test.ts > IK rig and retargeter reset_retarget_pose clears the offsets on the current pose": 68,
+    "tests/live/bcov-animation-b-rig.test.ts > IK rig and retargeter set_ik_retargeter_rig assigns a different target rig": 40,
+    "tests/live/bcov-animation-b-rig.test.ts > control rig read_control_rig_hierarchy lists the bones imported from the mesh": 2,
+    "tests/live/bcov-animation-b-rig.test.ts > control rig read_control_rig_graph reports the rig's models and honours includePins": 120,
+    "tests/live/bcov-animation-b-rig.test.ts > control rig read_control_rig_edit reads a control's value and sees an applied offset": 2742,
+    "tests/live/bcov-asset-a-graph.test.ts > customizable object graph create_customizable_object makes an object whose graph holds the base node": 51,
+    "tests/live/bcov-asset-a-graph.test.ts > customizable object graph add_graph_node, connect_graph_pins and disconnect_graph_pins edit the wires read_asset_graph reports": 148,
+    "tests/live/bcov-asset-a-graph.test.ts > customizable object graph compile_customizable_object compiles the object without errors": 22,
+    "tests/live/bcov-asset-a-registry.test.ts > folders create_folder makes a folder that delete_folder removes": 781,
+    "tests/live/bcov-asset-a-registry.test.ts > registry queries get_asset_referencers and get_asset_dependencies see the instance's parent link": 24,
+    "tests/live/bcov-asset-a-registry.test.ts > registry queries asset_health_check and diagnose_registry track an asset through its deletion": 1518,
+    "tests/live/bcov-asset-a-registry.test.ts > asset hygiene audit_asset_hygiene reports a misnamed asset and fix_asset_hygiene renames it": 586,
+    "tests/live/bcov-asset-a-registry.test.ts > asset hygiene bulk_rename_assets moves a referenced material and fixup_redirectors removes the redirector it leaves": 4890,
+    "tests/live/bcov-asset-a-registry.test.ts > saving save_asset force rewrites a clean asset saved the same second": 1347,
+    "tests/live/bcov-asset-b-mesh.test.ts > static mesh sockets set_socket_transform moves a socket and remove_socket drops it, read through list_sockets and list_asset_sockets": 95,
+    "tests/live/bcov-asset-b-mesh.test.ts > static mesh materials and navigation set_mesh_material assigns a slot that get_mesh_info reports": 46,
+    "tests/live/bcov-asset-b-mesh.test.ts > static mesh materials and navigation set_mesh_materials_batch assigns slots on several meshes": 67,
+    "tests/live/bcov-asset-b-mesh.test.ts > static mesh materials and navigation set_mesh_nav toggles whether the mesh affects navigation": 67,
+    "tests/live/bcov-asset-b-mesh.test.ts > static mesh geometry measure_mesh_geometry reports the 100 cm cube's size, area and volume": 17,
+    "tests/live/bcov-asset-b-mesh.test.ts > static mesh geometry set_static_mesh_build_settings rescales the build, read back and measured": 54,
+    "tests/live/bcov-asset-b-mesh.test.ts > static mesh geometry recenter_pivot shifts the mesh by the offset it reports": 148,
+    "tests/live/bcov-asset-b-skeletal.test.ts > skeletal mesh reads list_skeleton_bones lists the cube's bones with a root and parents": 30,
+    "tests/live/bcov-asset-b-skeletal.test.ts > skeletal mesh reads read_cloth_data reports every render section and no clothing on an unclothed mesh": 17,
+    "tests/live/bcov-asset-b-skeletal.test.ts > skeletal mesh edits set_sk_material_slots assigns a slot that get_mesh_info reports": 39,
+    "tests/live/bcov-asset-b-skeletal.test.ts > skeletal mesh edits set_skeletal_mesh_skin_weights rebinds a vertex, read back per vertex and per bone": 100,
+    "tests/live/bcov-asset-b-skeletal.test.ts > skeletal mesh edits set_skeletal_mesh_optimize_for_instancing flips the build flag read_skeletal_mesh_build_settings reports": 105,
+    "tests/live/bcov-audio-routing.test.ts > sound class routing create_sound_class and set_sound_class put the cue under a two-level class chain": 99,
+    "tests/live/bcov-audio-routing.test.ts > sound class routing set_sound_class_parent moves the class under another parent and detaches it": 112,
+    "tests/live/bcov-audio-routing.test.ts > submix routing create_submix and set_sound_submix route the cue through a parented submix": 102,
+    "tests/live/bcov-audio-routing.test.ts > submix routing set_submix_parent reparents the submix and detaches it to a root": 102,
+    "tests/live/bcov-audio-routing.test.ts > submix routing add_submix_effect appends a reverb preset to the submix's effect chain": 47,
+    "tests/live/bcov-audio-routing.test.ts > submix routing add_sound_submix_send adds a send at the requested level": 31,
+    "tests/live/bcov-audio-routing.test.ts > attenuation, concurrency and properties create_attenuation and set_sound_attenuation attach the authored falloff, then clear it": 85,
+    "tests/live/bcov-audio-routing.test.ts > attenuation, concurrency and properties create_concurrency and set_sound_concurrency attach the authored voice limit": 56,
+    "tests/live/bcov-audio-routing.test.ts > attenuation, concurrency and properties set_audio_property writes a sound's priority": 33,
+    "tests/live/bcov-audio-routing.test.ts > attenuation, concurrency and properties create_sound_mix stores its fade time and class adjusters": 40,
+    "tests/live/bcov-blueprint-graph.test.ts > wiring connect_pins_batch wires two exec edges that get_connections then reports": 113,
+    "tests/live/bcov-blueprint-graph.test.ts > wiring read_blueprint_graph_summary lists the nodes and the exec edges": 6,
+    "tests/live/bcov-blueprint-graph.test.ts > wiring disconnect_pins breaks only the named pin's link": 123,
+    "tests/live/bcov-blueprint-graph.test.ts > node state set_node_property writes a pin default that read_node_property returns": 98,
+    "tests/live/bcov-blueprint-graph.test.ts > node state refresh_node reconstructs the node and keeps its pins and defaults": 20,
+    "tests/live/bcov-blueprint-graph.test.ts > node state set_node_position moves a node to the given coordinates": 35,
+    "tests/live/bcov-blueprint-graph.test.ts > node state auto_layout_graph separates stacked nodes into columns": 82,
+    "tests/live/bcov-blueprint-graph.test.ts > node state export_nodes_t3d and import_nodes_t3d paste a copy of a node": 151,
+    "tests/live/bcov-blueprint-graph.test.ts > graph maintenance cleanup_graph removes a call node whose function was deleted, and validate_blueprint sees the difference": 895,
+    "tests/live/bcov-blueprint-graph.test.ts > graph maintenance compile_blueprints compiles each listed Blueprint": 101,
+    "tests/live/bcov-blueprint-graph.test.ts > graph maintenance resolve_blueprint_graph finds a function graph created on the Blueprint": 130,
+    "tests/live/bcov-blueprint-graph.test.ts > node type catalogues search_node_types finds PrintString on KismetSystemLibrary with an add_node recipe": 41,
+    "tests/live/bcov-blueprint-graph.test.ts > node type catalogues list_node_types scopes a category to its library class": 3,
+    "tests/live/bcov-blueprint-members.test.ts > blueprint member variables add, list, set properties, default, metadata, rename and delete a variable": 609,
+    "tests/live/bcov-blueprint-members.test.ts > blueprint functions and locals set_function_properties and list_graph_parameters read back a function's flags and signature": 307,
+    "tests/live/bcov-blueprint-members.test.ts > blueprint functions and locals rename_function and delete_function change what list_blueprint_functions reports": 341,
+    "tests/live/bcov-blueprint-members.test.ts > blueprint functions and locals add, list, edit and remove a local variable": 547,
+    "tests/live/bcov-blueprint-members.test.ts > blueprint functions and locals create_macro and delete_macro add and remove a macro graph": 226,
+    "tests/live/bcov-blueprint-members.test.ts > blueprint functions and locals list_overridable_functions names the parent's overridable events": 3,
+    "tests/live/bcov-blueprint-members.test.ts > blueprint dispatchers, interfaces and timelines add, list and remove an event dispatcher with a typed signature": 230,
+    "tests/live/bcov-blueprint-members.test.ts > blueprint dispatchers, interfaces and timelines create, add, list and remove a Blueprint Interface": 290,
+    "tests/live/bcov-blueprint-members.test.ts > blueprint dispatchers, interfaces and timelines add_timeline_track stores a track that a second add sees as taken": 91,
+    "tests/live/bcov-demo.test.ts > demo demo_get_steps lists the nineteen steps in order": 18,
+    "tests/live/bcov-demo.test.ts > demo demo_step builds the demo level, its materials and the floor": 625,
+    "tests/live/bcov-demo.test.ts > demo demo_cleanup deletes the demo level and materials and anchors on the home level": 5433,
+    "tests/live/bcov-demo.test.ts > demo demo_go_home leaves another map for the home level": 688,
+    "tests/live/bcov-editor-pie.test.ts > a running PIE session list_pie_instances and get_pie_pawn describe the session the player pawn lives in": 40,
+    "tests/live/bcov-editor-pie.test.ts > a running PIE session pie_set_player_view writes the control rotation the player controller reads back": 33,
+    "tests/live/bcov-editor-pie.test.ts > a running PIE session stage_game_input shows the cursor the player controller reports": 51,
+    "tests/live/bcov-editor-pie.test.ts > a running PIE session set_pie_time_scale sets the global time dilation GameplayStatics reads": 49,
+    "tests/live/bcov-editor-pie.test.ts > a running PIE session get_runtime_value and get_runtime_values read a live property the session wrote": 84,
+    "tests/live/bcov-editor-pie.test.ts > a running PIE session set_movement_mode makes the Character fly and teleport_runtime_actor moves it where get_runtime_values reads it": 66,
+    "tests/live/bcov-editor-pie.test.ts > the Blueprint-error bypass start pie_start_ignoring_blueprint_errors starts a PIE session pie_control reports": 260,
+    "tests/live/bcov-editor-profiling.test.ts > an Insights trace start_insights_trace writes a .utrace that get_insights_trace_status and stop_insights_trace report": 184,
+    "tests/live/bcov-editor-profiling.test.ts > an Insights trace set_trace_channels turns a channel off and on, as list_trace_channels and add_trace_bookmark see it": 133,
+    "tests/live/bcov-editor-profiling.test.ts > an Insights trace pause_insights_trace pauses and resumes a running trace, as get_insights_trace_status reads it": 100,
+    "tests/live/bcov-editor-profiling.test.ts > profile regions and hitches begin_profile_region opens a region the status lists and end_profile_region closes it": 267,
+    "tests/live/bcov-editor-profiling.test.ts > profile regions and hitches trigger_hitch stalls the game thread for the time asked": 317,
+    "tests/live/bcov-editor-profiling.test.ts > a standalone game process launch_standalone_game starts a process get_standalone_status sees and stop_standalone_game ends": 77,
+    "tests/live/bcov-fab.test.ts > fab local state fab_status, fab_cache_info and fab_list_cached agree on the local download cache": 48,
+    "tests/live/bcov-fab.test.ts > fab local state fab_import_file imports a local file into the destination folder": 179,
+    "tests/live/bcov-gameplay-ai.test.ts > blackboard authoring create_blackboard, add_blackboard_key, set_blackboard_parent and remove_blackboard_key read back through read_blackboard": 265,
+    "tests/live/bcov-gameplay-ai.test.ts > behavior tree authoring create_behavior_tree and set_behavior_tree_blackboard bind a blackboard get_behavior_tree_info reports": 109,
+    "tests/live/bcov-gameplay-ai.test.ts > behavior tree authoring add_bt_node, move_bt_node and remove_bt_node reshape the graph list_bt_graph_nodes and read_behavior_tree_graph report": 273,
+    "tests/live/bcov-gameplay-ai.test.ts > behavior tree authoring set_bt_node_property and set_bt_task_property write values read_bt_node_properties reads back": 82,
+    "tests/live/bcov-gameplay-ai.test.ts > behavior tree authoring list_bt_tasks inventories the tree's tasks and filters by class": 50,
+    "tests/live/bcov-gameplay-ai.test.ts > behavior tree authoring list_bt_node_classes reports the classes add_bt_node placed, by kind": 36,
+    "tests/live/bcov-gameplay-ai.test.ts > EQS authoring remove_eqs_test and remove_eqs_option shrink the query read_eqs_query reports, and list_eqs_queries lists it": 197,
+    "tests/live/bcov-gameplay-physics.test.ts > collision and physics on a placed actor set_collision_profile and set_collision_enabled land on the component's BodyInstance": 100,
+    "tests/live/bcov-gameplay-physics.test.ts > collision and physics on a placed actor set_simulate_physics and set_physics_properties land on the component's BodyInstance": 134,
+    "tests/live/bcov-gameplay-physics.test.ts > collision on a Blueprint component template set_collision writes the template get_component_collision reads": 296,
+    "tests/live/bcov-gameplay-pie.test.ts > Enhanced Input on the live player apply_mapping_context, get_input_mapping_contexts, get_action_value and remove_mapping_context agree on the live context": 140,
+    "tests/live/bcov-gameplay-pie.test.ts > physics in PIE add_impulse moves a simulating body along the impulse": 293,
+    "tests/live/bcov-level-instances.test.ts > instanced static mesh instances add_instances adds world-space instances get_instance_transforms reads": 33,
+    "tests/live/bcov-level-instances.test.ts > instanced static mesh instances update_instance_transform moves one instance": 33,
+    "tests/live/bcov-level-instances.test.ts > instanced static mesh instances snap_instances_to_surface projects instances onto the floor below": 83,
+    "tests/live/bcov-level-instances.test.ts > instanced static mesh instances remove_instance removes one instance": 33,
+    "tests/live/bcov-level-instances.test.ts > Nanite settings set_nanite_settings changes what get_nanite_info reports": 127,
+    "tests/live/bcov-level-instances.test.ts > skeletal mesh actors spawn_skeletal_mesh_actor places an actor carrying the mesh": 36,
+    "tests/live/bcov-level-instances.test.ts > skeletal mesh actors set_component_skeletal_mesh swaps and clears the component's mesh": 84,
+    "tests/live/bcov-level-multilevel.test.ts > streaming sub-levels and the current edit level add_streaming_sublevel adds a sub-level list_streaming_sublevels and list_levels report": 52,
+    "tests/live/bcov-level-multilevel.test.ts > streaming sub-levels and the current edit level set_current_edit_level switches the level get_current_edit_level reports": 74,
+    "tests/live/bcov-level-multilevel.test.ts > streaming sub-levels and the current edit level set_streaming_sublevel_properties writes visibility and offset": 33,
+    "tests/live/bcov-level-multilevel.test.ts > streaming sub-levels and the current edit level remove_streaming_sublevel removes it from the persistent level": 209,
+    "tests/live/bcov-level-multilevel.test.ts > world settings and navigation in a scratch map set_world_settings writes values get_world_settings reads": 99,
+    "tests/live/bcov-level-multilevel.test.ts > world settings and navigation in a scratch map nav_project_point projects onto a navmesh built over a floor": 2124,
+    "tests/live/bcov-level-multilevel.test.ts > exact-label deletes across maps delete_exact_labeled_actors_in_levels previews, then deletes and saves only the named actor": 246,
+    "tests/live/bcov-level-multilevel.test.ts > World Partition actor descriptors list_actor_descs finds the saved actor's descriptor": 24,
+    "tests/live/bcov-level-multilevel.test.ts > World Partition actor descriptors load_actor_descs pins and unpins the descriptor": 123,
+    "tests/live/bcov-material-instance.test.ts > material instances create_material_instance makes an instance of the parent": 42,
+    "tests/live/bcov-material-instance.test.ts > material instances batch_set_material_instances writes overrides read_material_instance reports": 40,
+    "tests/live/bcov-material-instance.test.ts > material instances set_material_static_switch overrides a switch list_material_static_switches reports": 65,
+    "tests/live/bcov-material-instance.test.ts > material instances clear_material_instance_parameters drops every override": 63,
+    "tests/live/bcov-material-instance.test.ts > material instances set_material_instance_parent reparents the instance": 40,
+    "tests/live/bcov-material-instance.test.ts > material instances recompile_material with recompileChildren reaches the instance": 6,
+    "tests/live/bcov-material-instance.test.ts > material instances read_material_parameter_collection reads the collection's parameters": 77,
+    "tests/live/bcov-material-rvt.test.ts > runtime virtual textures create_runtime_virtual_texture makes an asset read_runtime_virtual_texture describes": 35,
+    "tests/live/bcov-material-rvt.test.ts > runtime virtual textures add_rvt_volume places a volume bound to the RVT": 28,
+    "tests/live/bcov-material-rvt.test.ts > runtime virtual textures set_rvt_volume_bounds fits the volume to the landscape": 33,
+    "tests/live/bcov-material-rvt.test.ts > runtime virtual textures assign_rvt_to_landscape adds and removes the RVT on the landscape": 102,
+    "tests/live/bcov-material-rvt.test.ts > runtime virtual textures add_rvt_sampler adds a sampler node the RVT read finds": 186,
+    "tests/live/bcov-material-rvt.test.ts > runtime virtual textures add_rvt_output adds an output node fed by the material's own BaseColor": 178,
+    "tests/live/bcov-networking.test.ts > networking CDO settings get_networking_info reports the defaults of a fresh Actor Blueprint": 11,
+    "tests/live/bcov-networking.test.ts > networking CDO settings set_replicates turns replication on and get_networking_info reads it back": 106,
+    "tests/live/bcov-networking.test.ts > networking CDO settings configure_net_update_frequency writes both frequencies": 118,
+    "tests/live/bcov-networking.test.ts > networking CDO settings set_net_dormancy stores the named dormancy": 96,
+    "tests/live/bcov-networking.test.ts > networking CDO settings set_always_relevant flips bAlwaysRelevant": 106,
+    "tests/live/bcov-networking.test.ts > networking CDO settings set_net_priority stores the new priority": 97,
+    "tests/live/bcov-networking.test.ts > networking CDO settings set_replicate_movement turns movement replication on": 91,
+    "tests/live/bcov-networking.test.ts > networking CDO settings set_only_relevant_to_owner writes bOnlyRelevantToOwner on the CDO": 110,
+    "tests/live/bcov-networking.test.ts > networking CDO settings set_net_load_on_client clears bNetLoadOnClient on the CDO": 112,
+    "tests/live/bcov-networking.test.ts > networking CDO settings configure_net_cull_distance stores the squared distance": 89,
+    "tests/live/bcov-networking.test.ts > networking CDO settings set_property_replicated marks a Blueprint variable Replicated and clears it again": 206,
+    "tests/live/bcov-pie-script-act.test.ts > draft-time checks on arrange and act script_validate refuses an actor or Input Action that does not exist, and accepts ones that do": 27,
+    "tests/live/bcov-pie-script-act.test.ts > a script that arranges and acts on its own script_run applies arrange, runs act, then judges the expectation from the end of act": 530,
+    "tests/live/bcov-pie-script-act.test.ts > a script that arranges and acts on its own results.json keeps each step's arrange, act and act_result": 192,
+    "tests/live/bcov-pie-script-act.test.ts > a script that arranges and acts on its own script_replay replays the input without running arrange or act again": 3966,
+    "tests/live/bcov-pie-script-act.test.ts > a manual run skips arrange and act, since nothing is in PIE, and says so on the step": 82,
+    "tests/live/bcov-pie-session.test.ts > arming record_arm and record_disarm move the recorder between armed and idle": 43,
+    "tests/live/bcov-pie-session.test.ts > arming observe_arm and observe_disarm move the observer between armed and idle": 34,
+    "tests/live/bcov-pie-session.test.ts > arming replay_arm and replay_disarm move the replayer between armed and idle": 32,
+    "tests/live/bcov-pie-session.test.ts > a recorded and observed session record_status and observe_status report the live session": 28,
+    "tests/live/bcov-pie-session.test.ts > a recorded and observed session inject_input, inject_input_start, inject_input_update, inject_input_stop and inject_input_tape drive a bound action": 133,
+    "tests/live/bcov-pie-session.test.ts > a recorded and observed session mark writes a labelled marker into the recording in flight": 18,
+    "tests/live/bcov-pie-session.test.ts > a recorded and observed session anim_state and anim_properties read a PIE actor's anim instance": 50,
+    "tests/live/bcov-pie-session.test.ts > a recorded and observed session session_log and session_errors read the live session's captured log": 32,
+    "tests/live/bcov-pie-session.test.ts > a recorded and observed session replay_state with apply teleports the live pawn to a recorded pose": 54,
+    "tests/live/bcov-pie-session.test.ts > a recorded and observed session observe_stop finalizes the observation into its files": 172,
+    "tests/live/bcov-pie-session.test.ts > a recorded and observed session observe_list and observe_read read the finished observation back": 52,
+    "tests/live/bcov-pie-session.test.ts > the finished recording record_list and record_read return its manifest, sequence and csv": 67,
+    "tests/live/bcov-pie-session.test.ts > the finished recording perf_summary aggregates its frame times": 17,
+    "tests/live/bcov-pie-session.test.ts > the finished recording record_diff of a recording against itself finds no drift": 18,
+    "tests/live/bcov-pie-session.test.ts > the finished recording replay_state without apply reads the recorded pose at a frame": 15,
+    "tests/live/bcov-pie-session.test.ts > the finished recording test_scaffold, test_list, scenario_scaffold and assert_eval build and evaluate tests from it": 69,
+    "tests/live/bcov-pie-session.test.ts > replays replay_run drives the recording unattended, then replay_analyze and test_run read its drift": 1203,
+    "tests/live/bcov-pie-session.test.ts > replays replay_stop ends a replay in flight": 332,
+    "tests/live/bcov-pie-session.test.ts > multiplayer acceptance runs uat_run judges a step from the host log and uat_status reports the verdict": 2718,
+    "tests/live/bcov-pie-session.test.ts > multiplayer acceptance runs uat_abort ends a run that is still going": 2362,
+    "tests/live/bcov-pie-session.test.ts > deleting record_delete removes the recording folder and reports a second delete as already done": 75,
+    "tests/live/bcov-statetree-bindings.test.ts > statetree bindings add_state_tree_binding binds an evaluator float to a task's Duration; remove_state_tree_binding drops it": 100,
+    "tests/live/bcov-statetree-nodes.test.ts > statetree state tasks and conditions tasks: add, set instance and node properties, remove": 121,
+    "tests/live/bcov-statetree-nodes.test.ts > statetree state tasks and conditions enter conditions: add with instance properties, remove": 83,
+    "tests/live/bcov-statetree-nodes.test.ts > statetree state tasks and conditions transitions and transition conditions: add, read back, remove": 184,
+    "tests/live/bcov-statetree-nodes.test.ts > statetree state tasks and conditions clear_state_tree_state_nodes empties tasks, enter conditions and transitions": 99,
+    "tests/live/bcov-statetree-nodes.test.ts > statetree tree-level nodes list_state_tree_node_types lists the engine delay task with its instance properties": 18,
+    "tests/live/bcov-statetree-nodes.test.ts > statetree tree-level nodes evaluators: add, set instance and node properties, remove": 133,
+    "tests/live/bcov-statetree-nodes.test.ts > statetree tree-level nodes global tasks: add, set instance and node properties, remove": 117,
+    "tests/live/bcov-statetree-nodes.test.ts > statetree tree-level nodes set_state_tree_node_class gives a Blueprint task wrapper its class and an instance object": 66,
+    "tests/live/bcov-statetree-runtime.test.ts > StateTree runtime in PIE read_state_tree_runtime reports the running tree in its first child state": 2433,
+    "tests/live/bcov-statetree-runtime.test.ts > StateTree runtime in PIE send_state_tree_event fires the OnEvent transition out of the waiting state": 42,
+    "tests/live/bcov-statetree-runtime.test.ts > StateTree runtime in PIE request_state_tree_transition moves the tree to the requested state": 34,
+    "tests/live/bcov-statetree-states.test.ts > statetree state hierarchy add_state_tree_state adds a child that list_state_tree_states and read_state_tree report": 53,
+    "tests/live/bcov-statetree-states.test.ts > statetree state hierarchy set_state_tree_state_property writes name, weight, description and bEnabled, read back by read_state_tree_state": 100,
+    "tests/live/bcov-statetree-states.test.ts > statetree state hierarchy add_state_tree_color adds a palette entry that list_state_tree_colors lists and a state can use": 83,
+    "tests/live/bcov-statetree-states.test.ts > statetree state hierarchy move_state_tree_state reorders siblings and moves a state to the root": 167,
+    "tests/live/bcov-statetree-states.test.ts > statetree state hierarchy remove_state_tree_state drops the state from list_state_tree_states": 67,
+    "tests/live/bcov-statetree-states.test.ts > statetree state hierarchy set_state_tree_state_link links a state to an in-asset Subtree and clears it again": 99,
+    "tests/live/bcov-statetree-states.test.ts > statetree parameters and considerations state parameters: add, list, set and remove": 117,
+    "tests/live/bcov-statetree-states.test.ts > statetree parameters and considerations set_state_tree_root_parameters adds root parameters read_state_tree reports": 34,
+    "tests/live/bcov-statetree-states.test.ts > statetree parameters and considerations add_state_tree_consideration and remove_state_tree_consideration edit a child's utility considerations": 100,
+    "tests/live/bcov-widget-animation.test.ts > widget animation authoring create_widget_animation adds an animation get_widget_animation and read_widget_animations read": 143,
+    "tests/live/bcov-widget-animation.test.ts > widget animation authoring add and remove a property track and its keys, read back by get_widget_animation": 535,
+    "tests/live/bcov-widget-animation.test.ts > widget animation authoring add_widget_animation_event_key and remove_widget_animation_event_key edit the event track": 235,
+    "tests/live/bcov-widget-animation.test.ts > widget animation authoring bind_widget_animation_event adds one Finished node and unbind_widget_animation_event removes it": 245,
+    "tests/live/bcov-widget-animation.test.ts > widget animation authoring delete_widget_animation removes the animation read_widget_animations listed": 118,
+    "tests/live/bcov-widget-editor-utility.test.ts > editor utilities create_editor_utility_widget makes a utility widget run_editor_utility_widget opens": 94,
+    "tests/live/bcov-widget-editor-utility.test.ts > editor utilities create_editor_utility_blueprint makes a utility blueprint run_editor_utility_blueprint instantiates": 94,
+    "tests/live/bcov-widget-navigation.test.ts > widget navigation set, clear and restore an explicit rule, read back by audit_widget_focus_chain": 398,
+    "tests/live/bcov-widget-runtime.test.ts > runtime widgets add_to_viewport creates an instance list_runtime_widgets and get_runtime_widget find": 39,
+    "tests/live/bcov-widget-runtime.test.ts > runtime widgets get_runtime_delegates reads the live instance's multicast delegates": 15,
+    "tests/live/bcov-widget-runtime.test.ts > runtime widgets invoke_runtime_function checks the live CheckBox and inspect_runtime_instances reads its state": 50,
+    "tests/live/bcov-widget-runtime.test.ts > runtime widgets set_runtime_focus moves keyboard focus to the live button get_runtime_focus_path reports": 33,
+    "tests/live/blueprint-widget-reflection.test.ts > widget build_tree (#1300) builds a nested subtree in one call and removes it with the rollback": 268,
+    "tests/live/blueprint-widget-reflection.test.ts > widget check_structure (#1350) passes a healthy Widget Blueprint with each widget's outer reported": 5,
+    "tests/live/blueprint-widget-reflection.test.ts > list_subclasses (#1211) lists Blueprint subclasses with their depth, direct and transitive": 53,
+    "tests/live/collection-entry-edits.test.ts > native collection entry edits updates keyed array fields and clones with nested overrides, dry run and rollback": 159,
+    "tests/live/collection-entry-edits.test.ts > native collection entry edits refuses missing or ambiguous array keys without changing the array": 83,
+    "tests/live/collection-entry-edits.test.ts > native collection entry edits clones and updates map values while preserving the source and refusing invalid patches": 184,
+    "tests/live/collection-entry-edits.test.ts > native collection entry edits clones rows in a batch and rejects a bad later request before adding anything": 194,
+    "tests/live/collection-entry-edits.test.ts > native collection entry edits invokes a static callable on a class outside the function-library hierarchy": 20,
+    "tests/live/context-projection.test.ts > a projected call against the editor runs a lean category call the micro process does not advertise": 297,
+    "tests/live/context-projection.test.ts > a projected call against the editor runs a micro gateway call scoped to the category": 49,
+    "tests/live/context-projection.test.ts > a projected call against the editor refuses a category outside the scope without calling the editor": 0,
+    "tests/live/coverage.test.ts > the 7.3 matrix gives every case somewhere its assertion lives": 1,
+    "tests/live/coverage.test.ts > the 7.3 matrix uses ids that are unique, so a report can name a row": 0,
+    "tests/live/coverage.test.ts > the 7.3 matrix names files that exist": 10,
+    "tests/live/coverage.test.ts > the 7.3 matrix names tests those files actually contain": 5,
+    "tests/live/coverage.test.ts > the 7.3 matrix puts live references in the live tests and engine-free ones outside it": 1,
+    "tests/live/coverage.test.ts > the 7.3 matrix says which plan item ships anything still pending": 0,
+    "tests/live/coverage.test.ts > the 7.3 matrix prints where every case stands": 1,
+    "tests/live/dialog-policy-refusal.test.ts > set_dialog_policy response refusal (#1421) names the keyword and the buttonLabel spelling for a button label, and arms nothing": 21,
+    "tests/live/dialog-policy-refusal.test.ts > set_dialog_policy response refusal (#1421) points an unrelated value at buttonLabel": 17,
+    "tests/live/dialog-policy-refusal.test.ts > set_dialog_policy response refusal (#1421) arms the policy when the label is passed as buttonLabel": 67,
+    "tests/live/dispatch-leak.test.ts > the client consumes the routing key, on every path MCP category tools: the editor receives the call and no routing key": 2957,
+    "tests/live/dispatch-leak.test.ts > the client consumes the routing key, on every path flows: neither the run's params nor a step's own options carry it through": 2949,
+    "tests/live/dispatch-leak.test.ts > the client consumes the routing key, on every path the micro gateway: a target nested inside args does not travel": 52,
+    "tests/live/dispatch-leak.test.ts > the client consumes the routing key, on every path niagara(batch), which bypasses the task registry entirely": 44,
+    "tests/live/dispatch-leak.test.ts > the client consumes the routing key, on every path the category tool's own handler, which is not the MCP path but is kept correct": 38,
+    "tests/live/dispatch-leak.test.ts > the client consumes the routing key, on every path the HTTP flow surface resolves the target instead of forwarding it": 207,
+    "tests/live/editor-windows.test.ts > editor windows (#1231) lists an asset editor's floating window and closes it by windowId": 874,
+    "tests/live/editor-windows.test.ts > editor windows (#1231) refuses a button press on a window that is not open": 3,
+    "tests/live/eqs.test.ts > list_eqs_types lists generators, tests and contexts with the short names authoring accepts": 53,
+    "tests/live/eqs.test.ts > list_eqs_types filters by substring": 50,
+    "tests/live/eqs.test.ts > authoring a query from nothing reports an empty query as not runnable, and says what is missing": 46,
+    "tests/live/eqs.test.ts > authoring a query from nothing adds a generator and returns the path that configures it": 66,
+    "tests/live/eqs.test.ts > authoring a query from nothing refuses an unknown generator by listing the real ones": 37,
+    "tests/live/eqs.test.ts > authoring a query from nothing adds tests with the purpose that decides what they do": 114,
+    "tests/live/eqs.test.ts > authoring a query from nothing reads the whole structure back, with purposes and object paths": 37,
+    "tests/live/eqs.test.ts > authoring a query from nothing rejects a reorder that is not a permutation, rather than dropping a test": 100,
+    "tests/live/eqs.test.ts > authoring a query from nothing reorders so a cheap filter runs before an expensive test": 63,
+    "tests/live/eqs.test.ts > running the query returns scored items with locations": 38,
+    "tests/live/eqs.test.ts > running the query honours the limit without misreporting how many there were": 49,
+    "tests/live/eqs.test.ts > running the query refuses an unknown run mode by naming the real ones": 49,
+    "tests/live/eqs.test.ts > the empty result explains itself carries a note that names both causes, rather than an unexplained zero": 50,
+    "tests/live/gas-abilities.test.ts > trace_ability_activation never reports a refusal with no reason": 46,
+    "tests/live/gas-abilities.test.ts > trace_ability_activation says an ungranted ability is ungranted, and what to call": 49,
+    "tests/live/gas-abilities.test.ts > grant_ability grants, and returns the spec plus a rollback that undoes it": 51,
+    "tests/live/gas-abilities.test.ts > grant_ability is idempotent, returning the same spec rather than a second one": 50,
+    "tests/live/gas-abilities.test.ts > grant_ability changes the tracer's answer from ungranted to granted": 49,
+    "tests/live/gas-abilities.test.ts > grant_ability explains an uninitialised ASC instead of refusing silently": 51,
+    "tests/live/gas-abilities.test.ts > get_active_effects reports an empty effect list without erroring on a bare ASC": 49,
+    "tests/live/gas-abilities.test.ts > revoke_ability revokes what was granted, then reports the replay as already done": 100,
+    "tests/live/gas-abilities.test.ts > revoke_ability leaves the tracer saying ungranted again": 50,
+    "tests/live/gas-abilities.test.ts > errors name the problem refuses an ability class that does not resolve, and says what it accepts": 52,
+    "tests/live/gas-abilities.test.ts > errors name the problem names the actor it could not find, and how to find the real one": 46,
+    "tests/live/gas-abilities.test.ts > bind_ability_input refuses to bind an ability that was never granted, and names the fix": 51,
+    "tests/live/gas-abilities.test.ts > bind_ability_input binds a granted ability, and rolls back to the id that was there": 101,
+    "tests/live/gas-abilities.test.ts > bind_ability_input reports a repeat as unchanged rather than as a second write": 49,
+    "tests/live/gas-abilities.test.ts > bind_ability_input shows the binding through get_asc_state, so a reader can find it": 49,
+    "tests/live/gas-abilities.test.ts > clear_ability_input unbinds, then reports the replay as already done": 101,
+    "tests/live/gas-abilities.test.ts > send_ability_input says an input reached nothing rather than reporting a bare success": 49,
+    "tests/live/gas-abilities.test.ts > send_ability_input refuses an unbound ability by name and says which call binds it": 50,
+    "tests/live/gas-abilities.test.ts > send_ability_input presses a bound ability and reports the specs it reached, before and after": 100,
+    "tests/live/gas-abilities.test.ts > send_ability_input confirm has no inverse and says so instead of emitting a fake rollback": 50,
+    "tests/live/gas-abilities.test.ts > send_ability_input lists the valid events for an unknown one": 49,
+    "tests/live/gas-abilities.test.ts > add_effect_cue refuses an unregistered tag rather than storing an invalid one": 46,
+    "tests/live/gas-abilities.test.ts > add_effect_cue refuses a registered tag that is outside the GameplayCue root": 50,
+    "tests/live/gas-abilities.test.ts > add_effect_cue links the cue and warns that nothing answers it yet": 63,
+    "tests/live/gas-abilities.test.ts > add_effect_cue is idempotent on the tag rather than adding a second entry": 37,
+    "tests/live/gas-abilities.test.ts > add_effect_cue reports a level-range change as an update, not as a new link": 66,
+    "tests/live/gas-abilities.test.ts > validate_cue_coverage names the uncovered link and the effect it is on": 37,
+    "tests/live/gas-abilities.test.ts > validate_cue_coverage scans the project without erroring when no effect is named": 51,
+    "tests/live/gas-abilities.test.ts > remove_effect_cue unlinks, then reports the replay as already done": 98,
+    "tests/live/gas-abilities.test.ts > audit_attributes says a Blueprint attribute set cannot clamp, and why": 37,
+    "tests/live/gas-abilities.test.ts > audit_attributes names both ways to address it when neither is given": 49,
+    "tests/live/gas-abilities.test.ts > audit_attributes refuses a class that does not exist, and lists what it accepts": 57,
+    "tests/live/gas-abilities.test.ts > capture_gas_state and compare_gas_states captures every section of an actor's ability system state": 44,
+    "tests/live/gas-abilities.test.ts > capture_gas_state and compare_gas_states reports no change when nothing happened between two readings": 49,
+    "tests/live/gas-abilities.test.ts > capture_gas_state and compare_gas_states names the change rather than handing back two blobs": 100,
+    "tests/live/gas-abilities.test.ts > capture_gas_state and compare_gas_states reports the grant in the other direction too": 150,
+    "tests/live/gas-abilities.test.ts > capture_gas_state and compare_gas_states keeps the capture when compareWith names nothing, and says so": 50,
+    "tests/live/gas-abilities.test.ts > capture_gas_state and compare_gas_states refuses a comparison with only one side, and names the one-call route": 49,
+    "tests/live/gas-abilities.test.ts > capture_gas_state and compare_gas_states names the stored ids when one does not resolve": 51,
+    "tests/live/gas-abilities.test.ts > capture_gas_state and compare_gas_states lists what it holds, and drops one without losing its contents": 150,
+    "tests/live/handler-specs.test.ts > handler specs against the running plugin publishes them": 0,
+    "tests/live/handler-specs.test.ts > handler specs against the running plugin matches the recording the surface was generated from": 21,
+    "tests/live/handler-specs.test.ts > handler specs against the running plugin resolves an alias to the declared name before the handler runs": 360,
+    "tests/live/material-instance-load.test.ts > list_material_parameters on a MaterialInstanceConstant (#1183) loads an instance whose object is not named after its package, by the package path": 4,
+    "tests/live/material-instance-load.test.ts > list_material_parameters on a MaterialInstanceConstant (#1183) still refuses a wrong explicit object name, naming the path the registry has": 16,
+    "tests/live/niagara-depth.test.ts > simulation stages creates a stage whose script the editor can actually compile": 2258,
+    "tests/live/niagara-depth.test.ts > simulation stages reports the stage in the emitter's stack": 22,
+    "tests/live/niagara-depth.test.ts > simulation stages re-adding the same stage name is refused rather than silently duplicated": 24,
+    "tests/live/niagara-depth.test.ts > simulation stages removes the stage and still compiles": 363,
+    "tests/live/niagara-depth.test.ts > simulation stages removing an absent stage reports alreadyRemoved and lists what exists": 20,
+    "tests/live/niagara-depth.test.ts > event handlers creates an event handler whose script compiles": 372,
+    "tests/live/niagara-depth.test.ts > event handlers removes the handler and still compiles": 348,
+    "tests/live/niagara-depth.test.ts > module lifecycle adds a module, disables it, and re-disabling reports alreadySet": 1065,
+    "tests/live/niagara-depth.test.ts > dynamic inputs and HLSL lists the override map without needing a property read": 21,
+    "tests/live/niagara-depth.test.ts > dynamic inputs and HLSL reads back custom HLSL nodes, which is what makes HLSL iterable": 24,
+    "tests/live/open-asset-loaded-map.test.ts > open_asset on the loaded map (#1218) reports it already open and leaves the editor running": 53,
+    "tests/live/pcg-generated-output.test.ts > PCG generation state and output get_pcg_generation_state counts a finished generation (#1365)": 304,
+    "tests/live/pcg-generated-output.test.ts > PCG generation state and output read_pcg_generated_output pages the sampled points with their positions (#1309)": 17,
+    "tests/live/pcg-io-node-settings.test.ts > graph input and output nodes are addressable (#1324) set_node_settings: Pins as export text adds a graph input pin, and the calling Subgraph node grows it": 70,
+    "tests/live/pcg-io-node-settings.test.ts > graph input and output nodes are addressable (#1324) set_node_settings: Pins as a JSON array in a settings object adds a second pin": 68,
+    "tests/live/pcg-io-node-settings.test.ts > graph input and output nodes are addressable (#1324) set_node_settings: the output node is addressable too, export text in a settings object": 62,
+    "tests/live/pcg-io-node-settings.test.ts > graph input and output nodes are addressable (#1324) set_node_settings: a failed write carries its reason in error": 20,
+    "tests/live/pcg-io-node-settings.test.ts > graph input and output nodes are addressable (#1324) set_node_settings: a guessed input node name points at the real one": 15,
+    "tests/live/pcg-io-node-settings.test.ts > graph input and output nodes are addressable (#1324) remove_node: refuses the input and output nodes and leaves them in place": 39,
+    "tests/live/pcg-io-node-settings.test.ts > graph input and output nodes are addressable (#1324) set_subgraph: names the input node as the wrong kind of node, not as missing": 16,
+    "tests/live/pcg-settings-pin-refresh.test.ts > settings writes refresh the node's pins (#1256) import_graph: a Load node given an Asset exposes the asset's pins at once": 45,
+    "tests/live/pcg-settings-pin-refresh.test.ts > settings writes refresh the node's pins (#1256) set_node_settings: reports the refreshed pins": 67,
+    "tests/live/perception-bt.test.ts > read_perception reads a Blueprint's component template with an objectPath per sense": 27,
+    "tests/live/perception-bt.test.ts > read_perception finds the live component on the controller when asked about the pawn": 80,
+    "tests/live/perception-bt.test.ts > read_perception refuses a target it cannot name, rather than reading nothing": 22,
+    "tests/live/perception-bt.test.ts > remove_sense destroys an instanced subobject set_property cannot touch, with a rollback": 132,
+    "tests/live/perception-bt.test.ts > remove_sense reports alreadyRemoved on a replay instead of failing": 39,
+    "tests/live/perception-bt.test.ts > perception at runtime reads the perceived sets off PerceptualData, which has no UPROPERTY": 66,
+    "tests/live/perception-bt.test.ts > perception at runtime names the real senses when senseType is wrong": 83,
+    "tests/live/perception-bt.test.ts > perception at runtime reports who could receive a noise before anything ticks": 65,
+    "tests/live/perception-bt.test.ts > perception at runtime refuses a damage event with no amount rather than reporting a zero one": 66,
+    "tests/live/perception-bt.test.ts > perception at runtime hears the injected noise, and says which sense carried it": 121,
+    "tests/live/perception-bt.test.ts > run_behavior_tree starts a tree through the controller, which is what creates the component": 65,
+    "tests/live/perception-bt.test.ts > run_behavior_tree does not restart a tree that is already the running root": 65,
+    "tests/live/perception-bt.test.ts > run_behavior_tree refuses an executionMode it does not have": 30,
+    "tests/live/perception-bt.test.ts > get_bt_runtime reports the executing node and the composites above it": 65,
+    "tests/live/perception-bt.test.ts > list_ai_agents finds the running agent with its pawn, tree and active node": 66,
+    "tests/live/perception-bt.test.ts > list_ai_agents explains a zero result rather than returning a bare empty list": 68,
+    "tests/live/perception-bt.test.ts > live blackboard dumps every key with a typed value, not only the engine's description": 66,
+    "tests/live/perception-bt.test.ts > live blackboard writes through the typed accessor and reports the previous value": 67,
+    "tests/live/perception-bt.test.ts > live blackboard reports alreadySet rather than notifying observers a second time": 68,
+    "tests/live/perception-bt.test.ts > live blackboard lists the real keys when the name is wrong": 66,
+    "tests/live/perception-bt.test.ts > stop_behavior_tree pauses, is idempotent, and resumes": 119,
+    "tests/live/perception-bt.test.ts > stop_behavior_tree stops, and a second stop reports alreadyStopped": 96,
+    "tests/live/perception-bt.test.ts > stop_behavior_tree lists the real modes when the mode is wrong": 23,
+    "tests/live/playtest-mode.test.ts > playtest mode manual refuses script_run and script_replay without starting a run": 11,
+    "tests/live/playtest-mode.test.ts > playtest mode manual leaves the rest of pie answering from the editor": 238,
+    "tests/live/single-editor.test.ts > the single-editor shape is the shape it always was advertises no targeting parameter": 23,
+    "tests/live/single-editor.test.ts > the single-editor shape is the shape it always was attributes nothing to an editor, because there is only one": 270,
+    "tests/live/single-editor.test.ts > the single-editor shape is the shape it always was gates nothing: an untargeted change runs, as it always did": 39,
+    "tests/live/single-editor.test.ts > the single-editor shape is the shape it always was reports the real action count and the fab category in its instructions": 0,
+    "tests/live/single-editor.test.ts > the single-editor shape is the shape it always was hands a flow the whole context, including flows and plugins": 156,
+    "tests/live/single-editor.test.ts > the editor's own records publishes a port lockfile whose process is alive and answering": 1,
+    "tests/live/single-editor.test.ts > the editor's own records resolves this project's port from its own record, not from a guess": 1,
+    "tests/live/single-editor.test.ts > the editor's own records hands the editor the port the client resolved": 0,
+    "tests/live/single-editor.test.ts > the editor's own records reads a bind-failure record only while the editor that wrote it is alive": 23,
+    "tests/live/single-editor.test.ts > the editor's own records treats a lockfile whose process is gone as evidence of a crash, not an address": 14,
+    "tests/live/single-editor.test.ts > lifecycle, without starting or stopping anything refuses to start an editor for a project that already has one": 16,
+    "tests/live/single-editor.test.ts > attach, staleness and switching leaves a project that already has the bridge byte-identical": 6,
+    "tests/live/single-editor.test.ts > attach, staleness and switching writes no dangling plugin entry into a project that has no bridge": 6,
+    "tests/live/single-editor.test.ts > attach, staleness and switching decides staleness for a real deployment instead of always saying fresh": 32,
+    "tests/live/single-editor.test.ts > attach, staleness and switching moves path resolution and the socket together, onto a live editor": 79,
+    "tests/live/single-editor.test.ts > attach, staleness and switching takes the port from the project's published record, not from a stale field": 137,
+    "tests/live/single-editor.test.ts > the capability handshake against the running binary reports the version compiled into the binary, not scraped from source": 0,
+    "tests/live/single-editor.test.ts > the capability handshake against the running binary answers on a fresh connection inside the ordinary connect budget": 77,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) get_provider reports the provider state instead of failing": 16,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) get_status refuses once with source_control_not_enabled": 17,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) list_changes refuses once with source_control_not_enabled": 16,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) checkout refuses once with source_control_not_enabled": 18,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) add refuses once with source_control_not_enabled": 16,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) revert refuses once with source_control_not_enabled": 17,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) diff refuses once with source_control_not_enabled": 17,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) submit refuses once with source_control_not_enabled": 16,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) mark_for_delete refuses once with source_control_not_enabled": 17,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) sync refuses once with source_control_not_enabled": 17,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) history refuses once with source_control_not_enabled": 17,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) connect refuses once with source_control_not_enabled": 16,
+    "tests/live/source-control.test.ts > source control with no provider (#1357) set_checkout_mode switches the session mode and reports the previous one": 50,
+    "tests/live/viewport-transactions.test.ts > get_viewport_state reports what get_viewport never did": 49,
+    "tests/live/viewport-transactions.test.ts > set_view_mode changes the mode and reports the previous one": 99,
+    "tests/live/viewport-transactions.test.ts > set_view_mode is idempotent: setting the mode it already has says so": 51,
+    "tests/live/viewport-transactions.test.ts > set_view_mode refuses an unknown mode by listing the real ones": 50,
+    "tests/live/viewport-transactions.test.ts > set_viewport_exposure pins a fixed EV100, which is what makes two captures comparable": 100,
+    "tests/live/viewport-transactions.test.ts > set_viewport_exposure returns to auto eye adaptation": 100,
+    "tests/live/viewport-transactions.test.ts > set_viewport_view writes the FOV that set_viewport silently ignored": 199,
+    "tests/live/viewport-transactions.test.ts > set_game_view and redraw_viewport toggles game view and reports an unchanged repeat": 201,
+    "tests/live/viewport-transactions.test.ts > set_game_view and redraw_viewport redraws without erroring": 49,
+    "tests/live/viewport-transactions.test.ts > the transaction stack reports what an undo would actually reverse": 50,
+    "tests/live/viewport-transactions.test.ts > the transaction stack opens and cancels a transaction, which material's pair could never do": 100,
+    "tests/live/viewport-transactions.test.ts > the transaction stack reports rather than errors when there is nothing open to cancel": 50,
+    "tests/live/viewport-transactions.test.ts > the transaction stack opens and commits a transaction": 100,
+    "tests/live/viewport-transactions.test.ts > the transaction stack lists the undo buffer with titles rather than opaque indices": 50,
+    "tests/live/viewport-transactions.test.ts > the transaction stack refuses a multi-step undo while a transaction is open": 149,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs list_changes gives every package of the turn an asset diff from Unreal's diff code": 7521,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs a material carries the graph diff and the parameter default, with a picture of each version": 2,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs a material instance carries its overridden parameter": 1,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs a Blueprint carries My Blueprint, Components and the structural diff": 1,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs a static mesh carries the changed property and its LOD facts": 1,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs a texture carries its sRGB change": 2,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs a DataTable carries rows added and changed, and the engine's CSV diff": 1,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs a level carries actors added, removed and moved": 0,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs an added asset has no before and says what it is; a deleted one has no after": 3,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs diff_checkpoint_asset diffs one path on its own, the same as list_changes": 1011,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs checkpoint_diff_asset reports a version it cannot load, with the reason": 36,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs open_checkpoint_diff opens Unreal's diff window for the material, and it closes": 789,
+    "tests/live/checkpoint-asset-diff.test.ts > a turn's asset diffs checkpoint_open_native_diff opens the asset editor on an added asset": 1104,
+    "tests/live/dialog-gate.test.ts > a modal blocks every action, whatever raised it refuses editor-bound calls, offline calls and other categories alike": 4133,
+    "tests/live/dialog-gate.test.ts > a modal blocks every action, whatever raised it keeps the dialog actions reachable, or the modal could never be answered": 2530,
+    "tests/live/dialog-gate.test.ts > a modal blocks every action, whatever raised it lets everything through again the moment the dialog is answered": 4121,
+    "tests/live/dialog-gate.test.ts > the mode governs an ordinary call, not just the lifecycle actions defer withholds the press calls on a plain asset read": 6806,
+    "tests/live/asset-native-pipeline.test.ts > native asset pipeline imports per-file presets, previews batch settings and reads back every texture": 586,
+    "tests/live/asset-native-pipeline.test.ts > native asset pipeline reads static mesh sockets, regex metadata and collision with reference details": 5563,
+    "tests/live/asset-native-pipeline.test.ts > native asset pipeline round-trips a skeletal FBX with Interchange scale and skeleton controls": 1123,
+    "tests/live/asset-native-pipeline.test.ts > native asset pipeline authors texture parameters, tint and UV scale, creates an instance, and exports parameter JSON": 2041,
+    "tests/live/bcov-asset-a-import.test.ts > textures import_file imports PNGs that get_texture_info, compare_textures and export_texture read": 502,
+    "tests/live/bcov-asset-a-import.test.ts > textures create_render_target_2d creates a render target with the requested size": 81,
+    "tests/live/bcov-asset-a-import.test.ts > mesh and animation imports import_static_mesh imports an FBX the editor exported": 126,
+    "tests/live/bcov-asset-a-import.test.ts > mesh and animation imports import_skeletal_mesh and import_animation rebuild a character and its animation from FBX": 1082,
+    "tests/live/bcov-asset-a-import.test.ts > interchange pipeline create_interchange_pipeline writes its option overrides onto the asset": 115,
+    "tests/live/bcov-editor-diagnostics.test.ts > the output log get_output_log and search_log find a line a Python script just logged": 110,
+    "tests/live/bcov-editor-diagnostics.test.ts > Python modules purge_python_modules drops a module from sys.modules": 66,
+    "tests/live/bcov-editor-diagnostics.test.ts > crash folders list_crashes, get_crash_info and check_for_crashes read a crash folder written under Saved/Crashes": 99,
+    "tests/live/bcov-editor-diagnostics.test.ts > screenshots capture_screenshot with target=window writes a PNG to the given path": 46,
+    "tests/live/bcov-editor-diagnostics.test.ts > performance readouts get_editor_performance_stats and get_frame_timing report a live process and an advancing frame": 58,
+    "tests/live/bcov-editor-diagnostics.test.ts > performance readouts run_stat_command turns a stat overlay on the level viewport on, and stat none clears it": 49,
+    "tests/live/bcov-editor-diagnostics.test.ts > scalability and console variables set_scalability writes every sg.* group, as get_cvars reads them": 228,
+    "tests/live/bcov-editor-diagnostics.test.ts > scalability and console variables set_cvars writes a console variable get_cvars reads back, and its rollback restores it": 109,
+    "tests/live/bcov-editor-diagnostics.test.ts > function libraries list_function_libraries lists KismetMathLibrary with a function invoke_static_function can call": 45,
+    "tests/live/bcov-editor-diagnostics.test.ts > editor tabs open_tab opens a registered tab that a second call finds already open": 1087,
+    "tests/live/bcov-editor-diagnostics.test.ts > editor tabs open_settings opens the Project Settings viewer that a second call finds already open": 181,
+    "tests/live/bcov-editor-diagnostics.test.ts > build status and handler reload get_build_status reports idle and reload_handlers leaves the registry answering": 72,
+    "tests/live/bcov-editor-diagnostics.test.ts > PIE settings configure_pie writes the client count get_pie_config reads, and its rollback restores it": 129,
+    "tests/live/bcov-editor-sequence.test.ts > sequence authoring add_sequence_track adds a bound Transform track and a master Fade track, as get_sequence_info lists them": 79,
+    "tests/live/bcov-editor-sequence.test.ts > sequence authoring set_sequence_playback_range sets the range get_sequence_info reports": 34,
+    "tests/live/bcov-editor-sequence.test.ts > sequence authoring set_sequence_keyframes writes keys get_sequence_channel_keys reads back": 55,
+    "tests/live/bcov-editor-sequence.test.ts > Sequencer transport scrub_sequence moves the playhead and evaluates the keyed cube": 675,
+    "tests/live/bcov-editor-sequence.test.ts > Sequencer transport play_sequence plays and pauses the open sequence, each call seeing the previous state": 93,
+    "tests/live/bcov-editor-sequence.test.ts > Sequencer transport close_sequence closes the open sequence and a second call finds nothing open": 516,
+    "tests/live/bcov-editor-sequence.test.ts > rendering render_sequence_frames writes one PNG per frame to the output directory": 738,
+    "tests/live/bcov-editor-world.test.ts > object reflection on a placed actor describe_object, find_object and get_object_properties resolve the actor and read bHidden": 103,
+    "tests/live/bcov-editor-world.test.ts > object reflection on a placed actor invoke_object_function, invoke_function and invoke_object_functions change what get_object_properties reads": 175,
+    "tests/live/bcov-editor-world.test.ts > undo and redo undo reverses a move_actor and redo re-applies it": 217,
+    "tests/live/bcov-editor-world.test.ts > the level viewport hit_test_viewport_pixel finds the actor straight ahead of a posed camera": 100,
+    "tests/live/bcov-editor-world.test.ts > the level viewport focus_viewport_on_actor moves the camera to the actor, as get_viewport_info reads it": 82,
+    "tests/live/bcov-editor-world.test.ts > the level viewport set_realtime writes the flag get_viewport_state reads and reports what it replaced": 94,
+    "tests/live/bcov-editor-world.test.ts > bones on a placed skeletal mesh read_bone_transforms samples the bones in world space at the actor's location": 77,
+    "tests/live/bcov-editor-world.test.ts > unsaved state and validation list_dirty_packages and get_world_state report a package left dirty by an unsaved write": 158,
+    "tests/live/bcov-editor-world.test.ts > unsaved state and validation validate_assets validates exactly the asset it is given": 22,
+    "tests/live/bcov-editor-world.test.ts > unsaved state and validation get_message_log lists the registered listings and reads MapCheck after a map check": 100,
+    "tests/live/bcov-landscape-proxies.test.ts > World Partition landscape proxies find_landscape_proxy_at names a loaded proxy covering the point, and nothing far outside": 93,
+    "tests/live/bcov-landscape-proxies.test.ts > World Partition landscape proxies refresh_landscape_physical_material_collision rebuilds one proxy in memory and verifies its heights": 37,
+    "tests/live/bcov-landscape.test.ts > landscape creation and listings create_landscape spawns a landscape the info, component, proxy and layer listings report": 291,
+    "tests/live/bcov-landscape.test.ts > landscape creation and listings set_landscape_material assigns the material the usage summary reports": 41,
+    "tests/live/bcov-landscape.test.ts > landscape heights set_landscape_height_region raises a plateau that merge, region, point, normal, slope and analysis reads report": 228,
+    "tests/live/bcov-landscape.test.ts > landscape heights export_landscape_heightmap writes the plateau and import_landscape_heightmap puts it back after a flatten": 185,
+    "tests/live/bcov-landscape.test.ts > landscape heights sculpt_landscape raises a brush that sculpt_landscape_region flattens again": 180,
+    "tests/live/bcov-landscape.test.ts > landscape heights apply_landscape_erosion slumps a spike toward its neighbours": 180,
+    "tests/live/bcov-landscape.test.ts > landscape paint layers create_landscape_layer_info makes the asset add_landscape_layer_info registers, and the layer queries see it": 167,
+    "tests/live/bcov-landscape.test.ts > landscape paint layers paint_landscape_layer and set_landscape_layer_weight_region write weights the region read returns": 115,
+    "tests/live/bcov-landscape.test.ts > landscape paint layers remove_landscape_layer unregisters a layer the existence check and listing then miss": 78,
+    "tests/live/bcov-landscape.test.ts > landscape holes set_landscape_holes punches and fills a region that get_landscape_holes reads back": 458,
+    "tests/live/bcov-landscape.test.ts > real-world planning plan_real_world_landscape sizes a 1 km tile at one metre per quad and a 100 m elevation band": 21,
+    "tests/live/bcov-landscape.test.ts > real-world planning project_geo_coordinates maps the box corners onto the landscape corners and back": 21,
+    "tests/live/bcov-material-graph.test.ts > material settings list_expression_types pages the curated expression classes": 62,
+    "tests/live/bcov-material-graph.test.ts > material settings set_material_base_color wires a Constant3Vector into BaseColor": 62,
+    "tests/live/bcov-material-graph.test.ts > material settings set_material_shading_model and set_material_blend_mode read back from read_material": 98,
+    "tests/live/bcov-material-graph.test.ts > material settings set_material_domain changes MaterialDomain on the asset": 109,
+    "tests/live/bcov-material-graph.test.ts > material settings create_material_simple wires constants into BaseColor, Roughness and Metallic": 97,
+    "tests/live/bcov-material-graph.test.ts > material settings connect_texture_to_material adds a TextureSample on the property": 53,
+    "tests/live/bcov-material-graph.test.ts > material graph edits build_material_graph creates named nodes and wires a property": 87,
+    "tests/live/bcov-material-graph.test.ts > material graph edits connect_material_expressions wires one node into another's input": 51,
+    "tests/live/bcov-material-graph.test.ts > material graph edits set_expression_value changes a Constant's value": 104,
+    "tests/live/bcov-material-graph.test.ts > material graph edits disconnect_material_property clears the property input": 54,
+    "tests/live/bcov-material-graph.test.ts > material graph edits delete_material_expression removes the node and the wire into it": 48,
+    "tests/live/bcov-material-graph.test.ts > material graph edits set_custom_expression rebuilds a Custom node's code and input pins": 160,
+    "tests/live/bcov-material-graph.test.ts > whole-material operations validate_material reports an orphan node until it is removed": 127,
+    "tests/live/bcov-material-graph.test.ts > whole-material operations get_material_shader_stats counts the parameters the graph declares": 98,
+    "tests/live/bcov-material-graph.test.ts > whole-material operations import_material_graph adds nodes that export_material_graph reads back": 91,
+    "tests/live/bcov-material-graph.test.ts > whole-material operations duplicate_material copies the graph to a new asset": 47,
+    "tests/live/bcov-material-graph.test.ts > whole-material operations build_material creates a parameterised material and an instance with overrides": 1373,
+    "tests/live/bcov-material-graph.test.ts > whole-material operations render_material_preview writes a PNG of the material": 76,
+    "tests/live/bcov-material-graph.test.ts > whole-material operations begin and end_material_transaction record one named undo step": 98,
+    "tests/live/bcov-niagara.test.ts > Niagara systems and emitters create_niagara_emitter and create_niagara_system_from_spec build a system the reads list, and remove_emitter_from_system drops one": 1826,
+    "tests/live/bcov-niagara.test.ts > Niagara systems and emitters set_emitter_property disables the emitter, which get_niagara_info and validate_niagara_system both see": 401,
+    "tests/live/bcov-niagara.test.ts > Niagara systems and emitters get_niagara_compiled_hlsl reports the GPU script only after set_emitter_property moves the sim target": 247,
+    "tests/live/bcov-niagara.test.ts > Niagara renderers add_emitter_renderer, set_renderer_property and remove_emitter_renderer show up in list_emitter_renderers": 361,
+    "tests/live/bcov-niagara.test.ts > Niagara modules and inputs list_niagara_modules and list_niagara_module_inputs find the stock SpawnRate module and its input": 39,
+    "tests/live/bcov-niagara.test.ts > Niagara modules and inputs spawn_niagara_actor places a NiagaraActor and set_niagara_parameter keeps its override": 98,
+    "tests/live/bcov-niagara.test.ts > Niagara modules and inputs set_niagara_module_input on SpawnRate stops the placed system emitting": 1726,
+    "tests/live/bcov-niagara.test.ts > Niagara modules and inputs set_niagara_dynamic_input wires a script into SpawnRate and remove_niagara_dynamic_input unwires it": 852,
+    "tests/live/bcov-niagara.test.ts > Niagara modules and inputs set_niagara_static_switch flips a bool switch list_niagara_static_switches then reports": 230,
+    "tests/live/bcov-niagara.test.ts > Niagara modules and inputs list_niagara_system_parameters and inspect_data_interface agree on the system's user data interfaces": 59,
+    "tests/live/bcov-niagara.test.ts > Niagara HLSL module scripts create_niagara_module_from_hlsl and set_niagara_custom_hlsl write a body get_niagara_custom_hlsl reads": 136,
+    "tests/live/bcov-niagara.test.ts > Niagara HLSL module scripts create_scratch_module declares its pins in a CustomHLSL node list_niagara_modules can find": 88,
+    "tests/live/editor-show-notification.test.ts > editor(show_notification) shows a warning toast with a link and reads it back on screen": 24,
+    "tests/live/editor-show-notification.test.ts > editor(show_notification) defaults to an info toast and refuses a link without a URL or a non-http URL": 69,
+    "tests/live/material-niagara-font.test.ts > niagara sim cache (#1394) captures particle frames off a placed system and reads named attributes back": 1787,
+    "tests/live/material-niagara-font.test.ts > material orphans (#1403) delete_orphans lists the unreachable nodes on a dry run and deletes exactly those": 1457,
+    "tests/live/material-niagara-font.test.ts > fonts (#1377) imports a font face with no dialog and builds a composite font from two faces": 2131,
+    "tests/live/spatial-communication.test.ts > capture_scene_png spatial evidence pairs a PNG with the actual scene-capture camera rather than the editor viewport": 288,
+    "tests/live/spatial-communication.test.ts > capture_scene_png spatial evidence rejects a degenerate camera projection before writing a file": 374,
+    "tests/live/spatial-communication.test.ts > capture_scene_png spatial evidence rejects reversed or overflowing focus framing before capture": 378,
+    "tests/live/bcov-project.test.ts > modules list_project_modules names the test project's runtime module": 14,
+    "tests/live/bcov-project.test.ts > modules is_module_loaded answers true for the bridge module and false for a made-up one": 13,
+    "tests/live/bcov-project.test.ts > modules list_loaded_modules filters by name and reports load state": 10,
+    "tests/live/bcov-project.test.ts > config set_config writes a key to disk, reports the previous value and is a no-op on repeat": 53,
+    "tests/live/bcov-project.test.ts > plugin references enable_plugin and disable_plugin edit the .uproject entry that list_available_plugins reads": 88,
+    "tests/live/bcov-project.test.ts > Live Coding live_coding_compile starts Live Coding, which live_coding_status then reports": 6428,
+    "tests/live/bcov-project.test.ts > C++ class creation create_cpp_class writes a header and source declaring the new class": 8350,
+    "tests/live/bcov-project.test.ts > Epic toolsets epic_call_tool runs a wrapped Blueprint tool whose variable the bridge then lists": 20,
+    "tests/live/source-control-provider.test.ts > source control with a provider (#1357) get_provider reports the operations the provider can run": 2,
+    "tests/live/source-control-provider.test.ts > source control with a provider (#1357) connect leaves the provider connected and never echoes the password": 212,
+    "tests/live/source-control-provider.test.ts > source control with a provider (#1357) history lists the revision a submit just recorded": 644,
+    "tests/live/source-control-provider.test.ts > source control with a provider (#1357) mark_for_delete marks the file deleted, and its rollback restores it": 669,
+    "tests/live/source-control-provider.test.ts > source control with a provider (#1357) sync brings a change made upstream into the workspace file": 2399
+  }
+}

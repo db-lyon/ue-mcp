@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Montage authoring read back through read_anim_montage and list_montage_segments:
  * slot, properties, sequence, segment and section removal, on a montage built

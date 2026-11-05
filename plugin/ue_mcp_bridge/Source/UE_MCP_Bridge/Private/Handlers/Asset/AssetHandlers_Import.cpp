@@ -35,6 +35,8 @@
 #include "Engine/Texture2D.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
+#include "Misc/App.h"
+#include "TextureCompiler.h"
 #include "Animation/Skeleton.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimData/IAnimationDataModel.h"
@@ -1063,12 +1065,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListTextureProperties(const TSharedPtr<FJ
 	if (!Asset) return LoadError;
 	UTexture2D* Texture = Cast<UTexture2D>(Asset);
 	if (!Texture) return MCPAssetWrongTypeError(AssetPath, Asset, TEXT("Texture2D"));
+	// A texture imported a moment ago may still be compiling, and reads 0 x 0 until it is done.
+	FTextureCompilingManager::Get().FinishCompilation({ Texture });
 	auto Result = AssetTextureSettings::Read(Texture);
 	Result->SetBoolField(TEXT("success"), true);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), Texture->GetName());
-	Result->SetNumberField(TEXT("sizeX"), Texture->GetSizeX());
-	Result->SetNumberField(TEXT("sizeY"), Texture->GetSizeY());
+	// With no RHI there is no platform data to size; the source is the same image.
+	const bool bFromSource = Texture->GetSizeX() == 0 && Texture->Source.IsValid();
+	Result->SetNumberField(TEXT("sizeX"), bFromSource ? Texture->Source.GetSizeX() : Texture->GetSizeX());
+	Result->SetNumberField(TEXT("sizeY"), bFromSource ? Texture->Source.GetSizeY() : Texture->GetSizeY());
 	Result->SetNumberField(TEXT("numMips"), Texture->GetNumMips());
 	Result->SetStringField(TEXT("pixelFormat"), GPixelFormats[Texture->GetPixelFormat()].Name);
 	return MCPResult(Result);
@@ -4465,6 +4471,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 	}
 	else
 	{
+		// The skeletal mesh exporter reads the render-side mesh object, which a -nullrhi editor
+		// never builds; the engine asserts on it instead of failing the export.
+		if (!FApp::CanEverRender() && Asset->IsA<USkeletalMesh>())
+		{
+			return MCPError(FString::Printf(TEXT("Exporting skeletal mesh '%s' needs an editor that renders; this one runs with -nullrhi. Use -RenderOffScreen for a windowless editor that can export it."), *AssetPath));
+		}
+
 		// Use UE's AssetExportTask - same as unreal.AssetExportTask in Python
 		UAssetExportTask* ExportTask = NewObject<UAssetExportTask>();
 		FGCRootScope ExportTaskRoot(ExportTask);

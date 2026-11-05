@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Reflection: enum authoring read back through reflect_enum, class and instance
  * reflection over throwaway Blueprints, load probes, gameplay tag listing and a

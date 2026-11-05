@@ -12,11 +12,12 @@ Other trackers:
 |---|---|
 | `ue-mcp-studio` | UE-MCP Studio, the chat client: its window, sessions, models and sign-in, attachments, Settings > Update, the Studio extension |
 | `ue-mcp-studio-plugin` | Studio's editor plugin: toolbar button, the UE-MCP Studio dock tab, the setup page, how it launches the ue-mcp daemon |
-| `pie-studio` | PIE record, replay, observe and input injection (`ue-mcp plugin install pie-studio`) |
 | `voxel-plugin-tools` | the `voxel` category for Voxel Plugin 2 |
 | `perforce` | the Perforce plugin's actions |
 | `meshy` | the Meshy plugin's actions |
 | `fab-editor` | the experimental `fab_editor` category |
+
+The `pie` tool (PIE record, replay, observe, input injection, test scripts) is core and belongs here; it replaced the pie-studio plugin in 1.4.11.
 
 A problem in how ue-mcp loads, installs or dispatches any plugin belongs here, not to the plugin. A Studio session that surfaces a bridge or server bug belongs here when the bug reproduces without Studio.
 

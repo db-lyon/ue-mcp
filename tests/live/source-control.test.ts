@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Source control category (#1357), against the test project's editor.
  *

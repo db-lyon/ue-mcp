@@ -16,8 +16,8 @@ import {
  * Decide which tracker a feedback report belongs in.
  *
  * ue-mcp is a core server plus a growing set of npm-distributed plugins, each
- * with its own repo. An agent that hits a wall in a plugin-owned surface (PIE
- * record/replay, Perforce, Meshy, Voxel) has no idea the surface is not core,
+ * with its own repo. An agent that hits a wall in a plugin-owned surface
+ * (Perforce, Meshy, Voxel) has no idea the surface is not core,
  * so every report lands on the core tracker and has to be re-filed by hand.
  *
  * This module reads the published registry (plugins.ue-mcp.com) plus the set
@@ -100,7 +100,7 @@ export interface RoutingInput {
  * or merely flagged.
  *
  *   strong - the plugin's own identity: slug, name, package, and the tool
- *            categories it provides. "pie", "meshy", "perforce".
+ *            categories it provides. "meshy", "perforce", "voxel".
  *   weak   - descriptive tags the listing chose: "import", "replay",
  *            "testing". Real signal, but shared with ordinary Unreal
  *            vocabulary, so "importing a mesh loses its materials" must not
@@ -109,7 +109,7 @@ export interface RoutingInput {
  * A weak match can suggest a plugin at the approval prompt. Only a strong one
  * can make it the default destination.
  */
-const W_STRONG_CALL = 12; // "pie(replay)" / "pie.replay" and pie is not built-in
+const W_STRONG_CALL = 12; // "meshy(generate)" / "meshy.generate" and meshy is not built-in
 const W_STRONG_IDEAL = 10;
 const W_STRONG_TITLE = 6;
 const W_STRONG_SUMMARY = 3;
@@ -117,7 +117,7 @@ const W_WEAK_CALL = 6;
 const W_WEAK_IDEAL = 4;
 const W_WEAK_TITLE = 2;
 const W_WEAK_SUMMARY = 1;
-const W_PHRASE_TITLE = 6; // full multi-word slug, e.g. "pie studio"
+const W_PHRASE_TITLE = 6; // full multi-word slug, e.g. "sample recorder"
 const W_PHRASE_SUMMARY = 4;
 const W_INSTALLED = 3;    // the plugin is actually loaded in this project
 
@@ -210,7 +210,7 @@ function wordRe(token: string): RegExp {
 }
 
 /**
- * `pie(replay)` or `pie.replay` - a tool call, not a mention.
+ * `meshy(generate)` or `meshy.generate` - a tool call, not a mention.
  *
  * Both forms are deliberately strict. The dotted form needs a following
  * identifier, so a sentence ending "...the default grey material." stays

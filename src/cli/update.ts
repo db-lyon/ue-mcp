@@ -5,13 +5,14 @@ import * as path from "node:path";
 
 import { collectDoctor, formatDoctor } from "./doctor.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { editorOwnsProject, listEditorProcesses } from "../editor/engine-observer.js";
+import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-observer.js";
 import { UE_MCP_LAUNCH } from "../integrations/claude-code/mcp-client-config.js";
-import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "../core/version-check.js";
+import { distTagForVersion, isNewer, isPrereleaseVersion, resolveUpdateTarget } from "../core/version-check.js";
 import { packageModulePath, packageRoot, packageVersion } from "../core/package-root.js";
 import { findUProject, isUProjectPath } from "../config/uproject-path.js";
-import { installKindOf, resolvePluginDir } from "../editor/install-marker.js";
-import { applyUpdate, repinClientConfigs } from "../editor/bridge-update.js";
+import { installKindOf, installedBridge, resolvePluginDir } from "../editor/install-marker.js";
+import { applyUpdate, newerBridgeMessage, repinClientConfigs } from "../editor/bridge-update.js";
+import { recordPendingBuild } from "../editor/pending-build.js";
 import { RESET, BOLD, RED, DIM, CYAN, YELLOW, ok, fail, info as step } from "./ui/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
@@ -41,11 +42,17 @@ function targetUProject(arg: string | undefined): string | null {
   return findUProject(isDir ? arg : process.cwd());
 }
 
+/**
+ * Whether an editor holds this project. A process table that cannot be read
+ * counts as yes: the in-place swap is safe with the editor down, and the
+ * whole-tree swap is not with it up.
+ */
 async function editorRunningFor(uproject: string): Promise<boolean> {
   try {
-    return (await listEditorProcesses()).some((p) => editorOwnsProject(p, uproject));
+    const probe = await probeEditorProcessList();
+    return probe.failed || probe.processes.some((p) => editorOwnsProject(p, uproject));
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -107,8 +114,12 @@ async function update(argv: string[]) {
       fail("No .uproject here.");
       process.exit(1);
     }
+    const editorRunning = await editorRunningFor(uproject);
+    if (!editorRunning && installKindOf(resolvePluginDir(path.dirname(uproject))?.dir ?? "") === "source") {
+      step("Building the bridge (this can take a few minutes)...");
+    }
     const result = await applyUpdate(uproject, {
-      editorRunning: await editorRunningFor(uproject),
+      editorRunning,
       binaries: flagValue(args, "--binaries") ?? null,
     });
     if (!result.ok) {
@@ -118,7 +129,8 @@ async function update(argv: string[]) {
     const said = {
       applied: `Bridge ${result.version} installed`,
       staged: `Bridge ${result.version} staged; it replaces the running one when the editor exits`,
-      rebuild: `Bridge ${result.version} source deployed; it builds on the next restart`,
+      built: `Bridge ${result.version} source deployed and built`,
+      rebuild: `Bridge ${result.version} source deployed. The editor is running, so it builds the next time ue-mcp starts or restarts the editor`,
       unchanged: `Bridge already at ${result.version}`,
     }[result.state];
     ok(said);
@@ -131,6 +143,16 @@ async function update(argv: string[]) {
   console.log("");
 
   const installed = packageVersion();
+  // A bare `npx ue-mcp update` runs the stable line. A binary bridge from a newer
+  // release (a beta) is not this package's to replace, and neither are its pins.
+  const bridge = uproject ? installedBridge(path.dirname(uproject)) : null;
+  if (bridge?.kind === "binary" && isNewer(bridge.version, installed)) {
+    console.log(`  Installed: ${BOLD}${installed}${RESET}`);
+    console.log(`  Bridge:    ${BOLD}${bridge.version}${RESET}`);
+    console.log("");
+    fail(newerBridgeMessage(bridge.version, installed));
+    process.exit(1);
+  }
   console.log(`  Installed: ${BOLD}${installed}${RESET}`);
 
   const latest = getLatestVersion();
@@ -225,14 +247,17 @@ async function update(argv: string[]) {
 
   // 4. Rebuild the editor. A running editor holds the plugin DLL, so the build
   //    would fail on a locked file; skip it and say what to run instead.
+  // Either way the build is owed, and the next start through ue-mcp pays it first (#1593).
   if (shouldBuild && uproject && (await editorRunningFor(uproject))) {
     shouldBuild = false;
+    recordPendingBuild(uproject, aligned, "editor running");
     console.log("");
     console.log(`  ${YELLOW}The editor is running, so the plugin was deployed but not rebuilt.${RESET}`);
-    step("Close the editor, then run `ue-mcp build`.");
+    step("Close the editor, then run `ue-mcp build`, or restart the editor through ue-mcp, which builds first.");
   } else if (shouldDeploy && !shouldBuild) {
+    if (uproject) recordPendingBuild(uproject, aligned, "--no-build");
     console.log("");
-    step("Plugin deployed but not rebuilt (--no-build). Run `ue-mcp build` before the next editor launch.");
+    step("Plugin deployed but not rebuilt (--no-build). Run `ue-mcp build` before the next editor launch, or start the editor through ue-mcp, which builds first.");
   }
   if (shouldBuild) {
     console.log("");

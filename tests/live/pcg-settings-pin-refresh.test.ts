@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Settings writes refresh a PCG node's pins (#1256), against a real editor.
  *
@@ -25,6 +26,9 @@ const outputPins = async (nodeName: string): Promise<string[]> => {
 
 beforeAll(async () => {
   bridge = await getBridge();
+  // MCP_Home is not checked in; demo_go_home creates and saves it on a fresh project.
+  const home = await callBridge(bridge, "demo_go_home", {});
+  expect(home.ok, home.error).toBe(true);
   for (const assetPath of [GRAPH, DATA]) await callBridge(bridge, "delete_asset", { assetPath, force: true });
   const exported = await callBridge(bridge, "export_level_to_pcg_asset", { levelPath: MAP, assetPath: TEST_PREFIX, assetName: "PCG_PinRefresh_Data" });
   expect(exported.ok, exported.error).toBe(true);

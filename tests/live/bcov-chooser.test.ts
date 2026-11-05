@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Chooser table authoring read back through describe and list_rows: create,
  * columns, rows added, edited and deleted, and the object reference listing

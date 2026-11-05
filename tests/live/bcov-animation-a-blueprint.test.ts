@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * AnimBlueprint and blendspace authoring on the engine tutorial skeleton:
  * blueprint creation, state machine states and transitions, motion matching

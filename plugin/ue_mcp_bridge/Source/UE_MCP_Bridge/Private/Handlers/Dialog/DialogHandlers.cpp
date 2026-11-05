@@ -114,6 +114,41 @@ namespace MCPDialogPolicy
 		}
 	}
 
+	/** Whether text names an IDE or a source code editor. */
+	static bool NamesAnIde(const FString& Text)
+	{
+		const FString Lower = Normalise(Text);
+		for (const TCHAR* Phrase : { TEXT("visual studio"), TEXT("vs code"), TEXT("source code editor"), TEXT("code editor") })
+		{
+			if (Lower.Contains(Phrase)) return true;
+		}
+		TArray<FString> Words;
+		FString Word;
+		for (const TCHAR C : Lower)
+		{
+			if (FChar::IsAlnum(C)) { Word.AppendChar(C); continue; }
+			if (!Word.IsEmpty()) { Words.Add(Word); Word.Reset(); }
+		}
+		if (!Word.IsEmpty()) Words.Add(Word);
+		for (const TCHAR* Name : { TEXT("ide"), TEXT("vscode"), TEXT("rider"), TEXT("xcode"), TEXT("devenv") })
+		{
+			if (Words.Contains(Name)) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Whether pressing this button would open an IDE: its label names one, or
+	 * the dialog asks about one and the button is the one that agrees.
+	 */
+	static bool OpensAnIde(const FString& Label, const FString& Message)
+	{
+		if (NamesAnIde(Label)) return true;
+		if (!NamesAnIde(Message)) return false;
+		const FString L = Normalise(Label);
+		return L == TEXT("yes") || L == TEXT("ok") || L == TEXT("open") || L == TEXT("yes to all") || L == TEXT("continue");
+	}
+
 	/** Index of the first button whose label equals Needle once normalised. */
 	static int32 FindExact(const TArray<FDialogHandlers::FModalButton>& Buttons, const FString& Needle)
 	{
@@ -534,7 +569,12 @@ bool FDialogHandlers::ApplyPolicyToActiveModal()
 	// Nothing else can put a policy in the list, which is what keeps this from
 	// pressing a button on a dialog nobody asked about.
 	FString Reason;
-	const int32 Index = ResolveButtonForPolicy(*Policy, Buttons, Reason);
+	int32 Index = ResolveButtonForPolicy(*Policy, Buttons, Reason);
+	if (Buttons.IsValidIndex(Index) && OpensAnIde(Buttons[Index].Label, Message))
+	{
+		Reason = FString::Printf(TEXT("'%s' opens an IDE or source code editor, which no policy presses"), *Buttons[Index].Label);
+		Index = INDEX_NONE;
+	}
 	if (Index == INDEX_NONE)
 	{
 		if (WindowId != LastDeclinedWindow)
@@ -639,7 +679,14 @@ EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgCategory Category
 	{
 		EAppReturnType::Type Answer = EAppReturnType::Cancel;
 		FString Reason;
-		if (ResolveMessageDialogAnswer(*Policy, MsgType, Answer, Reason))
+		const bool bResolved = ResolveMessageDialogAnswer(*Policy, MsgType, Answer, Reason);
+		// A message box that asks about an IDE is never agreed to: Yes or OK is what opens it.
+		if (bResolved && MCPDialogPolicy::OpensAnIde(ResponseTypeToString(Answer), MessageStr))
+		{
+			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Dialog '%s' matched policy '%s' but its answer would open an IDE, so it is left unanswered."),
+				*TitleStr, *Policy->Pattern);
+		}
+		else if (bResolved)
 		{
 			UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Dialog answered by the policy a caller armed: pattern='%s' title='%s' answer=%s"),
 				*Policy->Pattern, *TitleStr, *ResponseTypeToString(Answer));
@@ -1738,6 +1785,11 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 	return MCPResult(Result);
 }
 
+bool FDialogHandlers::OpensAnIde(const FString& ButtonLabel, const FString& Message)
+{
+	return MCPDialogPolicy::OpensAnIde(ButtonLabel, Message);
+}
+
 TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonObject>& Params)
 {
 	using namespace MCPDialogPolicy;
@@ -1787,6 +1839,14 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 	else if (ButtonIndex >= 0 && ButtonIndex < Buttons.Num())
 	{
 		TargetIndex = ButtonIndex;
+	}
+
+	// Nothing the bridge does may start an IDE on the user's desktop.
+	if (Buttons.IsValidIndex(TargetIndex) && OpensAnIde(Buttons[TargetIndex].Label, Message))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Will not press '%s' on dialog '%s': it opens an IDE or source code editor. Press another of [%s], or dialogAction='close'."),
+			*Buttons[TargetIndex].Label, *Title, *JoinLabels(Buttons)));
 	}
 
 	auto Result = MCPSuccess();

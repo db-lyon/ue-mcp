@@ -1,5 +1,9 @@
 name: CI
 
+# Each commit is built and tested once, on its pull request. Main only takes a
+# pull request that is up to date with it, so the merged tree is the tree that
+# was tested, and a push to main or a release branch publishes without
+# building or testing it again.
 on:
   push:
     branches: [main, 'release/**']
@@ -20,11 +24,11 @@ permissions:
 # Prose rules run here over the tracked tree and again in .husky/pre-commit and
 # .husky/commit-msg, which reject a bad character before the commit exists.
 jobs:
-  build:
+  checks:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      statuses: write   # surface/counts, posted on pushes to main only
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,14 +44,9 @@ jobs:
           cache: "npm"
 
       - name: Install
-        # The committed package-lock.json was generated on Windows; npm has a
-        # known optional-deps bug (npm/cli#4828) where Linux-native rollup
-        # binaries are skipped when the lockfile is from another platform.
-        # Drop the lockfile and reinstall with --include=optional so vitest
-        # can load @rollup/rollup-linux-x64-gnu on the Ubuntu runner.
-        run: |
-          rm -f package-lock.json
-          npm install --include=optional
+        # Exact lockfile versions with integrity checks. Re-resolving here would
+        # pull whatever was published minutes ago, which is how npm worms spread.
+        run: npm ci --include=optional
 
       - name: Repo audits
         # npm run audit: docs and param drift, TS/C++ handler parity, prose
@@ -64,17 +63,11 @@ jobs:
         # least once by somebody who had read it.
         run: node scripts/check-release-gates.mjs all
 
-      - name: Type-check
-        run: npx tsc --noEmit
-
       - name: Type-check tests and scripts
         # tsconfig.json covers src/ only and vitest strips types without
         # checking them, so a test could build a fixture src/ no longer accepts
         # and still pass. Kept out of the pre-commit hook because it is slow.
         run: npm run typecheck:tests
-
-      - name: Unit tests
-        run: npm run test:unit
 
       - name: Multi-editor tests
         # Two bridges on two loopback sockets, driven from one test process
@@ -101,33 +94,156 @@ jobs:
         # harness pointed at tests/ue_mcp only, and nothing here needs to move.
         run: npm run test:multi-editor
 
+      - name: Audit (high+ only, production deps)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: false
+
+
+  # The build publish ships. The publish job downloads this artifact when the
+  # tree it is publishing is the tree built here, so npm gets the files that
+  # were type-checked, generated and load-tested on the pull request rather
+  # than a second compile. Keyed by git tree, not commit: the merge commit on
+  # main is a different commit, but main only takes a pull request that is up
+  # to date with it, so it has this tree. scripts/tested-build.mjs finds it.
+  package:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci --include=optional
+
+      - name: Type-check and build
+        run: npx tsc
+
+      - name: Generate what prepublishOnly adds to dist/
+        # The surface/counts description is computed here too, from the same
+        # tree, so the publish job needs no install to post it.
+        run: |
+          npx tsx scripts/generate-default-config.ts
+          npx tsx scripts/generate-tool-metadata.ts
+          npx tsx scripts/surface-counts.mts > surface-counts.txt
+          # The generators also stamp tracked files. Any change here would
+          # ship a package.json or descriptor that differs from the commit.
+          git diff --exit-code
+
+      - name: Verify build output
+        run: |
+          # Fail loud if any entry point is missing or empty: a broken publish
+          # is very hard to retract.
+          test -s dist/index.js || (echo "dist/index.js missing or empty" && exit 1)
+          test -s dist/init.js || (echo "dist/init.js missing or empty" && exit 1)
+          test -s dist/update.js || (echo "dist/update.js missing or empty" && exit 1)
+          test -s dist/ue-mcp.default.yml || (echo "dist/ue-mcp.default.yml missing or empty" && exit 1)
+          test -s dist/tool-counts.json || (echo "dist/tool-counts.json missing or empty" && exit 1)
+          test -s surface-counts.txt || (echo "surface-counts.txt missing or empty" && exit 1)
+          # Non-empty is not loadable. The unit suite runs from source, so a
+          # module that only fails once emitted reaches npm otherwise.
+          node -e "import('./dist/tools.js').then(()=>console.log('dist loads')).catch(e=>{console.error(e.message);process.exit(1)})"
+
+      - name: Key by tree
+        id: tree
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tested-build-${{ steps.tree.outputs.tree }}
+          path: |
+            dist/
+            surface-counts.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  # The unit and integration suites run as shards, packed by measured duration
+  # (tests/setup/weighted-shards.ts, weights in tests/timing/vitest-weights.json),
+  # so the wall time is the slowest shard rather than the sum.
+  unit:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    name: unit (${{ matrix.shard }}/3)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The release gates compare this branch against what it will merge
+          # into. A bare checkout on a pull request fetches only the merge ref
+          # and creates no origin/main, so every gate reported "no base to
+          # compare against" and exited 0.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install
+        # Exact lockfile versions with integrity checks. Re-resolving here would
+        # pull whatever was published minutes ago, which is how npm worms spread.
+        run: npm ci --include=optional
+
+      - name: Unit tests
+        run: npm run test:unit -- --shard=${{ matrix.shard }}/3
+
+  integration:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    name: integration (${{ matrix.shard }}/6)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The release gates compare this branch against what it will merge
+          # into. A bare checkout on a pull request fetches only the merge ref
+          # and creates no origin/main, so every gate reported "no base to
+          # compare against" and exited 0.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install
+        # Exact lockfile versions with integrity checks. Re-resolving here would
+        # pull whatever was published minutes ago, which is how npm worms spread.
+        run: npm ci --include=optional
+
       - name: Integration tests
         # The real CLI, server and daemon, spawned in hermetic sandboxes with
         # local fakes for the bridge, the registry and the feedback service.
         # Every surface they cover is listed in tests/coverage/integration-surfaces.json,
         # which the unit suite gates. Live-editor cases are in tests/live.
-        run: npm run test:integration
+        run: npm run test:integration -- --shard=${{ matrix.shard }}/6
 
-      - name: Audit (high+ only, production deps)
-        run: npm audit --omit=dev --audit-level=high
-        continue-on-error: false
-
-      - name: Post surface/counts commit status
-        # Derived from the source of truth (TS schema + C++ RegisterHandler)
-        # so the status stays accurate without hand-edited counts.
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          DESC=$(npx tsx scripts/surface-counts.mts)
-          gh api -X POST "repos/$REPO/statuses/$SHA"             -f state=success             -f context=surface/counts             -f description="$DESC"             -f target_url="https://github.com/$REPO/blob/$SHA/scripts/surface-counts.mts"
-          echo "Posted surface/counts: $DESC"
+  # The one required check: green only when every job above is, every shard
+  # included: a matrix job's result is success only when all of its legs are.
+  build:
+    if: github.event_name == 'pull_request' && always()
+    needs: [checks, package, unit, integration]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          [ "${{ needs.checks.result }}" = success ] && [ "${{ needs.package.result }}" = success ] && [ "${{ needs.unit.result }}" = success ] && [ "${{ needs.integration.result }}" = success ]
 
   publish:
-    needs: build
     runs-on: ubuntu-latest
     # A release/X.Y.Z branch publishes a stable cut from a beta's commit while main moves on.
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
@@ -135,6 +251,7 @@ jobs:
       contents: write   # for git tag push and gh-release
       id-token: write   # for npm provenance
       statuses: write   # for posting landing/headline from the Promote step
+      actions: read     # for the pull request run's tested build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -148,7 +265,6 @@ jobs:
           # shim is shadowed by setup-node's pinned binary, so `npm` keeps
           # resolving to 10.x and OIDC never engages.
           node-version: "24"
-          cache: "npm"
 
       - name: Verify npm >= 11.5.1
         run: |
@@ -159,6 +275,60 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Find the tested build of this tree
+        # The package job of the pull request that brought this tree to main
+        # built dist/ from it, and every other job of that run tested it.
+        id: tested
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TREE=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$TREE" >> "$GITHUB_OUTPUT"
+          node scripts/tested-build.mjs --repo "$REPO" --tree "$TREE" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Download the tested build
+        if: steps.tested.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          rm -rf dist surface-counts.txt
+          gh run download "${{ steps.tested.outputs.run_id }}" --repo "$REPO" \
+            --name "tested-build-${{ steps.tested.outputs.tree }}" --dir .
+          test -s dist/index.js && test -s surface-counts.txt
+
+      - name: Build here (no pull request run built this tree)
+        # A push that no pull request tested as this tree, such as a
+        # release/X.Y.Z bump or a build whose artifact expired. Lockfile
+        # install: this job holds id-token: write, so no freshly resolved
+        # dependency may run install scripts here.
+        if: steps.tested.outputs.found != 'true'
+        run: |
+          set -euo pipefail
+          npm ci --include=optional
+          npx tsc
+          npx tsx scripts/generate-default-config.ts
+          npx tsx scripts/generate-tool-metadata.ts
+          npx tsx scripts/surface-counts.mts > surface-counts.txt
+          node -e "import('./dist/tools.js').then(()=>console.log('dist loads')).catch(e=>{console.error(e.message);process.exit(1)})"
+
+      - name: Post surface/counts commit status
+        # Derived from the source of truth (TS schema + C++ RegisterHandler)
+        # so the status stays accurate without hand-edited counts.
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DESC=$(cat surface-counts.txt)
+          gh api -X POST "repos/$REPO/statuses/$SHA"             -f state=success             -f context=surface/counts             -f description="$DESC"             -f target_url="https://github.com/$REPO/blob/$SHA/scripts/surface-counts.mts"
+          echo "Posted surface/counts: $DESC"
 
       - name: Check whether this version is already published
         id: version
@@ -282,27 +452,15 @@ jobs:
           gh release view "v$VERSION" --json assets --jq '.assets[].name' \
             | node scripts/release-binaries.mjs --version "$VERSION"
 
-      - name: Install & Build
-        if: steps.version.outputs.should_publish == 'true'
-        # See note on the build job's Install step re: the rollup
-        # optional-deps bug.
-        run: |
-          rm -f package-lock.json
-          npm install --include=optional
-          npx tsc
-
       - name: Prose rules, against what will be published
         if: steps.version.outputs.should_publish == 'true'
         # The generated output, not the source it came from. A banned string
         # was taken out of src/ once and shipped anyway in a .d.ts, because
         # every check until now ran against a tree with no dist/ in it.
         #
-        # The generators run first: prepublishOnly produces two more dist files
-        # at publish time, so linting before them checked a dist/ that was
-        # missing part of what ships.
+        # dist/ already holds the generators' files, from the package job or
+        # the build step above, so this lints everything that ships.
         run: |
-          npx tsx scripts/generate-default-config.ts
-          npx tsx scripts/generate-tool-metadata.ts
           mapfile -t built < <(find dist -type f \( -name '*.js' -o -name '*.d.ts' -o -name '*.md' -o -name '*.yml' -o -name '*.json' \))
           if [ ${#built[@]} -eq 0 ]; then
             echo "dist/ has no files to check, which means the build did not run" >&2
@@ -319,9 +477,11 @@ jobs:
           test -s dist/index.js || (echo "dist/index.js missing or empty" && exit 1)
           test -s dist/init.js || (echo "dist/init.js missing or empty" && exit 1)
           test -s dist/update.js || (echo "dist/update.js missing or empty" && exit 1)
-          # Non-empty is not loadable. The unit suite runs from source, so a
-          # module that only fails once emitted reaches npm otherwise.
-          node -e "import('./dist/tools.js').then(()=>console.log('dist loads')).catch(e=>{console.error(e.message);process.exit(1)})"
+          test -s dist/ue-mcp.default.yml || (echo "dist/ue-mcp.default.yml missing or empty" && exit 1)
+          test -s dist/tool-counts.json || (echo "dist/tool-counts.json missing or empty" && exit 1)
+          # Loading dist/tools.js needs node_modules, which this job does not
+          # install when it has the tested build: the package job loaded these
+          # same files, and the fallback build step loaded its own.
 
       - name: Tag release (before publish)
         if: steps.version.outputs.should_publish == 'true'

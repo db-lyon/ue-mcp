@@ -9,7 +9,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { isPidAlive } from "../bridge/editor-target.js";
+import { isPidAlive, readBridgeInstanceRecords, readBridgeLockfileIn } from "../bridge/editor-target.js";
 import {
   findFileHolders,
   listCrashReporterProcesses,
@@ -41,6 +41,8 @@ export interface CrashReporterDeps {
   listCrashReporters: () => Promise<CrashReporterProcess[]>;
   /** Pids of every running UnrealEditor process, any project. */
   listLiveEditorPids: () => Promise<Set<number>>;
+  /** Pids of the editors this project's bridge recorded, live or not. */
+  listProjectEditorPids: (projectDir: string) => Set<number>;
   listModuleBinaries: (projectDir: string) => string[];
   findHolders: (files: string[]) => Promise<Map<number, string>>;
   /** End the process and resolve once it has exited; reject if it did not. */
@@ -76,8 +78,9 @@ export function commandLineNamesDir(commandLine: string, projectDir: string): bo
  *
  * A reporter watching an editor that is still running is left alone whatever
  * it names: it is serving that editor, not left over from a crash. Otherwise it
- * belongs to this project when its command line names a path inside the
- * project directory, or when it holds one of the project's binaries open.
+ * belongs to this project when it watched an editor this project's bridge
+ * recorded, when its command line names a path inside the project directory,
+ * or when it holds one of the project's binaries open.
  * `holders` may be null when that probe was not needed.
  */
 export function selectProjectCrashReporters(
@@ -85,11 +88,17 @@ export function selectProjectCrashReporters(
   projectDir: string,
   liveEditorPids: Set<number>,
   holders: Map<number, string> | null,
+  projectEditorPids: Set<number> = new Set(),
 ): CrashReporterMatch[] {
   const matches: CrashReporterMatch[] = [];
   for (const r of reporters) {
     const watched = monitoredPid(r.commandLine);
     if (watched !== null && liveEditorPids.has(watched)) continue;
+    // The companion a crashed editor started names no project path, and may not have opened its binaries yet.
+    if (watched !== null && projectEditorPids.has(watched)) {
+      matches.push({ pid: r.pid, image: r.image, reason: `it watched editor pid ${watched} of this project, which has exited` });
+      continue;
+    }
     if (commandLineNamesDir(r.commandLine, projectDir)) {
       matches.push({ pid: r.pid, image: r.image, reason: `its command line names a path under ${projectDir}` });
       continue;
@@ -141,6 +150,14 @@ export function listProjectModuleBinaries(projectDir: string): string[] {
   return found;
 }
 
+/** The editor pids this project's bridge published in port.json and its instance records. */
+export function listRecordedEditorPids(projectDir: string): Set<number> {
+  const pids = new Set(readBridgeInstanceRecords(projectDir).map((r) => r.pid));
+  const lockfilePid = readBridgeLockfileIn(projectDir)?.pid;
+  if (lockfilePid) pids.add(lockfilePid);
+  return pids;
+}
+
 /** End a process and wait for it to leave the process table. */
 async function terminateAndWait(pid: number): Promise<void> {
   // lint-prose-allow: no-kill  only a crash reporter of this project whose editor is gone, never an editor
@@ -156,6 +173,7 @@ const defaultDeps: CrashReporterDeps = {
   platform: process.platform,
   listCrashReporters: listCrashReporterProcesses,
   listLiveEditorPids: async () => new Set((await listEditorProcesses()).map((p) => p.pid)),
+  listProjectEditorPids: listRecordedEditorPids,
   listModuleBinaries: listProjectModuleBinaries,
   findHolders: findFileHolders,
   terminate: terminateAndWait,
@@ -180,7 +198,8 @@ export async function endProjectCrashReporters(
     const reporters = await deps.listCrashReporters();
     if (reporters.length === 0) return result;
     const live = await deps.listLiveEditorPids();
-    const byCommandLine = selectProjectCrashReporters(reporters, projectDir, live, null);
+    const recorded = deps.listProjectEditorPids(projectDir);
+    const byCommandLine = selectProjectCrashReporters(reporters, projectDir, live, null, recorded);
     // The file-holder probe is the expensive one, so it runs only for
     // reporters the command line did not already settle.
     const undecided = reporters.filter((r) => {
@@ -188,7 +207,7 @@ export async function endProjectCrashReporters(
       return !byCommandLine.some((m) => m.pid === r.pid) && !(watched !== null && live.has(watched));
     });
     const holders = undecided.length > 0 ? await deps.findHolders(deps.listModuleBinaries(projectDir)) : null;
-    matches = selectProjectCrashReporters(reporters, projectDir, live, holders);
+    matches = selectProjectCrashReporters(reporters, projectDir, live, holders, recorded);
   } catch (err) {
     return { ...result, probeError: err instanceof Error ? err.message : String(err) };
   }

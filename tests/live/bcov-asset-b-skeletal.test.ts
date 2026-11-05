@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Skeletal mesh reads and edits on a copy of the engine's SkeletalCube: bones,
  * cloth bindings, material slots, skin weights and the bone vertex bounds they

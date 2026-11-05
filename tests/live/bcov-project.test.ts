@@ -1,3 +1,4 @@
+// @live-editor base
 /**
  * Project: module listings and load probes, set_config against a probe ini the
  * test owns, plugin references in the .uproject (restored byte for byte),
@@ -117,6 +118,14 @@ describe("config", () => {
 
     const repeat = await call("set_config", { configName: CONFIG_FILE, section: CONFIG_SECTION, key: CONFIG_KEY, value: "two" });
     expect(repeat.existed).toBe(true);
+
+    // The editor keeps no copy of the file once the call returns, so a deleted
+    // ini is not written back from its cache when the editor exits.
+    fs.rmSync(configPath(), { force: true });
+    const afterDelete = await call("set_config", { configName: CONFIG_FILE, section: CONFIG_SECTION, key: CONFIG_KEY, value: "two" });
+    expect(afterDelete.existed).not.toBe(true);
+    expect(afterDelete.rollback).toBeUndefined();
+    expect(fs.readFileSync(configPath(), "utf8")).toMatch(/ProbeValue=two/);
   }, 120_000);
 });
 

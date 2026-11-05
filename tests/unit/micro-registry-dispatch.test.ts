@@ -13,13 +13,13 @@ import { UeMcpTask } from "../../src/task.js";
 import type { IBridge } from "../../src/bridge/bridge.js";
 
 // The same manifest -> registry-kind action -> native task registration path
-// as PIE Studio, without installing a plugin or contacting an editor.
+// as Sample Recorder, without installing a plugin or contacting an editor.
 function fixture(mode: "full" | "lean" | "micro" = "micro") {
   const manifest = PluginManifestSchema.parse({
-    actionPrefix: "pie",
+    actionPrefix: "recorder",
     nativeModule: {
-      uePluginName: "PIE_Studio", minBridgeApi: 1, source: "ue/Plugins/PIE_Studio",
-      category: "pie",
+      uePluginName: "Sample_Recorder", minBridgeApi: 1, source: "ue/Plugins/Sample_Recorder",
+      category: "recorder",
       handlers: {
         inject_input: {
           description: "Inject input. Params: assetPath, value?",
@@ -29,15 +29,15 @@ function fixture(mode: "full" | "lean" | "micro" = "micro") {
       },
     },
   });
-  const surface = nativeHandlerSurface(manifest, "pie-studio", new Set());
+  const surface = nativeHandlerSurface(manifest, "sample-recorder", new Set());
   if (surface?.kind !== "provide") throw new Error("expected a provided native category");
-  const pie = buildProvidedTool(surface.plan);
-  const tools = mode === "micro" ? [buildMicroGateway([pie]), pie]
-    : mode === "lean" ? applyLeanContext([pie]) : [pie];
+  const recorder = buildProvidedTool(surface.plan);
+  const tools = mode === "micro" ? [buildMicroGateway([recorder]), recorder]
+    : mode === "lean" ? applyLeanContext([recorder]) : [recorder];
   const registry = buildFlowRegistry(tools);
   // Plugin tasks register after the category graph, exactly as at startup.
   for (const { name, ctor } of surface.taskRegistrations) registry.register(name, ctor);
-  return { pie, registry };
+  return { recorder, registry };
 }
 
 function context(answer: unknown = { success: true }) {
@@ -58,24 +58,24 @@ const withoutDuration = ({ duration: _duration, ...result }: TaskResult) => resu
 
 describe("micro calls use the session task registry", () => {
   it("refuses args.action instead of dropping it (#1216)", async () => {
-    const { registry, pie } = fixture();
+    const { registry, recorder } = fixture();
     const { ctx, calls } = context();
-    await expect(registry.create("tools.call", ctx, { category: "pie", method: "inject_input", args: { action: "/Game/IA", assetPath: "/A" } }))
-      .rejects.toThrow(/args.action was not sent to pie.inject_input/);
-    const gateway = buildMicroGateway([pie]);
-    await expect(gateway.handler(ctx, { action: "call", category: "pie", method: "inject_input", args: { action: "/Game/IA" } }))
+    await expect(registry.create("tools.call", ctx, { category: "recorder", method: "inject_input", args: { action: "/Game/IA", assetPath: "/A" } }))
+      .rejects.toThrow(/args.action was not sent to recorder.inject_input/);
+    const gateway = buildMicroGateway([recorder]);
+    await expect(gateway.handler(ctx, { action: "call", category: "recorder", method: "inject_input", args: { action: "/Game/IA" } }))
       .rejects.toThrow(/'action' is the dispatcher's own key/);
     expect(calls).toEqual([]);
   });
 
   it.each(["full", "lean", "micro"] as const)("runs the native plugin task in %s mode", async (mode) => {
-    const { pie, registry } = fixture(mode);
+    const { recorder, registry } = fixture(mode);
     const { ctx, calls } = context({ success: true, accepted: 1 });
-    expect(pie.actions.inject_input.kind).toBe("registry");
+    expect(recorder.actions.inject_input.kind).toBe("registry");
     const args = { assetPath: "/Game/Take", value: 1 };
-    const task = await registry.create(mode === "micro" ? "tools.call" : "pie.inject_input", ctx,
-      mode === "micro" ? { category: "pie", method: "inject_input", args } : args);
-    expect(task.taskName).toBe("pie.inject_input");
+    const task = await registry.create(mode === "micro" ? "tools.call" : "recorder.inject_input", ctx,
+      mode === "micro" ? { category: "recorder", method: "inject_input", args } : args);
+    expect(task.taskName).toBe("recorder.inject_input");
     expect(withoutDuration(await task.run())).toEqual({ success: true, data: { success: true, accepted: 1 } });
     expect(calls).toEqual([{ method: "inject_input", params: args, timeoutMs: 120_000 }]);
   });
@@ -84,7 +84,7 @@ describe("micro calls use the session task registry", () => {
     const { registry } = fixture();
     const { ctx, calls } = context({ success: true, kept: { value: 1, hidden: 2 }, dropped: 3 });
     const task = await registry.create("tools.call", ctx, {
-      category: "pie", method: "inject_input", timeoutMs: 600_000, select: ["kept"],
+      category: "recorder", method: "inject_input", timeoutMs: 600_000, select: ["kept"],
       args: { editor:"already_routed", assetPath: "\\Game\\Take",
         timeoutMs: 200_000, select: ["dropped"], omit: ["kept.hidden"] },
     });
@@ -95,7 +95,7 @@ describe("micro calls use the session task registry", () => {
     expect(result.data).not.toHaveProperty("kept.hidden");
     expect(result.data).not.toHaveProperty("dropped");
     // Compare with the direct registry path, including the path-repair report.
-    const direct = await registry.create("pie.inject_input", ctx, {
+    const direct = await registry.create("recorder.inject_input", ctx, {
       assetPath: "\\Game\\Take", timeoutMs: 600_000, select: ["kept"], omit: ["kept.hidden"],
     });
     expect(withoutDuration(result)).toEqual(withoutDuration(await direct.run()));
@@ -108,8 +108,8 @@ describe("micro calls use the session task registry", () => {
     const { ctx } = context(answer);
     if (inFlow) ctx.taskReferenceContext = { steps: [] };
     const args = { assetPath: "/Game/Take", select: ["detail"] };
-    const micro = await registry.create("tools.call", ctx, { category: "pie", method: "inject_input", args });
-    const direct = await registry.create("pie.inject_input", ctx, args);
+    const micro = await registry.create("tools.call", ctx, { category: "recorder", method: "inject_input", args });
+    const direct = await registry.create("recorder.inject_input", ctx, args);
     const actual = await micro.run();
     const expected = await direct.run();
     expect(withoutDuration(actual)).toEqual(withoutDuration(expected));
@@ -122,13 +122,13 @@ describe("micro calls use the session task registry", () => {
     const { registry } = fixture();
     const { ctx } = context();
     const result: TaskResult = { success: false, data: { detail: "plugin detail" }, error: new Error("plugin refused"),
-      rollback: { taskName: "pie.undo", payload: { value: 1 } } };
+      rollback: { taskName: "recorder.undo", payload: { value: 1 } } };
     class PluginTask extends UeMcpTask {
-      get taskName() { return "pie.inject_input"; }
+      get taskName() { return "recorder.inject_input"; }
       async execute() { return result; }
     }
-    registry.register("pie.inject_input", PluginTask as unknown as TaskConstructor);
-    const task = await registry.create("tools.call", ctx, { category: "pie", method: "inject_input", args: {} });
+    registry.register("recorder.inject_input", PluginTask as unknown as TaskConstructor);
+    const task = await registry.create("tools.call", ctx, { category: "recorder", method: "inject_input", args: {} });
     expect(task).toBeInstanceOf(PluginTask);
     expect(await task.run()).toBe(result);
   });
@@ -145,7 +145,7 @@ describe("micro calls use the session task registry", () => {
     const runner = new FlowRunner({
       registry, context: ctx, tasks: {},
       flows: { test: FlowDefinitionSchema.parse({ steps: {
-        "1": { task: "tools.call", options: { category: "pie", method: "inject_input", args: { value: 7 } } },
+        "1": { task: "tools.call", options: { category: "recorder", method: "inject_input", args: { value: 7 } } },
       } }) },
     });
     const result = await runner.run({ flowName: "test", rollback_on_failure: true });
@@ -162,24 +162,24 @@ describe("micro calls use the session task registry", () => {
     const second = fixture();
     const a = context({ editor: "Alpha" });
     const b = context({ editor: "Beta" });
-    const options = { category: "pie", method: "inject_input", args: {} };
-    const task = await second.registry.create("tools.call", { ...b.ctx, getToolGraph: () => [second.pie] }, options);
+    const options = { category: "recorder", method: "inject_input", args: {} };
+    const task = await second.registry.create("tools.call", { ...b.ctx, getToolGraph: () => [second.recorder] }, options);
     expect((await task.run()).data).toEqual({ editor: "Beta" });
     expect(a.calls).toHaveLength(0);
     await expect(first.registry.create("tools.call", { ...a.ctx, getToolGraph: () => [] }, options))
-      .rejects.toThrow('Unknown category "pie"');
+      .rejects.toThrow('Unknown category "recorder"');
     expect(a.calls).toHaveLength(0);
   });
 
   it("refuses unknown actions and missing plugin registrations before dynamic task loading", async () => {
-    const { pie, registry } = fixture();
+    const { recorder, registry } = fixture();
     const { ctx } = context();
     for (const method of ["missing", "constructor", "../../outside"]) {
-      await expect(registry.create("tools.call", ctx, { category: "pie", method }))
+      await expect(registry.create("tools.call", ctx, { category: "recorder", method }))
         .rejects.toThrow("Unknown action");
     }
-    const missing = buildFlowRegistry([buildMicroGateway([pie]), pie]);
-    await expect(missing.create("tools.call", ctx, { category: "pie", method: "inject_input" }))
+    const missing = buildFlowRegistry([buildMicroGateway([recorder]), recorder]);
+    await expect(missing.create("tools.call", ctx, { category: "recorder", method: "inject_input" }))
       .rejects.toThrow("has no registered task");
   });
 

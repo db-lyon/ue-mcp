@@ -4516,6 +4516,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ExportActorFbx(const TSharedPtr<FJsonObje
 
 	FString AbsPath = OutputPath;
 	if (FPaths::IsRelative(AbsPath)) AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
+	AbsPath = FPaths::ConvertRelativePathToFull(AbsPath);
 	if (!AbsPath.EndsWith(TEXT(".fbx"))) AbsPath += TEXT(".fbx");
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsPath), /*Tree*/ true);
 

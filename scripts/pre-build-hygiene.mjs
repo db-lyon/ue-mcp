@@ -88,3 +88,32 @@ export function runHygiene({ binariesDir, sourceDir, deployedDir, remove = true,
 
   return { patches, orphans };
 }
+
+/**
+ * The test project's own UnrealBuildTool config, pinning a unity build.
+ *
+ * tests/ue_mcp is not at the root of a git checkout, so on an installed engine
+ * UnrealBuildTool falls back to the Perforce working set, which counts every
+ * writable file as checked out and compiles all of them outside unity files:
+ * 269 actions and about 8 minutes for a full build, against 40 actions and
+ * under 4 with unity. The file lives in the project, so build.js,
+ * build_project and the editor all build the same way, and a build from one
+ * stays incremental for the others.
+ */
+export const TEST_BUILD_CONFIGURATION = `<?xml version="1.0" encoding="utf-8" ?>
+<Configuration xmlns="https://www.unrealengine.com/BuildConfiguration">
+  <SourceFileWorkingSet>
+    <Provider>None</Provider>
+  </SourceFileWorkingSet>
+</Configuration>
+`;
+
+/** Write the project's BuildConfiguration.xml when it differs. Returns true when it wrote. */
+export function ensureTestBuildConfiguration(projectRoot) {
+  const file = path.join(projectRoot, "Saved", "UnrealBuildTool", "BuildConfiguration.xml");
+  const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+  if (current === TEST_BUILD_CONFIGURATION) return false;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, TEST_BUILD_CONFIGURATION);
+  return true;
+}

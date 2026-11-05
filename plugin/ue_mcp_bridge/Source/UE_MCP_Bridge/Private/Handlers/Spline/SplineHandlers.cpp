@@ -98,6 +98,7 @@ void FSplineHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("closedLoop"), EType::Boolean, TEXT("Close the spline")),
 		MCPParam::Optional(TEXT("loopPosition"), EType::Number, TEXT("Input key a closed loop closes at, with loopPositionOverride")),
 		MCPParam::Optional(TEXT("loopPositionOverride"), EType::Boolean, TEXT("Close at loopPosition rather than after the last key")),
+		MCPParam::Optional(TEXT("markEdited"), EType::Boolean, TEXT("Value for bSplineHasBeenEdited (default true), which keeps these points when the owner's construction script reruns; false clears it")),
 	}, OneActor);
 }
 
@@ -157,6 +158,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::ReadSpline(const TSharedPtr<FJsonObject>
 	Result->SetNumberField(TEXT("splinePointCount"), SplineComp->GetNumberOfSplinePoints());
 	Result->SetBoolField(TEXT("closedLoop"), SplineComp->IsClosedLoop());
 	Result->SetNumberField(TEXT("splineLength"), SplineComp->GetSplineLength());
+	Result->SetBoolField(TEXT("splineHasBeenEdited"), SplineComp->bSplineHasBeenEdited);
 
 	// #555: project a world point onto the spline. Returns the closest location,
 	// the input key, distance along the spline, and the perpendicular distance.
@@ -236,7 +238,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 {
 	MCPReadParamsAhead(Params, {
 		TEXT("actorLabel"), TEXT("actorPath"), TEXT("points"), TEXT("componentName"), TEXT("closedLoop"),
-		TEXT("loopPosition"), TEXT("loopPositionOverride"),
+		TEXT("loopPosition"), TEXT("loopPositionOverride"), TEXT("markEdited"),
 	});
 
 	FString ActorLabel;
@@ -247,6 +249,10 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	{
 		return MCPError(TEXT("Missing 'points' parameter (array of {x, y, z} objects)"));
 	}
+
+	bool bMarkEdited = true;
+	if (HasParam(Params, TEXT("markEdited")) && !TryGetBoolParam(Params, TEXT("markEdited"), bMarkEdited))
+		return MCPError(TEXT("markEdited must be a boolean"));
 
 	REQUIRE_EDITOR_WORLD(World);
 	if (HasParam(Params, TEXT("componentName")) && (!TryGetParam(Params, TEXT("componentName")).IsValid() || TryGetParam(Params, TEXT("componentName"))->Type != EJson::String))
@@ -416,6 +422,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 		PrevPoints.Add(MakeShared<FJsonValueObject>(PObj));
 	}
 	const bool bPrevClosedLoop = SplineComp->IsClosedLoop();
+	const bool bPrevEdited = SplineComp->bSplineHasBeenEdited;
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Set Spline Points")));
 	Actor->SetFlags(RF_Transactional);
@@ -450,6 +457,10 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 		SplineComp->SetClosedLoop(bHasClosedLoop ? bClosedLoop : bPrevClosedLoop, false);
 	}
 
+	// The flag the spline visualizer sets: a construction script rerun keeps edited points instead of the
+	// Blueprint's defaults, which is what reset splines built by an SCS or construction script.
+	SplineComp->bSplineHasBeenEdited = bMarkEdited;
+
 	SplineComp->UpdateSpline();
 	SplineComp->GetPackage()->MarkPackageDirty();
 
@@ -461,6 +472,9 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("splinePointCount"), SplineComp->GetNumberOfSplinePoints());
 	Result->SetBoolField(TEXT("closedLoop"), SplineComp->IsClosedLoop());
 	Result->SetNumberField(TEXT("splineLength"), SplineComp->GetSplineLength());
+	Result->SetBoolField(TEXT("splineHasBeenEdited"), SplineComp->bSplineHasBeenEdited);
+	Result->SetBoolField(TEXT("previousSplineHasBeenEdited"), bPrevEdited);
+	Result->SetStringField(TEXT("creationMethod"), StaticEnum<EComponentCreationMethod>()->GetNameStringByValue(static_cast<int64>(SplineComp->CreationMethod)));
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
@@ -470,6 +484,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	Payload->SetBoolField(TEXT("loopPositionOverride"), PreviousLoopOverride);
 	Payload->SetNumberField(TEXT("loopPosition"), PreviousLoopPosition);
 	Payload->SetStringField(TEXT("componentName"), SplineComp->GetName());
+	Payload->SetBoolField(TEXT("markEdited"), bPrevEdited);
 	MCPSetRollback(Result, TEXT("set_spline_points"), Payload);
 	Result->SetBoolField(TEXT("rollbackLossy"), true);
 	Result->SetStringField(TEXT("rollbackNote"), TEXT("MCP rollback preserves authored point positions, types, tangents, rotations, scales, keys and loop endpoint. Use editor Undo to restore any custom rotation/scale-curve interpolation and ancillary component state."));

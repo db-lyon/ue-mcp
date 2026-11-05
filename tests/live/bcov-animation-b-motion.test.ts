@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Motion matching content read back: mirror data table, pose search schema and
  * database (schema swap, clips, cost settings), and a chooser wired into a

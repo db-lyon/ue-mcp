@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Level instance, Nanite and skeletal mesh actions read back through another action: ISM instances added,
  * moved, snapped onto a floor and removed; Nanite settings on a duplicated cube; a spawned skeletal mesh

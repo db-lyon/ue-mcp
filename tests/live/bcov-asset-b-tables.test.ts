@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Data table, curve table and string table row edits, each read back through a
  * second action, plus a string table CSV import and a migrate to a scratch
@@ -192,7 +193,9 @@ describe("string table entries", () => {
 describe("migrate", () => {
   it("copies a saved package into another project's Content folder", async () => {
     await call("save_asset", { assetPath: ST, force: true });
-    // Migrate refuses while anything is unsaved, so start from a saved level.
+    // Migrate refuses while anything is unsaved, so start from a saved level: demo_go_home creates and saves
+    // MCP_Home on a fresh project, which does not check it in.
+    await call("demo_go_home", {});
     await call("load_level", { levelPath: "/Game/MCP_Home", discardUnsaved: true });
     await call("save_all_dirty", {});
     const content = join(scratch, "OtherProject", "Content");

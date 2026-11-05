@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Widget navigation rules written, cleared and restored, each read back through
  * audit_widget_focus_chain, which reports every explicit rule in the tree.

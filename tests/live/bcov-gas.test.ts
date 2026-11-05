@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * GAS authoring and live ASC actions, each read back through another action:
  * blueprint classification, ability tags, ASC wiring, attributes, loose tags

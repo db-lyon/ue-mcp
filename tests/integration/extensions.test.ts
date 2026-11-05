@@ -8,11 +8,13 @@ import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { covers } from "../helpers/covers.js";
 import { FakeHttp, plain, runCli, Sandbox, stopSandboxDaemons } from "./harness.js";
+import { projectKey } from "../../src/daemon/discovery.js";
 import {
   base,
   bearer,
   call,
   daemonEnv,
+  pidAlive,
   readDiscovery,
   readSse,
   signedBundle,
@@ -40,7 +42,7 @@ afterAll(async () => {
 const listJson = async () => {
   const r = await runCli(sb, ["extension", "list", "--json"]);
   expect(r.code, r.stderr).toBe(0);
-  return JSON.parse(r.stdout) as { ok: boolean; dir: string; extensions: Array<{ name: string; version: string }> };
+  return JSON.parse(r.stdout) as { ok: boolean; dir: string; extensions: Array<{ name: string; version: string; installed: string[] }> };
 };
 
 describe("ue-mcp extension", () => {
@@ -52,20 +54,20 @@ describe("ue-mcp extension", () => {
     expect(plain(text.stdout + text.stderr)).toContain(`no extensions in ${extDir}`);
   });
 
-  it("installs a verified zip into the extensions directory, and an upgrade replaces it", async () => {
+  it("installs a verified zip into its version's folder, and an upgrade no project records replaces it", async () => {
     covers("cli.extension.install");
     const v1 = zipExtension(work, { name: "probe", version: "0.1.0" });
     const r = await runCli(sb, ["extension", "install", v1.zip, "--sha256", v1.sha256, "--json"]);
     expect(r.code, r.stderr).toBe(0);
     expect(JSON.parse(r.stdout)).toMatchObject({ ok: true, name: "probe", version: "0.1.0", sha256: v1.sha256, daemonRestarted: false });
-    expect(JSON.parse(fs.readFileSync(path.join(extDir, "probe", "package.json"), "utf8")).version).toBe("0.1.0");
+    expect(JSON.parse(fs.readFileSync(path.join(extDir, "probe@0.1.0", "package.json"), "utf8")).version).toBe("0.1.0");
 
     const v2 = zipExtension(work, { name: "probe", version: "0.2.0" });
     const up = await runCli(sb, ["extension", "install", v2.zip]);
     expect(up.code, up.stderr).toBe(0);
     expect(plain(up.stdout + up.stderr)).toContain("installed probe 0.2.0");
-    expect(fs.readdirSync(extDir)).toEqual(["probe"]);
-    expect((await listJson()).extensions).toEqual([{ name: "probe", version: "0.2.0" }]);
+    expect(fs.readdirSync(extDir)).toEqual(["probe@0.2.0"]);
+    expect((await listJson()).extensions).toEqual([{ name: "probe", version: "0.2.0", installed: ["0.2.0"] }]);
   });
 
   it("refuses an archive whose digest does not match, in either flag spelling, and keeps what was installed", async () => {
@@ -77,10 +79,10 @@ describe("ue-mcp extension", () => {
       expect(r.code, `${args.join(" ")}: ${r.stdout}`).toBe(1);
       expect(JSON.parse(r.stdout)).toMatchObject({ ok: false, error: expect.stringMatching(/does not match the expected SHA-256/) });
     }
-    expect((await listJson()).extensions).toEqual([{ name: "probe", version: "0.2.0" }]);
+    expect((await listJson()).extensions).toEqual([{ name: "probe", version: "0.2.0", installed: ["0.2.0"] }]);
     const right = await runCli(sb, ["extension", "install", v3.zip, `--sha256=${v3.sha256}`, "--json"]);
     expect(right.code, right.stdout).toBe(0);
-    expect((await listJson()).extensions).toEqual([{ name: "probe", version: "0.3.0" }]);
+    expect((await listJson()).extensions).toEqual([{ name: "probe", version: "0.3.0", installed: ["0.3.0"] }]);
   });
 
   it("installs from a URL only with a digest, and from a release manifest that names one", async () => {
@@ -97,7 +99,7 @@ describe("ue-mcp extension", () => {
       expect(bare.code).toBe(1);
       expect(JSON.parse(bare.stdout).error).toMatch(/needs --sha256/);
       expect(fake.requests).toEqual([]);
-      expect(fs.existsSync(path.join(extDir, "remote"))).toBe(false);
+      expect(fs.existsSync(path.join(extDir, "remote@1.0.0"))).toBe(false);
 
       const viaManifest = await runCli(sb, ["extension", "install", `${fake.origin}/remote.json`, "--json"]);
       expect(viaManifest.code, viaManifest.stdout).toBe(0);
@@ -114,7 +116,7 @@ describe("ue-mcp extension", () => {
     const r = await runCli(sb, ["extension", "remove", "remote", "--json"]);
     expect(r.code, r.stderr).toBe(0);
     expect(JSON.parse(r.stdout)).toEqual({ ok: true, removed: true, daemonRestarted: false });
-    expect(fs.readdirSync(extDir)).toEqual(["probe"]);
+    expect(fs.readdirSync(extDir)).toEqual(["probe@0.3.0"]);
 
     const again = await runCli(sb, ["extension", "remove", "remote"]);
     expect(again.code).toBe(0);
@@ -131,7 +133,7 @@ describe("ue-mcp extension", () => {
       expect(JSON.parse(r.stdout)).toMatchObject({ ok: false, error: expect.stringMatching(/not an extension name/) });
     }
     expect(fs.readFileSync(path.join(userDir, "keep.txt"), "utf8")).toBe("user state");
-    expect(fs.readdirSync(extDir)).toEqual(["probe"]);
+    expect(fs.readdirSync(extDir)).toEqual(["probe@0.3.0"]);
   });
 });
 
@@ -234,6 +236,108 @@ describe("a daemon no extension trusts a key for", () => {
     } finally {
       await stopSandboxDaemons(lone);
       lone.cleanup();
+    }
+  });
+});
+
+describe("a daemon with an older extension than its newest UI bundle", () => {
+  it("serves the bundle at the loaded extension's version, never the newer one (#1618)", async () => {
+    covers("daemon.ui-bundles");
+    const older = new Sandbox();
+    try {
+      const project = older.makeProject("Older");
+      // A newer Studio once installed its UI; this one is the older extension that ships 1.0.0.
+      signedBundle(path.join(older.home, ".ue-mcp", "ui", "integ-ui-2.0.0"), "2.0.0", "newer-ui");
+      writeExtension(path.join(older.home, ".ue-mcp", "extensions"), {
+        name: "integ-ui", version: "1.0.0", bundle: { version: "1.0.0", marker: "matching-ui" },
+        activate: `api.route("GET", "/active", () => ({ body: api.ui.active() }));`,
+      });
+      const d = await startDaemonCli(older, project);
+      expect(fs.existsSync(path.join(older.home, ".ue-mcp", "ui", "integ-ui-2.0.0"))).toBe(true);
+      const page = await fetch(`${base(d)}/ui/`, { headers: bearer(d) });
+      expect(page.status).toBe(200);
+      const html = await page.text();
+      expect(html).toContain("matching-ui");
+      expect(html).not.toContain("newer-ui");
+      expect((await call(d, "GET", "/v1/health")).body).toMatchObject({ ui: "1.0.0", extensions: [{ name: "integ-ui", version: "1.0.0" }] });
+      expect((await call(d, "GET", "/v1/ext/integ-ui/active")).body).toMatchObject({ name: "integ-ui", version: "1.0.0" });
+    } finally {
+      await stopSandboxDaemons(older);
+      older.cleanup();
+    }
+  });
+});
+
+describe("projects on different versions of one extension (#1619)", () => {
+  const versionRoute = `api.route("GET", "/versions", () => ({ body: api.versions ? api.versions() : null }));`;
+
+  it("migrates the single install, keeps each project on its recorded version, and serves the matching UI", async () => {
+    covers("daemon.extension-versions", "cli.extension.use", "cli.extension.install", "daemon.ui-bundles");
+    const multi = new Sandbox();
+    try {
+      const ext = path.join(multi.home, ".ue-mcp", "extensions");
+      const work2 = multi.path("work");
+      fs.mkdirSync(work2, { recursive: true });
+      const a = multi.makeProject("Alpha");
+      const b = multi.makeProject("Bravo");
+      const c = multi.makeProject("Charlie");
+      // What an older ue-mcp installed: one unversioned folder every project loads.
+      writeExtension(ext, { name: "integ-ui", version: "1.0.0", bundle: { version: "1.0.0", marker: "ui-one" }, activate: versionRoute });
+      // Bravo ran it before, but its daemon has not started since this ue-mcp arrived.
+      fs.mkdirSync(path.join(multi.home, ".ue-mcp", "data", projectKey(path.dirname(b)), "integ-ui"), { recursive: true });
+
+      // Alpha's daemon migrates the install and records Alpha at it.
+      const da = await startDaemonCli(multi, a);
+      expect(fs.readdirSync(ext).sort()).toEqual(["integ-ui", "integ-ui@1.0.0"]);
+      expect((await call(da, "GET", "/v1/ext/integ-ui/versions")).body).toEqual({ loaded: "1.0.0", recorded: "1.0.0", installed: ["1.0.0"] });
+
+      // Charlie updates to 2.0.0. Alpha's record keeps 1.0.0 installed, and the unversioned folder is left for older daemons.
+      const v2 = zipExtension(work2, { name: "integ-ui", version: "2.0.0", bundle: { version: "2.0.0", marker: "ui-two" }, activate: versionRoute });
+      const r = await runCli(multi, ["extension", "install", v2.zip, c, "--json"], { env: daemonEnv() });
+      expect(r.code, r.stderr).toBe(0);
+      expect(JSON.parse(r.stdout)).toMatchObject({ ok: true, name: "integ-ui", version: "2.0.0" });
+      expect(fs.readdirSync(ext).sort()).toEqual(["integ-ui", "integ-ui@1.0.0", "integ-ui@2.0.0"]);
+      expect(JSON.parse(fs.readFileSync(path.join(ext, "integ-ui", "package.json"), "utf8")).version).toBe("1.0.0");
+
+      const dc = await startDaemonCli(multi, c);
+      expect((await call(dc, "GET", "/v1/ext/integ-ui/versions")).body).toEqual({ loaded: "2.0.0", recorded: "2.0.0", installed: ["1.0.0", "2.0.0"] });
+      expect(await (await fetch(`${base(dc)}/ui/`, { headers: bearer(dc) })).text()).toContain("ui-two");
+
+      // Alpha still runs 1.0.0 and its UI, and sees the newer version Charlie installed.
+      expect((await call(da, "GET", "/v1/ext/integ-ui/versions")).body).toEqual({ loaded: "1.0.0", recorded: "1.0.0", installed: ["1.0.0", "2.0.0"] });
+      const pageA = await (await fetch(`${base(da)}/ui/`, { headers: bearer(da) })).text();
+      expect(pageA).toContain("ui-one");
+      expect(pageA).not.toContain("ui-two");
+
+      // Bravo had used the unversioned copy, so it is recorded at 1.0.0, not moved to the newest.
+      const db = await startDaemonCli(multi, b);
+      expect((await call(db, "GET", "/v1/ext/integ-ui/versions")).body).toMatchObject({ loaded: "1.0.0", recorded: "1.0.0" });
+      // A project that never ran it starts on the newest.
+      const fresh = multi.makeProject("Delta");
+      const dd = await startDaemonCli(multi, fresh);
+      expect((await call(dd, "GET", "/v1/ext/integ-ui/versions")).body).toMatchObject({ loaded: "2.0.0", recorded: "2.0.0" });
+
+      // Alpha moves on only when asked, and its daemon restarts on the new version.
+      const use = await runCli(multi, ["extension", "use", "integ-ui", "2.0.0", a, "--json"], { env: daemonEnv() });
+      expect(use.code, use.stdout + use.stderr).toBe(0);
+      expect(JSON.parse(use.stdout)).toMatchObject({ ok: true, name: "integ-ui", version: "2.0.0", daemonRestarted: true });
+      // The old daemon has exited before the command returns, so the project never has two.
+      expect(pidAlive(da.pid)).toBe(false);
+      await waitGone(multi, a, da.pid);
+      const da2 = readDiscovery(multi, a)!;
+      expect((await call(da2, "GET", "/v1/ext/integ-ui/versions")).body).toMatchObject({ loaded: "2.0.0", recorded: "2.0.0" });
+      expect(await (await fetch(`${base(da2)}/ui/`, { headers: bearer(da2) })).text()).toContain("ui-two");
+      // Bravo did not move.
+      expect((await call(db, "GET", "/v1/ext/integ-ui/versions")).body).toMatchObject({ loaded: "1.0.0", recorded: "1.0.0" });
+
+      const list = await runCli(multi, ["extension", "list", b, "--json"]);
+      expect(JSON.parse(list.stdout).extensions).toEqual([{ name: "integ-ui", version: "1.0.0", installed: ["1.0.0", "2.0.0"], recorded: "1.0.0" }]);
+      const missing = await runCli(multi, ["extension", "use", "integ-ui", "9.9.9", b, "--json"], { env: daemonEnv() });
+      expect(missing.code).toBe(1);
+      expect(JSON.parse(missing.stdout).error).toMatch(/integ-ui 9\.9\.9 is not installed; installed: 1\.0\.0, 2\.0\.0/);
+    } finally {
+      await stopSandboxDaemons(multi);
+      multi.cleanup();
     }
   });
 });

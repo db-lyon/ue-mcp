@@ -141,6 +141,26 @@ describe("on_editor_loss", () => {
     expect((await runStep(guard, registry)).success).toBe(true);
   });
 
+  it("never waits before a step that runs without the editor, such as the build after a stop", async () => {
+    const bridge = new StubBridge();
+    bridge.returnAfterMs = -1;
+    const guard = new EditorLossGuard(bridge, {
+      policy: "resume",
+      timeoutMs: 60_000,
+      isReadOnly: () => false,
+      needsEditor: (name) => name !== "editor.stop_editor" && name !== "project.build",
+    });
+    const { registry } = registryOf([
+      (b) => { b.drop("rebuild"); return { success: true }; },
+      (b) => ({ success: !b.isConnected }),
+    ], bridge);
+    await runStep(guard, registry, "editor.stop_editor");
+    const started = Date.now();
+    const built = await runStep(guard, registry, "project.build");
+    expect(built.success).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
   it("a rollback step that hits a drop waits and runs once more", async () => {
     const bridge = new StubBridge();
     const guard = guardFor(bridge, "fail");

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Blackboard, BehaviorTree and EQS authoring, each write read back through the
  * matching read action: keys and parent chains, tree blackboard binding, graph

@@ -1,3 +1,4 @@
+// @live-editor render
 /** Captured camera provenance, using only the verified disposable test project. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";

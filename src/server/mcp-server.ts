@@ -9,8 +9,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
 import { composeServerInstructions } from "../surface/context/instructions.js";
 import { fullSurfaceDescription } from "../surface/context/lean-context.js";
-import { envelopeInputSchema, envelopeShape, usesArgsEnvelope } from "../surface/context/call-envelope.js";
+import { envelopeInputSchema, envelopeShape, strippingInputSchema, usesArgsEnvelope } from "../surface/context/call-envelope.js";
 import type { ToolDef } from "../core/types.js";
+import type { ContextStrategy } from "../surface/context/lean-context.js";
 import { withholdFromTool } from "../surface/registered-surface.js";
 import { packageVersion } from "../core/package-root.js";
 import { upgradeNoticeForClient } from "../core/version-check.js";
@@ -28,6 +29,29 @@ export interface RuntimeServer {
   server: McpServer;
   /** Stop following the runtime's surface changes. */
   dispose(): void;
+}
+
+/**
+ * How one tool is shown in tools/list: its description and input schema once
+ * the actions no running plugin has are withheld (6.4), or null when nothing
+ * of it is left. `envelope` says it is advertised as action + args (#1172).
+ * The server re-advertises through this, and a context projection reads it.
+ */
+export function advertisedPresentation(
+  tool: ToolDef,
+  envelope: boolean,
+  strategy: ContextStrategy,
+  have: ReadonlySet<string> | null,
+): { description: string; inputSchema: z.ZodTypeAny } | null {
+  const view = withholdFromTool(tool, have);
+  if (!view) return null;
+  if (envelope) {
+    return {
+      description: strategy === "full" ? fullSurfaceDescription(view) : view.description,
+      inputSchema: envelopeInputSchema(view),
+    };
+  }
+  return { description: view.description, inputSchema: strippingInputSchema(view.schema) };
 }
 
 export function createMcpServer(rt: Runtime): RuntimeServer {
@@ -60,6 +84,8 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
     dialogGuardFor: rt.dialogGuardFor,
     elicit: () => elicit,
     client: () => server.server.getClientVersion(),
+    // An MCP session's playtest runs follow `ue-mcp playtest mode`.
+    gatePlaytest: true,
   };
 
   // The upgrade notice leads this client's first tool response.
@@ -81,21 +107,18 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
   function advertise(tool: ToolDef, have = rt.advertisedHave()): void {
     const registration = registeredTools.get(tool.name);
     if (!registration) return;
-    const view = withholdFromTool(tool, have);
-    if (!view) {
+    const envelope = envelopeTools.has(tool.name);
+    const shown = advertisedPresentation(tool, envelope, contextStrategy, have);
+    if (!shown) {
       if (registration.enabled) registration.disable();
       return;
     }
     if (!registration.enabled) registration.enable();
-    const description = descriptionFor(view);
-    if (envelopeTools.has(tool.name)) {
-      // The SDK rebuilds a stripping object from the raw shape; put the
-      // pass-through one back so a flat call still reaches validation.
-      registration.update({ description, paramsSchema: envelopeShape(view) });
-      registration.inputSchema = envelopeInputSchema(view);
-    } else {
-      registration.update({ description, paramsSchema: view.schema });
-    }
+    const view = withholdFromTool(tool, have)!;
+    // The SDK rebuilds a stripping object from the raw shape; put the
+    // advertised one back so a flat call still reaches validation.
+    registration.update({ description: shown.description, paramsSchema: envelope ? envelopeShape(view) : view.schema });
+    registration.inputSchema = shown.inputSchema;
   }
 
   // ── Category tools, dispatched through each session's task registry ──
@@ -112,17 +135,17 @@ export function createMcpServer(rt: Runtime): RuntimeServer {
     };
     const registration = envelope
       ? server.registerTool(tool.name, { description, inputSchema: envelopeInputSchema(tool) }, callback as never)
-      : server.tool(tool.name, description, shape, callback as never);
+      : server.registerTool(tool.name, { description, inputSchema: strippingInputSchema(shape) }, callback as never);
     registeredTools.set(tool.name, registration);
   }
 
   // ── Flow tool ────────────────────────────────────────────────────
   const flowTool = rt.flowTool;
   const flowShape: Record<string, z.ZodType> = { ...flowTool.schema };
-  const flowRegistration = server.tool(flowTool.name, flowTool.description, flowShape, (rawParams) => {
+  const flowRegistration = server.registerTool(flowTool.name, { description: flowTool.description, inputSchema: strippingInputSchema(flowShape) }, ((rawParams: Record<string, unknown>) => {
     claimElicit();
     return withNotice(dispatchFlowCall(deps, flowTool, rt.baseCtx, rawParams)) as never;
-  });
+  }) as never);
   registeredTools.set(flowTool.name, flowRegistration);
 
   // Re-advertise whenever targeting or what the plugins registered changes.

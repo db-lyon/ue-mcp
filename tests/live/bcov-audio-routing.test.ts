@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Sound classes, submixes, effects, sends, attenuation, concurrency, mixes and
  * raw property writes, each read back through read_sound_routing or the asset

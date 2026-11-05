@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * IK Rig, IK Retargeter and Control Rig reads and edits, each read back: rig
  * mesh, retargeter rig assignment, retarget pose reset, Control Rig hierarchy

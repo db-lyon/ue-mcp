@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Navigation in the editor world: a navmesh built over a floor the test lays
  * down, point projection and path queries against it, a NavModifierVolume that

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * StateTree lifecycle: a bare tree from the generic asset route repaired with
  * set_schema, then compiled and validated, each read back through read.

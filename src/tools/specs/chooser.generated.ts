@@ -312,7 +312,7 @@ export const schema: Record<string, z.ZodType> = {
   from: z.string().optional().describe("Exact object path to replace (with to)"),
   fromPrefix: z.string().optional().describe("Path prefix to rewrite, e.g. /Game/Vendor/ (with toPrefix)"),
   index: z.number().int().optional().describe("Row index, 0-based"),
-  inputs: z.record(z.unknown()).optional().describe("Cell values keyed by column index (as string) or column name; same value format as cells"),
+  inputs: z.record(z.string(), z.unknown()).optional().describe("Cell values keyed by column index (as string) or column name; same value format as cells"),
   inputStruct: z.string().optional().describe("Parameter struct to bind the column input (e.g. EnumContextProperty, BoolContextProperty)"),
   name: z.string().optional().describe("New ChooserTable asset name"),
   onConflict: z.string().optional().describe("When the table exists: skip (default, report it) | error"),

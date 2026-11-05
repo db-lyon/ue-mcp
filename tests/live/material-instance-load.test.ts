@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * `material(list_parameters)` loading a MaterialInstanceConstant (#1183).
  *
@@ -12,7 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, TEST_PREFIX } from "../setup.js";
-import { REPO_ROOT } from "./server.js";
+import { TEST_PROJECT_DIR } from "../../scripts/bridge-target.mjs";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const FOLDER = `${TEST_PREFIX}/MatLoad1183`;
@@ -20,7 +21,7 @@ const SOURCE = `${FOLDER}/MI_Source1183`;
 const COPY = `${FOLDER}/MI_Copy1183`;
 // The copy's object keeps the source's name, and that object path is what deletes it.
 const COPY_OBJECT = `${COPY}.MI_Source1183`;
-const CONTENT_DIR = path.join(REPO_ROOT, "tests", "ue_mcp", "Content", ...FOLDER.replace(/^\/Game\//, "").split("/"));
+const CONTENT_DIR = path.join(TEST_PROJECT_DIR, "Content", ...FOLDER.replace(/^\/Game\//, "").split("/"));
 
 type Json = Record<string, unknown>;
 let bridge: EditorBridge;

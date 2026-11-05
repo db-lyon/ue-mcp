@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * A graph's input and output nodes are addressable by name in every PCG handler (#1324), against a real editor.
  *

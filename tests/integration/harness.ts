@@ -75,7 +75,8 @@ export class Sandbox {
   env(extra: Record<string, string | undefined> = {}): Record<string, string> {
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(process.env)) {
-      if (v === undefined || k.startsWith("UE_MCP_")) continue;
+      // A developer's model key would let a flow agent step reach the real API.
+      if (v === undefined || k.startsWith("UE_MCP_") || k.startsWith("ANTHROPIC_")) continue;
       // A developer's npm config would otherwise reach the fake's children.
       if (/^npm_/i.test(k)) continue;
       env[k] = v;
@@ -103,6 +104,7 @@ export class Sandbox {
       UE_MCP_GITHUB_OAUTH: DEAD_ORIGIN,
       UE_MCP_GITHUB_API: DEAD_ORIGIN,
       UE_MCP_NPM_REGISTRY: DEAD_ORIGIN,
+      ANTHROPIC_BASE_URL: DEAD_ORIGIN,
       UE_MCP_BINARIES: path.join(this.root, "no-binaries"),
       UE_MCP_PROTECTED_ENGINE_ROOTS: "",
       NPM_FAKE_LOG: this.npmLog,

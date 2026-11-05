@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * IK rig configuration and retargeting between two copies of the engine
  * tutorial mesh: configure_ik_rig read back through read_ik_rig, retarget pose

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * The motion matching content pipeline on the engine tutorial skeleton: a
  * mirror table, a schema and its channels, a database with a clip, its search

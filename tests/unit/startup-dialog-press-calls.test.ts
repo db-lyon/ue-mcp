@@ -59,6 +59,15 @@ describe("a dialog met during startup is named, never pressed", () => {
     expect(r.reason, "a startup dialog leaked the press call").not.toContain("respond_to_dialog");
   });
 
+  it("ignores a dialog the previous session left in its last snapshot", async () => {
+    const status = path.join(dir, "Saved", "UE_MCP_Bridge", "status.json");
+    const before = new Date(Date.now() - 4000);
+    fs.utimesSync(status, before, before);
+    const r = await waitForEditorReady(projectPath, dir, 2, { launchedAtMs: Date.now() });
+    expect(r.ready).toBe(false);
+    expect(r.reason ?? "").not.toContain("Restore Packages");
+  });
+
   it("drops the blank button the editor pads its list with", async () => {
     const r = await waitForEditorReady(projectPath, dir, 5);
     expect(r.reason).not.toMatch(/,\s*,/);

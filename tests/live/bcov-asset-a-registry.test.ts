@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Folders, the asset registry and asset hygiene, read back through list_assets
  * and the registry queries: create/delete folders, referencers and
@@ -6,7 +7,8 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import * as path from "node:path";
+import { TEST_PROJECT_DIR } from "../../scripts/bridge-target.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
@@ -18,7 +20,7 @@ const MOVED = `${DIR}/M_BCovParentMoved`;
 const NAMING_DIR = `${DIR}/Naming`;
 // A local collection holding the parent. The editor polls this folder each second,
 // and a collected asset always keeps a redirector at its old path when renamed.
-const COLLECTION_DIR = fileURLToPath(new URL("../ue_mcp/Saved/Collections/", import.meta.url));
+const COLLECTION_DIR = `${path.join(TEST_PROJECT_DIR, "Saved", "Collections")}${path.sep}`;
 const COLLECTION_FILE = `${COLLECTION_DIR}BCovAssetARegistry.collection`;
 
 type Json = Record<string, unknown>;

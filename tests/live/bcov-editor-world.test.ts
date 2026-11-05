@@ -1,3 +1,4 @@
+// @live-editor render
 /**
  * Editor-world actions read back from placed actors: object reflection and
  * function calls, undo/redo, the viewport (hit test, focus, realtime), bone

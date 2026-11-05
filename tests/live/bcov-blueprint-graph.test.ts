@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Blueprint graph editing read back through the graph readers: batch wiring,
  * disconnects, pin defaults, node positions and layout, refresh, T3D round

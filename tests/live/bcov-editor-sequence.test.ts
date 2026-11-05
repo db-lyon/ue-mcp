@@ -1,3 +1,4 @@
+// @live-editor render
 /**
  * Level Sequence editing and transport: tracks, keyframes and the playback
  * range read back through get_sequence_info and get_sequence_channel_keys,

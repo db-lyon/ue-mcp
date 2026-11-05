@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Level actor actions read back through another action: tags, folders, mobility, materials, component
  * properties, attachment, transforms and bounds, selection and editor visibility, batch placement and

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * `editor(open_asset)` on a map that is not the loaded one (#1422).
  *

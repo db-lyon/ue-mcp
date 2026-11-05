@@ -12,7 +12,7 @@ const ZOD_BY_TYPE = {
   number: "z.number()",
   integer: "z.number().int()",
   boolean: "z.boolean()",
-  object: "z.record(z.unknown())",
+  object: "z.record(z.string(), z.unknown())",
   array: "z.array(z.unknown())",
   vec3: "z.object({ x: z.number(), y: z.number(), z: z.number() })",
   rotator: "z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() })",
@@ -30,7 +30,7 @@ function baseExpression(type, name) {
 // never emits a `$ref`, and with no z.unknown() member, which converts to the
 // empty schema a client can read as "nothing validates" (#811).
 const ARG_SCALAR = "z.union([z.string(), z.number(), z.boolean(), z.null()])";
-const ARG_STRUCT = "z.object({}).passthrough()";
+const ARG_STRUCT = "z.object({}).passthrough().meta({ additionalProperties: true })";
 const ARG_VALUE = `z.union([${ARG_SCALAR}, ${ARG_STRUCT}, z.array(z.union([${ARG_SCALAR}, ${ARG_STRUCT}, z.array(${ARG_SCALAR})]))])`;
 const FORM_EXPRESSION = {
   argMap: `z.record(z.string(), ${ARG_VALUE})`,
@@ -48,7 +48,7 @@ function formsExpression(forms, name) {
     return expr;
   });
   if (members.length === 1) return members[0];
-  return `z.union([${members.join(", ")}], { errorMap: () => ({ message: ${JSON.stringify(formsMessage(name, forms))} }) })`;
+  return `z.union([${members.join(", ")}], { error: ${JSON.stringify(formsMessage(name, forms))} })`;
 }
 
 /** A scalar of one type with its enum or range applied. The written twin of ruledZod. */

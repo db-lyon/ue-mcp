@@ -4,6 +4,7 @@ import { parseHeader, collectFiles, findSourceRoots, resolveModuleDir } from "..
 import { listContent } from "../../codeintel/content-index.js";
 import { specBp } from "../specs/project.generated.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
+import { recordBeforeWrite } from "../../checkpoints/service.js";
 
 /**
  * Resolve a module name to its Source/<Module> directory, searching the project
@@ -173,7 +174,7 @@ export const sourceActions: Record<string, ActionSpec> = {
   list_files: {
     kind: "handler",
     effect: "read",
-    description: "List files on disk under a directory, optionally filtered by extension(s). Runs in the MCP server process (no editor round-trip). Params: directory (absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), recursive? (default false), maxResults? (default 1000) (#608)",
+    description: "List files on disk under a directory, optionally filtered by extension(s) and by name. Runs in the MCP server process (no editor round-trip). Params: directory (absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), namePattern? (case-insensitive substring of the file name; maxResults counts matches, so a name search over a large tree is not cut short by files that do not match), recursive? (default false), maxResults? (default 1000) (#608)",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const dirArg = p.directory as string;
@@ -185,22 +186,26 @@ export const sourceActions: Record<string, ActionSpec> = {
         .map((e) => String(e).replace(/^\./, "").toLowerCase());
       const recursive = (p.recursive as boolean) ?? false;
       const maxResults = (p.maxResults as number) ?? 1000;
+      const needle = typeof p.namePattern === "string" && p.namePattern !== "" ? p.namePattern.toLowerCase() : null;
       const results: Array<{ path: string; name: string; sizeBytes: number; ext: string }> = [];
+      // A further match past the cap is what makes the answer truncated, not reaching the cap.
+      let truncated = false;
       const walk = (dir: string): void => {
-        if (results.length >= maxResults) return;
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          if (results.length >= maxResults) return;
+          if (truncated) return;
           const full = path.join(dir, entry.name);
           if (entry.isDirectory()) { if (recursive) walk(full); continue; }
           const ext = path.extname(entry.name).replace(/^\./, "").toLowerCase();
           if (exts.length > 0 && !exts.includes(ext)) continue;
+          if (needle !== null && !entry.name.toLowerCase().includes(needle)) continue;
+          if (results.length >= maxResults) { truncated = true; return; }
           let sizeBytes = 0;
           try { sizeBytes = fs.statSync(full).size; } catch { /* race */ }
           results.push({ path: full, name: entry.name, sizeBytes, ext });
         }
       };
       walk(base);
-      return { directory: base, extensions: exts, recursive, count: results.length, files: results };
+      return { directory: base, extensions: exts, ...(needle !== null ? { namePattern: p.namePattern } : {}), recursive, count: results.length, truncated, files: results };
     },
   },
   // v0.7.13 - native C++ authoring. Bridge handlers wrap
@@ -240,6 +245,7 @@ export const sourceActions: Record<string, ActionSpec> = {
 
       const overwrote = fs.existsSync(resolved);
       fs.mkdirSync(path.dirname(resolved), { recursive: true });
+      recordBeforeWrite(ctx.session, resolved);
       fs.writeFileSync(resolved, content, "utf-8");
       return {
         path: resolved,
@@ -293,6 +299,7 @@ export const sourceActions: Record<string, ActionSpec> = {
 
       const overwrote = fs.existsSync(target);
       fs.mkdirSync(path.dirname(target), { recursive: true });
+      recordBeforeWrite(ctx.session, target);
       fs.writeFileSync(target, content, "utf-8");
       return {
         module: path.basename(moduleDir),
@@ -377,6 +384,7 @@ export const sourceActions: Record<string, ActionSpec> = {
         content = content.replace(ctorCloseRe, `${newBlock}$1`);
       }
 
+      recordBeforeWrite(ctx.session, buildCs);
       fs.writeFileSync(buildCs, content, "utf-8");
       return {
         status: "updated",
@@ -467,6 +475,7 @@ export const sourceActions: Record<string, ActionSpec> = {
         : `\n${access}:\n${indented}\n${lastAccess}:\n`;
 
       const updated = `${original.slice(0, closeIdx)}${insertion}${original.slice(closeIdx)}`;
+      recordBeforeWrite(ctx.session, resolved);
       fs.writeFileSync(resolved, updated, "utf-8");
       return {
         status: "added",

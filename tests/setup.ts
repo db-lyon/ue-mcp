@@ -85,7 +85,7 @@ export async function getBridgeFor(target: BridgeTarget = {}): Promise<EditorBri
     }
     _bridges.set(key, bridge);
     if (target.verifyTarget !== false && !_targetVerified) {
-      await verifyTestProjectTarget((method, params) => bridge.call(method, params));
+      await verifyTestProjectTarget((method, params, timeoutMs) => bridge.call(method, params, timeoutMs));
       _targetVerified = true;
     }
     return bridge;
@@ -144,6 +144,17 @@ export async function callBridge(
 }
 
 export const TEST_PREFIX = "/Game/MCPTest";
+
+/**
+ * Close the floating Project Settings, Content Browser and similar windows a
+ * test opened. Every editor saves them to one per-user layout and restores
+ * them at startup, so a test that leaves one open opens it in the developer's
+ * own editor next time. Returns the titles closed.
+ */
+export async function closeEditorTabWindows(bridge: EditorBridge): Promise<string[]> {
+  const { closeEditorTabWindows: close } = await import("../scripts/user-layout-guard.mjs");
+  return close(async (method: string, params: Record<string, unknown>) => (await callBridge(bridge, method, params)).result);
+}
 
 /** Safely extract an array field from an untyped bridge result. */
 export function resultArray(

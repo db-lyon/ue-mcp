@@ -2,6 +2,7 @@ import { deepMerge, type LoadedConfig } from "@db-lyon/flowkit";
 import { FlowConfigSchema, type FlowConfig } from "./schema.js";
 import { configLayerFiles, readConfigDoc, readGlobalConfigDoc, selectedOverlay } from "../config/ue-mcp-config.js";
 import type { ToolDef } from "../core/types.js";
+import { playtestFlow, playtestTasks } from "./playtest.js";
 
 /**
  * Build the defaults object from tool definitions.
@@ -37,7 +38,9 @@ export function buildDefaults(tools: ToolDef[]): Record<string, unknown> {
     description: "Run a shell command. Params: command, cwd?, timeout?",
   };
 
-  return { tasks, flows: defaultFlows() };
+  Object.assign(tasks, playtestTasks());
+
+  return { tasks, flows: { ...defaultFlows(), ...playtestFlow() } };
 }
 
 // Shorthand constants

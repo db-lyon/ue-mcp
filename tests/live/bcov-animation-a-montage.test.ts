@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Montage authoring on copies of the engine tutorial animations: creation,
  * appended segments, sections anchored to a segment, and the batch author,

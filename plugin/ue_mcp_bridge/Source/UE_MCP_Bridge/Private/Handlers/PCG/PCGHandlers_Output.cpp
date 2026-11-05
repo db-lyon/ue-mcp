@@ -12,8 +12,19 @@
 #include "Metadata/PCGAttributePropertySelector.h"
 #include "Metadata/Accessors/IPCGAttributeAccessor.h"
 #include "Metadata/Accessors/PCGAttributeAccessorHelpers.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "GameFramework/Actor.h"
+#include "UObject/UnrealType.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include <type_traits>
+
+// UPCGComponent::ForEachConstManagedResource and AreManagedResourcesAccessible are public from 5.7.
+// Older engines fall back to the components on the owner tagged as PCG generated.
+#define UE_MCP_HAS_PCG_MANAGED_RESOURCE_ITERATION (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
+#if UE_MCP_HAS_PCG_MANAGED_RESOURCE_ITERATION
+#include "PCGManagedResource.h"
+#endif
 
 #define UE_MCP_HAS_PCG_NODE_INSPECTION (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
 #if UE_MCP_HAS_PCG_NODE_INSPECTION
@@ -152,6 +163,100 @@ namespace
 		return Row;
 	}
 
+	/**
+	 * Every object reference a managed resource holds, read by reflection so the resource classes (one component,
+	 * a component list, spawned actors) need no per-engine API: soft or hard, alone or in an array or set.
+	 */
+	void MCPPCGCollectResourceRefs(const UObject* Resource, TFunctionRef<void(UObject*)> Take)
+	{
+		for (TFieldIterator<FProperty> It(Resource->GetClass()); It; ++It)
+		{
+			const void* Addr = It->ContainerPtrToValuePtr<void>(Resource);
+			if (const FObjectPropertyBase* Ref = CastField<FObjectPropertyBase>(*It))
+			{
+				Take(Ref->GetObjectPropertyValue(Addr));
+			}
+			else if (const FArrayProperty* Arr = CastField<FArrayProperty>(*It))
+			{
+				const FObjectPropertyBase* Inner = CastField<FObjectPropertyBase>(Arr->Inner);
+				FScriptArrayHelper Helper(Arr, Addr);
+				for (int32 i = 0; Inner && i < Helper.Num(); ++i) Take(Inner->GetObjectPropertyValue(Helper.GetRawPtr(i)));
+			}
+			else if (const FSetProperty* Set = CastField<FSetProperty>(*It))
+			{
+				const FObjectPropertyBase* Inner = CastField<FObjectPropertyBase>(Set->ElementProp);
+				FScriptSetHelper Helper(Set, Addr);
+				for (int32 i = 0; Inner && i < Helper.GetMaxIndex(); ++i)
+				{
+					if (Helper.IsValidIndex(i)) Take(Inner->GetObjectPropertyValue(Helper.GetElementPtr(i)));
+				}
+			}
+		}
+	}
+
+	/**
+	 * What the component spawned: its managed components (an ISM with its mesh and instance count) and actors, so a
+	 * graph whose output node receives nothing still shows what it built.
+	 */
+	void MCPPCGDescribeSpawned(UPCGComponent* Comp, const TSharedPtr<FJsonObject>& Row)
+	{
+		TArray<UActorComponent*> Components;
+		TArray<AActor*> Actors;
+		TSet<const UObject*> Seen;
+		AActor* Owner = Comp->GetOwner();
+		auto Take = [&](UObject* Obj)
+		{
+			if (!Obj || Obj == Comp || Obj == Owner || Seen.Contains(Obj)) return;
+			Seen.Add(Obj);
+			if (UActorComponent* AsComponent = Cast<UActorComponent>(Obj)) Components.Add(AsComponent);
+			else if (AActor* AsActor = Cast<AActor>(Obj)) Actors.Add(AsActor);
+		};
+		FString Source;
+#if UE_MCP_HAS_PCG_MANAGED_RESOURCE_ITERATION
+		if (Comp->AreManagedResourcesAccessible())
+		{
+			Source = TEXT("managedResources");
+			Comp->ForEachConstManagedResource([&](const UPCGManagedResource* Resource)
+			{
+				if (Resource) MCPPCGCollectResourceRefs(Resource, Take);
+			});
+		}
+#endif
+		if (Source.IsEmpty() && Owner)
+		{
+			// The tag PCG puts on what it generates (PCGHelpers::DefaultPCGTag).
+			Source = TEXT("generatedTag");
+			for (UActorComponent* Candidate : Owner->GetComponents())
+			{
+				if (Candidate && Candidate->ComponentTags.Contains(FName(TEXT("PCG Generated Component")))) Take(Candidate);
+			}
+		}
+
+		int64 TotalInstances = 0;
+		TArray<TSharedPtr<FJsonValue>> ComponentRows;
+		for (UActorComponent* Spawned : Components)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("name"), Spawned->GetName());
+			Entry->SetStringField(TEXT("class"), Spawned->GetClass()->GetName());
+			if (const AActor* SpawnedOwner = Spawned->GetOwner()) Entry->SetStringField(TEXT("owner"), SpawnedOwner->GetActorLabel());
+			if (const UInstancedStaticMeshComponent* ISM = Cast<UInstancedStaticMeshComponent>(Spawned))
+			{
+				const int32 Count = ISM->GetInstanceCount();
+				TotalInstances += Count;
+				Entry->SetNumberField(TEXT("instanceCount"), Count);
+				if (const UStaticMesh* Mesh = ISM->GetStaticMesh()) Entry->SetStringField(TEXT("mesh"), Mesh->GetPathName());
+			}
+			ComponentRows.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		TArray<TSharedPtr<FJsonValue>> ActorRows;
+		for (const AActor* Spawned : Actors) ActorRows.Add(MakeShared<FJsonValueString>(Spawned->GetActorLabel()));
+		Row->SetArrayField(TEXT("spawnedComponents"), ComponentRows);
+		Row->SetNumberField(TEXT("spawnedInstanceCount"), static_cast<double>(TotalInstances));
+		Row->SetArrayField(TEXT("spawnedActors"), ActorRows);
+		Row->SetStringField(TEXT("spawnedSource"), Source);
+	}
+
 	TArray<TSharedPtr<FJsonValue>> MCPPCGDescribeCollection(const FPCGDataCollection& Collection, const FString& Pin,
 		const TArray<FString>& Wanted, int32 Offset, int32 Limit)
 	{
@@ -215,6 +320,16 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadGeneratedOutput(const TSharedPtr<FJsonO
 		return Row;
 	};
 
+	double TotalSpawnedInstances = 0;
+	int32 TotalSpawnedComponents = 0;
+	// Spawners hand their points to nothing, so an empty data list beside spawned content is expected, not a fault.
+	auto NoteSpawnedWithoutData = [](const TSharedPtr<FJsonObject>& Row)
+	{
+		if (Row->GetArrayField(TEXT("data")).Num() == 0 && Row->GetArrayField(TEXT("spawnedComponents")).Num() > 0)
+		{
+			Row->SetStringField(TEXT("note"), TEXT("Nothing reached the graph's output node; what the graph spawned is in spawnedComponents and spawnedInstanceCount."));
+		}
+	};
 	for (UPCGComponent* Comp : Components)
 	{
 		if (NodeName.IsEmpty())
@@ -222,6 +337,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadGeneratedOutput(const TSharedPtr<FJsonO
 			TSharedPtr<FJsonObject> Row = Describe(Comp, false);
 			Row->SetStringField(TEXT("source"), TEXT("generated"));
 			Row->SetArrayField(TEXT("data"), MCPPCGDescribeCollection(Comp->GetGeneratedGraphOutput(), Pin, Wanted, Offset, Limit));
+			MCPPCGDescribeSpawned(Comp, Row);
+			NoteSpawnedWithoutData(Row);
+			TotalSpawnedInstances += Row->GetNumberField(TEXT("spawnedInstanceCount"));
+			TotalSpawnedComponents += Row->GetArrayField(TEXT("spawnedComponents")).Num();
 			Rows.Add(MakeShared<FJsonValueObject>(Row));
 			// A partitioned component's output lives on the local components the partition subsystem owns.
 			UPCGSubsystem* Subsystem = (bLocals && Comp->IsPartitioned()) ? UPCGSubsystem::GetInstance(Comp->GetWorld()) : nullptr;
@@ -233,6 +352,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadGeneratedOutput(const TSharedPtr<FJsonO
 					TSharedPtr<FJsonObject> LocalRow = Describe(Local, true);
 					LocalRow->SetStringField(TEXT("source"), TEXT("generated"));
 					LocalRow->SetArrayField(TEXT("data"), MCPPCGDescribeCollection(Local->GetGeneratedGraphOutput(), Pin, Wanted, Offset, Limit));
+					MCPPCGDescribeSpawned(Local, LocalRow);
+					NoteSpawnedWithoutData(LocalRow);
+					TotalSpawnedInstances += LocalRow->GetNumberField(TEXT("spawnedInstanceCount"));
+					TotalSpawnedComponents += LocalRow->GetArrayField(TEXT("spawnedComponents")).Num();
 					Rows.Add(MakeShared<FJsonValueObject>(LocalRow));
 				});
 			}
@@ -301,5 +424,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadGeneratedOutput(const TSharedPtr<FJsonO
 #endif
 	}
 	Result->SetArrayField(TEXT("components"), Rows);
+	if (NodeName.IsEmpty())
+	{
+		Result->SetNumberField(TEXT("spawnedComponentCount"), TotalSpawnedComponents);
+		Result->SetNumberField(TEXT("spawnedInstanceCount"), TotalSpawnedInstances);
+	}
 	return MCPResult(Result);
 }

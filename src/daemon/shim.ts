@@ -20,23 +20,60 @@ import { packageVersion } from "../core/package-root.js";
 import { DAEMON_API_VERSION, daemonDir, projectKey, readLiveDiscovery, type DaemonDiscovery } from "./discovery.js";
 import { isOlder } from "./daemon.js";
 import { liveStartLock } from "./start-lock.js";
+import { installedBridge } from "../editor/install-marker.js";
+import { NPX_AGE_GATE_OVERRIDE } from "../integrations/claude-code/mcp-client-config.js";
 
 const START_TIMEOUT_MS = 120_000;
 /** How long a spawned daemon has to take the start lock before it counts as dead. */
 const NO_STARTER_GRACE_MS = 20_000;
+/** The same through npx, which may download the version first. */
+const NPX_STARTER_GRACE_MS = 90_000;
 /** JSON-RPC error code for "the daemon went away while this request was out". */
 const DAEMON_LOST = -32001;
 
 /**
- * Start a detached daemon for the project and wait for it to publish itself.
- * No process is spawned while another starter holds the start lock.
+ * The version the project's daemon has to run. A binary bridge newer than this
+ * package came from a newer release, so the daemon is that release: a client
+ * launching `ue-mcp@latest` must not put a beta tester's project on the stable
+ * server. A source install, or one this package is not older than, runs here.
  */
-export async function ensureDaemon(uproject: string, wantVersion = packageVersion()): Promise<DaemonDiscovery> {
+export function daemonVersionFor(projectDir: string, own = packageVersion()): string {
+  const bridge = installedBridge(projectDir);
+  return bridge && bridge.kind === "binary" && isOlder(own, bridge.version) ? bridge.version : own;
+}
+
+/** npm's npx entry beside this node, which runs without a shell; null when it is not there. */
+export function npxCliPath(execPath = process.execPath, platform: NodeJS.Platform = process.platform): string | null {
+  const dir = path.dirname(execPath);
+  const candidate = platform === "win32"
+    ? path.join(dir, "node_modules", "npm", "bin", "npx-cli.js")
+    : path.join(dir, "..", "lib", "node_modules", "npm", "bin", "npx-cli.js");
+  return fs.existsSync(candidate) ? candidate : null;
+}
+
+/** The command line that runs the daemon: this entry, or `npx ue-mcp@<version>` for another version. */
+export function daemonCommand(uproject: string, version: string, npxCli: string | null = npxCliPath()): string[] | null {
+  if (version === packageVersion()) {
+    // The same entry this process was started with, so a dev checkout under tsx starts a dev daemon.
+    return [...process.execArgv, process.argv[1], "daemon", "run", path.resolve(uproject)];
+  }
+  if (!npxCli) return null;
+  return [npxCli, "-y", NPX_AGE_GATE_OVERRIDE, `ue-mcp@${version}`, "daemon", "run", path.resolve(uproject)];
+}
+
+/**
+ * Start a detached daemon for the project and wait for it to publish itself.
+ * No process is spawned while another starter holds the start lock. The daemon
+ * runs the version daemonVersionFor names; when that one cannot start, this
+ * package's own runs instead.
+ */
+export async function ensureDaemon(uproject: string, wantVersion?: string): Promise<DaemonDiscovery> {
   const projectDir = path.dirname(path.resolve(uproject));
   const logDir = daemonDir();
   const logFile = path.join(logDir, `${projectKey(projectDir)}.log`);
+  let want = wantVersion ?? daemonVersionFor(projectDir);
   const usable = (d: DaemonDiscovery | null): d is DaemonDiscovery =>
-    !!d && d.apiVersion === DAEMON_API_VERSION && !isOlder(d.version, wantVersion);
+    !!d && d.apiVersion === DAEMON_API_VERSION && !isOlder(d.version, want);
 
   let spawnedAt: number | null = null;
   let sawStarter = false;
@@ -49,31 +86,37 @@ export async function ensureDaemon(uproject: string, wantVersion = packageVersio
       if (starting) sawStarter = true;
       // The daemon we started is not starting any more and published nothing, or
       // never got as far as taking the lock: waiting out the timeout cannot help.
-      else if (sawStarter || Date.now() - spawnedAt > NO_STARTER_GRACE_MS) {
-        throw new Error(`daemon for ${projectDir} exited before it started; see ${logFile}`);
+      else if (sawStarter || Date.now() - spawnedAt > (want === packageVersion() ? NO_STARTER_GRACE_MS : NPX_STARTER_GRACE_MS)) {
+        if (want === packageVersion()) throw new Error(`daemon for ${projectDir} exited before it started; see ${logFile}`);
+        warn("shim", `ue-mcp ${want} did not start a daemon; starting this package's ${packageVersion()} instead`);
+        want = packageVersion();
+        spawnedAt = null;
+        sawStarter = false;
+        continue;
       }
     } else if (!starting) {
-      spawnDaemon(uproject, projectDir, logDir, logFile);
-      spawnedAt = Date.now();
+      if (!spawnDaemon(uproject, want, projectDir, logDir, logFile)) want = packageVersion();
+      else spawnedAt = Date.now();
     }
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`daemon for ${projectDir} did not start within ${START_TIMEOUT_MS / 1000}s; see ${logFile}`);
 }
 
-function spawnDaemon(uproject: string, projectDir: string, logDir: string, logFile: string): void {
-  // The daemon runs the same entry this process was started with, so a dev
-  // checkout under tsx starts a dev daemon and a published package its own.
+function spawnDaemon(uproject: string, version: string, projectDir: string, logDir: string, logFile: string): boolean {
+  const args = daemonCommand(uproject, version);
+  if (!args) {
+    warn("shim", `the bridge is ${version}, newer than this ue-mcp ${packageVersion()}, and npx was not found beside node to run it`);
+    return false;
+  }
   fs.mkdirSync(logDir, { recursive: true });
   const log = fs.openSync(logFile, "a");
   // Outside the shim's process tree: a client that ends the tree on reconnect
   // would otherwise end the daemon and the editor it launched (#1274).
-  spawnOutsideTree(process.execPath, [...process.execArgv, process.argv[1], "daemon", "run", path.resolve(uproject)], {
-    output: log,
-    env: process.env,
-  });
+  spawnOutsideTree(process.execPath, args, { output: log, env: process.env });
   fs.closeSync(log);
-  info("shim", `started daemon for ${path.basename(projectDir)}`);
+  info("shim", `started daemon ${version} for ${path.basename(projectDir)}`);
+  return true;
 }
 
 export async function runShim(uproject: string): Promise<void> {
@@ -109,6 +152,7 @@ export async function runShim(uproject: string): Promise<void> {
     ws?.close();
     process.exit(0);
   };
+  process.stdin.once("end", () => void stdio.close());
 
   const connect = async (replay: boolean): Promise<void> => {
     const d = await ensureDaemon(uproject);

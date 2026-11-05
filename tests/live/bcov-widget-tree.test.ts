@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Widget Blueprint authoring read back through the tree, property and audit
  * reads: creation and listing, tree edits, property and style writes, class

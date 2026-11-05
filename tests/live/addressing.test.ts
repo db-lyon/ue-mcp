@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Addressing, gating and the union surface against a real editor (#817, 7.3).
  *

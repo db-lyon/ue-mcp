@@ -1,3 +1,4 @@
+// @live-editor render
 /**
  * Imports and texture assets, read back through a second action: generic,
  * static mesh, skeletal mesh and animation imports from files the editor
@@ -9,7 +10,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
-import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
+import { callBridge, closeEditorTabWindows, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const DIR = "/Game/MCPTest/BCov/AssetA/Import";
@@ -91,6 +92,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
+  if (bridge) await closeEditorTabWindows(bridge);
   if (scratch) rmSync(scratch, { recursive: true, force: true });
   if (bridge) {
     await callBridge(bridge, "delete_folder", { path: DIR, force: true });

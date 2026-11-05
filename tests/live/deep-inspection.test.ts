@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * The three deep-inspection actions, against a real editor (#1004/#1006/#995).
  *

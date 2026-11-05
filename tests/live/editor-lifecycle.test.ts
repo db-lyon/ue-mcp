@@ -1,3 +1,4 @@
+// @live-editor lifecycle
 /**
  * The server-side lifecycle actions, against the real editor (#1223, items 4 and 5).
  *
@@ -61,6 +62,17 @@ async function runningEditor(): Promise<{ pid: number; startedAt?: string; port:
   return null;
 }
 
+/** Logs each step's duration, so a slow case says where its time went. */
+function phases(name: string): (step: string) => void {
+  const start = Date.now();
+  let last = start;
+  return (step) => {
+    const now = Date.now();
+    console.error(`[lifecycle] ${name}: ${step} ${((now - last) / 1000).toFixed(1)}s (total ${((now - start) / 1000).toFixed(1)}s)`);
+    last = now;
+  };
+}
+
 async function waitFor(what: string, check: () => Promise<boolean> | boolean, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -91,6 +103,17 @@ async function startEditor(): Promise<LiveCallResult> {
 async function ensureRunning(): Promise<void> {
   if (await runningEditor()) return;
   await startEditor();
+}
+
+/** Every advertised `epic_*` action, as category.action, read off tools/list. */
+async function advertisedEpicActions(): Promise<string[]> {
+  const tools = await server.listTools();
+  return tools.flatMap((t) => {
+    // The action enum is either the property's own or the first member of an anyOf beside a plain string.
+    const action = (t.inputSchema as { properties?: { action?: { enum?: string[]; anyOf?: Array<{ enum?: string[] }> } } }).properties?.action;
+    const actions = [...(action?.enum ?? []), ...(action?.anyOf ?? []).flatMap((m) => m.enum ?? [])];
+    return actions.filter((a) => a.startsWith("epic_")).map((a) => `${t.name}.${a}`);
+  }).sort();
 }
 
 /** Crash reporter pids, any project. Windows only. */
@@ -152,7 +175,11 @@ async function build(): Promise<Json> {
 describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --lifecycle)", () => {
   beforeAll(async () => {
     target = await liveTarget();
-    server = await LiveServer.start({ projects: [target.uproject] });
+    // The editors these cases start inherit the server's environment. Under the sandboxed profile they got
+    // an empty derived data cache of their own, and a relaunch took minutes rebuilding it. The server's own
+    // files stay redirected by LiveServer.
+    const profile = process.env.USERPROFILE ?? process.env.HOME ?? "";
+    server = await LiveServer.start({ projects: [target.uproject], env: profile ? { USERPROFILE: profile } : {} });
   }, 120_000);
 
   afterAll(async () => {
@@ -201,9 +228,35 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
     expect(again.alreadyRunning).toBe(true);
   }, START_TIMEOUT_S * 1000 * 2);
 
+  it("advertises the same epic_* actions after the editor restarts (#1538)", async () => {
+    await ensureRunning();
+    // The Python toolsets register after the bridge answers, so an editor the test before this one
+    // just launched has not advertised them yet; the snapshot is taken once they are in.
+    let before: string[] = [];
+    await waitFor("the late epic_* toolsets before the restart", async () => {
+      before = await advertisedEpicActions();
+      return before.some((a) => a.startsWith("level."));
+    }, 420_000).catch(() => undefined);
+    expect(before.filter((a) => a.startsWith("level.")).length, before.join(", ")).toBeGreaterThan(0);
+
+    await stopEditor();
+    const started = await startEditor();
+    expect(started.isError, started.text).toBe(false);
+
+    // Toolsets that register late arrive through a re-read, not on the handshake.
+    let after: string[] = [];
+    await waitFor("every epic_* action to come back", async () => {
+      after = await advertisedEpicActions();
+      return after.length === before.length;
+    }, 420_000).catch(() => undefined);
+    expect(after.filter((a) => !before.includes(a))).toEqual([]);
+    expect(before.filter((a) => !after.includes(a))).toEqual([]);
+  }, START_TIMEOUT_S * 1000 * 2 + 2 * 420_000);
+
   it.skipIf(!WINDOWS)(
     "stop_editor after a real crash ends the crash reporter, and the build that follows links (#1221)",
     async () => {
+      const phase = phases("crash");
       const before = await runningEditor();
       expect(before, "no editor is running on tests/ue_mcp").toBeTruthy();
       const reportersBefore = new Set(crashReporterPids());
@@ -211,6 +264,7 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
       // The engine's own crash command. The call cannot return: the editor is gone.
       await server.call("editor", { action: "execute_command", command: "debug crash" }).catch(() => undefined);
       await waitFor(`editor pid ${before!.pid} to die`, () => !isPidAlive(before!.pid), 180_000);
+      phase("crash until the editor process exited");
       // The reporter is either the companion launched with the editor to watch it, or one the crash started.
       const reporterFor = (): number | undefined =>
         crashReportersWatching(before!.pid)[0] ?? crashReporterPids().find((pid) => !reportersBefore.has(pid));
@@ -220,23 +274,28 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
         120_000,
       );
       const reporter = reporterFor()!;
+      phase("crash reporter found");
 
       const stopped = await stopEditor();
+      phase("stop_editor after the crash");
       expect(stopped.alreadyStopped, JSON.stringify(stopped)).toBe(true);
       const cleanup = stopped.crashReporters as { ended?: Array<{ pid: number; reason: string }>; failed?: unknown[] };
       expect(cleanup, "stop_editor reported no crash reporter cleanup").toBeTruthy();
       expect(cleanup.ended?.map((e) => e.pid)).toContain(reporter);
       expect(cleanup.failed ?? []).toEqual([]);
       await waitFor(`crash reporter ${reporter} to exit`, () => !isPidAlive(reporter), 60_000);
+      phase("crash reporter exited");
 
       // The regression: with the reporter gone the link can write the module DLL.
       forceRelink();
       const built = await build();
       expect(built.success, String(built.message ?? JSON.stringify(built))).toBe(true);
       expect(built.lockedOutputs).toBeUndefined();
+      phase("build");
 
       const started = body(await startEditor());
       expect(started.success, JSON.stringify(started)).toBe(true);
+      phase("start_editor");
     },
     BUILD_TIMEOUT_MS + START_TIMEOUT_S * 1000 + 600_000,
   );
@@ -300,6 +359,7 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
   it(
     "the rebuild flow stops, builds and relaunches the editor in one run",
     async () => {
+      const phase = phases("rebuild flow");
       await ensureRunning();
       const before = await runningEditor();
       expect(before).toBeTruthy();
@@ -311,6 +371,7 @@ describe.skipIf(!ENABLED)("editor lifecycle (opt-in: npm run test:live -- --life
         timeoutMs: BUILD_TIMEOUT_MS + START_TIMEOUT_S * 1000,
       });
       expect(run.isError, run.text).toBe(false);
+      phase("flow run (save, stop, build, start)");
 
       const after = await runningEditor();
       expect(after, "no editor answers after the rebuild flow").toBeTruthy();

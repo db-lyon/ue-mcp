@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Blueprint components and class defaults, each write read back: SCS add,
  * remove and reparent, component properties and materials, capsule size, tick

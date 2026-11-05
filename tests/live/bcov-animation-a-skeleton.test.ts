@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Skeleton and skeletal mesh edits on a copy of the engine's SkeletalCube
  * with its own skeleton: virtual bones, a committed hierarchy edit, mesh and

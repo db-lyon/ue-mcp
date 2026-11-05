@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * StateTree runtime actions against a tree running on a component in PIE:
  * reading the active state, sending an event a transition consumes, and

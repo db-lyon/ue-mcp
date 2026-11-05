@@ -1,5 +1,11 @@
 ue-mcp:
   version: 1
+  # Test editors open no IDE, whatever a case or a dialog answer asks for. start_editor
+  # and restart_editor pass these; the lifecycle cases and the rebuild flow go through them.
+  editor:
+    launchArgs:
+      - "-ini:EditorSettings:[/Script/SourceCodeAccess.SourceCodeAccessSettings]:PreferredAccessor=NullSourceCodeAccessor"
+      - "-ini:EditorSettings:[/Script/UnrealEd.EditorPerformanceSettings]:bThrottleCPUWhenNotForeground=False"
 
 # Fixture for the live tests (npm run test:live), which is the only thing
 # that runs this flow. tests/ue_mcp is the one project that suite is allowed to

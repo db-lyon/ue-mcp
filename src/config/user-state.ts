@@ -37,6 +37,10 @@ interface ProjectState {
    *  is: one editor can be a long unattended run while the user sits in front
    *  of another. */
   dialog?: { mode?: DialogMode };
+  /** Per-project playtest mode: who starts playtest runs in this project. */
+  playtest?: { mode?: PlaytestMode };
+  /** The daemon extension version this project loads, by extension name (#1619). */
+  extensions?: Record<string, string>;
 }
 
 export type FeedbackMode = "interactive" | "auto-approve" | "defer";
@@ -64,6 +68,13 @@ export type FeedbackMode = "interactive" | "auto-approve" | "defer";
  */
 export type DialogMode = "interactive" | "auto" | "defer";
 
+/**
+ * Who starts playtest runs (pie script_run and script_replay): a person
+ * (manual) or an agent (automatic). Unset leaves it to each client; see
+ * playtest-mode.ts for what manual enforces.
+ */
+export type PlaytestMode = "manual" | "automatic";
+
 interface Preferences {
   /** Per-user, per-device feedback approval mode. Set via
    *  `npx ue-mcp feedback mode <value>`. NOT in project yaml because the
@@ -74,6 +85,8 @@ interface Preferences {
    *  same reason: whether a person is at the keyboard to answer a modal is a
    *  property of the machine and the session, not of the project. */
   dialog?: { mode?: DialogMode };
+  /** Per-user, per-device playtest mode, for the same reason. */
+  playtest?: { mode?: PlaytestMode };
 }
 
 interface UserState {
@@ -223,6 +236,7 @@ function writeState(state: UserState): void {
       }
       if (proj.feedback && proj.feedback.mode === undefined) delete proj.feedback;
       if (proj.dialog && proj.dialog.mode === undefined) delete proj.dialog;
+      if (proj.playtest && proj.playtest.mode === undefined) delete proj.playtest;
       if (Object.keys(proj).length === 0) {
         delete state.projects[key];
       }
@@ -236,6 +250,8 @@ function writeState(state: UserState): void {
     if (fb && fb.mode === undefined) delete state.preferences.feedback;
     const dlg = state.preferences.dialog;
     if (dlg && dlg.mode === undefined) delete state.preferences.dialog;
+    const pt = state.preferences.playtest;
+    if (pt && pt.mode === undefined) delete state.preferences.playtest;
     if (Object.keys(state.preferences).length === 0) {
       delete state.preferences;
     }
@@ -323,8 +339,12 @@ function mergeProjectState(base: ProjectState, extra: ProjectState, extraWins: b
   const second = extraWins ? base : extra;
   const feedback = first.feedback?.mode !== undefined ? first.feedback : second.feedback;
   const dialog = first.dialog?.mode !== undefined ? first.dialog : second.dialog;
+  const playtest = first.playtest?.mode !== undefined ? first.playtest : second.playtest;
   if (feedback) merged.feedback = feedback;
   if (dialog) merged.dialog = dialog;
+  if (playtest) merged.playtest = playtest;
+  const extensions = { ...second.extensions, ...first.extensions };
+  if (Object.keys(extensions).length > 0) merged.extensions = extensions;
   return merged;
 }
 
@@ -529,6 +549,97 @@ export function setDialogMode(mode: DialogMode | undefined, projectRoot?: string
       state.preferences.dialog.mode = value;
     }
     writeState(state);
+  });
+}
+
+/** A stored playtest mode, trimmed and case-folded like the other modes. */
+function asPlaytestMode(mode: unknown): PlaytestMode | undefined {
+  const named = typeof mode === "string" ? mode.trim().toLowerCase() : mode;
+  return named === "manual" || named === "automatic" ? named : undefined;
+}
+
+/** The playtest mode each scope holds, without the fallback. */
+export function getPlaytestModeScopes(projectRoot?: string | null): {
+  project?: PlaytestMode;
+  user?: PlaytestMode;
+} {
+  const state = readState();
+  return {
+    project: projectRoot
+      ? asPlaytestMode(state.projects?.[projectKey(projectRoot)]?.playtest?.mode)
+      : undefined,
+    user: asPlaytestMode(state.preferences?.playtest?.mode),
+  };
+}
+
+/** Set or clear the playtest mode, per project or per user. Pass undefined to clear. */
+export function setPlaytestMode(mode: PlaytestMode | undefined, projectRoot?: string | null): void {
+  const value = mode !== undefined ? asPlaytestMode(mode) ?? mode : undefined;
+  withStateLock(() => {
+    const state = readState();
+    if (projectRoot) {
+      const key = projectKey(projectRoot);
+      if (!state.projects) state.projects = {};
+      if (!state.projects[key]) state.projects[key] = {};
+      if (value === undefined) delete state.projects[key].playtest;
+      else state.projects[key].playtest = { mode: value };
+      writeState(state);
+      return;
+    }
+    if (!state.preferences) state.preferences = {};
+    if (!state.preferences.playtest) state.preferences.playtest = {};
+    if (value === undefined) delete state.preferences.playtest.mode;
+    else state.preferences.playtest.mode = value;
+    writeState(state);
+  });
+}
+
+/** The version of extension `name` this project records, or null. */
+export function getProjectExtensionVersion(projectRoot: string, name: string): string | null {
+  const v = readState().projects?.[projectKey(projectRoot)]?.extensions?.[name];
+  return typeof v === "string" && v ? v : null;
+}
+
+/** Record the version of extension `name` this project loads. Pass undefined to clear it. */
+export function setProjectExtensionVersion(projectRoot: string, name: string, version: string | undefined): void {
+  withStateLock(() => {
+    const state = readState();
+    const key = projectKey(projectRoot);
+    if (!state.projects) state.projects = {};
+    if (!state.projects[key]) state.projects[key] = {};
+    const project = state.projects[key];
+    const extensions = { ...project.extensions };
+    if (version === undefined) delete extensions[name];
+    else extensions[name] = version;
+    if (Object.keys(extensions).length > 0) project.extensions = extensions;
+    else delete project.extensions;
+    writeState(state);
+  });
+}
+
+/** Every version of extension `name` some project records. */
+export function recordedExtensionVersions(name: string): Set<string> {
+  const out = new Set<string>();
+  for (const project of Object.values(readState().projects ?? {})) {
+    const v = project?.extensions?.[name];
+    if (typeof v === "string" && v) out.add(v);
+  }
+  return out;
+}
+
+/** Forget extension `name` in every project, when it is removed from the machine. */
+export function clearExtensionRecords(name: string): void {
+  withStateLock(() => {
+    const state = readState();
+    let changed = false;
+    for (const project of Object.values(state.projects ?? {})) {
+      if (project?.extensions && name in project.extensions) {
+        delete project.extensions[name];
+        if (Object.keys(project.extensions).length === 0) delete project.extensions;
+        changed = true;
+      }
+    }
+    if (changed) writeState(state);
   });
 }
 

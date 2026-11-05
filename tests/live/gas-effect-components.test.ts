@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * GameplayEffect duration policy, components and granted tags (#1423).
  *

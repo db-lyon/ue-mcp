@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * StateTree state authoring: the state hierarchy, state properties, the colour
  * palette, links, moves, state and root parameters and utility considerations,

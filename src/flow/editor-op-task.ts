@@ -17,6 +17,9 @@ const STEPS: Record<EditorOperation, string[]> = {
   rebuild: ["editor.stop_editor", "project.build", "editor.start_editor"],
 };
 
+/** Task names of the operations above, which manage the editor rather than call it. */
+export const EDITOR_OPERATION_TASKS: ReadonlySet<string> = new Set(Object.keys(STEPS).map((op) => `editor.${op}`));
+
 export function editorOperationTask(op: EditorOperation): TaskConstructor {
   return class EditorOperationTask extends BaseTask {
     protected declare readonly ctx: FlowContext;

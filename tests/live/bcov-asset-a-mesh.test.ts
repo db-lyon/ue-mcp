@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Static mesh reads and geometry edits on copies of the engine's basic shapes,
  * each edit read back through get_mesh_geometry, get_mesh_bounds,

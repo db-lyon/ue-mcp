@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Audio import, PCM readback, sound listing, ambient sound actors and SoundCue
  * graph editing, each read back through another action. The SoundWave is

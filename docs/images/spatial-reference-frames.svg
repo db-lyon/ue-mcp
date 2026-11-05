@@ -54,7 +54,7 @@
   <g transform="translate(80 535)" filter="url(#shadow)">
     <rect width="700" height="320" rx="22" fill="#14283f" stroke="#334155" stroke-width="2"/>
     <text x="30" y="46" fill="#fbbf24" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700">PARENT</text>
-    <text x="30" y="78" fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="18">Follows the attachment parent or socket chain.</text>
+    <text x="30" y="78" fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="18">Follows the attachment parent component.</text>
     <g transform="translate(235 205) rotate(25)">
       <rect x="-105" y="-38" width="210" height="76" rx="18" fill="#475569" stroke="#cbd5e1" stroke-width="2"/>
       <circle cx="86" cy="0" r="11" fill="#fbbf24"/>
@@ -62,7 +62,7 @@
       <line x1="86" y1="0" x2="86" y2="-98" stroke="#34d399" stroke-width="6" marker-end="url(#greenArrow)"/>
     </g>
     <path d="M475,134 C520,116 565,142 590,185 C612,225 586,267 540,272 C494,277 458,240 463,198 Z" fill="#7c3aed" stroke="#c4b5fd" stroke-width="2"/>
-    <text x="444" y="302" fill="#cbd5e1" font-family="Segoe UI, Arial" font-size="17">Socket-aligned adjustment</text>
+    <text x="444" y="302" fill="#cbd5e1" font-family="Segoe UI, Arial" font-size="17">Parent-aligned adjustment</text>
   </g>
 
   <g transform="translate(820 535)" filter="url(#shadow)">

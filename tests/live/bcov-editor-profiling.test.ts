@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Profiling: an Insights trace written to a scratch file (start, status,
  * channels, pause, regions, bookmarks, stop), a deliberate hitch, and a
@@ -88,7 +89,13 @@ describe("an Insights trace", () => {
       expect(stopped.wasTracing).toBe(true);
       expect(stopped.stopped).toBe(true);
     }
-    expect((await call("get_insights_trace_status", {})).tracing).toBe(false);
+    // The trace writer closes on its own thread, so the status follows the stop shortly after.
+    let tracing = (await call("get_insights_trace_status", {})).tracing;
+    for (let i = 0; i < 100 && tracing !== false; i++) {
+      await sleep(50);
+      tracing = (await call("get_insights_trace_status", {})).tracing;
+    }
+    expect(tracing).toBe(false);
     expect(fs.existsSync(file)).toBe(true);
     expect(fs.statSync(file).size).toBeGreaterThan(0);
   }, 120_000);

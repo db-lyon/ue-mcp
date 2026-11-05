@@ -5,11 +5,20 @@ import { warn as logWarn } from "../../core/log.js";
 export type McpClientConfigFormat = "json" | "toml";
 
 /**
+ * Lifts npm's release-age gate for this one launch. npx ignores
+ * `min-release-age-exclude` (npm/cli#9765), so without it a release younger
+ * than the window is refused even when ue-mcp is excluded (#1510). The `=`
+ * form matters: npm before 11.10 does not know the key and ignores it, but
+ * would read a separate `0` as the package to run.
+ */
+export const NPX_AGE_GATE_OVERRIDE = "--min-release-age=0";
+
+/**
  * How every MCP client entry launches the server. `-y` plus `@latest` makes
  * npx fetch the current release on each start, so a stale local copy cannot
  * shadow it. doctor flags any entry that launches it another way.
  */
-export const UE_MCP_LAUNCH = "npx -y ue-mcp@latest";
+export const UE_MCP_LAUNCH = `npx -y ${NPX_AGE_GATE_OVERRIDE} ue-mcp@latest`;
 
 /**
  * How a written entry launches the server. `pin` names an exact version, so the
@@ -27,7 +36,17 @@ export function ueMcpPackageSpec(launch: ServerLaunch = {}): string {
 }
 
 export function ueMcpServerArgs(uprojectPath: string, launch: ServerLaunch = {}): string[] {
-  return ["-y", ueMcpPackageSpec(launch), toMcpPath(uprojectPath)];
+  return ["-y", NPX_AGE_GATE_OVERRIDE, ueMcpPackageSpec(launch), toMcpPath(uprojectPath)];
+}
+
+/** Whether npx args lift the release-age gate, in the `=` form or as a separate value. */
+export function liftsAgeGate(args: readonly string[]): boolean {
+  return args.some((a, i) => a === NPX_AGE_GATE_OVERRIDE || (a === "--min-release-age" && args[i + 1] === "0"));
+}
+
+/** Whether a client entry's command is npx, by name or by path. */
+export function isNpxCommand(command: string | null): boolean {
+  return !!command && /(^|[\\/])npx(\.cmd|\.exe)?$/i.test(command.trim());
 }
 
 /** The version a launch spec pins, or null for `@latest`, a tag, or no spec. */
@@ -125,13 +144,15 @@ export interface UeMcpEntry {
   command: string | null;
   /** The .uproject the entry serves, when it names one. */
   project: string | null;
+  /** The entry's arguments as written. */
+  args: string[];
 }
 
-const NO_ENTRY: UeMcpEntry = { configured: false, pinned: null, command: null, project: null };
+const NO_ENTRY: UeMcpEntry = { configured: false, pinned: null, command: null, project: null, args: [] };
 
 function entryFromArgs(command: string | null, args: string[]): UeMcpEntry {
   const project = [...args].reverse().find((a) => /\.uproject$/i.test(a)) ?? null;
-  return { configured: true, pinned: pinnedVersionOf(args), command, project };
+  return { configured: true, pinned: pinnedVersionOf(args), command, project, args };
 }
 
 /** The ue-mcp entry in a client's config: whether there is one, its pin, command and project. */
@@ -173,6 +194,40 @@ export function removeUeMcpEntry(client: Pick<McpClient, "configPath" | "format"
   delete parsed.mcpServers["ue-mcp"];
   fs.writeFileSync(client.configPath, JSON.stringify(parsed, null, 2));
   return true;
+}
+
+/**
+ * Insert NPX_AGE_GATE_OVERRIDE before the ue-mcp package spec in a client's
+ * entry, leaving its command, spec and projects as they are. True when the
+ * config changed.
+ */
+export function liftAgeGateInEntry(client: Pick<McpClient, "configPath" | "format">): boolean {
+  if (!fs.existsSync(client.configPath)) return false;
+  const raw = fs.readFileSync(client.configPath, "utf-8");
+  const isSpec = (a: string) => a === "ue-mcp" || a.startsWith("ue-mcp@");
+  if (client.format === "json") {
+    const parsed = JSON.parse(raw) as { mcpServers?: Record<string, { args?: unknown[] }> };
+    const args = parsed.mcpServers?.["ue-mcp"]?.args;
+    if (!Array.isArray(args) || liftsAgeGate(args.map(String))) return false;
+    const at = args.findIndex((a) => typeof a === "string" && isSpec(a));
+    if (at < 0) return false;
+    args.splice(at, 0, NPX_AGE_GATE_OVERRIDE);
+    fs.writeFileSync(client.configPath, JSON.stringify(parsed, null, 2));
+    return true;
+  }
+  const lines = raw.split(/\r?\n/);
+  const start = lines.findIndex((l) => l.trim() === "[mcp_servers.ue-mcp]");
+  if (start < 0) return false;
+  for (let i = start + 1; i < lines.length && !/^\s*\[/.test(lines[i]); i++) {
+    if (!/^\s*args\s*=/.test(lines[i])) continue;
+    if (lines[i].includes(tomlString(NPX_AGE_GATE_OVERRIDE))) return false;
+    const next = lines[i].replace(/"ue-mcp(@[^"]*)?"/, (spec) => `${tomlString(NPX_AGE_GATE_OVERRIDE)}, ${spec}`);
+    if (next === lines[i]) return false;
+    lines[i] = next;
+    fs.writeFileSync(client.configPath, lines.join(raw.includes("\r\n") ? "\r\n" : "\n"));
+    return true;
+  }
+  return false;
 }
 
 export function writeMcpConfig(client: McpClient, uprojectPath: string, launch: ServerLaunch = {}): void {

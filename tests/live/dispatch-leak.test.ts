@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Per-path dispatch and leak assertions against a real editor (#817, 7.3).
  *

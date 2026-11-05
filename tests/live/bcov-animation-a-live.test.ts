@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Live skeletal reads on a tutorial mesh actor the test spawns at a known
  * location: the bone list, one bone's transform, and the evaluated pose.

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * The Fab actions that work without an account: the local cache readers,
  * cross-checked against each other, and importing a local file into a content

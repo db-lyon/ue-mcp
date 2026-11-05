@@ -20,6 +20,7 @@ import {
 } from "./engine-observer.js";
 import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "../bridge/editor-target.js";
 import { oneLine } from "./dialog-guard.js";
+import { prepareBridgeForLaunch } from "./bridge-update.js";
 import type { ProgressDisplay, ProgressFn } from "../core/types.js";
 import { findUProject } from "../config/uproject-path.js";
 import { readEnv } from "../core/env.js";
@@ -188,6 +189,8 @@ export async function waitForEditorReady(
     openDisplay?: (title: string) => ProgressDisplay;
     onProgress?: ProgressFn;
     launchedAtMs?: number;
+    /** Ends the wait early, for a caller that has its own verdict (the process exited). */
+    signal?: AbortSignal;
   } = {},
 ): Promise<ReadyResult> {
   const startTime = Date.now();
@@ -216,6 +219,9 @@ export async function waitForEditorReady(
   };
 
   while (Date.now() - startTime < maxWaitMs) {
+    if (opts.signal?.aborted) {
+      return finish({ ready: false, elapsedSeconds: elapsed(), timeline, reason: "the wait was cancelled" });
+    }
     const snapshot = readEngineSnapshot(projectPath);
     const logState = readLogState(projectPath);
 
@@ -225,7 +231,10 @@ export async function waitForEditorReady(
     // since this launch, and hand over to the snapshot as soon as there is one,
     // otherwise the timeline walks backwards through two different sessions.
     const logIsCurrent = (logState.secondsSinceWrite ?? Infinity) < elapsed() + 1;
-    const snapshotIsCurrent = snapshot !== null && (snapshot.ageSeconds ?? 999) < 10;
+    // Written by this launch: a previous session's last snapshot can be seconds old and still name its modal.
+    const snapshotWrittenAt = Date.now() - (snapshot?.ageSeconds ?? 999) * 1000;
+    const snapshotIsCurrent =
+      snapshot !== null && (snapshot.ageSeconds ?? 999) < 10 && snapshotWrittenAt >= (opts.launchedAtMs ?? startTime) - 1000;
     if (snapshotIsCurrent) sawSnapshot = true;
 
     // Once the snapshot has spoken, it owns the phase. A momentarily missed
@@ -289,7 +298,7 @@ export async function waitForEditorReady(
     if (logIsCurrent && logState.phase === "crashed") {
       return finish({ ready: false, elapsedSeconds: elapsed(), timeline, reason: "the editor crashed during startup", state: await readEngineState(projectPath ?? null) });
     }
-    if (snapshot?.modal && modalBlocksGameThread(snapshot.modal)) {
+    if (snapshotIsCurrent && snapshot?.modal && modalBlocksGameThread(snapshot.modal)) {
       // No bridge yet, so no gate and no press: name the prompt as the reason the
       // launch did not finish. dialogPolicy is how a caller answers one this early.
       //
@@ -499,6 +508,10 @@ export interface StartEditorResult {
   bridgeReady?: boolean;
   /** The port the already-running editor published, when it is answering there. */
   port?: number;
+  /** Set when a source bridge owed a build since an update and was built before the launch (#1593). */
+  bridgeBuilt?: { version: string; message: string };
+  /** Set when that build failed earlier, so this launch opened the previous build. */
+  bridgeBuildFailed?: { version: string; message: string };
 }
 
 export async function startEditor(
@@ -592,13 +605,29 @@ export async function startEditor(
     };
   }
 
+  // No editor holds this project now, so a pending bridge update can finish, a binary bridge
+  // that would not load is reinstalled before the editor can offer a rebuild it cannot do, and
+  // a source bridge deployed while the editor ran is built, since Unreal would load the old DLL.
+  const bridgeReady = await prepareBridgeForLaunch(project.projectPath);
+  if (!bridgeReady.ok) {
+    return { success: false, message: `Not launching: ${bridgeReady.message}` };
+  }
+  const built = bridgeReady.built
+    ? { bridgeBuilt: bridgeReady.built }
+    : bridgeReady.buildFailed ? { bridgeBuildFailed: bridgeReady.buildFailed } : {};
+  const builtNote = bridgeReady.built
+    ? `Built the bridge ${bridgeReady.built.version} first. `
+    : bridgeReady.buildFailed
+      ? `The bridge ${bridgeReady.buildFailed.version} did not build (${bridgeReady.buildFailed.message}), so the editor opened on the previous build, where actions added since answer Unknown method until it builds. `
+      : "";
+
   try {
     // Recorded before the spawn so the wait can tell the lockfile this editor
     // publishes from one an earlier session left behind.
     const launchedAtMs = Date.now();
     // Outside this server's process tree, so a client that ends the tree on
     // reconnect does not take the editor with it (#1274).
-    spawnOutsideTree(editorExe, [project.projectPath], {
+    spawnOutsideTree(editorExe, [project.projectPath, ...(project.config.editor?.launchArgs ?? [])], {
       env: buildEditorLaunchEnv(opts.dialogPolicy, opts.paramEcho),
     });
 
@@ -618,14 +647,16 @@ export async function startEditor(
         timeline: result.timeline,
         elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
         ...(result.state ? { state: result.state } : {}),
+        ...built,
       };
     }
 
     return {
       success: true,
-      message: `Editor ready in ${result.elapsedSeconds.toFixed(1)}s (waited through startup: ${describeTimeline(result.timeline)}). No further status polling is needed.`,
+      message: `${builtNote}Editor ready in ${result.elapsedSeconds.toFixed(1)}s (waited through startup: ${describeTimeline(result.timeline)}). No further status polling is needed.`,
       timeline: result.timeline,
       elapsedSeconds: Number(result.elapsedSeconds.toFixed(1)),
+      ...built,
     };
   } catch (error) {
     return {

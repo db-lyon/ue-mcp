@@ -252,7 +252,14 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
   {
     id: "set-project-attaches",
     text: "set_project attaches instead of deploying; bridgeSetup comes from attachSummary.",
-    coverage: [{ kind: "live", file: LIVE_SINGLE, title: "leaves a project that already has the bridge byte-identical" }],
+    coverage: [
+      { kind: "live", file: LIVE_SINGLE, title: "leaves a project that already has the bridge byte-identical" },
+      {
+        kind: "engine-free",
+        file: "tests/unit/set-project-bridge.test.ts",
+        title: "leaves a bridge that init or update installed byte-identical, and reports the mismatch",
+      },
+    ],
   },
   {
     id: "attach-no-dangling-entry",

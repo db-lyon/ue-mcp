@@ -20,6 +20,7 @@ import { loadManifest } from "../extensions/manifest.js";
 import { findInstalledPackage } from "../extensions/resolver.js";
 import { readPluginsList } from "../extensions/plugins-list.js";
 import { registryBase } from "../extensions/registry-catalog.js";
+import { isSuperseded } from "../extensions/superseded.js";
 
 export interface InstalledPlugin {
   name: string;
@@ -159,7 +160,9 @@ export function pluginRoutes(deps: PluginRouteDeps) {
           const res = await fetchImpl(`${registryBase()}/api/plugins`, { signal: AbortSignal.timeout(8000) });
           if (!res.ok) return { status: 502, body: { error: `the plugin registry answered ${res.status}` } };
           const j = (await res.json()) as { plugins?: CatalogPlugin[] };
-          catalog = { at: Date.now(), plugins: j.plugins ?? [] };
+          // A plugin now built into core is not offered for install.
+          const plugins = (j.plugins ?? []).filter((p) => !isSuperseded(p.slug) && !(p.packageName && isSuperseded(p.packageName)));
+          catalog = { at: Date.now(), plugins };
         } catch (e) {
           if (!catalog) return { status: 502, body: { error: `the plugin registry could not be reached: ${(e as Error).message}` } };
         }

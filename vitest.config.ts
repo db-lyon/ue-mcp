@@ -1,5 +1,7 @@
 import { defineConfig } from "vitest/config";
 
+import WeightedSequencer from "./tests/setup/weighted-shards.js";
+
 export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
@@ -10,7 +12,8 @@ export default defineConfig({
     hookTimeout: 60_000,
     reporters: ["verbose"],
     fileParallelism: false,
-    sequence: { concurrent: false },
+    // --shard=i/n in CI packs files by measured duration (tests/setup/weighted-shards.ts).
+    sequence: { concurrent: false, sequencer: WeightedSequencer },
     pool: "forks",
     poolOptions: { forks: { singleFork: true } },
   },

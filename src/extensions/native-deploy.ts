@@ -13,10 +13,10 @@ import * as path from "node:path";
  *
  *   {
  *     "<npm-package-name>": {
- *       "uePluginName": "PIE_Studio",
+ *       "uePluginName": "Sample_Recorder",
  *       "pluginVersion": "0.0.2",
  *       "installedAt": "2026-05-26T00:00:00.000Z",
- *       "files": ["Plugins/PIE_Studio/...", ...]   // relative to projectDir
+ *       "files": ["Plugins/Sample_Recorder/...", ...]   // relative to projectDir
  *     }
  *   }
  */

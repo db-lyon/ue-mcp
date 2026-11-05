@@ -1,3 +1,4 @@
+// @live-editor headless
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, TEST_PREFIX } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";

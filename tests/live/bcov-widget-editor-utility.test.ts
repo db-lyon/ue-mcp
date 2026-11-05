@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Editor Utility Widget and Editor Utility Blueprint creation, read back by
  * search_assets, and running each, read back as a live instance of its class.

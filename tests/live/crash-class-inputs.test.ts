@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Crash-class inputs (#1223, item 3).
  *

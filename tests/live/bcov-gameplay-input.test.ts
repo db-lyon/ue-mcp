@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Enhanced Input asset authoring in the editor: actions, mapping contexts,
  * an action's own triggers and modifiers, player-mappable settings and the

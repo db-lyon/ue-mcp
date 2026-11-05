@@ -129,6 +129,13 @@ public:
 	 */
 	static bool ShouldPublishStatus();
 
+	/**
+	 * Temp file plus rename, with the temp file named for this process. For polled files:
+	 * a reader holding the file open fails the rename, which is retried briefly and never
+	 * logged as an error, since the next publish replaces it anyway.
+	 */
+	static bool PublishAtomically(const FString& FinalPath, const FString& Contents);
+
 private:
 	struct FSlowTaskEntry
 	{
@@ -138,9 +145,6 @@ private:
 
 	/** Serialise under the lock, then write atomically (temp file + move). */
 	void FlushToDisk();
-
-	/** Temp file plus rename, with the temp file named for this process. */
-	static bool PublishAtomically(const FString& FinalPath, const FString& Contents);
 
 	/** Drop `status.<pid>.json` files left by processes that are gone. */
 	static void RemoveStaleInstanceStatusFiles();

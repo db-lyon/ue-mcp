@@ -1,3 +1,4 @@
+// @live-editor render
 /**
  * Material asset settings and graph edits, each read back through read_material,
  * list_material_expressions, export_material_graph or the asset property reader.

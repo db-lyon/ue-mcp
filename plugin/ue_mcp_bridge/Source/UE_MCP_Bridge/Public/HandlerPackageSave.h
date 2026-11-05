@@ -4,6 +4,7 @@
 // written, the save itself, and how a result reports whether it reached disk.
 
 #include "CoreMinimal.h"
+#include "HandlerCheckpoint.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
@@ -257,6 +258,8 @@ inline bool SaveAssetPackage(UObject* Asset)
 	// The default GError treats a save warning as fatal. GWarn logs it, which
 	// is what the editor's own save does and what FMCPSaveDiagnostics reads.
 	SaveArgs.Error = GWarn;
+	// A direct UPackage::SavePackage does not raise PreSavePackageWithContextEvent, so checkpoints are told here.
+	MCPCheckpointRecordBeforeWrite(PackageFileName);
 	return UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 }
 

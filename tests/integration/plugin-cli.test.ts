@@ -3,6 +3,7 @@
  * fake (installing packages built on disk), the registry is a local FakeHttp,
  * and every assertion reads what the command left in the project.
  */
+import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
@@ -218,15 +219,94 @@ describe("install, list, update, uninstall", () => {
 
   it("uninstall removes the package, its entry, its native module and its skills", async () => {
     covers("cli.plugin.uninstall", "plugin.skills.sync");
+    // Build output the install never recorded, which a file-by-file undeploy left behind.
+    fs.mkdirSync(path.join(game, "Plugins", "ClifixNative", "Binaries", "Win64"), { recursive: true });
+    fs.writeFileSync(path.join(game, "Plugins", "ClifixNative", "Binaries", "Win64", "UnrealEditor-ClifixNative.dll"), "dll");
+    fs.mkdirSync(path.join(game, "Plugins", "ClifixNative", "Intermediate", "Build"), { recursive: true });
+    fs.writeFileSync(path.join(game, "Plugins", "ClifixNative", "Intermediate", "Build", "x.obj"), "obj");
     const r = await plugin(["uninstall", PKG], game);
     expect(r.code, r.stderr + r.stdout).toBe(0);
     expect(declared(game)).toEqual([]);
     expect(exists(game, "node_modules", PKG)).toBe(false);
-    expect(exists(game, "Plugins", "ClifixNative", "Source", "New.cpp")).toBe(false);
+    expect(exists(game, "Plugins", "ClifixNative")).toBe(false);
+    expect(plain(r.stdout)).toContain("Plugins/ClifixNative/ (source, Binaries and Intermediate)");
     expect(exists(game, ".claude", "skills", "clifix-guide")).toBe(false);
     const pj = JSON.parse(fs.readFileSync(path.join(game, "package.json"), "utf8"));
     expect(pj.dependencies?.[PKG]).toBeUndefined();
   });
+});
+
+describe("remove of a superseded plugin's native module", () => {
+  // A .uproject as the editor writes it: tabs, CRLF, the entry in the middle.
+  const UPROJECT = [
+    "{",
+    '\t"FileVersion": 3,',
+    '\t"EngineAssociation": "5.8",',
+    '\t"Plugins": [',
+    "\t\t{",
+    '\t\t\t"Name": "UE_MCP_Bridge",',
+    '\t\t\t"Enabled": true',
+    "\t\t},",
+    "\t\t{",
+    '\t\t\t"Name": "PIE_Studio",',
+    '\t\t\t"Enabled": true',
+    "\t\t},",
+    "\t\t{",
+    '\t\t\t"Name": "ModelingToolsEditorMode",',
+    '\t\t\t"Enabled": true',
+    "\t\t}",
+    "\t]",
+    "}",
+  ].join("\r\n");
+  const WITHOUT = UPROJECT.replace('\t\t{\r\n\t\t\t"Name": "PIE_Studio",\r\n\t\t\t"Enabled": true\r\n\t\t},\r\n', "");
+
+  function vale(name: string): { dir: string; uproject: string } {
+    const dir = project(name, ["pie-studio"]);
+    const uproject = path.join(dir, `${name}.uproject`);
+    fs.writeFileSync(uproject, UPROJECT);
+    for (const f of ["PIE_Studio.uplugin", "Source/PIE_Studio/PIE_Studio.Build.cs", "Binaries/Win64/UnrealEditor-PIE_Studio.dll", "Intermediate/Build/Win64/x.obj"]) {
+      fs.mkdirSync(path.dirname(path.join(dir, "Plugins", "PIE_Studio", f)), { recursive: true });
+      fs.writeFileSync(path.join(dir, "Plugins", "PIE_Studio", f), "x");
+    }
+    return { dir, uproject };
+  }
+
+  it("deletes the whole plugin folder and its .uproject entry, keeping the file's formatting, and says what it removed", async () => {
+    covers("cli.plugin.uninstall");
+    const { dir, uproject } = vale("ValeLike");
+    const r = await plugin(["remove", "pie-studio"], dir);
+    expect(r.code, r.stderr + r.stdout).toBe(0);
+    expect(exists(dir, "Plugins", "PIE_Studio")).toBe(false);
+    expect(fs.readFileSync(uproject, "utf8")).toBe(WITHOUT);
+    expect(declared(dir)).toEqual([]);
+    const out = plain(r.stdout);
+    expect(out).toContain("removed pie-studio:");
+    expect(out).toContain("Plugins/PIE_Studio/ (source, Binaries and Intermediate)");
+    expect(out).toContain("the PIE_Studio entry in ValeLike.uproject");
+  });
+
+  it("refuses while an editor has the project open, and touches nothing", async () => {
+    covers("cli.plugin.uninstall");
+    const { dir, uproject } = vale("ValeOpen");
+    // A process named like the editor with the .uproject on its command line, which is how the probe tells.
+    const exe = sb.path("fake-editor", process.platform === "win32" ? "UnrealEditor.exe" : "UnrealEditor");
+    fs.mkdirSync(path.dirname(exe), { recursive: true });
+    fs.copyFileSync(process.execPath, exe);
+    fs.chmodSync(exe, 0o755);
+    const editor = spawn(exe, ["-e", "setInterval(() => {}, 1000)", uproject], { stdio: "ignore", env: sb.env() });
+    try {
+      const r = await plugin(["remove", "pie-studio"], dir);
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain(`an editor has ValeOpen.uproject open (pid ${editor.pid})`);
+      expect(r.stderr).toContain("Nothing was removed.");
+      expect(exists(dir, "Plugins", "PIE_Studio", "Binaries", "Win64", "UnrealEditor-PIE_Studio.dll")).toBe(true);
+      expect(fs.readFileSync(uproject, "utf8")).toBe(UPROJECT);
+      expect(declared(dir)).toEqual([{ name: "pie-studio" }]);
+      expect(sb.npmCalls().some((c) => path.resolve(c.cwd) === path.resolve(dir))).toBe(false);
+    } finally {
+      editor.kill();
+    }
+  }, 60_000);
 });
 
 describe.concurrent("each in its own project", () => {

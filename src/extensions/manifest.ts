@@ -40,7 +40,7 @@ const InjectActionSchema = z.object({
   task: z.string().min(1),
   description: z.string().optional(),
   effect: ActionEffectSchema.optional(),
-  schema: z.record(SchemaFieldSchema).optional(),
+  schema: z.record(z.string(), SchemaFieldSchema).optional(),
 });
 
 export type ManifestInjectAction = z.infer<typeof InjectActionSchema>;
@@ -54,14 +54,14 @@ const ProvidedActionSchema = z.object({
   task: z.string().min(1),
   description: z.string().optional(),
   effect: ActionEffectSchema.optional(),
-  schema: z.record(SchemaFieldSchema).optional(),
+  schema: z.record(z.string(), SchemaFieldSchema).optional(),
 });
 
 export type ManifestProvidedAction = z.infer<typeof ProvidedActionSchema>;
 
 const ProvidedCategorySchema = z.object({
   description: z.string().optional(),
-  actions: z.record(ProvidedActionSchema),
+  actions: z.record(z.string(), ProvidedActionSchema),
 });
 
 export type ManifestProvidedCategory = z.infer<typeof ProvidedCategorySchema>;
@@ -74,7 +74,7 @@ const TaskEntrySchema = z.object({
 const FlowStepEntrySchema = z.object({
   task: z.string().optional(),
   flow: z.string().optional(),
-  options: z.record(z.unknown()).optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
   retries: z.number().optional(),
   retryDelay: z.number().optional(),
   retryOn: z.string().optional(),
@@ -87,7 +87,10 @@ const FlowEntrySchema = z.object({
   // prefix before the first underscore (`niagara_fire` -> `niagara`). Users
   // enable/disable whole groups via `ue-mcp.pluginConfig.<slug>.groups`.
   group: z.string().optional(),
-  steps: z.record(FlowStepKeySchema, FlowStepEntrySchema),
+  // zod 4 reports a bad key as "Invalid key in record"; surface the key schema's own message.
+  steps: z.record(FlowStepKeySchema, FlowStepEntrySchema, {
+    error: (issue) => (issue.code === "invalid_key" ? issue.issues[0]?.message : undefined),
+  }),
 });
 
 /**
@@ -98,11 +101,11 @@ const FlowEntrySchema = z.object({
  * MCPHandlerRegistration.h shipped under the bridge's Public/).
  *
  *   nativeModule:
- *     uePluginName: PIE_Studio
+ *     uePluginName: Sample_Recorder
  *     minBridgeApi: 1
- *     source: ue/Plugins/PIE_Studio
+ *     source: ue/Plugins/Sample_Recorder
  *     handlers:
- *       inject_input: { description: "..." }
+ *       record_start: { description: "..." }
  */
 const NativeModuleSchema = z.object({
   uePluginName: z.string().min(1),
@@ -128,13 +131,13 @@ const NativeModuleSchema = z.object({
   specs: z.string().min(1).optional(),
   handlers: z
     .record(
-      z.object({
+      z.string(), z.object({
         description: z.string().optional(),
         timeoutSeconds: z.number().positive().optional(),
         // Param declarations for the surfaced action. Required for any param
         // the handler reads: the MCP SDK strips keys absent from the action's
         // schema before they reach the bridge.
-        schema: z.record(SchemaFieldSchema).optional(),
+        schema: z.record(z.string(), SchemaFieldSchema).optional(),
       }),
     )
     .default({}),
@@ -160,7 +163,7 @@ export const PluginManifestSchema = z.object({
   }),
   minServerVersion: z.string().optional(),
   uePluginDependency: z.string().optional(),
-  inject: z.record(z.record(InjectActionSchema)).default({}),
+  inject: z.record(z.string(), z.record(z.string(), InjectActionSchema)).default({}),
   provides: z
     .record(
       z.string().regex(/^[a-z][a-z0-9_]*$/, {
@@ -171,9 +174,9 @@ export const PluginManifestSchema = z.object({
     )
     .default({}),
   nativeModule: NativeModuleSchema.optional(),
-  knowledge: z.record(z.string()).default({}),
-  tasks: z.record(TaskEntrySchema).default({}),
-  flows: z.record(FlowEntrySchema).default({}),
+  knowledge: z.record(z.string(), z.string()).default({}),
+  tasks: z.record(z.string(), TaskEntrySchema).default({}),
+  flows: z.record(z.string(), FlowEntrySchema).default({}),
   guards: GuardsSchema,
   registry: RegistryListingSchema.optional(),
 });
@@ -259,11 +262,11 @@ export function parseManifest(raw: unknown): { manifest: PluginManifest; dropped
     // segment array, since a segment (a task name, say) may contain a dot.
     const units = new Map<string, { unit: Array<string | number>; reason: string }>();
     for (const issue of result.error.issues) {
-      const unit = salvageableUnit(issue.path);
+      const unit = salvageableUnit(issue.path as Array<string | number>);
       if (!unit) throw result.error;
       const key = unit.join(".");
       if (!units.has(key)) {
-        units.set(key, { unit, reason: `${issue.path.join(".")}: ${issue.message}` });
+        units.set(key, { unit, reason: `${issue.path.map(String).join(".")}: ${issue.message}` });
       }
     }
     if (units.size === 0) throw result.error;
@@ -312,7 +315,7 @@ function zodForParamType(type: ManifestParamType): z.ZodType {
     case "string": return z.string();
     case "number": return z.number();
     case "boolean": return z.boolean();
-    case "object": return z.record(z.unknown());
+    case "object": return z.record(z.string(), z.unknown());
     case "array": return z.array(z.unknown());
   }
 }

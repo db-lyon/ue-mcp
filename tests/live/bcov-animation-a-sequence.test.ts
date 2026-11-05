@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * AnimSequence authoring on sequences created against the engine tutorial
  * skeleton: creation, curves, notifies, keyframe and root-motion bakes, a

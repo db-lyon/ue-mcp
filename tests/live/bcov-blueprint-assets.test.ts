@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Whole-asset Blueprint actions and user-defined types, read back: duplicate,
  * diff, reparent and dependencies; enum order and tooltips; struct order,

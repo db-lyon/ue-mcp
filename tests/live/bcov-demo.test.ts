@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * The demo category: the step list, building the first three steps, cleanup and
  * the home level, read back through the level, actor and asset readers. The

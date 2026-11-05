@@ -1,4 +1,5 @@
 #include "AssetHandlers.h"
+#include "HandlerCheckpoint.h"
 #include "Internationalization/Regex.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
@@ -2357,6 +2358,7 @@ static TSharedPtr<FJsonValue> RenameWorldWithExternals(const FString& SourceAsse
 	RollbackPayload->SetBoolField(TEXT("force"), true);
 	MCPSetRollback(R, TEXT("rename_asset"), RollbackPayload);
 
+	MCPCheckpointRecordRenameSources(Batch);
 	const bool bOk = AssetTools.RenameAssets(Batch);
 	R->SetBoolField(TEXT("success"), bOk);
 
@@ -2514,6 +2516,7 @@ static TSharedPtr<FJsonValue> ReconcileOrphanExternals(const FString& SourceAsse
 			Orphans.Num(), *(SrcMount + TEXT("__ExternalActors__/") + SrcRel), FailedLoad.Num()));
 	}
 
+	MCPCheckpointRecordRenameSources(Batch);
 	const bool bOk = AssetTools.RenameAssets(Batch);
 
 	auto R = MCPSuccess();
@@ -2641,6 +2644,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>
 	const int32 DialogSerialBefore = FDialogHandlers::GetAnsweredDialogSerial();
 	TArray<FAssetRenameData> RenameBatch;
 	RenameBatch.Emplace(TWeakObjectPtr<UObject>(SourceAsset), FPaths::GetPath(DestPackage), FPaths::GetBaseFilename(DestPackage));
+	MCPCheckpointRecordRenameSources(RenameBatch);
 	bool bOk = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().RenameAssets(RenameBatch);
 
 	auto Result = MCPSuccess();
@@ -3369,6 +3373,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkRename(const TSharedPtr<FJsonObject>&
 	// RenameAssets wraps all renames in a single transaction + one
 	// redirector-fixup pass - the same op the Content Browser performs on
 	// drag-and-drop. Returns true if every rename succeeded.
+	MCPCheckpointRecordRenameSources(BatchRenames);
 	bool bOk = AssetTools.RenameAssets(BatchRenames);
 
 	// Mark each batched rename with its post-op status.
@@ -4617,6 +4622,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::MoveFolder(const TSharedPtr<FJsonObject>&
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
+	MCPCheckpointRecordRenameSources(BatchRenames);
 	bool bOk = AssetTools.RenameAssets(BatchRenames);
 
 	// Count how many actually landed at the destination, and record the entry

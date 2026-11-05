@@ -1,3 +1,4 @@
+// @live-editor render
 /**
  * Niagara system, emitter, renderer, module input, static switch, dynamic
  * input and user parameter actions, each read back through another action

@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1144,
+  "handlerCount": 1211,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -17540,6 +17540,51 @@
         }
       ]
     },
+    "get_pcg_component_parameters": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": false,
+          "description": "Blueprint whose PCG component template is written; every placed instance rebuilds from it"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Editor label of the actor holding the PCG component; a label naming several actors is refused"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "PCG component: the Blueprint's component variable name or the placed actor's component name (default: the only PCG component)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "blueprintPath"
+            ],
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
     "get_pcg_components": {
       "category": "pcg",
       "params": []
@@ -24176,6 +24221,107 @@
       ],
       "contractExempt": "pauses or resumes the running Insights trace"
     },
+    "pie_anim_properties": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": true,
+          "description": "Actor label or name in PIE"
+        },
+        {
+          "name": "propertyNames",
+          "type": "array",
+          "required": false,
+          "description": "Property names to read (default: all)",
+          "items": "string"
+        }
+      ]
+    },
+    "pie_anim_state": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": true,
+          "description": "Actor label or name in PIE"
+        }
+      ]
+    },
+    "pie_assert_eval": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "required": false,
+          "description": "Observation run id (resolves observation.csv under output_dir)"
+        },
+        {
+          "name": "output_dir",
+          "type": "string",
+          "required": false,
+          "description": "Observation root (default Saved/MCPObservations)"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recording or replay folder (resolves recording.csv)"
+        },
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "csv_path",
+          "type": "string",
+          "required": false,
+          "description": "Explicit per-frame series CSV"
+        },
+        {
+          "name": "assertions",
+          "type": "array",
+          "required": false,
+          "description": "Predicates {name, channel|event, op, value|min+max|tol, hold, from_s, to_s, within_s, after_event, severity}; omitted reads test_path's predicates",
+          "items": "object"
+        },
+        {
+          "name": "test_path",
+          "type": "string",
+          "required": false,
+          "description": "Scenario json whose predicates block is evaluated when assertions is omitted"
+        }
+      ],
+      "contractExempt": "Writes verdict.json beside the series it evaluates"
+    },
+    "pie_clients": {
+      "category": "pie",
+      "params": []
+    },
+    "pie_console": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "command",
+          "type": "string",
+          "required": true,
+          "description": "Console command"
+        },
+        {
+          "name": "client",
+          "type": "integer",
+          "required": true,
+          "description": "Remote player 1..N (join order)",
+          "minimum": 1
+        }
+      ],
+      "contractExempt": "Runs a console command in a remote player's process"
+    },
     "pie_control": {
       "category": "editor",
       "params": [
@@ -24200,6 +24346,1871 @@
       ],
       "contractExempt": "starts and stops Play In Editor"
     },
+    "pie_inject_input": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "action_path",
+          "type": "string",
+          "required": true,
+          "description": "InputAction asset path"
+        },
+        {
+          "name": "value_x",
+          "type": "number",
+          "required": false,
+          "description": "Axis or bool value X (default 1)"
+        },
+        {
+          "name": "value_y",
+          "type": "number",
+          "required": false,
+          "description": "Axis value Y (default 0)"
+        },
+        {
+          "name": "value_z",
+          "type": "number",
+          "required": false,
+          "description": "Axis value Z (default 0)"
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside the selected PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back",
+          "minimum": 0
+        },
+        {
+          "name": "client",
+          "type": "integer",
+          "required": false,
+          "description": "1..N relays to that remote player (join order) over the game connection, including separate-process clients; 0 or absent uses the local player",
+          "minimum": 0
+        }
+      ],
+      "contractExempt": "Drives input into the running PIE session"
+    },
+    "pie_inject_input_start": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "action_path",
+          "type": "string",
+          "required": true,
+          "description": "InputAction asset path"
+        },
+        {
+          "name": "value_x",
+          "type": "number",
+          "required": false,
+          "description": "Axis or bool value X (default 1)"
+        },
+        {
+          "name": "value_y",
+          "type": "number",
+          "required": false,
+          "description": "Axis value Y (default 0)"
+        },
+        {
+          "name": "value_z",
+          "type": "number",
+          "required": false,
+          "description": "Axis value Z (default 0)"
+        },
+        {
+          "name": "injection_id",
+          "type": "string",
+          "required": false,
+          "description": "Caller-chosen hold id (minted when absent)"
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside the selected PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back",
+          "minimum": 0
+        },
+        {
+          "name": "client",
+          "type": "integer",
+          "required": false,
+          "description": "1..N relays to that remote player (join order) over the game connection, including separate-process clients; 0 or absent uses the local player",
+          "minimum": 0
+        }
+      ],
+      "contractExempt": "Starts holding an input action in the running PIE session"
+    },
+    "pie_inject_input_stop": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "injection_id",
+          "type": "string",
+          "required": true,
+          "description": "Hold or tape id to stop"
+        }
+      ],
+      "contractExempt": "Stops a running input hold or tape"
+    },
+    "pie_inject_input_tape": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "action_path",
+          "type": "string",
+          "required": true,
+          "description": "InputAction asset path"
+        },
+        {
+          "name": "values",
+          "type": "array",
+          "required": true,
+          "description": "Per-frame values: numbers or [x,y,z] arrays"
+        },
+        {
+          "name": "hz",
+          "type": "number",
+          "required": false,
+          "description": "Playback rate (default 60)"
+        },
+        {
+          "name": "injection_id",
+          "type": "string",
+          "required": false,
+          "description": "Caller-chosen tape id (minted when absent)"
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside the selected PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back",
+          "minimum": 0
+        },
+        {
+          "name": "client",
+          "type": "integer",
+          "required": false,
+          "description": "1..N relays to that remote player (join order) over the game connection, including separate-process clients; 0 or absent uses the local player",
+          "minimum": 0
+        }
+      ],
+      "contractExempt": "Plays a value tape into the running PIE session"
+    },
+    "pie_inject_input_update": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "injection_id",
+          "type": "string",
+          "required": true,
+          "description": "Hold id from inject_input_start"
+        },
+        {
+          "name": "value_x",
+          "type": "number",
+          "required": false,
+          "description": "Axis or bool value X (default 1)"
+        },
+        {
+          "name": "value_y",
+          "type": "number",
+          "required": false,
+          "description": "Axis value Y (default 0)"
+        },
+        {
+          "name": "value_z",
+          "type": "number",
+          "required": false,
+          "description": "Axis value Z (default 0)"
+        }
+      ],
+      "contractExempt": "Changes the value of a running input hold"
+    },
+    "pie_mark": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "description": "Marker label"
+        }
+      ],
+      "contractExempt": "Writes a marker into the recording in flight"
+    },
+    "pie_observe_arm": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "profile",
+          "type": "string",
+          "required": true,
+          "description": "Observation profile asset path"
+        },
+        {
+          "name": "output_dir",
+          "type": "string",
+          "required": false,
+          "description": "Observation root (default Saved/MCPObservations)"
+        },
+        {
+          "name": "sample_hz",
+          "type": "integer",
+          "required": false,
+          "description": "Sample rate (default 60)",
+          "minimum": 1
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside the selected PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back",
+          "minimum": 0
+        },
+        {
+          "name": "pin_fps",
+          "type": "integer",
+          "required": false,
+          "description": "Pin PIE fps while observing"
+        }
+      ],
+      "contractExempt": "Arms the observer, which starts on the next PIE session"
+    },
+    "pie_observe_disarm": {
+      "category": "pie",
+      "params": [],
+      "contractExempt": "Takes no parameters and cancels armed observations"
+    },
+    "pie_observe_list": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "output_dir",
+          "type": "string",
+          "required": false,
+          "description": "Observation root (default Saved/MCPObservations)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most rows (default 200)",
+          "minimum": 1
+        }
+      ]
+    },
+    "pie_observe_read": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "required": true,
+          "description": "Observation run id"
+        },
+        {
+          "name": "output_dir",
+          "type": "string",
+          "required": false,
+          "description": "Observation root (default Saved/MCPObservations)"
+        },
+        {
+          "name": "file",
+          "type": "string",
+          "required": false,
+          "description": "Artifact to read; series returns per-channel time series (default manifest)",
+          "enum": [
+            "manifest",
+            "csv",
+            "tracked",
+            "series",
+            "widgets"
+          ]
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "csv/tracked: most rows (default 1000)",
+          "minimum": 1
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "csv/tracked: first row",
+          "minimum": 0
+        },
+        {
+          "name": "channels",
+          "type": "string",
+          "required": false,
+          "description": "series: comma-separated columns (default: every t:* plus speed2d, gpu_ms, game_ms)"
+        },
+        {
+          "name": "threshold",
+          "type": "number",
+          "required": false,
+          "description": "series: report the first frame where |value| exceeds this"
+        },
+        {
+          "name": "include_values",
+          "type": "boolean",
+          "required": false,
+          "description": "series: include the downsampled values (default false)"
+        },
+        {
+          "name": "max_points",
+          "type": "integer",
+          "required": false,
+          "description": "series: most values per channel (default 500)",
+          "minimum": 1
+        }
+      ]
+    },
+    "pie_observe_status": {
+      "category": "pie",
+      "params": []
+    },
+    "pie_observe_stop": {
+      "category": "pie",
+      "params": [],
+      "contractExempt": "Takes no parameters and finalizes the observation in flight"
+    },
+    "pie_perf_summary": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        }
+      ]
+    },
+    "pie_profile_create": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Asset name"
+        },
+        {
+          "name": "package_path",
+          "type": "string",
+          "required": false,
+          "description": "Content folder (default /Game/Observation)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "What to do when the asset exists (default skip)",
+          "enum": [
+            "skip",
+            "replace"
+          ]
+        },
+        {
+          "name": "tracked_values",
+          "type": "array",
+          "required": false,
+          "description": "Value paths, or {path, drift_threshold} objects"
+        },
+        {
+          "name": "tracked_actors",
+          "type": "array",
+          "required": false,
+          "description": "Actor ids to track",
+          "items": "string"
+        },
+        {
+          "name": "tracked_widgets",
+          "type": "array",
+          "required": false,
+          "description": "Widget class names or paths, or widget names, sampled as visible true or false",
+          "items": "string"
+        },
+        {
+          "name": "capture_pawn_state",
+          "type": "boolean",
+          "required": false,
+          "description": "Sample the pawn transform and movement"
+        },
+        {
+          "name": "capture_montage",
+          "type": "boolean",
+          "required": false,
+          "description": "Sample the active montage"
+        },
+        {
+          "name": "position_threshold_cm",
+          "type": "number",
+          "required": false,
+          "description": "Position drift threshold"
+        },
+        {
+          "name": "rotation_threshold_deg",
+          "type": "number",
+          "required": false,
+          "description": "Rotation drift threshold"
+        },
+        {
+          "name": "velocity_threshold_cms",
+          "type": "number",
+          "required": false,
+          "description": "Velocity drift threshold"
+        },
+        {
+          "name": "tracked_value_default_threshold",
+          "type": "number",
+          "required": false,
+          "description": "Default tracked-value threshold"
+        }
+      ],
+      "contractExempt": "Creates an observation profile asset"
+    },
+    "pie_profile_delete": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Profile asset path"
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "description": "Must be true to delete"
+        }
+      ],
+      "contractExempt": "Deletes the profile asset"
+    },
+    "pie_profile_list": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "directory",
+          "type": "string",
+          "required": false,
+          "description": "Content path prefix (default /Game)"
+        }
+      ]
+    },
+    "pie_profile_read": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Profile asset path"
+        }
+      ]
+    },
+    "pie_profile_update": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Profile asset path"
+        },
+        {
+          "name": "tracked_values",
+          "type": "array",
+          "required": false,
+          "description": "Replaces the tracked values"
+        },
+        {
+          "name": "tracked_actors",
+          "type": "array",
+          "required": false,
+          "description": "Replaces the tracked actors",
+          "items": "string"
+        },
+        {
+          "name": "tracked_widgets",
+          "type": "array",
+          "required": false,
+          "description": "Replaces the tracked widgets",
+          "items": "string"
+        },
+        {
+          "name": "capture_pawn_state",
+          "type": "boolean",
+          "required": false,
+          "description": "Sample the pawn transform and movement"
+        },
+        {
+          "name": "capture_montage",
+          "type": "boolean",
+          "required": false,
+          "description": "Sample the active montage"
+        },
+        {
+          "name": "position_threshold_cm",
+          "type": "number",
+          "required": false,
+          "description": "Position drift threshold"
+        },
+        {
+          "name": "rotation_threshold_deg",
+          "type": "number",
+          "required": false,
+          "description": "Rotation drift threshold"
+        },
+        {
+          "name": "velocity_threshold_cms",
+          "type": "number",
+          "required": false,
+          "description": "Velocity drift threshold"
+        },
+        {
+          "name": "tracked_value_default_threshold",
+          "type": "number",
+          "required": false,
+          "description": "Default tracked-value threshold"
+        }
+      ],
+      "contractExempt": "Writes and saves the profile asset"
+    },
+    "pie_record_arm": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "actions",
+          "type": "array",
+          "required": false,
+          "description": "InputAction paths to record (default: every action bound on the pawn)",
+          "items": "string"
+        },
+        {
+          "name": "track_values",
+          "type": "array",
+          "required": false,
+          "description": "Dotted value paths sampled each frame; sub:<Class>.<path> reads a subsystem, bone:/bonecs:<Bone>.<channel> a bone",
+          "items": "string"
+        },
+        {
+          "name": "track_actors",
+          "type": "array",
+          "required": false,
+          "description": "Actor ids sampled for position, rotation and velocity",
+          "items": "string"
+        },
+        {
+          "name": "axis_threshold",
+          "type": "number",
+          "required": false,
+          "description": "Axis change deadzone (default 0.15)"
+        },
+        {
+          "name": "sample_hz",
+          "type": "integer",
+          "required": false,
+          "description": "Sample rate (default 60)",
+          "minimum": 1
+        },
+        {
+          "name": "pin_fps",
+          "type": "integer",
+          "required": false,
+          "description": "Pin PIE fps for reproducibility (default sample_hz)"
+        },
+        {
+          "name": "capture_pawn_state",
+          "type": "boolean",
+          "required": false,
+          "description": "Sample the pawn transform and movement (default true)"
+        },
+        {
+          "name": "capture_montage",
+          "type": "boolean",
+          "required": false,
+          "description": "Sample the active montage (default true)"
+        },
+        {
+          "name": "take_record",
+          "type": "boolean",
+          "required": false,
+          "description": "Also drive Take Recorder (default false)"
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside the selected PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back",
+          "minimum": 0
+        },
+        {
+          "name": "rng_seed",
+          "type": "number",
+          "required": false,
+          "description": "Seed the stream RNG for reproducible runs"
+        },
+        {
+          "name": "run_gap_frames",
+          "type": "integer",
+          "required": false,
+          "description": "Idle frames that split input runs (default 6)"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id (default: a timestamp)"
+        }
+      ],
+      "contractExempt": "Arms the recorder, which starts on the next PIE session"
+    },
+    "pie_record_delete": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "Recording id"
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "description": "Must be true to delete"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root (default Saved/MCPRecordings)"
+        }
+      ],
+      "contractExempt": "Deletes a recording folder from disk"
+    },
+    "pie_record_diff": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "a_id",
+          "type": "string",
+          "required": true,
+          "description": "First recording id"
+        },
+        {
+          "name": "b_id",
+          "type": "string",
+          "required": true,
+          "description": "Second recording id"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "position_cm",
+          "type": "number",
+          "required": false,
+          "description": "Position drift threshold (default 5)"
+        },
+        {
+          "name": "rotation_deg",
+          "type": "number",
+          "required": false,
+          "description": "Rotation drift threshold (default 2)"
+        },
+        {
+          "name": "velocity_cms",
+          "type": "number",
+          "required": false,
+          "description": "Velocity drift threshold (default 25)"
+        },
+        {
+          "name": "tracked_default",
+          "type": "number",
+          "required": false,
+          "description": "Default tracked-value threshold"
+        },
+        {
+          "name": "tracked_thresholds",
+          "type": "object",
+          "required": false,
+          "description": "Per-path tracked-value thresholds {path: threshold}"
+        }
+      ]
+    },
+    "pie_record_disarm": {
+      "category": "pie",
+      "params": [],
+      "contractExempt": "Takes no parameters and cancels an armed recording"
+    },
+    "pie_record_list": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most rows (default 200)",
+          "minimum": 1
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Rows to skip",
+          "minimum": 0
+        }
+      ]
+    },
+    "pie_record_read": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "Recording id"
+        },
+        {
+          "name": "file",
+          "type": "string",
+          "required": false,
+          "description": "Artifact to read (default manifest)",
+          "enum": [
+            "manifest",
+            "sequence",
+            "csv",
+            "drift",
+            "tracked"
+          ]
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "csv: most rows (default 1000)",
+          "minimum": 1
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "csv: first row",
+          "minimum": 0
+        }
+      ]
+    },
+    "pie_record_status": {
+      "category": "pie",
+      "params": []
+    },
+    "pie_record_stop": {
+      "category": "pie",
+      "params": [],
+      "contractExempt": "Takes no parameters and finalizes the recording in flight"
+    },
+    "pie_remote_result": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "request_id",
+          "type": "string",
+          "required": true,
+          "description": "injection_id or request_id a relayed call returned",
+          "aliases": [
+            "injection_id"
+          ]
+        }
+      ]
+    },
+    "pie_replay_analyze": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        }
+      ]
+    },
+    "pie_replay_arm": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "sequence_path",
+          "type": "string",
+          "required": false,
+          "description": "Explicit sequence.json path"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "steps",
+          "type": "array",
+          "required": false,
+          "description": "Inline step array, instead of a recording",
+          "items": "object"
+        },
+        {
+          "name": "settle_ms",
+          "type": "integer",
+          "required": false,
+          "description": "Settle delay before playback (default 500)",
+          "minimum": 0
+        },
+        {
+          "name": "sample_hz",
+          "type": "integer",
+          "required": false,
+          "description": "Inline steps: sample rate (default 60)",
+          "minimum": 1
+        },
+        {
+          "name": "rng_seed",
+          "type": "number",
+          "required": false,
+          "description": "Inline steps: RNG seed"
+        },
+        {
+          "name": "pin_fps",
+          "type": "integer",
+          "required": false,
+          "description": "Pin PIE fps during replay"
+        },
+        {
+          "name": "apply_rng_seed",
+          "type": "boolean",
+          "required": false,
+          "description": "Re-apply the recorded seed (default true)"
+        },
+        {
+          "name": "record_drift",
+          "type": "boolean",
+          "required": false,
+          "description": "Record drift against the source (default true)"
+        },
+        {
+          "name": "auto_stop_pie",
+          "type": "boolean",
+          "required": false,
+          "description": "End PIE when the replay completes (replay_arm default false, replay_run default true)"
+        },
+        {
+          "name": "eject",
+          "type": "boolean",
+          "required": false,
+          "description": "Eject to a spectator camera during replay"
+        },
+        {
+          "name": "time_scale",
+          "type": "number",
+          "required": false,
+          "description": "Playback speed multiplier (default 1)"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "replay drives input; monitor only samples (default replay)",
+          "enum": [
+            "replay",
+            "monitor"
+          ]
+        },
+        {
+          "name": "capture_frame_every",
+          "type": "integer",
+          "required": false,
+          "description": "Capture a viewport JPEG every N steps and build a contact sheet",
+          "minimum": 0
+        },
+        {
+          "name": "encode_gif",
+          "type": "boolean",
+          "required": false,
+          "description": "Also encode an animated GIF (default false)"
+        },
+        {
+          "name": "fixed_timestep",
+          "type": "boolean",
+          "required": false,
+          "description": "Fixed 1/pin_fps delta during replay (default false)"
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside the selected PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back",
+          "minimum": 0
+        },
+        {
+          "name": "drift_thresholds",
+          "type": "object",
+          "required": false,
+          "description": "{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"
+        }
+      ],
+      "contractExempt": "Arms the replayer, which drives the next PIE session"
+    },
+    "pie_replay_disarm": {
+      "category": "pie",
+      "params": [],
+      "contractExempt": "Takes no parameters and cancels an armed replay"
+    },
+    "pie_replay_run": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "sequence_path",
+          "type": "string",
+          "required": false,
+          "description": "Explicit sequence.json path"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "steps",
+          "type": "array",
+          "required": false,
+          "description": "Inline step array, instead of a recording",
+          "items": "object"
+        },
+        {
+          "name": "settle_ms",
+          "type": "integer",
+          "required": false,
+          "description": "Settle delay before playback (default 500)",
+          "minimum": 0
+        },
+        {
+          "name": "sample_hz",
+          "type": "integer",
+          "required": false,
+          "description": "Inline steps: sample rate (default 60)",
+          "minimum": 1
+        },
+        {
+          "name": "rng_seed",
+          "type": "number",
+          "required": false,
+          "description": "Inline steps: RNG seed"
+        },
+        {
+          "name": "pin_fps",
+          "type": "integer",
+          "required": false,
+          "description": "Pin PIE fps during replay"
+        },
+        {
+          "name": "apply_rng_seed",
+          "type": "boolean",
+          "required": false,
+          "description": "Re-apply the recorded seed (default true)"
+        },
+        {
+          "name": "record_drift",
+          "type": "boolean",
+          "required": false,
+          "description": "Record drift against the source (default true)"
+        },
+        {
+          "name": "auto_stop_pie",
+          "type": "boolean",
+          "required": false,
+          "description": "End PIE when the replay completes (replay_arm default false, replay_run default true)"
+        },
+        {
+          "name": "eject",
+          "type": "boolean",
+          "required": false,
+          "description": "Eject to a spectator camera during replay"
+        },
+        {
+          "name": "time_scale",
+          "type": "number",
+          "required": false,
+          "description": "Playback speed multiplier (default 1)"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "replay drives input; monitor only samples (default replay)",
+          "enum": [
+            "replay",
+            "monitor"
+          ]
+        },
+        {
+          "name": "capture_frame_every",
+          "type": "integer",
+          "required": false,
+          "description": "Capture a viewport JPEG every N steps and build a contact sheet",
+          "minimum": 0
+        },
+        {
+          "name": "encode_gif",
+          "type": "boolean",
+          "required": false,
+          "description": "Also encode an animated GIF (default false)"
+        },
+        {
+          "name": "fixed_timestep",
+          "type": "boolean",
+          "required": false,
+          "description": "Fixed 1/pin_fps delta during replay (default false)"
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside the selected PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext::PIEInstance, a non-negative integer. Omitted picks the active PlayWorld, then the first PIE world with the player; an explicit value never falls back",
+          "minimum": 0
+        },
+        {
+          "name": "drift_thresholds",
+          "type": "object",
+          "required": false,
+          "description": "{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"
+        }
+      ],
+      "contractExempt": "Arms the replayer and starts PIE"
+    },
+    "pie_replay_state": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "at_time",
+          "type": "number",
+          "required": false,
+          "description": "Seconds to sample, interpolated (default: the last frame)"
+        },
+        {
+          "name": "at_frame",
+          "type": "integer",
+          "required": false,
+          "description": "Frame index to sample, instead of at_time",
+          "minimum": 0
+        },
+        {
+          "name": "apply",
+          "type": "boolean",
+          "required": false,
+          "description": "Teleport the live PIE pawn to the recorded pose (default false)"
+        }
+      ],
+      "contractExempt": "With apply it moves the live PIE pawn"
+    },
+    "pie_replay_status": {
+      "category": "pie",
+      "params": []
+    },
+    "pie_replay_stop": {
+      "category": "pie",
+      "params": [],
+      "contractExempt": "Takes no parameters and stops the replay in flight"
+    },
+    "pie_scenario_scaffold": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Scenario name (default scenario)"
+        },
+        {
+          "name": "max_errors",
+          "type": "integer",
+          "required": false,
+          "description": "no-errors predicate threshold (default 0)",
+          "minimum": 0
+        }
+      ],
+      "contractExempt": "Writes scenario.json beside the recording"
+    },
+    "pie_scenario_validate": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "scenario_path",
+          "type": "string",
+          "required": false,
+          "description": "Path to a scenario.json"
+        },
+        {
+          "name": "scenario",
+          "type": "object",
+          "required": false,
+          "description": "Inline scenario object"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "scenario_path"
+            ],
+            [
+              "scenario"
+            ]
+          ]
+        }
+      ]
+    },
+    "pie_script_create": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Asset name"
+        },
+        {
+          "name": "package_path",
+          "type": "string",
+          "required": false,
+          "description": "Package folder (default /Game/PIEStudio/Scripts)"
+        },
+        {
+          "name": "steps",
+          "type": "array",
+          "required": true,
+          "description": "Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+          "items": "object"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "description": "What the script tests"
+        },
+        {
+          "name": "profile",
+          "type": "string",
+          "required": false,
+          "description": "Observation profile asset path"
+        },
+        {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open"
+        },
+        {
+          "name": "default_within_ms",
+          "type": "integer",
+          "required": false,
+          "description": "Default auto-step window in game ms (default 5000)",
+          "minimum": 1
+        },
+        {
+          "name": "manual_only",
+          "type": "boolean",
+          "required": false,
+          "description": "Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"
+        },
+        {
+          "name": "onConflict",
+          "type": "string",
+          "required": false,
+          "description": "When the asset exists: skip (default), update or replace (overwrite it), error",
+          "enum": [
+            "skip",
+            "update",
+            "replace",
+            "error"
+          ]
+        }
+      ],
+      "contractExempt": "Creates and saves a script asset"
+    },
+    "pie_script_delete": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Test script asset path"
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "description": "Must be true to delete"
+        }
+      ]
+    },
+    "pie_script_list": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "directory",
+          "type": "string",
+          "required": false,
+          "description": "Content folder to list under (default /Game)"
+        }
+      ]
+    },
+    "pie_script_read": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Test script asset path"
+        }
+      ]
+    },
+    "pie_script_replay": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "required": false,
+          "description": "Finished run to replay (default the last run)"
+        },
+        {
+          "name": "results_path",
+          "type": "string",
+          "required": false,
+          "description": "results.json of the run to replay, instead of a run id"
+        },
+        {
+          "name": "time_scale",
+          "type": "number",
+          "required": false,
+          "description": "Global time dilation during the replay (default 1)",
+          "minimum": 0
+        },
+        {
+          "name": "auto_stop_pie",
+          "type": "boolean",
+          "required": false,
+          "description": "End PIE when the replay finishes (default true)"
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext PIEInstance to observe (default the active PIE world)",
+          "minimum": 0
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside the selected PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Block until the run finishes or awaits a verdict"
+        },
+        {
+          "name": "timeout_seconds",
+          "type": "number",
+          "required": false,
+          "description": "Most seconds to wait when wait is set",
+          "minimum": 0
+        }
+      ],
+      "contractExempt": "Arms the replayer and observer and starts PIE"
+    },
+    "pie_script_results": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "required": false,
+          "description": "Script run id (default the current or last run)"
+        },
+        {
+          "name": "results_path",
+          "type": "string",
+          "required": false,
+          "description": "results.json path, instead of a run id"
+        }
+      ]
+    },
+    "pie_script_run": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "script",
+          "type": "string",
+          "required": false,
+          "description": "Test script asset path"
+        },
+        {
+          "name": "steps",
+          "type": "array",
+          "required": false,
+          "description": "Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+          "items": "object"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Name for an inline run (default inline)"
+        },
+        {
+          "name": "profile",
+          "type": "string",
+          "required": false,
+          "description": "Observation profile asset path; overrides the script's"
+        },
+        {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is"
+        },
+        {
+          "name": "record",
+          "type": "boolean",
+          "required": false,
+          "description": "Record input so pie_script_replay can rerun it (default true)"
+        },
+        {
+          "name": "start_pie",
+          "type": "boolean",
+          "required": false,
+          "description": "Start PIE when it is not running (default false)"
+        },
+        {
+          "name": "block_on_manual",
+          "type": "boolean",
+          "required": false,
+          "description": "Hold the run at each manual block until every step in it has a verdict (default true)"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "full (default) plays the script in PIE; manual starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once",
+          "enum": [
+            "full",
+            "manual"
+          ]
+        },
+        {
+          "name": "default_within_ms",
+          "type": "integer",
+          "required": false,
+          "description": "Default auto-step window in game ms; overrides the script's (default 5000)",
+          "minimum": 1
+        },
+        {
+          "name": "pie_instance",
+          "type": "integer",
+          "required": false,
+          "description": "FWorldContext PIEInstance to observe (default the active PIE world)",
+          "minimum": 0
+        },
+        {
+          "name": "client_id",
+          "type": "integer",
+          "required": false,
+          "description": "Local-player index inside the selected PIE world (default 0)",
+          "minimum": 0
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Block until the run finishes or awaits a verdict"
+        },
+        {
+          "name": "timeout_seconds",
+          "type": "number",
+          "required": false,
+          "description": "Most seconds to wait when wait is set",
+          "minimum": 0
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "script"
+            ],
+            [
+              "steps"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "Arms the observer and recorder and can start PIE"
+    },
+    "pie_script_runs": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "script",
+          "type": "string",
+          "required": false,
+          "description": "Test script asset path: only that script's runs"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most runs, newest first (default 50)",
+          "minimum": 1
+        },
+        {
+          "name": "include_steps",
+          "type": "boolean",
+          "required": false,
+          "description": "Each run's per-step results (default true)"
+        }
+      ]
+    },
+    "pie_script_status": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "required": false,
+          "description": "Script run id (default the current or last run)"
+        },
+        {
+          "name": "since_seq",
+          "type": "integer",
+          "required": false,
+          "description": "Only events with a larger seq (default 0, every event)",
+          "minimum": 0
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "required": false,
+          "description": "Block until the run finishes or awaits a verdict"
+        },
+        {
+          "name": "timeout_seconds",
+          "type": "number",
+          "required": false,
+          "description": "Most seconds to wait when wait is set",
+          "minimum": 0
+        }
+      ]
+    },
+    "pie_script_stop": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "required": false,
+          "description": "Run to stop; must be the active run when given"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "description": "Recorded as the run's stop reason"
+        }
+      ]
+    },
+    "pie_script_update": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Test script asset path"
+        },
+        {
+          "name": "steps",
+          "type": "array",
+          "required": false,
+          "description": "Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+          "items": "object"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "description": "What the script tests"
+        },
+        {
+          "name": "profile",
+          "type": "string",
+          "required": false,
+          "description": "Observation profile asset path; empty clears it"
+        },
+        {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level the script plays in; empty clears it"
+        },
+        {
+          "name": "default_within_ms",
+          "type": "integer",
+          "required": false,
+          "description": "Default auto-step window in game ms",
+          "minimum": 1
+        },
+        {
+          "name": "manual_only",
+          "type": "boolean",
+          "required": false,
+          "description": "Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"
+        }
+      ]
+    },
+    "pie_script_validate": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "steps",
+          "type": "array",
+          "required": true,
+          "description": "Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+          "items": "object"
+        },
+        {
+          "name": "profile",
+          "type": "string",
+          "required": false,
+          "description": "Observation profile asset path the script would use"
+        },
+        {
+          "name": "map",
+          "type": "string",
+          "required": false,
+          "description": "Level the script would play in"
+        },
+        {
+          "name": "manual_only",
+          "type": "boolean",
+          "required": false,
+          "description": "Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"
+        }
+      ]
+    },
+    "pie_script_values": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": false,
+          "description": "Actor class or Blueprint to report on: its actors in the level, and whether it is the player pawn"
+        },
+        {
+          "name": "profile",
+          "type": "string",
+          "required": false,
+          "description": "Observation profile asset path whose tracked values to list"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most entries per list (default 400)",
+          "minimum": 1
+        }
+      ]
+    },
+    "pie_script_verdict": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "step",
+          "type": "integer",
+          "required": true,
+          "description": "Manual step index, 0-based",
+          "minimum": 0
+        },
+        {
+          "name": "verdict",
+          "type": "string",
+          "required": true,
+          "description": "Verdict",
+          "enum": [
+            "pass",
+            "fail",
+            "skip"
+          ]
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": false,
+          "description": "Tester's note"
+        },
+        {
+          "name": "run_id",
+          "type": "string",
+          "required": false,
+          "description": "Run the step belongs to (default the current or last run)"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false,
+          "description": "Who judged the step: human (default) or agent. An agent verdict needs evidence and is refused on a step with agent_judgeable false. elicitation is the verdict form's human channel, action an alias of human",
+          "enum": [
+            "human",
+            "agent",
+            "elicitation",
+            "action"
+          ]
+        },
+        {
+          "name": "evidence",
+          "type": "object",
+          "required": false,
+          "description": "What the verdict rests on; required when source is agent",
+          "fields": [
+            {
+              "name": "note",
+              "type": "string",
+              "required": true,
+              "description": "What was observed"
+            },
+            {
+              "name": "captures",
+              "type": "array",
+              "required": false,
+              "description": "Capture files that show it: absolute, or relative to the run's output_dir; each must exist",
+              "items": "string"
+            }
+          ]
+        }
+      ]
+    },
+    "pie_session_errors": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "session",
+          "type": "string",
+          "required": false,
+          "description": "Session id under Saved/MCPSessions (default: the live or most recent session)"
+        },
+        {
+          "name": "session_dir",
+          "type": "string",
+          "required": false,
+          "description": "Absolute session folder, overriding session"
+        },
+        {
+          "name": "min_verbosity",
+          "type": "string",
+          "required": false,
+          "description": "Lowest severity kept (default warning)",
+          "enum": [
+            "error",
+            "warning"
+          ]
+        }
+      ]
+    },
+    "pie_session_log": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "session",
+          "type": "string",
+          "required": false,
+          "description": "Session id under Saved/MCPSessions (default: the live or most recent session)"
+        },
+        {
+          "name": "session_dir",
+          "type": "string",
+          "required": false,
+          "description": "Absolute session folder, overriding session"
+        },
+        {
+          "name": "min_verbosity",
+          "type": "string",
+          "required": false,
+          "description": "Lowest severity kept (default log)",
+          "enum": [
+            "error",
+            "warning",
+            "display",
+            "log",
+            "verbose"
+          ]
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "required": false,
+          "description": "Exact log category, such as LogTemp"
+        },
+        {
+          "name": "contains",
+          "type": "string",
+          "required": false,
+          "description": "Substring the message must contain"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most rows (default 200)",
+          "minimum": 1
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "First row",
+          "minimum": 0
+        }
+      ]
+    },
     "pie_set_player_view": {
       "category": "editor",
       "params": [
@@ -24223,6 +26234,155 @@
         }
       ],
       "contractExempt": "rotates the running PIE player's view"
+    },
+    "pie_test_list": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        }
+      ]
+    },
+    "pie_test_run": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "test_path",
+          "type": "string",
+          "required": false,
+          "description": "Explicit test.json path"
+        },
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Test name (default repro)"
+        },
+        {
+          "name": "auto_run",
+          "type": "boolean",
+          "required": false,
+          "description": "Drive the replay when no drift.json exists yet (default true)"
+        }
+      ],
+      "contractExempt": "Replays the recording in PIE"
+    },
+    "pie_test_scaffold": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "recording_id",
+          "type": "string",
+          "required": false,
+          "description": "Recording id under the recordings root"
+        },
+        {
+          "name": "recording_dir",
+          "type": "string",
+          "required": false,
+          "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Test name (default repro)"
+        },
+        {
+          "name": "max_position_drift_cm",
+          "type": "number",
+          "required": false,
+          "description": "Most position drift allowed (default 10)"
+        },
+        {
+          "name": "max_velocity_drift_cms",
+          "type": "number",
+          "required": false,
+          "description": "Most velocity drift allowed (default 50)"
+        },
+        {
+          "name": "max_rotation_drift_deg",
+          "type": "number",
+          "required": false,
+          "description": "Most rotation drift allowed (default 5)"
+        },
+        {
+          "name": "max_errors",
+          "type": "integer",
+          "required": false,
+          "description": "Most errors logged during the run (default 0)",
+          "minimum": 0
+        }
+      ],
+      "contractExempt": "Writes test.json beside the recording"
+    },
+    "pie_uat_abort": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "description": "Why the run is ended, recorded in the report"
+        }
+      ],
+      "contractExempt": "Ends the acceptance run and stops PIE"
+    },
+    "pie_uat_run": {
+      "category": "pie",
+      "params": [
+        {
+          "name": "scenario",
+          "type": "object",
+          "required": false,
+          "description": "Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[], forbid[], window_ms}]}; see docs/pie.md"
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false,
+          "description": "Scenario JSON file, relative to the project directory"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "scenario"
+            ],
+            [
+              "path"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "Opens the scenario map and starts a multiplayer PIE session"
+    },
+    "pie_uat_status": {
+      "category": "pie",
+      "params": []
     },
     "place_actor": {
       "category": "level",
@@ -35913,6 +38073,108 @@
         }
       ]
     },
+    "set_pcg_component_graph": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": false,
+          "description": "Blueprint whose PCG component template is written; every placed instance rebuilds from it"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Editor label of the actor holding the PCG component; a label naming several actors is refused"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "PCG component: the Blueprint's component variable name or the placed actor's component name (default: the only PCG component)"
+        },
+        {
+          "name": "graphPath",
+          "type": "string",
+          "required": true,
+          "description": "PCGGraph or PCGGraphInstance assigned through UPCGComponent::SetGraph; \"\" clears it"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "blueprintPath"
+            ],
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
+    "set_pcg_component_parameters": {
+      "category": "pcg",
+      "params": [
+        {
+          "name": "blueprintPath",
+          "type": "string",
+          "required": false,
+          "description": "Blueprint whose PCG component template is written; every placed instance rebuilds from it"
+        },
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Editor label of the actor holding the PCG component; a label naming several actors is refused"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector"
+        },
+        {
+          "name": "componentName",
+          "type": "string",
+          "required": false,
+          "description": "PCG component: the Blueprint's component variable name or the placed actor's component name (default: the only PCG component)"
+        },
+        {
+          "name": "overrides",
+          "type": "object",
+          "required": true,
+          "description": "{parameterName: value}; null clears that override"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "blueprintPath"
+            ],
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ]
+          ]
+        }
+      ]
+    },
     "set_pcg_graph_instance_overrides": {
       "category": "pcg",
       "params": [
@@ -37645,6 +39907,12 @@
           "type": "boolean",
           "required": false,
           "description": "Close at loopPosition rather than after the last key"
+        },
+        {
+          "name": "markEdited",
+          "type": "boolean",
+          "required": false,
+          "description": "Value for bSplineHasBeenEdited (default true), which keeps these points when the owner's construction script reruns; false clears it"
         }
       ],
       "choices": [
@@ -39157,6 +41425,56 @@
           "description": "Enable world bounds checks"
         }
       ]
+    },
+    "show_notification": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "Headline of the toast"
+        },
+        {
+          "name": "subText",
+          "type": "string",
+          "required": false,
+          "description": "Second line under the headline"
+        },
+        {
+          "name": "durationS",
+          "type": "number",
+          "required": false,
+          "description": "Seconds before the toast fades (default 8)",
+          "minimum": 1,
+          "maximum": 600
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "required": false,
+          "description": "Icon and colour of the toast (default info)",
+          "enum": [
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        },
+        {
+          "name": "hyperlinkText",
+          "type": "string",
+          "required": false,
+          "description": "Link label on the toast. Needs hyperlinkUrl"
+        },
+        {
+          "name": "hyperlinkUrl",
+          "type": "string",
+          "required": false,
+          "description": "http or https URL the link opens in the default browser"
+        }
+      ],
+      "contractExempt": "shows an editor toast"
     },
     "simulate_procedural_foliage": {
       "category": "foliage",

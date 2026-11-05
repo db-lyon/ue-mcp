@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * MetaSound authoring one action at a time: source creation, graph members,
  * the four connect forms, defaults, disconnects and renames, each read back

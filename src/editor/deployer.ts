@@ -134,7 +134,7 @@ export function deploySummary(r: DeployResult): string {
  * should surface that to the user and ask them to run `ue-mcp init`
  * or `ue-mcp deploy` explicitly.
  */
-export function attach(context: ProjectContext): AttachResult {
+export function attach(context: ProjectContext, opts: { cleanLegacy?: boolean } = {}): AttachResult {
   const result: AttachResult = {
     pythonPluginEnabled: false,
     cppPluginEnabled: false,
@@ -169,7 +169,8 @@ export function attach(context: ProjectContext): AttachResult {
 
     if (!result.cppPluginPresent) return result;
 
-    if (resolved) removeLegacyPythonContent(resolved.dir);
+    // cleanLegacy: false leaves the plugin folder byte-identical, as a project switch must (#1615).
+    if (resolved && opts.cleanLegacy !== false) removeLegacyPythonContent(resolved.dir);
     result.pythonPluginEnabled = ensurePythonPlugin(uprojectPath);
     result.cppPluginEnabled = ensureCppPluginEnabled(uprojectPath);
   } catch (e) {

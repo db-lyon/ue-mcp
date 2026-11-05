@@ -1,6 +1,7 @@
 #include "DemoHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerAssetDelete.h"
 
 #include "Handlers/VolumeHelpers_Internal.h"
 
@@ -442,7 +443,9 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 	for (const FString& AssetPath : AssetsToDelete)
 	{
 		if (!UEditorAssetLibrary::DoesAssetExist(AssetPath)) continue;
-		if (UEditorAssetLibrary::DeleteAsset(AssetPath))
+		// The shared delete, which also removes a package file the engine reported deleted but left on disk.
+		bool bRemovedOrphanFile = false;
+		if (MCPDeleteAssetFromDisk(AssetPath, bRemovedOrphanFile))
 		{
 			++AssetsDeleted;
 		}

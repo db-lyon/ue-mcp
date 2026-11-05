@@ -52,8 +52,9 @@
     </g>
     <rect x="34" y="330" width="452" height="136" rx="16" fill="#0b1a2c" stroke="#475569"/>
     <text x="58" y="368" fill="#94a3b8" font-family="Segoe UI, Arial" font-size="18">Tool arguments</text>
-    <text x="58" y="407" fill="#dbeafe" font-family="Cascadia Mono, Consolas" font-size="17">frame: "actor"</text>
-    <text x="58" y="439" fill="#dbeafe" font-family="Cascadia Mono, Consolas" font-size="17">axisRotation: { axis: "up", degrees: 15 }</text>
+    <text x="58" y="398" fill="#dbeafe" font-family="Cascadia Mono, Consolas" font-size="17">frame: "actor"</text>
+    <text x="58" y="424" fill="#dbeafe" font-family="Cascadia Mono, Consolas" font-size="17">viewRotation: { viewFrom: "above",</text>
+    <text x="78" y="450" fill="#dbeafe" font-family="Cascadia Mono, Consolas" font-size="17">direction: "clockwise", degrees: 15 }</text>
     <text x="34" y="518" fill="#fb7185" font-family="Segoe UI, Arial" font-size="20" font-weight="700">Without “looking down”:</text>
     <text x="34" y="552" fill="#cbd5e1" font-family="Segoe UI, Arial" font-size="18">clockwise could reverse from underneath,</text>
     <text x="34" y="580" fill="#cbd5e1" font-family="Segoe UI, Arial" font-size="18">or mean a different camera-facing plane.</text>

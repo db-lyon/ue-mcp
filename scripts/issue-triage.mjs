@@ -23,7 +23,6 @@ export const MAINTAINERS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 export const DESTINATIONS = {
   "ue-mcp-studio": { repo: "db-lyon/ue-mcp-studio" },
   "ue-mcp-studio-plugin": { repo: "db-lyon/ue-mcp-studio-plugin" },
-  "pie-studio": { repo: "db-lyon/pie-studio" },
   "voxel-plugin-tools": { repo: "db-lyon/voxel-plugin-tools" },
   perforce: { label: "plugin:perforce", name: "Perforce" },
   meshy: { label: "plugin:meshy", name: "Meshy" },
