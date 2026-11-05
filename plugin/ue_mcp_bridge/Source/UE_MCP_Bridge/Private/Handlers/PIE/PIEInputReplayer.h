@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Handlers/PIE/PIEFrameSampler.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEMaxFPSPin.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
 class UWorld;
@@ -192,6 +193,7 @@ namespace MCPPIE
 		FString CurrentDriftPath;
 		TArray<FSourceFrame> SourceFrames;
 		FPIEFrameSampler Sampler;
+		FPIEMaxFPSPin FPSPin;
 		TWeakObjectPtr<UWorld> TargetWorld;
 		TWeakObjectPtr<APlayerController> TargetPlayerController;
 		TWeakObjectPtr<ULocalPlayer> TargetLocalPlayer;

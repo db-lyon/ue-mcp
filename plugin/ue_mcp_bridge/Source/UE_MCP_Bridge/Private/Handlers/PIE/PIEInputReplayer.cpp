@@ -120,6 +120,8 @@ namespace MCPPIE
 		}
 		OnEndFrameHandle.Reset();
 		bEndFrameBound = false;
+		FPSPin.Restore();
+		RestoreFixedTimestep();
 		State = EReplayerState::Idle;
 		bArmed = false;
 		TargetWorld.Reset();
@@ -435,10 +437,11 @@ namespace MCPPIE
 
 	void FPIEInputReplayer::ApplyFPSPin(UWorld* PIEWorld, int32 Hz)
 	{
-		if (!PIEWorld || !GEngine || Hz <= 0) return;
-		const FString Cmd = FString::Printf(TEXT("t.MaxFPS %d"), Hz);
-		GEngine->Exec(PIEWorld, *Cmd);
-		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] %s"), *Cmd);
+		if (!PIEWorld || Hz <= 0) return;
+		if (FPSPin.Apply(Hz))
+		{
+			UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REP] t.MaxFPS pinned to %d"), Hz);
+		}
 
 		// Item X2: opt-in fixed timestep for stronger reproducibility.
 		if (Pending.bFixedTimestep)
@@ -1053,6 +1056,7 @@ namespace MCPPIE
 
 		RepossessPlayer();
 		RestoreFixedTimestep();
+		FPSPin.Restore();
 
 		if (ViewportCapture.IsValid())
 		{

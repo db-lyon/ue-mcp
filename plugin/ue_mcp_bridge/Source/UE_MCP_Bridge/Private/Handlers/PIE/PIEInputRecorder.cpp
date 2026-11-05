@@ -84,6 +84,7 @@ namespace MCPPIE
 		}
 		OnEndFrameHandle.Reset();
 		bEndFrameBound = false;
+		FPSPin.Restore();
 		State = ERecorderState::Idle;
 		bArmed = false;
 		TargetWorld.Reset();
@@ -193,11 +194,11 @@ namespace MCPPIE
 
 	void FPIEInputRecorder::ApplyFPSPin(UWorld* PIEWorld)
 	{
-		if (Pending.PinFPS <= 0) return;
-		if (!PIEWorld || !GEngine) return;
-		const FString Cmd = FString::Printf(TEXT("t.MaxFPS %d"), Pending.PinFPS);
-		GEngine->Exec(PIEWorld, *Cmd);
-		UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REC] %s"), *Cmd);
+		if (Pending.PinFPS <= 0 || !PIEWorld) return;
+		if (FPSPin.Apply(Pending.PinFPS))
+		{
+			UE_LOG(LogMCPPIE, Log, TEXT("[PIE-REC] t.MaxFPS pinned to %d"), Pending.PinFPS);
+		}
 	}
 
 	void FPIEInputRecorder::OnEndFrame()
@@ -421,6 +422,7 @@ namespace MCPPIE
 			return R;
 		}
 		const bool bHadData = Rows.Num() > 0 && Sampler.IsAttached();
+		FPSPin.Restore();
 		R.Id = CurrentId;
 		R.RecordingDir = CurrentDir;
 

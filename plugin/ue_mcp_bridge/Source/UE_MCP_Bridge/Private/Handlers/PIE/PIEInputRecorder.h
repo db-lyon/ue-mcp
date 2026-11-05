@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Handlers/PIE/PIEFrameSampler.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEMaxFPSPin.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
 class UWorld;
@@ -140,6 +141,7 @@ namespace MCPPIE
 		bool bArmed = false;
 		ERecorderState State = ERecorderState::Idle;
 		FPIEFrameSampler Sampler;
+		FPIEMaxFPSPin FPSPin;
 		TWeakObjectPtr<UWorld> TargetWorld;
 		int32 ResolvedPIEInstance = INDEX_NONE;
 		bool bTargetResolved = false;
