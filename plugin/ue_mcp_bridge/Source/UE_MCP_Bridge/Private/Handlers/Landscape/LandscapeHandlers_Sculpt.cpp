@@ -990,6 +990,9 @@ namespace
 		OutError.Reset();
 		OutHeights.SetNumZeroed(Region.Count());
 		FLandscapeEditDataInterface EditData(Info);
+		// Even GetHeightData calls Texture->Modify through the edit interface.
+		// Suppress dirtying for reads without clearing any existing dirty flags.
+		EditData.SetShouldDirtyPackage(false);
 		if (bUseEditLayer) EditData.SetEditLayer(EditLayerGuid);
 		int32 GX1 = Region.X1, GY1 = Region.Y1, GX2 = Region.X2, GY2 = Region.Y2;
 		EditData.GetHeightData(GX1, GY1, GX2, GY2, OutHeights.GetData(), 0);

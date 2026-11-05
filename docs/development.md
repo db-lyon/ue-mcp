@@ -141,6 +141,8 @@ No environment variable is needed. When nothing answers, the failure names the l
 
 `npm run test:automation -- --filter <prefix>` narrows the C++ suite, for example `--filter UE.MCP.Level.PlaceVolume` (native volume placement) or `--filter UE.MCP.Blueprint.TransactionalNodes` (graph node flags). `--verbose` prints every error line.
 
+`--filter UE.MCP.Landscape.HeightRead` checks that `landscape(get_height_region)` returns the expected heights without dirtying a clean landscape package or clearing an existing dirty flag, for merged and edit-layer reads. The same reader serves the point, normal, slope, analysis, export and geo-projection height queries.
+
 ### Live tests
 
 Each shard of `npm run test:live` is a copy of `tests/ue_mcp` with its own editor and port, launched with the kind its files declare (`// @live-editor headless`, `render`, `interactive`, `base`, `scm`, `none`, `lifecycle`). Files are split by measured time, the shard count follows free memory, and the run fails over 10 minutes or when a test passes its budget. Every shard is checked to have its own project open before anything is sent.
