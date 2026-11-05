@@ -2,7 +2,7 @@
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal 5.8 tools that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->30<!-- /count --> category tools** covering **<!-- count:actions -->2125+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
+UE-MCP exposes **<!-- count:tools -->30<!-- /count --> category tools** covering **<!-- count:actions -->2126+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation and an `args` object holding that action's parameters: `level(action="place_actor", args={actorClass: "PointLight"})`. Under the default `micro` [context strategy](configuration.md#context-strategy-full-lean-micro) the same call goes through the gateway: `tools(action="call", category="level", method="place_actor", args={...})`.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -2423,7 +2423,7 @@ The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) a
 
 ## fab
 
-*Import Fab (Epic marketplace) content: check plugin/login status, trigger login/logout, sync your owned library into the Content Browser, inspect/clear the download cache, and import owned or local source files into the project.*
+*Import Fab (Epic marketplace) content: open the fab.com search page at a query, check plugin/login status, trigger login/logout, sync your owned library into the Content Browser, inspect/clear the download cache, and import owned or local source files into the project.*
 
 | Action | Description |
 |--------|-------------|
@@ -2435,6 +2435,7 @@ The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) a
 | `cache_info()` | Report the Fab download cache location, total size, and entry count. Params: `none` |
 | `clear_cache()` | Delete the local Fab download cache to reclaim disk. Does not affect assets already imported into the project. Reports unchanged=true when the cache was already empty (where the native Fab API is linked). No inverse: the downloads come back only by downloading them again. Params: `none` |
 | `import_file(source\|sourceFile, destination\|destPath)` | Import a source file into the project through the Fab Interchange import pipeline. Use for owned assets that are downloaded/cached locally, or any local source file (fbx, textures). Single files import synchronously and report the created asset paths; pack/quixel workflows may run asynchronously. A synchronous import rolls back by deleting exactly the assets it created, taken from the paths the importer reported (a force delete, because the imported set references itself). An ASYNCHRONOUS import emits no inverse: its paths are not known yet, and a record naming the destination folder would delete whatever else already lives there. Params: `source (or sourceFile), destination (or destPath)` |
+| `open_search(query, listingType?, assetFormat?, free?:b, open?:b)` | Open fab.com's own search page at a query in the user's default browser. Builds https://www.fab.com/search?q=<query>&listing_types=<listingType>&asset_formats=<assetFormat>&is_free=1, leaving out unset filters. Sends no request to Fab and returns no listing data: Fab has no search API and its terms forbid automated access. open=false returns the URL without opening it, for showing as a link. Returns url and opened. Params: `query, listingType?, assetFormat?, free?, open?` |
 
 ---
 

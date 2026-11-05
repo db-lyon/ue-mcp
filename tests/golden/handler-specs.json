@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1220,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -14732,6 +14732,42 @@
       "category": "fab",
       "params": [],
       "contractExempt": "Takes no parameters and clears the stored Fab credentials when called"
+    },
+    "fab_open_search": {
+      "category": "fab",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Search text"
+        },
+        {
+          "name": "listingType",
+          "type": "string",
+          "required": false,
+          "description": "Listing type filter, e.g. 3d-model, material, tool-and-plugin"
+        },
+        {
+          "name": "assetFormat",
+          "type": "string",
+          "required": false,
+          "description": "Asset format filter (default unreal-engine; empty string drops the filter)"
+        },
+        {
+          "name": "free",
+          "type": "boolean",
+          "required": false,
+          "description": "Only free listings (default false)"
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "description": "Open the page in the default browser (default true); false only returns the URL"
+        }
+      ],
+      "contractExempt": "Opens the fab.com search page in the default browser when called"
     },
     "fab_status": {
       "category": "fab",
