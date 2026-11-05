@@ -18,6 +18,7 @@ namespace
 #if UE_MCP_HAS_5_8_API
 
 #include "HandlerAssetCreate.h"
+#include "HandlerControlRigStepSampling.h"
 
 #include "Algo/Reverse.h"
 #include "AnimPose.h"
@@ -1939,6 +1940,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 	{
 		return MCPError(FString::Printf(TEXT("Control Rig edit sessions are limited to %d frames"), ControlRigSequencerMaxFrames));
 	}
+	const float SessionPlayRate = MCPControlRigStepSampling::SessionPlayRate(
+		RawTimelinePlayRate, SourceAnimation->Interpolation,
+		SourceAnimation->GetNumberOfSampledKeys(), EndFrameExclusive - StartFrame + 1);
 
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("error")).ToLower();
 	if (OnConflict != TEXT("skip") && OnConflict != TEXT("error"))
@@ -2033,7 +2037,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 					AnimationSection->Params.Animation = SourceAnimation;
 					// Sequencer multiplies section PlayRate by the AnimSequence RateScale.
 					// Cancel the asset rate so the edit session sees the raw source timeline once.
-					AnimationSection->Params.PlayRate = RawTimelinePlayRate;
+					AnimationSection->Params.PlayRate = SessionPlayRate;
 					// Unreal's AnimSequence exporter samples the exact playback end as its final key.
 					// Keep one support frame on the source/rig sections so that sample evaluates the
 					// animation instead of falling outside every section and snapping to reference pose.

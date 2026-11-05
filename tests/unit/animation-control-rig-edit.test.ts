@@ -56,7 +56,9 @@ describe("animation Control Rig edit workflow", () => {
     );
 
     expect(source).toContain("const float RawTimelinePlayRate = static_cast<float>(1.0 / SourceRateScale)");
-    expect(source).toContain("AnimationSection->Params.PlayRate = RawTimelinePlayRate");
+    expect(source).toContain("AnimationSection->Params.PlayRate = SessionPlayRate");
+    expect(source).toContain("MCPControlRigStepSampling::SessionPlayRate(");
+    expect(source).toContain("RawTimelinePlayRate, SourceAnimation->Interpolation,");
     expect(nativeTest).toContain("SourceAnimation->RateScale = 3.06608796f");
     expect(nativeTest).toContain("for (int32 Frame = 0; Frame <= 40; ++Frame)");
     expect(nativeTest).toContain("Section->MapTimeToAnimation(FFrameTime(Frame), DisplayRate)");
