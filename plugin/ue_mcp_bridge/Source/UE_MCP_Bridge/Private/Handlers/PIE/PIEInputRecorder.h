@@ -75,6 +75,8 @@ namespace MCPPIE
 		double ElapsedSeconds = 0.0;
 		int32 TrackedActionCount = 0;
 		FString LastError;
+		// Attach-time problems: unmatched actions, unresolved track_values.
+		TArray<FString> Warnings;
 	};
 
 	struct FRecorderFinishResult
@@ -92,6 +94,7 @@ namespace MCPPIE
 		TArray<FMarker> Markers;
 		bool bTakeRecordAttempted = false;
 		FString TakeRecorderStatus;
+		TArray<FString> Warnings;
 	};
 
 	class FPIEInputRecorder

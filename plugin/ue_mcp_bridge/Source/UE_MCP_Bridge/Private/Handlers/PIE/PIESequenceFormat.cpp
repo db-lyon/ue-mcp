@@ -186,6 +186,13 @@ namespace MCPPIE
 		}
 		O->SetArrayField(TEXT("tracked_values"), TrackedArr);
 
+		if (M.Warnings.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> WarnArr;
+			for (const FString& W : M.Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
+			O->SetArrayField(TEXT("warnings"), WarnArr);
+		}
+
 		TArray<TSharedPtr<FJsonValue>> MarkersArr;
 		for (const FMarker& Mk : M.Markers)
 		{
@@ -299,6 +306,16 @@ namespace MCPPIE
 				TO->TryGetStringField(TEXT("path"), T.Path);
 				TO->TryGetStringField(TEXT("type"), T.Type);
 				Out.TrackedValues.Add(T);
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* WarnArr = nullptr;
+		if (Obj->TryGetArrayField(TEXT("warnings"), WarnArr) && WarnArr)
+		{
+			for (const TSharedPtr<FJsonValue>& WV : *WarnArr)
+			{
+				FString W;
+				if (WV.IsValid() && WV->TryGetString(W)) Out.Warnings.Add(W);
 			}
 		}
 

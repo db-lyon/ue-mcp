@@ -517,6 +517,7 @@ namespace MCPPIE
 		M.Actions = Sampler.GetActions();
 		M.TrackedValues = Sampler.GetTrackedValues();
 		M.Markers = Markers;
+		M.Warnings = Sampler.GetWarnings();
 		M.CSVFile = TEXT("recording.csv");
 		M.SequenceFile = TEXT("sequence.json");
 
@@ -548,6 +549,7 @@ namespace MCPPIE
 		R.SequencePath = SeqPath;
 		R.TotalFrames = M.TotalFrames;
 		R.DurationSeconds = M.DurationSeconds;
+		R.Warnings = M.Warnings;
 
 		// Drive Take Recorder Stop in lockstep with the input recorder
 		// finalise. Report the outcome so the user knows what happened.
@@ -605,6 +607,7 @@ namespace MCPPIE
 		S.ElapsedSeconds = (Rows.Num() >= 2) ? (Rows.Last().Time - Rows[0].Time) : 0.0;
 		S.TrackedActionCount = Sampler.GetActions().Num();
 		S.LastError = LastError;
+		S.Warnings = Sampler.GetWarnings();
 		return S;
 	}
 

@@ -83,6 +83,9 @@ namespace MCPPIE
 		TArray<FTrackedValueSpec> TrackedValues;
 		TArray<FString> TrackedActorIds;
 		TArray<FMarker> Markers;
+		// Attach-time problems the recording carries (unmatched actions,
+		// track_values that never resolved). Absent when empty.
+		TArray<FString> Warnings;
 		FString CSVFile = TEXT("recording.csv");
 		FString SequenceFile = TEXT("sequence.json");
 		FString DriftFile;
