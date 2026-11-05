@@ -13,6 +13,7 @@ import type { EditorBridge } from "../../src/bridge/bridge.js";
 const PREFIX = "BCov_Level_";
 const CUBE = "/Engine/BasicShapes/Cube.Cube";
 const GRID_MATERIAL = "/Engine/EngineMaterials/WorldGridMaterial.WorldGridMaterial";
+const PORTAL_BP = "/Game/MCPTest/BCov/Level/BP_BCov_Level_Portal";
 
 type Json = Record<string, unknown>;
 type Vec = { x: number; y: number; z: number };
@@ -50,6 +51,7 @@ async function componentValue(label: string, componentName: string, property: st
 
 async function cleanup(): Promise<void> {
   await callBridge(bridge, "delete_actors", { labelPrefix: PREFIX });
+  await callBridge(bridge, "delete_asset", { assetPath: PORTAL_BP, force: true });
 }
 
 beforeAll(async () => {
@@ -137,6 +139,35 @@ describe("level component properties", () => {
     const removed = await call("remove_component_from_actor", { actorLabel: A, componentName: "BCovArrow" });
     expect(removed.deleted).toBe(true);
     expect((await components(A)).some((c) => c.name === "BCovArrow")).toBe(false);
+  }, 120_000);
+});
+
+describe("level actor property readback (#1566)", () => {
+  const START = `${PREFIX}Start`;
+  const PORTAL = `${PREFIX}Portal`;
+
+  it("set_actor_property sets PlayerStartTag and reports the stored value", async () => {
+    await call("place_actor", { actorClass: "PlayerStart", label: START, location: { x: 0, y: 21000, z: 100 } });
+    const out = await call("set_actor_property", { actorLabel: START, propertyName: "PlayerStartTag", value: "BCovDefaultStart" });
+    expect(out.value).toBe("BCovDefaultStart");
+    expect(out.changed).toBe(true);
+    expect(out.type).toBe("FName");
+    const read = await call("get_property", { objectPath: String(out.actorPath), propertyName: "PlayerStartTag" });
+    expect(read.value).toBe("BCovDefaultStart");
+  }, 120_000);
+
+  it("set_actor_property writes a Blueprint instance variable and reads it back", async () => {
+    await call("create_blueprint", { assetPath: PORTAL_BP, parentClass: "Actor" });
+    await call("add_variable", { assetPath: PORTAL_BP, name: "TargetLevel", varType: "name", instanceEditable: true });
+    await call("compile_blueprint", { assetPath: PORTAL_BP });
+    await call("place_actor", { actorClass: `${PORTAL_BP}.BP_BCov_Level_Portal_C`, label: PORTAL, location: { x: 300, y: 21000, z: 100 } });
+    const target = "/Game/BCov/Maps/LV_Target#GateExit";
+    const out = await call("set_actor_property", { actorLabel: PORTAL, propertyName: "TargetLevel", value: target });
+    expect(out.previousValue).toBe("None");
+    expect(out.value).toBe(target);
+    expect(out.changed).toBe(true);
+    const read = await call("get_property", { objectPath: String(out.actorPath), propertyName: "TargetLevel" });
+    expect(read.value).toBe(target);
   }, 120_000);
 });
 

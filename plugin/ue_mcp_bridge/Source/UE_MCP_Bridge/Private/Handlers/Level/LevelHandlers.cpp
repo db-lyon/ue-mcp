@@ -3986,6 +3986,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 	// mirror of this bug; a read that shows three tiers and a write that can
 	// only reach the first is not a usable pair.
 	int32 LeafArrayIndex = 0;
+	// A construction script rerun can replace a sub-object, so a leaf reached
+	// through one is resolved again before it is read back.
+	bool bViaSubObject = false;
 	for (int32 i = 0; i < PathParts.Num(); ++i)
 	{
 		FString Token = PathParts[i];
@@ -4055,6 +4058,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 				SubObject->Modify();
 				CurrentContainer = SubObject;
 				CurrentStruct = SubObject->GetClass();
+				bViaSubObject = true;
 			}
 			else
 			{
@@ -4229,6 +4233,29 @@ WriteDone:
 	Result->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("previousValue"), PrevValue);
+	// What the property holds after the write and PostEditChangeProperty, in the
+	// same export form as previousValue, so a caller checks it without a second read (#1566).
+	FString NewValue;
+	bool bReadBack = !bViaSubObject;
+	if (bReadBack)
+	{
+		Prop->ExportText_Direct(NewValue, ValuePtr, ValuePtr, TargetActor, PPF_None);
+	}
+	else
+	{
+		FProperty* ReadProp = nullptr;
+		void* ReadPtr = nullptr;
+		UObject* ReadOwner = nullptr;
+		FString ReadErr;
+		bReadBack = MCPJsonProperty::ResolveDottedPath(TargetActor, PropertyName, ReadProp, ReadPtr, ReadOwner, ReadErr) && ReadProp == Prop;
+		if (bReadBack) ReadProp->ExportText_Direct(NewValue, ReadPtr, ReadPtr, ReadOwner, PPF_None);
+	}
+	if (bReadBack)
+	{
+		Result->SetStringField(TEXT("value"), NewValue);
+		Result->SetBoolField(TEXT("changed"), NewValue != PrevValue);
+	}
+	Result->SetStringField(TEXT("type"), Prop->GetCPPType());
 
 	// The undo travels by path so replaying it cannot land on a namesake (#983).
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();

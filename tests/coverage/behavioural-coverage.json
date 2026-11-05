@@ -1547,6 +1547,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "set_actor_property writes a Blueprint instance variable and reads it back"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "checkpoint_arm records a new package as absent and an existing one as a copy, once per generation"
         }
@@ -3313,6 +3318,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "set_actor_property writes a Blueprint instance variable and reads it back"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-reflection.test.ts",
           "test": "inspect_save_game loads a slot the test wrote and reports its class"
         },
@@ -4009,6 +4019,11 @@
           "suite": "live",
           "file": "tests/live/bcov-gas.test.ts",
           "test": "add_ability_system_component and set_asc_defaults wire an ASC that later calls find"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "set_actor_property writes a Blueprint instance variable and reads it back"
         },
         {
           "suite": "live",
@@ -8960,6 +8975,16 @@
           "suite": "live",
           "file": "tests/live/bcov-gas.test.ts",
           "test": "set_effect_modifier adds a modifier the effect CDO then carries"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "set_actor_property sets PlayerStartTag and reports the stored value"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "set_actor_property writes a Blueprint instance variable and reads it back"
         },
         {
           "suite": "live",
@@ -14312,6 +14337,16 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "set_actor_property sets PlayerStartTag and reports the stored value"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "set_actor_property writes a Blueprint instance variable and reads it back"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
           "test": "set_component_property writes a value get_component_details reads back"
         },
         {
@@ -18802,6 +18837,16 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/ActorSelectorTests.cpp",
           "test": "UE.MCP.Level.ActorSelector.DuplicateLabelIsRefused"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "set_actor_property sets PlayerStartTag and reports the stored value"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-actors.test.ts",
+          "test": "set_actor_property writes a Blueprint instance variable and reads it back"
         }
       ]
     },
