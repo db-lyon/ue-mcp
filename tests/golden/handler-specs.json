@@ -14818,6 +14818,18 @@
           "type": "string",
           "required": false,
           "description": "Full object path of the pathfinding context actor; alternative to pathfindingContext"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "editor (default) | pie | game | auto; pie queries the running session's navmesh, including after a level change"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE instance id; omitted selects the active PIE world"
         }
       ]
     },
