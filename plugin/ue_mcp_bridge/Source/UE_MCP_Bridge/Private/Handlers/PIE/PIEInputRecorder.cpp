@@ -622,6 +622,24 @@ namespace MCPPIE
 		S.TrackedActionCount = Sampler.GetActions().Num();
 		S.LastError = LastError;
 		S.Warnings = Sampler.GetWarnings();
+		S.PIEInstance = ResolvedPIEInstance;
+		if (State == ERecorderState::WaitingForPawn)
+		{
+			S.WaitingFor = !bTargetResolved
+				? (TargetResolveError.IsEmpty() ? FString(TEXT("a PIE world with the requested player")) : TargetResolveError)
+				: (Sampler.GetAttachBlocker().IsEmpty() ? FString(TEXT("the player's pawn")) : Sampler.GetAttachBlocker());
+		}
+		if (GEngine)
+		{
+			for (const FWorldContext& Context : GEngine->GetWorldContexts())
+			{
+				if ((Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game) && Context.World())
+				{
+					S.bPIEActive = true;
+					break;
+				}
+			}
+		}
 		return S;
 	}
 

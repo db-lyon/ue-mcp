@@ -293,6 +293,8 @@ Actions that inject, record, replay or observe accept `pie_instance`, the exact 
 
 Without `pie_instance`, the tool prefers an eligible `GEditor->PlayWorld`, then the first PIE or Game world that has the requested local player, which avoids picking a dedicated server first. The selected world and player stay fixed for each recording, replay, observation, hold and tape. Unresolved recorder, replay and observation targets are retried for 10 seconds from BeginPIE, then finalize as failures with `last_error` in their status.
 
+While the recorder or replayer is `waiting_for_pawn`, its status carries `waiting_for` (no PIE world has the player, the controller possesses no pawn yet, or the pawn has no input component yet) and `pie_worlds`: each running world's `pie_instance`, `net_mode` and local players with their controller and pawn. With a dedicated server and two clients, that shows which client instance to pass as `pie_instance`, and that a pawn missing everywhere is the game still holding the player in its intro. `record_status` also reports `pie_active`.
+
 ## Data layout
 
 ```text

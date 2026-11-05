@@ -21,7 +21,7 @@ export const pieTool: ToolDef = categoryTool(
     record_arm:           specBp("mutate", "Arm the PIE recorder; it starts on BeginPIE and finalizes on EndPIE into Saved/MCPRecordings/<id>. Rolls back with record_disarm.", "pie_record_arm"),
     record_disarm:        specBp("mutate", "Cancel an armed recording.", "pie_record_disarm"),
     record_stop:          specBp("mutate", "Finalize the recording in flight.", "pie_record_stop"),
-    record_status:        specBp("read", "Recorder state, id, frame and elapsed time.", "pie_record_status"),
+    record_status:        specBp("read", "Recorder state, id, frame, elapsed time and pie_active. While waiting_for_pawn: waiting_for (what is missing) and pie_worlds (each PIE world's pie_instance, net_mode, players and pawns).", "pie_record_status"),
     record_list:          specBp("read", "List recordings.", "pie_record_list"),
     record_read:          specBp("read", "Read a recording artifact: manifest, sequence, csv, drift or tracked.", "pie_record_read"),
     record_delete:        { ...specBp("mutate", "Delete a recording folder (confirm=true).", "pie_record_delete"), destructive: true },

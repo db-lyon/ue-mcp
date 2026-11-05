@@ -83,6 +83,9 @@ namespace MCPPIE
 		// One line per problem found at attach: unmatched actions, tracked
 		// values that do not resolve to a numeric leaf. Empty when clean.
 		const TArray<FString>& GetWarnings() const { return Warnings; }
+		// Why the last AttachToPIE did not attach (no controller, no pawn, no
+		// input component yet). Empty once attached.
+		const FString& GetAttachBlocker() const { return AttachBlocker; }
 
 		// Insert a marker label into the next emitted row's EdgeEvents.
 		// Multiple markers in the same frame are concatenated.
@@ -112,6 +115,7 @@ namespace MCPPIE
 		TArray<FTrackedAction> Tracked;
 		TArray<FString> PendingMarkerLabels;
 		TArray<FString> Warnings;
+		FString AttachBlocker;
 		FVector PrevPawnLocation = FVector::ZeroVector;
 	};
 }

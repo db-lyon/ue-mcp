@@ -1946,7 +1946,7 @@ The press actions (`respond_to_dialog`, `press_window_button`, `close_window`) a
 | `record_arm(actions?:[s], track_values?:[s], track_actors?:[s], axis_threshold?:n, sample_hz?:i(1..), pin_fps?:i, capture_pawn_state?:b, capture_montage?:b, take_record?:b, client_id?:i(0..), pie_instance?:i(0..), rng_seed?:n, run_gap_frames?:i, recording_dir?, id?)` | Arm the PIE recorder; it starts on BeginPIE and finalizes on EndPIE into Saved/MCPRecordings/<id>. Rolls back with record_disarm. Params: `actions?, track_values?, track_actors?, axis_threshold?, sample_hz?, pin_fps?, capture_pawn_state?, capture_montage?, take_record?, client_id?, pie_instance?, rng_seed?, run_gap_frames?, recording_dir?, id?` |
 | `record_disarm()` | Cancel an armed recording. Params: `none` |
 | `record_stop()` | Finalize the recording in flight. Params: `none` |
-| `record_status()` | Recorder state, id, frame and elapsed time. Params: `none` |
+| `record_status()` | Recorder state, id, frame, elapsed time and pie_active. While waiting_for_pawn: waiting_for (what is missing) and pie_worlds (each PIE world's pie_instance, net_mode, players and pawns). Params: `none` |
 | `record_list(recording_dir?, limit?:i(1..), offset?:i(0..))` | List recordings. Params: `recording_dir?, limit?, offset?` |
 | `record_read(id, file?:{manifest,sequence,csv,drift,tracked}, recording_dir?, limit?:i(1..), offset?:i(0..))` | Read a recording artifact: manifest, sequence, csv, drift or tracked. Params: `id, file?, recording_dir?, limit?, offset?` |
 | `record_delete(id, confirm?:b, recording_dir?)` | Delete a recording folder (confirm=true). Params: `id, confirm?, recording_dir?` |

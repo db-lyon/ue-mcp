@@ -297,6 +297,7 @@ namespace MCPPIE
 		Tracked.Reset();
 		PendingMarkerLabels.Reset();
 		Warnings.Reset();
+		AttachBlocker.Reset();
 		PrevPawnLocation = FVector::ZeroVector;
 		// Re-seed from the current config so AttachToPIE can run again.
 		SeedTrackedValues();
@@ -381,19 +382,28 @@ namespace MCPPIE
 		FString Error;
 		if (!PIEWorldResolver::ResolvePlayerInWorld(PIEWorld, Config.ClientIndex, Target, Error))
 		{
+			AttachBlocker = Error;
 			return false;
 		}
 
 		APlayerController* PC = Target.PlayerController;
 		if (!PC)
 		{
+			AttachBlocker = FString::Printf(TEXT("local player %d has no player controller"), Config.ClientIndex);
 			return false;
 		}
 		APawn* Pawn = PC->GetPawn();
-		if (!Pawn || !Pawn->InputComponent)
+		if (!Pawn)
 		{
+			AttachBlocker = FString::Printf(TEXT("%s in %s possesses no pawn yet"), *PC->GetName(), *PIEWorld->GetName());
 			return false;
 		}
+		if (!Pawn->InputComponent)
+		{
+			AttachBlocker = FString::Printf(TEXT("pawn %s has no input component yet"), *Pawn->GetName());
+			return false;
+		}
+		AttachBlocker.Reset();
 
 		PawnClassPath = Pawn->GetClass()->GetPathName();
 		PIEWorldPath = PIEWorld->GetPathName();

@@ -1432,7 +1432,13 @@ namespace MCPPIE
 		}
 		S.bPIEActive = bPIEActive;
 		S.LastError = TargetResolveError;
-		if (State == EReplayerState::Replaying && Pending.StartGate.bEnabled && !bStepClockStarted)
+		if (State == EReplayerState::WaitingForPawn)
+		{
+			S.WaitingFor = !bTargetResolved
+				? (TargetResolveError.IsEmpty() ? FString(TEXT("a PIE world with the requested player")) : TargetResolveError)
+				: (Sampler.GetAttachBlocker().IsEmpty() ? FString(TEXT("the player's pawn")) : Sampler.GetAttachBlocker());
+		}
+		else if (State == EReplayerState::Replaying && Pending.StartGate.bEnabled && !bStepClockStarted)
 		{
 			S.WaitingFor = FString::Printf(TEXT("start_when: %s"), *GateBlocker);
 		}

@@ -5,6 +5,7 @@
 #include "HandlerUtils.h"
 #include "Handlers/PIE/PIEInputReplayer.h"
 #include "Handlers/PIE/PIESequenceFormat.h"
+#include "Handlers/PIE/PIEWorldResolver.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Misc/Paths.h"
@@ -48,6 +49,10 @@ namespace
 		if (!S.WaitingFor.IsEmpty())
 		{
 			R->SetStringField(TEXT("waiting_for"), S.WaitingFor);
+		}
+		if (S.State == EReplayerState::WaitingForPawn)
+		{
+			R->SetArrayField(TEXT("pie_worlds"), PIEWorldResolver::DescribePlayWorlds());
 		}
 		if (S.bHasLastResult)
 		{
