@@ -1,0 +1,4 @@
+{
+  "note": "Surfaces that had no integration test when the integration-coverage gate landed, grandfathered so it could start green. This list only shrinks: the gate fails on an entry that has gained a test (npm run coverage:integration -- --shrink-ratchet) and the release gate fails on any entry that was not here at the merge base. A new surface never goes here; it gets a test or a reasoned exemption in integration-exemptions.json.",
+  "gaps": []
+}

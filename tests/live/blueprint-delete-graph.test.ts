@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * `blueprint(delete_graph)`, against a real editor (#1010).
  *

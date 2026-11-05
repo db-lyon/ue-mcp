@@ -143,9 +143,7 @@ describe("catalog discovery tool", () => {
     const catalog = buildCatalogTool(fixtureTools());
     const ok = (await runAction(catalog, "describe", { category: "level" })) as { count: number };
     expect(ok.count).toBe(2);
-    const bad = (await runAction(catalog, "describe", { category: "nope" })) as { error?: string; categories?: string[] };
-    expect(bad.error).toBeDefined();
-    expect(bad.categories).toContain("level");
+    await expect(runAction(catalog, "describe", { category: "nope" })).rejects.toThrow(/Unknown category "nope". Categories: .*level/);
   });
 
   it("list_categories returns every category with its summary", async () => {
@@ -220,8 +218,7 @@ describe("buildMicroGateway", () => {
     const gw = buildMicroGateway(microFixture());
     const ok = (await gw.actions.describe.handler!(ctxB, { action: "describe", category: "blueprint" })) as { signatures: string[] };
     expect(ok.signatures).toEqual(["create()", "compile()"]);
-    const bad = (await gw.actions.describe.handler!(ctxB, { action: "describe", category: "nope" })) as { error?: string };
-    expect(bad.error).toBeDefined();
+    await expect(gw.actions.describe.handler!(ctxB, { action: "describe", category: "nope" })).rejects.toThrow(/Unknown category "nope"/);
   });
 
   it("call routes to a handler action", async () => {

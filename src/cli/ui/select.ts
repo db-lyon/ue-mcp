@@ -6,6 +6,10 @@
  * multiSelect    - every item default-checked, thin wrapper over checkboxSelect.
  *
  * Ctrl+C exits the process. Arrow keys and k/j both move the cursor.
+ *
+ * Each selector needs a terminal for stdin. Without one it throws
+ * NoTerminalError naming the prompt and the flag that answers it, rather than
+ * crashing on setRawMode.
  */
 
 import {
@@ -37,6 +41,20 @@ function visualRowsForLine(line: string, width: number): number {
   return Math.max(1, Math.ceil(len / width));
 }
 
+/** A prompt was reached with no terminal to ask on. */
+export class NoTerminalError extends Error {
+  constructor(prompt: string, answeredBy: string) {
+    super(`"${prompt}" needs an interactive terminal, and stdin is not one. ${answeredBy}`);
+    this.name = "NoTerminalError";
+  }
+}
+
+/** Throw NoTerminalError unless stdin is a terminal that can go raw. */
+export function requireTerminal(prompt: string, answeredBy: string): void {
+  const stdin = process.stdin as NodeJS.ReadStream;
+  if (!stdin.isTTY || typeof stdin.setRawMode !== "function") throw new NoTerminalError(prompt, answeredBy);
+}
+
 export interface CheckboxItem {
   label: string;
   checked: boolean;
@@ -46,7 +64,9 @@ export interface CheckboxItem {
 export function checkboxSelect(
   title: string,
   items: CheckboxItem[],
+  answeredBy: string,
 ): Promise<boolean[]> {
+  requireTerminal(title, answeredBy);
   return new Promise((resolve) => {
     let cursor = 0;
     const states = items.map((i) => i.checked);
@@ -180,7 +200,9 @@ export function checkboxSelect(
 export function singleSelect(
   title: string,
   items: string[],
+  answeredBy: string,
 ): Promise<number> {
+  requireTerminal(title, answeredBy);
   return new Promise((resolve) => {
     let cursor = 0;
 
@@ -262,10 +284,11 @@ export function singleSelect(
 export function multiSelect(
   title: string,
   items: string[],
+  answeredBy: string,
 ): Promise<boolean[]> {
   const checkItems = items.map((label) => ({
     label,
     checked: true,
   }));
-  return checkboxSelect(title, checkItems);
+  return checkboxSelect(title, checkItems, answeredBy);
 }

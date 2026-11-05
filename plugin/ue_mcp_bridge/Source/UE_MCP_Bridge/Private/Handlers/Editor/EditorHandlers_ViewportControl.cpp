@@ -353,6 +353,10 @@ namespace
 		Result->SetBoolField(TEXT("gameView"), Client->IsInGameView());
 		Result->SetBoolField(TEXT("realtime"), Client->IsRealtime());
 		Result->SetBoolField(TEXT("realtimeOverridden"), Client->IsRealtimeOverrideSet());
+		bool bRealtimeSetting = false;
+		Client->SaveRealtimeStateToConfig(bRealtimeSetting);
+		// The stored flag set_realtime writes; realtime is what the viewport does now, override included.
+		Result->SetBoolField(TEXT("realtimeSetting"), bRealtimeSetting);
 
 		Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Client->GetViewLocation()));
 		Result->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Client->GetViewRotation()));

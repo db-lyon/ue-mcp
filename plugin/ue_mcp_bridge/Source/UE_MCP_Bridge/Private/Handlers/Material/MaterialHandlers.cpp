@@ -1533,7 +1533,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterial(const TSharedPtr<FJsonObj
 		UMaterialInterface* Interface = LoadAssetByPath<UMaterialInterface>(AssetPath);
 		if (!Interface)
 		{
-			return MCPError(FString::Printf(TEXT("Failed to load material or material instance at '%s'"), *AssetPath));
+			return MCPAssetLoadError(AssetPath, TEXT("MaterialInterface"));
 		}
 
 		auto InstanceResult = MCPSuccess();
@@ -2306,7 +2306,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialParameters(const TSharedPt
 		UMaterialInterface* Interface = LoadAssetByPath<UMaterialInterface>(AssetPath);
 		if (!Interface)
 		{
-			return MCPError(FString::Printf(TEXT("Failed to load material or material instance at '%s'"), *AssetPath));
+			return MCPAssetLoadError(AssetPath, TEXT("MaterialInterface"));
 		}
 
 		auto InstanceResult = MCPSuccess();
@@ -2525,7 +2525,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		}
 		else
 		{
-			return MCPError(FString::Printf(TEXT("Failed to load material or material instance at '%s'"), *AssetPath));
+			return MCPAssetLoadError(AssetPath, TEXT("MaterialInterface"));
 		}
 	}
 
@@ -2777,6 +2777,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 	{
 		return MCPError(FString::Printf(TEXT("Unknown parameterType '%s'. Use 'scalar', 'vector' (alias 'color'), or 'texture'."), *ParameterType));
 	}
+}
+
+TSharedPtr<FJsonObject> FMaterialHandlers::DescribeMaterialInstance(UMaterialInterface* Material)
+{
+	auto Result = MCPSuccess();
+	WriteMaterialInstanceRead(Result, Material);
+	return Result;
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterialInstance(const TSharedPtr<FJsonObject>& Params)
@@ -3363,6 +3370,15 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ClearMaterialInstanceParameters(const 
 
 	Instance->Modify(true);
 	Instance->ClearParameterValuesEditorOnly();
+	// ClearParameterValuesEditorOnly leaves static switch overrides; an empty static
+	// parameter set drops them too, so "every override" includes switches.
+	{
+		FStaticParameterSet CurrentStatic;
+		Instance->GetStaticParameterValues(CurrentStatic);
+		bool bHasStaticOverride = false;
+		for (const FStaticSwitchParameter& Parameter : CurrentStatic.StaticSwitchParameters) bHasStaticOverride |= Parameter.bOverride;
+		if (bHasStaticOverride) Instance->UpdateStaticPermutation(FStaticParameterSet());
+	}
 	Instance->PostEditChange();
 	FString SaveError;
 	const bool bSaved = SaveAssetPackageChecked(Instance, SaveError);
@@ -3406,7 +3422,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialStaticSwitches(const TShar
 	UMaterialInterface* Material = LoadAssetByPath<UMaterialInterface>(AssetPath);
 	if (!Material)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load material or material instance at '%s'"), *AssetPath));
+		return MCPAssetLoadError(AssetPath, TEXT("MaterialInterface"));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Switches = MaterialStaticSwitchesToJson(Material);

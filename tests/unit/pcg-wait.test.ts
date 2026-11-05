@@ -72,6 +72,30 @@ describe("pcg wait_for_generation (#1365)", () => {
     expect(result).toMatchObject({ success: true, state: "generated", runId: 7 });
   });
 
+  it("follows a run whose Generate deferred its start, instead of reporting not_started", async () => {
+    const { ctx } = scripted([
+      { busy: false, finishCount: 2, lastRun: { id: 9, state: "not_started" } },
+      { busy: true, finishCount: 2, lastRun: { id: 9, state: "generating", deferredStart: true } },
+      { busy: false, finishCount: 3, lastRun: { id: 9, state: "generated", deferredStart: true } },
+    ]);
+    const result = await waitForGeneration(ctx, { actorLabel: "Region", runId: 9 }, fakeClock());
+    expect(result).toMatchObject({ success: true, state: "generated", runId: 9, lastRun: { deferredStart: true } });
+  });
+
+  it("reports not_started after the grace window with what the component already holds", async () => {
+    const { ctx } = scripted([{
+      busy: false, finishCount: 1, generated: true, lastFinishState: "generated", lastFinishUtc: "2026-10-27T09:00:00.000Z",
+      lastRun: { id: 4, state: "not_started" },
+    }]);
+    const clock = fakeClock();
+    const result = await waitForGeneration(ctx, { actorLabel: "Region", runId: 4, graceSeconds: 1 }, clock);
+    expect(result).toMatchObject({
+      success: true, state: "not_started", alreadyGenerated: true, lastFinishUtc: "2026-10-27T09:00:00.000Z", lastFinishState: "generated",
+    });
+    expect(result.note).toContain("already up to date");
+    expect(clock.now()).toBeGreaterThanOrEqual(1000);
+  });
+
   it("times out, fails, and backs off between polls", async () => {
     const { ctx } = scripted([{ busy: true, finishCount: 0 }]);
     const clock = fakeClock();

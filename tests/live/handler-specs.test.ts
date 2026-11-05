@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * The recorded handler specs still describe the running plugin (#1057).
  *

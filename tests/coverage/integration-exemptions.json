@@ -1,0 +1,4 @@
+{
+  "note": "Surfaces with no integration test of their own, each with the reason no test can drive it. Read by scripts/integration-coverage.ts. An exemption fails the gate once a test does cover the surface.",
+  "exemptions": {}
+}

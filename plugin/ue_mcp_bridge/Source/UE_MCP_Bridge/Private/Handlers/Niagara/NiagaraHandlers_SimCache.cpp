@@ -7,6 +7,7 @@
 #include "HandlerUtils.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSimCache.h"
+#include "NiagaraSystem.h"
 #include "NiagaraTypes.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"

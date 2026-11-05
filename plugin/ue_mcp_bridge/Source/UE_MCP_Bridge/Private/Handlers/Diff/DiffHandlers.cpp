@@ -10,6 +10,12 @@
 #include "Animation/Skeleton.h"
 #include "Engine/SkeletalMesh.h"
 #include "ReferenceSkeleton.h"
+#include "DiffUtils.h"
+#include "PackageTools.h"
+#include "Misc/ScopeExit.h"
+#include "HAL/FileManager.h"
+#include "Misc/PackageName.h"
+#include "Misc/PackagePath.h"
 
 // ── Structural extraction helpers ────────────────────────────────────────────
 namespace
@@ -166,6 +172,11 @@ void FDiffHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::Optional(TEXT("toRevision"), EType::String, TEXT("Reserved for source-control revision diffing, which is not implemented; passing it is refused")),
 		});
 	}
+	// Internal to editor(list_changes) (#1482): no spec, no category action of its own.
+	Registry.RegisterHandler(TEXT("checkpoint_diff_blueprint"), &FDiffHandlers::DiffCheckpointBlueprint);
+	// Internal to editor(list_changes), diff_checkpoint_asset and open_checkpoint_diff.
+	Registry.RegisterHandlerWithTimeout(TEXT("checkpoint_diff_asset"), &FDiffHandlers::DiffCheckpointAsset, 300.f);
+	Registry.RegisterHandlerWithTimeout(TEXT("checkpoint_open_native_diff"), &FDiffHandlers::OpenCheckpointNativeDiff, 120.f);
 	{
 		// Exposed as asset(diff), so its spec generates into the asset surface.
 		FMCPHandlerRegistry::FCategoryScope AssetScope(Registry, TEXT("asset"));
@@ -197,7 +208,11 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprint(const TSharedPtr<FJsonObject
 	if (!A) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *PathA));
 	UBlueprint* B = LoadAssetByPath<UBlueprint>(PathB);
 	if (!B) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *PathB));
+	return DiffBlueprintObjects(A, B, PathA, PathB);
+}
 
+TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprintObjects(UBlueprint* A, UBlueprint* B, const FString& PathA, const FString& PathB)
+{
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetType"), TEXT("Blueprint"));
 	Result->SetStringField(TEXT("from"), PathA);
@@ -593,4 +608,61 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffAsset(const TSharedPtr<FJsonObject>& P
 			*Asset->GetClass()->GetName()));
 	}
 	return MCPError(FString::Printf(TEXT("Asset not found: %s"), *PathA));
+}
+
+TSharedPtr<FJsonValue> FDiffHandlers::DiffCheckpointBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString OriginalFile;
+	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("originalFile"), OriginalFile)) return Err;
+	FString FromFile;
+	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("fromFile"), FromFile)) return Err;
+	FString ToFile;
+	TryGetStringParam(Params, TEXT("toFile"), ToFile);
+
+	FString PackageName;
+	if (!FPackageName::TryConvertFilenameToLongPackageName(OriginalFile, PackageName))
+	{
+		return MCPError(FString::Printf(TEXT("%s is not under a mounted content folder"), *OriginalFile));
+	}
+	const FPackagePath OriginalPath = FPackagePath::FromLocalPath(OriginalFile);
+
+	// A checkpoint's copy under Saved/Diff maps to /Temp and loads as a diff package, the way a revision does.
+	// Every snapshot loaded here is unloaded before returning, so no errored /Temp Blueprint is left
+	// behind for a later compile check to find, and the copy's file is released for the server to delete.
+	TArray<UPackage*> Snapshots;
+	ON_SCOPE_EXIT
+	{
+		if (Snapshots.Num() == 0) return;
+		for (UPackage* Package : Snapshots)
+		{
+			ResetLoaders(Package);
+		}
+		FText UnloadError;
+		UPackageTools::UnloadPackages(Snapshots, UnloadError, /*bUnloadDirtyPackages*/ true);
+		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+	};
+	auto LoadSnapshot = [&OriginalPath, &Snapshots](const FString& File) -> UBlueprint*
+	{
+		if (!IFileManager::Get().FileExists(*File)) return nullptr;
+		UPackage* Package = DiffUtils::LoadPackageForDiff(FPackagePath::FromLocalPath(File), OriginalPath);
+		if (!Package) return nullptr;
+		Snapshots.AddUnique(Package);
+		return Cast<UBlueprint>(Package->FindAssetInPackage());
+	};
+
+	UBlueprint* A = LoadSnapshot(FromFile);
+	TSharedPtr<FJsonObject> NotBlueprint = MCPSuccess();
+	NotBlueprint->SetBoolField(TEXT("isBlueprint"), false);
+	if (!A) return MCPResult(NotBlueprint);
+
+	const FString AssetPath = PackageName + TEXT(".") + FPackageName::GetShortName(PackageName);
+	UBlueprint* B = ToFile.IsEmpty() ? LoadAssetByPath<UBlueprint>(AssetPath) : LoadSnapshot(ToFile);
+	if (!B) return MCPResult(NotBlueprint);
+
+	TSharedPtr<FJsonValue> Diff = DiffBlueprintObjects(A, B, FromFile, ToFile.IsEmpty() ? AssetPath : ToFile);
+	if (Diff.IsValid() && Diff->Type == EJson::Object)
+	{
+		Diff->AsObject()->SetBoolField(TEXT("isBlueprint"), true);
+	}
+	return Diff;
 }

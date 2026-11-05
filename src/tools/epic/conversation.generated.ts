@@ -62,7 +62,7 @@ export const actions: Record<string, ActionSpec> = {
 
 /** The parameters those actions accept, declared so the MCP layer stops stripping them. */
 export const schema: Record<string, z.ZodType> = {
-  conversation: z.union([z.string(), z.record(z.unknown())]).optional().describe("Represents a reference to a UObject or UClass."),
+  conversation: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("Represents a reference to a UObject or UClass."),
   guid: z.string().optional().describe("Globally unique identifier in 8-4-4-4-12 hyphenated form, e.g. \"E05FCC13-4D37-9D7A-E238-83859F29AD74\"."),
-  node: z.union([z.string(), z.record(z.unknown())]).optional().describe("Represents a reference to a UObject or UClass."),
+  node: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("Represents a reference to a UObject or UClass."),
 };

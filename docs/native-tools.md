@@ -732,7 +732,7 @@ Wraps 37 official tools.
 - `widget(epic_type)` - [Epic SlateInspectorToolset.SlateInspectorToolset] Type text into a Slate text input widget. Focuses the widget first, then sends one key event per character. Params: ref, text, submit?
 - `widget(epic_unobserve)` - [Epic SlateInspectorToolset.SlateInspectorToolset] Remove an observer by its identifier. Params: identifier
 - `widget(epic_wait_for)` - [Epic SlateInspectorToolset.SlateInspectorToolset] Check if text is present or absent in the Slate widget tree. Non-blocking: checks once and returns immediately. Poll to wait. Params: text, textGone
-- `widget(epic_windows)` - [Epic SlateInspectorToolset.SlateInspectorToolset] List, select, or close top-level Slate editor windows. Params: action?, index?
+- `widget(epic_windows)` - [Epic SlateInspectorToolset.SlateInspectorToolset] List, select, or close top-level Slate editor windows. Params: index?, input? (carries action, which cannot be sent at the top level)
 - `widget(epic_wrap_widgets)` - [Epic UMGToolSet.UMGToolSet] Wraps one or more widgets in a new panel widget of the specified class. Only the root-most widgets in the selection are wrapped - children of other selected widgets are skipped because their parent will be wrapped. Returns info for each newly created wrapper. Use ObjectTools.list_properties on each returned Widget and Slot to discover property names before calling set_properties (padding, alignment, anchors, etc. vary per panel class). Params: widgetBlueprint, widgets, wrapperClass
 
 ## editor

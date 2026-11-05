@@ -750,8 +750,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RenderMaterialPreview(const TSharedPtr
 	// the disk: created one, or replaced one whose bytes are not recoverable.
 	const bool bOverwroteExistingFile = FPaths::FileExists(OutputPath);
 
-	TArray<uint8> Compressed;
-	FImageUtils::ThumbnailCompressImageArray(Width, Height, Pixels, Compressed);
+	// PNG explicitly: ThumbnailCompressImageArray writes JPEG under the default
+	// thumbnail settings, which left a .png file holding JPEG bytes.
+	TArray64<uint8> Compressed;
+	FImageUtils::PNGCompressImageArray(Width, Height, Pixels, Compressed);
 
 	// Whether the render actually changed anything on disk. A replayed call
 	// against an unchanged material produces the same bytes, and saying so is
@@ -759,7 +761,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RenderMaterialPreview(const TSharedPtr
 	bool bBytesIdentical = false;
 	if (bOverwroteExistingFile)
 	{
-		TArray<uint8> Existing;
+		TArray64<uint8> Existing;
 		if (FFileHelper::LoadFileToArray(Existing, *OutputPath))
 		{
 			bBytesIdentical = Existing == Compressed;

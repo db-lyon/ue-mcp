@@ -1,9 +1,9 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.4.7",
+	"VersionName": "1.4.12-beta.1",
 	"FriendlyName": "UE MCP Bridge",
-	"Description": "C++ WebSocket bridge for UE-MCP, providing 1968+ editor actions over the MCP protocol",
+	"Description": "C++ WebSocket bridge for UE-MCP, providing 2045+ editor actions over the MCP protocol",
 	"Category": "Developer Tools",
 	"CreatedBy": "UE-MCP",
 	"CreatedByURL": "",
@@ -20,6 +20,11 @@
 			"Name": "UE_MCP_BridgeStatus",
 			"Type": "Editor",
 			"LoadingPhase": "PostConfigInit"
+		},
+		{
+			"Name": "UE_MCP_BridgeRuntime",
+			"Type": "DeveloperTool",
+			"LoadingPhase": "Default"
 		},
 		{
 			"Name": "UE_MCP_Bridge",

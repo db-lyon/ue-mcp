@@ -1003,9 +1003,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshInfo(const TSharedPtr<FJsonObject>
 	Result->SetNumberField(TEXT("heightM"), (Extent.Z * 2.0) / 100.0);
 	Result->SetNumberField(TEXT("lodCount"), LodCount);
 	Result->SetNumberField(TEXT("vertexCount"), VertexCount);
-	if (!SkeletonPath.IsEmpty()) Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+	Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
 	Result->SetArrayField(TEXT("materialSlots"), SlotsJson);
 	Result->SetNumberField(TEXT("materialCount"), SlotsJson.Num());
+	auto SocketResult = ListSockets(Params)->AsObject();
+	const TArray<TSharedPtr<FJsonValue>>* Sockets = nullptr;
+	if (SocketResult->TryGetArrayField(TEXT("sockets"), Sockets))
+	{
+		Result->SetArrayField(TEXT("sockets"), *Sockets);
+		Result->SetNumberField(TEXT("socketCount"), Sockets->Num());
+	}
 	return MCPResult(Result);
 }
 

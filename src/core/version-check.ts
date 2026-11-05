@@ -8,8 +8,9 @@
  *
  * On startup we async-fetch the latest version from the npm registry, cache
  * the result in the OS temp dir for 24h, and stash a notice if a newer
- * release exists. The next tool response calls `consumeUpgradeNotice()`,
- * which returns the notice once and then clears it - one nudge per session.
+ * release exists. Each MCP client's first tool response after that carries
+ * the notice once (`upgradeNoticeForClient()`), whether the server runs in
+ * process or as a daemon serving several clients.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -240,6 +241,20 @@ export function consumeUpgradeNotice(): string | null {
   return out;
 }
 
+
+/**
+ * One MCP client's view of the notice: the first response after the check
+ * finds a newer version carries it, and none after. A daemon serves many
+ * clients from one process, so each gets its own.
+ */
+export function upgradeNoticeForClient(): () => string | null {
+  let delivered = false;
+  return () => {
+    if (delivered || pendingNotice === null) return null;
+    delivered = true;
+    return pendingNotice;
+  };
+}
 
 /** Test hook. */
 export function _setNoticeForTests(notice: string | null): void {

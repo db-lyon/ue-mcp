@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Sequencer channels and bindings (#1407, #1232, #1356), Datasmith (#1383)
  * and MetaHuman (#1354), each read back from the editor.

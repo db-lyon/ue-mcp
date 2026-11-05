@@ -17,6 +17,7 @@ import {
   TEST_PROJECT_DIR,
   TEST_PROJECT_UPROJECT,
   verifyTestProjectTarget,
+  PROJECT_IDENTITY_TIMEOUT_MS,
 } from "../../scripts/bridge-target.mjs";
 import { deriveProjectPort as srcDeriveProjectPort } from "../../src/bridge/port.js";
 
@@ -167,6 +168,16 @@ describe("test-project guard", () => {
     await expect(
       verifyTestProjectTarget(async () => ({ output: `MCP_PROJECT_DIR:${TEST_PROJECT_DIR}/` })),
     ).resolves.toBeTruthy();
+  });
+
+  it("gives the identity check a budget past the 30 s default, for a fresh editor starting Python", async () => {
+    const budgets: unknown[] = [];
+    await verifyTestProjectTarget(async (_method: string, _params: unknown, timeoutMs: unknown) => {
+      budgets.push(timeoutMs);
+      return { output: `MCP_PROJECT_DIR:${TEST_PROJECT_DIR}/` };
+    });
+    expect(budgets).toEqual([PROJECT_IDENTITY_TIMEOUT_MS]);
+    expect(PROJECT_IDENTITY_TIMEOUT_MS).toBeGreaterThan(30_000);
   });
 
   it("aborts when the editor has a different project open", async () => {

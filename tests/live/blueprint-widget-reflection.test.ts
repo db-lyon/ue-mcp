@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Widget subtree authoring (#1300), widget structure checks (#1350) and
  * Blueprint subclass discovery (#1211), each read back from the editor.

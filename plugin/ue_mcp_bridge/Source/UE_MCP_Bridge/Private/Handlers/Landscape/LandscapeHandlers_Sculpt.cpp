@@ -3352,7 +3352,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::GetHoles(const TSharedPtr<FJsonObject
 	MCPReadParamsAhead(Params, {
 		TEXT("actorLabel"), TEXT("actorPath"), TEXT("region"), TEXT("space"), TEXT("center"), TEXT("radius"),
 		TEXT("x"), TEXT("y"), TEXT("point"), TEXT("worldX"), TEXT("worldY"), TEXT("maxVertices"), TEXT("includeMask"),
-		TEXT("arrayEncodingLimit"),
+		TEXT("arrayEncodingLimit"), TEXT("editLayer"), TEXT("editLayerIndex"),
 	});
 
 	REQUIRE_EDITOR_WORLD(World);
@@ -3388,8 +3388,13 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::GetHoles(const TSharedPtr<FJsonObject
 	}
 	if (!bPointQuery && !MCPLscResolveRegion(Landscape, Info, Params, 262144, Region, Error)) return Error;
 
+	FGuid LayerGuid;
+	FString EditLayerName;
+	bool bUseLayer = false;
+	if (!MCPLscResolveReadLayer(Landscape, Params, LayerGuid, EditLayerName, bUseLayer, Error)) return Error;
+
 	TArray<uint8> Weights;
-	if (!MCPLscReadWeights(Info, Visibility, FGuid(), false, Region, Weights, Error)) return Error;
+	if (!MCPLscReadWeights(Info, Visibility, LayerGuid, bUseLayer, Region, Weights, Error)) return Error;
 
 	// The renderer's own threshold, so "this action says hole" and "the terrain
 	// has a hole here" are the same statement.
@@ -3527,6 +3532,24 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHoles(const TSharedPtr<FJsonObject
 		Source = TEXT("hole");
 	}
 
+	// The engine writes visibility only into components whose hole material (the
+	// landscape material when no hole material is set) contains a Landscape
+	// Visibility Mask node, and skips every other component without a word
+	// (FLandscapeEditDataInterface::SetAlphaData), so that is checked first.
+	{
+		TSet<ULandscapeComponent*> RegionComponents;
+		FLandscapeEditDataInterface(Info).GetComponentsInRegion(Region.X1, Region.Y1, Region.X2, Region.Y2, &RegionComponents);
+		bool bAnyHoleMaterial = false;
+		for (const ULandscapeComponent* Component : RegionComponents)
+		{
+			if (Component && Component->IsLandscapeHoleMaterialValid()) { bAnyHoleMaterial = true; break; }
+		}
+		if (!bAnyHoleMaterial)
+		{
+			return MCPError(TEXT("This landscape cannot hold holes: neither its hole material nor its landscape material contains a Landscape Visibility Mask node, and the engine writes no visibility data without one. Add a LandscapeVisibilityMask expression wired to Opacity Mask on a Masked material (material(add_expression, expressionType=LandscapeVisibilityMask), material(connect_to_property, property=OpacityMask), material(set_blend_mode, blendMode=Masked)), assign it with landscape(set_material), then set holes."));
+		}
+	}
+
 	TArray<uint8> Previous;
 	if (!MCPLscReadWeights(Info, Visibility, FGuid(), false, Region, Previous, Error)) return Error;
 
@@ -3535,9 +3558,42 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHoles(const TSharedPtr<FJsonObject
 	Result->SetBoolField(TEXT("pointWrite"), bPointWrite);
 	Result->SetStringField(TEXT("visibilityNote"),
 		TEXT("Holes are stored as the landscape visibility weightmap. The data is written regardless, but the hole only renders and only stops collision if the landscape material routes a Landscape Visibility Mask node into opacity mask."));
-	return MCPLscWriteWeights(Landscape, Info, Visibility, TEXT("visibility"),
+	TSharedPtr<FJsonValue> Written = MCPLscWriteWeights(Landscape, Info, Visibility, TEXT("visibility"),
 		TEXT("set_landscape_holes"), /*bPayloadCarriesLayerName=*/false,
 		Params, Region, Previous, NewWeights, Result);
+	// Read back what the landscape now holds, so the answer is the effect, not the request.
+	// Read from the edit layer the write went to: the merged result is rebuilt on
+	// a later tick.
+	TArray<uint8> After;
+	TSharedPtr<FJsonValue> ReadError;
+	FGuid WrittenLayerGuid;
+	FString WrittenLayerName;
+	if (MCPLscRequireEditLayer(Landscape, Params, WrittenLayerGuid, WrittenLayerName, ReadError)
+		&& MCPLscReadWeights(Info, Visibility, WrittenLayerGuid, true, Region, After, ReadError))
+	{
+		int32 HolesAfter = 0, HolesWanted = 0;
+		for (const uint8 W : After) if (W >= 170) ++HolesAfter;
+		for (const uint8 W : NewWeights) if (W >= 170) ++HolesWanted;
+		Result->SetNumberField(TEXT("holeVertexCountAfter"), HolesAfter);
+		Result->SetStringField(TEXT("visibilityLayer"), Visibility->GetPathName());
+		if (HolesAfter != HolesWanted)
+		{
+			// The engine took the write and kept nothing, which on some versions is what
+			// happens to the visibility layer. Whatever did land is put back, and the
+			// call says so rather than reporting holes that are not there.
+			TSharedPtr<FJsonObject> Undo = MakeShared<FJsonObject>();
+			MCPLscWriteWeights(Landscape, Info, Visibility, TEXT("visibility"), TEXT("set_landscape_holes"), false, Params, Region, After, Previous, Undo);
+			TSharedPtr<FJsonObject> NotLanded = MCPErrorObject(FString::Printf(
+				TEXT("The hole write did not land: %d vertex(es) were asked to become holes and the landscape holds %d after the write. The engine accepted the visibility weights through its edit interface and kept none of them, so nothing was changed. The output log carries the landscape's reason."),
+				HolesWanted, HolesAfter));
+			NotLanded->SetObjectField(TEXT("region"), MCPLscRegionJson(Region));
+			NotLanded->SetNumberField(TEXT("holeVertexCountRequested"), HolesWanted);
+			NotLanded->SetNumberField(TEXT("holeVertexCountAfter"), HolesAfter);
+			NotLanded->SetStringField(TEXT("visibilityLayer"), Visibility->GetPathName());
+			return MCPResult(NotLanded);
+		}
+	}
+	return Written;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

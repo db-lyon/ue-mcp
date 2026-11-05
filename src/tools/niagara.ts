@@ -135,6 +135,6 @@ export const niagaraTool: ToolDef = categoryTool(
     // registration. A key listed again below is shared with hand-written
     // actions, and tests/unit/handler-specs.test.ts holds the two to one type.
     ...specSchema,
-    ops: z.array(z.record(z.unknown())).optional().describe("For batch: [{action, params}]"),
+    ops: z.array(z.record(z.string(), z.unknown())).optional().describe("For batch: [{action, params}]"),
   },
 );

@@ -106,6 +106,9 @@ private:
 	static TSharedPtr<FJsonValue> ReimportDataTable(const TSharedPtr<FJsonObject>& Params);
 	// #437: single-row append/update without re-serializing the whole table.
 	static TSharedPtr<FJsonValue> SetDataTableRow(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CloneDataTableRows(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveDataTableRows(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> EditCollectionEntry(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetDataTableCell(const TSharedPtr<FJsonObject>& Params);

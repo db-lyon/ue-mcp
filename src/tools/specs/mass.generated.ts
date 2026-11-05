@@ -103,7 +103,7 @@ export const schema: Record<string, z.ZodType> = {
   name: z.string().optional().describe("Asset name, when assetPath is not given"),
   onConflict: z.string().optional().describe("skip | error | update (default): what an existing asset gets"),
   packagePath: z.string().optional().describe("Content folder for name (default /Game)"),
-  traits: z.array(z.object({ class: z.string().optional().describe("Concrete UMassEntityTraitBase subclass, short name or /Script path; this or traitClass"), traitClass: z.string().optional().describe("Same as class"), properties: z.record(z.unknown()).optional().describe("Fields written onto the trait instance; dotted paths allowed") })).optional().describe("Ordered trait list; the order is the asset's order and a class may appear once"),
+  traits: z.array(z.object({ class: z.string().optional().describe("Concrete UMassEntityTraitBase subclass, short name or /Script path; this or traitClass"), traitClass: z.string().optional().describe("Same as class"), properties: z.record(z.string(), z.unknown()).optional().describe("Fields written onto the trait instance; dotted paths allowed") })).optional().describe("Ordered trait list; the order is the asset's order and a class may appear once"),
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */

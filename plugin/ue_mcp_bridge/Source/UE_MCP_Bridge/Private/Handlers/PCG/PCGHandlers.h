@@ -62,6 +62,11 @@ private:
 	// issue #1365 - generation state for waiting on a run started by anything.
 	static TSharedPtr<FJsonValue> GetPCGGenerationState(const TSharedPtr<FJsonObject>& Params);
 
+	// A component's graph parameter overrides, on a placed actor or a Blueprint component template.
+	static TSharedPtr<FJsonValue> GetComponentParameters(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetComponentParameters(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetComponentGraph(const TSharedPtr<FJsonObject>& Params);
+
 	static void ExportSubgraphSettings(const class UPCGSettings* Settings, const TSharedPtr<FJsonObject>& Node);
 	static bool ImportSubgraphSettings(class UPCGSettings* Settings, const TSharedPtr<FJsonObject>& Node, FString& Error);
 };

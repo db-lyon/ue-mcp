@@ -52,6 +52,8 @@ export const ENV_VARS = {
   serverMode: "UE_MCP_SERVER_MODE",
   /** Directory of daemon discovery files. Unset means ~/.ue-mcp/daemons. */
   daemonDir: "UE_MCP_DAEMON_DIR",
+  /** enforce or warn: whether an extension needing a newer ue-mcp is refused or loaded with a warning. Unset means enforce; warn is for development daemons. */
+  extensionFloor: "UE_MCP_EXTENSION_FLOOR",
   /** How long a daemon with no editor, client or stream attached waits before exiting, in milliseconds. */
   daemonIdleMs: "UE_MCP_DAEMON_IDLE_MS",
   /** Directory daemon extensions are loaded from. Unset means ~/.ue-mcp/extensions. */
@@ -80,6 +82,10 @@ export const ENV_VARS = {
   authDir: "UE_MCP_AUTH_DIR",
   /** GitHub OAuth app used for the device flow. */
   oauthClientId: "UE_MCP_OAUTH_CLIENT_ID",
+  /** Origin of GitHub's OAuth device flow. Unset means https://github.com. */
+  githubOAuth: "UE_MCP_GITHUB_OAUTH",
+  /** Origin of the GitHub REST API. Unset means https://api.github.com. */
+  githubApi: "UE_MCP_GITHUB_API",
   /** Origin of the plugin registry. Unset means https://plugins.ue-mcp.com. */
   registry: "UE_MCP_REGISTRY",
   /** Path of the cached registry catalog. */
@@ -90,6 +96,8 @@ export const ENV_VARS = {
   pluginMinServer: "UE_MCP_PLUGIN_MIN_SERVER",
   /** Prebuilt bridge binaries: a plugin directory, a .zip, a directory of archives, or a URL base. */
   binaries: "UE_MCP_BINARIES",
+  /** Origin of the npm registry the release lookups read. Unset means https://registry.npmjs.org. */
+  npmRegistry: "UE_MCP_NPM_REGISTRY",
   /** `1` skips the npm registry check for a newer release. */
   disableUpdateCheck: "UE_MCP_DISABLE_UPDATE_CHECK",
   /** Path of the cached update-check result. */

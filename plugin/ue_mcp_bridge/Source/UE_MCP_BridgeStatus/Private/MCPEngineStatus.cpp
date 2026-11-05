@@ -7,6 +7,7 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/RunnableThread.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/DateTime.h"
 #include "Misc/FeedbackContext.h"
@@ -583,12 +584,20 @@ bool FMCPEngineStatus::PublishAtomically(const FString& FinalPath, const FString
 	{
 		return false;
 	}
-	if (!IFileManager::Get().Move(*FinalPath, *TempPath, /*Replace*/ true, /*EvenIfReadOnly*/ true))
+	// The platform layer, not IFileManager::Move: that logs every failed rename at Error,
+	// and a reader polling this file holds it open for a moment on every read.
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	for (int32 Attempt = 0; Attempt < 5; ++Attempt)
 	{
-		IFileManager::Get().Delete(*TempPath, /*RequireExists*/ false, /*EvenReadOnly*/ false, /*Quiet*/ true);
-		return false;
+		PlatformFile.DeleteFile(*FinalPath);
+		if (PlatformFile.MoveFile(*FinalPath, *TempPath))
+		{
+			return true;
+		}
+		FPlatformProcess::Sleep(0.005f);
 	}
-	return true;
+	PlatformFile.DeleteFile(*TempPath);
+	return false;
 }
 
 void FMCPEngineStatus::RemoveStaleInstanceStatusFiles()

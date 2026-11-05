@@ -1,0 +1,133 @@
+# Triages new issues with a Claude agent.
+#
+# decide: the agent reads the issue, searches for duplicates, reads the code and
+#   history on main, and returns one decision object (.github/triage/
+#   decision.schema.json). Its token is read-only and its tools are a fixed
+#   list of read commands, so text in an issue cannot make it write anything.
+# apply: scripts/issue-triage.mjs checks every claim in the decision against
+#   GitHub and git, downgrades anything unproven to needs-triage, and applies
+#   the rest. No model runs in this job.
+#
+# Mode, from the dispatch input or else the TRIAGE_MODE repository variable:
+#   propose  (default) labels and comments; closes and transfers are posted as
+#            a proposal under needs-triage instead of applied
+#   act      applies closes and transfers too
+#   dry-run  writes nothing; the decision and plan go to the job summary
+#
+# Secrets: ANTHROPIC_API_KEY. ISSUE_ADMIN_TOKEN, when set, is used only to
+# transfer an issue to a sibling repo; without it a move is left for a
+# maintainer. Variables: TRIAGE_MODE, TRIAGE_MODEL.
+
+name: Issue triage
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_numbers:
+        description: "Issue numbers to triage, comma separated"
+        required: true
+        type: string
+      mode:
+        description: "propose, act or dry-run (blank uses TRIAGE_MODE)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      issues: ${{ steps.list.outputs.issues }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - id: list
+        env:
+          ISSUE_NUMBERS: ${{ github.event.inputs.issue_numbers }}
+        run: node scripts/issue-triage.mjs targets | tee -a "$GITHUB_OUTPUT"
+
+  decide:
+    needs: targets
+    if: needs.targets.outputs.issues != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        issue: ${{ fromJSON(needs.targets.outputs.issues) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.301
+      - name: Decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MODEL: ${{ vars.TRIAGE_MODEL || 'claude-sonnet-5-5' }}
+          ISSUE: ${{ matrix.issue }}
+        # --setting-sources "" keeps the repo's own .claude/settings.json (which
+        # allows every Bash command) out of this run; the allow list below is
+        # the whole of what the agent can execute.
+        run: |
+          node scripts/issue-triage.mjs prompt "$ISSUE" > "$RUNNER_TEMP/prompt.md"
+          claude -p "$(cat "$RUNNER_TEMP/prompt.md")" \
+            --model "$MODEL" \
+            --setting-sources "" \
+            --strict-mcp-config \
+            --permission-mode dontAsk \
+            --tools "Bash,Read,Grep,Glob" \
+            --allowedTools "Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search issues:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh release list:*),Bash(gh release view:*),Bash(git log:*),Bash(git show:*),Bash(git tag:*),Bash(git merge-base:*),Bash(git grep:*),Read,Grep,Glob" \
+            --json-schema "$(cat .github/triage/decision.schema.json)" \
+            --max-turns 40 \
+            --max-budget-usd 2 \
+            --output-format json > "decision-$ISSUE.json" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: decision-${{ matrix.issue }}
+          path: decision-${{ matrix.issue }}.json
+          retention-days: 30
+
+  apply:
+    needs: [targets, decide]
+    if: always() && needs.targets.outputs.issues != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        issue: ${{ fromJSON(needs.targets.outputs.issues) }}
+    concurrency:
+      group: issue-triage-${{ matrix.issue }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: decision-${{ matrix.issue }}
+      - name: Apply
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRANSFER_TOKEN: ${{ secrets.ISSUE_ADMIN_TOKEN }}
+          TRIAGE_MODE: ${{ github.event.inputs.mode || vars.TRIAGE_MODE || 'propose' }}
+        run: node scripts/issue-triage.mjs apply "${{ matrix.issue }}" "decision-${{ matrix.issue }}.json"

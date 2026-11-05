@@ -84,7 +84,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 /** Every key the spec'd epic handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   includeSchemas: z.boolean().optional().describe("Return each tool with its input and output schemas instead of its name (default false)"),
-  input: z.record(z.unknown()).optional().describe("Tool arguments as a JSON object"),
+  input: z.record(z.string(), z.unknown()).optional().describe("Tool arguments as a JSON object"),
   inputJson: z.string().optional().describe("Tool arguments as a raw JSON string; wins over input"),
   nameFilter: z.string().optional().describe("Case-sensitive substring of the qualified toolset name"),
   tool: z.string().optional().describe("Tool name from describe_toolset, bare or qualified with its toolset"),

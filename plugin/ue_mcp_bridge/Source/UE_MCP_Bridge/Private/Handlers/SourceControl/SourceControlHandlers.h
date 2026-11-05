@@ -23,4 +23,8 @@ private:
 	static TSharedPtr<FJsonValue> Diff(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> Submit(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetCheckoutMode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> MarkForDelete(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> Sync(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> History(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> Connect(const TSharedPtr<FJsonObject>& Params);
 };

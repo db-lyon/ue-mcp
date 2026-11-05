@@ -20,6 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { printServerLogsOnFailure } from "../helpers/server-log.js";
+import { USER_SANDBOX_VARS, userSandboxEnv } from "../helpers/user-sandbox.js";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -168,14 +169,13 @@ beforeAll(async () => {
     // Named explicitly: the harness advertises no elicitation, so the default
     // would be defer, and auto is the mode that hands back the press calls.
     UE_MCP_DIALOG_MODE: "auto",
-    UE_MCP_STATE_DIR: path.join(sandbox, "state"),
-    UE_MCP_CONFIG_DIR: path.join(sandbox, "config"),
+    ...userSandboxEnv(path.join(sandbox, "home")),
     // These cases drive the category tools directly, which only the full and
     // lean strategies advertise; micro is the default since #1172.
     UE_MCP_CONTEXT_STRATEGY: "full",
   };
   for (const k of Object.keys(env)) {
-    if (k.startsWith("UE_MCP_") && !["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_SERVER_MODE", "UE_MCP_DISABLE_UPDATE_CHECK", "UE_MCP_DIALOG_MODE", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY"].includes(k)) {
+    if (k.startsWith("UE_MCP_") && !["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_SERVER_MODE", "UE_MCP_DISABLE_UPDATE_CHECK", "UE_MCP_DIALOG_MODE", ...USER_SANDBOX_VARS, "UE_MCP_CONTEXT_STRATEGY"].includes(k)) {
       delete env[k];
     }
   }
@@ -342,8 +342,7 @@ describe("micro mode can still answer its own dialog", () => {
       UE_MCP_HOST: "127.0.0.1",
       UE_MCP_DIALOG_MODE: "auto",
       UE_MCP_CONTEXT_STRATEGY: "micro",
-      UE_MCP_STATE_DIR: path.join(microSandbox, "state"),
-      UE_MCP_CONFIG_DIR: path.join(microSandbox, "config"),
+      ...userSandboxEnv(path.join(microSandbox, "home")),
     };
     microClient = new Client({ name: "ue-mcp-gate-micro", version: "1.0.0" }, { capabilities: {} });
     await microClient.connect(
@@ -428,8 +427,7 @@ describe("interactive mode, end to end, with a client that can be asked", () => 
       // below advertises elicitation, and that resolution is what broke: the
       // guard cached deps built at startup with canElicit=false, so interactive
       // could never fire on any route and the whole suite still went green.
-      UE_MCP_STATE_DIR: path.join(liveSandbox, "state"),
-      UE_MCP_CONFIG_DIR: path.join(liveSandbox, "config"),
+      ...userSandboxEnv(path.join(liveSandbox, "home")),
       UE_MCP_CONTEXT_STRATEGY: "full",
     };
     delete env.UE_MCP_DIALOG_MODE;
@@ -558,8 +556,7 @@ describe("the blocked-editor stamp", () => {
             UE_MCP_PORT: String(clearBridge.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_DIALOG_MODE: "auto",
-            UE_MCP_STATE_DIR: path.join(sandbox2, "state"),
-            UE_MCP_CONFIG_DIR: path.join(sandbox2, "config"),
+            ...userSandboxEnv(path.join(sandbox2, "home")),
             UE_MCP_CONTEXT_STRATEGY: "full",
           },
           stderr: fs.openSync(serverLog(path.join(sandbox2, "server.log")), "a"),
@@ -607,8 +604,7 @@ describe("the preflight, on a guard that knows nothing yet", () => {
             UE_MCP_PORT: String(coldBridge.port),
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_DIALOG_MODE: "auto",
-            UE_MCP_STATE_DIR: path.join(sandbox3, "state"),
-            UE_MCP_CONFIG_DIR: path.join(sandbox3, "config"),
+            ...userSandboxEnv(path.join(sandbox3, "home")),
             UE_MCP_CONTEXT_STRATEGY: "full",
           },
           stderr: fs.openSync(serverLog(path.join(sandbox3, "server.log")), "a"),
@@ -672,8 +668,7 @@ describe("answering a dialog does not answer the next one for you", () => {
             UE_MCP_DISABLE_UPDATE_CHECK: "1",
             UE_MCP_PORT: String(b.port),
             UE_MCP_HOST: "127.0.0.1",
-            UE_MCP_STATE_DIR: path.join(sandbox4, "state"),
-            UE_MCP_CONFIG_DIR: path.join(sandbox4, "config"),
+            ...userSandboxEnv(path.join(sandbox4, "home")),
             UE_MCP_CONTEXT_STRATEGY: "full",
             // auto, because this case is about the RE-PROBE after a press and
             // auto is the only mode in which the agent gets to press at all.
@@ -734,8 +729,7 @@ describe("a tool call is the agent, so interactive refuses it the button", () =>
             UE_MCP_DISABLE_UPDATE_CHECK: "1",
             UE_MCP_PORT: String(b.port),
             UE_MCP_HOST: "127.0.0.1",
-            UE_MCP_STATE_DIR: path.join(sandbox, "state"),
-            UE_MCP_CONFIG_DIR: path.join(sandbox, "config"),
+            ...userSandboxEnv(path.join(sandbox, "home")),
             UE_MCP_CONTEXT_STRATEGY: "full",
             UE_MCP_DIALOG_MODE: "interactive",
           },

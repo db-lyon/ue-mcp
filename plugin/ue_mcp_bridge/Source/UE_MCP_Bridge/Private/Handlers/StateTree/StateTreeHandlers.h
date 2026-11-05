@@ -12,6 +12,8 @@ class FStateTreeHandlers
 {
 public:
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
+	/** The dot-path FindStateByPath reads: state names from the root, joined with dots. */
+	static FString StateDotPath(const UStateTreeState* State);
 
 private:
 	// Helpers

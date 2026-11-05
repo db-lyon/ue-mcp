@@ -12,8 +12,18 @@ import * as path from "node:path";
 import { execSync } from "node:child_process";
 
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
-import { isNewer } from "../core/version-check.js";
-import { UE_MCP_LAUNCH, detectMcpClients, pinnedVersionOf, readUeMcpEntry, removeUeMcpEntry } from "../integrations/claude-code/mcp-client-config.js";
+import { distTagForVersion, isNewer } from "../core/version-check.js";
+import {
+  NPX_AGE_GATE_OVERRIDE,
+  UE_MCP_LAUNCH,
+  detectMcpClients,
+  isNpxCommand,
+  liftAgeGateInEntry,
+  liftsAgeGate,
+  pinnedVersionOf,
+  readUeMcpEntry,
+  removeUeMcpEntry,
+} from "../integrations/claude-code/mcp-client-config.js";
 import { packageVersion } from "../core/package-root.js";
 import { findUProject, isUProjectPath, projectDirOf } from "../config/uproject-path.js";
 import { RESET, BOLD, DIM, GREEN, RED, CYAN, YELLOW } from "./ui/ansi.js";
@@ -26,7 +36,9 @@ export interface DoctorReport {
   registryLatest: string | null;
   npmGlobal: { version: string | null; dir: string | null };
   localShadow: { version: string; dir: string } | null; // nearest node_modules/ue-mcp from cwd up
-  effectiveNpx: string | null;    // what `npx ue-mcp` would run: shadow ?? global
+  effectiveNpx: string | null;    // what `npx ue-mcp` would run: shadow ?? global ?? registry latest
+  /** Where effectiveNpx comes from; with nothing installed npx fetches the registry's latest. */
+  effectiveNpxSource?: "local" | "global" | "registry" | null;
   runningServers: Array<{
     pid: number;
     version: string | null;
@@ -44,6 +56,88 @@ export interface DoctorReport {
   pinnedConfigs?: Array<{ config: string; version: string }>;
   /** Client configs whose ue-mcp entry serves a project that is gone or has no bridge. */
   deadClientEntries?: DeadClientEntry[];
+  /** npm's release-age gate as this machine's npm applies it, or null when none is set. */
+  npmAgeGate?: NpmAgeGate | null;
+  /** Client entries whose npx launch that gate refuses for a new release. */
+  ageGatedLaunches?: AgeGatedLaunch[];
+}
+
+export interface NpmAgeGate {
+  npm: string;
+  /** min-release-age in days, when this npm applies it. */
+  minReleaseAge: number | null;
+  /** The before cutoff, when one is set. */
+  before: string | null;
+  /** Whether NPX_AGE_GATE_OVERRIDE lifts the gate: npm 11.10 and later know the key. */
+  overridable: boolean;
+}
+
+export interface AgeGatedLaunch {
+  client: string;
+  config: string;
+  /** The package spec the entry runs, e.g. ue-mcp@1.4.11. */
+  spec: string;
+  /** Whether the entry already carries the override, which this npm cannot honour. */
+  lifted: boolean;
+}
+
+/** First npm release that knows min-release-age, and so honours the override. */
+const NPM_MIN_RELEASE_AGE = "11.10.0";
+
+/**
+ * The release-age gate this machine's npm applies to npx, read from
+ * `npm config get`. An older npm reads min-release-age from .npmrc without
+ * applying it, so only `before` counts there.
+ */
+export function readNpmAgeGate(query: (cmd: string) => string | null = safeExec): NpmAgeGate | null {
+  const npm = query("npm --version");
+  if (!npm) return null;
+  const values = new Map<string, string>();
+  for (const line of (query("npm config get min-release-age before") ?? "").split(/\r?\n/)) {
+    const eq = line.indexOf("=");
+    if (eq > 0) values.set(line.slice(0, eq).trim(), line.slice(eq + 1).trim());
+  }
+  const set = (v: string | undefined) => (v && v !== "null" && v !== "undefined" ? v : null);
+  const overridable = !isNewer(NPM_MIN_RELEASE_AGE, npm);
+  const days = Number(set(values.get("min-release-age")));
+  const minReleaseAge = overridable && Number.isFinite(days) && days > 0 ? days : null;
+  const before = set(values.get("before"));
+  if (minReleaseAge === null && before === null) return null;
+  return { npm, minReleaseAge, before, overridable };
+}
+
+/**
+ * Client entries (this project's and the machine-wide ones) that launch ue-mcp
+ * through npx under `gate` without lifting it. npx ignores
+ * min-release-age-exclude (npm/cli#9765), so excluding ue-mcp does not help.
+ */
+export function findAgeGatedLaunches(projectDir: string, gate: NpmAgeGate | null): AgeGatedLaunch[] {
+  if (!gate) return [];
+  const hits: AgeGatedLaunch[] = [];
+  for (const client of detectMcpClients(projectDir)) {
+    const entry = readUeMcpEntry(client);
+    if (!entry.configured || !isNpxCommand(entry.command)) continue;
+    const spec = entry.args.find((a) => a === "ue-mcp" || a.startsWith("ue-mcp@"));
+    if (!spec) continue;
+    const lifted = liftsAgeGate(entry.args);
+    if (lifted && gate.overridable) continue;
+    hits.push({ client: client.name, config: client.configPath, spec, lifted });
+  }
+  return hits;
+}
+
+/** Add the override to exactly the given launches. Returns the configs changed. */
+export function liftAgeGatedLaunches(projectDir: string, launches: AgeGatedLaunch[]): string[] {
+  const changed: string[] = [];
+  for (const client of detectMcpClients(projectDir)) {
+    if (!launches.some((l) => l.config === client.configPath && !l.lifted)) continue;
+    if (liftAgeGateInEntry(client)) changed.push(client.configPath);
+  }
+  return changed;
+}
+
+function describeGate(gate: NpmAgeGate): string {
+  return gate.minReleaseAge !== null ? `min-release-age=${gate.minReleaseAge}` : `before=${gate.before}`;
 }
 
 export interface DeadClientEntry {
@@ -322,6 +416,7 @@ export function findPinnedConfigs(cwd: string): Array<{ config: string; version:
 
 export function collectDoctor(projectArg?: string, cwd: string = process.cwd()): DoctorReport {
   const global = npmGlobal();
+  const gate = readNpmAgeGate();
   const shadow = findLocalShadow(cwd);
   const uproject = findUproject(projectArg, cwd);
   const targetProjectDir = uproject ? projectDirOf(uproject) : null;
@@ -338,12 +433,15 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
     );
     return { ...s, servesTarget };
   });
+  const latest = registryLatest();
+  const effectiveNpxSource = shadow ? "local" : global.version ? "global" : latest ? "registry" : null;
   return {
     selfVersion: packageVersion(),
-    registryLatest: registryLatest(),
+    registryLatest: latest,
     npmGlobal: global,
     localShadow: shadow,
-    effectiveNpx: shadow ? shadow.version : global.version,
+    effectiveNpx: shadow ? shadow.version : global.version ?? latest,
+    effectiveNpxSource,
     runningServers: servers,
     targetProjectDir,
     bridgePlugin: uproject
@@ -352,6 +450,8 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
     bareNpxConfigs: findBareNpxConfigs(cwd),
     pinnedConfigs: findPinnedConfigs(cwd),
     deadClientEntries: findDeadClientEntries(targetProjectDir ?? cwd),
+    npmAgeGate: gate,
+    ageGatedLaunches: findAgeGatedLaunches(targetProjectDir ?? cwd, gate),
   };
 }
 
@@ -390,8 +490,9 @@ export function formatDoctor(d: DoctorReport): string {
   }
 
   const effLabel = d.effectiveNpx ?? "unknown";
+  const effSource = d.effectiveNpxSource === "registry" ? `  ${DIM}(registry latest; nothing installed)${RESET}` : "";
   const effMismatch = behindLatest(d.effectiveNpx, latest);
-  lines.push(row("effective (npx):", effMismatch ? `${RED}${effLabel}  (behind latest ${latest})${RESET}` : `${GREEN}${effLabel}${RESET}`));
+  lines.push(row("effective (npx):", effMismatch ? `${RED}${effLabel}  (behind latest ${latest})${RESET}` : `${GREEN}${effLabel}${RESET}${effSource}`));
 
   // Show servers, putting the one serving the target project first and naming
   // the project each serves so an unrelated dev server can't be mistaken for it.
@@ -446,6 +547,13 @@ export function formatDoctor(d: DoctorReport): string {
       `Run \`ue-mcp update\` (or npm i -g ue-mcp@latest).`,
     );
   }
+  const bridgeVersion = d.bridgePlugin?.version;
+  if (bridgeVersion && d.bridgePlugin?.installKind === "binary" && d.effectiveNpx && isNewer(bridgeVersion, d.effectiveNpx)) {
+    problems.push(
+      `The bridge is ${bridgeVersion}, but a bare \`npx ue-mcp\` runs ${d.effectiveNpx}. ` +
+      `Run commands as \`npx ue-mcp@${distTagForVersion(bridgeVersion)} <command>\` to stay on the bridge's channel.`,
+    );
+  }
   for (const pin of d.pinnedConfigs ?? []) {
     const bridge = d.bridgePlugin?.version;
     if (!bridge || bridge === pin.version) continue;
@@ -455,6 +563,15 @@ export function formatDoctor(d: DoctorReport): string {
   for (const dead of d.deadClientEntries ?? []) {
     const what = dead.reason === "project missing" ? "no longer exists" : "has no bridge installed";
     problems.push(`${dead.client} (${dead.config}) serves ${dead.project}, which ${what}. Run \`ue-mcp doctor --fix\` to remove the entry.`);
+  }
+  for (const launch of d.ageGatedLaunches ?? []) {
+    const gate = d.npmAgeGate;
+    if (!gate) continue;
+    problems.push(
+      launch.lifted
+        ? `${launch.client} (${launch.config}) runs \`npx ${launch.spec}\` under npm's ${describeGate(gate)}, which \`${NPX_AGE_GATE_OVERRIDE}\` cannot lift on npm ${gate.npm}. Update npm to ${NPM_MIN_RELEASE_AGE} or later, or remove before from your npm config.`
+        : `${launch.client} (${launch.config}) runs \`npx ${launch.spec}\`, which npm's ${describeGate(gate)} refuses for a release newer than the cutoff, even when ue-mcp is in min-release-age-exclude (npx ignores it). Run \`ue-mcp doctor --fix\` to add \`${NPX_AGE_GATE_OVERRIDE}\` to the launch.`,
+    );
   }
   for (const cfg of d.bareNpxConfigs) {
     const rel = path.relative(process.cwd(), cfg).replace(/\\/g, "/") || cfg;
@@ -492,7 +609,7 @@ export const usage: CliUsage = {
   summary: "Report what is installed and running.",
   strict: true,
   flags: [
-    { name: "--fix", description: "Remove MCP client entries that point at nothing" },
+    { name: "--fix", description: "Remove MCP client entries that point at nothing, and lift npm's release-age gate from npx launches" },
     { name: "--editor", value: "<name-or-path>", description: "Target one of the editors this server drives" },
   ],
 };
@@ -509,9 +626,13 @@ export async function run(argv: string[]): Promise<number | void> {
   const projectArg = target.projectPath ?? target.rest.find((a) => !a.startsWith("-"));
   const report = collectDoctor(projectArg);
   console.log(formatDoctor(report));
-  if (target.rest.includes("--fix") && (report.deadClientEntries ?? []).length > 0) {
-    const changed = removeDeadClientEntries(report.targetProjectDir ?? process.cwd(), report.deadClientEntries ?? []);
-    for (const config of changed) console.log(`  ${GREEN}Removed the ue-mcp entry from ${config}${RESET}`);
-    console.log("");
-  }
+  if (!target.rest.includes("--fix")) return;
+  const dir = report.targetProjectDir ?? process.cwd();
+  const removed = removeDeadClientEntries(dir, report.deadClientEntries ?? []);
+  for (const config of removed) console.log(`  ${GREEN}Removed the ue-mcp entry from ${config}${RESET}`);
+  // A removed entry is gone, so it is not lifted as well.
+  const gated = (report.ageGatedLaunches ?? []).filter((l) => report.npmAgeGate?.overridable && !removed.includes(l.config));
+  const lifted = liftAgeGatedLaunches(dir, gated);
+  for (const config of lifted) console.log(`  ${GREEN}Added ${NPX_AGE_GATE_OVERRIDE} to the ue-mcp launch in ${config}${RESET}`);
+  if (removed.length + lifted.length > 0) console.log("");
 }

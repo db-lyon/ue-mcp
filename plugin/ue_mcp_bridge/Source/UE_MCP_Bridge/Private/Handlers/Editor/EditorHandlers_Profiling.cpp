@@ -418,6 +418,9 @@ namespace
 		if (!State) return false;
 		FMCPProfilingChannelRow Row;
 		Row.Name = Info.Name ? FString(ANSI_TO_TCHAR(Info.Name)) : FString();
+		// Newer engines report the declared name (BookmarkChannel); the name every
+		// trace command and activeChannels use has no Channel suffix.
+		Row.Name.RemoveFromEnd(TEXT("Channel"));
 		Row.Description = Info.Desc ? FString(ANSI_TO_TCHAR(Info.Desc)) : FString();
 		Row.Id = Info.Id;
 		Row.bEnabled = Info.bIsEnabled;
@@ -433,6 +436,9 @@ namespace
 		if (!State) return;
 		FMCPProfilingChannelRow Row;
 		Row.Name = Name ? FString(ANSI_TO_TCHAR(Name)) : FString();
+		// Newer engines report the declared name (BookmarkChannel); the name every
+		// trace command and activeChannels use has no Channel suffix.
+		Row.Name.RemoveFromEnd(TEXT("Channel"));
 		Row.bEnabled = bState;
 		Row.bHasDetail = false;
 		State->Rows.Add(MoveTemp(Row));

@@ -17,7 +17,8 @@ import {
   findReferences,
   symbolContext,
 } from "../../codeintel/engine-analysis.js";
-import { specBp as reflectionSpecBp } from "../specs/reflection.generated.js";
+import { reflectionTool } from "../reflection.js";
+import { movedAction } from "../../surface/moved-action.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
 
 /**
@@ -190,15 +191,9 @@ export const engineActions: Record<string, ActionSpec> = {
       return { query: p.query, tree, subdirectory: subdir ?? "(root)", engineRoot, resultCount: results.length, results };
     },
   },
-  // Registered under reflection in C++; project exposes the same handlers.
-  list_loaded_modules: reflectionSpecBp("read", 
-    "Enumerate ALL engine+project modules with runtime load state (loaded/gameModule), not just uproject-declared ones. filter is a case-insensitive substring; loadedOnly defaults to false (#689).",
-    "list_loaded_modules",
-  ),
-  is_module_loaded: reflectionSpecBp("read", 
-    "Report whether a named module is currently loaded in the editor (#689).",
-    "is_module_loaded",
-  ),
+  // Moved to reflection, where the C++ handlers are registered.
+  list_loaded_modules: movedAction(reflectionTool, "list_loaded_modules"),
+  is_module_loaded: movedAction(reflectionTool, "is_module_loaded"),
   build_engine_index: {
     kind: "handler",
     effect: "mutate",

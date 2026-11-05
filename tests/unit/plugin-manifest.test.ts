@@ -113,12 +113,12 @@ describe("compileSchemaFields", () => {
 
 describe("parseManifest salvage (#892)", () => {
   const nativeManifest = (handlers: Record<string, unknown>) => ({
-    actionPrefix: "pie",
+    actionPrefix: "recorder",
     nativeModule: {
-      uePluginName: "PIE_Studio",
+      uePluginName: "Sample_Recorder",
       minBridgeApi: 1,
-      source: "ue/Plugins/PIE_Studio",
-      category: "pie",
+      source: "ue/Plugins/Sample_Recorder",
+      category: "recorder",
       handlers,
     },
   });

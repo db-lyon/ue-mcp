@@ -212,9 +212,11 @@ bool FMaterialInstanceReadRegistrationTest::RunTest(const FString& Parameters)
 			if (TSharedPtr<FJsonObject> Response = MaterialTestsRunHandler(Registry, Method, Request))
 			{
 				TestFalse(FString::Printf(TEXT("%s rejects a missing asset"), Method), Response->GetBoolField(TEXT("success")));
+				// A missing asset is reported as not found, by the path asked for, from the
+				// shared resolver that tries every asset in the package (#1183).
 				TestTrue(
-					FString::Printf(TEXT("%s says both kinds were tried"), Method),
-					Response->GetStringField(TEXT("error")).Contains(TEXT("material instance")));
+					FString::Printf(TEXT("%s names the missing asset"), Method),
+					Response->GetStringField(TEXT("error")).Contains(TEXT("not found: '/Game/UEMCPTests/DoesNotExist_UEMCP'")));
 			}
 			else
 			{

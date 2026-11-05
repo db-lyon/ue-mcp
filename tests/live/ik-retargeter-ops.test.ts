@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * IK Retargeter op settings, against a real editor (#1000/#1034).
  *

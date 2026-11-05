@@ -67,7 +67,7 @@ describe("JSON MCP client config", () => {
     };
     expect(config.mcpServers["ue-mcp"]).toEqual({
       command: "npx",
-      args: ["-y", "ue-mcp@latest", "C:/Projects/MyGame/MyGame.uproject"],
+      args: ["-y", "--min-release-age=0", "ue-mcp@latest", "C:/Projects/MyGame/MyGame.uproject"],
     });
   });
 
@@ -94,7 +94,7 @@ describe("Codex MCP client config", () => {
     expect(result).toContain("[profiles.default]");
     expect(result).toContain("[mcp_servers.ue-mcp]");
     expect(result).toContain('command = "npx"');
-    expect(result).toContain('args = ["-y", "ue-mcp@latest", "C:/Projects/MyGame/MyGame.uproject"]');
+    expect(result).toContain('args = ["-y", "--min-release-age=0", "ue-mcp@latest", "C:/Projects/MyGame/MyGame.uproject"]');
     expect(result).toContain('cwd = "C:/Projects/MyGame"');
     expect(result).toContain("enabled = true");
   });
@@ -124,7 +124,7 @@ describe("Codex MCP client config", () => {
     expect(result).toContain('sandbox_mode = "workspace-write"');
     expect(result).not.toContain('command = "old"');
     expect(result).not.toContain('UE_MCP_BRIDGE_PORT = "9999"');
-    expect(result).toContain('args = ["-y", "ue-mcp@latest", "/home/alex/Game/Game.uproject"]');
+    expect(result).toContain('args = ["-y", "--min-release-age=0", "ue-mcp@latest", "/home/alex/Game/Game.uproject"]');
     expect(result).toContain('cwd = "/home/alex/Game"');
   });
 
@@ -135,7 +135,7 @@ describe("Codex MCP client config", () => {
 
     const result = fs.readFileSync(configPath, "utf-8");
     expect(result).toContain("[mcp_servers.ue-mcp]");
-    expect(result).toContain('args = ["-y", "ue-mcp@latest", "M:/Game/Game.uproject"]');
+    expect(result).toContain('args = ["-y", "--min-release-age=0", "ue-mcp@latest", "M:/Game/Game.uproject"]');
     expect(result).toContain('cwd = "M:/Game"');
   });
 
@@ -152,7 +152,7 @@ describe("Codex MCP client config", () => {
     const result = fs.readFileSync(path.join(tmpRoot, ".codex", "config.toml"), "utf-8");
     expect(result).toContain("[mcp_servers.ue-mcp]");
     expect(result).toContain('command = "npx"');
-    expect(result).toContain('args = ["-y", "ue-mcp@latest", "M:/PerforceWorkspace/Territory/Territory.uproject"]');
+    expect(result).toContain('args = ["-y", "--min-release-age=0", "ue-mcp@latest", "M:/PerforceWorkspace/Territory/Territory.uproject"]');
     expect(result).toContain('cwd = "M:/PerforceWorkspace/Territory"');
     expect(result).toContain("enabled = true");
   });
@@ -160,8 +160,8 @@ describe("Codex MCP client config", () => {
 
 describe("version pinning", () => {
   it("pins the package spec and leaves @latest as the default", () => {
-    expect(ueMcpServerArgs("C:/G/G.uproject")).toEqual(["-y", "ue-mcp@latest", "C:/G/G.uproject"]);
-    expect(ueMcpServerArgs("C:/G/G.uproject", { pin: "1.3.10-beta.16" })).toEqual(["-y", "ue-mcp@1.3.10-beta.16", "C:/G/G.uproject"]);
+    expect(ueMcpServerArgs("C:/G/G.uproject")).toEqual(["-y", "--min-release-age=0", "ue-mcp@latest", "C:/G/G.uproject"]);
+    expect(ueMcpServerArgs("C:/G/G.uproject", { pin: "1.3.10-beta.16" })).toEqual(["-y", "--min-release-age=0", "ue-mcp@1.3.10-beta.16", "C:/G/G.uproject"]);
   });
 
   it("reads back an exact pin and nothing else", () => {
@@ -176,9 +176,9 @@ describe("version pinning", () => {
     writeJsonMcpConfig(json, "C:/G/G.uproject", { pin: "1.2.3", command: "C:/node/npx.cmd" });
     expect(JSON.parse(fs.readFileSync(json, "utf-8")).mcpServers["ue-mcp"]).toEqual({
       command: "C:/node/npx.cmd",
-      args: ["-y", "ue-mcp@1.2.3", "C:/G/G.uproject"],
+      args: ["-y", "--min-release-age=0", "ue-mcp@1.2.3", "C:/G/G.uproject"],
     });
     const toml = upsertCodexMcpServer("", "C:/G/G.uproject", { pin: "1.2.3" });
-    expect(toml).toContain('args = ["-y", "ue-mcp@1.2.3", "C:/G/G.uproject"]');
+    expect(toml).toContain('args = ["-y", "--min-release-age=0", "ue-mcp@1.2.3", "C:/G/G.uproject"]');
   });
 });

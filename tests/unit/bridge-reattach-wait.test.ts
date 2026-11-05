@@ -44,10 +44,25 @@ describe("waiting for the editor", () => {
 
   it("waits for an editor that comes back within reattachWaitMs", async () => {
     const port = await freePort();
+    serve(port);
     const bridge = new EditorBridge("127.0.0.1", port);
+    await bridge.connect(5000);
+    for (const c of wss!.clients) c.terminate();
+    await new Promise<void>((r) => wss!.close(() => r()));
+    wss = null;
+    while (bridge.isConnected) await new Promise((r) => setTimeout(r, 20));
     bridge.reattachWaitMs = 5000;
     setTimeout(() => serve(port), 300);
     await expect(bridge.call("get_world_outliner")).resolves.toMatchObject({ success: true });
+    bridge.disconnect();
+  }, 15_000);
+
+  it("fails at once for an editor that never connected, whatever reattachWaitMs says", async () => {
+    const bridge = new EditorBridge("127.0.0.1", await freePort());
+    bridge.reattachWaitMs = 30_000;
+    const started = Date.now();
+    await expect(bridge.call("get_world_outliner")).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(5000);
     bridge.disconnect();
   }, 15_000);
 

@@ -38,6 +38,9 @@ async function main() {
   rt.logSummary();
 
   await server.connect(new StdioServerTransport());
+  // The client closing stdin ends the session; without this it waits out its
+  // kill timeout. A server also serving flows over HTTP stays up for those.
+  if (!rt.project.config.http?.enabled) process.stdin.once("end", () => process.exit(0));
 }
 
 // A first argument naming a command runs it; help and stray flags print usage;

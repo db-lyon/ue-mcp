@@ -14,6 +14,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ALL_TOOLS } from "../../src/tools.js";
+import { USER_SANDBOX_VARS, userSandboxEnv } from "../helpers/user-sandbox.js";
+import { covers } from "../helpers/covers.js";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -88,13 +90,12 @@ beforeAll(async () => {
   uproject = path.join(projectDir, "Daemoned.uproject");
   fs.writeFileSync(uproject, JSON.stringify({ FileVersion: 3, EngineAssociation: "5.8", Modules: [] }));
 
-  const keep = ["UE_MCP_PORT", "UE_MCP_HOST", "UE_MCP_STATE_DIR", "UE_MCP_CONFIG_DIR", "UE_MCP_CONTEXT_STRATEGY", "UE_MCP_DAEMON_DIR", "UE_MCP_DAEMON_IDLE_MS", "UE_MCP_DISABLE_UPDATE_CHECK"];
+  const keep = ["UE_MCP_PORT", "UE_MCP_HOST", ...USER_SANDBOX_VARS, "UE_MCP_CONTEXT_STRATEGY", "UE_MCP_DAEMON_DIR", "UE_MCP_DAEMON_IDLE_MS", "UE_MCP_DISABLE_UPDATE_CHECK"];
   env = {
     ...(process.env as Record<string, string>),
     UE_MCP_PORT: String(port),
     UE_MCP_HOST: "127.0.0.1",
-    UE_MCP_STATE_DIR: path.join(sandbox, "state"),
-    UE_MCP_CONFIG_DIR: path.join(sandbox, "config"),
+    ...userSandboxEnv(path.join(sandbox, "home")),
     UE_MCP_CONTEXT_STRATEGY: "full",
     UE_MCP_DAEMON_DIR: daemonDir,
     UE_MCP_DISABLE_UPDATE_CHECK: "1",
@@ -136,6 +137,8 @@ describe("the daemon path", () => {
   }, 60_000);
 
   it("publishes a discovery file and refuses a request without the token", async () => {
+
+    covers("daemon.discovery-auth");
     const d = discovery();
     expect((await fetch(`http://127.0.0.1:${d.port}/v1/health`)).status).toBe(401);
     const health = await (await fetch(`http://127.0.0.1:${d.port}/v1/health`, { headers: { authorization: `Bearer ${d.token}` } })).json();
@@ -144,6 +147,8 @@ describe("the daemon path", () => {
   });
 
   it("refuses a request from a foreign origin or host, token or not", async () => {
+
+    covers("daemon.discovery-auth");
     const d = discovery();
     const auth = { authorization: `Bearer ${d.token}` };
     const base = `http://127.0.0.1:${d.port}/v1/health`;
@@ -166,6 +171,8 @@ describe("the daemon path", () => {
   }, 30_000);
 
   it("publishes the call in the activity feed, attributed to the MCP client", async () => {
+
+    covers("daemon.events");
     const d = discovery();
     const auth = { authorization: `Bearer ${d.token}` };
     const start = (await (await fetch(`http://127.0.0.1:${d.port}/v1/health`, { headers: auth })).json()).lastEventId as number;
@@ -186,6 +193,8 @@ describe("the daemon path", () => {
   }, 30_000);
 
   it("streams the editor going away with its cause, resumable by id", async () => {
+
+    covers("daemon.events");
     const d = discovery();
     const auth = { authorization: `Bearer ${d.token}` };
     const start = (await (await fetch(`http://127.0.0.1:${d.port}/v1/health`, { headers: auth })).json()).lastEventId as number;
@@ -208,6 +217,8 @@ describe("the daemon path", () => {
   }, 30_000);
 
   it("replaces a daemon that dies, without the client reconnecting", async () => {
+
+    covers("daemon.reconnect");
     const first = discovery();
     await fetch(`http://127.0.0.1:${first.port}/v1/shutdown`, { method: "POST", headers: { authorization: `Bearer ${first.token}` } });
     const second = await waitFor(() => {

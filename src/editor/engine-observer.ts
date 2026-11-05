@@ -199,6 +199,11 @@ export async function listEditorProcesses(): Promise<EditorProcess[]> {
   return (await probeEditorProcesses()).processes;
 }
 
+/** The process list and whether the probe ran at all: an empty list from a failed probe is not "no editor". */
+export async function probeEditorProcessList(): Promise<{ processes: EditorProcess[]; failed: boolean }> {
+  return probeEditorProcesses();
+}
+
 async function probeEditorProcesses(): Promise<ProcessProbe> {
   if (processCache && Date.now() - processCache.at < PROCESS_CACHE_MS) {
     return { processes: processCache.value, failed: processCache.failed };

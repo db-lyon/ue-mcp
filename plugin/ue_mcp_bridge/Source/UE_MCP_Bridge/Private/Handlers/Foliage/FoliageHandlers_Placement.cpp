@@ -504,12 +504,24 @@ TSharedPtr<FJsonValue> FFoliageHandlers::AddFoliageInstances(const TSharedPtr<FJ
 		FFoliageInstance Instance;
 		UActorComponent* Base = nullptr;
 		FString Reason;
-		const bool bPlaced = FoliageDepthPlaceDesiredInstance(
-			World, LevelType, Start, End,
-			FGuid(), /*bProceduralMode=*/ false, /*ProceduralVolumeBody=*/ nullptr,
-			bApplyTypeRules, bSkipCollision,
-			bHasExplicit ? Explicit[i] : FTransform::Identity, bHasExplicit,
-			Instance, Base, Reason);
+		bool bPlaced = false;
+		if (!bProjectToGround && !bApplyTypeRules)
+		{
+			// Nothing to trace for: the instance goes exactly where it was asked, with
+			// no base component, even where there is no geometry under it.
+			Instance.Location = Point;
+			if (bHasExplicit) Instance.SetInstanceWorldTransform(Explicit[i]);
+			bPlaced = true;
+		}
+		else
+		{
+			bPlaced = FoliageDepthPlaceDesiredInstance(
+				World, LevelType, Start, End,
+				FGuid(), /*bProceduralMode=*/ false, /*ProceduralVolumeBody=*/ nullptr,
+				bApplyTypeRules, bSkipCollision,
+				bHasExplicit ? Explicit[i] : FTransform::Identity, bHasExplicit,
+				Instance, Base, Reason);
+		}
 
 		if (!bPlaced)
 		{

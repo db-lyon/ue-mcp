@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Addressing a Blueprint node by GUID when writing (#996).
  *

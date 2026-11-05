@@ -70,7 +70,7 @@ export function epicValueProblem(propValue: unknown, value: unknown, at: string)
 export function epicPropZod(propValue: unknown, depth = 0): z.ZodTypeAny {
   const prop = asProp(propValue);
   if (!prop) return z.unknown();
-  if (isAssetRefProp(prop)) return z.union([z.string(), z.record(z.unknown())]);
+  if (isAssetRefProp(prop)) return z.union([z.string(), z.record(z.string(), z.unknown())]);
   switch (prop.type) {
     case "string":
       return prop.enum?.length ? z.enum(prop.enum as [string, ...string[]]) : z.string();
@@ -79,10 +79,10 @@ export function epicPropZod(propValue: unknown, depth = 0): z.ZodTypeAny {
     case "boolean": return z.boolean();
     case "array": return z.array(prop.items && depth < 4 ? epicPropZod(prop.items, depth + 1) : z.unknown());
     case "object": {
-      if (!prop.properties || depth >= 4) return z.record(z.unknown());
+      if (!prop.properties || depth >= 4) return z.record(z.string(), z.unknown());
       const shape = Object.fromEntries(Object.entries(prop.properties)
         .map(([k, v]) => [k, epicPropZod(v, depth + 1).optional()]));
-      return z.object(shape).passthrough();
+      return z.object(shape).passthrough().meta({ additionalProperties: true });
     }
     default: return z.unknown();
   }

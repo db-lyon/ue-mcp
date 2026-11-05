@@ -51,9 +51,52 @@
 #include "UObject/UObjectIterator.h"
 #include "EnhancedInputSubsystemInterface.h"
 #include "ScopedTransaction.h"
+#include "JsonSerializer.h"
 
 namespace ImcEdit_Internal
 {
+	static FObjectPropertyBase* MappingSettingsProperty()
+	{
+		return CastField<FObjectPropertyBase>(FEnhancedActionKeyMapping::StaticStruct()->FindPropertyByName(TEXT("PlayerMappableKeySettings")));
+	}
+
+	static TSharedPtr<FJsonValue> SettingsJson(const UObject* Settings)
+	{
+		if (!Settings) return MakeShared<FJsonValueNull>();
+		auto Object = MakeShared<FJsonObject>();
+		Object->SetStringField(TEXT("objectPath"), Settings->GetPathName());
+		Object->SetStringField(TEXT("class"), Settings->GetClass()->GetPathName());
+		auto Properties = MakeShared<FJsonObject>();
+		for (TFieldIterator<FProperty> It(Settings->GetClass()); It; ++It)
+		{
+			if (!It->HasAnyPropertyFlags(CPF_Transient))
+				Properties->SetField(It->GetName(), FMCPJsonSerializer::SerializeValue(It->ContainerPtrToValuePtr<void>(Settings), *It));
+		}
+		Object->SetObjectField(TEXT("properties"), Properties);
+		return MakeShared<FJsonValueObject>(Object);
+	}
+
+	static FString MappingBehaviorName(const FEnhancedActionKeyMapping& Mapping)
+	{
+		FProperty* Behavior = FEnhancedActionKeyMapping::StaticStruct()->FindPropertyByName(TEXT("SettingBehavior"));
+		FString BehaviorText;
+		// ExportText_Direct omits zero/default values, including inheritance.
+		if (Behavior) Behavior->ExportTextItem_Direct(BehaviorText, Behavior->ContainerPtrToValuePtr<void>(&Mapping), nullptr, nullptr, PPF_None);
+		int32 Separator = INDEX_NONE;
+		if (BehaviorText.FindLastChar(TEXT(':'), Separator)) BehaviorText.RightChopInline(Separator + 1);
+		return BehaviorText;
+	}
+
+	static void ReadMappingSettings(const FEnhancedActionKeyMapping& Mapping, const TSharedPtr<FJsonObject>& Result)
+	{
+		FObjectPropertyBase* SettingsProperty = MappingSettingsProperty();
+		const FString BehaviorText = MappingBehaviorName(Mapping);
+		Result->SetStringField(TEXT("settingBehavior"), BehaviorText);
+		const UObject* Settings = SettingsProperty ? SettingsProperty->GetObjectPropertyValue_InContainer(&Mapping) : nullptr;
+		Result->SetField(TEXT("playerMappableKeySettings"), SettingsJson(Settings));
+		Result->SetField(TEXT("effectivePlayerMappableKeySettings"), SettingsJson(Mapping.GetPlayerMappableKeySettings()));
+	}
+
 	// Packages holding an IMC edit that Unreal refused to mark dirty (PIE,
 	// loading, undo). A no-op call with save=true still owes them a write.
 	static TSet<FName>& UnmarkedEdits()
@@ -282,6 +325,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>&
 		MObj->SetStringField(TEXT("inputAction"), Mapping.Action ? Mapping.Action->GetPathName() : TEXT("None"));
 		MObj->SetStringField(TEXT("inputActionName"), Mapping.Action ? Mapping.Action->GetName() : TEXT("None"));
 		MObj->SetStringField(TEXT("key"), Mapping.Key.GetFName().ToString());
+		MObj->SetNumberField(TEXT("mappingIndex"), MappingsArr.Num());
+		ImcEdit_Internal::ReadMappingSettings(Mapping, MObj);
 
 		// Each trigger and modifier carries its class and property values (Negate
 		// X/Y/Z, SwizzleAxis Order), the same shape read_input_action reports (#1403).
@@ -1097,7 +1142,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetImcMappingAction(const TSharedPtr<F
 //
 // So context and action creation, mapping CRUD, per-mapping trigger and
 // modifier authoring, applied-context readback and Blueprint event nodes were
-// all already covered. Runtime input INJECTION is covered too, in pie-studio.
+// all already covered. Runtime input INJECTION is covered too, in the pie category.
 //
 // What was genuinely missing, and is what this section adds:
 //
@@ -1683,12 +1728,200 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetActionTriggers(const TSharedPtr<FJs
 // set_player_mappable_settings - mint or update the protected Instanced
 // UPlayerMappableKeySettings subobject a property write cannot create
 // ─────────────────────────────────────────────────────────────
+namespace ImcEdit_Internal
+{
+	static TSharedPtr<FJsonValue> SetMappingSettings(const TSharedPtr<FJsonObject>& Params)
+	{
+		const FString ImcPath = OptionalString(Params, TEXT("imcPath"));
+		const double RawIndex = OptionalNumber(Params, TEXT("mappingIndex"), INDEX_NONE);
+		const FString BehaviorName = OptionalString(Params, TEXT("settingBehavior"));
+		const auto SettingsValue = TryGetParam(Params, TEXT("playerMappableKeySettings"));
+		const FString MappingName = OptionalString(Params, TEXT("mappingName"));
+		const FString DisplayName = OptionalString(Params, TEXT("displayName"));
+		const FString DisplayCategory = OptionalString(Params, TEXT("displayCategory"));
+		const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+		ReadSaveFlag(Params);
+		if (HasParam(Params, TEXT("inputActionPath"))) return MCPError(TEXT("Choose inputActionPath or imcPath plus mappingIndex"));
+		UInputMappingContext* IMC = LoadAssetByPath<UInputMappingContext>(ImcPath);
+		if (!IMC) return MCPAssetLoadError(ImcPath, TEXT("InputMappingContext"));
+		if (MCPIsProtectedAssetPath(ImcPath)) return MCPError(TEXT("Cannot edit a protected mapping context"));
+		auto& Mappings = const_cast<TArray<FEnhancedActionKeyMapping>&>(IMC->GetMappings());
+		if (!FMath::IsFinite(RawIndex) || RawIndex < 0 || RawIndex >= Mappings.Num())
+			return MCPError(TEXT("mappingIndex must be an integer identifying an existing row"));
+		const int32 Index = static_cast<int32>(RawIndex);
+		if (RawIndex != Index) return MCPError(TEXT("mappingIndex must be an integer"));
+		if (!Mappings.IsValidIndex(Index)) return MCPError(TEXT("mappingIndex is required and must identify an existing row"));
+		FProperty* Behavior = FEnhancedActionKeyMapping::StaticStruct()->FindPropertyByName(TEXT("SettingBehavior"));
+		FObjectPropertyBase* SettingsProperty = MappingSettingsProperty();
+		if (!Behavior || !SettingsProperty) return MCPError(TEXT("This engine does not expose per-mapping settings"));
+		FEnhancedActionKeyMapping& Mapping = Mappings[Index];
+		FEnhancedActionKeyMapping Proposed = Mapping;
+		FString Error;
+		if (!BehaviorName.IsEmpty())
+		{
+			if (BehaviorName != TEXT("InheritSettingsFromAction") && BehaviorName != TEXT("OverrideSettings") && BehaviorName != TEXT("IgnoreSettings"))
+				return MCPError(TEXT("settingBehavior must be InheritSettingsFromAction, OverrideSettings or IgnoreSettings"));
+			if (!MCPJsonProperty::SetJsonOnProperty(Behavior, Behavior->ContainerPtrToValuePtr<void>(&Proposed), MakeShared<FJsonValueString>(BehaviorName), Error)) return MCPError(Error);
+		}
+		UObject* Previous = SettingsProperty->GetObjectPropertyValue_InContainer(&Mapping);
+		const bool bPreviousNameEmpty = Previous && CastChecked<UPlayerMappableKeySettings>(Previous)->Name.IsNone();
+		UObject* Staged = nullptr;
+		const bool bClear = SettingsValue.IsValid() && SettingsValue->IsNull();
+		const bool bMetadata = HasParam(Params, TEXT("mappingName")) || HasParam(Params, TEXT("displayName")) || HasParam(Params, TEXT("displayCategory"));
+		const bool bWriteSettings = SettingsValue.IsValid() || bMetadata;
+		if (bClear && bMetadata) return MCPError(TEXT("Do not combine null playerMappableKeySettings with metadata fields"));
+		if (bWriteSettings && !bClear)
+		{
+			Staged = NewObject<UObject>(GetTransientPackage(), Previous ? Previous->GetClass() : UPlayerMappableKeySettings::StaticClass());
+			if (Previous)
+			{
+				for (TFieldIterator<FProperty> It(Previous->GetClass()); It; ++It)
+					if (!It->HasAnyPropertyFlags(CPF_Transient)) It->CopyCompleteValue_InContainer(Staged, Previous);
+			}
+			const TSharedPtr<FJsonObject>* Fields = nullptr;
+			if (SettingsValue.IsValid())
+			{
+				if (!SettingsValue->TryGetObject(Fields)) return MCPError(TEXT("playerMappableKeySettings must be a property object or null"));
+				for (const auto& Pair : (*Fields)->Values)
+				{
+					FProperty* Property = Staged->GetClass()->FindPropertyByName(FName(*Pair.Key));
+					if (!Property) return MCPError(FString::Printf(TEXT("Unknown settings property: %s"), *Pair.Key));
+					if (!MCPJsonProperty::SetJsonOnProperty(Property, Property->ContainerPtrToValuePtr<void>(Staged), Pair.Value, Error)) return MCPError(Error);
+				}
+			}
+			UPlayerMappableKeySettings* Typed = CastChecked<UPlayerMappableKeySettings>(Staged);
+			if (HasParam(Params, TEXT("mappingName"))) Typed->Name = FName(*MappingName);
+			if (HasParam(Params, TEXT("displayName"))) Typed->DisplayName = FText::FromString(DisplayName);
+			if (HasParam(Params, TEXT("displayCategory"))) Typed->DisplayCategory = FText::FromString(DisplayCategory);
+			if (Typed->Name.IsNone()) return MCPError(TEXT("Player mappable settings require a non-empty Name or mappingName"));
+		}
+		if (bWriteSettings) SettingsProperty->SetObjectPropertyValue_InContainer(&Proposed, Staged);
+		auto Result = MCPSuccess();
+		Result->SetStringField(TEXT("imcPath"), IMC->GetPathName());
+		Result->SetNumberField(TEXT("mappingIndex"), Index);
+		Result->SetBoolField(TEXT("dryRun"), bDryRun);
+		bool bSameSettings = !bWriteSettings || (bClear && !Previous);
+		if (Previous && Staged)
+		{
+			bSameSettings = true;
+			for (TFieldIterator<FProperty> It(Previous->GetClass()); It; ++It)
+			{
+				if (It->HasAnyPropertyFlags(CPF_Transient)) continue;
+				FString Before, After;
+				It->ExportTextItem_Direct(Before, It->ContainerPtrToValuePtr<void>(Previous), nullptr, Previous, PPF_None);
+				It->ExportTextItem_Direct(After, It->ContainerPtrToValuePtr<void>(Staged), nullptr, Staged, PPF_None);
+				if (Before != After) { bSameSettings = false; break; }
+			}
+		}
+		const bool bUnchanged = bSameSettings && Behavior->Identical(Behavior->ContainerPtrToValuePtr<void>(&Mapping), Behavior->ContainerPtrToValuePtr<void>(&Proposed));
+		Result->SetBoolField(TEXT("unchanged"), bUnchanged);
+		if (bDryRun)
+		{
+			auto Preview = MakeShared<FJsonObject>();
+			ReadMappingSettings(Proposed, Preview);
+			Result->SetObjectField(TEXT("proposedMapping"), Preview);
+			MCPSetNoRollback(Result, TEXT("Dry run; nothing changed"));
+			return MCPResult(Result);
+		}
+		if (auto Blocked = RefuseUnwritable(IMC, Params, TEXT("edit mapping settings"))) return Blocked;
+		if (bUnchanged)
+		{
+			MCPSetExisted(Result);
+			ReadMappingSettings(Mapping, Result);
+			MCPSetNoRollback(Result, TEXT("The mapping already carries these settings"));
+			FinishEdit(IMC, Params, Result, false);
+			return MCPResult(Result);
+		}
+		auto Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("imcPath"), IMC->GetPathName());
+		Rollback->SetNumberField(TEXT("mappingIndex"), Index);
+		Rollback->SetStringField(TEXT("settingBehavior"), MappingBehaviorName(Mapping));
+		if (bWriteSettings)
+		{
+			if (!Previous) Rollback->SetField(TEXT("playerMappableKeySettings"), MakeShared<FJsonValueNull>());
+			else
+			{
+				auto Fields = MakeShared<FJsonObject>();
+				for (TFieldIterator<FProperty> It(Previous->GetClass()); It; ++It)
+				{
+					if (It->HasAnyPropertyFlags(CPF_Transient)) continue;
+					const FStructProperty* StructProperty = CastField<FStructProperty>(*It);
+					if (StructProperty && (StructProperty->Struct->IsChildOf(FGameplayTag::StaticStruct())
+						|| StructProperty->Struct->IsChildOf(FGameplayTagContainer::StaticStruct())))
+					{
+						// The JSON setter treats strings as tag names, not export text.
+						// In particular, an empty tag container must be [] rather than "()".
+						Fields->SetField(It->GetName(), FMCPJsonSerializer::SerializeValue(It->ContainerPtrToValuePtr<void>(Previous), *It));
+						continue;
+					}
+					// Preserve export text for other fields, including localized FText.
+					FString Text;
+					It->ExportTextItem_Direct(Text, It->ContainerPtrToValuePtr<void>(Previous), nullptr, Previous, PPF_None);
+					Fields->SetStringField(It->GetName(), Text);
+				}
+				Rollback->SetObjectField(TEXT("playerMappableKeySettings"), Fields);
+			}
+		}
+		FScopedTransaction Transaction(NSLOCTEXT("UEMCP", "MappingSettings", "Edit mapping settings"));
+		IMC->Modify();
+		Behavior->CopyCompleteValue(Behavior->ContainerPtrToValuePtr<void>(&Mapping), Behavior->ContainerPtrToValuePtr<void>(&Proposed));
+		if (bWriteSettings)
+		{
+			UObject* Written = Previous;
+			if (bClear) Written = nullptr;
+			else if (!Written)
+			{
+				Written = DuplicateObject<UObject>(Staged, IMC);
+				Written->SetFlags(RF_Transactional);
+			}
+			else
+			{
+				Written->Modify();
+				for (TFieldIterator<FProperty> It(Written->GetClass()); It; ++It)
+					if (!It->HasAnyPropertyFlags(CPF_Transient)) It->CopyCompleteValue_InContainer(Written, Staged);
+			}
+			SettingsProperty->SetObjectPropertyValue_InContainer(&Mapping, Written);
+		}
+		IMC->PostEditChange();
+		MCPSetUpdated(Result);
+		if (IMC->GetMappings().IsValidIndex(Index)) ReadMappingSettings(IMC->GetMappings()[Index], Result);
+		else
+		{
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), TEXT("Mapping disappeared during edit notification"));
+		}
+		MCPSetRollback(Result, TEXT("set_player_mappable_settings"), Rollback);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("Restores this mapping index; replay before reordering mappings. Clearing settings recreates the settings object on rollback."));
+		if (bClear && Previous)
+		{
+			Result->SetBoolField(TEXT("rollbackLossy"), true);
+			if (Previous->GetClass() != UPlayerMappableKeySettings::StaticClass())
+			{
+				Result->RemoveField(TEXT("rollback"));
+				MCPSetNoRollback(Result, TEXT("Clearing a custom settings subclass cannot recreate its class; use editor undo"));
+			}
+		}
+		if (bWriteSettings && bPreviousNameEmpty)
+		{
+			Result->RemoveField(TEXT("rollback"));
+			MCPSetNoRollback(Result, TEXT("The previous settings had an empty Name, which cannot be authored; use editor undo"));
+		}
+		FinishEdit(IMC, Params, Result, true);
+		return MCPResult(Result);
+	}
+}
+
 TSharedPtr<FJsonValue> FGameplayHandlers::SetPlayerMappableSettings(const TSharedPtr<FJsonObject>& Params)
 {
 	using namespace InputDepth_Internal;
+	if (HasParam(Params, TEXT("imcPath"))) return ImcEdit_Internal::SetMappingSettings(Params);
+	HasParam(Params, TEXT("mappingIndex"));
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	const bool bHasBehavior = HasParam(Params, TEXT("settingBehavior"));
+	const bool bHasSettings = HasParam(Params, TEXT("playerMappableKeySettings"));
 
 	FString ActionPath;
-	if (auto Err = RequireString(Params, TEXT("inputActionPath"), ActionPath)) return Err;
+	const auto MissingAction = RequireString(Params, TEXT("inputActionPath"), ActionPath);
 
 	// Every parameter is read before anything can fail (#1057).
 	FString MappingName;
@@ -1699,6 +1932,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetPlayerMappableSettings(const TShare
 	const bool bHasDisplayCategory = Params.IsValid() && TryGetStringParam(Params, TEXT("displayCategory"), DisplayCategory);
 	ImcEdit_Internal::ReadSaveFlag(Params);
 
+	if (MissingAction) return MissingAction;
+	if (bHasBehavior || bHasSettings)
+		return MCPError(TEXT("settingBehavior and playerMappableKeySettings require imcPath plus mappingIndex"));
 	MappingName.TrimStartAndEndInline();
 	if (!bHasMappingName || MappingName.IsEmpty())
 	{
@@ -1730,6 +1966,17 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetPlayerMappableSettings(const TShare
 	const bool bDisplayNameUnchanged = !bHasDisplayName || (Settings && PreviousDisplayName == DisplayName);
 	const bool bDisplayCategoryUnchanged = !bHasDisplayCategory || (Settings && PreviousDisplayCategory == DisplayCategory);
 	const bool bUnchanged = !bCreated && bNameUnchanged && bDisplayNameUnchanged && bDisplayCategoryUnchanged;
+	if (bDryRun)
+	{
+		auto Preview = MCPSuccess();
+		Preview->SetBoolField(TEXT("dryRun"), true);
+		Preview->SetBoolField(TEXT("unchanged"), bUnchanged);
+		Preview->SetStringField(TEXT("mappingName"), MappingName);
+		Preview->SetStringField(TEXT("displayName"), bHasDisplayName ? DisplayName : PreviousDisplayName);
+		Preview->SetStringField(TEXT("displayCategory"), bHasDisplayCategory ? DisplayCategory : PreviousDisplayCategory);
+		MCPSetNoRollback(Preview, TEXT("Dry run; nothing changed"));
+		return MCPResult(Preview);
+	}
 	if (auto Blocked = ImcEdit_Internal::RefuseUnwritable(Action, Params, TEXT("set player-mappable settings"))) return Blocked;
 
 	if (bUnchanged)

@@ -1,0 +1,20 @@
+{
+  "release": "1.4.9-beta.2",
+  "recordedAt": "2026-10-23",
+  "source": "the release run's own step logs (build, up, smoke, automation, lifecycle, live), read back for #1465",
+  "machine": { "cpus": 24, "memoryGB": 32, "note": "12 physical cores, UBT capped at 6 parallel actions by the user BuildConfiguration.xml" },
+  "mode": "every step serial, one interactive editor",
+  "steps": [
+    { "name": "build", "durationS": 651, "note": "fresh worktree, no Intermediate: 269 actions, non-unity" },
+    { "name": "up", "durationS": 39 },
+    { "name": "smoke", "durationS": 390, "note": "1158 handlers" },
+    { "name": "automation", "durationS": 32, "note": "189 tests" },
+    { "name": "lifecycle", "durationS": 1156, "note": "rebuild flow 661 s, crash 353 s, locked output 85 s, stop and start 50 s" },
+    { "name": "live", "durationS": 3000, "note": "over 50 minutes, 905 tests serial; the log stops after 2593 s and 838 tests" },
+    { "name": "release-gates", "durationS": null, "note": "run after the editor steps, not timed" },
+    { "name": "unit", "durationS": null, "note": "run after the editor steps, not timed" },
+    { "name": "binaries", "durationS": null, "note": "not timed" }
+  ],
+  "wallS": 5268,
+  "wallNote": "sum of the timed steps; the untimed ones ran after them"
+}

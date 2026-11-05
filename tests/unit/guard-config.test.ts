@@ -178,6 +178,29 @@ describe("guard config from files", () => {
     expect(seen.at(-1)).toMatchObject({ enabled: false, nested: { winner: "env-edited" } });
   });
 
+  it("follows edits to the overlay a project's own env: key selects", async () => {
+    const envFile = path.join(dir, "ue-mcp.staging.yml");
+    write(projectFile, { "ue-mcp": { version: 1, env: "staging" }, ...config({ stage: "project" }) });
+    write(envFile, config({ stage: "env" }));
+    const { invoke } = await pipeline([liveSource()]);
+    await invoke();
+    expect(seen.at(-1)).toEqual({ stage: "env" });
+    write(envFile, config({ stage: "env-edited" }));
+    await invoke();
+    expect(seen.at(-1)).toEqual({ stage: "env-edited" });
+  });
+
+  it("follows edits to ue-mcp.local.yml when the project has no ue-mcp.yml", async () => {
+    const localFile = path.join(dir, "ue-mcp.local.yml");
+    write(localFile, config({ stage: "local" }));
+    const { invoke } = await pipeline([liveSource()]);
+    await invoke();
+    expect(seen.at(-1)).toEqual({ stage: "local" });
+    write(localFile, config({ stage: "local-edited" }));
+    await invoke();
+    expect(seen.at(-1)).toEqual({ stage: "local-edited" });
+  });
+
   it.each(["global", "project"])("keeps a denying guard on invalid %s YAML and removal", async (layer) => {
     const file = layer === "global" ? globalFile : projectFile;
     write(file, config({ deny: true }));
@@ -294,12 +317,15 @@ describe("guard config from files", () => {
     await expect(invoke()).rejects.toThrow("policy denied");
   });
 
+  /** A read made while loading the config, not while choosing which overlay to watch. */
+  const fromLoader = (): boolean => new Error().stack?.includes("loadFlowConfig") ?? false;
+
   it("keeps a startup snapshot when its layer disappears during the read", async () => {
     write(globalFile, config({ deny: true }));
     const read = fs.readFileSync;
     const disappearingRead = vi.spyOn(fs, "readFileSync").mockImplementation((...args: Parameters<typeof read>) => {
       const contents = read(...args);
-      if (args[0] === globalFile) fs.unlinkSync(globalFile);
+      if (args[0] === globalFile && fromLoader()) fs.unlinkSync(globalFile);
       return contents;
     });
     const source = liveSource();
@@ -315,7 +341,7 @@ describe("guard config from files", () => {
     let changed = false;
     const changingRead = vi.spyOn(fs, "readFileSync").mockImplementation((...args: Parameters<typeof read>) => {
       const contents = read(...args);
-      if (args[0] === globalFile && !changed) {
+      if (args[0] === globalFile && !changed && fromLoader()) {
         changed = true;
         write(globalFile, kind === "YAML" ? "guards: [broken" : { guards: { policy: { scope: "all" } } });
       }
@@ -337,7 +363,8 @@ describe("guard config from files", () => {
       source.liveOptions!("policy", "before");
       source.liveOptions!("policy", "after");
     }
-    expect(stat).toHaveBeenCalledTimes(2);
+    // global, ue-mcp.yml and ue-mcp.local.yml: the local layer applies with or without ue-mcp.yml.
+    expect(stat).toHaveBeenCalledTimes(3);
     expect(read).not.toHaveBeenCalled();
     write(globalFile, "guards: [broken");
     expect(source.liveOptions!("policy", "before")).toEqual({ deny: true });

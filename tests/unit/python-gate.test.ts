@@ -19,6 +19,7 @@ import {
   gateRefusalMessage,
 
   parseRulings,
+  relevantCandidates,
   resetRulings,
   ruledOutKey,
   type GateCandidate,
@@ -200,6 +201,35 @@ describe("candidates the running plugin does not register (#1167)", () => {
   });
 });
 
+describe("relevantCandidates: the gate asks only about candidates that bear on the summary", () => {
+  const TOOLS = ["pcg", "audio", "blueprint", "gameplay", "level", "editor"];
+  const pcgRead: GateCandidate = { tool: "pcg", action: "read_graph", description: "Read graph structure", score: 17 };
+  const metasoundPins: GateCandidate = { tool: "audio", action: "metasound_list_node_pins", description: "List a MetaSound node's pins", score: 15 };
+  const bpSignature: GateCandidate = { tool: "blueprint", action: "read_function_signature", description: "Pins of a function", score: 12 };
+  const levelPcg: GateCandidate = { tool: "level", action: "set_spline_points", description: "Spline points a PCG graph reads", score: 10 };
+
+  it("drops another subsystem's actions when the summary names one", () => {
+    const kept = relevantCandidates([pcgRead, metasoundPins, bpSignature], "Read PCG node pin labels", TOOLS);
+    expect(kept.map((c) => c.action)).toEqual(["read_graph"]);
+  });
+
+  it("keeps a candidate from another tool whose own text names the subsystem", () => {
+    const kept = relevantCandidates([pcgRead, levelPcg, metasoundPins], "PCG spline input labels", TOOLS);
+    expect(kept.map((c) => c.action)).toEqual(["read_graph", "set_spline_points"]);
+  });
+
+  it("reads a subsystem's other names (metasound is audio)", () => {
+    const kept = relevantCandidates([pcgRead, metasoundPins], "list metasound node pins", TOOLS);
+    expect(kept.map((c) => c.action)).toEqual(["metasound_list_node_pins"]);
+  });
+
+  it("does not narrow by a generic tool word, but drops a candidate under half the best score", () => {
+    const weak: GateCandidate = { tool: "editor", action: "get_selection", description: "Selected actors", score: 5 };
+    const kept = relevantCandidates([pcgRead, metasoundPins, weak], "read the level pins", TOOLS);
+    expect(kept.map((c) => c.action)).toEqual(["read_graph", "metasound_list_node_pins"]);
+  });
+});
+
 describe("editor.execute_python end to end", () => {
   const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
   const bridge = {
@@ -311,6 +341,17 @@ describe("editor.execute_python end to end", () => {
       // The absent method was the only candidate, so nothing was owed.
       expect(candidates).toEqual([target]);
     }
+  });
+
+  it("asks a PCG pin lookup about PCG actions only, not MetaSound or Blueprint ones", async () => {
+    const blocked = await run({ code: "print(1)", taskSummary: "Read PCG node input and output pin labels for a graph" });
+    expect(blocked.blocked).toBe(true);
+    const candidates = blocked.candidates as GateCandidate[];
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const c of candidates) {
+      expect(c.tool === "pcg" || `${c.action} ${c.description}`.toLowerCase().includes("pcg")).toBe(true);
+    }
+    expect(candidates.some((c) => c.tool === "audio" || c.tool === "blueprint")).toBe(false);
   });
 
   it("still refuses a call with no taskSummary at all", async () => {

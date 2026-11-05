@@ -114,6 +114,41 @@ namespace MCPDialogPolicy
 		}
 	}
 
+	/** Whether text names an IDE or a source code editor. */
+	static bool NamesAnIde(const FString& Text)
+	{
+		const FString Lower = Normalise(Text);
+		for (const TCHAR* Phrase : { TEXT("visual studio"), TEXT("vs code"), TEXT("source code editor"), TEXT("code editor") })
+		{
+			if (Lower.Contains(Phrase)) return true;
+		}
+		TArray<FString> Words;
+		FString Word;
+		for (const TCHAR C : Lower)
+		{
+			if (FChar::IsAlnum(C)) { Word.AppendChar(C); continue; }
+			if (!Word.IsEmpty()) { Words.Add(Word); Word.Reset(); }
+		}
+		if (!Word.IsEmpty()) Words.Add(Word);
+		for (const TCHAR* Name : { TEXT("ide"), TEXT("vscode"), TEXT("rider"), TEXT("xcode"), TEXT("devenv") })
+		{
+			if (Words.Contains(Name)) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Whether pressing this button would open an IDE: its label names one, or
+	 * the dialog asks about one and the button is the one that agrees.
+	 */
+	static bool OpensAnIde(const FString& Label, const FString& Message)
+	{
+		if (NamesAnIde(Label)) return true;
+		if (!NamesAnIde(Message)) return false;
+		const FString L = Normalise(Label);
+		return L == TEXT("yes") || L == TEXT("ok") || L == TEXT("open") || L == TEXT("yes to all") || L == TEXT("continue");
+	}
+
 	/** Index of the first button whose label equals Needle once normalised. */
 	static int32 FindExact(const TArray<FDialogHandlers::FModalButton>& Buttons, const FString& Needle)
 	{
@@ -243,6 +278,61 @@ namespace MCPDialogPolicy
 				if (Normalise(Offered).Contains(Want))
 				{
 					OutAnswer = Button.Answer;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The button an FMessageDialog of this type offers for a response, by
+	 * meaning: the response itself, else its nearest equivalent there. An
+	 * OK/Cancel dialog has no Yes or No, so yes answers OK and no answers
+	 * Cancel; returning a value the dialog does not offer is read by the caller
+	 * as whatever it tests for, which let "no" continue a rename (#1334).
+	 */
+	static bool OfferedAnswerFor(EAppMsgType::Type MsgType, EAppReturnType::Type Response, EAppReturnType::Type& OutAnswer)
+	{
+		TArray<EAppReturnType::Type> Preference;
+		switch (Response)
+		{
+		case EAppReturnType::Yes:      Preference = { EAppReturnType::Yes, EAppReturnType::Ok, EAppReturnType::Continue }; break;
+		case EAppReturnType::Ok:       Preference = { EAppReturnType::Ok, EAppReturnType::Yes, EAppReturnType::Continue }; break;
+		case EAppReturnType::Continue: Preference = { EAppReturnType::Continue, EAppReturnType::Ok, EAppReturnType::Yes }; break;
+		case EAppReturnType::YesAll:   Preference = { EAppReturnType::YesAll, EAppReturnType::Yes, EAppReturnType::Ok }; break;
+		case EAppReturnType::No:       Preference = { EAppReturnType::No, EAppReturnType::Cancel }; break;
+		case EAppReturnType::NoAll:    Preference = { EAppReturnType::NoAll, EAppReturnType::No, EAppReturnType::Cancel }; break;
+		case EAppReturnType::Cancel:   Preference = { EAppReturnType::Cancel, EAppReturnType::No }; break;
+		default:                       Preference = { Response }; break;
+		}
+		const TArray<FMessageDialogButton> Offered = MessageDialogButtons(MsgType);
+		for (const EAppReturnType::Type Want : Preference)
+		{
+			for (const FMessageDialogButton& Button : Offered)
+			{
+				if (Button.Answer == Want)
+				{
+					OutAnswer = Want;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** The first response keyword whose synonyms carry Label, so a refusal can name it (#1421). */
+	static bool ResponseForButtonLabel(const FString& Label, EAppReturnType::Type& OutAnswer)
+	{
+		const FString Want = Normalise(Label);
+		for (EAppReturnType::Type Candidate : { EAppReturnType::Yes, EAppReturnType::No, EAppReturnType::Ok, EAppReturnType::Cancel,
+			EAppReturnType::Retry, EAppReturnType::Continue, EAppReturnType::YesAll, EAppReturnType::NoAll })
+		{
+			for (const FString& Synonym : SynonymsFor(Candidate))
+			{
+				if (Normalise(Synonym) == Want)
+				{
+					OutAnswer = Candidate;
 					return true;
 				}
 			}
@@ -479,7 +569,12 @@ bool FDialogHandlers::ApplyPolicyToActiveModal()
 	// Nothing else can put a policy in the list, which is what keeps this from
 	// pressing a button on a dialog nobody asked about.
 	FString Reason;
-	const int32 Index = ResolveButtonForPolicy(*Policy, Buttons, Reason);
+	int32 Index = ResolveButtonForPolicy(*Policy, Buttons, Reason);
+	if (Buttons.IsValidIndex(Index) && OpensAnIde(Buttons[Index].Label, Message))
+	{
+		Reason = FString::Printf(TEXT("'%s' opens an IDE or source code editor, which no policy presses"), *Buttons[Index].Label);
+		Index = INDEX_NONE;
+	}
 	if (Index == INDEX_NONE)
 	{
 		if (WindowId != LastDeclinedWindow)
@@ -515,19 +610,16 @@ bool FDialogHandlers::ResolveMessageDialogAnswer(const FDialogPolicy& Policy, EA
 	using namespace MCPDialogPolicy;
 
 	OutReason.Empty();
-	if (Policy.ButtonLabel.IsEmpty())
-	{
-		OutAnswer = Policy.Response;
-		return true;
-	}
 	const TArray<FMessageDialogButton> Offered = MessageDialogButtons(MsgType);
-	if (FindMessageAnswer(Offered, Policy.ButtonLabel, OutAnswer))
+	if (!Policy.ButtonLabel.IsEmpty() && FindMessageAnswer(Offered, Policy.ButtonLabel, OutAnswer))
 	{
 		return true;
 	}
-	if (Policy.bResponseExplicit)
+	// A label this dialog does not carry still answers by the response it names
+	// (Yes on an OK/Cancel dialog is OK), as an explicit response does.
+	const bool bAnswersByResponse = Policy.ButtonLabel.IsEmpty() || Policy.bHasResponse;
+	if (bAnswersByResponse && OfferedAnswerFor(MsgType, Policy.Response, OutAnswer))
 	{
-		OutAnswer = Policy.Response;
 		return true;
 	}
 	TArray<FString> Labels;
@@ -535,8 +627,9 @@ bool FDialogHandlers::ResolveMessageDialogAnswer(const FDialogPolicy& Policy, EA
 	{
 		Labels.Add(Button.Labels.Num() > 0 ? Button.Labels[0] : FString());
 	}
-	OutReason = FString::Printf(TEXT("buttonLabel '%s' matches none of [%s] and the policy has no response keyword"),
-		*Policy.ButtonLabel, *FString::Join(Labels, TEXT(", ")));
+	OutReason = bAnswersByResponse
+		? FString::Printf(TEXT("response '%s' has no equivalent among [%s]"), *ResponseTypeToString(Policy.Response), *FString::Join(Labels, TEXT(", ")))
+		: FString::Printf(TEXT("buttonLabel '%s' matches none of [%s] and the policy has no response keyword"), *Policy.ButtonLabel, *FString::Join(Labels, TEXT(", ")));
 	return false;
 }
 
@@ -586,7 +679,14 @@ EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgCategory Category
 	{
 		EAppReturnType::Type Answer = EAppReturnType::Cancel;
 		FString Reason;
-		if (ResolveMessageDialogAnswer(*Policy, MsgType, Answer, Reason))
+		const bool bResolved = ResolveMessageDialogAnswer(*Policy, MsgType, Answer, Reason);
+		// A message box that asks about an IDE is never agreed to: Yes or OK is what opens it.
+		if (bResolved && MCPDialogPolicy::OpensAnIde(ResponseTypeToString(Answer), MessageStr))
+		{
+			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Dialog '%s' matched policy '%s' but its answer would open an IDE, so it is left unanswered."),
+				*TitleStr, *Policy->Pattern);
+		}
+		else if (bResolved)
 		{
 			UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Dialog answered by the policy a caller armed: pattern='%s' title='%s' answer=%s"),
 				*Policy->Pattern, *TitleStr, *ResponseTypeToString(Answer));
@@ -642,8 +742,16 @@ TSharedPtr<FJsonValue> FDialogHandlers::SetDialogPolicy(const TSharedPtr<FJsonOb
 		Response = ParseResponseType(ResponseStr, bValidResponse);
 		if (!bValidResponse)
 		{
+			// A button label passed as the response is refused with the keyword that presses it (#1421).
+			EAppReturnType::Type Mapped = EAppReturnType::Cancel;
+			if (MCPDialogPolicy::ResponseForButtonLabel(ResponseStr, Mapped))
+			{
+				return MCPError(FString::Printf(
+					TEXT("Unknown response '%s'. That is a button label, not a response keyword: response '%s' presses it, or pass buttonLabel '%s' to press it by name. Valid responses are %s."),
+					*ResponseStr, *ResponseTypeToString(Mapped), *ResponseStr, *ValidResponseList()));
+			}
 			return MCPError(FString::Printf(
-				TEXT("Unknown response '%s'. Valid responses are %s."),
+				TEXT("Unknown response '%s'. Valid responses are %s. To press a button by its label, pass buttonLabel instead."),
 				*ResponseStr, *ValidResponseList()));
 		}
 	}
@@ -713,7 +821,7 @@ TSharedPtr<FJsonValue> FDialogHandlers::SetDialogPolicy(const TSharedPtr<FJsonOb
 	if (!bResponseExplicit)
 	{
 		Result->SetStringField(TEXT("messageDialogNote"), bHasResponse
-			? FString::Printf(TEXT("On a message dialog that offers it, this label answers '%s'."), *ResponseOut)
+			? FString::Printf(TEXT("On a message dialog this label answers '%s', or the nearest button that dialog offers (OK for yes on an OK/Cancel dialog, Cancel for no)."), *ResponseOut)
 			: FString(TEXT("No message dialog button carries this label, so a message dialog this pattern matches is left for a person.")));
 	}
 
@@ -1677,6 +1785,11 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 	return MCPResult(Result);
 }
 
+bool FDialogHandlers::OpensAnIde(const FString& ButtonLabel, const FString& Message)
+{
+	return MCPDialogPolicy::OpensAnIde(ButtonLabel, Message);
+}
+
 TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonObject>& Params)
 {
 	using namespace MCPDialogPolicy;
@@ -1726,6 +1839,14 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 	else if (ButtonIndex >= 0 && ButtonIndex < Buttons.Num())
 	{
 		TargetIndex = ButtonIndex;
+	}
+
+	// Nothing the bridge does may start an IDE on the user's desktop.
+	if (Buttons.IsValidIndex(TargetIndex) && OpensAnIde(Buttons[TargetIndex].Label, Message))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Will not press '%s' on dialog '%s': it opens an IDE or source code editor. Press another of [%s], or dialogAction='close'."),
+			*Buttons[TargetIndex].Label, *Title, *JoinLabels(Buttons)));
 	}
 
 	auto Result = MCPSuccess();

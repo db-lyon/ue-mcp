@@ -6,6 +6,7 @@ import { registeredMethodsOf, withholdFromTool, withholdUnregistered } from "../
 import { searchToolGraph } from "./tool-search.js";
 import { actionSignature } from "../action-signature.js";
 import { readEnv } from "../../core/env.js";
+import { McpError, ErrorCode } from "../../core/errors.js";
 
 /**
  * Lean context strategy, and what every strategy shares: choosing one, and
@@ -181,7 +182,10 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
         const declared = byName.get(category);
         const tool = declared && withholdFromTool(declared, registeredMethodsOf(ctx?.bridge));
         if (!tool) {
-          return { error: `Unknown category "${category}". Use catalog(action="list_categories").`, categories: summaries.map((s) => s.category) };
+          throw new McpError(
+            ErrorCode.UNKNOWN_ACTION,
+            `Unknown category "${category}". Categories: ${summaries.map((s) => s.category).join(", ")}.`,
+          );
         }
         if (typeof p.method === "string" && p.method) return actionSchema(tool, p.method);
         return describeCategory(tool, readOffset(p));

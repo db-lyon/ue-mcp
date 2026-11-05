@@ -43,6 +43,29 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "add_effect_component": {
+    "category": "gas",
+    "params": [
+      {
+        "name": "effectPath",
+        "type": "string",
+        "required": true,
+        "description": "GameplayEffect Blueprint asset path"
+      },
+      {
+        "name": "componentClass",
+        "type": "string",
+        "required": true,
+        "description": "GameplayEffectComponent class: a name such as TargetTagsGameplayEffectComponent, or a class path"
+      },
+      {
+        "name": "properties",
+        "type": "object",
+        "required": false,
+        "description": "Property values to write onto the component, keyed by property name"
+      }
+    ]
+  },
   "add_effect_cue": {
     "category": "gas",
     "params": [
@@ -432,7 +455,13 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "durationPolicy",
         "type": "string",
         "required": false,
-        "description": "Echoed back as durationPolicy (default Instant); it is not written onto the effect"
+        "description": "Instant (default) | Infinite | HasDuration, written onto the effect's class defaults"
+      },
+      {
+        "name": "durationMagnitude",
+        "type": "number",
+        "required": false,
+        "description": "Duration in seconds; only with durationPolicy HasDuration"
       }
     ],
     "contractExempt": "Creates, compiles and saves a Blueprint under the contract values; nothing it reads fails first"
@@ -706,6 +735,23 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "remove_effect_component": {
+    "category": "gas",
+    "params": [
+      {
+        "name": "effectPath",
+        "type": "string",
+        "required": true,
+        "description": "GameplayEffect Blueprint asset path"
+      },
+      {
+        "name": "componentClass",
+        "type": "string",
+        "required": true,
+        "description": "GameplayEffectComponent class to remove: a name such as TargetTagsGameplayEffectComponent, or a class path"
+      }
+    ]
+  },
   "remove_effect_cue": {
     "category": "gas",
     "params": [
@@ -944,6 +990,31 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "set_effect_granted_tags": {
+    "category": "gas",
+    "params": [
+      {
+        "name": "effectPath",
+        "type": "string",
+        "required": true,
+        "description": "GameplayEffect Blueprint asset path"
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "required": true,
+        "description": "Registered tags the effect grants its target, written whole",
+        "items": "string"
+      },
+      {
+        "name": "removedTags",
+        "type": "array",
+        "required": false,
+        "description": "Inherited tags to drop from a parent effect's grants, written whole",
+        "items": "string"
+      }
+    ]
+  },
   "set_effect_modifier": {
     "category": "gas",
     "params": [
@@ -1093,6 +1164,7 @@ export const handlerSpecs: HandlerSpecs = {
 export const paramsClauses: Readonly<Record<string, string>> = {
   add_ability_system_component: "Params: blueprintPath, componentName?",
   add_attribute: "Params: attributeSetPath, attributeName",
+  add_effect_component: "Params: effectPath, componentClass, properties?",
   add_effect_cue: "Params: effectPath (or effectClass), cueTag, minLevel?, maxLevel?, magnitudeAttribute?",
   add_loose_gameplay_tag: "Params: actorLabel?, actorPath?, tag, count?, world?",
   apply_effect: "Params: actorLabel?, actorPath?, effectClass (or effectPath), level?, setByCaller?, world?",
@@ -1104,7 +1176,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   create_attribute_set: "Params: name, packagePath?, onConflict?",
   create_gameplay_ability: "Params: name, packagePath?, onConflict?",
   create_gameplay_cue: "Params: name, packagePath?, onConflict?, cueType?",
-  create_gameplay_effect: "Params: name, packagePath?, onConflict?, durationPolicy?",
+  create_gameplay_effect: "Params: name, packagePath?, onConflict?, durationPolicy?, durationMagnitude?",
   delete_gas_snapshot: "Params: snapshotId",
   get_active_effects: "Params: actorLabel?, actorPath?, world?",
   get_asc_state: "Params: actorLabel?, actorPath?, world?",
@@ -1115,6 +1187,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   init_asc: "Params: actorLabel?, actorPath?, attributeSet?, world?",
   list_gas_snapshots: "Params: actorPath?, includeSnapshots?",
   remove_effect: "Params: actorLabel?, actorPath?, effectHandle?, effectClass? (or effectPath), stacksToRemove?, world?",
+  remove_effect_component: "Params: effectPath, componentClass",
   remove_effect_cue: "Params: effectPath (or effectClass), cueTag",
   remove_loose_gameplay_tag: "Params: actorLabel?, actorPath?, tag, count?, world?",
   revoke_ability: "Params: actorLabel?, actorPath?, abilityClass, world?",
@@ -1122,6 +1195,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_ability_tags: "Params: abilityPath, ability_tags?, cancel_abilities_with_tag?, block_abilities_with_tag?, activation_required_tags?, activation_blocked_tags?",
   set_asc_defaults: "Params: blueprintPath, attributeSet (or attributeSetPath), componentName?, initDataTable?",
   set_attribute: "Params: actorLabel?, actorPath?, attribute, value, world?",
+  set_effect_granted_tags: "Params: effectPath, tags, removedTags?",
   set_effect_modifier: "Params: effectPath, attribute, operation?, magnitude?",
   set_live_attribute_value: "Params: actorLabel?, actorPath?, attributeSet, attribute, value, valueType?, registerOwnerSets?, world?",
   trace_ability_activation: "Params: actorLabel?, actorPath?, abilityClass, activate?, world?",
@@ -1139,26 +1213,28 @@ export const schema: Record<string, z.ZodType> = {
   actorLabel: z.string().optional().describe("Live actor label, internal name or object path. Pass this or actorPath"),
   actorPath: z.string().optional().describe("Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given (add_loose_gameplay_tag, apply_effect, audit_attributes, bind_ability_input, capture_gas_state, clear_ability_input, get_active_effects, get_asc_state, get_attribute, get_live_attribute_value, grant_ability, init_asc, remove_effect, remove_loose_gameplay_tag, revoke_ability, send_ability_input, set_attribute, set_live_attribute_value, trace_ability_activation). Only snapshots of this actor object path (list_gas_snapshots)"),
   afterId: z.string().optional().describe("Snapshot id of the later reading. Pass this or afterSnapshot"),
-  afterSnapshot: z.record(z.unknown()).optional().describe("The later snapshot object itself"),
+  afterSnapshot: z.record(z.string(), z.unknown()).optional().describe("The later snapshot object itself"),
   attribute: z.string().optional().describe("Attribute to read. Omit to list every attribute (get_attribute). Attribute property name, or Set.Property (get_live_attribute_value, set_live_attribute_value). Attribute name: Health or SetName.Health (set_attribute). Attribute to modify: SetName.Attribute, or a unique attribute name (set_effect_modifier)"),
   attributeName: z.string().optional().describe("FGameplayAttributeData variable to add"),
   attributeSet: z.string().optional().describe("AttributeSet content path or class name. Pass this, a live actor, or both (audit_attributes). AttributeSet content path or class name (get_live_attribute_value, set_asc_defaults, set_live_attribute_value). AttributeSet content path or class name to make sure is registered (init_asc)"),
   attributeSetPath: z.string().optional().describe("AttributeSet Blueprint asset path (add_attribute). Alias for attributeSet (set_asc_defaults)"),
   beforeId: z.string().optional().describe("Snapshot id of the earlier reading. Pass this or beforeSnapshot"),
-  beforeSnapshot: z.record(z.unknown()).optional().describe("The earlier snapshot object itself"),
+  beforeSnapshot: z.record(z.string(), z.unknown()).optional().describe("The earlier snapshot object itself"),
   block_abilities_with_tag: z.array(z.string()).optional().describe("BlockAbilitiesWithTag container, written whole"),
   blueprintPath: z.string().optional().describe("Blueprint asset path (add_ability_system_component). Blueprint asset path to inspect (get_gas_info). Blueprint asset path carrying the AbilitySystemComponent (set_asc_defaults)"),
   cancel_abilities_with_tag: z.array(z.string()).optional().describe("CancelAbilitiesWithTag container, written whole"),
   compareWith: z.string().optional().describe("Earlier snapshot id to diff this capture against"),
+  componentClass: z.string().optional().describe("GameplayEffectComponent class: a name such as TargetTagsGameplayEffectComponent, or a class path (add_effect_component). GameplayEffectComponent class to remove: a name such as TargetTagsGameplayEffectComponent, or a class path (remove_effect_component)"),
   componentName: z.string().optional().describe("Name of the AbilitySystemComponent (default AbilitySystemComp) (add_ability_system_component). AbilitySystemComponent to wire (default: the first one) (set_asc_defaults)"),
   count: z.number().int().optional().describe("References to add, at least 1 (default 1) (add_loose_gameplay_tag). References to remove, at least 1 (default 1) (remove_loose_gameplay_tag)"),
   cueTag: z.string().optional().describe("Registered GameplayCue tag, under the GameplayCue root (add_effect_cue). GameplayCue tag to unlink. May be one that is no longer registered (remove_effect_cue)"),
   cueType: z.string().optional().describe("Static (default, GameplayCueNotify_Static) | Actor (GameplayCueNotify_Actor)"),
   directory: z.string().optional().describe("Content path to scan (default /Game)"),
-  durationPolicy: z.string().optional().describe("Echoed back as durationPolicy (default Instant); it is not written onto the effect"),
+  durationMagnitude: z.number().optional().describe("Duration in seconds; only with durationPolicy HasDuration"),
+  durationPolicy: z.string().optional().describe("Instant (default) | Infinite | HasDuration, written onto the effect's class defaults"),
   effectClass: z.string().optional().describe("Alias for effectPath (add_effect_cue, remove_effect_cue, validate_cue_coverage). GameplayEffect content path or class name (apply_effect). GameplayEffect content path or class name. Removes every active effect of that class (remove_effect)"),
   effectHandle: z.string().optional().describe("Active-effect handle apply_effect reported. Removes exactly that effect"),
-  effectPath: z.string().optional().describe("GameplayEffect Blueprint asset path (add_effect_cue, remove_effect_cue, set_effect_modifier). Alias for effectClass (apply_effect, remove_effect). Audit this one GameplayEffect instead of scanning (validate_cue_coverage)"),
+  effectPath: z.string().optional().describe("GameplayEffect Blueprint asset path (add_effect_component, add_effect_cue, remove_effect_component, remove_effect_cue, set_effect_granted_tags, set_effect_modifier). Alias for effectClass (apply_effect, remove_effect). Audit this one GameplayEffect instead of scanning (validate_cue_coverage)"),
   includeSnapshots: z.boolean().optional().describe("Return the full snapshot bodies rather than a summary row each"),
   initDataTable: z.string().optional().describe("DataTable of starting attribute values"),
   inputEvent: z.string().optional().describe("pressed (default) | released | confirm | cancel. pressed and released address an inputId; confirm and cancel take none"),
@@ -1174,11 +1250,14 @@ export const schema: Record<string, z.ZodType> = {
   operation: z.string().optional().describe("Additive (default) | Multiplicative | Division | Override"),
   packagePath: z.string().optional().describe("Content folder (default /Game/GAS/Attributes) (create_attribute_set). Content folder (default /Game/GAS/Abilities) (create_gameplay_ability). Content folder (default /Game/GAS/Cues) (create_gameplay_cue). Content folder (default /Game/GAS/Effects) (create_gameplay_effect)"),
   probeClamping: z.boolean().optional().describe("Measure an existing clamp by driving the set's own PreAttributeChange. Needs a live registered set (default false)"),
+  properties: z.record(z.string(), z.unknown()).optional().describe("Property values to write onto the component, keyed by property name"),
   registerOwnerSets: z.boolean().optional().describe("Register the actor's own attribute sets on its ASC when it has none, the way BeginPlay would (default true)"),
-  setByCaller: z.record(z.unknown()).optional().describe("SetByCaller magnitudes keyed by gameplay tag or name"),
+  removedTags: z.array(z.string()).optional().describe("Inherited tags to drop from a parent effect's grants, written whole"),
+  setByCaller: z.record(z.string(), z.unknown()).optional().describe("SetByCaller magnitudes keyed by gameplay tag or name"),
   snapshotId: z.string().optional().describe("Id to store the snapshot under (generated when omitted) (capture_gas_state). Snapshot id to drop (delete_gas_snapshot)"),
   stacksToRemove: z.number().int().optional().describe("Stacks to take off (default -1, the whole effect)"),
   tag: z.string().optional().describe("A registered gameplay tag"),
+  tags: z.array(z.string()).optional().describe("Registered tags the effect grants its target, written whole"),
   value: z.number().optional().describe("New base value (set_attribute). Value to write (set_live_attribute_value)"),
   valueType: z.string().optional().describe("current (default, writes the attribute data in place) | base (writes through the ASC aggregator)"),
   world: z.string().optional().describe("Runtime world scope: auto (default) | pie | editor"),

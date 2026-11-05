@@ -15,7 +15,8 @@ import { GuardsSchema } from "./guard-schema.js";
  *     http: { enabled: false, port: 7723 }
  */
 export const FlowVersionSchema = z.object({
-  version: z.literal(1),
+  // Absent reads as 1, so a layer that only sets preferences still loads.
+  version: z.literal(1).default(1),
   contentRoots: z.array(z.string()).optional(),
   disable: z.array(z.string()).optional(),
   http: z
@@ -50,6 +51,11 @@ export const PluginEntrySchema = z.object({
 
 export type PluginEntry = z.infer<typeof PluginEntrySchema>;
 
+/** A step's key is its place in the run order; the runner sorts steps by it as a number. */
+export const FlowStepKeySchema = z.coerce.string().regex(/^\d+$/, {
+  message: 'a flow step key is its run order, a whole number such as "1" or "2"',
+});
+
 /** flowkit's flow definition plus what ue-mcp adds to it. See flow/editor-loss.ts. */
 export const UeMcpFlowDefinitionSchema = FlowDefinitionSchema.extend({
   on_editor_loss: z.enum(["resume", "rollback", "fail"]).optional(),
@@ -57,7 +63,7 @@ export const UeMcpFlowDefinitionSchema = FlowDefinitionSchema.extend({
 });
 
 export const FlowConfigSchema = EngineConfigSchema.extend({
-  flows: z.record(UeMcpFlowDefinitionSchema).default({}),
+  flows: z.record(z.string(), UeMcpFlowDefinitionSchema).default({}),
   "ue-mcp": FlowVersionSchema.optional(),
   project: FlowProjectSchema,
   git_snapshot: GitSnapshotSchema,

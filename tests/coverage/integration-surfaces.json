@@ -1,0 +1,710 @@
+{
+  "note": "Every user-facing surface of ue-mcp that is not a bridge action, hand-kept. Bridge actions are inventoried separately (behavioural-coverage.json). A test claims a surface with covers(\"<id>\") from tests/helpers/covers.ts; scripts/integration-coverage.ts credits it when the test asserts on what the real process did. A new surface goes here together with its test or a reasoned exemption.",
+  "surfaces": [
+    {
+      "id": "cli.help",
+      "group": "cli",
+      "summary": "ue-mcp help, --help and -h print the command list and exit 0 without starting a server"
+    },
+    {
+      "id": "cli.unknown-flag",
+      "group": "cli",
+      "summary": "ue-mcp with a stray flag exits 2 with usage instead of starting a server"
+    },
+    {
+      "id": "cli.version",
+      "group": "cli",
+      "summary": "ue-mcp version, --version and -v print the package version"
+    },
+    {
+      "id": "cli.command-help",
+      "group": "cli",
+      "summary": "ue-mcp <command> --help prints that command's usage, exits 0 and writes nothing, for every command"
+    },
+    {
+      "id": "cli.command-unknown-flag",
+      "group": "cli",
+      "summary": "a strict command refuses a mistyped flag with exit 2 before doing any work"
+    },
+    {
+      "id": "cli.init.yes",
+      "group": "cli",
+      "summary": "ue-mcp init --yes on a bare project deploys the bridge, edits the .uproject, writes ue-mcp.yml, client configs, hooks and skills"
+    },
+    {
+      "id": "cli.init.json",
+      "group": "cli",
+      "summary": "ue-mcp init --json prints one machine-readable result on stdout and nothing else"
+    },
+    {
+      "id": "cli.init.dry-run",
+      "group": "cli",
+      "summary": "ue-mcp init --yes --dry-run prints the plan and writes nothing"
+    },
+    {
+      "id": "cli.init.binary",
+      "group": "cli",
+      "summary": "ue-mcp init --install binary --binaries <local> installs prebuilt bridge binaries"
+    },
+    {
+      "id": "cli.init.feedback-mode",
+      "group": "cli",
+      "summary": "ue-mcp init --feedback-mode <mode> stores the project's feedback approval mode, and the plan reports the mode in effect and its scope"
+    },
+    {
+      "id": "cli.init.rerun",
+      "group": "cli",
+      "summary": "running ue-mcp init a second time is idempotent"
+    },
+    {
+      "id": "cli.init.interactive",
+      "group": "cli",
+      "summary": "ue-mcp init without --yes walks the interactive prompts on a terminal"
+    },
+    {
+      "id": "cli.init.bin",
+      "group": "cli",
+      "summary": "the ue-mcp-init package bin runs init"
+    },
+    {
+      "id": "cli.update",
+      "group": "cli",
+      "summary": "ue-mcp update installs the newest server from npm, then redeploys and rebuilds the bridge"
+    },
+    {
+      "id": "cli.update.apply-only",
+      "group": "cli",
+      "summary": "ue-mcp update --apply-only redeploys the bridge from this package or local binaries"
+    },
+    {
+      "id": "cli.update.bin",
+      "group": "cli",
+      "summary": "the ue-mcp-update package bin runs update"
+    },
+    {
+      "id": "cli.deploy",
+      "group": "cli",
+      "summary": "ue-mcp deploy syncs the bridge plugin into a project and enables it in the .uproject"
+    },
+    {
+      "id": "cli.deploy.bin",
+      "group": "cli",
+      "summary": "the ue-mcp-deploy package bin runs deploy"
+    },
+    {
+      "id": "cli.build",
+      "group": "cli",
+      "summary": "ue-mcp build runs the engine's build script for the project's editor target and reports its exit"
+    },
+    {
+      "id": "cli.doctor",
+      "group": "cli",
+      "summary": "ue-mcp doctor reports installed versions, client configs and running servers"
+    },
+    {
+      "id": "cli.doctor.fix",
+      "group": "cli",
+      "summary": "ue-mcp doctor --fix removes client config entries that point at missing projects"
+    },
+    {
+      "id": "cli.doctor.age-gate",
+      "group": "cli",
+      "summary": "ue-mcp doctor reports an npx launch npm's release-age gate would refuse, and --fix lifts the gate in that entry"
+    },
+    {
+      "id": "client.launch.age-gate",
+      "group": "cli",
+      "summary": "a client config ue-mcp writes starts the server through npx under min-release-age on the day of a release"
+    },
+    {
+      "id": "cli.status",
+      "group": "cli",
+      "summary": "ue-mcp status reports a project's install, client and editor state"
+    },
+    {
+      "id": "cli.status.json",
+      "group": "cli",
+      "summary": "ue-mcp status --json prints one JSON status report"
+    },
+    {
+      "id": "cli.daemon.run",
+      "group": "cli",
+      "summary": "ue-mcp daemon run serves a project in the foreground and publishes a discovery file"
+    },
+    {
+      "id": "cli.daemon.start",
+      "group": "cli",
+      "summary": "ue-mcp daemon start spawns a detached daemon for a project and prints where it listens"
+    },
+    {
+      "id": "cli.daemon.stop",
+      "group": "cli",
+      "summary": "ue-mcp daemon stop shuts down a project's running daemon"
+    },
+    {
+      "id": "cli.daemon.status",
+      "group": "cli",
+      "summary": "ue-mcp daemon status reports whether a project's daemon is running and healthy"
+    },
+    {
+      "id": "cli.daemon.open",
+      "group": "cli",
+      "summary": "ue-mcp daemon open prints the daemon UI address, starting the daemon if needed"
+    },
+    {
+      "id": "cli.daemon.usage",
+      "group": "cli",
+      "summary": "ue-mcp daemon with no or an unknown subcommand prints usage and exits 2"
+    },
+    {
+      "id": "cli.extension.list",
+      "group": "cli",
+      "summary": "ue-mcp extension list lists installed daemon extensions"
+    },
+    {
+      "id": "cli.extension.install",
+      "group": "cli",
+      "summary": "ue-mcp extension install unpacks an extension archive into the extensions directory"
+    },
+    {
+      "id": "cli.extension.use",
+      "group": "cli",
+      "summary": "ue-mcp extension use moves one project to an installed extension version and restarts its daemon"
+    },
+    {
+      "id": "cli.extension.remove",
+      "group": "cli",
+      "summary": "ue-mcp extension remove deletes one installed extension and nothing else"
+    },
+    {
+      "id": "cli.hook.post-tool-use",
+      "group": "cli",
+      "summary": "ue-mcp hook post-tool-use reads a Claude Code payload on stdin and answers with a feedback reminder"
+    },
+    {
+      "id": "cli.hook.other",
+      "group": "cli",
+      "summary": "ue-mcp hook with another event kind is a silent no-op"
+    },
+    {
+      "id": "cli.uninstall-hooks",
+      "group": "cli",
+      "summary": "ue-mcp uninstall-hooks removes every hook init recorded for a project"
+    },
+    {
+      "id": "cli.auth",
+      "group": "cli",
+      "summary": "ue-mcp auth signs in to GitHub with the device flow and caches the token"
+    },
+    {
+      "id": "cli.auth.json",
+      "group": "cli",
+      "summary": "ue-mcp auth --json prints the device code and the outcome as JSON lines"
+    },
+    {
+      "id": "cli.login",
+      "group": "cli",
+      "summary": "ue-mcp login exchanges a GitHub token for a registry publish token"
+    },
+    {
+      "id": "cli.logout",
+      "group": "cli",
+      "summary": "ue-mcp logout forgets the cached registry token"
+    },
+    {
+      "id": "cli.feedback.mode",
+      "group": "cli",
+      "summary": "ue-mcp feedback mode reads and sets the stored feedback mode"
+    },
+    {
+      "id": "cli.feedback.list",
+      "group": "cli",
+      "summary": "ue-mcp feedback list shows deferred feedback reports"
+    },
+    {
+      "id": "cli.feedback.show",
+      "group": "cli",
+      "summary": "ue-mcp feedback show prints one deferred report"
+    },
+    {
+      "id": "cli.feedback.discard",
+      "group": "cli",
+      "summary": "ue-mcp feedback discard deletes one deferred report"
+    },
+    {
+      "id": "cli.feedback.approve",
+      "group": "cli",
+      "summary": "ue-mcp feedback approve files one deferred report and removes it from the queue"
+    },
+    {
+      "id": "cli.feedback.review",
+      "group": "cli",
+      "summary": "ue-mcp feedback review walks the deferred queue on a terminal"
+    },
+    {
+      "id": "cli.dialog.mode",
+      "group": "cli",
+      "summary": "ue-mcp dialog mode reads and sets how blocking editor dialogs are handled"
+    },
+    {
+      "id": "cli.playtest.mode",
+      "group": "cli",
+      "summary": "ue-mcp playtest mode reads, sets and clears who starts playtest runs, per user or per project"
+    },
+    {
+      "id": "cli.context.status",
+      "group": "cli",
+      "summary": "ue-mcp context prints the project's context strategy"
+    },
+    {
+      "id": "cli.context.set",
+      "group": "cli",
+      "summary": "ue-mcp context micro|lean|full writes the strategy into ue-mcp.yml"
+    },
+    {
+      "id": "cli.resolve",
+      "group": "cli",
+      "summary": "ue-mcp resolve works a GitHub issue into a pull request through gh, git and claude"
+    },
+    {
+      "id": "cli.plugin.install",
+      "group": "cli",
+      "summary": "ue-mcp plugin install adds a plugin package, validates its manifest and records it in ue-mcp.yml"
+    },
+    {
+      "id": "cli.plugin.uninstall",
+      "group": "cli",
+      "summary": "ue-mcp plugin uninstall removes a plugin, its native module and its skills"
+    },
+    {
+      "id": "cli.plugin.list",
+      "group": "cli",
+      "summary": "ue-mcp plugin list lists the project's plugins and their status"
+    },
+    {
+      "id": "cli.plugin.update",
+      "group": "cli",
+      "summary": "ue-mcp plugin update reinstalls plugins at their newest version"
+    },
+    {
+      "id": "cli.plugin.check-skills",
+      "group": "cli",
+      "summary": "ue-mcp plugin check-skills validates a plugin's shipped skills"
+    },
+    {
+      "id": "cli.plugin.create",
+      "group": "cli",
+      "summary": "ue-mcp plugin create scaffolds a new plugin package"
+    },
+    {
+      "id": "cli.plugin.config",
+      "group": "cli",
+      "summary": "ue-mcp plugin config enables and disables a plugin's groups"
+    },
+    {
+      "id": "cli.plugin.publish",
+      "group": "cli",
+      "summary": "ue-mcp plugin publish uploads a plugin listing to the registry"
+    },
+    {
+      "id": "cli.plugin.publish.dry-run",
+      "group": "cli",
+      "summary": "ue-mcp plugin publish --dry-run prints the listing diff without a token or a write"
+    },
+    {
+      "id": "cli.plugin.record-specs",
+      "group": "cli",
+      "summary": "ue-mcp plugin record-specs records a native module's handler specs from a running bridge"
+    },
+    {
+      "id": "cli.plugin.usage",
+      "group": "cli",
+      "summary": "ue-mcp plugin with no or an unknown subcommand prints usage and fails"
+    },
+    {
+      "id": "server.startup.micro.in-process",
+      "group": "server",
+      "summary": "the in-process server in the micro strategy advertises the tools gateway and flow, with the micro instructions"
+    },
+    {
+      "id": "server.checkpoints",
+      "group": "server",
+      "summary": "editor(checkpoint, list_checkpoints, list_changes, restore) record and restore files written through the server with no editor running"
+    },
+    {
+      "id": "server.playtest-mode",
+      "group": "server",
+      "summary": "under playtest mode manual an MCP session's pie(script_run) and pie(script_replay) are refused without reaching the editor, directly and through the micro gateway; automatic runs them"
+    },
+    {
+      "id": "server.startup.lean.in-process",
+      "group": "server",
+      "summary": "the in-process server in the lean strategy advertises the catalog tool and trimmed category tools"
+    },
+    {
+      "id": "server.startup.full.in-process",
+      "group": "server",
+      "summary": "the in-process server in the full strategy advertises every category tool"
+    },
+    {
+      "id": "server.startup.micro.daemon",
+      "group": "server",
+      "summary": "the stdio shim in daemon mode advertises what the micro in-process server does"
+    },
+    {
+      "id": "server.startup.lean.daemon",
+      "group": "server",
+      "summary": "the stdio shim in daemon mode advertises what the lean in-process server does"
+    },
+    {
+      "id": "server.startup.full.daemon",
+      "group": "server",
+      "summary": "the stdio shim in daemon mode advertises what the full in-process server does"
+    },
+    {
+      "id": "server.strategy.config",
+      "group": "server",
+      "summary": "context.strategy in ue-mcp.yml picks the strategy when no env var does"
+    },
+    {
+      "id": "server.mode.config",
+      "group": "server",
+      "summary": "server.mode in ue-mcp.yml picks daemon or in-process when no env var does"
+    },
+    {
+      "id": "server.mode.fallback",
+      "group": "server",
+      "summary": "a server whose daemon cannot start serves in process instead"
+    },
+    {
+      "id": "server.no-project",
+      "group": "server",
+      "summary": "a server started with no project serves the default bridge"
+    },
+    {
+      "id": "server.multi-project",
+      "group": "server",
+      "summary": "a server started with several projects runs one session per project"
+    },
+    {
+      "id": "server.editor-down",
+      "group": "server",
+      "summary": "tool calls with no editor running answer with a clear not-connected result instead of hanging"
+    },
+    {
+      "id": "gateway.list_categories",
+      "group": "gateway",
+      "summary": "tools(list_categories) lists every category with a summary"
+    },
+    {
+      "id": "gateway.search",
+      "group": "gateway",
+      "summary": "tools(search) ranks action signatures for a query"
+    },
+    {
+      "id": "gateway.describe",
+      "group": "gateway",
+      "summary": "tools(describe) pages a category's signatures and one action's schema"
+    },
+    {
+      "id": "gateway.call",
+      "group": "gateway",
+      "summary": "tools(call) dispatches a category action and validates its args"
+    },
+    {
+      "id": "actions.local",
+      "group": "gateway",
+      "summary": "server-side actions (project get_status, get_info, list_editors, plugins list) answer with no editor"
+    },
+    {
+      "id": "flow.list",
+      "group": "flow",
+      "summary": "flow(list) lists built-in, plugin and ue-mcp.yml flows"
+    },
+    {
+      "id": "flow.plan",
+      "group": "flow",
+      "summary": "flow(plan) resolves a flow's steps without running them"
+    },
+    {
+      "id": "flow.plan.inputs",
+      "group": "flow",
+      "summary": "flow(plan) and GET /v1/flows/<name>/plan report the inputs a run may pass, derived from the step schemas and options_schema"
+    },
+    {
+      "id": "flow.run.yaml",
+      "group": "flow",
+      "summary": "flow(run) runs a flow defined in ue-mcp.yml and reports each step"
+    },
+    {
+      "id": "flow.run.builtin",
+      "group": "flow",
+      "summary": "flow(run) runs a built-in flow against an editor"
+    },
+    {
+      "id": "flow.playtest",
+      "group": "flow",
+      "summary": "flow(run, playtest) drafts a test script with the flow model, checks it with pie(script_validate), returns refusals to the model and saves it with pie(script_create)"
+    },
+    {
+      "id": "flow.agent.env-model",
+      "group": "flow",
+      "summary": "a flow agent step with no registered provider runs on ANTHROPIC_API_KEY"
+    },
+    {
+      "id": "flow.agent.no-model",
+      "group": "flow",
+      "summary": "a flow agent step with no model configured fails with No model is configured for flow agent steps."
+    },
+    {
+      "id": "flow.http",
+      "group": "flow",
+      "summary": "the opt-in flow HTTP server lists, plans and runs flows behind its token"
+    },
+    {
+      "id": "guards.config",
+      "group": "flow",
+      "summary": "guards configured in ue-mcp.yml allow or refuse a real tool call"
+    },
+    {
+      "id": "guards.write-detect",
+      "group": "flow",
+      "summary": "write-method detection marks mutating calls so guards and gating see them"
+    },
+    {
+      "id": "config.cascade",
+      "group": "config",
+      "summary": "global config, ue-mcp.yml, the env overlay and ue-mcp.local.yml merge in order"
+    },
+    {
+      "id": "config.env-overlay",
+      "group": "config",
+      "summary": "UE_MCP_ENV or env: selects ue-mcp.<env>.yml"
+    },
+    {
+      "id": "config.checkpoints",
+      "group": "config",
+      "summary": "checkpoints are off unless ue-mcp.yml sets checkpoints: on, and the daemon overrides that per session"
+    },
+    {
+      "id": "version-check.notice",
+      "group": "config",
+      "summary": "a newer published version adds a one-time upgrade notice to the next tool result"
+    },
+    {
+      "id": "sessions.targeting",
+      "group": "sessions",
+      "summary": "the editor parameter routes a call to the named project's bridge and no other"
+    },
+    {
+      "id": "sessions.gating",
+      "group": "sessions",
+      "summary": "an untargeted write is refused once more than one editor is registered"
+    },
+    {
+      "id": "sessions.editor-management",
+      "group": "sessions",
+      "summary": "project(add_editor, use_editor, drop_editor, list_editors) change the session set"
+    },
+    {
+      "id": "daemon.discovery-auth",
+      "group": "daemon",
+      "summary": "the daemon publishes a discovery file and refuses requests without its token or from a foreign origin"
+    },
+    {
+      "id": "daemon.events",
+      "group": "daemon",
+      "summary": "the daemon streams tool calls and editor events on /v1/events"
+    },
+    {
+      "id": "daemon.script-events",
+      "group": "daemon",
+      "summary": "the daemon streams PIE test script step events on /v1/events"
+    },
+    {
+      "id": "daemon.reconnect",
+      "group": "daemon",
+      "summary": "the shim replaces a daemon that dies without the client reconnecting"
+    },
+    {
+      "id": "daemon.idle-exit",
+      "group": "daemon",
+      "summary": "a daemon with nothing attached exits after UE_MCP_DAEMON_IDLE_MS"
+    },
+    {
+      "id": "daemon.handoff",
+      "group": "daemon",
+      "summary": "a newer daemon takes over from an older one for the same project"
+    },
+    {
+      "id": "daemon.supersede",
+      "group": "daemon",
+      "summary": "a daemon stops itself once its discovery record names another live daemon"
+    },
+    {
+      "id": "daemon.start-lock",
+      "group": "daemon",
+      "summary": "concurrent starts leave exactly one daemon per project"
+    },
+    {
+      "id": "daemon.flows",
+      "group": "daemon",
+      "summary": "the daemon lists, plans and runs flows over HTTP"
+    },
+    {
+      "id": "daemon.extension-host",
+      "group": "daemon",
+      "summary": "a spawned daemon loads extensions from the extensions directory and serves their routes"
+    },
+    {
+      "id": "daemon.model-provider",
+      "group": "daemon",
+      "summary": "a daemon extension registers the model flow agent steps run on with api.models.register"
+    },
+    {
+      "id": "daemon.extension-versions",
+      "group": "daemon",
+      "summary": "a daemon loads the extension version its project records, migrating the unversioned install, while other projects keep theirs"
+    },
+    {
+      "id": "daemon.ui-bundles",
+      "group": "daemon",
+      "summary": "the daemon serves only signed UI bundles at /ui"
+    },
+    {
+      "id": "daemon.plugin-routes",
+      "group": "daemon",
+      "summary": "the daemon installs, updates and removes plugins over /v1/plugins"
+    },
+    {
+      "id": "daemon.update",
+      "group": "daemon",
+      "summary": "the daemon reports and applies bridge updates over /v1/update"
+    },
+    {
+      "id": "daemon.editor-rebuild",
+      "group": "daemon",
+      "summary": "a source bridge an update deployed is built: /v1/install names the owed build, /v1/editor/start builds before launching and refuses on a failed build, and /v1/editor/rebuild stops, builds and gives a failed step's reason"
+    },
+    {
+      "id": "daemon.checkpoints",
+      "group": "daemon",
+      "summary": "the daemon's /v1/checkpoints routes create, list, diff, restore and clear checkpoints, arm the editor's save recording and publish checkpoint events, without touching the project's .git"
+    },
+    {
+      "id": "daemon.skills",
+      "group": "daemon",
+      "summary": "the daemon lists ue-mcp's packaged skills and the project's own, with owner and location, over /v1/skills and api.skills"
+    },
+    {
+      "id": "daemon.checkpoints.asset-diff",
+      "group": "daemon",
+      "summary": "each changed package gets an asset diff from the editor on the versions the shadow history exports, cached per pair of versions, its pictures served by blob id, the first 25 diffed and the rest named and diffed on request, and Unreal's own diff opened with both versions"
+    },
+    {
+      "id": "daemon.context-projection",
+      "group": "daemon",
+      "summary": "the daemon reports the instructions and tools a context strategy and category scope advertise over /v1/context/projection and api.context.project, and api.context.call runs a call against that surface"
+    },
+    {
+      "id": "daemon.actions-effects",
+      "group": "daemon",
+      "summary": "the daemon lists every action's effect and destructive flag over /v1/actions and api.actions.effects"
+    },
+    {
+      "id": "daemon.modes-playtest",
+      "group": "daemon",
+      "summary": "a daemon extension reads and sets the project's playtest mode through api.modes, and its own callAction is not gated by it"
+    },
+    {
+      "id": "package.dist-server",
+      "group": "daemon",
+      "summary": "the compiled package, laid out as npm installs it, starts from dist/index.js and serves what the source does"
+    },
+    {
+      "id": "exports.task",
+      "group": "daemon",
+      "summary": "the ue-mcp/task export resolves and its Task base class runs a plugin task"
+    },
+    {
+      "id": "exports.guard",
+      "group": "daemon",
+      "summary": "the ue-mcp/guard export resolves and its guard base class is usable from a plugin"
+    },
+    {
+      "id": "exports.daemon",
+      "group": "daemon",
+      "summary": "the ue-mcp/daemon export resolves for daemon extensions"
+    },
+    {
+      "id": "exports.context-measurement",
+      "group": "daemon",
+      "summary": "the built package exports parseContextMeasurement and scopeBucket from ue-mcp/daemon and ships schemas/context-measurement.schema.json"
+    },
+    {
+      "id": "plugin.load.inject",
+      "group": "plugins",
+      "summary": "a project plugin's inject tasks appear as actions on the target category and run"
+    },
+    {
+      "id": "plugin.load.provides",
+      "group": "plugins",
+      "summary": "a project plugin's provides category appears as its own tool and runs"
+    },
+    {
+      "id": "plugin.load.native",
+      "group": "plugins",
+      "summary": "a plugin's native module handlers become bridge-backed actions"
+    },
+    {
+      "id": "plugin.load.version-gate",
+      "group": "plugins",
+      "summary": "a plugin whose minServerVersion is newer than the server is skipped with a reason"
+    },
+    {
+      "id": "plugin.load.reserved-params",
+      "group": "plugins",
+      "summary": "a plugin action that declares a reserved routing parameter is dropped with a reason"
+    },
+    {
+      "id": "plugin.load.flows",
+      "group": "plugins",
+      "summary": "flows a plugin ships appear in flow(list) and run"
+    },
+    {
+      "id": "plugin.skills.sync",
+      "group": "plugins",
+      "summary": "plugin skills are installed into .claude/skills and pruned when the plugin goes"
+    },
+    {
+      "id": "registry.catalog",
+      "group": "feedback",
+      "summary": "the plugin catalog is fetched from the registry and cached on disk"
+    },
+    {
+      "id": "feedback.submit.bot",
+      "group": "feedback",
+      "summary": "feedback(submit) files an approved report through the signing service"
+    },
+    {
+      "id": "feedback.submit.defer",
+      "group": "feedback",
+      "summary": "feedback(submit) in defer mode queues the report on disk"
+    },
+    {
+      "id": "feedback.routing",
+      "group": "feedback",
+      "summary": "a report about a plugin's action is routed to that plugin's tracker"
+    },
+    {
+      "id": "feedback.submit.user",
+      "group": "feedback",
+      "summary": "feedback(submit) as the user posts the issue through the GitHub API"
+    },
+    {
+      "id": "auth.device-flow",
+      "group": "feedback",
+      "summary": "the GitHub device flow signs the user in and caches the token"
+    }
+  ]
+}

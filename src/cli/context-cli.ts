@@ -34,7 +34,15 @@ function printHelp(): void {
 `);
 }
 
-function parseArgs(argv: string[]): { action: string; projectArg?: string; help: boolean } {
+interface ContextArgs {
+  action: string;
+  projectArg?: string;
+  help: boolean;
+  /** A positional that is neither the strategy nor the project. */
+  stray?: string;
+}
+
+function parseArgs(argv: string[]): ContextArgs {
   if (argv.some((a) => a === "-h" || a === "--help" || a === "help")) {
     return { action: "status", help: true };
   }
@@ -53,15 +61,17 @@ function parseArgs(argv: string[]): { action: string; projectArg?: string; help:
   const positional = target.rest.filter((a) => !a.startsWith("-"));
   let action: string | undefined;
   let projectArg: string | undefined = target.projectPath;
+  let stray: string | undefined;
   for (const a of positional) {
     if (!action && ACTIONS.has(a.toLowerCase())) action = a.toLowerCase();
-    else if (!projectArg) projectArg = a;
+    else if (!projectArg && findUProject(a)) projectArg = a;
+    else stray ??= a;
   }
-  return { action: action ?? "status", projectArg, help: false };
+  return { action: action ?? "status", projectArg, help: false, stray };
 }
 
 function findProjectDir(projectArg?: string): string | null {
-  const uproject = (projectArg && findUProject(projectArg)) || findUProject(process.cwd());
+  const uproject = projectArg ? findUProject(projectArg) : findUProject(process.cwd());
   return uproject ? path.dirname(uproject) : null;
 }
 
@@ -77,11 +87,18 @@ function currentStrategy(existing: Record<string, unknown>): "full" | "lean" | "
   return s === "lean" ? "lean" : s === "full" ? "full" : "micro";
 }
 
-function main(argv: string[]): void {
-  const { action, projectArg, help } = parseArgs(argv);
+function main(argv: string[]): number | void {
+  const { action, projectArg, help, stray } = parseArgs(argv);
   if (help) {
     printHelp();
     return;
+  }
+  // A word that names no strategy and no project is a typo, never the cwd project.
+  if (stray) {
+    console.log(`
+  ${RED}'${stray}' is not a strategy (micro, lean, full, status) or a project.${RESET}
+`);
+    return 2;
   }
 
   const projectDir = findProjectDir(projectArg);
@@ -132,5 +149,5 @@ function main(argv: string[]): void {
 
 /** Entry point for `ue-mcp context [full|lean|micro|status] [project]`. */
 export async function run(argv: string[]): Promise<number | void> {
-  main(argv);
+  return main(argv);
 }

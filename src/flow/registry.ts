@@ -9,14 +9,16 @@ import { actionPreparation } from "./run-action.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL, microGatewayTargets, resolveMicroCall } from "../surface/context/micro-context.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { paramMapperOf } from "../surface/epic-input.js";
+import { AGENT_TASK_CLASSES } from "./agent-step.js";
+import { PLAYTEST_TASK_CLASSES } from "./playtest.js";
 
 /** A gateway call is an alias for the target task, not a handler that executes
  *  another action and repackages its result. Both MCP and FlowRunner create
  *  tasks here, so plugin dispatch, failures and rollback keep the same path. */
 class MicroTaskRegistry extends TaskRegistry {
   /** `targets` is what the gateway itself reaches: the enabled categories. */
-  constructor(private readonly targets: ToolDef[]) {
-    super();
+  constructor(private readonly targets: ToolDef[], baseDir?: string) {
+    super({ baseDir });
   }
 
   override async create(name: string, ctx: TaskContextInput, options: Record<string, unknown>) {
@@ -39,20 +41,26 @@ class MicroTaskRegistry extends TaskRegistry {
  * - Handler actions → factory classes wrapping the existing handler function
  *
  * Also registers `ue-mcp.bridge` as a class_path for YAML-defined bridge tasks.
+ *
+ * `baseDir` is the folder holding the ue-mcp.yml whose class paths this
+ * registry resolves; without it they resolve from the cwd (#1590).
  */
-export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
+export function buildFlowRegistry(tools: ToolDef[], baseDir?: string): TaskRegistry {
   // The registry keeps disabled categories so flows can name them directly;
   // the gateway resolves only the categories it was built from.
   const gateway = tools.find((tool) => tool.name === MICRO_GATEWAY_TOOL);
   const registry = gateway
-    ? new MicroTaskRegistry(microGatewayTargets(gateway) ?? tools)
-    : new TaskRegistry();
+    ? new MicroTaskRegistry(microGatewayTargets(gateway) ?? tools, baseDir)
+    : new TaskRegistry({ baseDir });
 
   // Register built-in task class paths
   registry.registerClassPath("ue-mcp.bridge", BridgeTask as unknown as TaskConstructor);
   registry.register("shell", ShellTask as unknown as TaskConstructor);
   registry.register("editor.restart", editorOperationTask("restart"));
   registry.register("editor.rebuild", editorOperationTask("rebuild"));
+  // Model steps (agent, agent_prompt) and the playtest flow's own tasks.
+  for (const [classPath, ctor] of Object.entries(AGENT_TASK_CLASSES)) registry.registerClassPath(classPath, ctor);
+  for (const [name, ctor] of Object.entries(PLAYTEST_TASK_CLASSES)) registry.register(name, ctor);
 
   for (const tool of tools) {
     for (const [actionName, spec] of Object.entries(tool.actions)) {

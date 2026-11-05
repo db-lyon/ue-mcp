@@ -1,4 +1,5 @@
 #include "EditorHandlers.h"
+#include "HandlerCheckpoint.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerFunctionCall.h"
@@ -62,6 +63,10 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SViewport.h"
 #include "Widgets/SWindow.h"
+#include "Framework/Notifications/NotificationManager.h"
+#include "Widgets/Notifications/SNotificationList.h"
+#include "Widgets/Text/STextBlock.h"
+#include "Styling/AppStyle.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Engine/SceneCapture2D.h"
@@ -802,8 +807,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("deferToNextTick"), EType::Boolean, TEXT("Queue the call for the next engine tick, outside the editor script-execution guard, so a replicated UFUNCTION routes normally; return and out values are not reported")),
 	}, MCPSpec::AtLeastOne({ { TEXT("actorLabel") }, { TEXT("actorPath") } }).ContractExempt(TEXT("calls a UFUNCTION")));
 	Registry.RegisterHandler(TEXT("invoke_static_function"), &InvokeStaticFunction, {
-		MCPParam::Required(TEXT("className"), EType::String, TEXT("UBlueprintFunctionLibrary class: a short name or a /Script/Module.Class path")),
-		MCPParam::Required(TEXT("functionName"), EType::String, TEXT("Static UFUNCTION on the library")),
+		MCPParam::Required(TEXT("className"), EType::String, TEXT("Reflected class declaring the static function, including project component classes: short name or /Script/Module.Class path")),
+		MCPParam::Required(TEXT("functionName"), EType::String, TEXT("Static UFUNCTION on the class")),
 		FunctionArgsParam(),
 		MCPParam::Optional(TEXT("actorArgs"), EType::Object, TEXT("UObject* parameter name -> actor label, resolved against live actors in the selected world")),
 		MCPParam::Optional(TEXT("worldContextParam"), EType::String, TEXT("UObject* parameter to fill with the selected world; detected from WorldContext metadata and for WorldContextObject when omitted")),
@@ -878,6 +883,14 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("category"), EType::String, TEXT("Settings category, e.g. Engine")),
 		MCPParam::Optional(TEXT("section"), EType::String, TEXT("Settings section, e.g. Physics, or a combined Engine.Physics")),
 	}, MCPSpec::ContractExempt(TEXT("opens a settings viewer")));
+	Registry.RegisterHandler(TEXT("show_notification"), &ShowNotification, {
+		MCPParam::Required(TEXT("text"), EType::String, TEXT("Headline of the toast")),
+		MCPParam::Optional(TEXT("subText"), EType::String, TEXT("Second line under the headline")),
+		MCPParam::Optional(TEXT("durationS"), EType::Number, TEXT("Seconds before the toast fades (default 8)")).Range(1, 600),
+		MCPParam::Optional(TEXT("severity"), EType::String, TEXT("Icon and colour of the toast (default info)")).Enum({ TEXT("info"), TEXT("success"), TEXT("warning"), TEXT("error") }),
+		MCPParam::Optional(TEXT("hyperlinkText"), EType::String, TEXT("Link label on the toast. Needs hyperlinkUrl")),
+		MCPParam::Optional(TEXT("hyperlinkUrl"), EType::String, TEXT("http or https URL the link opens in the default browser")),
+	}, MCPSpec::ContractExempt(TEXT("shows an editor toast")));
 }
 
 TSharedPtr<FJsonValue> FEditorHandlers::ExecuteCommand(const TSharedPtr<FJsonObject>& Params)
@@ -1496,7 +1509,33 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenTab(const TSharedPtr<FJsonObject>& P
 	// Asked before invoking: TryInvokeTab draws attention to a tab that is
 	// already up and returns it either way, so this is the only point at which
 	// "was it already open" is answerable.
-	const bool bAlreadyOpen = FGlobalTabmanager::Get()->FindExistingLiveTab(FTabId(*TabId)).IsValid();
+	// FindExistingLiveTab misses a nomad tab docked under another tab manager (the
+	// Output Log in the level editor), so the open windows are searched for the tab.
+	bool bAlreadyOpen = FGlobalTabmanager::Get()->FindExistingLiveTab(FTabId(*TabId)).IsValid();
+	if (!bAlreadyOpen && FSlateApplication::IsInitialized())
+	{
+		const FName TabType(*TabId);
+		TFunction<bool(const TSharedRef<SWidget>&)> HasTab = [&HasTab, TabType](const TSharedRef<SWidget>& Widget) -> bool
+		{
+			if (Widget->GetType() == FName(TEXT("SDockTab"))
+				&& StaticCastSharedRef<SDockTab>(Widget)->GetLayoutIdentifier().TabType == TabType)
+			{
+				return true;
+			}
+			FChildren* Children = Widget->GetChildren();
+			for (int32 Index = 0; Children && Index < Children->Num(); ++Index)
+			{
+				if (HasTab(Children->GetChildAt(Index))) return true;
+			}
+			return false;
+		};
+		TArray<TSharedRef<SWindow>> Windows;
+		FSlateApplication::Get().GetAllVisibleWindowsOrdered(Windows);
+		for (const TSharedRef<SWindow>& Window : Windows)
+		{
+			if (HasTab(Window)) { bAlreadyOpen = true; break; }
+		}
+	}
 	TSharedPtr<SDockTab> Tab = FGlobalTabmanager::Get()->TryInvokeTab(FTabId(*TabId));
 
 	auto Result = MCPSuccess();
@@ -1565,6 +1604,113 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenSettings(const TSharedPtr<FJsonObjec
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
 		TEXT("No bridge call closes the settings viewer, and the section it was showing before is not readable, so there is nothing to restore it to. This opens and navigates editor UI; it writes no project setting."));
+	return MCPResult(Result);
+}
+
+namespace
+{
+	/** Every STextBlock string under a widget, depth first. */
+	void CollectNotificationTexts(const TSharedRef<SWidget>& Widget, TArray<FString>& Out)
+	{
+		if (Widget->GetType() == FName(TEXT("STextBlock")))
+		{
+			Out.Add(StaticCastSharedRef<STextBlock>(Widget)->GetText().ToString());
+		}
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			for (int32 i = 0; i < Children->Num(); ++i)
+			{
+				CollectNotificationTexts(Children->GetChildAt(i), Out);
+			}
+		}
+	}
+}
+
+// Shows a Slate toast in the editor's notification area. onScreen reads the
+// notification windows back, so a caller can tell a toast that is up from one
+// Slate accepted but never drew.
+TSharedPtr<FJsonValue> FEditorHandlers::ShowNotification(const TSharedPtr<FJsonObject>& Params)
+{
+	// Every parameter is read before anything can fail (#1057).
+	FString Text;
+	TSharedPtr<FJsonValue> TextErr = RequireString(Params, TEXT("text"), Text);
+	const FString SubText = OptionalString(Params, TEXT("subText"));
+	const double DurationS = OptionalNumber(Params, TEXT("durationS"), 8.0);
+	const FString Severity = OptionalString(Params, TEXT("severity"), TEXT("info")).ToLower();
+	const FString HyperlinkText = OptionalString(Params, TEXT("hyperlinkText"));
+	const FString HyperlinkUrl = OptionalString(Params, TEXT("hyperlinkUrl"));
+	if (TextErr) return TextErr;
+
+	if (Text.TrimStartAndEnd().IsEmpty())
+	{
+		return MCPError(TEXT("text must not be empty"));
+	}
+	if (!HyperlinkText.IsEmpty() && HyperlinkUrl.IsEmpty())
+	{
+		return MCPError(TEXT("hyperlinkText needs hyperlinkUrl, the address the link opens"));
+	}
+	if (!HyperlinkUrl.IsEmpty() && !HyperlinkUrl.StartsWith(TEXT("http://")) && !HyperlinkUrl.StartsWith(TEXT("https://")))
+	{
+		return MCPError(FString::Printf(TEXT("hyperlinkUrl must be an http or https URL, got '%s'"), *HyperlinkUrl));
+	}
+	if (!FSlateApplication::IsInitialized())
+	{
+		return MCPError(TEXT("Slate is not initialized, so there is no notification area to show a toast in"));
+	}
+
+	FNotificationInfo Info(FText::FromString(Text));
+	if (!SubText.IsEmpty())
+	{
+		Info.SubText = FText::FromString(SubText);
+	}
+	Info.bFireAndForget = true;
+	Info.ExpireDuration = static_cast<float>(DurationS);
+	Info.bUseSuccessFailIcons = false;
+	const TCHAR* Brush = Severity == TEXT("success") ? TEXT("Icons.SuccessWithColor")
+		: Severity == TEXT("warning") ? TEXT("Icons.WarningWithColor")
+		: Severity == TEXT("error") ? TEXT("Icons.ErrorWithColor")
+		: TEXT("Icons.InfoWithColor");
+	Info.Image = FAppStyle::GetBrush(Brush);
+	if (!HyperlinkUrl.IsEmpty())
+	{
+		const FString Url = HyperlinkUrl;
+		Info.Hyperlink = FSimpleDelegate::CreateLambda([Url]()
+		{
+			FPlatformProcess::LaunchURL(*Url, nullptr, nullptr);
+		});
+		Info.HyperlinkText = FText::FromString(HyperlinkText.IsEmpty() ? HyperlinkUrl : HyperlinkText);
+	}
+
+	TSharedPtr<SNotificationItem> Item = FSlateNotificationManager::Get().AddNotification(Info);
+	if (!Item.IsValid())
+	{
+		return MCPError(TEXT("FSlateNotificationManager refused the notification (notifications may be disabled in this editor session)"));
+	}
+	if (Severity == TEXT("success")) Item->SetCompletionState(SNotificationItem::CS_Success);
+	else if (Severity == TEXT("error")) Item->SetCompletionState(SNotificationItem::CS_Fail);
+
+	TArray<TSharedRef<SWindow>> Windows;
+	FSlateNotificationManager::Get().GetWindows(Windows);
+	TArray<FString> Texts;
+	for (const TSharedRef<SWindow>& Window : Windows)
+	{
+		CollectNotificationTexts(Window, Texts);
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("text"), Text);
+	Result->SetStringField(TEXT("subText"), SubText);
+	Result->SetStringField(TEXT("severity"), Severity);
+	Result->SetNumberField(TEXT("durationS"), DurationS);
+	if (!HyperlinkUrl.IsEmpty())
+	{
+		Result->SetStringField(TEXT("hyperlinkText"), Info.HyperlinkText.Get().ToString());
+		Result->SetStringField(TEXT("hyperlinkUrl"), HyperlinkUrl);
+	}
+	Result->SetBoolField(TEXT("onScreen"), Texts.Contains(Text));
+	Result->SetNumberField(TEXT("notificationWindows"), Windows.Num());
+	Result->SetBoolField(TEXT("changed"), true);
+	MCPSetNoRollback(Result, TEXT("A toast fades by itself after durationS and writes nothing, so there is nothing to restore."));
 	return MCPResult(Result);
 }
 
@@ -1983,7 +2129,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetRealtime(const TSharedPtr<FJsonObject
 	for (FLevelEditorViewportClient* ViewportClient : GEditor->GetLevelViewportClients())
 	{
 		if (!ViewportClient) continue;
-		if (ViewportClient->IsRealtime()) ++PreviouslyEnabled; else ++PreviouslyDisabled;
+		// The stored setting SetRealtime writes, not IsRealtime, which reports an
+		// active override (a background window, a modal) instead of the flag.
+		bool bWasRealtime = false;
+		ViewportClient->SaveRealtimeStateToConfig(bWasRealtime);
+		if (bWasRealtime) ++PreviouslyEnabled; else ++PreviouslyDisabled;
 		ViewportClient->SetRealtime(bEnabled);
 		ViewportsChanged++;
 	}
@@ -2036,6 +2186,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetConfig(const TSharedPtr<FJsonObject>&
 	FString ConfigDir = FPaths::ProjectConfigDir();
 	FString IniPath = FPaths::Combine(ConfigDir, ConfigName);
 
+	// A file only this call loads is dropped from the config cache again when it
+	// returns: a cached file is written back when the editor exits, which
+	// recreates an ini deleted after the call and rewrites one edited since.
+	const bool bWasCached = GConfig->FindConfigFile(IniPath) != nullptr;
+	if (!bWasCached && FPaths::FileExists(IniPath)) GConfig->LoadFile(IniPath);
+	ON_SCOPE_EXIT
+	{
+		if (!bWasCached) GConfig->Flush(true, IniPath);
+	};
+
 	// Capture previous value for rollback and idempotency
 	FString PrevValue;
 	bool bHadPrev = GConfig->GetString(*Section, *Key, PrevValue, IniPath);
@@ -2050,6 +2210,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetConfig(const TSharedPtr<FJsonObject>&
 		return MCPResult(Noop);
 	}
 
+	MCPCheckpointRecordBeforeWrite(IniPath);
 	GConfig->SetString(*Section, *Key, *Value, IniPath);
 	GConfig->Flush(false, IniPath);
 
@@ -3313,6 +3474,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
 		SaveArgs.Error = GError;
+		MCPCheckpointRecordBeforeWrite(FileName);
 		const bool bOk = UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("package"), PackageName);
@@ -3558,16 +3720,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::FocusViewportOnActor(const TSharedPtr<FJ
 
 	// Focus on the actor's bounding box
 	FBox ActorBounds = TargetActor->GetComponentsBoundingBox(true);
-	// Which branch runs decides whether the camera move is observable here.
-	// FocusViewportOnBox defaults bInstant to false and hands the move to
-	// TransitionToLocation, which, whenever the client has a real viewport
-	// widget, only sets DesiredLocation and starts a curve: ViewLocation is
-	// advanced by UpdateTransition on later ticks, so reading it back in this
-	// call still returns the location the camera had before the focus.
+	// Instant: the animated transition only advances on viewport ticks, which
+	// stop while the editor window is in the background, so the camera could
+	// stay where it was. The final pose is what a caller reads back.
 	const bool bFocusedOnBounds = ActorBounds.IsValid != 0;
 	if (ActorBounds.IsValid)
 	{
-		ViewportClient->FocusViewportOnBox(ActorBounds);
+		ViewportClient->FocusViewportOnBox(ActorBounds, /*bInstant=*/ true);
 	}
 	else
 	{
@@ -3807,9 +3966,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 
 	// A map opens as the editor world through load_level. Loading it here first would leave its package resident,
 	// and the map load then fatals on "Old level package ... not cleaned up by garbage collection" (#1241).
-	FString PackageFilename;
-	if (FPackageName::DoesPackageExist(FPackageName::ObjectPathToPackageName(AssetPath), &PackageFilename)
-		&& FPaths::GetExtension(PackageFilename, /*bIncludeDot*/ true) == FPackageName::GetMapPackageExtension())
+	// Loading a map through the asset editor also destroys the world the handler holds, which read freed memory
+	// for the class name and crashed on it (#1422).
+	auto OpenMapViaLoadLevel = [&Params, &AssetPath]() -> TSharedPtr<FJsonValue>
 	{
 		TSharedPtr<FJsonObject> LevelParams = MakeShared<FJsonObject>();
 		LevelParams->SetStringField(TEXT("levelPath"), AssetPath);
@@ -3832,6 +3991,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 			}
 		}
 		return LevelResult;
+	};
+
+	FString PackageFilename;
+	if (FPackageName::DoesPackageExist(FPackageName::ObjectPathToPackageName(AssetPath), &PackageFilename)
+		&& FPaths::GetExtension(PackageFilename, /*bIncludeDot*/ true) == FPackageName::GetMapPackageExtension())
+	{
+		return OpenMapViaLoadLevel();
 	}
 
 	// The shared resolver checks the path's shape before loading: StaticLoadObject on a malformed
@@ -3865,6 +4031,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 		return MCPResult(Result);
 	}
 
+	// A world the package check above missed, such as one not yet saved to disk, still opens as a map.
+	if (Asset->IsA<UWorld>())
+	{
+		return OpenMapViaLoadLevel();
+	}
+
 	// StaticLoadObject returns an unrooted pointer and OpenEditorForAsset can run
 	// the GC, so the asset is held for the rest of the call.
 	FGCObjectScopeGuard AssetScopeGuard(Asset);
@@ -3879,17 +4051,19 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 	// up and returns true either way, so this is the only point at which
 	// "was it already open" is answerable.
 	const bool bAlreadyOpen = AssetEditorSubsystem->FindEditorForAsset(Asset, /*bFocusIfOpen=*/false) != nullptr;
+	// Read before opening: an editor that loads a level can destroy objects on the way.
+	const FString AssetClassName = Asset->GetClass()->GetName();
 	bool bOpened = AssetEditorSubsystem->OpenEditorForAsset(Asset);
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
-	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
+	Result->SetStringField(TEXT("assetClass"), AssetClassName);
 	Result->SetBoolField(TEXT("success"), bOpened);
 	Result->SetBoolField(TEXT("alreadyOpen"), bAlreadyOpen);
 	Result->SetBoolField(TEXT("changed"), bOpened && !bAlreadyOpen);
 	if (!bOpened)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to open editor for '%s' (%s)"), *AssetPath, *Asset->GetClass()->GetName()));
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to open editor for '%s' (%s)"), *AssetPath, *AssetClassName));
 	}
 	// No rollback: nothing in the bridge closes an asset editor. close_sequence
 	// is the one exception and it only handles Level Sequences, so naming it
@@ -3925,10 +4099,31 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunStatCommand(const TSharedPtr<FJsonObj
 
 	REQUIRE_EDITOR_WORLD(World);
 
+	// A stat overlay toggles on the viewport the engine is processing stats for,
+	// which is the level viewport here, so its enabled list is read either side.
+	FEditorViewportClient* Viewport = GCurrentLevelEditingViewportClient;
+	const TArray<FString> StatsBefore = (Viewport && Viewport->GetEnabledStats()) ? *Viewport->GetEnabledStats() : TArray<FString>();
+	FCommonViewportClient* PreviousStatViewport = GStatProcessingViewportClient;
+	if (Viewport) GStatProcessingViewportClient = Viewport;
 	GEditor->Exec(World, *Command);
+	GStatProcessingViewportClient = PreviousStatViewport;
+	const TArray<FString> StatsAfter = (Viewport && Viewport->GetEnabledStats()) ? *Viewport->GetEnabledStats() : TArray<FString>();
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("command"), Command);
+	TArray<TSharedPtr<FJsonValue>> Enabled, TurnedOn, TurnedOff;
+	for (const FString& Name : StatsAfter)
+	{
+		Enabled.Add(MakeShared<FJsonValueString>(Name));
+		if (!StatsBefore.Contains(Name)) TurnedOn.Add(MakeShared<FJsonValueString>(Name));
+	}
+	for (const FString& Name : StatsBefore)
+	{
+		if (!StatsAfter.Contains(Name)) TurnedOff.Add(MakeShared<FJsonValueString>(Name));
+	}
+	Result->SetArrayField(TEXT("enabledStats"), Enabled);
+	Result->SetArrayField(TEXT("statsTurnedOn"), TurnedOn);
+	Result->SetArrayField(TEXT("statsTurnedOff"), TurnedOff);
 	// The command was dispatched. Most stat commands toggle rather than set, so
 	// the overlay's state after this depends on what it was before, and Exec
 	// reports nothing back that this handler could compare.
@@ -4248,7 +4443,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetCVars(const TSharedPtr<FJsonObject>& 
 }
 TSharedPtr<FJsonValue> FEditorHandlers::ListCrashes(const TSharedPtr<FJsonObject>& Params)
 {
-	FString CrashesDir = FPaths::ProjectSavedDir() / TEXT("Crashes");
+	FString CrashesDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Crashes"));
 
 	// T3: paged. A project that has been crashing accumulates hundreds of
 	// folders, each carrying its own file listing.
@@ -4358,7 +4553,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetCrashInfo(const TSharedPtr<FJsonObjec
 
 TSharedPtr<FJsonValue> FEditorHandlers::CheckForCrashes(const TSharedPtr<FJsonObject>& Params)
 {
-	FString CrashesDir = FPaths::ProjectSavedDir() / TEXT("Crashes");
+	FString CrashesDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Crashes"));
 
 	TArray<TSharedPtr<FJsonValue>> RecentCrashes;
 	IFileManager& FileManager = IFileManager::Get();

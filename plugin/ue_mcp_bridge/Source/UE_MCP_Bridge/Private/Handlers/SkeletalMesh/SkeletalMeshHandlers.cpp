@@ -12,6 +12,7 @@
 #include "BoneWeights.h"
 #include "GPUSkinVertexFactory.h"
 #include "MeshDescription.h"
+#include "ScopedTransaction.h"
 #include "SkeletalMeshAttributes.h"
 #endif
 
@@ -1039,14 +1040,11 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::SetSkinWeights(const TSharedPtr<FJ
 		FSkeletalMeshConstAttributes(*Target.Description).GetVertexSkinWeights(Target.ProfileName);
 	if (bNeedsMutation)
 	{
+		// ModifyMeshDescription returns false when no transaction is open, so open
+		// one; the edit is then undoable and the false return is not a failure.
+		FScopedTransaction Transaction(NSLOCTEXT("UEMCP", "SetSkinWeights", "Set Skeletal Mesh Skin Weights"));
 		Target.Mesh->Modify();
-		if (!Target.Mesh->ModifyMeshDescription(Target.LodIndex))
-		{
-			return MCPError(FString::Printf(
-				TEXT("Failed to open LOD %d of '%s' for a transactional MeshDescription edit"),
-				Target.LodIndex,
-				*Target.Mesh->GetPathName()));
-		}
+		Target.Mesh->ModifyMeshDescription(Target.LodIndex);
 		TSharedPtr<FJsonValue> ReadbackError;
 		for (FMCPSkinWeightEdit& Edit : Edits)
 		{

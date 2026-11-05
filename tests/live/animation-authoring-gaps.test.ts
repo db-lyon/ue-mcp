@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Animation authoring gaps (#1227, #1230, #1372, #1288, #1369), each read back.
  *

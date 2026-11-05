@@ -178,6 +178,12 @@ export interface ToolContext {
    * rather than leaving the user staring at a call that looks frozen.
    */
   client?: { name: string; version?: string };
+  /**
+   * A flow run started over HTTP with `stepApproval`: every task it creates
+   * asks this registered approver first (flow/step-approval.ts). Never set by
+   * the MCP surface.
+   */
+  flowStepApproval?: { approver: string; token: string };
 }
 
 export interface ProgressUpdate {
@@ -329,6 +335,13 @@ interface ActionSpecBase {
   effect: ActionEffect;
   /** Omitted means `declared`. Set to `inferred` only by runtime injection. */
   effectSource?: ActionEffectSource;
+  /**
+   * This action destroys or overwrites something it cannot give back: true
+   * or false said outright. Omitted, a client reading action effects falls
+   * back to the leading verb of the name (DESTRUCTIVE_VERBS), so declare it
+   * only where that fallback is wrong in either direction.
+   */
+  destructive?: boolean;
   description?: string;
   /** Override the bridge call timeout in milliseconds. Defaults to 30s. */
   timeoutMs?: number;
@@ -357,6 +370,12 @@ interface ActionSpecBase {
   strictParams?: boolean;
   /** A plugin handler's recorded contract and its bridge method, compared against the live editor for drift (#1282). */
   recordedContract?: { method: string; spec: HandlerSpec };
+  /**
+   * This address is a deprecated alias kept for one release: the action now
+   * lives at `category(action)`. It dispatches as before; discovery lists only
+   * the canonical address. Built by `movedAction`.
+   */
+  movedTo?: { category: string; action: string };
 }
 
 /** Forwards to a C++ bridge method over the WebSocket. Built by `bp`. */

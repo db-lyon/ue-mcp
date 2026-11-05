@@ -1,0 +1,69 @@
+# Closes fixed-pending-release issues once their fix is in a published release.
+#
+# Runs after CI succeeds on main or a release branch. CI's publish job creates
+# the release with GITHUB_TOKEN, which never triggers other workflows, so this
+# follows CI instead of listening for the release event. A run where CI skipped
+# publishing (the version was already out) finds nothing new and is a no-op.
+#
+# Stable release: issues whose fix commits are all in the tag are commented and
+# closed. Prerelease: they get one comment saying which beta has the fix.
+# The rules are in scripts/release-closeout.mjs.
+
+name: Release close-out
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main, 'release/**']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v1.4.7"
+        required: true
+        type: string
+      dry_run:
+        description: "List what would happen without writing"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-closeout
+  cancel-in-progress: false
+
+jobs:
+  closeout:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          else
+            VERSION=$(git show "$HEAD_SHA:package.json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')
+            echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Close out
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+        run: |
+          git fetch --tags --force origin
+          node scripts/release-closeout.mjs --tag "$TAG" $DRY_RUN

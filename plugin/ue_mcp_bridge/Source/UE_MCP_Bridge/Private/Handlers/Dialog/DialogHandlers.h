@@ -33,6 +33,9 @@ enum class EMCPPromptKind : uint8
 class FDialogHandlers
 {
 public:
+	/** Whether pressing this button opens an IDE: respond_to_dialog and the policies never press one. */
+	static bool OpensAnIde(const FString& ButtonLabel, const FString& Message);
+
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
 	// Call once during module startup to hook FCoreDelegates::ModalMessageDialog
@@ -170,6 +173,7 @@ private:
 	static TSharedPtr<FJsonValue> GetDialogPolicy(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListDialogs(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RespondToDialog(const TSharedPtr<FJsonObject>& Params);
+
 
 	// Window control (#1231): every open modal and floating window, addressed
 	// by the windowId list_windows and list_dialogs report.

@@ -27,6 +27,7 @@ import { handlerSpecs as networking } from "./networking.generated.js";
 import { handlerSpecs as niagara } from "./niagara.generated.js";
 import { handlerSpecs as pcg } from "./pcg.generated.js";
 import { handlerSpecs as physics } from "./physics.generated.js";
+import { handlerSpecs as pie } from "./pie.generated.js";
 import { handlerSpecs as project } from "./project.generated.js";
 import { handlerSpecs as reflection } from "./reflection.generated.js";
 import { handlerSpecs as source_control } from "./source_control.generated.js";
@@ -57,6 +58,7 @@ export const RECORDED_HANDLER_SPECS: HandlerSpecs = {
   ...niagara,
   ...pcg,
   ...physics,
+  ...pie,
   ...project,
   ...reflection,
   ...source_control,

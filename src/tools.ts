@@ -36,6 +36,7 @@ import { metahumanTool } from "./tools/metahuman.js";
 import { dataflowTool } from "./tools/dataflow.js";
 import { conversationTool } from "./tools/conversation.js";
 import { sourceControlTool } from "./tools/source_control.js";
+import { pieTool } from "./tools/pie.js";
 
 export const ALL_TOOLS: ToolDef[] = [
   projectTool,
@@ -51,6 +52,7 @@ export const ALL_TOOLS: ToolDef[] = [
   audioTool,
   widgetTool,
   editorTool,
+  pieTool,
   reflectionTool,
   gameplayTool,
   gasTool,

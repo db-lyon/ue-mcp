@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { FakeBridge } from "../fake-bridge.js";
+import { userSandboxEnv } from "../helpers/user-sandbox.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -36,8 +37,7 @@ it("retries failed guard construction before publishing a runtime editor", async
     ) as Record<string, string>;
     env.UE_MCP_HOST = "127.0.0.1";
     env.UE_MCP_SERVER_MODE = "in-process";
-    env.UE_MCP_STATE_DIR = path.join(dir, "state");
-    env.UE_MCP_CONFIG_DIR = path.join(dir, "config");
+    Object.assign(env, userSandboxEnv(path.join(dir, "home")));
     // Calls the category tools directly, which micro (the default) does not advertise.
     env.UE_MCP_CONTEXT_STRATEGY = "full";
     env.UE_MCP_GLOBAL_CONFIG = path.join(dir, "global.yml");

@@ -839,6 +839,23 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetTree(const TSharedPtr<FJsonObj
 	return MCPResult(Result);
 }
 
+namespace
+{
+	/** A Blutility factory with ParentClass set, reached by name: the factory classes are not exported.
+	 *  Their ParentClass is otherwise chosen in a class picker, so without it no generated class is made. */
+	UFactory* MakeBlutilityFactory(const TCHAR* FactoryClassPath, UClass* ParentClass)
+	{
+		UClass* FactoryClass = FindObject<UClass>(nullptr, FactoryClassPath);
+		if (!FactoryClass || !ParentClass) return nullptr;
+		UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
+		if (FClassProperty* Prop = CastField<FClassProperty>(FactoryClass->FindPropertyByName(TEXT("ParentClass"))))
+		{
+			Prop->SetObjectPropertyValue_InContainer(Factory, ParentClass);
+		}
+		return Factory;
+	}
+}
+
 TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params)
 {
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
@@ -852,9 +869,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 		return MCPError(TEXT("EditorUtilityWidgetBlueprint class not found. Enable Blutility plugin."));
 	}
 
-	UWidgetBlueprintFactory* WidgetFactory = NewObject<UWidgetBlueprintFactory>();
-	WidgetFactory->ParentClass = UUserWidget::StaticClass();
-	WidgetFactory->BlueprintType = BPTYPE_Normal;
+	// UWidgetBlueprintFactory always makes a plain WidgetBlueprint, whatever class is asked for.
+	UFactory* WidgetFactory = MakeBlutilityFactory(TEXT("/Script/Blutility.EditorUtilityWidgetBlueprintFactory"), UEditorUtilityWidget::StaticClass());
+	if (!WidgetFactory) return MCPError(TEXT("EditorUtilityWidgetBlueprintFactory not found. Enable Blutility plugin."));
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(AssetName, PackagePath, OnConflict, TEXT("EditorUtilityWidgetBlueprint"), EUWBClass, WidgetFactory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
@@ -894,7 +911,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 		return MCPError(TEXT("EditorUtilityBlueprint class not found. Enable Blutility plugin."));
 	}
 
-	auto Created = MCPCreateAssetIdempotent<UObject>(AssetName, PackagePath, OnConflict, TEXT("EditorUtilityBlueprint"), EUBClass, nullptr);
+	UFactory* BlueprintFactory = MakeBlutilityFactory(TEXT("/Script/Blutility.EditorUtilityBlueprintFactory"),
+		FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityObject")));
+	if (!BlueprintFactory) return MCPError(TEXT("EditorUtilityBlueprintFactory not found. Enable Blutility plugin."));
+
+	auto Created = MCPCreateAssetIdempotent<UObject>(AssetName, PackagePath, OnConflict, TEXT("EditorUtilityBlueprint"), EUBClass, BlueprintFactory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
 	FString SaveError;

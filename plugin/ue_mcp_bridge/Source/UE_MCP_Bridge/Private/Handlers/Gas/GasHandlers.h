@@ -13,6 +13,7 @@
 // that includes it first.
 #include "GameplayAbilitySpec.h"
 #include "AttributeSet.h"
+#include "GameplayEffect.h"
 #include "HandlerUtils.h"
 
 /**
@@ -133,7 +134,18 @@ private:
 		const FString& DefaultPackagePath,
 		class UClass* ParentClass,
 		const FString& FriendlyType,
-		TFunction<void(TSharedPtr<FJsonObject>&)> ExtraResultFields = nullptr);
+		TFunction<void(TSharedPtr<FJsonObject>&)> ExtraResultFields = nullptr,
+		TFunction<void(class UBlueprint*)> ConfigureBeforeSave = nullptr);
+
+	// GameplayEffect authoring shared by create_gameplay_effect, get_gas_info and
+	// the effect component actions (#1423).
+	static bool ParseDurationPolicy(const FString& In, EGameplayEffectDurationType& Out);
+	static FString DurationPolicyToString(EGameplayEffectDurationType Policy);
+	static TSharedPtr<FJsonObject> DescribeEffect(const class UGameplayEffect* Effect);
+	static TArray<class UGameplayEffectComponent*> GetEffectComponents(const class UGameplayEffect* Effect);
+	static TSharedPtr<FJsonValue> AddEffectComponent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveEffectComponent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetEffectGrantedTags(const TSharedPtr<FJsonObject>& Params);
 
 	static TSharedPtr<FJsonValue> CreateGameplayEffect(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetGasInfo(const TSharedPtr<FJsonObject>& Params);

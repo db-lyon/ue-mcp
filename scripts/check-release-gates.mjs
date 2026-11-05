@@ -12,6 +12,8 @@
  *   node scripts/check-release-gates.mjs context-tax     every seed within its budget
  *   node scripts/check-release-gates.mjs behavioural-coverage
  *                                                        every action tested, exempt or a shrinking gap
+ *   node scripts/check-release-gates.mjs integration-coverage
+ *                                                        every other surface tested, exempt or a shrinking gap
  *   node scripts/check-release-gates.mjs all             every gate above
  */
 import fs from "node:fs";
@@ -27,6 +29,8 @@ import {
 } from "./context-tax.mjs";
 import {
   EXEMPTIONS_FILE,
+  INTEGRATION_EXEMPTIONS_FILE,
+  INTEGRATION_RATCHET_FILE,
   RATCHET_FILE,
   parseRatchet,
   ratchetGrowth,
@@ -342,14 +346,63 @@ async function checkContextTax() {
  * every entry it added. A baseline with no list yet is the commit that
  * introduces it, which adds nothing.
  */
-export function ratchetGrowthProblem(baselineText, headGaps) {
+export function ratchetGrowthProblem(
+  baselineText,
+  headGaps,
+  files = { ratchet: RATCHET_FILE, exemptions: EXEMPTIONS_FILE, subject: "action", test: "a behavioural test" },
+) {
   if (baselineText === null) return null;
-  const added = ratchetGrowth(parseRatchet(baselineText), headGaps);
+  const added = ratchetGrowth(parseRatchet(baselineText, files.ratchet), headGaps);
   if (added.length === 0) return null;
   return (
-    `${RATCHET_FILE} grew by ${added.length}: ${added.join(", ")}. The gap list only shrinks. ` +
-    `Give each action a behavioural test, or a reasoned exemption in ${EXEMPTIONS_FILE}.`
+    `${files.ratchet} grew by ${added.length}: ${added.join(", ")}. The gap list only shrinks. ` +
+    `Give each ${files.subject} ${files.test}, or a reasoned exemption in ${files.exemptions}.`
   );
+}
+
+/** The integration ratchet's files, for ratchetGrowthProblem. */
+export const INTEGRATION_RATCHET = {
+  ratchet: INTEGRATION_RATCHET_FILE,
+  exemptions: INTEGRATION_EXEMPTIONS_FILE,
+  subject: "surface",
+  test: "an integration test",
+};
+
+function checkCoverageInventory({ label, script, prefix, ratchetFile, files }) {
+  let bad = 0;
+  try {
+    const out = execFileSync("npx", ["tsx", script, "--check"], {
+      cwd: REPO,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: process.platform === "win32",
+    });
+    const line = out.split("\n").find((l) => l.startsWith(`${prefix}:`));
+    console.log(`${label} - ${(line ?? "inventory current").slice(line?.startsWith(`${prefix}:`) ? prefix.length + 1 : 0).trim()}`);
+  } catch (e) {
+    const detail = String(e.stderr ?? e.message).split("\n").filter((l) => l.trim()).map((l) => `      ${l}`).join("\n");
+    console.error(`${label} - the ${prefix} inventory does not pass:\n${detail}`);
+    bad = 1;
+  }
+
+  const base = baselineRef();
+  if (base === null) {
+    console.error(`${label} - no baseline commit, so the gap list's growth is unchecked.`);
+    return 1;
+  }
+  let baselineText = null;
+  try {
+    baselineText = git("show", `${base}:${ratchetFile}`);
+  } catch {
+    baselineText = null;
+  }
+  const problem = ratchetGrowthProblem(baselineText, readRatchet(REPO, ratchetFile), files);
+  if (problem) {
+    console.error(`${label} - ${problem}`);
+    return 1;
+  }
+  if (bad === 0) console.log(`${label} - gap list did not grow`);
+  return bad;
 }
 
 /**
@@ -358,40 +411,24 @@ export function ratchetGrowthProblem(baselineText, headGaps) {
  * not grow against the baseline.
  */
 function checkBehaviouralCoverage() {
-  let bad = 0;
-  try {
-    const out = execFileSync("npx", ["tsx", "scripts/behavioural-coverage.ts", "--check"], {
-      cwd: REPO,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: process.platform === "win32",
-    });
-    const line = out.split("\n").find((l) => l.startsWith("behavioural-coverage:"));
-    console.log(`coverage        - ${(line ?? "inventory current").replace(/^behavioural-coverage:\s*/, "")}`);
-  } catch (e) {
-    const detail = String(e.stderr ?? e.message).split("\n").filter((l) => l.trim()).map((l) => `      ${l}`).join("\n");
-    console.error(`coverage        - the behavioural-coverage inventory does not pass:\n${detail}`);
-    bad = 1;
-  }
+  return checkCoverageInventory({
+    label: "coverage       ",
+    script: "scripts/behavioural-coverage.ts",
+    prefix: "behavioural-coverage",
+    ratchetFile: RATCHET_FILE,
+    files: undefined,
+  });
+}
 
-  const base = baselineRef();
-  if (base === null) {
-    console.error("coverage        - no baseline commit, so the gap list's growth is unchecked.");
-    return 1;
-  }
-  let baselineText = null;
-  try {
-    baselineText = git("show", `${base}:${RATCHET_FILE}`);
-  } catch {
-    baselineText = null;
-  }
-  const problem = ratchetGrowthProblem(baselineText, readRatchet(REPO));
-  if (problem) {
-    console.error(`coverage        - ${problem}`);
-    return 1;
-  }
-  if (bad === 0) console.log("coverage        - gap list did not grow");
-  return bad;
+/** The same three rules for every user-facing surface that is not a bridge action. */
+function checkIntegrationCoverage() {
+  return checkCoverageInventory({
+    label: "integration    ",
+    script: "scripts/integration-coverage.ts",
+    prefix: "integration-coverage",
+    ratchetFile: INTEGRATION_RATCHET_FILE,
+    files: INTEGRATION_RATCHET,
+  });
 }
 
 const GATES = {
@@ -400,6 +437,7 @@ const GATES = {
   "docs-freshness": checkDocsFreshness,
   "context-tax": checkContextTax,
   "behavioural-coverage": checkBehaviouralCoverage,
+  "integration-coverage": checkIntegrationCoverage,
 };
 
 async function main(argv) {

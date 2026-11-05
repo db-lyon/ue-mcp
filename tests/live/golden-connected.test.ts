@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * The editor-connected golden baseline (#817, plan item 1.10).
  *

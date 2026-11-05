@@ -1,7 +1,7 @@
-import { readEnv } from "../core/env.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { globalConfigPath } from "../config/ue-mcp-config.js";
+import { readEnv } from "../core/env.js";
+import { configLayerFiles, selectedOverlay } from "../config/ue-mcp-config.js";
 import type { ToolDef } from "../core/types.js";
 import type { GuardDeclarations } from "./guard-schema.js";
 import type { GuardSource } from "./guards.js";
@@ -25,14 +25,23 @@ function configLayer(file: string): ConfigLayer {
   }
 }
 
+const overlayCache = new Map<string, { key: string; overlay: string | undefined }>();
+
+/**
+ * The files loadFlowConfig reads, by the same overlay rule, so an edit to any
+ * of them is seen. The overlay is chosen by `env:` in the files that are
+ * always layers, so it is re-read only when one of them changed.
+ */
 function configLayers(configDir: string): ConfigLayer[] {
-  const project = configLayer(path.join(configDir, "ue-mcp.yml"));
-  const layers = [configLayer(globalConfigPath()), project];
-  if (project.stamp !== null) {
-    if (readEnv("env")) layers.push(configLayer(path.join(configDir, `ue-mcp.${readEnv("env")}.yml`)));
-    layers.push(configLayer(path.join(configDir, "ue-mcp.local.yml")));
+  const files = configLayerFiles(configDir);
+  const base = new Map(files.map((layer) => [layer.file, configLayer(layer.file)]));
+  const key = `${readEnv("env") ?? ""}|${[...base.values()].map((layer) => layer.stamp).join("|")}`;
+  let cached = overlayCache.get(configDir);
+  if (cached?.key !== key) {
+    cached = { key, overlay: selectedOverlay(configDir) };
+    overlayCache.set(configDir, cached);
   }
-  return layers;
+  return configLayerFiles(configDir, cached.overlay).map((layer) => base.get(layer.file) ?? configLayer(layer.file));
 }
 
 function sameLayers(a: ConfigLayer[], b: ConfigLayer[]): boolean {

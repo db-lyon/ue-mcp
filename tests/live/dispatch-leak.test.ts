@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Per-path dispatch and leak assertions against a real editor (#817, 7.3).
  *
@@ -36,6 +37,7 @@ import { cloneToolDef } from "../../src/surface/category-tool.js";
 import { injectEditorTarget, sessionContext } from "../../src/surface/target-params.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
 import { LiveServer } from "./server.js";
+import { covers } from "../helpers/covers.js";
 import {
   clearParamEcho,
   closeLiveBridges,
@@ -130,6 +132,8 @@ describe.skipIf(echoUnavailable !== null)("the client consumes the routing key, 
   }, 240_000);
 
   it("flows: neither the run's params nor a step's own options carry it through", async () => {
+
+    covers("flow.run.yaml");
     // The fixture flow in tests/ue_mcp/ue-mcp.yml writes `editor` into every
     // step's options by hand, which is the case the per-action bridge task,
     // the handler-backed task and the generic class_path task each have to
@@ -201,6 +205,8 @@ describe.skipIf(echoUnavailable !== null)("the client consumes the routing key, 
   }, 120_000);
 
   it("the HTTP flow surface resolves the target instead of forwarding it", async () => {
+
+    covers("flow.http");
     const load = loadFlowConfig(ALL_TOOLS, live.project.projectDir ?? undefined);
     const registry = buildFlowRegistry(ALL_TOOLS);
     const flowTool = createFlowTool(registry, () => load.config);

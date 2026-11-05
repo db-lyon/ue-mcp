@@ -184,7 +184,10 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("includeProperties"), EType::Boolean, TEXT("Include reflected UPROPERTY values")),
 		MCPParam::Optional(TEXT("componentClass"), EType::String, TEXT("Case-insensitive substring over the component class name")),
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Only this component, by instance name")),
-		SpecWorld, SpecPieInstance,
+		MCPParam::Optional(TEXT("relativeTo"), EType::String, TEXT("Scene component on the same actor (instance name); every scene component and socket row also reports its transform in that component's space")),
+		MCPParam::Optional(TEXT("socketNames"), EType::Array, TEXT("Bone or socket names; each component that has sockets reports their component-space transforms")).Items(EType::String),
+		MCPParam::Optional(TEXT("world"), EType::String, TEXT("editor (default) | pie | a world object path such as a Blueprint editor preview world (/Engine/Transient.World_N); with world omitted, an actorPath in another world reads that world")),
+		SpecPieInstance,
 	});
 	Registry.RegisterHandler(TEXT("get_relative_transform"), &GetRelativeTransform, {
 		MCPParam::Optional(TEXT("targetLabel"), EType::String, TEXT("Target actor label; pass targetLabel or targetPath")).Alias(TEXT("target")),
@@ -983,7 +986,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		}
 		if (!FolderPathFilter.IsEmpty() || !FolderPathPrefixFilter.IsEmpty())
 		{
-			const FString Folder = Actor->GetFolderPath().ToString();
+			const FString Folder = MCPActorFolderPath(Actor);
 			if (!FolderPathFilter.IsEmpty() && !Folder.Equals(FolderPathFilter, ESearchCase::IgnoreCase))
 			{
 				continue;
@@ -1015,7 +1018,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		ActorObj->SetStringField(TEXT("path"), Actor->GetPathName());
 		// #767: the outliner folder is what an agent sees in the editor tree,
 		// so report it alongside the label rather than only being able to set it.
-		ActorObj->SetStringField(TEXT("folderPath"), Actor->GetFolderPath().ToString());
+		ActorObj->SetStringField(TEXT("folderPath"), MCPActorFolderPath(Actor));
 		ActorObj->SetBoolField(TEXT("editorHidden"), bEditorHidden);
 
 		FVector Location = Actor->GetActorLocation();
@@ -1395,7 +1398,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 	// back into any actor-targeting action is a copy of one field.
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
-	Result->SetStringField(TEXT("folderPath"), Actor->GetFolderPath().ToString());
+	Result->SetStringField(TEXT("folderPath"), MCPActorFolderPath(Actor));
 
 	FVector Location = Actor->GetActorLocation();
 	TSharedPtr<FJsonObject> LocationObj = MCPVec3ToJsonObject(Location);
@@ -1492,14 +1495,58 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 {
 	MCPReadParamsAhead(Params, {
 		TEXT("actorLabel"), TEXT("actorPath"), TEXT("includeProperties"), TEXT("componentClass"), TEXT("componentName"),
-		TEXT("world"), TEXT("pieInstance"),
+		TEXT("relativeTo"), TEXT("socketNames"), TEXT("world"), TEXT("pieInstance"),
 	});
 
 	FString Selector;
 	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), Selector)) return Err;
 
+	TArray<FName> SocketNames;
+	if (HasParam(Params, TEXT("socketNames")))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* SocketValues = nullptr;
+		if (!TryGetArrayParam(Params, TEXT("socketNames"), SocketValues) || !SocketValues)
+		{
+			return MCPError(TEXT("'socketNames' must be an array of bone or socket names"));
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *SocketValues)
+		{
+			FString Name;
+			if (!Value.IsValid() || !Value->TryGetString(Name) || Name.TrimStartAndEnd().IsEmpty())
+			{
+				return MCPError(TEXT("'socketNames' must be an array of non-empty bone or socket names"));
+			}
+			SocketNames.AddUnique(FName(*Name.TrimStartAndEnd()));
+		}
+	}
+
+	// A Blueprint editor's viewport, a thumbnail scene and every other preview
+	// scene is a transient world of its own, which neither "editor" nor "pie"
+	// reaches. world takes that world's object path. With world omitted, an
+	// actorPath that lives in some other world reads that world, rather than
+	// failing to find the actor in the editor world.
+	const bool bWorldGiven = HasParam(Params, TEXT("world"));
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
-	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	UWorld* World = nullptr;
+	if (WorldScope.StartsWith(TEXT("/")))
+	{
+		World = FindObject<UWorld>(nullptr, *WorldScope);
+		if (!World)
+		{
+			return MCPError(FString::Printf(
+				TEXT("No loaded world at '%s'. A preview world exists only while its editor is open; editor(find_object, className=\"World\") lists the live ones."),
+				*WorldScope));
+		}
+	}
+	else
+	{
+		const FString ActorPathParam = OptionalString(Params, TEXT("actorPath")).TrimStartAndEnd();
+		AActor* PathActor = (!bWorldGiven && !ActorPathParam.IsEmpty())
+			? FindObject<AActor>(nullptr, *FPackageName::ExportTextPathToObjectPath(ActorPathParam))
+			: nullptr;
+		UWorld* PathWorld = IsValid(PathActor) ? PathActor->GetWorld() : nullptr;
+		World = PathWorld ? PathWorld : ResolveWorldFromParams(Params, *WorldScope);
+	}
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("World '%s' not available"), *WorldScope));
@@ -1511,10 +1558,40 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 	// ambiguity, so accepting the name cannot reintroduce a silent pick (#983).
 	FMCPActorSelector ActorSel;
 	ActorSel.Match = EMCPActorMatch::LabelOrName;
-	ActorSel.WorldLabel = World->IsGameWorld() ? TEXT("PIE") : TEXT("editor");
+	// WorldLabel is a borrowed pointer, so the path it may name outlives the call.
+	const FString WorldLabelText = World->IsGameWorld() ? FString(TEXT("PIE"))
+		: (World->WorldType == EWorldType::Editor ? FString(TEXT("editor")) : World->GetPathName());
+	ActorSel.WorldLabel = *WorldLabelText;
 	TSharedPtr<FJsonValue> ActorErr;
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr, ActorSel);
 	if (!Actor) return ActorErr;
+
+	// relativeTo names the frame the caller wants every transform in as well,
+	// typically a camera or a hand. It is resolved before any row is built, so
+	// a typo is a refusal naming the real components rather than a tree with
+	// the field silently missing from every row.
+	const FString RelativeToName = OptionalString(Params, TEXT("relativeTo")).TrimStartAndEnd();
+	USceneComponent* RelativeTo = nullptr;
+	if (!RelativeToName.IsEmpty())
+	{
+		TArray<USceneComponent*> SceneComponents;
+		Actor->GetComponents(SceneComponents);
+		TArray<FString> SceneNames;
+		for (USceneComponent* Candidate : SceneComponents)
+		{
+			if (!Candidate) continue;
+			SceneNames.Add(Candidate->GetName());
+			if (!RelativeTo && Candidate->GetName().Equals(RelativeToName, ESearchCase::IgnoreCase)) RelativeTo = Candidate;
+		}
+		if (!RelativeTo)
+		{
+			SceneNames.Sort();
+			return MCPError(FString::Printf(
+				TEXT("relativeTo '%s' is not a scene component of %s. Its scene components: %s"),
+				*RelativeToName, *Actor->GetName(), *FString::Join(SceneNames, TEXT(", "))));
+		}
+	}
+	const FTransform RelativeToWorld = RelativeTo ? RelativeTo->GetComponentTransform() : FTransform::Identity;
 
 	const bool bIncludeProperties = OptionalBool(Params, TEXT("includeProperties"));
 	const FString PropertyFilter = OptionalString(Params, TEXT("componentClass"));
@@ -1576,6 +1653,48 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 			C->SetObjectField(TEXT("worldLocation"), MCPVec3ToJsonObject(SC->GetComponentLocation()));
 			C->SetObjectField(TEXT("worldRotation"), MCPRotatorToJsonObject(SC->GetComponentRotation()));
 			C->SetObjectField(TEXT("worldScale"), MCPVec3ToJsonObject(SC->GetComponentScale()));
+			// bVisible is the component's own flag; hiddenInGame is the second
+			// switch a game view honours, and either one hides it in play.
+			C->SetBoolField(TEXT("hiddenInGame"), SC->bHiddenInGame);
+			if (RelativeTo)
+			{
+				C->SetObjectField(TEXT("relativeToComponent"),
+					MCPTransformToJsonObject(SC->GetComponentTransform().GetRelativeTransform(RelativeToWorld)));
+			}
+
+			// socketNames: where named bones and sockets sit on this component,
+			// in its own space (what an attachment offset is authored in) and,
+			// with relativeTo, in that component's space. Only components that
+			// carry sockets at all answer, so a camera or a capsule does not
+			// grow a row of misses.
+			if (SocketNames.Num() > 0 && SC->HasAnySockets())
+			{
+				const USkinnedMeshComponent* Skinned = Cast<USkinnedMeshComponent>(SC);
+				TArray<TSharedPtr<FJsonValue>> SocketRows;
+				for (const FName& WantedSocket : SocketNames)
+				{
+					TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+					Row->SetStringField(TEXT("name"), WantedSocket.ToString());
+					const bool bExists = SC->DoesSocketExist(WantedSocket);
+					Row->SetBoolField(TEXT("found"), bExists);
+					if (bExists)
+					{
+						const bool bIsBone = Skinned && Skinned->GetBoneIndex(WantedSocket) != INDEX_NONE;
+						Row->SetStringField(TEXT("kind"), bIsBone ? TEXT("bone") : TEXT("socket"));
+						Row->SetObjectField(TEXT("componentSpace"),
+							MCPTransformToJsonObject(SC->GetSocketTransform(WantedSocket, RTS_Component)));
+						const FTransform SocketWorld = SC->GetSocketTransform(WantedSocket, RTS_World);
+						Row->SetObjectField(TEXT("world"), MCPTransformToJsonObject(SocketWorld));
+						if (RelativeTo)
+						{
+							Row->SetObjectField(TEXT("relativeToComponent"),
+								MCPTransformToJsonObject(SocketWorld.GetRelativeTransform(RelativeToWorld)));
+						}
+					}
+					SocketRows.Add(MakeShared<FJsonValueObject>(Row));
+				}
+				C->SetArrayField(TEXT("sockets"), SocketRows);
+			}
 
 			if (UPrimitiveComponent* PC = Cast<UPrimitiveComponent>(SC))
 			{
@@ -1709,6 +1828,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("actorClass"), Actor->GetClass()->GetName());
+	// Which world answered, so a read that fell through to a preview or PIE
+	// world says so rather than looking like the editor level.
+	Result->SetStringField(TEXT("world"), World->GetPathName());
+	Result->SetStringField(TEXT("worldType"), MCPDescribeWorldType(World));
+	if (RelativeTo) Result->SetStringField(TEXT("relativeTo"), RelativeTo->GetName());
 	Result->SetNumberField(TEXT("componentCount"), CompArr.Num());
 	Result->SetArrayField(TEXT("components"), CompArr);
 	return MCPResult(Result);
@@ -4420,6 +4544,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ExportActorFbx(const TSharedPtr<FJsonObje
 
 	FString AbsPath = OutputPath;
 	if (FPaths::IsRelative(AbsPath)) AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
+	AbsPath = FPaths::ConvertRelativePathToFull(AbsPath);
 	if (!AbsPath.EndsWith(TEXT(".fbx"))) AbsPath += TEXT(".fbx");
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsPath), /*Tree*/ true);
 
@@ -4550,7 +4675,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorFolderPath(const TSharedPtr<FJson
 	{
 		for (AActor* A : Matches)
 		{
-			const FString Previous = A->GetFolderPath().ToString();
+			const FString Previous = MCPActorFolderPath(A);
 			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 			Entry->SetStringField(TEXT("label"), A->GetActorLabel());
 			Entry->SetStringField(TEXT("previousFolderPath"), Previous);
@@ -4565,7 +4690,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorFolderPath(const TSharedPtr<FJson
 				A->SetFolderPath(NewFolder);
 				++Changed;
 				// Read the value back rather than trusting the setter.
-				const bool bOk = A->GetFolderPath().ToString() == FolderPath;
+				const bool bOk = MCPActorFolderPath(A) == FolderPath;
 				Entry->SetBoolField(TEXT("verified"), bOk);
 				if (bOk) ++Verified;
 			}

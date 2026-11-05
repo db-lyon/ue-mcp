@@ -156,7 +156,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ConvertBrushesToStaticMesh(const TSharedP
 		}
 		if (!bSelected && !FolderPath.IsEmpty())
 		{
-			const FString Folder = Brush->GetFolderPath().ToString();
+			const FString Folder = MCPActorFolderPath(Brush);
 			bSelected = bRecursiveFolder
 				? (Folder.Equals(FolderPath, ESearchCase::IgnoreCase) ||
 				   Folder.StartsWith(FolderPath + TEXT("/"), ESearchCase::IgnoreCase))

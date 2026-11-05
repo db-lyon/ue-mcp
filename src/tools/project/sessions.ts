@@ -1,7 +1,7 @@
 import { checkPluginFreshness } from "../../editor/bridge-freshness.js";
 import { checkBridgeParity, deployedPlugin, freshnessWarning, pluginStaleness, recordedPluginSpecs } from "../../bridge/bridge-parity.js";
 import * as fs from "node:fs";
-import { deploy, deploySummary, attach, attachSummary } from "../../editor/deployer.js";
+import { attach, attachSummary } from "../../editor/deployer.js";
 import { collapsingEnvWarnings } from "../../config/session-env.js";
 import { startEditor, isBridgeReachable, connectedEditorOf } from "../../editor/editor-control.js";
 import { detectProjectHolders } from "../../editor/project-holders.js";
@@ -215,7 +215,9 @@ export const sessionActions: Record<string, ActionSpec> = {
       // project. Without this the session stays addressable only under the
       // project it just left.
       const editor = ctx.sessions && ctx.session ? ctx.sessions.rekey(ctx.session) : undefined;
-      const result = deploy(ctx.project);
+      // Detect and enable only: a switch never writes the target's bridge, which init or
+      // update may have installed, so a server's own source cannot downgrade it (#1615).
+      const result = attach(ctx.project, { cleanLegacy: false });
       return {
         success: true,
         editor: editor?.name,
@@ -233,7 +235,7 @@ export const sessionActions: Record<string, ActionSpec> = {
         // Present when no editor answered: the switch still completed, and
         // nothing can reach the previous project's editor any more.
         editorUnreachable: switched.connectError,
-        bridgeSetup: deploySummary(result),
+        bridgeSetup: attachSummary(result),
       };
     },
   },
@@ -379,6 +381,8 @@ export const sessionActions: Record<string, ActionSpec> = {
   drop_editor: {
     kind: "handler",
     effect: "mutate",
+    // Detaches; the editor and its project are untouched.
+    destructive: false,
     description: "Forget an editor session and close its bridge socket. The editor process is LEFT RUNNING and untouched - this detaches, it does not stop anything (use editor(stop_editor) for that). Params: editorTarget (#817)",
     handler: async (ctx, p) => {
       if (!ctx.sessions) throw new Error("This server drives one editor; there is nothing to drop.");

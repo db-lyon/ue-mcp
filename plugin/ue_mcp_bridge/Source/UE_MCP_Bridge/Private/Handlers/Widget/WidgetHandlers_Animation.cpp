@@ -496,7 +496,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetAnimation(const TSharedPtr<F
 	}
 
 	// ── Create. Outered to the Widget Blueprint, transactional, like the designer's own.
-	const FName UniqueName = MakeUniqueObjectName(WidgetBP, UWidgetAnimation::StaticClass(), FName(*AnimationName));
+	// The requested name when it is free: MakeUniqueObjectName always appends a
+	// number, which left the animation unreachable by the name the caller gave.
+	const FName RequestedName(*AnimationName);
+	const FName UniqueName = StaticFindObjectFast(nullptr, WidgetBP, RequestedName)
+		? MakeUniqueObjectName(WidgetBP, UWidgetAnimation::StaticClass(), RequestedName)
+		: RequestedName;
 	UWidgetAnimation* NewAnim = NewObject<UWidgetAnimation>(WidgetBP, UniqueName, RF_Transactional);
 	if (!NewAnim)
 	{

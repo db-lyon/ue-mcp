@@ -3223,6 +3223,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PopulateBlendspace(const TSharedPtr<F
 				Failed.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("anim not found: %s"), *AnimPath)));
 				continue;
 			}
+			// ValidateSampleData below drops a sample whose skeleton the blendspace cannot
+			// use, after AddSample has already returned an index for it, so it is refused here.
+			const USkeleton* BlendSkeleton = BS->GetSkeleton();
+			if (BlendSkeleton && Anim->GetSkeleton() && !BlendSkeleton->IsCompatibleForEditor(Anim->GetSkeleton()))
+			{
+				Failed.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("skeleton %s of %s is not compatible with the blendspace skeleton %s"),
+					*Anim->GetSkeleton()->GetPathName(), *AnimPath, *BlendSkeleton->GetPathName())));
+				continue;
+			}
 			double X = 0, Y = 0;
 			(*SObj)->TryGetNumberField(TEXT("x"), X);
 			(*SObj)->TryGetNumberField(TEXT("y"), Y);

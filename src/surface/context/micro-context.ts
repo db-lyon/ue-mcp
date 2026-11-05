@@ -19,7 +19,7 @@ import { takeTimeout } from "../../dispatch/call-pipeline.js";
 import { McpError, ErrorCode } from "../../core/errors.js";
 import { actionSchema } from "../action-schema.js";
 import { takeFieldSelection } from "./field-select.js";
-import { coerceJsonStringArgs, flatValidationMessage } from "./call-envelope.js";
+import { coerceJsonStringArgs, flatValidationMessage, unknownRecord } from "./call-envelope.js";
 import { describeCategory, discoveryResults, readOffset, splitDescription } from "./lean-context.js";
 
 /**
@@ -153,7 +153,10 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
         const declared = byName.get(category);
         const tool = declared && withholdFromTool(declared, registeredMethodsOf(ctx?.bridge));
         if (!tool) {
-          return { error: `Unknown category "${category}".`, categories: summaries.map((s) => s.category) };
+          throw new McpError(
+            ErrorCode.UNKNOWN_ACTION,
+            `Unknown category "${category}". Categories: ${summaries.map((s) => s.category).join(", ")}.`,
+          );
         }
         if (typeof p.method === "string" && p.method) return actionSchema(tool, p.method);
         return describeCategory(tool, readOffset(p));
@@ -193,9 +196,10 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
     {
       category: z.string().optional().describe('Category name for describe/call, e.g. "blueprint"'),
       method: z.string().optional().describe('Action name for call or a single-action describe, e.g. "create"'),
-      args: z.record(z.unknown()).optional().describe("Params object passed to the called action"),
+      args: unknownRecord().optional().describe("Params object passed to the called action"),
       query: z.string().optional().describe("Keyword or intent for search"),
-      offset: z.number().int().min(0).optional().describe("describe: first signature of the page (nextOffset)"),
+      // No `maximum`: zod 4 would advertise the safe-integer bound that .int() implies.
+      offset: z.number().int().min(0).meta({ maximum: undefined }).optional().describe("describe: first signature of the page (nextOffset)"),
       limit: z.number().int().min(1).max(100).optional().describe("Max search results (default 20)"),
     },
     // Every real parameter of a gateway call is one level down, so the path

@@ -301,13 +301,16 @@ static UScriptStruct* ResolveChooserStruct(const FString& TypeName)
 	{
 		return FindObject<UScriptStruct>(nullptr, *TypeName);
 	}
-	FString Short = TypeName;
-	Short.RemoveFromStart(TEXT("F"));
-	if (UScriptStruct* SS = FindObject<UScriptStruct>(nullptr, *FString::Printf(TEXT("/Script/Chooser.%s"), *Short)))
+	// The name as given first, then without a C++ F prefix: stripping a leading F
+	// unconditionally turned FloatRangeColumn into loatRangeColumn.
+	TArray<FString> Candidates = { TypeName };
+	if (TypeName.Len() > 1 && TypeName[0] == TEXT('F') && FChar::IsUpper(TypeName[1])) Candidates.Add(TypeName.RightChop(1));
+	for (const FString& Short : Candidates)
 	{
-		return SS;
+		if (UScriptStruct* SS = FindObject<UScriptStruct>(nullptr, *FString::Printf(TEXT("/Script/Chooser.%s"), *Short))) return SS;
+		if (UScriptStruct* SS = FindFirstObject<UScriptStruct>(*Short, EFindFirstObjectOptions::None)) return SS;
 	}
-	return FindFirstObject<UScriptStruct>(*Short, EFindFirstObjectOptions::None);
+	return nullptr;
 }
 
 // Best-effort: point a column's input parameter at a bound property (and, for

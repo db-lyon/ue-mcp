@@ -13,6 +13,7 @@ import {
   readConfigDoc,
   readGlobalUeMcpBlock,
   readUeMcpBlock,
+  selectedOverlay,
   writeConfigDoc,
 } from "./ue-mcp-config.js";
 import { setInstalledHooks, setFeedbackMode, type FeedbackMode } from "./user-state.js";
@@ -49,6 +50,8 @@ export interface UeMcpConfig {
   editor?: {
     path?: string;
     buildToolPath?: string;
+    /** Extra command-line arguments start_editor and restart_editor pass to this project's editor. */
+    launchArgs?: string[];
   };
   /** Per-project equivalent of UE_MCP_ENV (#817): the `ue-mcp.<env>.yml`
    *  overlay this project merges. The env var still wins. */
@@ -83,6 +86,8 @@ export interface UeMcpConfig {
     /** Daemon only: open the client UI in the system browser when the editor crashes. Default false. */
     openBrowserOnCrash?: boolean;
   };
+  /** Checkpoints (#1482): `on`/`off`, or `{ enabled, largeFileBytes }`. Off by default. See src/checkpoints/service.ts. */
+  checkpoints?: boolean | "on" | "off" | { enabled?: boolean | "on" | "off"; largeFileBytes?: number };
   /** Play In Editor. `allowIgnoreBlueprintErrors` pre-authorizes
    *  editor(play_in_editor_ignore_blueprint_errors) so it stops asking for
    *  per-launch approval. Off by default. */
@@ -470,7 +475,7 @@ function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
   const project = readUeMcpBlock(projectConfigPath(projectDir));
 
   const layers: Record<string, unknown>[] = [global, project];
-  for (const layer of configLayerFiles(projectDir, overlayFor(projectDir, global, project))) {
+  for (const layer of configLayerFiles(projectDir, overlayFor(projectDir))) {
     if (layer.target === "env" || layer.target === "local") layers.push(readUeMcpBlock(layer.file));
   }
 
@@ -494,17 +499,9 @@ function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
  * would leave the client connecting to one port while the editor bound
  * another.
  */
-function overlayFor(
-  projectDir: string,
-  global: Record<string, unknown>,
-  project: Record<string, unknown>,
-): string | undefined {
-  const fromVariable = firstString(readEnv("env"));
-  if (fromVariable) return fromVariable;
-
-  const local = readUeMcpBlock(localConfigPath(projectDir));
-  const named = firstString(local.env, project.env, global.env);
-  if (!named) return undefined;
+function overlayFor(projectDir: string): string | undefined {
+  const named = selectedOverlay(projectDir);
+  if (!named || readEnv("env")?.trim()) return named;
 
   const overlay = readUeMcpBlock(overlayConfigPath(projectDir, named));
   if ((overlay.bridge as { port?: unknown } | undefined)?.port !== undefined) {
@@ -517,13 +514,6 @@ function overlayFor(
     );
   }
   return named;
-}
-
-function firstString(...values: unknown[]): string | undefined {
-  for (const v of values) {
-    if (typeof v === "string" && v.trim() !== "") return v.trim();
-  }
-  return undefined;
 }
 
 /**

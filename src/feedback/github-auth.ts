@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { userDir } from "../core/user-dir.js";
 import { readEnv } from "../core/env.js";
@@ -12,11 +12,22 @@ function clientId(): string {
   return readEnv("oauthClientId") || DEFAULT_CLIENT_ID;
 }
 
+/** GitHub's OAuth origin: UE_MCP_GITHUB_OAUTH, else https://github.com. */
+function githubOAuthBase(): string {
+  return (readEnv("githubOAuth")?.trim() || "https://github.com").replace(/\/+$/, "");
+}
+
+/** The GitHub REST API origin: UE_MCP_GITHUB_API, else https://api.github.com. */
+export function githubApiBase(): string {
+  return (readEnv("githubApi")?.trim() || "https://api.github.com").replace(/\/+$/, "");
+}
+
 /** Where the GitHub and registry tokens are kept: UE_MCP_AUTH_DIR, else ~/.ue-mcp. */
 export function authDir(): string {
   return readEnv("authDir") || userDir();
 }
-const authFile = () => join(authDir(), "auth.json");
+/** The cached GitHub token's file. */
+export const authFile = () => join(authDir(), "auth.json");
 const pendingFile = () => join(authDir(), "device-pending.json");
 
 export interface UserAuth {
@@ -42,6 +53,15 @@ export async function readUserAuth(): Promise<UserAuth | null> {
   try {
     const raw = await fs.readFile(authFile(), "utf-8");
     return JSON.parse(raw) as UserAuth;
+  } catch {
+    return null;
+  }
+}
+
+/** readUserAuth for synchronous callers such as init's plan. */
+export function readUserAuthSync(): UserAuth | null {
+  try {
+    return JSON.parse(readFileSync(authFile(), "utf-8")) as UserAuth;
   } catch {
     return null;
   }
@@ -80,7 +100,7 @@ async function clearPending(): Promise<void> {
 }
 
 export async function startDeviceFlow(): Promise<PendingDeviceFlow> {
-  const res = await fetch("https://github.com/login/device/code", {
+  const res = await fetch(`${githubOAuthBase()}/login/device/code`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -104,7 +124,8 @@ export async function startDeviceFlow(): Promise<PendingDeviceFlow> {
     user_code: data.user_code,
     verification_uri: data.verification_uri,
     expires_at: Math.floor(Date.now() / 1000) + data.expires_in,
-    interval: Math.max(data.interval, 5),
+    // GitHub's floor. Another origin is someone else's server and sets its own.
+    interval: readEnv("githubOAuth")?.trim() ? data.interval : Math.max(data.interval, 5),
   };
   await writePending(pending);
   return pending;
@@ -119,7 +140,7 @@ export type ExchangeResult =
 export async function tryExchangeDeviceCode(
   pending: PendingDeviceFlow,
 ): Promise<ExchangeResult> {
-  const res = await fetch("https://github.com/login/oauth/access_token", {
+  const res = await fetch(`${githubOAuthBase()}/login/oauth/access_token`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -136,8 +157,15 @@ export async function tryExchangeDeviceCode(
     access_token?: string;
     token_type?: string;
     error?: string;
+    interval?: number;
   };
-  if (data.error === "authorization_pending" || data.error === "slow_down") {
+  if (data.error === "slow_down") {
+    // RFC 8628 3.5: every later poll waits longer, by the interval sent or by 5s.
+    pending.interval = typeof data.interval === "number" ? data.interval : pending.interval + 5;
+    await writePending(pending);
+    return { kind: "pending" };
+  }
+  if (data.error === "authorization_pending") {
     return { kind: "pending" };
   }
   if (data.error === "expired_token") {
@@ -152,7 +180,7 @@ export async function tryExchangeDeviceCode(
     throw new Error(`Device code exchange failed: ${data.error || "unknown"}`);
   }
 
-  const userRes = await fetch("https://api.github.com/user", {
+  const userRes = await fetch(`${githubApiBase()}/user`, {
     headers: {
       Authorization: `token ${data.access_token}`,
       Accept: "application/vnd.github+json",

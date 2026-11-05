@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * `blueprint(get_connections)`, against a real editor (#996, gap 2).
  *

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import fsSync from "node:fs";
-import { parseVersion, versionDeltaProblem, docsFreshnessProblem, docsExemptionReason, ratchetGrowthProblem } from "../../scripts/check-release-gates.mjs";
+import { parseVersion, versionDeltaProblem, docsFreshnessProblem, docsExemptionReason, ratchetGrowthProblem, INTEGRATION_RATCHET } from "../../scripts/check-release-gates.mjs";
 
 const problem = (from: string, to: string): string | null =>
   versionDeltaProblem(from, to) as string | null;
@@ -117,13 +117,13 @@ describe("every gate is reachable from the entry point", () => {
     const src = await import("node:fs").then((fs) =>
       fs.readFileSync(new URL("../../scripts/check-release-gates.mjs", import.meta.url), "utf8"),
     );
-    for (const gate of ["version-delta", "count-markers", "docs-freshness", "behavioural-coverage"]) {
+    for (const gate of ["version-delta", "count-markers", "docs-freshness", "behavioural-coverage", "integration-coverage"]) {
       expect(src, gate).toContain(`"${gate}"`);
     }
     // Each one has to be wired into the table `all` iterates, not merely
     // defined somewhere in the file.
     const table = src.slice(src.indexOf("const GATES = {"), src.indexOf("function main("));
-    for (const gate of ["version-delta", "count-markers", "docs-freshness", "behavioural-coverage"]) {
+    for (const gate of ["version-delta", "count-markers", "docs-freshness", "behavioural-coverage", "integration-coverage"]) {
       expect(table, `${gate} is not in the gate table`).toContain(gate);
     }
   });
@@ -156,6 +156,12 @@ describe("behavioural-coverage gap list", () => {
 
   it("accepts the commit that introduces the list", () => {
     expect(ratchetGrowthProblem(null, ["a", "b"])).toBeNull();
+  });
+
+  it("names the integration files when it guards the integration list", () => {
+    const problem = ratchetGrowthProblem(list(["cli.a"]), ["cli.a", "cli.b"], INTEGRATION_RATCHET);
+    expect(problem).toMatch(/integration-gaps\.json grew by 1: cli\.b/);
+    expect(problem).toMatch(/integration-exemptions\.json/);
   });
 });
 

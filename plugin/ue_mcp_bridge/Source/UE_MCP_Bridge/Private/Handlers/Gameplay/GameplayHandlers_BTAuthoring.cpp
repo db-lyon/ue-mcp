@@ -376,11 +376,20 @@ namespace
 		UBehaviorTreeGraph* Graph = Cast<UBehaviorTreeGraph>(Tree->BTGraph);
 		if (!Graph) return nullptr;
 
+		// Placing the root node binds the first blackboard loaded in memory to the tree, whichever that is.
+		// The tree keeps the blackboard it already had.
+		UBlackboardData* const Bound = Tree->BlackboardAsset;
 		if (const UEdGraphSchema* Schema = Graph->GetSchema())
 		{
 			Schema->CreateDefaultNodesForGraph(*Graph);
 		}
 		Graph->OnCreated();
+		if (UBehaviorTreeGraphNode_Root* Root = MCPBTAFindRoot(Graph))
+		{
+			Root->BlackboardAsset = Bound;
+			Root->UpdateBlackboard();
+		}
+		Tree->BlackboardAsset = Bound;
 		bOutCreated = true;
 		return Graph;
 	}

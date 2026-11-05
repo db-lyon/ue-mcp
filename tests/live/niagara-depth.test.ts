@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Niagara graph authoring, against a real editor.
  *

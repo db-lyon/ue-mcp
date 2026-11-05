@@ -27,6 +27,7 @@ import { ALL_TOOLS } from "../tools.js";
 import { splitTaskName } from "./action-class.js";
 import { flowCategoryForCheck } from "../flow/flow-surface.js";
 import { EPIC_TOOL_EFFECTS } from "../tools/epic/effects.js";
+import { DESTRUCTIVE_VERBS, leadingVerb } from "./action-verbs.js";
 import type { ActionEffect, ActionEffectSource, ToolDef } from "../core/types.js";
 
 export interface ResolvedEffect {
@@ -82,6 +83,9 @@ export const RAW_BRIDGE_METHODS: Readonly<Record<string, ActionEffect>> = {
   // Arbitrary python inside the editor process. Its effect is the string it
   // was handed, which is what `unknown` is for.
   execute_python: "unknown",
+  // Loads two versions of a package into /Temp for diffing and unloads them,
+  // writing only pictures under Saved. editor(list_changes, diff_checkpoint_asset).
+  checkpoint_diff_asset: "read",
   // Probes the running editor and reports. editor(get_engine_state).
   get_engine_state: "read",
   // Copies assets into another project's Content directory. asset(migrate).
@@ -225,4 +229,67 @@ export function bridgeMethodEffect(
 /** Does this effect mean the call may change something? `unknown` counts. */
 export function mayChangeState(effect: ActionEffect): boolean {
   return effect !== "read";
+}
+
+/** One action's effect and whether it destroys something, for a client deciding what to confirm. */
+export interface ActionEffectInfo {
+  category: string;
+  action: string;
+  effect: ActionEffect;
+  /** `declared` on the spec, `inferred` by plugin injection from the name, `undeclared` when nothing claims it. */
+  effectSource: ActionEffectSource | "undeclared";
+  destructive: boolean;
+  /** `declared` on the spec, `lexicon` from the leading verb, `none` for a read (never destructive). */
+  destructiveSource: "declared" | "lexicon" | "none";
+}
+
+/**
+ * Whether an action destroys something: what its spec declares, else, for a
+ * mutate or unknown effect, whether its name leads with a DESTRUCTIVE_VERBS
+ * verb. The lexicon is a fallback; an action it misjudges declares the answer.
+ */
+export function actionDestructive(
+  action: string,
+  spec: { destructive?: boolean } | undefined,
+  effect: ActionEffect,
+): { destructive: boolean; source: ActionEffectInfo["destructiveSource"] } {
+  if (typeof spec?.destructive === "boolean") return { destructive: spec.destructive, source: "declared" };
+  if (effect === "read") return { destructive: false, source: "none" };
+  return { destructive: DESTRUCTIVE_VERBS.has(leadingVerb(action)), source: "lexicon" };
+}
+
+/**
+ * Every action of `tools` with its effect, read from `graph` (the graph the
+ * server dispatches, plugin-injected actions included) and its destructive
+ * flag. `categories` narrows the list; an unknown name throws.
+ */
+export function actionEffectInfo(
+  tools: readonly ToolDef[],
+  graph: readonly ToolDef[],
+  categories?: readonly string[],
+): ActionEffectInfo[] {
+  if (categories) {
+    const known = new Set(tools.map((t) => t.name));
+    const unknown = categories.filter((c) => !known.has(c));
+    if (unknown.length > 0) throw new RangeError(`no such category: ${unknown.join(", ")}`);
+  }
+  const wanted = categories ? new Set(categories) : null;
+  const out: ActionEffectInfo[] = [];
+  for (const tool of tools) {
+    if (wanted && !wanted.has(tool.name)) continue;
+    for (const [action, spec] of Object.entries(tool.actions)) {
+      const resolved = actionEffect(tool.name, action, graph);
+      const source = resolved.source === "declared" ? (spec.effectSource ?? "declared") : resolved.source;
+      const d = actionDestructive(action, spec, resolved.effect);
+      out.push({
+        category: tool.name,
+        action,
+        effect: resolved.effect,
+        effectSource: source,
+        destructive: d.destructive,
+        destructiveSource: d.source,
+      });
+    }
+  }
+  return out;
 }

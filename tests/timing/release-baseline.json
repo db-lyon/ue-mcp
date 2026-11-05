@@ -1,0 +1,71 @@
+{
+  "recordedAt": "2026-10-23T23:26:12.283Z",
+  "machine": {
+    "cpus": 24,
+    "memoryGB": 32,
+    "note": "Reference machine, no game running, 18 GB free. Release worktree reused (plugin unchanged, build 6 s). node scripts/release-run.mjs --binaries."
+  },
+  "wallS": 1240.068,
+  "steps": [
+    {
+      "name": "deploy",
+      "code": 0,
+      "startS": 0.001,
+      "durationS": 2.877
+    },
+    {
+      "name": "build",
+      "code": 0,
+      "startS": 2.88,
+      "durationS": 5.968
+    },
+    {
+      "name": "live",
+      "code": 0,
+      "startS": 8.849,
+      "durationS": 458.37
+    },
+    {
+      "name": "release-gates",
+      "code": 0,
+      "startS": 467.22,
+      "durationS": 12.407
+    },
+    {
+      "name": "binaries",
+      "code": 0,
+      "startS": 467.231,
+      "durationS": 644.744
+    },
+    {
+      "name": "up",
+      "code": 0,
+      "startS": 467.242,
+      "durationS": 25.912
+    },
+    {
+      "name": "unit",
+      "code": 0,
+      "startS": 479.628,
+      "durationS": 353.222
+    },
+    {
+      "name": "smoke",
+      "code": 0,
+      "startS": 493.155,
+      "durationS": 393.071
+    },
+    {
+      "name": "automation",
+      "code": 0,
+      "startS": 886.227,
+      "durationS": 14.6
+    },
+    {
+      "name": "lifecycle",
+      "code": 0,
+      "startS": 900.828,
+      "durationS": 339.24
+    }
+  ]
+}

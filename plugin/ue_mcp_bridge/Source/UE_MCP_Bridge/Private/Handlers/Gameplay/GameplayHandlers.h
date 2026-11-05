@@ -101,7 +101,7 @@ private:
 	static TSharedPtr<FJsonValue> ListStateTrees(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ProjectPointToNavigation(const TSharedPtr<FJsonObject>& Params);
 	// Enhanced Input asset authoring lives here (core authoring, not test
-	// automation). pie-studio handles PIE record/replay/inject of inputs.
+	// automation). the pie category handles PIE record/replay/inject of inputs.
 	static TSharedPtr<FJsonValue> CreateInputAction(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateInputMappingContext(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadImc(const TSharedPtr<FJsonObject>& Params);
@@ -182,7 +182,7 @@ private:
 	static TSharedPtr<FJsonValue> AddSmartObjectSlotBehavior(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddSmartObjectDefaultBehavior(const TSharedPtr<FJsonObject>& Params);
 
-	// IMC read/write, PIE inspection, anim state, subsystem state - moved to pie-studio
+	// IMC read/write, PIE inspection, anim state, subsystem state - moved to the pie category
 
 	// Helper to create a blueprint with a given parent class
 	static TSharedPtr<FJsonValue> CreateBlueprintWithParent(const FString& Name, const FString& PackagePath, const FString& ParentClassPath, const FString& FriendlyTypeName);
@@ -214,6 +214,6 @@ private:
 	// #163 - detailed navmesh configuration
 	static TSharedPtr<FJsonValue> GetNavmeshDetails(const TSharedPtr<FJsonObject>& Params);
 
-	// ApplyDamageInPie moved to pie-studio
+	// ApplyDamageInPie moved to the pie category
 
 };

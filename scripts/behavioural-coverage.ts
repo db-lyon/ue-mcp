@@ -26,6 +26,16 @@ import { fileURLToPath } from "node:url";
 import { listRegistrations } from "./lib/cpp-registrations.mjs";
 import { maskLiterals } from "./lib/tool-source.mjs";
 import {
+  calledHelpers,
+  helperSpans,
+  matching,
+  tsAsserts,
+  tsTitledBlocks,
+  walk,
+  type FileHelpers,
+  type Span,
+} from "./lib/test-scan.js";
+import {
   EXEMPTIONS_FILE,
   INVENTORY_FILE,
   MIN_EXEMPTION_REASON,
@@ -78,109 +88,6 @@ export interface Inventory {
 
 const rel = (abs: string): string => path.relative(REPO, abs).split(path.sep).join("/");
 
-function walk(dir: string, accept: (name: string) => boolean): string[] {
-  const out: string[] = [];
-  if (!fs.existsSync(dir)) return out;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...walk(full, accept));
-    else if (accept(entry.name)) out.push(full);
-  }
-  return out.sort();
-}
-
-/** Index of the bracket that closes the one at `open`, in masked text. */
-function matching(masked: string, open: number): number {
-  const pairs: Record<string, string> = { "(": ")", "{": "}", "[": "]" };
-  const want = pairs[masked[open]];
-  if (!want) throw new Error(`no bracket at ${open}`);
-  let depth = 0;
-  for (let i = open; i < masked.length; i++) {
-    const ch = masked[i];
-    if (ch === "(" || ch === "{" || ch === "[") depth++;
-    else if (ch === ")" || ch === "}" || ch === "]") {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
-
-interface Span {
-  start: number;
-  end: number;
-}
-
-/** Named functions declared in a file, with their bodies, for one level of helper expansion. */
-interface FileHelpers {
-  spans: Map<string, Span>;
-}
-
-const KEYWORDS = new Set([
-  "if", "for", "while", "switch", "catch", "return", "sizeof", "decltype", "static_assert",
-  "TEXT", "it", "test", "describe", "expect", "beforeAll", "afterAll", "beforeEach", "afterEach",
-]);
-
-function helperSpans(masked: string, kind: "ts" | "cpp"): FileHelpers {
-  const spans = new Map<string, Span>();
-  const add = (name: string, open: number) => {
-    if (KEYWORDS.has(name) || spans.has(name)) return;
-    const close = matching(masked, open);
-    if (close > open) spans.set(name, { start: open, end: close });
-  };
-  if (kind === "ts") {
-    for (const m of masked.matchAll(/\bfunction\s+(\w+)\s*(?:<[^>]*>)?\s*\(/g)) {
-      const parenClose = matching(masked, m.index! + m[0].length - 1);
-      const brace = masked.indexOf("{", parenClose);
-      if (brace !== -1) add(m[1], brace);
-    }
-    for (const m of masked.matchAll(/\b(?:const|let)\s+(\w+)\s*(?::[^=]+)?=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*(?::[^=]+)?=>\s*/g)) {
-      const at = m.index! + m[0].length;
-      if (masked[at] === "{") {
-        add(m[1], at);
-        continue;
-      }
-      // An expression body runs to the `;` that ends the declaration.
-      let depth = 0;
-      let end = at;
-      for (; end < masked.length; end++) {
-        const ch = masked[end];
-        if (ch === "(" || ch === "{" || ch === "[") depth++;
-        else if (ch === ")" || ch === "}" || ch === "]") {
-          if (--depth < 0) break;
-        } else if (ch === ";" && depth === 0) break;
-      }
-      if (!KEYWORDS.has(m[1]) && !spans.has(m[1])) spans.set(m[1], { start: at, end });
-    }
-  } else {
-    for (const m of masked.matchAll(/\b(\w+)\s*\(([^;{}()]|\([^()]*\))*\)\s*(?:const\s*)?(?:->\s*[\w:<>]+\s*)?\{/g)) {
-      add(m[1], m.index! + m[0].length - 1);
-    }
-  }
-  return { spans };
-}
-
-/** Names of helpers called inside a span, transitively, never the span's own name. */
-function calledHelpers(masked: string, span: Span, helpers: FileHelpers, self?: string): Span[] {
-  const out: Span[] = [];
-  const seen = new Set<string>(self ? [self] : []);
-  const queue: Span[] = [span];
-  while (queue.length > 0) {
-    const s = queue.shift()!;
-    const text = masked.slice(s.start, s.end);
-    for (const m of text.matchAll(/\b(\w+)\s*\(/g)) {
-      const name = m[1];
-      if (seen.has(name)) continue;
-      const body = helpers.spans.get(name);
-      if (!body) continue;
-      seen.add(name);
-      out.push(body);
-      queue.push(body);
-    }
-  }
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // tests/live
 // ---------------------------------------------------------------------------
@@ -199,26 +106,8 @@ export function bridgeActionMap(): Map<string, Map<string, string>> {
   return out;
 }
 
-const TRIVIAL_EXPECT = /^\s*[\w.?!\[\]"']+\.(ok|isConnected)\s*(,[\s\S]*)?$/;
-
-/** Whether a TS span asserts something beyond "the call answered". */
-function tsAsserts(source: string, masked: string, spans: Span[]): boolean {
-  for (const span of spans) {
-    const text = masked.slice(span.start, span.end);
-    for (const m of text.matchAll(/\bexpect(?:\.soft)?\s*\(/g)) {
-      const open = span.start + m.index! + m[0].length - 1;
-      const close = matching(masked, open);
-      if (close === -1) continue;
-      const arg = source.slice(open + 1, close);
-      if (!TRIVIAL_EXPECT.test(arg)) return true;
-    }
-    if (/\bexpect\.fail\s*\(|\bassert\w*\s*\(/.test(text)) return true;
-  }
-  return false;
-}
-
 /** Bridge methods a TS span dispatches, by method name or by category action. */
-function tsDispatches(
+export function tsDispatches(
   source: string,
   masked: string,
   spans: Span[],
@@ -263,49 +152,10 @@ function tsDispatches(
 }
 
 /** Same-file helpers whose body dispatches a bridge call, so a method literal handed to one is a dispatch. */
-function forwardingHelpers(masked: string, helpers: FileHelpers): Set<string> {
+export function forwardingHelpers(masked: string, helpers: FileHelpers): Set<string> {
   const out = new Set<string>();
   for (const [name, span] of helpers.spans) {
     if (/\b(?:callBridge|call)\s*\(/.test(masked.slice(span.start, span.end))) out.add(name);
-  }
-  return out;
-}
-
-/** Every titled block a callee opens (`it`, `test`, `describe`): its title and its argument span. */
-function tsTitledBlocks(source: string, masked: string, callee: RegExp): Array<{ title: string; span: Span }> {
-  const out: Array<{ title: string; span: Span }> = [];
-  for (const m of masked.matchAll(callee)) {
-    let i = m.index! + m[0].length;
-    // Skip modifiers: .only, .skip, .skipIf(cond), .runIf(cond), .concurrent.
-    for (;;) {
-      while (/\s/.test(masked[i] ?? "")) i++;
-      if (masked[i] === ".") {
-        const word = /^\.\s*(\w+)/.exec(masked.slice(i));
-        if (!word) break;
-        i += word[0].length;
-        continue;
-      }
-      if (masked[i] === "(") {
-        let j = i + 1;
-        while (/\s/.test(masked[j] ?? "")) j++;
-        if (/["'`]/.test(source[j] ?? "")) break;
-        const close = matching(masked, i);
-        if (close === -1) break;
-        i = close + 1;
-        continue;
-      }
-      break;
-    }
-    if (masked[i] !== "(") continue;
-    let j = i + 1;
-    while (/\s/.test(masked[j] ?? "")) j++;
-    const quote = source[j];
-    if (!quote || !/["'`]/.test(quote)) continue;
-    const titleEnd = source.indexOf(quote, j + 1);
-    if (titleEnd === -1) continue;
-    const close = matching(masked, i);
-    if (close === -1) continue;
-    out.push({ title: source.slice(j + 1, titleEnd), span: { start: i, end: close } });
   }
   return out;
 }
@@ -374,7 +224,7 @@ function cppAsserts(masked: string, spans: Span[]): boolean {
   return false;
 }
 
-function cppDispatches(
+export function cppDispatches(
   source: string,
   masked: string,
   spans: Span[],
@@ -451,10 +301,14 @@ export function scanAutomationTests(
 // The inventory
 // ---------------------------------------------------------------------------
 
+/** bridge method -> the category it belongs to. A moved action's old address never names it. */
 function categoryOf(): Map<string, string> {
   const out = new Map<string, string>();
-  for (const [category, actions] of bridgeActionMap()) {
-    for (const bridge of actions.values()) if (!out.has(bridge)) out.set(bridge, category);
+  for (const tool of ALL_TOOLS) {
+    for (const spec of Object.values(tool.actions)) {
+      const { bridge, movedTo } = spec as { bridge?: string; movedTo?: unknown };
+      if (bridge && !movedTo && !out.has(bridge)) out.set(bridge, tool.name);
+    }
   }
   return out;
 }
@@ -462,6 +316,20 @@ function categoryOf(): Map<string, string> {
 export interface InventoryInputs {
   exemptions: Record<string, string>;
   ratchet: string[];
+  /** Bridge method -> whether any action dispatching it is declared mutate. Defaults to ALL_TOOLS. */
+  mutating?: Set<string>;
+}
+
+/** Bridge methods some category action declares with effect mutate. */
+export function mutatingBridgeMethods(): Set<string> {
+  const out = new Set<string>();
+  for (const tool of ALL_TOOLS) {
+    for (const spec of Object.values(tool.actions)) {
+      const { bridge, effect } = spec as { bridge?: string; effect?: string };
+      if (bridge && effect === "mutate") out.add(bridge);
+    }
+  }
+  return out;
 }
 
 export function buildInventory(inputs: InventoryInputs = { exemptions: readExemptions(), ratchet: readRatchet() }): Inventory {
@@ -557,6 +425,17 @@ export function inventoryProblems(inventory: Inventory, inputs: InventoryInputs)
         "Add a test in tests/live or a UE.MCP.* automation test that dispatches the action and asserts its effect, " +
         `or add it to ${EXEMPTIONS_FILE} with the reason no test can observe it. The gap list (${RATCHET_FILE}) ` +
         "only shrinks; new actions do not go there.",
+    );
+  }
+
+  // A mutating action changes something a test can read back, so it may not sit in
+  // the gap list: it gets a behavioural test, or an exemption saying why none can see it.
+  const mutating = inputs.mutating ?? mutatingBridgeMethods();
+  const mutatingGaps = inputs.ratchet.filter((m) => mutating.has(m));
+  if (mutatingGaps.length > 0) {
+    problems.push(
+      `${RATCHET_FILE} lists ${mutatingGaps.length} mutating action(s): ${mutatingGaps.join(", ")}. ` +
+        "Every action declared with effect mutate needs a behavioural test that asserts what it changed.",
     );
   }
 
