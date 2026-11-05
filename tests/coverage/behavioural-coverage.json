@@ -2479,6 +2479,11 @@
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "bulk_set_widget_properties applies several writes get_widget_properties reads back"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-widget-tree.test.ts",
+          "test": "bulk_set_widget_properties writes slot.* paths set_widget_property takes and rolls them back (#1632)"
         }
       ]
     },
@@ -9306,6 +9311,11 @@
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "bulk_set_widget_properties applies several writes get_widget_properties reads back"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-widget-tree.test.ts",
+          "test": "bulk_set_widget_properties writes slot.* paths set_widget_property takes and rolls them back (#1632)"
         },
         {
           "suite": "live",

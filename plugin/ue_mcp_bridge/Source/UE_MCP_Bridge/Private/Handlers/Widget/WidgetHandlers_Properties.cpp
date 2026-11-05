@@ -1394,6 +1394,74 @@ namespace
 		if (!bSet) OutError = TEXT("property not found or value format invalid");
 		return bSet;
 	}
+
+	/** One bulk_set_widget_properties write. Keys address what set_widget_property
+	 *  does: slot.* on the widget's slot, dotted paths, its typed names (#1632).
+	 *  OutPrevious replays through this action, or is null when the write took a
+	 *  typed route whose input format the old value does not read back as. */
+	bool ApplyBulkWidgetProperty(UWidgetBlueprint* WidgetBP, UWidget* Widget, const FString& Key,
+		const TSharedPtr<FJsonValue>& Value, TSharedPtr<FJsonValue>& OutPrevious, FString& OutError)
+	{
+		OutPrevious.Reset();
+		const bool bSlot = Key.StartsWith(TEXT("slot."), ESearchCase::IgnoreCase);
+		UObject* Target = bSlot ? static_cast<UObject*>(Widget->Slot) : static_cast<UObject*>(Widget);
+		if (!Target) { OutError = TEXT("the widget has no slot (it is the root, or not inside a panel)"); return false; }
+		const FString Path = bSlot ? Key.Mid(5) : Key;
+		const bool bStructured = Value->Type == EJson::Object || Value->Type == EJson::Array;
+
+		// #200: a slot write that is not recorded is lost to the compile.
+		WidgetBP->Modify();
+		if (WidgetBP->WidgetTree) WidgetBP->WidgetTree->Modify();
+		Widget->Modify();
+		Target->Modify();
+
+		FProperty* Prop = nullptr;
+		void* Addr = nullptr;
+		UObject* LeafOwner = nullptr;
+		FString ResolveError, SetError;
+		if (MCPJsonProperty::ResolveDottedPath(Target, Path, Prop, Addr, LeafOwner, ResolveError))
+		{
+			UObject* Owner = LeafOwner ? LeafOwner : Target;
+			if (Owner != Target) Owner->Modify();
+			const TSharedPtr<FJsonValue> Previous = MCPQuery::PropertyToJson(Prop, Addr);
+			if (MCPJsonProperty::SetJsonOnPropertyWithOwner(Prop, Addr, Value, Owner, SetError))
+			{
+				Widget->PostEditChange();
+				OutPrevious = Previous;
+				return true;
+			}
+			if (bStructured) { OutError = SetError; return false; }
+		}
+		else if (bStructured)
+		{
+			OutError = FString::Printf(TEXT("property not found: %s"), *ResolveError);
+			return false;
+		}
+
+		// A scalar the reflected path did not take: set_widget_property's typed
+		// routes ("R,G,B,A" colours, canvas slot anchors and position).
+		FString Text;
+		if (Value->Type == EJson::Boolean) Text = Value->AsBool() ? TEXT("true") : TEXT("false");
+		else if (Value->Type == EJson::Number) Text = FString::SanitizeFloat(Value->AsNumber());
+		else Text = Value->AsString();
+
+		FMCPWidgetPropertyCapture Capture;
+		bool bSet = MCPWidgetApplyTypedProperty(Widget, Key, Text);
+		if (!bSet && bSlot)
+		{
+			if (auto Refusal = MCPWidgetApplySlotProperty(WidgetBP, Widget, Key, Text, Capture, bSet)) { OutError = BuildTreeErrorText(Refusal); return false; }
+		}
+		if (!bSet)
+		{
+			OutError = !SetError.IsEmpty() ? SetError : FString::Printf(TEXT("property not found: %s"), *ResolveError);
+			return false;
+		}
+		if (Capture.bCapturedPreviousValue && !Capture.PreviousPropertyValue.IsEmpty())
+		{
+			OutPrevious = MakeShared<FJsonValueString>(Capture.PreviousPropertyValue);
+		}
+		return true;
+	}
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>& Params)
@@ -1788,6 +1856,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 	// properties this call changed, in the order it changed them, and touch
 	// nothing it did not.
 	TArray<TSharedPtr<FJsonValue>> InversePropertyEntries;
+	// Writes that landed through a typed route with no exact inverse.
+	TArray<TSharedPtr<FJsonValue>> NotRestorable;
 	int32 Applied = 0, Failed = 0;
 	int32 EntryIndex = -1;
 	for (const TSharedPtr<FJsonValue>& EV : *Entries)
@@ -1827,28 +1897,23 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 			R->SetStringField(TEXT("error"), TEXT("widget/property/value missing"));
 			Results.Add(MakeShared<FJsonValueObject>(R)); ++Failed; continue;
 		}
-		FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*PName));
-		if (!Prop)
-		{
-			R->SetBoolField(TEXT("ok"), false);
-			R->SetStringField(TEXT("error"), TEXT("property not found"));
-			Results.Add(MakeShared<FJsonValueObject>(R)); ++Failed; continue;
-		}
-		Widget->Modify();
-		void* EntryValuePtr = Prop->ContainerPtrToValuePtr<void>(Widget);
-		const TSharedPtr<FJsonValue> EntryPrevious = MCPQuery::PropertyToJson(Prop, EntryValuePtr);
+		TSharedPtr<FJsonValue> EntryPrevious;
 		FString SetErr;
-		if (MCPJsonProperty::SetJsonOnProperty(Prop, EntryValuePtr, Val, SetErr))
+		if (ApplyBulkWidgetProperty(WidgetBP, Widget, PName, Val, EntryPrevious, SetErr))
 		{
 			R->SetBoolField(TEXT("ok"), true); ++Applied;
-			// PropertyToJson answers for every property kind, so every write that
-			// lands contributes exactly one inverse entry and the two counts move
-			// together.
-			TSharedPtr<FJsonObject> Inverse = MakeShared<FJsonObject>();
-			Inverse->SetStringField(TEXT("widgetName"), WName);
-			Inverse->SetStringField(TEXT("propertyName"), PName);
-			Inverse->SetField(TEXT("value"), EntryPrevious);
-			InversePropertyEntries.Add(MakeShared<FJsonValueObject>(Inverse));
+			if (EntryPrevious.IsValid())
+			{
+				TSharedPtr<FJsonObject> Inverse = MakeShared<FJsonObject>();
+				Inverse->SetStringField(TEXT("widgetName"), WName);
+				Inverse->SetStringField(TEXT("propertyName"), PName);
+				Inverse->SetField(TEXT("value"), EntryPrevious);
+				InversePropertyEntries.Add(MakeShared<FJsonValueObject>(Inverse));
+			}
+			else
+			{
+				NotRestorable.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s.%s"), *WName, *PName)));
+			}
 		}
 		else
 		{
@@ -1885,9 +1950,18 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 		Payload->SetStringField(TEXT("assetPath"), AssetPath);
 		Payload->SetArrayField(TEXT("properties"), InversePropertyEntries);
 		MCPSetRollback(Result, TEXT("bulk_set_widget_properties"), Payload);
-		Result->SetBoolField(TEXT("rollbackLossy"), false);
+		Result->SetBoolField(TEXT("rollbackLossy"), NotRestorable.Num() > 0);
 	}
-	else
+	if (NotRestorable.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("notRestorable"), NotRestorable);
+		if (InversePropertyEntries.Num() == 0) Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The writes in `notRestorable` went through a typed route (comma-separated colours, canvas slot anchors or position) ")
+			TEXT("whose input format the old value does not read back as, so the rollback leaves them. Write them by their full ")
+			TEXT("UPROPERTY path for an exact inverse."));
+	}
+	else if (InversePropertyEntries.Num() == 0)
 	{
 		Result->SetBoolField(TEXT("rollbackPossible"), false);
 		Result->SetStringField(TEXT("rollbackNote"),

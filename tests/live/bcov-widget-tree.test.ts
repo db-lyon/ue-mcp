@@ -163,6 +163,43 @@ describe("widget blueprint tree", () => {
     expect(Number.parseFloat((await fullProps("Row")).RenderOpacity)).toBeCloseTo(0.75, 3);
   }, 120_000);
 
+  it("bulk_set_widget_properties writes slot.* paths set_widget_property takes and rolls them back (#1632)", async () => {
+    const slotProps = async (widgetName: string): Promise<Record<string, string>> => {
+      const read = await call("get_widget_properties", { assetPath: WBP, widgetName });
+      return (read.widget as { slot: { properties: Record<string, string> } }).slot.properties;
+    };
+    const before = await slotProps("Txt_A");
+
+    const bulk = await call("bulk_set_widget_properties", {
+      assetPath: WBP,
+      properties: [
+        { widgetName: "Txt_A", propertyName: "Slot.Padding", value: { Left: 8, Top: 4, Right: 8, Bottom: 4 } },
+        { widgetName: "Txt_A", propertyName: "slot.HorizontalAlignment", value: "HAlign_Center" },
+        { widgetName: "Txt_B", propertyName: "Slot.Padding.Left", value: 12 },
+        { widgetName: "Txt_A", propertyName: "Slot.NoSuchField", value: 1 },
+      ],
+    });
+    expect(bulk.applied).toBe(3);
+    expect(bulk.failed).toBe(1);
+    const rows = bulk.results as Array<{ ok: boolean; error?: string }>;
+    expect(rows[3].ok).toBe(false);
+    expect(rows[3].error).toContain("NoSuchField");
+
+    const a = await slotProps("Txt_A");
+    expect(a.Padding).toContain("Left=8.0");
+    expect(a.Padding).toContain("Top=4.0");
+    expect(a.HorizontalAlignment).toBe("HAlign_Center");
+    expect((await slotProps("Txt_B")).Padding).toContain("Left=12.0");
+
+    const rollback = bulk.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("bulk_set_widget_properties");
+    expect(bulk.rollbackLossy).toBe(false);
+    await call(rollback.method, rollback.payload);
+    const restored = await slotProps("Txt_A");
+    expect(restored.Padding).toBe(before.Padding);
+    expect(restored.HorizontalAlignment).toBe(before.HorizontalAlignment);
+  }, 120_000);
+
   it("list_widget_classes reports native panels and this blueprint's generated class", async () => {
     const native = await call("list_widget_classes", { filter: "Panel", module: "UMG", limit: 500 });
     const classes = native.classes as Array<{ name: string; isPanel: boolean; module: string }>;
