@@ -1268,6 +1268,32 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "rename_widget": {
+    "category": "widget",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "widgetName",
+        "type": "string",
+        "required": true,
+        "description": "Name of a widget inside the tree (#798)"
+      },
+      {
+        "name": "newName",
+        "type": "string",
+        "required": true,
+        "description": "New widget name; refused when another widget, variable or function already holds it"
+      }
+    ]
+  },
   "reorder_child": {
     "category": "widget",
     "params": [
@@ -1642,6 +1668,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   remove_widget_animation_event_key: "Params: assetPath (or path), animationName, time?, trackName?",
   remove_widget_animation_key: "Params: assetPath (or path), animationName, widgetName, propertyName, time, channel?, channelIndex?",
   remove_widget_animation_track: "Params: assetPath (or path), animationName, widgetName, propertyName",
+  rename_widget: "Params: assetPath (or path), widgetName, newName",
   reorder_child: "Params: assetPath (or path), widgetName, index",
   restore_widget_navigation: "Params: assetPath (or path), previous",
   run_editor_utility_blueprint: "Params: assetPath (or path)",
@@ -1658,7 +1685,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 /** Every key the spec'd widget handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   animationName: z.string().optional().describe("The UWidgetAnimation's object name or display label"),
-  assetPath: z.string().optional().describe("Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798) (add_to_viewport, add_widget, add_widget_animation_event_key, add_widget_animation_key, add_widget_animation_track, audit_widget_accessibility, audit_widget_focus_chain, bind_widget_animation_event, build_tree, bulk_set_widget_properties, check_widget_structure, clear_widget_binding, clear_widget_navigation, create_widget_animation, delete_widget_animation, get_widget_animation, get_widget_details, get_widget_properties, list_widget_bindings, move_widget, read_widget_animations, read_widget_tree, remove_widget, remove_widget_animation_event_key, remove_widget_animation_key, remove_widget_animation_track, reorder_child, restore_widget_navigation, run_editor_utility_blueprint, run_editor_utility_widget, set_root_widget, set_widget_navigation, set_widget_property, set_widget_style, unbind_widget_animation_event, wrap_root_widget). Widget Blueprint whose CommonUI wiring to check as well (audit_commonui). Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath (create_editor_utility_blueprint, create_editor_utility_widget, create_widget_blueprint). Widget Blueprint whose parent's contract to read and whose tree to check against it (get_bind_widget_contract)"),
+  assetPath: z.string().optional().describe("Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798) (add_to_viewport, add_widget, add_widget_animation_event_key, add_widget_animation_key, add_widget_animation_track, audit_widget_accessibility, audit_widget_focus_chain, bind_widget_animation_event, build_tree, bulk_set_widget_properties, check_widget_structure, clear_widget_binding, clear_widget_navigation, create_widget_animation, delete_widget_animation, get_widget_animation, get_widget_details, get_widget_properties, list_widget_bindings, move_widget, read_widget_animations, read_widget_tree, remove_widget, remove_widget_animation_event_key, remove_widget_animation_key, remove_widget_animation_track, rename_widget, reorder_child, restore_widget_navigation, run_editor_utility_blueprint, run_editor_utility_widget, set_root_widget, set_widget_navigation, set_widget_property, set_widget_style, unbind_widget_animation_event, wrap_root_widget). Widget Blueprint whose CommonUI wiring to check as well (audit_commonui). Full destination, e.g. /Game/UI/WBP_Example; wins over name + packagePath (create_editor_utility_blueprint, create_editor_utility_widget, create_widget_blueprint). Widget Blueprint whose parent's contract to read and whose tree to check against it (get_bind_widget_contract)"),
   channel: z.string().optional().describe("Channel by name (R/G/B/A, Left/Top/Right/Bottom, Translation.X); a miss lists the section's real channels"),
   channelIndex: z.number().int().optional().describe("Channel by index, used when channel is not given (default 0)"),
   childClassFilter: z.string().optional().describe("Class substring filter for subtree nodes (implies includeSubtree)"),
@@ -1696,6 +1723,7 @@ export const schema: Record<string, z.ZodType> = {
   module: z.string().optional().describe("Case-insensitive substring of the defining module, e.g. UMG or CommonUI"),
   name: z.string().optional().describe("Alias for widgetName (add_widget). Bare asset name, placed in packagePath (create_editor_utility_blueprint, create_editor_utility_widget, create_widget_blueprint)"),
   namePrefix: z.string().optional().describe("Instance name prefix filter"),
+  newName: z.string().optional().describe("New widget name; refused when another widget, variable or function already holds it"),
   newParentWidgetName: z.string().optional().describe("Panel widget to reparent into"),
   onConflict: z.string().optional().describe("When the asset exists: skip (default, report it) | error"),
   packagePath: z.string().optional().describe("Folder for name (default /Game/EditorUtilities) (create_editor_utility_blueprint, create_editor_utility_widget). Folder for name (default /Game/UI/Widgets) (create_widget_blueprint)"),
@@ -1724,7 +1752,7 @@ export const schema: Record<string, z.ZodType> = {
   viewportOnly: z.boolean().optional().describe("Only widgets currently added to the viewport"),
   widgetBlueprintPath: z.string().optional().describe("Alias for assetPath"),
   widgetClass: z.string().optional().describe("Widget class: a short name (TextBlock, CanvasPanel), a full path, or a Widget Blueprint path (add_widget). Alias for wrapperClass (wrap_root_widget)"),
-  widgetName: z.string().optional().describe("Name of a widget inside the tree (#798) (add_widget, add_widget_animation_key, add_widget_animation_track, clear_widget_binding, clear_widget_navigation, get_widget_details, get_widget_properties, move_widget, remove_widget, remove_widget_animation_key, remove_widget_animation_track, reorder_child, set_root_widget, set_widget_property, set_widget_style). Alias for sourceWidgetName (extract_widget_subtree). Exact live instance name. Provide this or className (get_runtime_delegates). Exact live instance name (get_runtime_widget, invoke_runtime_function). Exact live instance name. Provide this or classFilter (inspect_runtime_instances). Named child of a live PIE widget, or the live UserWidget's own name (set_runtime_focus). Widget whose navigation a single write sets (set_widget_navigation)"),
+  widgetName: z.string().optional().describe("Name of a widget inside the tree (#798) (add_widget, add_widget_animation_key, add_widget_animation_track, clear_widget_binding, clear_widget_navigation, get_widget_details, get_widget_properties, move_widget, remove_widget, remove_widget_animation_key, remove_widget_animation_track, rename_widget, reorder_child, set_root_widget, set_widget_property, set_widget_style). Alias for sourceWidgetName (extract_widget_subtree). Exact live instance name. Provide this or className (get_runtime_delegates). Exact live instance name (get_runtime_widget, invoke_runtime_function). Exact live instance name. Provide this or classFilter (inspect_runtime_instances). Named child of a live PIE widget, or the live UserWidget's own name (set_runtime_focus). Widget whose navigation a single write sets (set_widget_navigation)"),
   widgetToFocus: z.string().optional().describe("Target widget of a single Explicit write"),
   world: z.string().optional().describe("Runtime world scope: pie (default) | game | auto. The editor world is never a valid target"),
   wrapperClass: z.string().optional().describe("Panel widget class (CanvasPanel, VerticalBox, Overlay, etc.); must be a UPanelWidget subclass"),

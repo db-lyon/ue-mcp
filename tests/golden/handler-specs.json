@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1211,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -31613,6 +31613,32 @@
               "fieldGuid"
             ]
           ]
+        }
+      ]
+    },
+    "rename_widget": {
+      "category": "widget",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Widget Blueprint or Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "widgetName",
+          "type": "string",
+          "required": true,
+          "description": "Name of a widget inside the tree (#798)"
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "required": true,
+          "description": "New widget name; refused when another widget, variable or function already holds it"
         }
       ]
     },
