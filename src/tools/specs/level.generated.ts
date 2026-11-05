@@ -2471,6 +2471,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Collision channel to inspect; omitted lists non-Block responses, capped at 32"
+      },
+      {
+        "name": "includeChildActors",
+        "type": "boolean",
+        "required": false,
+        "description": "Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"
       }
     ]
   },
@@ -3021,6 +3027,35 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "Deselects everything before it selects, so the contract's empty lists would clear the editor selection"
+  },
+  "select_component": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Actor editor label; pass actorLabel or actorPath"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+      },
+      {
+        "name": "componentName",
+        "type": "string",
+        "required": true,
+        "description": "Component instance name, on the actor or on one of its child actors"
+      },
+      {
+        "name": "addToSelection",
+        "type": "boolean",
+        "required": false,
+        "description": "Keep the current selection and add to it (default false: replace it)"
+      }
+    ]
   },
   "set_actor_folder_path": {
     "category": "level",
@@ -5175,7 +5210,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   nudge_component: "Params: actorLabel OR actorPath, componentName, frame?, translationDelta?, axisRotation?, viewRotation?, scaleMultiplier?, dryRun?, world?, pieInstance?",
   place_actor: "Params: actorClass, label?, onConflict?, location?, rotation?, scale?, staticMesh?, material?, world?, pieInstance?",
   place_actors_batch: "Params: actors",
-  query_components: "Params: componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?, includeCollision?, collisionChannel?",
+  query_components: "Params: componentClass?, actorClass?, matchSubclasses?, componentNameContains?, actorLabelPrefix?, actorLabelContains?, actorTag?, folderPath?, folderPathPrefix?, fields?, propertyNames?, actorPropertyNames?, where?, whereMode?, suspectOnly?, groupBy?, countBy?, sampleLimit?, countOnly?, limit?, startIndex?, duplicateTransformTolerance?, levelPath?, world?, pieInstance?, includeCollision?, collisionChannel?, includeChildActors?",
   read_actor_motion: "Params: actorLabel?, actorLabels?, actorPath?, actorPaths?, world?, pieInstance?",
   rebuild_water_zone: "Params: actorLabel?, actorPath?, zoneExtent?, tileSize?, maxPasses?",
   recreate_physics_state: "Params: at least one of actorLabels/labelPrefix/tag/classFilter/componentClass/componentNameContains, dryRun?, maxComponents?, world?, pieInstance?",
@@ -5189,6 +5224,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   restore_component_relative_transform: "Params: actorLabel OR actorPath, componentName, relativeTransform, world?, pieInstance?",
   save_level: "Params: force?, includeExternalActors?, commitDeletes?",
   select_actors: "Params: at least one of actorLabels/actorPaths",
+  select_component: "Params: actorLabel?, actorPath?, componentName, addToSelection?",
   set_actor_folder_path: "Params: folderPath, at least one of actorLabels/labelPrefix/className/tag, dryRun?, transactionLabel?",
   set_actor_hlod_layer: "Params: hlodLayer, at least one of actorLabels/labelPrefix/labelContains/tag/classFilter/folderPath/folderPathPrefix, matchSubclasses?, enableAutoLODGeneration?, dryRun?, transactionLabel?",
   set_actor_material: "Params: actorLabel?, actorPath?, materialPath, slotIndex?",
@@ -5229,19 +5265,20 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   actorClass: z.string().optional().describe("Actor class: short name, /Script path or Blueprint class path (place_actor, spawn_actors_batch, spawn_transient_actor). Owning actor class, resolved as a class or matched as a substring (query_components)"),
   actorClassFilter: z.string().optional().describe("Alias for classFilter"),
-  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor)"),
+  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor)"),
   actorLabelA: z.string().optional().describe("First actor label; pass actorLabelA or actorPathA"),
   actorLabelB: z.string().optional().describe("Second actor label; pass actorLabelB or actorPathB"),
   actorLabelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   actorLabelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"),
   actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor)"),
+  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, select_component, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor)"),
   actorPathA: z.string().optional().describe("First actor object path"),
   actorPathB: z.string().optional().describe("Second actor object path"),
   actorPaths: z.array(z.string()).optional().describe("Full actor object paths"),
   actorPropertyNames: z.array(z.string()).optional().describe("Owning actor property names or dotted paths, Blueprint variables included, projected under actorProps.*, at most 32"),
   actors: z.array(z.object({ staticMesh: z.string().describe("Static mesh asset path"), location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World scale"), label: z.string().optional().describe("Actor label"), tags: z.array(z.string()).optional().describe("Actor tags to add"), parentLabel: z.string().optional().describe("Label of the actor to attach to, keeping world transform; may name an actor later in the batch") })).optional().describe("StaticMeshActors to spawn; meshes load once per path"),
   actorTag: z.string().optional().describe("Actor must carry this tag"),
+  addToSelection: z.boolean().optional().describe("Keep the current selection and add to it (default false: replace it)"),
   all: z.boolean().optional().describe("Destroy every transient verification actor in the world (destroy_transient_actor). Target every actor (set_editor_visibility)"),
   allowSubtractive: z.boolean().optional().describe("Also convert subtractive brushes, which have no surface of their own"),
   alongSpline: z.object({ actorLabel: z.string().optional().describe("Spline actor label; pass actorLabel or actorPath"), actorPath: z.string().optional().describe("Spline actor object path"), componentName: z.string().optional().describe("Spline component, when the actor has several"), spacing: z.number().describe("Distance between spawns in cm, at least 1"), startDistance: z.number().optional().describe("Distance along the spline to start at (default 0)"), endDistance: z.number().optional().describe("Distance along the spline to stop at (default its length)"), offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Offset, in the spline's frame when aligning to it"), alignToTangent: z.boolean().optional().describe("Rotate each spawn to the spline (default true)") }).optional().describe("Spawns scattered along a spline by distance"),
@@ -5268,7 +5305,7 @@ export const schema: Record<string, z.ZodType> = {
   color: z.record(z.string(), z.unknown()).optional().describe("Alias for fogInscatteringColor (set_fog_properties). Colour {r, g, b} in 0-255 (set_light_properties, spawn_light)"),
   commitDeletes: z.boolean().optional().describe("Save through the editor's dirty-package save, which deletes the packages of deleted World Partition actors (default false)"),
   componentClass: z.string().optional().describe("Component class: short name or full path (add_component_to_actor). Component class name, exact or substring (get_actors_by_component_class). Case-insensitive substring over the component class name (get_component_tree). Component class, resolved as a class or matched as a substring (query_components). Primitive component class to rebuild (recreate_physics_state). Component class to remove (remove_components_by_class)"),
-  componentName: z.string().optional().describe("Name of the new component (add_component_to_actor). Component instance name (add_hismc_instances, add_instances, get_component_details, get_instance_transforms, remove_instance, set_component_property, snap_instances_to_surface, update_instance_transform). Component name looked up on every matched actor (bulk_set_component_property). Only this component, by instance name (get_component_tree). Component holding the post-process settings, when the actor is not a PostProcessVolume (get_post_process_settings, set_fixed_exposure, set_post_process_settings). Spline component, when the actor has several (get_spline_info). Exact SceneComponent instance name (nudge_component, restore_component_relative_transform). Component to remove (remove_component_from_actor). Mesh component (default: the actor's first mesh component) (set_component_materials). Skinned mesh component (default: the first on the actor) (set_component_skeletal_mesh). Spline component, when the actor has several; matched exactly (set_spline_points)"),
+  componentName: z.string().optional().describe("Name of the new component (add_component_to_actor). Component instance name (add_hismc_instances, add_instances, get_component_details, get_instance_transforms, remove_instance, set_component_property, snap_instances_to_surface, update_instance_transform). Component name looked up on every matched actor (bulk_set_component_property). Only this component, by instance name (get_component_tree). Component holding the post-process settings, when the actor is not a PostProcessVolume (get_post_process_settings, set_fixed_exposure, set_post_process_settings). Spline component, when the actor has several (get_spline_info). Exact SceneComponent instance name (nudge_component, restore_component_relative_transform). Component to remove (remove_component_from_actor). Component instance name, on the actor or on one of its child actors (select_component). Mesh component (default: the actor's first mesh component) (set_component_materials). Skinned mesh component (default: the first on the actor) (set_component_skeletal_mesh). Spline component, when the actor has several; matched exactly (set_spline_points)"),
   componentNameA: z.string().optional().describe("Component on actor A; omitted selects its root"),
   componentNameB: z.string().optional().describe("Component on actor B; omitted selects its root"),
   componentNameContains: z.string().optional().describe("Case-insensitive substring over the component instance name"),
@@ -5320,6 +5357,7 @@ export const schema: Record<string, z.ZodType> = {
   hideFromOutliner: z.boolean().optional().describe("Keep the actor out of the World Outliner (default false)"),
   hlodLayer: z.string().nullable().optional().describe("HLODLayer asset path, or null to clear the per-actor override"),
   ignoreActors: z.array(z.string()).optional().describe("Actor labels to skip"),
+  includeChildActors: z.boolean().optional().describe("Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)"),
   includeCollision: z.boolean().optional().describe("Include component collision state (default false)"),
   includeExternalActors: z.boolean().optional().describe("Also save the level's loaded external actor and folder packages (default true)"),
   includeOccurrences: z.boolean().optional().describe("Include example actor and component occurrences per mesh"),

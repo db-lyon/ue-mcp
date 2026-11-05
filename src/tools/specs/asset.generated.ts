@@ -246,6 +246,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "Values to append, validated before any is written"
       },
       {
+        "name": "unique",
+        "type": "boolean",
+        "required": false,
+        "description": "Skip values already in the array or earlier in elements (default false)"
+      },
+      {
         "name": "save",
         "type": "boolean",
         "required": false,
@@ -3367,6 +3373,81 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "get_static_mesh_geometry": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StaticMesh asset path; keep the same path on every snapshot page",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "geometrySource",
+        "type": "string",
+        "required": true,
+        "description": "sourceModel reads the authored MeshDescription; renderData reads built LOD buffers, including Nanite fallback geometry",
+        "enum": [
+          "sourceModel",
+          "renderData"
+        ]
+      },
+      {
+        "name": "lodIndex",
+        "type": "integer",
+        "required": false,
+        "description": "Source model or render LOD index (default 0)"
+      },
+      {
+        "name": "elementType",
+        "type": "string",
+        "required": false,
+        "description": "Element table to page (default triangles); read all three tables for a complete capture",
+        "enum": [
+          "vertices",
+          "corners",
+          "triangles"
+        ]
+      },
+      {
+        "name": "elementOffset",
+        "type": "integer",
+        "required": false,
+        "description": "Offset in the selected table, not an element ID (default 0)",
+        "minimum": 0,
+        "maximum": 1000000
+      },
+      {
+        "name": "pageSize",
+        "type": "integer",
+        "required": false,
+        "description": "Maximum elements per page (default 256, maximum 512)",
+        "minimum": 1,
+        "maximum": 512
+      },
+      {
+        "name": "snapshotId",
+        "type": "string",
+        "required": false,
+        "description": "ID from the first response; required for continuation. Omit at offset 0 to capture current data. Cached pages never re-read the asset."
+      },
+      {
+        "name": "dumpToFile",
+        "type": "boolean",
+        "required": false,
+        "description": "Stream the complete snapshot to a JSON file instead of a page (default false); omit elementType, elementOffset and pageSize"
+      },
+      {
+        "name": "outputPath",
+        "type": "string",
+        "required": false,
+        "description": "New .json destination for dumpToFile; relative paths stay under Saved/. Defaults to Saved/UE_MCP/MeshGeometry/<snapshotId>.json. Existing destinations are always refused."
+      }
+    ]
+  },
   "get_stringtable_entry": {
     "category": "asset",
     "params": [
@@ -4970,6 +5051,58 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "remove_asset_array_elements": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Asset path; a Blueprint path writes its generated-class CDO",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "propertyName",
+        "type": "string",
+        "required": true,
+        "description": "Path of the TArray property"
+      },
+      {
+        "name": "indices",
+        "type": "array",
+        "required": false,
+        "description": "Element indices to remove; each must exist",
+        "items": "integer"
+      },
+      {
+        "name": "elements",
+        "type": "array",
+        "required": false,
+        "description": "Values to remove; every element equal to one of them goes"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Save the package after the write (default true)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "indices"
+          ],
+          [
+            "elements"
+          ]
+        ]
+      }
+    ]
+  },
   "remove_curvetable_row": {
     "category": "asset",
     "params": [
@@ -5287,6 +5420,59 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "scale_mesh_geometry": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StaticMesh to scale",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "factor",
+        "type": "number",
+        "required": true,
+        "description": "Uniform factor, or {x, y, z} per axis; every component must be above 0",
+        "orTypes": [
+          "vec3"
+        ]
+      },
+      {
+        "name": "pivot",
+        "type": "vec3",
+        "required": false,
+        "description": "Mesh-space point that stays fixed (default the mesh origin)"
+      },
+      {
+        "name": "outputPath",
+        "type": "string",
+        "required": false,
+        "description": "Scale a copy written here and leave assetPath untouched (default: scale assetPath in place)"
+      },
+      {
+        "name": "scaleSockets",
+        "type": "boolean",
+        "required": false,
+        "description": "Move socket locations with the geometry (default true)"
+      },
+      {
+        "name": "scaleCollision",
+        "type": "boolean",
+        "required": false,
+        "description": "Scale the simple collision with the geometry (default true)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Save the mesh after the rebuild (default true)"
+      }
+    ]
+  },
   "search_assets_fts": {
     "category": "asset",
     "params": [
@@ -5380,6 +5566,45 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Only configs whose class or key contains this"
+      }
+    ]
+  },
+  "set_curve_keys": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "CurveFloat, CurveVector or CurveLinearColor asset path",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "channel",
+        "type": "number",
+        "required": false,
+        "description": "Channel index to replace: 0 on a CurveFloat, 0-2 on a CurveVector, 0-3 on a CurveLinearColor (default 0)"
+      },
+      {
+        "name": "channelName",
+        "type": "string",
+        "required": false,
+        "description": "Channel to replace by name, instead of channel: Value, X/Y/Z or R/G/B/A"
+      },
+      {
+        "name": "keys",
+        "type": "array",
+        "required": true,
+        "description": "Replacement keys, [] to clear: [{time, value, interpMode? (cubic default, linear, constant, none), tangentMode? (auto|smartAuto|user|break|none), tangentWeightMode? (none|arrive|leave|both), arriveTangent?, leaveTangent?, arriveTangentWeight?, leaveTangentWeight?}]. A tangent given without tangentMode is kept as a user tangent",
+        "items": "object"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Save the package (default true); false leaves it dirty"
       }
     ]
   },
@@ -6265,7 +6490,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_datatable_row: "Params: assetPath (or path), rowName, row (or fields, or data)",
   add_graph_node: "Params: assetPath (or path), graphName?, nodeClass?, actionName?, spawnMode?, posX?, posY?, save?",
   add_socket: "Params: assetPath, socketName, boneName?, relativeLocation?, relativeRotation?, relativeScale?, onConflict?",
-  append_asset_array_elements: "Params: assetPath (or path), propertyName, elements, save?",
+  append_asset_array_elements: "Params: assetPath (or path), propertyName, elements, unique?, save?",
   apply_mesh_fracture: "Params: assetPath (or path), pattern?, axis?, pieces?, gridX?, gridY?, gridZ?, planeCount?, seed?, jitter?, gapWidth?, fillHoles?, minPieceTriangles?, outputBasePath?, onConflict?, copyMaterialsFromSource?, nanite?, recomputeNormals?, recomputeTangents?, lodType?, lodIndex?, save?, dryRun?",
   apply_mesh_hole_fill: "Params: assetPath (or path), fillMethod?, weldFirst?, weldTolerance?, removeDegenerateFirst?, deleteIsolatedTriangles?, outputPath?, inPlace?, backupPath?, lodType?, lodIndex?, onConflict?, copyMaterialsFromSource?, copyCollisionFromSource?, nanite?, recomputeNormals?, recomputeTangents?, removeDegenerates?, save?, dryRun?",
   apply_mesh_mirror: "Params: assetPath (or path), axis?, planeOrigin?, planeNormal?, applyPlaneCut?, flipCutSide?, weldAlongPlane?, outputPath?, inPlace?, backupPath?, lodType?, lodIndex?, onConflict?, copyMaterialsFromSource?, copyCollisionFromSource?, nanite?, recomputeNormals?, recomputeTangents?, removeDegenerates?, save?, dryRun?",
@@ -6327,6 +6552,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_mesh_info: "Params: assetPath",
   get_primary_asset_ids: "Params: type?, maxResults?",
   get_static_mesh_build_settings: "Params: assetPath (or path), lodIndex?",
+  get_static_mesh_geometry: "Params: assetPath (or path), geometrySource, lodIndex?, elementType?, elementOffset?, pageSize?, snapshotId?, dumpToFile?, outputPath?",
   get_stringtable_entry: "Params: assetPath (or path), key",
   get_texture_info: "Params: assetPath (or path) OR assetPaths",
   import_animation: "Params: filePath (or filename) OR filePaths, name? (or assetName), packagePath? (or destinationPath), skeletonPath, importCustomAttribute?, removeRedundantKeys?, importSettings?",
@@ -6371,6 +6597,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   reimport_datatable: "Params: assetPath (or path), jsonPath?, jsonString?",
   reindex_assets_fts: "Params: directory?",
   reload_package: "Params: assetPath (or path)",
+  remove_asset_array_elements: "Params: assetPath (or path), propertyName, indices OR elements, save?",
   remove_curvetable_row: "Params: assetPath (or path), rowName",
   remove_datatable_row: "Params: assetPath (or path), rowName OR rowNames, save?",
   remove_graph_node: "Params: assetPath (or path), graphName?, node, save?",
@@ -6382,9 +6609,11 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   rename_struct_field: "Params: assetPath (or path), fieldName OR fieldGuid, newDisplayName",
   save_all_dirty: "Params: saveMapPackages?, saveContentPackages?",
   save_asset: "Params: assetPath? (or path), assetPaths?, force?",
+  scale_mesh_geometry: "Params: assetPath (or path), factor, pivot?, outputPath?, scaleSockets?, scaleCollision?, save?",
   search_assets_fts: "Params: query, classFilter?, cursor?, limit? (or maxResults)",
   set_asset_property: "Params: assetPath (or path), propertyName, value, save?",
   set_cloth_config: "Params: skeletalMeshPath (or assetPath), properties, clothingAsset?, configType?",
+  set_curve_keys: "Params: assetPath (or path), channel?, channelName?, keys, save?",
   set_curvetable_keys: "Params: assetPath (or path), rowName, keys",
   set_datatable_cell: "Params: assetPath (or path), rowName, fieldName, value",
   set_datatable_cells: "Params: assetPath (or path), cells, dryRun?, save?",
@@ -6419,7 +6648,7 @@ export const schema: Record<string, z.ZodType> = {
   applyPlaneCut: z.boolean().optional().describe("Remove the geometry on the far side of the plane before reflecting (default true)"),
   assetLodIndex: z.number().int().optional().describe("LOD inside the clothing asset (default: lodIndex, clamped)"),
   assetName: z.string().optional().describe("Alias for name"),
-  assetPath: z.string().optional().describe("CurveTable asset path (add_curvetable_key, add_curvetable_row, get_curvetable_keys, import_curvetable, list_curvetable_rows, read_curvetable, remove_curvetable_row, rename_curvetable_row, set_curvetable_keys). DataTable asset path (add_datatable_row, clone_datatable_rows, fill_datatable_from_json, get_datatable_row, read_datatable, reimport_datatable, remove_datatable_row, rename_datatable_row, set_datatable_cell, set_datatable_cells, set_datatable_row, update_datatable_row). EdGraph-backed asset path (add_graph_node, connect_graph_pins, disconnect_graph_pins, read_asset_graph, remove_graph_node). StaticMesh, SkeletalMesh or Skeleton asset path (add_socket, list_asset_sockets, list_sockets, remove_socket). Asset path; a Blueprint path writes its generated-class CDO (append_asset_array_elements, set_asset_property). StaticMesh to cut; it is never modified (apply_mesh_fracture). StaticMesh to read (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). Asset to check (asset_health_check). Alias for skeletalMeshPath (bind_cloth_to_section, read_cloth_data, set_cloth_config, unbind_cloth_from_section). StaticMesh or SkeletalMesh asset path (check_uvs, export_uv_layout, get_mesh_bounds, get_mesh_geometry, get_mesh_info, measure_mesh_geometry, read_mesh_materials, read_uv_channels, set_socket_transform, set_uv_channel_count, transform_uvs, unwrap_uvs). CustomizableObject asset path (compile_customizable_object). Object path of the new pipeline (create_interchange_pipeline). Asset that owns the new subobject (create_subobject). Asset to delete (delete_asset). Blueprint, Skeleton or SkeletalMesh to diff from (diff_asset). Data asset path (edit_collection_entry). UserDefinedEnum asset path (edit_user_defined_enum). UserDefinedStruct asset path (edit_user_defined_struct, list_struct_fields, rename_struct_field). Asset to export (export_asset). Texture2D asset path (export_texture, get_texture_info, set_texture_settings). Asset to reload from disk (force_reload_asset). StaticMesh asset path (generate_lightmap_uvs, get_mesh_collision, get_static_mesh_build_settings, set_mesh_material, set_mesh_nav, set_static_mesh_build_settings). StaticMesh whose collision to build or clear (generate_mesh_collision). One SkeletalMesh (generate_skeletal_mesh_lods). Asset path; a Blueprint path reads its generated-class CDO (get_asset_properties, read_asset_properties). StringTable asset path (get_stringtable_entry, import_stringtable, import_stringtable_csv, list_stringtable_keys, read_stringtable, remove_stringtable_entry, set_stringtable_entry). UEnum or UserDefinedEnum asset path (list_enum_values). SkeletalMesh or Skeleton asset path (list_skeleton_bones). Asset to rename in its own folder, together with newName (move_asset, rename_asset). Asset path (read_asset). Imported asset path (read_import_sources). SkeletalMesh asset path (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_build_settings, read_skeletal_mesh_skin_weights, set_sk_material_slots, set_skeletal_mesh_optimize_for_instancing, set_skeletal_mesh_skin_weights). StaticMesh to recenter (recenter_pivot). Imported asset to rebuild from its source file (reimport_asset). Asset whose package to reload (reload_package). Asset to save; omit it and assetPaths to save every dirty asset under /Game (save_asset)"),
+  assetPath: z.string().optional().describe("CurveTable asset path (add_curvetable_key, add_curvetable_row, get_curvetable_keys, import_curvetable, list_curvetable_rows, read_curvetable, remove_curvetable_row, rename_curvetable_row, set_curvetable_keys). DataTable asset path (add_datatable_row, clone_datatable_rows, fill_datatable_from_json, get_datatable_row, read_datatable, reimport_datatable, remove_datatable_row, rename_datatable_row, set_datatable_cell, set_datatable_cells, set_datatable_row, update_datatable_row). EdGraph-backed asset path (add_graph_node, connect_graph_pins, disconnect_graph_pins, read_asset_graph, remove_graph_node). StaticMesh, SkeletalMesh or Skeleton asset path (add_socket, list_asset_sockets, list_sockets, remove_socket). Asset path; a Blueprint path writes its generated-class CDO (append_asset_array_elements, remove_asset_array_elements, set_asset_property). StaticMesh to cut; it is never modified (apply_mesh_fracture). StaticMesh to read (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). Asset to check (asset_health_check). Alias for skeletalMeshPath (bind_cloth_to_section, read_cloth_data, set_cloth_config, unbind_cloth_from_section). StaticMesh or SkeletalMesh asset path (check_uvs, export_uv_layout, get_mesh_bounds, get_mesh_geometry, get_mesh_info, measure_mesh_geometry, read_mesh_materials, read_uv_channels, set_socket_transform, set_uv_channel_count, transform_uvs, unwrap_uvs). CustomizableObject asset path (compile_customizable_object). Object path of the new pipeline (create_interchange_pipeline). Asset that owns the new subobject (create_subobject). Asset to delete (delete_asset). Blueprint, Skeleton or SkeletalMesh to diff from (diff_asset). Data asset path (edit_collection_entry). UserDefinedEnum asset path (edit_user_defined_enum). UserDefinedStruct asset path (edit_user_defined_struct, list_struct_fields, rename_struct_field). Asset to export (export_asset). Texture2D asset path (export_texture, get_texture_info, set_texture_settings). Asset to reload from disk (force_reload_asset). StaticMesh asset path (generate_lightmap_uvs, get_mesh_collision, get_static_mesh_build_settings, set_mesh_material, set_mesh_nav, set_static_mesh_build_settings). StaticMesh whose collision to build or clear (generate_mesh_collision). One SkeletalMesh (generate_skeletal_mesh_lods). Asset path; a Blueprint path reads its generated-class CDO (get_asset_properties, read_asset_properties). StaticMesh asset path; keep the same path on every snapshot page (get_static_mesh_geometry). StringTable asset path (get_stringtable_entry, import_stringtable, import_stringtable_csv, list_stringtable_keys, read_stringtable, remove_stringtable_entry, set_stringtable_entry). UEnum or UserDefinedEnum asset path (list_enum_values). SkeletalMesh or Skeleton asset path (list_skeleton_bones). Asset to rename in its own folder, together with newName (move_asset, rename_asset). Asset path (read_asset). Imported asset path (read_import_sources). SkeletalMesh asset path (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_build_settings, read_skeletal_mesh_skin_weights, set_sk_material_slots, set_skeletal_mesh_optimize_for_instancing, set_skeletal_mesh_skin_weights). StaticMesh to recenter (recenter_pivot). Imported asset to rebuild from its source file (reimport_asset). Asset whose package to reload (reload_package). Asset to save; omit it and assetPaths to save every dirty asset under /Game (save_asset). StaticMesh to scale (scale_mesh_geometry). CurveFloat, CurveVector or CurveLinearColor asset path (set_curve_keys)"),
   assetPathA: z.string().optional().describe("First Texture2D"),
   assetPathB: z.string().optional().describe("Second Texture2D"),
   assetPaths: z.array(z.string()).optional().describe("The exact assets to read (bulk_read_asset_properties). Assets to delete (delete_asset_batch). The exact assets to act on, the safest way to drive it (fix_asset_hygiene). SkeletalMeshes, at most 500 (generate_skeletal_mesh_lods). Texture2D asset paths, 1-500; use instead of assetPath (get_texture_info, set_texture_settings). StaticMeshes to recenter together; the first sets the reference pivot (recenter_pivot). Save exactly these loaded packages (asset, object or package paths) and no others; each is reported saved, notDirty or failed (save_asset)"),
@@ -6438,8 +6667,9 @@ export const schema: Record<string, z.ZodType> = {
   boneNames: z.array(z.string()).optional().describe("Bones to report; omit for every bone that owns at least one vertex"),
   boundaryConstraint: z.string().optional().describe("Fixed | Refine | Free (default) | Ignore"),
   cells: z.array(z.object({ row: z.string().describe("Existing row to edit"), column: z.string().describe("Row-struct field to write"), value: z.unknown().describe("Value to write, parsed as set_datatable_cell parses value") })).optional().describe("Cells to write; every row must exist and every column must be a top-level row-struct field"),
-  channel: z.number().optional().describe("Channel to draw (default 0) (export_uv_layout). Channel to remove (op=remove) (set_uv_channel_count). Channel to transform (default 0) (transform_uvs). Channel to write (default 0) (unwrap_uvs)"),
+  channel: z.number().optional().describe("Channel to draw (default 0) (export_uv_layout). Channel index to replace: 0 on a CurveFloat, 0-2 on a CurveVector, 0-3 on a CurveLinearColor (default 0) (set_curve_keys). Channel to remove (op=remove) (set_uv_channel_count). Channel to transform (default 0) (transform_uvs). Channel to write (default 0) (unwrap_uvs)"),
   channelCount: z.number().optional().describe("Target channel count (op=set)"),
+  channelName: z.string().optional().describe("Channel to replace by name, instead of channel: Value, X/Y/Z or R/G/B/A"),
   channels: z.array(z.number()).optional().describe("Only these channels (omit for every channel)"),
   checks: z.array(z.string()).optional().describe("unreferenced | brokenReferences | duplicates | naming | redirectors (default all five)"),
   class: z.string().optional().describe("Alias for className"),
@@ -6481,11 +6711,13 @@ export const schema: Record<string, z.ZodType> = {
   discardUnsaved: z.boolean().optional().describe("Reload even when the package has unsaved changes, discarding them (default false)"),
   displayName: z.string().optional().describe("Display text for the enumerator (add_value, rename_value)"),
   dryRun: z.boolean().optional().describe("Run the operation and report the result without writing (default false) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Preflight and report without writing (default false) (bulk_set_asset_properties, set_mesh_materials_batch). Run the full preflight and report the planned statuses without writing (default false) (bulk_upsert_data_assets). Validate the entire batch and return proposedRows without changes (default false) (clone_datatable_rows). Validate and return proposedValue without changing the asset (default false) (edit_collection_entry). Validate and report without importing, writing or saving (default false) (export_asset, import_skeletal_mesh, import_texture_batch, set_texture_settings). Name every asset and destination without changing anything (default TRUE) (fix_asset_hygiene). Report the redirectors, referencers and packages it would load and save, and stop (default false) (fixup_redirectors). Report without writing (generate_lightmap_uvs, set_uv_channel_count, transform_uvs, unwrap_uvs). Report each mesh's LODs and what would happen without changing anything (generate_skeletal_mesh_lods). Run the boolean and report the counts without writing (default false) (mesh_boolean). Validate every cell and report what would change without writing (default false) (set_datatable_cells)"),
-  dumpToFile: z.boolean().optional().describe("Write the geometry JSON to a file instead of returning it"),
+  dumpToFile: z.boolean().optional().describe("Write the geometry JSON to a file instead of returning it (get_mesh_geometry). Stream the complete snapshot to a JSON file instead of a page (default false); omit elementType, elementOffset and pageSize (get_static_mesh_geometry)"),
   duplicateMethod: z.string().optional().describe("content (same class, size and saved hash) | name (same name and class in several folders) | both (default)"),
   edgeLength: z.number().optional().describe("Target edge length in centimetres (simplifyMode edgeLength or clusterEdgeLength)"),
   edits: z.array(z.object({ vertexIndex: z.number().int().describe("Source MeshDescription vertex ID"), influences: z.array(z.record(z.string(), z.unknown())).describe("1-64 entries of {boneName, weight? (0 to 1) | rawWeight? (1 to 65535)}") })).optional().describe("Selected source vertices and their complete replacement influences (1-256)"),
-  elements: z.array(z.unknown()).optional().describe("Values to append, validated before any is written"),
+  elementOffset: z.number().int().min(0).max(1000000).optional().describe("Offset in the selected table, not an element ID (default 0)"),
+  elements: z.array(z.unknown()).optional().describe("Values to append, validated before any is written (append_asset_array_elements). Values to remove; every element equal to one of them goes (remove_asset_array_elements)"),
+  elementType: z.enum(["vertices","corners","triangles"]).optional().describe("Element table to page (default triangles); read all three tables for a complete capture"),
   enable: z.boolean().optional().describe("Turn lightmap UV generation on (default) or off"),
   enabled: z.boolean().optional().describe("Value to write to bOptimizeForInstancing"),
   entryKey: z.unknown().optional().describe("Existing map key or array key-field value; must match exactly one entry"),
@@ -6493,6 +6725,7 @@ export const schema: Record<string, z.ZodType> = {
   expandDepth: z.number().int().optional().describe("Inline the properties of subobjects the asset owns to this depth, 0-5 (default 0)"),
   expandExternal: z.boolean().optional().describe("Also follow references to other assets when expanding (default false)"),
   expectedKeys: z.array(z.string()).optional().describe("Keys the CSV must carry, checked before the asset is touched"),
+  factor: z.union([z.number(), z.object({ x: z.number(), y: z.number(), z: z.number() })]).optional().describe("Uniform factor, or {x, y, z} per axis; every component must be above 0"),
   factoryClass: z.string().optional().describe("UFactory subclass by name or /Script path (default: picked by extension)"),
   factoryProperties: z.record(z.string(), z.unknown()).optional().describe("Factory properties by UPROPERTY name or dotted path, set before the import"),
   fieldGuid: z.string().optional().describe("Member by GUID, stable across renames; wins over fieldName (edit_user_defined_struct). Member by GUID, stable across renames (rename_struct_field)"),
@@ -6515,6 +6748,7 @@ export const schema: Record<string, z.ZodType> = {
   gapWidth: z.number().optional().describe("How far apart the halves of each cut are pushed, in centimetres (default 0.01)"),
   generateLightmapUVs: z.boolean().optional().describe("Generate lightmap UVs (default true)"),
   generateMips: z.boolean().optional().describe("Generate mipmaps automatically (default false)"),
+  geometrySource: z.enum(["sourceModel","renderData"]).optional().describe("sourceModel reads the authored MeshDescription; renderData reads built LOD buffers, including Nanite fallback geometry"),
   graphName: z.string().optional().describe("Graph to author in, by name or unique substring (required when the asset has several graphs) (add_graph_node, connect_graph_pins, disconnect_graph_pins, remove_graph_node). Only graphs whose name contains this (read_asset_graph)"),
   gridX: z.number().int().optional().describe("Pieces along X for grid (default 2)"),
   gridY: z.number().int().optional().describe("Pieces along Y for grid (default 2)"),
@@ -6546,6 +6780,7 @@ export const schema: Record<string, z.ZodType> = {
   includeValues: z.boolean().optional().describe("Include each property's value (default true) (get_asset_properties). Include each property's value (default false) (read_asset_properties)"),
   includeWorlds: z.boolean().optional().describe("Report maps as unreferenced too (default false)"),
   index: z.number().optional().describe("Enumerator index for rename_value and remove_value"),
+  indices: z.array(z.number().int()).optional().describe("Element indices to remove; each must exist"),
   initialPatchCount: z.number().optional().describe("Starting patch count for patchBuilder"),
   inPlace: z.boolean().optional().describe("Overwrite assetPath instead of writing a separate asset (default false); not with outputPath, and the one form with no rollback (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). Overwrite targetPath instead (default false); not with outputPath, and the only destructive form (mesh_boolean)"),
   interpMode: z.string().optional().describe("linear (default) | constant | cubic | none"),
@@ -6559,14 +6794,14 @@ export const schema: Record<string, z.ZodType> = {
   key: z.string().optional().describe("Entry key"),
   keyField: z.string().optional().describe("Array element field to match, required for arrays (for example WeaponId)"),
   keyFilter: z.string().optional().describe("Case-insensitive substring filter on keys"),
-  keys: z.array(z.record(z.string(), z.unknown())).optional().describe("Replacement keys: [{time, value, interpMode?, arriveTangent?, leaveTangent?}]"),
+  keys: z.array(z.record(z.string(), z.unknown())).optional().describe("Replacement keys, [] to clear: [{time, value, interpMode? (cubic default, linear, constant, none), tangentMode? (auto|smartAuto|user|break|none), tangentWeightMode? (none|arrive|leave|both), arriveTangent?, leaveTangent?, arriveTangentWeight?, leaveTangentWeight?}]. A tangent given without tangentMode is kept as a user tangent (set_curve_keys). Replacement keys: [{time, value, interpMode?, arriveTangent?, leaveTangent?}] (set_curvetable_keys)"),
   keyTimeTolerance: z.number().optional().describe("How close an existing key must be to be updated rather than added"),
   lightmapResolution: z.number().optional().describe("The mesh's lightmap resolution"),
   limit: z.number().int().optional().describe("Rows to return (default 200, max 2000) (bulk_read_asset_properties). Rows per page, 1 to 5000 (default 500) (list_assets). Bones per page (default every bone) (list_skeleton_bones). Rows per page, 1 to 2000 (default 50) (list_textures, search_assets_fts)"),
   loadingPolicy: z.string().optional().describe("LazyLoad (default) | Stream | Inline"),
   lodCount: z.number().int().optional().describe("Total LODs including LOD 0, 1 to 8"),
   lodGroup: z.string().optional().describe("Texture LOD group, applied to the imported texture (import_texture). Texture group, with or without TEXTUREGROUP_: World, Weapon, WeaponNormalMap, WeaponSpecular and the other engine values (set_texture_settings)"),
-  lodIndex: z.number().int().optional().describe("LOD to read when lodType names one (default 0) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Mesh LOD (bind_cloth_to_section, unbind_cloth_from_section). Source LOD to act on (default 0) (check_uvs, export_uv_layout, generate_lightmap_uvs, read_uv_channels, set_uv_channel_count, transform_uvs, unwrap_uvs). LOD to read (default 0) (get_mesh_geometry). Source model (LOD) to read (default 0) (get_static_mesh_build_settings). LOD to measure (default 0) (measure_mesh_geometry). LOD of each input to read when lodType names one (default 0) (mesh_boolean). Only return this LOD mapping; omitted returns every LOD (read_mesh_materials). Source LOD (default 0); generated LODs without source geometry are refused (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_skin_weights, set_skeletal_mesh_skin_weights). LOD to target (default 0); not with allLods (read_skeletal_mesh_build_settings, set_skeletal_mesh_optimize_for_instancing). Source model (LOD) to write (default 0) (set_static_mesh_build_settings)"),
+  lodIndex: z.number().int().optional().describe("LOD to read when lodType names one (default 0) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Mesh LOD (bind_cloth_to_section, unbind_cloth_from_section). Source LOD to act on (default 0) (check_uvs, export_uv_layout, generate_lightmap_uvs, read_uv_channels, set_uv_channel_count, transform_uvs, unwrap_uvs). LOD to read (default 0) (get_mesh_geometry). Source model (LOD) to read (default 0) (get_static_mesh_build_settings). Source model or render LOD index (default 0) (get_static_mesh_geometry). LOD to measure (default 0) (measure_mesh_geometry). LOD of each input to read when lodType names one (default 0) (mesh_boolean). Only return this LOD mapping; omitted returns every LOD (read_mesh_materials). Source LOD (default 0); generated LODs without source geometry are refused (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_skin_weights, set_skeletal_mesh_skin_weights). LOD to target (default 0); not with allLods (read_skeletal_mesh_build_settings, set_skeletal_mesh_optimize_for_instancing). Source model (LOD) to write (default 0) (set_static_mesh_build_settings)"),
   lodType: z.string().optional().describe("MaxAvailable (default, ignores lodIndex) | HiResSourceModel | SourceModel | RenderData"),
   markAsCustomized: z.boolean().optional().describe("Mark the collision customized so a reimport keeps it (default true)"),
   matchSubclasses: z.boolean().optional().describe("Also match subclasses of classNames (default true)"),
@@ -6616,15 +6851,17 @@ export const schema: Record<string, z.ZodType> = {
   otherPath: z.string().optional().describe("Asset of the same class to compare against"),
   outer: z.string().optional().describe("asset (default) | package"),
   outputBasePath: z.string().optional().describe("Pieces are written as outputBasePath_00, _01 and on (default '<assetPath>_Piece')"),
-  outputPath: z.string().optional().describe("Asset to write (default '<assetPath>_Filled') (apply_mesh_hole_fill). Asset to write (default '<assetPath>_Mirrored') (apply_mesh_mirror). Asset to write (default '<assetPath>_Remeshed') (apply_mesh_remesh). Asset to write (default '<assetPath>_Simplified') (apply_mesh_simplify). Write every matched row to this JSON file and return the path instead of the rows (bulk_read_asset_properties). File to write; a relative path resolves against the project directory (export_asset). PNG file to write; a relative path resolves against the project directory (export_texture). PNG to write (default under Saved/UVLayouts) (export_uv_layout). File for dumpToFile; relative paths resolve under Saved/ (get_mesh_geometry). Asset to write (default '<targetPath>_<Operation>') (mesh_boolean). Write the rows to this JSON file instead of returning them; relative paths resolve under Saved/ (read_datatable)"),
+  outputPath: z.string().optional().describe("Asset to write (default '<assetPath>_Filled') (apply_mesh_hole_fill). Asset to write (default '<assetPath>_Mirrored') (apply_mesh_mirror). Asset to write (default '<assetPath>_Remeshed') (apply_mesh_remesh). Asset to write (default '<assetPath>_Simplified') (apply_mesh_simplify). Write every matched row to this JSON file and return the path instead of the rows (bulk_read_asset_properties). File to write; a relative path resolves against the project directory (export_asset). PNG file to write; a relative path resolves against the project directory (export_texture). PNG to write (default under Saved/UVLayouts) (export_uv_layout). File for dumpToFile; relative paths resolve under Saved/ (get_mesh_geometry). New .json destination for dumpToFile; relative paths stay under Saved/. Defaults to Saved/UE_MCP/MeshGeometry/<snapshotId>.json. Existing destinations are always refused. (get_static_mesh_geometry). Asset to write (default '<targetPath>_<Operation>') (mesh_boolean). Write the rows to this JSON file instead of returning them; relative paths resolve under Saved/ (read_datatable). Scale a copy written here and leave assetPath untouched (default: scale assetPath in place) (scale_mesh_geometry)"),
   overrides: z.record(z.string(), z.unknown()).optional().describe("Struct fields to patch; nested objects or dotted struct paths, preserving omitted fields"),
   pack: z.boolean().optional().describe("Repack the islands after unwrapping (default true)"),
   packagePath: z.string().optional().describe("Destination folder (default /Game) (create_asset_by_class, create_customizable_object, create_data_asset, create_render_target_2d, create_user_defined_enum, create_user_defined_struct). Destination folder (default /Game/CurveTables) (create_curvetable). Destination folder (default /Game/DataTables) (create_datatable). Folder for the font (default /Game/Fonts) (create_font). Folder for name (default /Game/Import) (create_interchange_pipeline). Destination folder (default /Game/StringTables) (create_stringtable). One package path, used when packages is omitted (get_asset_dependencies, get_asset_referencers). Destination folder (default /Game/Animations) (import_animation). Destination folder (import_file). Destination folder (default /Game/Fonts) (import_font). Destination folder (default /Game/Meshes) (import_skeletal_mesh, import_static_mesh). Destination folder (default /Game/Textures) (import_texture). Folder for entries that name none (default /Game/Textures) (import_texture_batch)"),
   packages: z.array(z.string()).optional().describe("Package paths to look up"),
-  path: z.string().optional().describe("Alias for assetPath (add_curvetable_key, add_curvetable_row, add_datatable_row, add_graph_node, append_asset_array_elements, apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, asset_health_check, check_uvs, clone_datatable_rows, compile_customizable_object, connect_graph_pins, create_subobject, delete_asset, diff_asset, disconnect_graph_pins, edit_collection_entry, edit_user_defined_enum, edit_user_defined_struct, export_asset, export_texture, export_uv_layout, fill_datatable_from_json, force_reload_asset, generate_lightmap_uvs, generate_mesh_collision, get_asset_properties, get_curvetable_keys, get_datatable_row, get_mesh_geometry, get_static_mesh_build_settings, get_stringtable_entry, get_texture_info, import_curvetable, import_stringtable, import_stringtable_csv, list_curvetable_rows, list_enum_values, list_skeleton_bones, list_stringtable_keys, list_struct_fields, measure_mesh_geometry, read_asset, read_asset_graph, read_asset_properties, read_curvetable, read_datatable, read_import_sources, read_stringtable, read_uv_channels, recenter_pivot, reimport_asset, reimport_datatable, reload_package, remove_curvetable_row, remove_datatable_row, remove_graph_node, remove_stringtable_entry, rename_curvetable_row, rename_datatable_row, rename_struct_field, save_asset, set_asset_property, set_curvetable_keys, set_datatable_cell, set_datatable_cells, set_datatable_row, set_mesh_material, set_sk_material_slots, set_static_mesh_build_settings, set_stringtable_entry, set_texture_settings, set_uv_channel_count, transform_uvs, unwrap_uvs, update_datatable_row). Content folder to create, e.g. /Game/Foo (create_folder). Content folder to delete (delete_folder). Content path to diagnose (diagnose_registry)"),
+  pageSize: z.number().int().min(1).max(512).optional().describe("Maximum elements per page (default 256, maximum 512)"),
+  path: z.string().optional().describe("Alias for assetPath (add_curvetable_key, add_curvetable_row, add_datatable_row, add_graph_node, append_asset_array_elements, apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, asset_health_check, check_uvs, clone_datatable_rows, compile_customizable_object, connect_graph_pins, create_subobject, delete_asset, diff_asset, disconnect_graph_pins, edit_collection_entry, edit_user_defined_enum, edit_user_defined_struct, export_asset, export_texture, export_uv_layout, fill_datatable_from_json, force_reload_asset, generate_lightmap_uvs, generate_mesh_collision, get_asset_properties, get_curvetable_keys, get_datatable_row, get_mesh_geometry, get_static_mesh_build_settings, get_static_mesh_geometry, get_stringtable_entry, get_texture_info, import_curvetable, import_stringtable, import_stringtable_csv, list_curvetable_rows, list_enum_values, list_skeleton_bones, list_stringtable_keys, list_struct_fields, measure_mesh_geometry, read_asset, read_asset_graph, read_asset_properties, read_curvetable, read_datatable, read_import_sources, read_stringtable, read_uv_channels, recenter_pivot, reimport_asset, reimport_datatable, reload_package, remove_asset_array_elements, remove_curvetable_row, remove_datatable_row, remove_graph_node, remove_stringtable_entry, rename_curvetable_row, rename_datatable_row, rename_struct_field, save_asset, scale_mesh_geometry, set_asset_property, set_curve_keys, set_curvetable_keys, set_datatable_cell, set_datatable_cells, set_datatable_row, set_mesh_material, set_sk_material_slots, set_static_mesh_build_settings, set_stringtable_entry, set_texture_settings, set_uv_channel_count, transform_uvs, unwrap_uvs, update_datatable_row). Content folder to create, e.g. /Game/Foo (create_folder). Content folder to delete (delete_folder). Content path to diagnose (diagnose_registry)"),
   paths: z.array(z.string()).optional().describe("Content folders to create; combined with path (create_folder). Alias for assetPaths (delete_asset_batch). Content folders to delete (delete_folder). Redirector packages, or the folders holding them (fixup_redirectors)"),
   pattern: z.string().optional().describe("slice (default) | grid | random"),
   pieces: z.number().int().optional().describe("Pieces along axis for slice, at least 2 (default 4)"),
+  pivot: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Mesh-space point that stays fixed (default the mesh origin)"),
   planeCount: z.number().int().optional().describe("Random planes to cut with (default 3)"),
   planeNormal: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("The mirror plane's normal when axis is custom; a zero vector is refused"),
   planeOrigin: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("A point on the mirror plane (default the mesh origin)"),
@@ -6637,7 +6874,7 @@ export const schema: Record<string, z.ZodType> = {
   profileName: z.string().optional().describe("Existing skin-weight profile; omit or pass 'default' for the default profile"),
   projectionTransform: z.record(z.string(), z.unknown()).optional().describe("Transform for the planar, box and cylinder projections"),
   properties: z.record(z.string(), z.unknown()).optional().describe("Property values keyed by property name (create_asset_by_class, create_data_asset). Property values, validated on a throwaway instance first (create_subobject). Config properties to set by reflection (set_cloth_config)"),
-  propertyName: z.string().optional().describe("Path of the TArray property (append_asset_array_elements). Path to a TArray of structs or TMap with struct values (edit_collection_entry). One property to read; dotted and indexed paths walk structs, arrays and instanced subobjects (get_asset_properties, read_asset_properties). Property path; dotted and indexed paths walk structs, arrays and instanced subobjects (set_asset_property)"),
+  propertyName: z.string().optional().describe("Path of the TArray property (append_asset_array_elements, remove_asset_array_elements). Path to a TArray of structs or TMap with struct values (edit_collection_entry). One property to read; dotted and indexed paths walk structs, arrays and instanced subobjects (get_asset_properties, read_asset_properties). Property path; dotted and indexed paths walk structs, arrays and instanced subobjects (set_asset_property)"),
   propertyNames: z.array(z.string()).optional().describe("Property paths to read off every matched asset; dotted paths walk nested structs (max 32)"),
   quarantineFolder: z.string().optional().describe("Where quarantined assets move, keeping their folder shape (default /Game/Quarantine)"),
   query: z.string().optional().describe("Words scored against each asset's name, class and path"),
@@ -6672,10 +6909,12 @@ export const schema: Record<string, z.ZodType> = {
   rows: z.record(z.string(), z.unknown()).optional().describe("Rows to upsert: {rowName: {field: value}}"),
   rowStruct: z.string().optional().describe("Row struct, e.g. /Script/Module.MyRow or a UserDefinedStruct path"),
   sampleLimit: z.number().int().optional().describe("Sample asset names per group (default 5, max 25)"),
-  save: z.boolean().optional().describe("Save the asset after the edit (default true) (add_graph_node, connect_graph_pins, disconnect_graph_pins, remove_graph_node). Save the package after the write (default true) (append_asset_array_elements, set_asset_property). Save the written asset (default true) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision, mesh_boolean). Save the changed packages (default true) (bulk_set_asset_properties, bulk_upsert_data_assets). Save the table after editing (default true) (clone_datatable_rows). Save the new asset (default true) (create_customizable_object). Save the owning package (default true) (create_subobject). Save the package after editing (default true) (edit_collection_entry). Save what changed (default true) (fix_asset_hygiene). Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference (fixup_redirectors). Save the mesh (default true) (generate_lightmap_uvs, set_uv_channel_count, transform_uvs, unwrap_uvs). Save each changed mesh (default true) (generate_skeletal_mesh_lods, set_mesh_materials_batch). Save each imported asset and report saved per asset (default true; false leaves them dirty) (import_file). Save all imported assets (default false) (import_skeletal_mesh). Save the table (default true) (import_stringtable_csv). Save changed assets (default true) (import_texture_batch). Save the reimported asset's package (default false: it is left dirty) (reimport_asset). Save after removing rows (default true) (remove_datatable_row). Save the package after the write (default false) (set_datatable_cells). Save the mesh after the rebuild (default true) (set_static_mesh_build_settings). Save changed textures (default false; otherwise leave the packages dirty) (set_texture_settings)"),
+  save: z.boolean().optional().describe("Save the asset after the edit (default true) (add_graph_node, connect_graph_pins, disconnect_graph_pins, remove_graph_node). Save the package after the write (default true) (append_asset_array_elements, remove_asset_array_elements, set_asset_property). Save the written asset (default true) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision, mesh_boolean). Save the changed packages (default true) (bulk_set_asset_properties, bulk_upsert_data_assets). Save the table after editing (default true) (clone_datatable_rows). Save the new asset (default true) (create_customizable_object). Save the owning package (default true) (create_subobject). Save the package after editing (default true) (edit_collection_entry). Save what changed (default true) (fix_asset_hygiene). Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference (fixup_redirectors). Save the mesh (default true) (generate_lightmap_uvs, set_uv_channel_count, transform_uvs, unwrap_uvs). Save each changed mesh (default true) (generate_skeletal_mesh_lods, set_mesh_materials_batch). Save each imported asset and report saved per asset (default true; false leaves them dirty) (import_file). Save all imported assets (default false) (import_skeletal_mesh). Save the table (default true) (import_stringtable_csv). Save changed assets (default true) (import_texture_batch). Save the reimported asset's package (default false: it is left dirty) (reimport_asset). Save after removing rows (default true) (remove_datatable_row). Save the mesh after the rebuild (default true) (scale_mesh_geometry, set_static_mesh_build_settings). Save the package (default true); false leaves it dirty (set_curve_keys). Save the package after the write (default false) (set_datatable_cells). Save changed textures (default false; otherwise leave the packages dirty) (set_texture_settings)"),
   saveContentPackages: z.boolean().optional().describe("Include content packages (default true)"),
   saveMapPackages: z.boolean().optional().describe("Include map packages (default true)"),
   scale: z.record(z.string(), z.unknown()).optional().describe("UV-space scale {u, v}; a zero component is refused"),
+  scaleCollision: z.boolean().optional().describe("Scale the simple collision with the geometry (default true)"),
+  scaleSockets: z.boolean().optional().describe("Move socket locations with the geometry (default true)"),
   sectionIndex: z.number().int().optional().describe("Render section to bind (bind_cloth_to_section). One render section (omit for every section) (get_mesh_geometry). One render section (omit to measure the whole LOD) (measure_mesh_geometry). Render section to unbind (unbind_cloth_from_section)"),
   seed: z.number().int().optional().describe("Seed for plane placement and jitter (default 0); the same seed gives the same pieces"),
   selection: z.record(z.string(), z.unknown()).optional().describe("What to transform: {mode: all|island|normal|polygonGroup, islandIndices?, normalDirection?, normalAngleTolerance?, polygonGroups?, materialSlotNames?}"),
@@ -6695,6 +6934,7 @@ export const schema: Record<string, z.ZodType> = {
   slots: z.array(z.record(z.string(), z.unknown())).optional().describe("Slot assignments: [{slotName? | slotIndex?, materialPath}]"),
   smoothingRate: z.number().optional().describe("0 to 1, how far vertices move toward their neighbours each pass (default 0.25)"),
   smoothingType: z.string().optional().describe("Uniform | UVPreserving | Mixed (default)"),
+  snapshotId: z.string().optional().describe("ID from the first response; required for continuation. Omit at offset 0 to capture current data. Cached pages never re-read the asset."),
   socketName: z.string().optional().describe("Socket name (add_socket). Socket to remove (remove_socket). Socket to move (set_socket_transform)"),
   soft: z.boolean().optional().describe("Include soft dependencies (default true)"),
   sourceChannel: z.number().optional().describe("Channel the generator reads (default: the current setting)"),
@@ -6733,6 +6973,7 @@ export const schema: Record<string, z.ZodType> = {
   type: z.string().optional().describe("Type for add_field (default bool) and set_field_type: a scalar, struct, enum or object type, or a container (struct:/Game/S.S[], TArray<int>, Set<Name>, Map<Name,int>). A field's typeSpec from list_struct_fields round-trips (edit_user_defined_struct). FPrimaryAssetType to list (omit for every type) (get_primary_asset_ids)"),
   typefaceNames: z.array(z.string()).optional().describe("Typeface entry names in fontFaces order, e.g. Regular, Bold, Italic (default: Default, then each face's asset name)"),
   typeFilter: z.string().optional().describe("Alias for classFilter"),
+  unique: z.boolean().optional().describe("Skip values already in the array or earlier in elements (default false)"),
   unreferencedAction: z.string().optional().describe("quarantine (default, undoable) | delete (permanent, no rollback)"),
   uvChannel: z.number().int().optional().describe("UV channel to return (default 0)"),
   value: z.unknown().optional().describe("Key value (a number) (add_curvetable_key). Value to write: scalar, object, array or asset path (set_asset_property). Value to write (set_datatable_cell). Source string to write, when sourceString is omitted (set_stringtable_entry)"),

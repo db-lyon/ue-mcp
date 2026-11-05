@@ -211,11 +211,35 @@ export const handlerSpecs: HandlerSpecs = {
       {
         "name": "outputPath",
         "type": "string",
-        "required": true,
-        "description": "Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png",
+        "required": false,
+        "description": "Absolute or project-relative PNG path to write; required when starting a capture",
         "aliases": [
           "filename"
         ]
+      },
+      {
+        "name": "captureId",
+        "type": "string",
+        "required": false,
+        "description": "Query the latest warm capture instead of starting one; outputPath must be omitted"
+      },
+      {
+        "name": "cancel",
+        "type": "boolean",
+        "required": false,
+        "description": "With captureId, cancel an active warm capture and release its transient resources (default false)"
+      },
+      {
+        "name": "warmupFrames",
+        "type": "number",
+        "required": false,
+        "description": "0 (default) keeps synchronous capture; 1-240 starts a tick-driven normal-streaming capture and returns captureId"
+      },
+      {
+        "name": "warmupTimeoutSeconds",
+        "type": "number",
+        "required": false,
+        "description": "Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)"
       },
       {
         "name": "location",
@@ -3788,7 +3812,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   build_lighting: "Params: quality?",
   cancel_editor_transaction: "Params: index?",
   cancel_mesh_studio_render: "Params: jobId",
-  capture_scene_png: "Params: outputPath (or filename), location?, rotation?, focusActorLabel?, focusActorPath?, focusDirection?, focusMargin?, world?, pieInstance?, width?, height?, fov?, fullyLoadTextures?",
+  capture_scene_png: "Params: outputPath? (or filename), captureId?, cancel?, warmupFrames?, warmupTimeoutSeconds?, location?, rotation?, focusActorLabel?, focusActorPath?, focusDirection?, focusMargin?, world?, pieInstance?, width?, height?, fov?, fullyLoadTextures?",
   capture_screenshot: "Params: filename (or outputPath), target?, pieInstance?, worldPath?",
   check_for_crashes: "Params: none",
   clear_dialog_policy: "Params: pattern?",
@@ -3934,6 +3958,8 @@ export const schema: Record<string, z.ZodType> = {
   cameraActorLabel: z.string().optional().describe("Camera actor to bind a CameraCut section to (add_sequence_section). Camera actor to render through instead of the camera cuts (render_sequence_frames)"),
   cameraActorPath: z.string().optional().describe("Full object path of the camera actor. Wins over cameraActorLabel (add_sequence_section). Full object path of that camera actor. Wins over cameraActorLabel (render_sequence_frames)"),
   cameraSpeed: z.number().optional().describe("Viewport camera speed, greater than 0"),
+  cancel: z.boolean().optional().describe("With captureId, cancel an active warm capture and release its transient resources (default false)"),
+  captureId: z.string().optional().describe("Query the latest warm capture instead of starting one; outputPath must be omitted"),
   captureLog: z.boolean().optional().describe("false drops everything the script logged except its errors (default true)"),
   captureMode: z.enum(["beauty","matte","both"]).optional().describe("beauty: opaque colour; matte: opaque coverage grayscale; both: colour with coverage alpha (default both)"),
   captures: z.array(z.object({ id: z.string().describe("Unique filename stem: letters, digits, underscore or hyphen"), meshPath: z.string().optional().describe("StaticMesh or SkeletalMesh asset path"), parts: z.array(z.object({ meshPath: z.string().describe("StaticMesh or SkeletalMesh asset path"), relativeTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Translation in centimetres, default zero"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Pitch, yaw and roll in degrees, default zero"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Scale, default one") }).optional().describe("Transform relative to the assembly origin") })).optional().describe("1-64 meshes forming one assembly"), aspect: z.object({ width: z.number().min(0.01).max(100).describe("Positive relative width"), height: z.number().min(0.01).max(100).describe("Positive relative height") }).optional().describe("Inventory aspect ratio; the longer output edge equals resolution") })).optional().describe("1-128 mesh captures, with unique filename-safe ids and exactly one of meshPath or parts"),
@@ -4064,7 +4090,7 @@ export const schema: Record<string, z.ZodType> = {
   orthoZoom: z.number().optional().describe("Orthographic zoom, within the engine's own limits"),
   outerPath: z.string().optional().describe("Only objects somewhere under this outer, such as one level or world"),
   outputDir: z.string().optional().describe("Absolute or project-relative directory for <id>.png and a job-specific JSON manifest (render_mesh_studio). Absolute or project-relative directory for the frames (default Saved/SequenceFrames/<sequence>) (render_sequence_frames)"),
-  outputPath: z.string().optional().describe("Absolute or project-relative PNG path to write, e.g. Saved/Screenshots/cap.png (capture_scene_png). Alias for filename (capture_screenshot)"),
+  outputPath: z.string().optional().describe("Absolute or project-relative PNG path to write; required when starting a capture (capture_scene_png). Alias for filename (capture_screenshot)"),
   packagePath: z.string().optional().describe("Destination folder (default /Game/Cinematics)"),
   packages: z.array(z.string()).optional().describe("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched"),
   parameterType: z.string().optional().describe("scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"),
@@ -4139,6 +4165,8 @@ export const schema: Record<string, z.ZodType> = {
   viewportType: z.string().optional().describe("Perspective | Top | Bottom | Left | Right | Front | Back | OrthoFreelook"),
   waitForAssetRegistry: z.boolean().optional().describe("start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)"),
   waitUntilIdle: z.boolean().optional().describe("Poll between game-thread ticks until shaders are idle; timeoutMs is the server routing budget (default 60000)"),
+  warmupFrames: z.number().optional().describe("0 (default) keeps synchronous capture; 1-240 starts a tick-driven normal-streaming capture and returns captureId"),
+  warmupTimeoutSeconds: z.number().optional().describe("Warm capture deadline checked between frames and before export, 1-120 seconds (default 60)"),
   width: z.number().optional().describe("Capture width in pixels (default 1280) (capture_scene_png). Viewport width to read x against, when picking from a screenshot of another resolution (hit_test_viewport_pixel). Frame width in pixels (default 1280) (render_sequence_frames)"),
   windowed: z.boolean().optional().describe("Run windowed rather than fullscreen (default true)"),
   windowId: z.number().int().optional().describe("Window to close, by the id list_windows reported (close_window). Describe only this window, by the id list_windows or list_dialogs reported (list_windows). Window to press a button on, by the id list_windows reported (press_window_button)"),

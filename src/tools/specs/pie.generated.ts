@@ -476,7 +476,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "recording_id",
         "type": "string",
         "required": false,
-        "description": "Recording id under the recordings root"
+        "description": "Recording id under the recordings root (default: the newest recording)"
       },
       {
         "name": "recording_dir",
@@ -968,6 +968,20 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Most frames_over_threshold entries returned (default 50)",
+        "minimum": 0
+      },
+      {
+        "name": "offset",
+        "type": "integer",
+        "required": false,
+        "description": "First frames_over_threshold entry returned",
+        "minimum": 0
       }
     ]
   },
@@ -1103,6 +1117,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "object",
         "required": false,
         "description": "{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"
+      },
+      {
+        "name": "start_when",
+        "type": "object",
+        "required": false,
+        "description": "Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms"
       }
     ],
     "contractExempt": "Arms the replayer, which drives the next PIE session"
@@ -1244,6 +1264,12 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "object",
         "required": false,
         "description": "{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"
+      },
+      {
+        "name": "start_when",
+        "type": "object",
+        "required": false,
+        "description": "Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms"
       }
     ],
     "contractExempt": "Arms the replayer and starts PIE"
@@ -1374,7 +1400,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "steps",
         "type": "array",
         "required": true,
-        "description": "Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+        "description": "Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
         "items": "object"
       },
       {
@@ -1550,7 +1576,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "steps",
         "type": "array",
         "required": false,
-        "description": "Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+        "description": "Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
         "items": "object"
       },
       {
@@ -1734,7 +1760,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "steps",
         "type": "array",
         "required": false,
-        "description": "Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+        "description": "Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
         "items": "object"
       },
       {
@@ -1777,7 +1803,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "steps",
         "type": "array",
         "required": true,
-        "description": "Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}}",
+        "description": "Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}}",
         "items": "object"
       },
       {
@@ -1972,6 +1998,13 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "First row",
         "minimum": 0
+      },
+      {
+        "name": "max_message_chars",
+        "type": "integer",
+        "required": false,
+        "description": "Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)",
+        "minimum": 0
       }
     ]
   },
@@ -2073,6 +2106,12 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Most errors logged during the run (default 0)",
         "minimum": 0
+      },
+      {
+        "name": "start_when",
+        "type": "object",
+        "required": false,
+        "description": "Replay gate test_run uses, as replay_run's start_when"
       }
     ],
     "contractExempt": "Writes test.json beside the recording"
@@ -2096,7 +2135,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "scenario",
         "type": "object",
         "required": false,
-        "description": "Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[], forbid[], window_ms}]}; see docs/pie.md"
+        "description": "Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[{log host|client:N, pattern (regex), min, max, since step|run}], forbid[], window_ms}]}. A rule reads only lines logged after its step began unless since is run; see docs/pie.md"
       },
       {
         "name": "path",
@@ -2214,10 +2253,10 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_record_status: "Params: none",
   pie_record_stop: "Params: none",
   pie_remote_result: "Params: request_id (or injection_id)",
-  pie_replay_analyze: "Params: recording_id?, recording_dir?",
-  pie_replay_arm: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?",
+  pie_replay_analyze: "Params: recording_id?, recording_dir?, limit?, offset?",
+  pie_replay_arm: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
   pie_replay_disarm: "Params: none",
-  pie_replay_run: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?",
+  pie_replay_run: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
   pie_replay_state: "Params: recording_id?, recording_dir?, at_time?, at_frame?, apply?",
   pie_replay_status: "Params: none",
   pie_replay_stop: "Params: none",
@@ -2238,10 +2277,10 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_script_values: "Params: target?, profile?, limit?",
   pie_script_verdict: "Params: step, verdict, note?, run_id?, source?, evidence?",
   pie_session_errors: "Params: session?, session_dir?, min_verbosity?",
-  pie_session_log: "Params: session?, session_dir?, min_verbosity?, category?, contains?, limit?, offset?",
+  pie_session_log: "Params: session?, session_dir?, min_verbosity?, category?, contains?, limit?, offset?, max_message_chars?",
   pie_test_list: "Params: recording_id?, recording_dir?",
   pie_test_run: "Params: test_path?, recording_id?, recording_dir?, name?, auto_run?",
-  pie_test_scaffold: "Params: recording_id?, recording_dir?, name?, max_position_drift_cm?, max_velocity_drift_cms?, max_rotation_drift_deg?, max_errors?",
+  pie_test_scaffold: "Params: recording_id?, recording_dir?, name?, max_position_drift_cm?, max_velocity_drift_cms?, max_rotation_drift_deg?, max_errors?, start_when?",
   pie_uat_abort: "Params: reason?",
   pie_uat_run: "Params: scenario OR path",
   pie_uat_status: "Params: none",
@@ -2294,10 +2333,11 @@ export const schema: Record<string, z.ZodType> = {
   include_values: z.boolean().optional().describe("series: include the downsampled values (default false)"),
   injection_id: z.string().optional().describe("Caller-chosen hold id (minted when absent) (pie_inject_input_start). Hold or tape id to stop (pie_inject_input_stop). Caller-chosen tape id (minted when absent) (pie_inject_input_tape). Hold id from inject_input_start (pie_inject_input_update). Alias for request_id (pie_remote_result)"),
   label: z.string().optional().describe("Marker label"),
-  limit: z.number().int().min(1).optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most runs, newest first (default 50) (pie_script_runs). Most entries per list (default 400) (pie_script_values)"),
+  limit: z.number().int().optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most frames_over_threshold entries returned (default 50) (pie_replay_analyze). Most runs, newest first (default 50) (pie_script_runs). Most entries per list (default 400) (pie_script_values)"),
   manual_only: z.boolean().optional().describe("Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"),
   map: z.string().optional().describe("Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open (pie_script_create). Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is (pie_script_run). Level the script plays in; empty clears it (pie_script_update). Level the script would play in (pie_script_validate)"),
   max_errors: z.number().int().min(0).optional().describe("no-errors predicate threshold (default 0) (pie_scenario_scaffold). Most errors logged during the run (default 0) (pie_test_scaffold)"),
+  max_message_chars: z.number().int().min(0).optional().describe("Longest message returned; longer ones are cut and marked truncated (default 500, 0 for no limit)"),
   max_points: z.number().int().min(1).optional().describe("series: most values per channel (default 500)"),
   max_position_drift_cm: z.number().optional().describe("Most position drift allowed (default 10)"),
   max_rotation_drift_deg: z.number().optional().describe("Most rotation drift allowed (default 5)"),
@@ -2306,7 +2346,7 @@ export const schema: Record<string, z.ZodType> = {
   mode: z.string().optional().describe("replay drives input; monitor only samples (default replay) (pie_replay_arm, pie_replay_run). full (default) plays the script in PIE; manual starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once (pie_script_run)"),
   name: z.string().optional().describe("Asset name (pie_profile_create, pie_script_create). Scenario name (default scenario) (pie_scenario_scaffold). Name for an inline run (default inline) (pie_script_run). Test name (default repro) (pie_test_run, pie_test_scaffold)"),
   note: z.string().optional().describe("Tester's note"),
-  offset: z.number().int().min(0).optional().describe("csv/tracked: first row (pie_observe_read). Rows to skip (pie_record_list). csv: first row (pie_record_read). First row (pie_session_log)"),
+  offset: z.number().int().min(0).optional().describe("csv/tracked: first row (pie_observe_read). Rows to skip (pie_record_list). csv: first row (pie_record_read). First frames_over_threshold entry returned (pie_replay_analyze). First row (pie_session_log)"),
   onConflict: z.string().optional().describe("What to do when the asset exists (default skip) (pie_profile_create). When the asset exists: skip (default), update or replace (overwrite it), error (pie_script_create)"),
   output_dir: z.string().optional().describe("Observation root (default Saved/MCPObservations)"),
   package_path: z.string().optional().describe("Content folder (default /Game/Observation) (pie_profile_create). Package folder (default /Game/PIEStudio/Scripts) (pie_script_create)"),
@@ -2323,7 +2363,7 @@ export const schema: Record<string, z.ZodType> = {
   record: z.boolean().optional().describe("Record input so pie_script_replay can rerun it (default true)"),
   record_drift: z.boolean().optional().describe("Record drift against the source (default true)"),
   recording_dir: z.string().optional().describe("Recording or replay folder (resolves recording.csv) (pie_assert_eval). Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings) (pie_perf_summary, pie_replay_analyze, pie_replay_arm, pie_replay_run, pie_replay_state, pie_scenario_scaffold, pie_test_list, pie_test_run, pie_test_scaffold). Recordings root (default Saved/MCPRecordings) (pie_record_arm, pie_record_delete, pie_record_diff, pie_record_list, pie_record_read)"),
-  recording_id: z.string().optional().describe("Recording id under the recordings root"),
+  recording_id: z.string().optional().describe("Recording id under the recordings root (pie_assert_eval, pie_replay_analyze, pie_replay_arm, pie_replay_run, pie_replay_state, pie_scenario_scaffold, pie_test_list, pie_test_run, pie_test_scaffold). Recording id under the recordings root (default: the newest recording) (pie_perf_summary)"),
   request_id: z.string().optional().describe("injection_id or request_id a relayed call returned"),
   results_path: z.string().optional().describe("results.json of the run to replay, instead of a run id (pie_script_replay). results.json path, instead of a run id (pie_script_results)"),
   rng_seed: z.number().optional().describe("Seed the stream RNG for reproducible runs (pie_record_arm). Inline steps: RNG seed (pie_replay_arm, pie_replay_run)"),
@@ -2332,7 +2372,7 @@ export const schema: Record<string, z.ZodType> = {
   run_gap_frames: z.number().int().optional().describe("Idle frames that split input runs (default 6)"),
   run_id: z.string().optional().describe("Observation run id (resolves observation.csv under output_dir) (pie_assert_eval). Observation run id (pie_observe_read). Finished run to replay (default the last run) (pie_script_replay). Script run id (default the current or last run) (pie_script_results, pie_script_status). Run to stop; must be the active run when given (pie_script_stop). Run the step belongs to (default the current or last run) (pie_script_verdict)"),
   sample_hz: z.number().int().min(1).optional().describe("Sample rate (default 60) (pie_observe_arm, pie_record_arm). Inline steps: sample rate (default 60) (pie_replay_arm, pie_replay_run)"),
-  scenario: z.record(z.string(), z.unknown()).optional().describe("Inline scenario object (pie_scenario_validate). Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[], forbid[], window_ms}]}; see docs/pie.md (pie_uat_run)"),
+  scenario: z.record(z.string(), z.unknown()).optional().describe("Inline scenario object (pie_scenario_validate). Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[{log host|client:N, pattern (regex), min, max, since step|run}], forbid[], window_ms}]}. A rule reads only lines logged after its step began unless since is run; see docs/pie.md (pie_uat_run)"),
   scenario_path: z.string().optional().describe("Path to a scenario.json"),
   script: z.string().optional().describe("Test script asset path (pie_script_run). Test script asset path: only that script's runs (pie_script_runs)"),
   sequence_path: z.string().optional().describe("Explicit sequence.json path"),
@@ -2342,8 +2382,9 @@ export const schema: Record<string, z.ZodType> = {
   since_seq: z.number().int().min(0).optional().describe("Only events with a larger seq (default 0, every event)"),
   source: z.enum(["human","agent","elicitation","action"]).optional().describe("Who judged the step: human (default) or agent. An agent verdict needs evidence and is refused on a step with agent_judgeable false. elicitation is the verdict form's human channel, action an alias of human"),
   start_pie: z.boolean().optional().describe("Start PIE when it is not running (default false)"),
+  start_when: z.record(z.string(), z.unknown()).optional().describe("Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms (pie_replay_arm, pie_replay_run). Replay gate test_run uses, as replay_run's start_when (pie_test_scaffold)"),
   step: z.number().int().min(0).optional().describe("Manual step index, 0-based"),
-  steps: z.array(z.record(z.string(), z.unknown())).optional().describe("Inline step array, instead of a recording (pie_replay_arm, pie_replay_run). Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}} (pie_script_create). Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}} (pie_script_run). Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}} (pie_script_update). Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true), within_ms}} (pie_script_validate)"),
+  steps: z.array(z.record(z.string(), z.unknown())).optional().describe("Inline step array, instead of a recording (pie_replay_arm, pie_replay_run). Steps, run in order: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}} (pie_script_create). Inline steps instead of a script asset: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}} (pie_script_run). Replacement steps: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}} (pie_script_update). Steps to check, as script_create takes them: {instruction, judge: auto|manual (default auto), agent_judgeable (manual steps: false means only a person gives the verdict, default true), resolve_in_pie (true: expect.value and the actors arrange and act name only resolve once PIE runs, so script_create and script_update do not check them), arrange: [{kind: spawn, class, at?, rotation?, scale?} | {kind: set, target, path, value} | {kind: call, target, func, args?}] (run when the step starts), act: [{client?, place: {at, offset?, face?} | {location, yaw?}} | {client?, press: {action, frames?}} | {client?, inject: {action, value}} | {client?, hold: {action, value, ms}} | {client?, tape: {action, values, hz?}} | {client?, console} | {client?, capture} | {wait_ms}] (run after arrange, as uat_run runs a step's do; within_ms counts from its end), expect: {value (tracked value path or last segment, actor id for exists, widget for visible), op: decreasing|increasing|eq|gt|lt|visible|exists, target (number for eq/gt/lt, boolean for visible/exists, default true, optional least change for decreasing/increasing), within_ms}} (pie_script_validate)"),
   sweepRadius: z.number().optional().describe("Also sweep a sphere of this radius in cm when positive"),
   take_record: z.boolean().optional().describe("Also drive Take Recorder (default false)"),
   target: z.string().optional().describe("Actor class or Blueprint to report on: its actors in the level, and whether it is the player pawn"),
