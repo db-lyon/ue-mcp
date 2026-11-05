@@ -178,6 +178,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "add_component parentSocket is stored on the SCS node, read back and carried by the remove rollback"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "add_component, reparent_component and remove_component change the hierarchy read_blueprint reports"
         },
         {
@@ -14803,6 +14808,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "add_component parentSocket is stored on the SCS node, read back and carried by the remove rollback"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
           "test": "add_component, reparent_component and remove_component change the hierarchy read_blueprint reports"
         },
         {
@@ -16553,6 +16563,11 @@
       "registeredIn": "BlueprintHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "add_component parentSocket is stored on the SCS node, read back and carried by the remove rollback"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",

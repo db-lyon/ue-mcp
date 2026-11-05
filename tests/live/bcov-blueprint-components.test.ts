@@ -79,6 +79,22 @@ describe("SCS components", () => {
     expect(comps.map((c) => c.name)).toContain("BCovMesh");
   }, 180_000);
 
+  it("add_component parentSocket is stored on the SCS node, read back and carried by the remove rollback", async () => {
+    await call("add_component", { assetPath: BP, componentClass: "SkeletalMeshComponent", componentName: "BCovSkel" });
+    const added = await call("add_component", {
+      assetPath: BP, componentClass: "StaticMeshComponent", componentName: "BCovProp", parentComponent: "BCovSkel", parentSocket: "hand_r",
+    });
+    expect(added.parentSocket).toBe("hand_r");
+    const prop = (await components(BP)).find((c) => c.name === "BCovProp");
+    expect(prop?.parent).toBe("BCovSkel");
+    expect(prop?.parentSocket).toBe("hand_r");
+
+    const removed = await call("remove_component", { assetPath: BP, componentName: "BCovProp" });
+    const rollback = removed.rollback as Json | undefined;
+    expect((rollback?.payload as Json | undefined)?.parentSocket).toBe("hand_r");
+    await call("remove_component", { assetPath: BP, componentName: "BCovSkel" });
+  }, 180_000);
+
   it("set_blueprint_component_property writes a mesh that the component readers return", async () => {
     await call("set_blueprint_component_property", { assetPath: BP, componentName: "BCovMesh", propertyName: "StaticMesh", value: CUBE });
     const single = await componentValue(BP, "BCovMesh", "StaticMesh");

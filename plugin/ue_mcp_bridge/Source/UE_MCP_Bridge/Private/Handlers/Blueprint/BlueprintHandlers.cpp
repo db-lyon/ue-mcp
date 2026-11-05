@@ -153,6 +153,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Name of the new component (default: componentClass)")),
 		SpecOnConflict,
 		MCPParam::Optional(TEXT("parentComponent"), EType::String, TEXT("SCS parent component for the hierarchy")),
+		MCPParam::Optional(TEXT("parentSocket"), EType::String, TEXT("Bone or socket on parentComponent to attach to (the details panel's Parent Socket)")),
 		MCPParam::Optional(TEXT("childActorClass"), EType::String, TEXT("ChildActorClass for an added ChildActorComponent: a Blueprint path with or without _C, or a C++ class")),
 	});
 	Registry.RegisterHandler(TEXT("add_blueprint_interface"), &AddBlueprintInterface, {
@@ -1922,6 +1923,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprint(const TSharedPtr<FJsonO
 				CompObj->SetStringField(TEXT("parent"), (*ParentPtr)->GetVariableName().ToString());
 			}
 
+			// The bone or socket on the parent this component attaches to.
+			if (!Node->AttachToName.IsNone())
+			{
+				CompObj->SetStringField(TEXT("parentSocket"), Node->AttachToName.ToString());
+			}
+
 			// Transform for SceneComponents
 			if (USceneComponent* SceneComp = Cast<USceneComponent>(Template))
 			{
@@ -2172,6 +2179,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	// same call. Both are read before the load can fail (#1057).
 	const FString ParentComponent = OptionalString(Params, TEXT("parentComponent"));
 	const FString ChildActorClassPath = OptionalString(Params, TEXT("childActorClass"));
+	const FString ParentSocket = OptionalString(Params, TEXT("parentSocket"));
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -2219,6 +2227,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 
 	// Try using SubobjectDataSubsystem (UE5 method)
 	bool bSuccess = false;
+	FString AppliedParentSocket;
 	if (USubobjectDataSubsystem* Subsystem = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
 	{
 		// Get blueprint handles using K2 function
@@ -2260,6 +2269,23 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 				if (ComponentName != ComponentClass)
 				{
 					Subsystem->RenameSubobject(NewHandle, FText::FromString(ComponentName));
+				}
+
+				// The SCS node's AttachToName is what the details panel's Parent
+				// Socket writes, so a weapon or prop mesh can sit on a bone of the
+				// parent skeletal mesh from the moment it is added. The node is
+				// looked up by the variable name the new handle ended up with.
+				if (!ParentSocket.IsEmpty())
+				{
+					const FSubobjectData* NewData = NewHandle.GetData();
+					const FString NewVariableName = NewData ? NewData->GetVariableName().ToString() : ComponentName;
+					USCS_Node* Node = MCPFindSCSNode(Blueprint->SimpleConstructionScript, NewVariableName);
+					if (Node)
+					{
+						Node->Modify();
+						Node->AttachToName = FName(*ParentSocket);
+						AppliedParentSocket = ParentSocket;
+					}
 				}
 
 				// #526: when adding a ChildActorComponent, let callers set its
@@ -2310,6 +2336,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentClass"), ComponentClass);
 		Result->SetStringField(TEXT("componentName"), ComponentName);
+		if (!AppliedParentSocket.IsEmpty())
+		{
+			Result->SetStringField(TEXT("parentSocket"), AppliedParentSocket);
+		}
+		else if (!ParentSocket.IsEmpty())
+		{
+			Result->SetStringField(TEXT("warning"), FString::Printf(TEXT("parentSocket '%s' was not written: the new component's SCS node was not found"), *ParentSocket));
+		}
 
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("path"), AssetPath);
@@ -3229,6 +3263,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 	// re-add cannot bring back.
 	const FString RemovedClassPath = TargetNode->ComponentTemplate->GetClass()->GetPathName();
 	const FString RemovedVariableName = TargetNode->GetVariableName().ToString();
+	const FString RemovedParentSocket = TargetNode->AttachToName.IsNone() ? FString() : TargetNode->AttachToName.ToString();
 	const int32 RemovedChildCount = TargetNode->GetChildNodes().Num();
 	FString RemovedParentName;
 	bool bParentAddressable = false;
@@ -3346,6 +3381,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		if (bParentAddressable)
 		{
 			Payload->SetStringField(TEXT("parentComponent"), RemovedParentName);
+			if (!RemovedParentSocket.IsEmpty())
+			{
+				Payload->SetStringField(TEXT("parentSocket"), RemovedParentSocket);
+			}
 		}
 		MCPSetRollback(Result, TEXT("add_component"), Payload);
 		Result->SetStringField(TEXT("previousParent"), RemovedParentName);
