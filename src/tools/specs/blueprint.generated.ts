@@ -304,6 +304,12 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color",
         "items": "object"
+      },
+      {
+        "name": "curveAssetPath",
+        "type": "string",
+        "required": false,
+        "description": "Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color"
       }
     ]
   },
@@ -3159,7 +3165,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   add_function_parameter: "Params: assetPath (or path), functionName, parameterName, parameterType?, isOutput?",
   add_local_variable: "Params: assetPath (or path), functionName, name, varType? (or type)",
   add_node: "Params: assetPath (or path), graphName?, nodeClass, nodeParams?, deferCompile?",
-  add_timeline_track: "Params: assetPath (or path), timelineName, trackName, trackType?, keyframes?",
+  add_timeline_track: "Params: assetPath (or path), timelineName, trackName, trackType?, keyframes?, curveAssetPath?",
   add_variable: "Params: assetPath (or path), name, varType? (or type), onConflict?, category?, tooltip?, instanceEditable?",
   audit_blueprint_dead_code: "Params: directory?, assetPaths?, recursive?, includeLevelScripts?, scanReferencers?, maxBlueprints?, maxSamples?, limit?, dumpToFile?, outputPath?",
   auto_layout_graph: "Params: assetPath (or path), graphName?, columnGap?, rowGap?, previousPositionsLimit?, capturePreviousPositions?",
@@ -3275,6 +3281,7 @@ export const schema: Record<string, z.ZodType> = {
   componentName: z.string().optional().describe("Name of the new component (default: componentClass) (add_component). SCS or inherited component name (get_blueprint_component_property, read_component_properties, remove_component, reparent_component, set_blueprint_component_property, set_capsule_size, set_component_override_materials). Component whose effective collision to read (get_component_collision)"),
   connections: z.array(z.record(z.string(), z.unknown())).optional().describe("[{sourceNode, sourcePin, targetNode, targetPin}]"),
   cursor: z.string().optional().describe("Resume a paged read: pass back the nextCursor from the previous page, unmodified"),
+  curveAssetPath: z.string().optional().describe("Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color"),
   defaultValue: z.unknown().optional().describe("Default value as Unreal export text; an empty string clears it (edit_graph_parameters, edit_local_variable, set_struct_field_default). Alias for value (set_node_property)"),
   deferCompile: z.boolean().optional().describe("Skip this write's compile (default false) so a sequence of node writes compiles once, with blueprint(compile), at the end"),
   deprecated: z.boolean().optional().describe("Mark the function deprecated so its call sites warn"),

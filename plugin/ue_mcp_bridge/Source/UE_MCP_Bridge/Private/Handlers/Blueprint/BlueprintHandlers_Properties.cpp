@@ -1777,6 +1777,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentOverrideMaterials(const T
 //   trackType ("float" | "vector" | "color" | "event"),
 //   keyframes ([{time, value}]) - value: number for float/event,
 //     {x,y,z} for vector, {r,g,b,a} for color.
+//   curveAssetPath - bind an existing curve asset instead of keyframes.
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -1791,9 +1792,44 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	// fail (#1057).
 	const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
 	TryGetArrayParam(Params, TEXT("keyframes"), Keys);
+	const FString CurveAssetPath = OptionalString(Params, TEXT("curveAssetPath"));
+
+	UClass* ExpectedCurveClass = nullptr;
+	if (TrackType == TEXT("float") || TrackType == TEXT("event")) ExpectedCurveClass = UCurveFloat::StaticClass();
+	else if (TrackType == TEXT("vector")) ExpectedCurveClass = UCurveVector::StaticClass();
+	else if (TrackType == TEXT("color")) ExpectedCurveClass = UCurveLinearColor::StaticClass();
+	else
+	{
+		return MCPError(FString::Printf(TEXT("Unknown trackType '%s'. Use 'float' | 'vector' | 'color' | 'event'."), *TrackType));
+	}
+
+	// An external curve asset is referenced, not copied, so keys for it would
+	// have nowhere to go: they are refused rather than written into the asset.
+	UCurveBase* ExternalCurve = nullptr;
+	if (!CurveAssetPath.IsEmpty())
+	{
+		if (Keys && Keys->Num() > 0)
+		{
+			return MCPError(TEXT("Pass keyframes or curveAssetPath, not both. curveAssetPath binds the track to an existing curve asset, whose keys are its own."));
+		}
+		ExternalCurve = LoadObject<UCurveBase>(nullptr, *CurveAssetPath);
+		if (!ExternalCurve)
+		{
+			return MCPError(FString::Printf(TEXT("Curve asset not found: '%s'."), *CurveAssetPath));
+		}
+		if (!ExternalCurve->IsA(ExpectedCurveClass))
+		{
+			return MCPError(FString::Printf(TEXT("Curve asset '%s' is a %s; a %s track needs a %s."),
+				*CurveAssetPath, *ExternalCurve->GetClass()->GetName(), *TrackType, *ExpectedCurveClass->GetName()));
+		}
+	}
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+	if (!Blueprint->GeneratedClass)
+	{
+		return MCPError(FString::Printf(TEXT("'%s' has no generated class to hold timeline curves. Compile it first."), *AssetPath));
+	}
 
 	// Find or create the UTimelineTemplate that backs the K2Node_Timeline.
 	const FName TimelineFName(*TimelineName);
@@ -1859,10 +1895,56 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		if (Time > Timeline->TimelineLength) Timeline->TimelineLength = Time;
 	};
 
+	// Curves are made the way the timeline editor makes them: outered to the
+	// generated class and RF_Public. A placed instance's TimelineComponent
+	// references them from the level package, and a private curve outered to
+	// the template makes that level fail to save (#1650).
+	UClass* CurveOuter = Blueprint->GeneratedClass;
+	auto NewTrackCurve = [CurveOuter](UClass* CurveClass) -> UCurveBase*
+	{
+		return NewObject<UCurveBase>(CurveOuter, CurveClass, NAME_None, RF_Public | RF_Transactional);
+	};
+
+	// Curves an earlier bridge made private under their template move to the
+	// same place, on every timeline of this Blueprint, so a level that already
+	// refuses to save is fixed by the next add_timeline_track.
+	int32 RepairedCurves = 0;
+	auto RepairCurve = [&RepairedCurves, CurveOuter](UCurveBase* Curve, bool bExternal)
+	{
+		if (!Curve || bExternal || Curve->GetOuter()->IsA<UPackage>()) return;
+		if (Curve->GetOuter() == CurveOuter && Curve->HasAnyFlags(RF_Public)) return;
+		Curve->Modify();
+		if (Curve->GetOuter() != CurveOuter)
+		{
+			const FName NewName = MakeUniqueObjectName(CurveOuter, Curve->GetClass(), Curve->GetFName());
+			Curve->Rename(*NewName.ToString(), CurveOuter, REN_DontCreateRedirectors);
+		}
+		Curve->SetFlags(RF_Public);
+		++RepairedCurves;
+	};
+	for (UTimelineTemplate* T : Blueprint->Timelines)
+	{
+		if (!T) continue;
+		for (const FTTFloatTrack& Tr : T->FloatTracks) RepairCurve(Tr.CurveFloat, Tr.bIsExternalCurve);
+		for (const FTTVectorTrack& Tr : T->VectorTracks) RepairCurve(Tr.CurveVector, Tr.bIsExternalCurve);
+		for (const FTTLinearColorTrack& Tr : T->LinearColorTracks) RepairCurve(Tr.CurveLinearColor, Tr.bIsExternalCurve);
+		for (const FTTEventTrack& Tr : T->EventTracks) RepairCurve(Tr.CurveKeys, Tr.bIsExternalCurve);
+	}
+
+	// An external curve's own keys decide how long the timeline must run.
+	if (ExternalCurve)
+	{
+		float MinTime = 0.f, MaxTime = 0.f;
+		ExternalCurve->GetTimeRange(MinTime, MaxTime);
+		BumpLength(MaxTime);
+	}
+	const bool bExternal = ExternalCurve != nullptr;
+	FTTTrackId NewTrackId;
+	UCurveBase* TrackCurve = nullptr;
+
 	if (TrackType == TEXT("float"))
 	{
-		// Build a CurveFloat asset bound to the timeline.
-		UCurveFloat* Curve = NewObject<UCurveFloat>(Timeline, NAME_None, RF_Transactional);
+		UCurveFloat* Curve = CastChecked<UCurveFloat>(bExternal ? ExternalCurve : NewTrackCurve(UCurveFloat::StaticClass()));
 		if (Keys)
 		{
 			for (const TSharedPtr<FJsonValue>& KV : *Keys)
@@ -1879,11 +1961,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		FTTFloatTrack Track;
 		Track.SetTrackName(TrackFName, Timeline);
 		Track.CurveFloat = Curve;
-		Timeline->FloatTracks.Add(Track);
+		TrackCurve = Curve;
+		Track.bIsExternalCurve = bExternal;
+		NewTrackId = FTTTrackId(FTTTrackBase::TT_FloatInterp, Timeline->FloatTracks.Add(Track));
 	}
 	else if (TrackType == TEXT("vector"))
 	{
-		UCurveVector* Curve = NewObject<UCurveVector>(Timeline, NAME_None, RF_Transactional);
+		UCurveVector* Curve = CastChecked<UCurveVector>(bExternal ? ExternalCurve : NewTrackCurve(UCurveVector::StaticClass()));
 		if (Keys)
 		{
 			for (const TSharedPtr<FJsonValue>& KV : *Keys)
@@ -1909,11 +1993,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		FTTVectorTrack Track;
 		Track.SetTrackName(TrackFName, Timeline);
 		Track.CurveVector = Curve;
-		Timeline->VectorTracks.Add(Track);
+		TrackCurve = Curve;
+		Track.bIsExternalCurve = bExternal;
+		NewTrackId = FTTTrackId(FTTTrackBase::TT_VectorInterp, Timeline->VectorTracks.Add(Track));
 	}
 	else if (TrackType == TEXT("color"))
 	{
-		UCurveLinearColor* Curve = NewObject<UCurveLinearColor>(Timeline, NAME_None, RF_Transactional);
+		UCurveLinearColor* Curve = CastChecked<UCurveLinearColor>(bExternal ? ExternalCurve : NewTrackCurve(UCurveLinearColor::StaticClass()));
 		if (Keys)
 		{
 			for (const TSharedPtr<FJsonValue>& KV : *Keys)
@@ -1941,13 +2027,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 		FTTLinearColorTrack Track;
 		Track.SetTrackName(TrackFName, Timeline);
 		Track.CurveLinearColor = Curve;
-		Timeline->LinearColorTracks.Add(Track);
+		TrackCurve = Curve;
+		Track.bIsExternalCurve = bExternal;
+		NewTrackId = FTTTrackId(FTTTrackBase::TT_LinearColorInterp, Timeline->LinearColorTracks.Add(Track));
 	}
-	else if (TrackType == TEXT("event"))
+	else
 	{
-		FTTEventTrack EventTrack;
-		EventTrack.SetTrackName(TrackFName, Timeline);
-		UCurveFloat* Curve = NewObject<UCurveFloat>(Timeline, NAME_None, RF_Transactional);
+		UCurveFloat* Curve = CastChecked<UCurveFloat>(bExternal ? ExternalCurve : NewTrackCurve(UCurveFloat::StaticClass()));
+		if (!bExternal) Curve->bIsEventCurve = true;
 		if (Keys)
 		{
 			for (const TSharedPtr<FJsonValue>& KV : *Keys)
@@ -1960,13 +2047,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 				BumpLength((float)T);
 			}
 		}
+		FTTEventTrack EventTrack;
+		EventTrack.SetTrackName(TrackFName, Timeline);
 		EventTrack.CurveKeys = Curve;
-		Timeline->EventTracks.Add(EventTrack);
+		TrackCurve = Curve;
+		EventTrack.bIsExternalCurve = bExternal;
+		NewTrackId = FTTTrackId(FTTTrackBase::TT_Event, Timeline->EventTracks.Add(EventTrack));
 	}
-	else
-	{
-		return MCPError(FString::Printf(TEXT("Unknown trackType '%s'. Use 'float' | 'vector' | 'color' | 'event'."), *TrackType));
-	}
+	// The timeline editor lists tracks from the display order, not the arrays.
+	Timeline->AddDisplayTrack(NewTrackId);
 
 	// Recompile so K2Node_Timeline regenerates its output pins for the new track.
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
@@ -1985,6 +2074,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	Result->SetNumberField(TEXT("timelineLength"), Timeline->TimelineLength);
 
 	Result->SetBoolField(TEXT("createdTimeline"), bCreatedTimeline);
+	Result->SetBoolField(TEXT("externalCurve"), bExternal);
+	Result->SetStringField(TEXT("curvePath"), TrackCurve->GetPathName());
+	Result->SetBoolField(TEXT("curvePublic"), TrackCurve->HasAnyFlags(RF_Public));
+	Result->SetNumberField(TEXT("repairedCurves"), RepairedCurves);
 
 	// A timeline this call created is undone whole by remove_timeline. No action
 	// removes a single track, so a track added to an existing timeline has none.

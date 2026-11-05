@@ -3142,6 +3142,12 @@
           "required": false,
           "description": "[{time, value}]: value is a number for float and event, {x,y,z} for vector, {r,g,b,a} for color",
           "items": "object"
+        },
+        {
+          "name": "curveAssetPath",
+          "type": "string",
+          "required": false,
+          "description": "Existing curve asset to bind instead of keyframes: CurveFloat for float and event, CurveVector for vector, CurveLinearColor for color"
         }
       ]
     },
