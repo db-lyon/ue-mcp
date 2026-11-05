@@ -41,6 +41,11 @@ private:
 	static TSharedPtr<FJsonValue> ListExpressionTypes(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadMaterial(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> InsertExpressionBetween(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RestoreExpressionInsertion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadMaterialSummary(const TSharedPtr<FJsonObject>& Params);
+	static FExpressionInput* ResolveSurgeryInput(UMaterial* Material, const FString& ExpressionName,
+		const FString& PropertyName, const FString& InputName, FString& Error);
 	static TSharedPtr<FJsonValue> SetMaterialShadingModel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialBlendMode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialDomain(const TSharedPtr<FJsonObject>& Params);

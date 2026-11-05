@@ -65,6 +65,32 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// before anything failed, duplicate_material (it makes the destination
 	// folder first) and the transaction pair.
 	using EType = EMCPParamType;
+	Registry.RegisterHandler(TEXT("insert_expression_between"), &InsertExpressionBetween, {
+		MCPParam::Required(TEXT("materialPath"), EType::String, TEXT("Material asset path")),
+		MCPParam::Optional(TEXT("targetExpression"), EType::String, TEXT("Target expression name; pass this or property")),
+		MCPParam::Optional(TEXT("property"), EType::String, TEXT("Target material property, including MaterialAttributes")),
+		MCPParam::Optional(TEXT("targetInput"), EType::String, TEXT("Target input name or index; default first input")),
+		MCPParam::Required(TEXT("expressionType"), EType::String, TEXT("New material expression class or short name")),
+		MCPParam::Optional(TEXT("inputForUpstream"), EType::String, TEXT("New node input for the previous source; default first input")),
+		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Editable reflected properties on the new expression")),
+	}, MCPSpec::ExactlyOne({ { TEXT("targetExpression") }, { TEXT("property") } }));
+	Registry.RegisterHandler(TEXT("restore_expression_insertion"), &RestoreExpressionInsertion, {
+		MCPParam::Required(TEXT("materialPath"), EType::String, TEXT("Material asset path")),
+		MCPParam::Required(TEXT("expressionName"), EType::String, TEXT("Inserted node name from the rollback record")),
+		MCPParam::Required(TEXT("insertion"), EType::Object, TEXT("Original insertion parameters from the rollback record")),
+		MCPParam::Required(TEXT("previousSource"), EType::Object, TEXT("Original source and channel masks from the rollback record")),
+	});
+	Registry.RegisterHandler(TEXT("read_material_summary"), &ReadMaterialSummary, {
+		MCPParam::Required(TEXT("materialPath"), EType::String, TEXT("Material asset path")),
+		MCPParam::Optional(TEXT("classes"), EType::Array, TEXT("Expression classes to include, full or short names")).Items(EType::String),
+		MCPParam::Optional(TEXT("parameterNames"), EType::Array, TEXT("Parameter names to include; intersects classes when both are supplied")).Items(EType::String),
+		MCPParam::Optional(TEXT("propertyChain"), EType::Object, TEXT("One property or named expression input and upstream depth limit")).WithFields({
+			MCPParam::OptionalField(TEXT("property"), EType::String, TEXT("Root material property")),
+			MCPParam::OptionalField(TEXT("targetExpression"), EType::String, TEXT("Root expression instead of property")),
+			MCPParam::OptionalField(TEXT("targetInput"), EType::String, TEXT("Root expression input name or index")),
+			MCPParam::OptionalField(TEXT("depthLimit"), EType::Integer, TEXT("Maximum upstream depth from 0 to 64; default 8")),
+		}),
+	});
 	auto SpecAssetPath = [](const TCHAR* Description)
 	{
 		return MCPParam::Required(TEXT("assetPath"), EType::String, Description).Alias(TEXT("path"));
