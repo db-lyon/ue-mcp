@@ -14,7 +14,7 @@ describe("resolvePackageInstall (#1630)", () => {
       version: "2.0.0",
       protectedDirs: [project],
     });
-    expect(plan).toEqual({ kind: "global", command: "npm install -g ue-mcp@2.0.0" });
+    expect(plan).toEqual({ kind: "global", command: "npm install -g ue-mcp@2.0.0", args: ["install", "-g", "ue-mcp@2.0.0"] });
   });
 
   it("updates an npx cache in its own prefix, never the working directory", () => {
@@ -25,7 +25,7 @@ describe("resolvePackageInstall (#1630)", () => {
       version: "2.0.0",
       protectedDirs: [project, path.join(project, "Source")],
     });
-    expect(plan).toEqual({ kind: "prefix", command: "npm install ue-mcp@2.0.0", cwd: cache });
+    expect(plan).toEqual({ kind: "prefix", command: "npm install ue-mcp@2.0.0", args: ["install", "ue-mcp@2.0.0"], cwd: cache });
   });
 
   it("refuses to install into the project a local copy lives in", () => {

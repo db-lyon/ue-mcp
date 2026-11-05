@@ -4,16 +4,14 @@
     "pr": ""
   },
   "permissions": {
-    "defaultMode": "bypassPermissions",
-    "additionalDirectories": ["~/.claude/"],
     "allow": [
-      "Bash(*)",
       "Read",
-      "Write",
-      "Edit",
-      "MultiEdit",
-      "WebFetch(*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npm run lint:prose)"
     ],
     "deny": [
       "Edit(/etc/**)",

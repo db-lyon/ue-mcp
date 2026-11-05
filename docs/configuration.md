@@ -495,6 +495,7 @@ Each wins over the matching config key. The full list, with the ones tests and s
 | `UE_MCP_PORT` | Bridge port for every session, over the derived port and `bridge.port` |
 | `UE_MCP_HOST` | Host every bridge is reached on (default `127.0.0.1`) |
 | `UE_MCP_BRIDGE_TIMEOUT_MS` | Floor under every bridge call's timeout, in milliseconds |
+| `UE_MCP_BRIDGE_TOKEN_DIR` | Directory of the bridge's session token files (default `~/.ue-mcp/bridge`). Read by the plugin and the client, so set it for both |
 | `UE_MCP_STRICT_PARAMS` | `1` refuses a call with a parameter the action does not forward, instead of warning |
 | `UE_MCP_ENV` | Selects the `ue-mcp.<env>.yml` overlay |
 | `UE_MCP_GLOBAL_CONFIG` | Path of the user-global config layer |

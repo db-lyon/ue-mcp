@@ -141,6 +141,7 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
+  "editor/module-owner.ts": "Finds the .uplugin that declares a module under the project and engine roots it is handed. No editor is involved.",
   "daemon/extension-install.ts": "Installs an extension into the user's extensions directory. No editor is involved.",
   "daemon/extension-versions.ts": "Lays out installed extension versions and picks the one a project records. No editor is involved.",
   "daemon/plugin-routes.ts": "Lists and changes the plugins of the one project the daemon serves, through the CLI. No editor is involved.",
@@ -154,8 +155,13 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "daemon/events.ts": "A numbered, bounded event log. No editor is involved.",
   "daemon/editor-step.ts": "Reads one editor operation step's result text. Pure logic over its arguments.",
   "daemon/activity.ts": "Reads an MCP tools/call into a category and action. Pure logic.",
+  "extensions/package-paths.ts": "Resolves a manifest path inside the package it is handed. Pure path logic over its arguments.",
   "core/open-url.ts": "Opens a URL in the system browser. No editor is involved.",
   "core/spawn-outside-tree.ts": "Starts a process through a trampoline that exits. Pure process plumbing over its arguments.",
+  "bridge/bridge-token.ts": "Reads the session token file for the port it is handed. Pure filesystem plumbing over its arguments.",
+  "core/path-guard.ts": "Resolves a path against the folders it is handed and refuses one outside them. Pure logic over its arguments.",
+  "core/private-file.ts": "Writes the owner-only file it is handed. Pure filesystem plumbing over its arguments.",
+  "core/safe-spawn.ts": "Builds argv invocations and checks the values they carry. Pure process plumbing over its arguments.",
   "daemon/dir-watch.ts": "Watches the one directory it is handed and retries after a failure. Pure filesystem plumbing over its arguments.",
   "editor/launch-args.ts": "Pure launch-argument rules: window-mode precedence, extraArgs splitting and argv building for whatever project it is handed.",
   "daemon/ws-transport.ts": "MCP's transport over one WebSocket. No editor is involved.",

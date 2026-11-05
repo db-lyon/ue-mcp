@@ -188,6 +188,8 @@ A close frame gets its status code echoed back and a ping gets a pong with the s
 
 The upgrade request is read to its blank line under one deadline and one size bound, and validated before a `101` is sent: `GET`, HTTP/1.1, `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Version: 13`, and a `Sec-WebSocket-Key` that decodes to 16 bytes. A refusal answers with an HTTP status and a sentence. Bytes pipelined behind the request go straight to the frame reader.
 
+**Session token.** The bridge listens on 127.0.0.1 only and refuses any upgrade that carries an `Origin` header, which keeps out other machines and web pages. To keep out other local processes and other accounts on the same machine, it also requires a token. When its port is bound it writes 32 random bytes from the OS (BCryptGenRandom on Windows, `/dev/urandom` elsewhere), as 64 hex digits, to `~/.ue-mcp/bridge/<port>.token`, and every upgrade must carry `Authorization: Bearer <token>`. On Linux and macOS the directory is `0700` and the file `0600`; on Windows both get an access list that grants the editor's user alone. The comparison is constant time, a refusal is a `401` with a sentence saying what to do, and the file is removed on a clean shutdown. `UE_MCP_BRIDGE_TOKEN_DIR` moves the directory for the plugin and the client alike. The client sends the token when the file for its port exists and connects without one when it does not, so it still works with a plugin that predates the token. The `101` and the `401` carry `X-UE-MCP-Bridge-Auth: token-file`, and `get_bridge_capabilities` lists the `session-token` feature.
+
 #### Capability handshake
 
 On connect the client calls `get_bridge_capabilities`, which the bridge answers on the socket thread without touching the game thread:

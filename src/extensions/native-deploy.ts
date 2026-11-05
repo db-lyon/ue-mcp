@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { UE_PLUGIN_NAME_RE, pathInPackage, staysInside } from "./package-paths.js";
 
 /**
  * Install-time deployer for plugin-supplied native UE modules.
@@ -74,7 +75,12 @@ export function deployNativeModule(
   uePluginName: string,
   projectDir: string,
 ): DeployNativeResult {
-  const sourceAbs = path.join(pkgDir, sourceRel);
+  if (!UE_PLUGIN_NAME_RE.test(uePluginName)) {
+    throw new Error(
+      `nativeModule.uePluginName '${uePluginName}' is not an Unreal plugin name (letters, digits and underscores, not starting with a digit)`,
+    );
+  }
+  const sourceAbs = pathInPackage(pkgDir, sourceRel, "nativeModule.source");
   if (!fs.existsSync(sourceAbs)) {
     throw new Error(
       `nativeModule.source '${sourceRel}' not found in plugin package at ${sourceAbs}`,
@@ -88,8 +94,12 @@ export function deployNativeModule(
   return { destDir: destAbs, filesCopied: copied.length, fileList: copied };
 }
 
+/** Copies regular files and directories only; a link in the source is refused, never followed. */
 function copyRecursive(src: string, dest: string, projectDir: string, copied: string[]): void {
-  const stat = fs.statSync(src);
+  const stat = fs.lstatSync(src);
+  if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) {
+    throw new Error(`nativeModule.source holds ${src}, which is not a regular file or directory; links are not copied`);
+  }
   if (stat.isDirectory()) {
     fs.mkdirSync(dest, { recursive: true });
     for (const entry of fs.readdirSync(src)) {
@@ -135,6 +145,8 @@ export function pruneStaleNativeFiles(projectDir: string, previousFiles: string[
 /** Delete recorded files, then the directories their removal left empty. */
 function removeDeployedFiles(projectDir: string, files: string[]): number {
   let removed = 0;
+  // The state file sits in the project, so a recorded path is checked before it is deleted.
+  files = files.filter((rel) => typeof rel === "string" && staysInside(projectDir, rel));
   for (const rel of files) {
     const abs = path.join(projectDir, rel);
     try {

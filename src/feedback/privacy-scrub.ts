@@ -1,4 +1,6 @@
 import * as os from "node:os";
+import * as path from "node:path";
+import { findUProject } from "../config/uproject-path.js";
 
 /**
  * Server-side redaction of personal/project identifiers from feedback bodies
@@ -18,6 +20,12 @@ import * as os from "node:os";
  *   - The OS home directory path                      → REDACTED_HOME
  *   - The project name as a whole word                → REDACTED_PROJECT
  *   - The OS username as a whole word                 → REDACTED_USER
+ *   - The machine name as a whole word                → REDACTED_HOST
+ *   - Email addresses                                 → REDACTED_EMAIL
+ *
+ * With no project root or name passed, both come from a .uproject in the
+ * working directory, so a caller that has no project context still cannot
+ * post the one the process runs in.
  *
  * Project/username matches use `\b` word boundaries (case-insensitive) so
  * "david" inside paths or sentences matches but "davidson" does not. Class,
@@ -35,6 +43,8 @@ export interface PrivacyScrubContext {
   username?: string;
   /** OS home directory. Defaults to os.homedir(); tests pass an explicit value. */
   homeDir?: string;
+  /** Machine name. Defaults to os.hostname(); tests pass an explicit value. */
+  hostname?: string;
   /**
    * Roots of the OTHER editors this server drives (#817, plan item 6.4).
    *
@@ -112,19 +122,32 @@ export function privacyScrub(
   // otherwise have matched cleanly.
   const home = ctx.homeDir ?? os.homedir();
   const user = ctx.username ?? os.userInfo().username;
+  const host = ctx.hostname ?? os.hostname();
+  const cwdProject = ctx.projectRoot === undefined || ctx.projectName === undefined ? findUProject(process.cwd()) : null;
+  const projectRoot = ctx.projectRoot ?? (cwdProject ? path.dirname(cwdProject) : undefined);
+  const projectName = ctx.projectName ?? (cwdProject ? path.basename(cwdProject, path.extname(cwdProject)) : undefined);
 
-  replacePath(ctx.projectRoot, "REDACTED_PROJECT_ROOT", "project-root-path");
+  // An address whose domain ends in letters, so ue-mcp@1.4.12 and pkg@^2.0 stay.
+  let emails = 0;
+  text = text.replace(/[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}\b/g, () => {
+    emails++;
+    return "REDACTED_EMAIL";
+  });
+  record("email", emails);
+
+  replacePath(projectRoot, "REDACTED_PROJECT_ROOT", "project-root-path");
   // Longest first among the other roots too, so a nested project root is not
   // fragmented by its parent's replacement.
   for (const root of [...(ctx.otherProjectRoots ?? [])].sort((a, b) => b.length - a.length)) {
     replacePath(root, "REDACTED_PROJECT_ROOT", "other-project-root-path");
   }
   replacePath(home,            "REDACTED_HOME",         "home-path");
-  replaceWord(ctx.projectName, "REDACTED_PROJECT", "project-name");
+  replaceWord(projectName,     "REDACTED_PROJECT", "project-name");
   for (const name of ctx.otherProjectNames ?? []) {
     replaceWord(name, "REDACTED_PROJECT", "other-project-name");
   }
   replaceWord(user,            "REDACTED_USER",    "username");
+  replaceWord(host,            "REDACTED_HOST",    "hostname");
 
   return { text, hits };
 }

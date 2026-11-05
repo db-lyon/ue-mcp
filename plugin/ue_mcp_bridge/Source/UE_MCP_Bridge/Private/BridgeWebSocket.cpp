@@ -1,5 +1,6 @@
 #include "BridgeWebSocket.h"
 #include "BridgeServer.h"
+#include "BridgeSessionToken.h"
 #include "UE_MCP_BridgeModule.h"
 #include "MCPSocketPlatform.h"
 #include "HAL/PlatformTime.h"
@@ -67,8 +68,8 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 
 	// Refuse every browser-originated upgrade.
 	//
-	// The bridge exposes execute_python and every editor mutation, and it
-	// authenticates nothing about the caller. Allowing loopback origins meant
+	// The bridge exposes execute_python and every editor mutation, so a page
+	// gets no say even before the token check below. Allowing loopback origins meant
 	// any page served by any dev server on the machine could scan the port
 	// range and drive the editor, because the browser supplies
 	// Sec-WebSocket-Key itself and the page never has to see the response to
@@ -84,6 +85,31 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected browser-originated WebSocket upgrade from Origin: %s"), *Origin);
 			SendHttpError(ClientSocketFD, 403, TEXT("Forbidden"),
 				TEXT("The UE-MCP bridge does not accept upgrades from web pages. Connect from a local process instead."));
+			return TEXT("");
+		}
+	}
+
+	// Require this session's token. Loopback and the Origin refusal keep out
+	// other machines and web pages; neither keeps out another local process
+	// or another account on the same machine, and the bridge runs Python as
+	// the editor's user. The token file is readable by that user alone.
+	const FString AuthSchemeLine = FString::Printf(TEXT("%s: %s\r\n"),
+		UEMCPBridgeSessionToken::AuthSchemeHeaderName(), UEMCPBridgeSessionToken::AuthSchemeHeaderValue());
+	{
+		FString Authorization;
+		const bool bHasAuthorization = FindHeaderValue(Request, TEXT("Authorization"), Authorization);
+		const EMCPBridgeAuthDecision Decision =
+			UEMCPBridgeSessionToken::EvaluateAuthorization(bHasAuthorization, Authorization, SessionToken);
+		if (Decision != EMCPBridgeAuthDecision::Accepted)
+		{
+			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Refused WebSocket upgrade: %s"),
+				Decision == EMCPBridgeAuthDecision::Missing ? TEXT("no session token (the client predates it)")
+				: Decision == EMCPBridgeAuthDecision::Malformed ? TEXT("malformed Authorization header")
+				: Decision == EMCPBridgeAuthDecision::Mismatch ? TEXT("session token does not match")
+				: TEXT("this editor has no session token"));
+			SendHttpError(ClientSocketFD, 401, TEXT("Unauthorized"),
+				UEMCPBridgeSessionToken::DescribeRefusal(Decision, ServerPort),
+				AuthSchemeLine + TEXT("WWW-Authenticate: Bearer realm=\"ue-mcp-bridge\"\r\n"));
 			return TEXT("");
 		}
 	}
@@ -115,6 +141,7 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 	Response += TEXT("Upgrade: websocket\r\n");
 	Response += TEXT("Connection: Upgrade\r\n");
 	Response += FString::Printf(TEXT("Sec-WebSocket-Accept: %s\r\n"), *AcceptKey);
+	Response += AuthSchemeLine;
 	Response += TEXT("\r\n");
 	
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Accept key: %s"), *AcceptKey);
@@ -146,15 +173,15 @@ bool FMCPBridgeServer::FindHeaderValue(const FString& Request, const FString& He
 	return false;
 }
 
-void FMCPBridgeServer::SendHttpError(FMCPSocketHandle SocketFD, int32 StatusCode, const FString& StatusText, const FString& Detail)
+void FMCPBridgeServer::SendHttpError(FMCPSocketHandle SocketFD, int32 StatusCode, const FString& StatusText, const FString& Detail, const FString& ExtraHeaders)
 {
 	// A rejected upgrade used to be a silent disconnect, which reads to the
 	// caller exactly like "no editor is running". Say what was wrong.
 	const FString Body = Detail + TEXT("\r\n");
 	const FTCHARToUTF8 Utf8Body(*Body);
 	const FString Response = FString::Printf(
-		TEXT("HTTP/1.1 %d %s\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s"),
-		StatusCode, *StatusText, Utf8Body.Length(), *Body);
+		TEXT("HTTP/1.1 %d %s\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n%s\r\n%s"),
+		StatusCode, *StatusText, Utf8Body.Length(), *ExtraHeaders, *Body);
 
 	const FTCHARToUTF8 Utf8Response(*Response);
 	SendAll(SocketFD, (const uint8*)Utf8Response.Get(), Utf8Response.Length());

@@ -362,6 +362,12 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieObserveArm(const TSharedPtr<FJsonObject>
 	FObserverArmConfig Cfg;
 	Cfg.ProfilePath = ProfilePath;
 	Cfg.OutputDir = OptionalString(Params, TEXT("output_dir"));
+	if (!Cfg.OutputDir.IsEmpty())
+	{
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(Cfg.OutputDir, Resolved)) return Err;
+		Cfg.OutputDir = Resolved;
+	}
 	Cfg.SampleHz = OptionalInt(Params, TEXT("sample_hz"), 60);
 	Cfg.ClientId = OptionalInt(Params, TEXT("client_id"), 0);
 	Cfg.PIEInstance = PIEInstance;
@@ -492,7 +498,8 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieObserveRead(const TSharedPtr<FJsonObject
 	const int32 Limit = OptionalInt(Params, TEXT("limit"), 1000);
 	const int32 Offset = OptionalInt(Params, TEXT("offset"), 0);
 
-	const FString RunDir = Root / RunId;
+	FString RunDir;
+	if (auto Err = MCPRequireWritablePath(Root / RunId, RunDir)) return Err;
 
 	if (File == TEXT("manifest"))
 	{

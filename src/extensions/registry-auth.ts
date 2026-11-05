@@ -23,6 +23,7 @@ import {
 } from "../feedback/github-auth.js";
 import { registryBase } from "./registry-catalog.js";
 import { readEnv } from "../core/env.js";
+import { writePrivateFile } from "../core/private-file.js";
 
 const registryFile = () => join(authDir(), "registry.json");
 
@@ -50,8 +51,7 @@ export async function readRegistryAuth(): Promise<RegistryAuth | null> {
 }
 
 async function writeRegistryAuth(a: RegistryAuth): Promise<void> {
-  await fs.mkdir(authDir(), { recursive: true });
-  await fs.writeFile(registryFile(), JSON.stringify(a, null, 2), { mode: 0o600 });
+  await writePrivateFile(registryFile(), JSON.stringify(a, null, 2));
 }
 
 export async function clearRegistryAuth(): Promise<void> {
