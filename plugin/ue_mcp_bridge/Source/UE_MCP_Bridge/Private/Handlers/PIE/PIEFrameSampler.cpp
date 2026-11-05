@@ -297,6 +297,7 @@ namespace MCPPIE
 		Tracked.Reset();
 		PendingMarkerLabels.Reset();
 		Warnings.Reset();
+		TrackedActorRefs.Reset();
 		PrevPawnLocation = FVector::ZeroVector;
 		// Re-seed from the current config so AttachToPIE can run again.
 		SeedTrackedValues();
@@ -416,7 +417,23 @@ namespace MCPPIE
 		return true;
 	}
 
-	bool FPIEFrameSampler::SampleTrackedValue(UWorld* PIEWorld, APawn* Pawn, const FString& Path, double& OutValue, FString* OutWhy) const
+	AActor* FPIEFrameSampler::FindTrackedActor(UWorld* PIEWorld, const FString& Id)
+	{
+		FTrackedActorRef& Ref = TrackedActorRefs.FindOrAdd(Id);
+		if (AActor* Cached = Ref.Actor.Get())
+		{
+			if (Cached->GetWorld() == PIEWorld) return Cached;
+			Ref.Actor.Reset();
+		}
+		const double Now = FPlatformTime::Seconds();
+		if (Now < Ref.NextRetrySeconds) return nullptr;
+		AActor* Found = FindActorById(PIEWorld, Id);
+		Ref.Actor = Found;
+		Ref.NextRetrySeconds = Found ? 0.0 : Now + 1.0;
+		return Found;
+	}
+
+	bool FPIEFrameSampler::SampleTrackedValue(UWorld* PIEWorld, APawn* Pawn, const FString& Path, double& OutValue, FString* OutWhy)
 	{
 		if (Path.StartsWith(TEXT("sub:")))
 		{
@@ -444,7 +461,28 @@ namespace MCPPIE
 			if (OutWhy) *OutWhy = TEXT("no such bone or socket on the pawn's skeletal mesh, or an unknown channel");
 			return false;
 		}
-		return ResolvePathToDouble(Pawn, Path, OutValue, OutWhy);
+		FString PawnWhy;
+		if (ResolvePathToDouble(Pawn, Path, OutValue, &PawnWhy))
+		{
+			return true;
+		}
+		// "<Actor>.<path>": the head names a level actor the same way
+		// tracked_actors and expect {op: exists} do (#1655).
+		FString Head, Rest;
+		if (Path.Split(TEXT("."), &Head, &Rest) && !Rest.IsEmpty())
+		{
+			if (AActor* Actor = FindTrackedActor(PIEWorld, Head))
+			{
+				return ResolvePathToDouble(Actor, Rest, OutValue, OutWhy);
+			}
+		}
+		if (OutWhy)
+		{
+			*OutWhy = Head.IsEmpty()
+				? PawnWhy
+				: FString::Printf(TEXT("%s on the pawn, and no actor in the PIE world is named '%s'"), *PawnWhy, *Head);
+		}
+		return false;
 	}
 
 	void FPIEFrameSampler::ProbeTrackedValues(UWorld* PIEWorld, APawn* Pawn)
@@ -617,8 +655,8 @@ namespace MCPPIE
 			}
 		}
 
-		// Tracked reflection values: resolve against the pawn, or against a named
-		// subsystem for "sub:<Class>.<path>" entries (item 2b).
+		// Tracked reflection values: resolve against the pawn, a level actor
+		// ("<Actor>.<path>"), or a named subsystem ("sub:<Class>.<path>").
 		// A miss writes 0 to the CSV; the spec's type and the attach warning
 		// say so. A path that resolves later is promoted back to double.
 		for (FTrackedValueSpec& S : TrackedValues)

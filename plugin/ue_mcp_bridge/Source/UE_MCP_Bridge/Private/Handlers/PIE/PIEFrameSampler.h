@@ -101,7 +101,9 @@ namespace MCPPIE
 		void DiscoverActions(APlayerController* PC, APawn* Pawn);
 		void SeedTrackedValues();
 		void ProbeTrackedValues(UWorld* PIEWorld, APawn* Pawn);
-		bool SampleTrackedValue(UWorld* PIEWorld, APawn* Pawn, const FString& Path, double& OutValue, FString* OutWhy) const;
+		bool SampleTrackedValue(UWorld* PIEWorld, APawn* Pawn, const FString& Path, double& OutValue, FString* OutWhy);
+		// "<Actor>.<path>": the level actor named by the head segment, or null.
+		AActor* FindTrackedActor(UWorld* PIEWorld, const FString& Id);
 
 		FConfig Config;
 		bool bAttached = false;
@@ -112,6 +114,15 @@ namespace MCPPIE
 		TArray<FTrackedAction> Tracked;
 		TArray<FString> PendingMarkerLabels;
 		TArray<FString> Warnings;
+		// Actor lookups for actor-qualified tracked values (#1655). A miss is
+		// retried at most once a second so an unresolved path does not walk
+		// every actor in the world each frame.
+		struct FTrackedActorRef
+		{
+			TWeakObjectPtr<AActor> Actor;
+			double NextRetrySeconds = 0.0;
+		};
+		TMap<FString, FTrackedActorRef> TrackedActorRefs;
 		FVector PrevPawnLocation = FVector::ZeroVector;
 	};
 }

@@ -105,7 +105,7 @@ The response contains `viewLocation`, `viewRotation`, `viewDirection`, `playerIn
 
 Recording starts on BeginPIE and finalizes on EndPIE. It discovers Enhanced Input actions from event bindings and active mapping contexts, including actions added after the pawn attaches. Per frame it writes pawn location, rotation, velocity and `speed2d`, the active montage and section, every input action value with `_pressed` and `_released` edges, labelled markers, and per-frame performance (game, render and GPU ms, memory). Velocity comes from `UCharacterMovementComponent` when present, then `GetVelocity()`, physics velocity, and position delta as fallbacks, so any `APawn` works.
 
-`record_arm` can also track reflection paths and subsystem values (`track_values`, with `sub:<Class>.<path>` for a subsystem), actor positions (`track_actors`), and skeletal bone or socket channels: `bone:<BoneOrSocket>.<channel>` in world space or `bonecs:<BoneOrSocket>.<channel>` in component space, with channels `x|y|z`, `pitch|yaw|roll` and `scalex|scaley|scalez`. Component space does not move when the actor does, which is what an animation assertion usually wants. A bone that the mesh does not have is absent from the row rather than sampled as zero.
+`record_arm` can also track reflection paths and subsystem values (`track_values`: a path on the pawn, `<Actor>.<path>` for a level actor named by label, name or class, `sub:<Class>.<path>` for a subsystem), actor positions (`track_actors`), and skeletal bone or socket channels: `bone:<BoneOrSocket>.<channel>` in world space or `bonecs:<BoneOrSocket>.<channel>` in component space, with channels `x|y|z`, `pitch|yaw|roll` and `scalex|scaley|scalez`. Component space does not move when the actor does, which is what an animation assertion usually wants. A bone that the mesh does not have is absent from the row rather than sampled as zero.
 
 Every `track_values` path is checked when the pawn attaches. A path that does not end at a number (a struct such as `Velocity` or `RelativeRotation`, or a name that does not resolve) is still written as a column, but the manifest lists its type as `unresolved` and a warning names the failing segment: name a numeric field instead, such as `Velocity.X`. The same goes for an `actions` entry the player has no binding or mapping for. `record_status`, `record_stop` and the manifest carry these as `warnings`.
 
@@ -227,6 +227,8 @@ pie(action="profile_create",
     tracked_values=[{"path": "Hero.AbilitySystem.Health", "drift_threshold": 5.0}, "Hero.AbilitySystem.Stamina"],
     tracked_actors=["BP_Hero_C", "BP_Boss_C"])
 ```
+
+A tracked value path is read from the player pawn first. When the pawn has no such path, the first segment names a level actor in the PIE world, matched by label, name or class the same way `tracked_actors` and `expect {op: exists}` match it, and the rest of the path is read from that actor. `Hero.AbilitySystem.Health` reads the `Health` field of the `AbilitySystem` component on the actor `Hero`.
 
 Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `observation.csv`, and `tracked.jsonl` when actors are tracked. One recording replayed with different profiles investigates different systems.
 
