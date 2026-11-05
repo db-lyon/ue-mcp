@@ -19,6 +19,7 @@ import { extensionsDir } from "../daemon/extensions.js";
 import { installExtension, removeExtension, useExtensionVersion } from "../daemon/extension-install.js";
 import { installedCopies, migrateLegacy, recordedVersion, versionsOf } from "../daemon/extension-versions.js";
 import { ensureDaemon } from "../daemon/shim.js";
+import { waitForExit } from "../daemon/supersede-watch.js";
 import { fail, ok } from "./ui/ansi.js";
 import type { CliUsage } from "./cli-main.js";
 
@@ -39,8 +40,8 @@ async function restartDaemon(uproject: string): Promise<boolean> {
   const d = readLiveDiscovery(dir);
   if (!d) return false;
   await fetch(`http://127.0.0.1:${d.port}/v1/shutdown`, { method: "POST", headers: { authorization: `Bearer ${d.token}` } }).catch(() => undefined);
-  const deadline = Date.now() + 15_000;
-  while (readLiveDiscovery(dir)?.pid === d.pid && Date.now() < deadline) await new Promise((r) => setTimeout(r, 200));
+  // Wait for the process to end, not just its record: a new daemon started beside a live old one leaves two attached to the editor.
+  await waitForExit(d.pid, 30_000);
   await ensureDaemon(uproject);
   return true;
 }
