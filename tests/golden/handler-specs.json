@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1228,
+  "handlerCount": 1229,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -33695,6 +33695,59 @@
         }
       ],
       "contractExempt": "Saves the current level under the contract values; nothing it reads fails first"
+    },
+    "scale_mesh_geometry": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "StaticMesh to scale",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "factor",
+          "type": "number",
+          "required": true,
+          "description": "Uniform factor, or {x, y, z} per axis; every component must be above 0",
+          "orTypes": [
+            "vec3"
+          ]
+        },
+        {
+          "name": "pivot",
+          "type": "vec3",
+          "required": false,
+          "description": "Mesh-space point that stays fixed (default the mesh origin)"
+        },
+        {
+          "name": "outputPath",
+          "type": "string",
+          "required": false,
+          "description": "Scale a copy written here and leave assetPath untouched (default: scale assetPath in place)"
+        },
+        {
+          "name": "scaleSockets",
+          "type": "boolean",
+          "required": false,
+          "description": "Move socket locations with the geometry (default true)"
+        },
+        {
+          "name": "scaleCollision",
+          "type": "boolean",
+          "required": false,
+          "description": "Scale the simple collision with the geometry (default true)"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the mesh after the rebuild (default true)"
+        }
+      ]
     },
     "scan_animation_tracks": {
       "category": "animation",
