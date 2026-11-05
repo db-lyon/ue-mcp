@@ -14,7 +14,7 @@ import {
   type EditorIdeMode,
   type EditorWindowMode,
 } from "./launch-args.js";
-import { EngineResolutionError, engineLookupFor, selectEngine, trySelectEngine } from "./engine-root.js";
+import { EngineResolutionError, engineLookupFor, resolveEngineRoot, selectEngine, trySelectEngine } from "./engine-root.js";
 import {
   editorOwnsProject,
   findEditorByPid,
@@ -24,6 +24,7 @@ import {
   readEngineState,
   readEngineSnapshot,
   readLogState,
+  readEngineRootFromLog,
   modalBlocksGameThread,
   MISSING_MODULE_PROMPT,
   type EngineState,
@@ -31,6 +32,7 @@ import {
 } from "./engine-observer.js";
 import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "../bridge/editor-target.js";
 import { oneLine } from "./dialog-guard.js";
+import { findModuleOwners, type ModuleOwner } from "./module-owner.js";
 import { prepareBridgeForLaunch } from "./bridge-update.js";
 import type { ProgressDisplay, ProgressFn } from "../core/types.js";
 import { findUProject } from "../config/uproject-path.js";
@@ -331,7 +333,13 @@ export async function waitForEditorReady(
     }
     if (logIsCurrent && logState.blocking) {
       const state = await readEngineState(projectPath ?? null, { probeWindows: true });
-      return finish({ ready: false, elapsedSeconds: elapsed(), timeline, reason: blockedStartupReason(logState, state), state });
+      const owners = logState.phase === MISSING_MODULE_PROMPT && logState.missingModules.length > 0
+        ? findModuleOwners(logState.missingModules, {
+            projectDir: projectPath ? path.dirname(projectPath) : projectDir,
+            engineRoot: readEngineRootFromLog(projectPath) ?? resolveEngineRoot(engineLookupFor(projectPath)),
+          })
+        : undefined;
+      return finish({ ready: false, elapsedSeconds: elapsed(), timeline, reason: blockedStartupReason(logState, state, owners, projectPath), state });
     }
     if (logIsCurrent && logState.phase === "editor exited") {
       return finish({ ready: false, elapsedSeconds: elapsed(), timeline, reason: "the editor exited during startup", state: await readEngineState(projectPath ?? null) });
@@ -426,17 +434,53 @@ export async function waitForEditorReady(
  * Why a launch stopped, from a log that ended on a prompt. The engine's rebuild
  * prompt comes before the bridge loads, so nothing can answer it but the person
  * at the editor window; the reason names the modules and the process (#1384).
+ * A module an engine plugin declares cannot come from a project build, so it
+ * gets the fixes that work instead (#1627).
  */
-export function blockedStartupReason(logState: LogState, state?: Pick<EngineState, "processes"> | null): string {
+export function blockedStartupReason(
+  logState: LogState,
+  state?: Pick<EngineState, "processes"> | null,
+  owners?: ReadonlyMap<string, ModuleOwner>,
+  projectPath?: string | null,
+): string {
   if (logState.phase !== MISSING_MODULE_PROMPT) return logState.phase;
-  const modules = logState.missingModules.length > 0 ? logState.missingModules.join(", ") : "a project module";
   const pids = (state?.processes ?? []).map((p) => p.pid);
   const pid = pids.length > 0 ? ` (PID ${pids.join(", ")})` : "";
-  return (
+  const prompt =
     `the editor${pid} is stopped at the engine's "modules are missing or built with a different engine version, `
-    + `rebuild them now?" prompt before the bridge loads. Not built: ${modules}. Build the project with `
-    + "project(build) and fix what it reports, then answer or close that prompt in the editor window, or stop the editor"
+    + "rebuild them now?\" prompt before the bridge loads.";
+
+  const engineOwned = logState.missingModules
+    .map((m) => owners?.get(m))
+    .filter((o): o is ModuleOwner => o?.scope === "engine");
+  const projectModules = logState.missingModules.filter((m) => owners?.get(m)?.scope !== "engine");
+
+  const parts: string[] = [prompt];
+  if (engineOwned.length > 0) {
+    const uproject = projectPath ? path.basename(projectPath) : "the .uproject";
+    const plugins = [...new Set(engineOwned.map((o) => o.plugin))];
+    for (const owner of engineOwned) {
+      parts.push(
+        `Missing: ${owner.module}, a module of the engine plugin ${owner.plugin} (${owner.upluginPath}). `
+        + "It ships with the engine, so a project build cannot produce it.",
+      );
+    }
+    parts.push(
+      "Verify the engine install in the Epic Games Launcher, or disable "
+      + plugins.map((p) => `${p} for this project by adding {"Name": "${p}", "Enabled": false} to the Plugins array of ${uproject}`).join(", and ")
+      + ".",
+    );
+  }
+  if (projectModules.length > 0 || engineOwned.length === 0) {
+    const modules = projectModules.length > 0 ? projectModules.join(", ") : "a project module";
+    parts.push(`Not built: ${modules}. Build the project with project(build) and fix what it reports.`);
+  }
+  parts.push(
+    engineOwned.length > 0 && projectModules.length === 0
+      ? "Then close that prompt in the editor window, or stop the editor, and start it again"
+      : "Then answer or close that prompt in the editor window, or stop the editor",
   );
+  return parts.join(" ");
 }
 
 /**

@@ -2,8 +2,8 @@
 /**
  * Skeletal mesh reads and edits on a copy of the engine's SkeletalCube: bones,
  * cloth bindings, material slots, skin weights and the bone vertex bounds they
- * drive, and the instancing build flag.
- * Refs #1223
+ * drive, the instancing build flag, and a bone moved with its skinned part.
+ * Refs #1223, #1614
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
@@ -11,6 +11,7 @@ import type { EditorBridge } from "../../src/bridge/bridge.js";
 
 const DIR = "/Game/MCPTest/BCov/AssetB/Skel";
 const MESH = `${DIR}/SKM_BCovB_Cube`;
+const PART_MESH = `${DIR}/SKM_BCovB_Part`;
 const SOURCE = "/Engine/EngineMeshes/SkeletalCube";
 const WORLD_GRID = "/Engine/EngineMaterials/WorldGridMaterial";
 
@@ -18,6 +19,20 @@ type Json = Record<string, unknown>;
 type Influence = { boneName: string; weight: number };
 type Vertex = { vertexIndex: number; influences: Influence[] };
 type BoneBounds = { boneName: string; vertexCount: number };
+type Vec = { x: number; y: number; z: number };
+type PartBounds = BoneBounds & {
+  parentName: string;
+  bindPose: { location: Vec };
+  componentSpace?: { center: Vec };
+};
+type PartLod = {
+  lodIndex: number;
+  geometry: string;
+  verticesMoved?: number;
+  renderVerticesMoved?: number;
+  maxRenderPositionErrorCm?: number;
+  maxRenderNormalChangeDegrees?: number;
+};
 const body = (r: TestResult): Json => (r.result && typeof r.result === "object" ? (r.result as Json) : {});
 const succeeded = (r: TestResult): boolean => r.ok && body(r).success !== false;
 
@@ -53,6 +68,7 @@ beforeAll(async () => {
   bridge = await getBridge();
   await callBridge(bridge, "delete_folder", { path: DIR, force: true });
   await call("duplicate_asset", { sourcePath: SOURCE, destinationPath: MESH });
+  await call("duplicate_asset", { sourcePath: SOURCE, destinationPath: PART_MESH });
 }, 120_000);
 
 afterAll(async () => {
@@ -125,4 +141,63 @@ describe("skeletal mesh edits", () => {
     await call("set_skeletal_mesh_optimize_for_instancing", { assetPath: MESH, enabled: initial, lodIndex: 0 });
     expect(await optimizeForInstancing()).toBe(initial);
   }, 180_000);
+});
+
+describe("transform_skinned_part", () => {
+  async function partBones(): Promise<PartBounds[]> {
+    const read = await call("read_skeletal_mesh_bone_vertex_bounds", { assetPath: PART_MESH, minWeight: 0.0001 });
+    return read.bones as PartBounds[];
+  }
+  async function bone(name: string): Promise<PartBounds> {
+    const read = await call("read_skeletal_mesh_bone_vertex_bounds", { assetPath: PART_MESH, boneNames: [name], minWeight: 0.0001 });
+    return (read.bones as PartBounds[])[0];
+  }
+
+  it("moves a bone and its vertices together in every LOD, refuses before writing, and rolls back", async () => {
+    const weighted = await partBones();
+    // A child bone that owns vertices, or the root when it owns them all.
+    const target = weighted.find((b) => b.parentName !== "") ?? weighted[0];
+    expect(target.vertexCount).toBeGreaterThan(0);
+    const before = await bone(target.boneName);
+
+    const refused = await callBridge(bridge, "transform_skinned_part", {
+      assetPath: PART_MESH, boneName: "NoSuchBone_1614", translation: { x: 0, y: 0, z: 5 },
+    });
+    expect(succeeded(refused)).toBe(false);
+
+    const dry = await call("transform_skinned_part", {
+      assetPath: PART_MESH, boneName: target.boneName, translation: { x: 0, y: 0, z: 5 }, space: "component", dryRun: true,
+    });
+    expect(dry.updated).toBe(false);
+    expect((dry.lods as PartLod[])[0].verticesMoved).toBeGreaterThan(0);
+    const unchanged = await bone(target.boneName);
+    expect(unchanged.bindPose.location.z).toBeCloseTo(before.bindPose.location.z, 3);
+    expect(unchanged.componentSpace!.center.z).toBeCloseTo(before.componentSpace!.center.z, 3);
+
+    const moved = await call("transform_skinned_part", {
+      assetPath: PART_MESH, boneName: target.boneName, translation: { x: 0, y: 0, z: 5 }, space: "component",
+    });
+    expect(moved.updated).toBe(true);
+    const lods = moved.lods as PartLod[];
+    const lod0 = lods[0];
+    expect(lod0.geometry).toBe("source");
+    expect(lod0.verticesMoved).toBeGreaterThan(0);
+    expect(lod0.renderVerticesMoved).toBeGreaterThan(0);
+    expect(lod0.maxRenderPositionErrorCm).toBeLessThan(0.01);
+    expect(lod0.maxRenderNormalChangeDegrees).toBeLessThan(1);
+
+    const after = await bone(target.boneName);
+    expect(after.bindPose.location.z - before.bindPose.location.z).toBeCloseTo(5, 2);
+    // Each vertex moves by its weight on the bone, so the part's centre rises by at most the full offset.
+    const rise = after.componentSpace!.center.z - before.componentSpace!.center.z;
+    expect(rise).toBeGreaterThan(0);
+    expect(rise).toBeLessThanOrEqual(5.01);
+
+    const rollback = moved.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("transform_skinned_part");
+    await call(rollback.method, rollback.payload);
+    const restored = await bone(target.boneName);
+    expect(restored.bindPose.location.z).toBeCloseTo(before.bindPose.location.z, 2);
+    expect(restored.componentSpace!.center.z).toBeCloseTo(before.componentSpace!.center.z, 2);
+  }, 240_000);
 });
