@@ -20,6 +20,8 @@ public:
 	static void StartupSystems();
 	static void ShutdownSystems();
 
+	static TSharedPtr<FJsonValue> ViewTrace(const TSharedPtr<FJsonObject>& Params);
+
 	// PIE inspection
 	static TSharedPtr<FJsonValue> GetPieAnimState(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetPieAnimProperties(const TSharedPtr<FJsonObject>& Params);

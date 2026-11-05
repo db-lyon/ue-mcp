@@ -74,6 +74,22 @@ pie(action="record_read", id="some-recording", file="drift")
 
 ## Actions
 
+### Live view and collision
+
+| Action | Purpose |
+|--------|---------|
+| `view_trace` | Read the selected player's live view, line trace from it and optionally sphere sweep; report hit collision settings |
+
+```text
+pie(action="view_trace", distance=3000, channel="Visibility", sweepRadius=20)
+level(action="query_components", world="pie", actorLabelContains="Cable", componentClass="BoxComponent", includeCollision=true, collisionChannel="Visibility")
+```
+
+`view_trace` uses the player controller's `GetPlayerViewPoint`, so it follows the live camera. `playerIndex` defaults to 0 within the selected world; `pieInstance` selects an exact instance, and omitting it prefers the active PIE world with that local player. Missing PIE, instance or player returns an error. `distance` defaults to 1000 cm and must be positive. `channel` defaults to Visibility and accepts project-renamed collision channels. `traceComplex` defaults to false. `ignoreActors` accepts labels or full paths; a label skips every match in that world. `ignorePawn` defaults to true for the viewing player's pawn.
+
+The response contains `viewLocation`, `viewRotation`, `viewDirection`, `playerIndex`, `pieInstance`, and `line`. A positive `sweepRadius` adds `sweep`, a sphere sweep on the same ray. Zero omits the sweep. Each trace uses the [level trace result](level-traces.md) fields. Hit components also report `collisionEnabled`, `objectType`, `responseOnChannel`, `collisionChannel`, `blocksVisibility`, `ownerActorLabel` and `ownerActorClass`. `blocksVisibility` describes the Visibility channel response; `collisionEnabled` separately tells you whether queries are enabled.
+
+
 ### Recording
 
 | Action | Purpose |

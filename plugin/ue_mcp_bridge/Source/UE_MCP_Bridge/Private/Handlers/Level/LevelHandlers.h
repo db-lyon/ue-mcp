@@ -134,6 +134,7 @@ private:
 	// #264: explicit per-instance batch spawn (mesh+transform per actor)
 	static TSharedPtr<FJsonValue> PlaceActorsBatch(const TSharedPtr<FJsonObject>& Params);
 	// #420: raycast + #419 snap-to-floor (spatial level operations)
+	static TSharedPtr<FJsonValue> ShapeTrace(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LineTrace(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BulkLineTrace(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SnapActorToFloor(const TSharedPtr<FJsonObject>& Params);

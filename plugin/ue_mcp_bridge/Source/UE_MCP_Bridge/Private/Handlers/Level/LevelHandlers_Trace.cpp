@@ -1,8 +1,9 @@
-// World-space line trace + actor floor snap.
+// World-space line and shape traces, shared collision inspection, and floor snap.
 // Translation-unit partition of FLevelHandlers - registration stays in
 // LevelHandlers.cpp::RegisterHandlers.
 
 #include "LevelHandlers.h"
+#include "LevelTrace.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "Editor.h"
@@ -18,19 +19,115 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-namespace
+namespace MCPTrace
 {
+	bool MakeShape(const FString& Shape, double Radius, FVector HalfExtent, double HalfHeight,
+		FCollisionShape& OutShape, FString& OutError)
+	{
+		const bool bRadiusValid = FMath::IsFinite(Radius) && Radius > 0 && Radius <= MAX_flt;
+		if (Shape == TEXT("sphere") && bRadiusValid)
+			OutShape = FCollisionShape::MakeSphere(static_cast<float>(Radius));
+		else if (Shape == TEXT("box") && !HalfExtent.ContainsNaN() &&
+			HalfExtent.X > 0 && HalfExtent.Y > 0 && HalfExtent.Z > 0 && HalfExtent.GetMax() <= MAX_flt)
+			OutShape = FCollisionShape::MakeBox(HalfExtent);
+		else if (Shape == TEXT("capsule") && bRadiusValid && FMath::IsFinite(HalfHeight) &&
+			HalfHeight >= Radius && HalfHeight <= MAX_flt)
+			OutShape = FCollisionShape::MakeCapsule(static_cast<float>(Radius), static_cast<float>(HalfHeight));
+		else
+		{
+			OutError = TEXT("shape must be sphere (positive radius), box (positive halfExtent xyz), or capsule (positive radius and halfHeight >= radius); dimensions must be finite");
+			return false;
+		}
+		return true;
+	}
+
+	static FString ChannelLabel(int32 Channel)
+	{
+		const UCollisionProfile* Profile = UCollisionProfile::Get();
+		return Profile ? Profile->ReturnChannelNameFromContainerIndex(Channel).ToString() : FString::FromInt(Channel);
+	}
+
+	static const TCHAR* ResponseName(ECollisionResponse Response)
+	{
+		switch (Response)
+		{
+			case ECR_Ignore: return TEXT("Ignore");
+			case ECR_Overlap: return TEXT("Overlap");
+			case ECR_Block: return TEXT("Block");
+			default: return TEXT("Unknown");
+		}
+	}
+
+	static const TCHAR* EnabledName(ECollisionEnabled::Type Enabled)
+	{
+		switch (Enabled)
+		{
+			case ECollisionEnabled::NoCollision: return TEXT("NoCollision");
+			case ECollisionEnabled::QueryOnly: return TEXT("QueryOnly");
+			case ECollisionEnabled::PhysicsOnly: return TEXT("PhysicsOnly");
+			case ECollisionEnabled::QueryAndPhysics: return TEXT("QueryAndPhysics");
+			case ECollisionEnabled::ProbeOnly: return TEXT("ProbeOnly");
+			case ECollisionEnabled::QueryAndProbe: return TEXT("QueryAndProbe");
+			default: return TEXT("Unknown");
+		}
+	}
+
+	void EmitCollision(const TSharedPtr<FJsonObject>& Result, const UPrimitiveComponent* Component, int32 Channel)
+	{
+		if (!Component)
+		{
+			for (const TCHAR* Key : { TEXT("collisionEnabled"), TEXT("objectType"), TEXT("responseOnChannel"), TEXT("blocksVisibility") })
+				Result->SetField(Key, MakeShared<FJsonValueNull>());
+			return;
+		}
+		Result->SetStringField(TEXT("collisionEnabled"), EnabledName(Component->GetCollisionEnabled()));
+		Result->SetStringField(TEXT("objectType"), ChannelLabel(Component->GetCollisionObjectType()));
+		Result->SetBoolField(TEXT("blocksVisibility"), Component->GetCollisionResponseToChannel(ECC_Visibility) == ECR_Block);
+		if (AActor* Owner = Component->GetOwner())
+		{
+			Result->SetStringField(TEXT("ownerActorLabel"), Owner->GetActorLabel());
+			Result->SetStringField(TEXT("ownerActorClass"), Owner->GetClass()->GetName());
+		}
+		if (Channel != INDEX_NONE)
+		{
+			Result->SetStringField(TEXT("collisionChannel"), ChannelLabel(Channel));
+			Result->SetStringField(TEXT("responseOnChannel"), ResponseName(
+				Component->GetCollisionResponseToChannel(static_cast<ECollisionChannel>(Channel))));
+		}
+		else
+		{
+			TArray<TSharedPtr<FJsonValue>> Responses;
+			int32 Total = 0;
+			for (int32 Index = 0; Index < ECC_OverlapAll_Deprecated; ++Index)
+			{
+				const FString Name = ChannelLabel(Index);
+				if (Name.IsEmpty() || Name == TEXT("None")) continue;
+				const ECollisionResponse Response = Component->GetCollisionResponseToChannel(static_cast<ECollisionChannel>(Index));
+				if (Response == ECR_Block) continue;
+				++Total;
+				if (Responses.Num() >= 32) continue;
+				auto Row = MakeShared<FJsonObject>();
+				Row->SetStringField(TEXT("channel"), Name);
+				Row->SetStringField(TEXT("response"), ResponseName(Response));
+				Responses.Add(MakeShared<FJsonValueObject>(Row));
+			}
+			Result->SetStringField(TEXT("defaultResponse"), TEXT("Block"));
+			Result->SetArrayField(TEXT("responses"), Responses);
+			Result->SetBoolField(TEXT("responsesTruncated"), Total > 32);
+		}
+	}
+
 	/**
 	 * #933: the world a trace runs in, taken from the request's own `world`
 	 * (editor|pie|game|auto) plus `pieInstance`, through ResolveWorldFromParams -
 	 * the one resolver every other world-scoped action in this category already
-	 * goes through. Written once here because all three trace actions need it and
+	 * goes through. Written once here because the trace actions need it and
 	 * a second copy of the resolution is how the two would drift apart again.
 	 *
 	 * On failure OutError carries the response to return, so the caller does not
-	 * restate the message and the three actions cannot disagree about it.
+	 * restate the message and the actions cannot disagree about it.
 	 */
-	static UWorld* ResolveTraceWorld(const TSharedPtr<FJsonObject>& Params, TSharedPtr<FJsonValue>& OutError)
+	UWorld* ResolveTraceWorld(const TSharedPtr<FJsonObject>& Params, TSharedPtr<FJsonValue>& OutError)
 	{
 		const FString Scope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 		UWorld* World = ResolveWorldFromParams(Params, *Scope);
@@ -106,8 +203,9 @@ namespace
 		if (Hit.PhysMaterial.IsValid()) Result->SetStringField(TEXT("physicalMaterial"), Hit.PhysMaterial->GetPathName());
 	}
 
-	/** One line_trace. Shared by the single-item handler and bulk_line_trace. */
-	static TSharedPtr<FJsonValue> ExecuteLineTrace(UWorld* World, const TSharedPtr<FJsonObject>& Params)
+	/** Shared query implementation for line, shape, bulk and live view traces. */
+	TSharedPtr<FJsonValue> Execute(UWorld* World, const TSharedPtr<FJsonObject>& Params,
+		bool bShape, const AActor* IgnoredActor, bool bCollision)
 	{
 		if (!HasParam(Params, TEXT("start")))
 		{
@@ -127,11 +225,24 @@ namespace
 				return MCPError(TEXT("'direction' must be a non-zero vector"));
 			}
 			const double Distance = OptionalNumber(Params, TEXT("distance"), 200000.0);
+			if (bShape && (!FMath::IsFinite(Distance) || Distance <= 0.0))
+				return MCPError(TEXT("'distance' must be finite and positive"));
 			End = Start + Dir * Distance;
 		}
 		else
 		{
 			return MCPError(TEXT("Pass either 'end' (Vec3) or 'direction' (Vec3) + 'distance?'"));
+		}
+
+		if (Start.ContainsNaN() || End.ContainsNaN())
+			return MCPError(TEXT("Trace vectors must be finite"));
+		FCollisionShape Shape;
+		if (bShape)
+		{
+			FString Error;
+			if (!MakeShape(OptionalString(Params, TEXT("shape")), OptionalNumber(Params, TEXT("radius"), 0),
+				OptionalVec3(Params, TEXT("halfExtent")), OptionalNumber(Params, TEXT("halfHeight"), 0), Shape, Error))
+				return MCPError(Error);
 		}
 
 		// Gameplay traces run against simple collision unless they ask otherwise, so a
@@ -173,8 +284,14 @@ namespace
 			}
 		}
 
+		if (IgnoredActor) Query.AddIgnoredActor(IgnoredActor);
 		FHitResult Hit;
-		const bool bHit = World->LineTraceSingleByChannel(Hit, Start, End, Channel, Query);
+		TArray<FHitResult> Hits;
+		const bool bMulti = bShape && OptionalBool(Params, TEXT("multi"), false);
+		const bool bHit = bShape
+			? (bMulti ? World->SweepMultiByChannel(Hits, Start, End, FQuat::Identity, Channel, Shape, Query)
+				: World->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, Channel, Shape, Query))
+			: World->LineTraceSingleByChannel(Hit, Start, End, Channel, Query);
 
 		auto Result = MCPSuccess();
 		Result->SetBoolField(TEXT("hit"), bHit);
@@ -188,7 +305,28 @@ namespace
 		// trace against an editor trace has no other way to tell them apart, and
 		// silently answering from the wrong one is the bug this closes.
 		Result->SetStringField(TEXT("world"), DescribeTracedWorld(World));
-		if (bHit) EmitHitFields(Result, Hit);
+		if (bMulti)
+		{
+			TArray<TSharedPtr<FJsonValue>> Rows;
+			for (int32 Index = 0; Index < FMath::Min(Hits.Num(), 64); ++Index)
+			{
+				auto Row = MakeShared<FJsonObject>();
+				Row->SetBoolField(TEXT("blockingHit"), Hits[Index].bBlockingHit);
+				Row->SetBoolField(TEXT("bStartPenetrating"), Hits[Index].bStartPenetrating);
+				EmitHitFields(Row, Hits[Index]);
+				if (bCollision) EmitCollision(Row, Hits[Index].GetComponent(), Channel);
+				Rows.Add(MakeShared<FJsonValueObject>(Row));
+			}
+			Result->SetArrayField(TEXT("hits"), Rows);
+			Result->SetNumberField(TEXT("totalHits"), Hits.Num());
+			Result->SetBoolField(TEXT("truncated"), Hits.Num() > 64);
+		}
+		else if (bHit)
+		{
+			EmitHitFields(Result, Hit);
+			if (bShape) Result->SetBoolField(TEXT("bStartPenetrating"), Hit.bStartPenetrating);
+			if (bCollision) EmitCollision(Result, Hit.GetComponent(), Channel);
+		}
 		return MCPResult(Result);
 	}
 }
@@ -207,9 +345,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::LineTrace(const TSharedPtr<FJsonObject>& 
 	});
 
 	TSharedPtr<FJsonValue> WorldError;
-	UWorld* World = ResolveTraceWorld(Params, WorldError);
+	UWorld* World = MCPTrace::ResolveTraceWorld(Params, WorldError);
 	if (!World) return WorldError;
-	return ExecuteLineTrace(World, Params);
+	return MCPTrace::Execute(World, Params);
 }
 
 
@@ -221,7 +359,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BulkLineTrace(const TSharedPtr<FJsonObjec
 	// per-item scope would let one batch straddle two worlds and report the
 	// results in one array as though they were comparable.
 	TSharedPtr<FJsonValue> WorldError;
-	UWorld* World = ResolveTraceWorld(Params, WorldError);
+	UWorld* World = MCPTrace::ResolveTraceWorld(Params, WorldError);
 	if (!World) return WorldError;
 
 	constexpr int32 MaxBulkLineTraces = 256;
@@ -252,7 +390,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BulkLineTrace(const TSharedPtr<FJsonObjec
 			Results.Add(MCPError(FString::Printf(TEXT("traces[%d] must be an object"), Index)));
 			continue;
 		}
-		Results.Add(ExecuteLineTrace(World, Item));
+		Results.Add(MCPTrace::Execute(World, Item));
 	}
 
 	auto Result = MCPSuccess();
@@ -272,7 +410,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SnapActorToFloor(const TSharedPtr<FJsonOb
 	// #933: same defect as line_trace. The actor is looked up in this world and
 	// the downward trace runs in it, so both halves have to agree on which one.
 	TSharedPtr<FJsonValue> WorldError;
-	UWorld* World = ResolveTraceWorld(Params, WorldError);
+	UWorld* World = MCPTrace::ResolveTraceWorld(Params, WorldError);
 	if (!World) return WorldError;
 	FString ActorLabel;
 
@@ -324,4 +462,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::SnapActorToFloor(const TSharedPtr<FJsonOb
 	Payload->SetObjectField(TEXT("location"), Loc);
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::ShapeTrace(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, { TEXT("shape"), TEXT("radius"), TEXT("halfExtent"), TEXT("halfHeight"),
+		TEXT("start"), TEXT("end"), TEXT("direction"), TEXT("distance"), TEXT("traceComplex"), TEXT("channel"),
+		TEXT("ignoreActors"), TEXT("world"), TEXT("pieInstance"), TEXT("multi") });
+	TSharedPtr<FJsonValue> Error;
+	UWorld* World = MCPTrace::ResolveTraceWorld(Params, Error);
+	return World ? MCPTrace::Execute(World, Params, true) : Error;
 }

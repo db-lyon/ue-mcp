@@ -23,6 +23,7 @@
 //     for "Movable" silently matched nothing. Both are computed here.
 
 #include "LevelHandlers.h"
+#include "LevelTrace.h"
 
 #include "HandlerRegistry.h"
 #include "HandlerQuery.h"
@@ -227,6 +228,8 @@ namespace
 	{
 		FString WorldScope;
 		FString LevelPath;
+		bool bIncludeCollision = false;
+		int32 CollisionChannel = INDEX_NONE;
 		bool bMatchSubclasses = true;
 		FString ComponentNameContains;
 		FString ActorLabelPrefix;
@@ -273,6 +276,16 @@ namespace
 	 *  the refusal, or nullptr with OutRequest filled in. */
 	TSharedPtr<FJsonValue> MCPQueryParseRequest(const TSharedPtr<FJsonObject>& Params, FMCPQueryRequest& OutRequest)
 	{
+		OutRequest.bIncludeCollision = OptionalBool(Params, TEXT("includeCollision"), false);
+		const FString CollisionName = OptionalString(Params, TEXT("collisionChannel"));
+		if (!CollisionName.IsEmpty())
+		{
+			ECollisionChannel Channel;
+			FString Resolved;
+			if (!MCPResolveCollisionChannel(CollisionName, Channel, Resolved))
+				return MCPError(FString::Printf(TEXT("Unknown collision channel '%s'"), *CollisionName));
+			OutRequest.CollisionChannel = Channel;
+		}
 		const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 		const FString LevelPath = OptionalString(Params, TEXT("levelPath"));
 
@@ -550,6 +563,7 @@ namespace
 		Row->SetStringField(TEXT("folderPath"), ActorFolder);
 		Row->SetStringField(TEXT("componentName"), ComponentName);
 		Row->SetStringField(TEXT("componentClass"), Component->GetClass()->GetName());
+		if (Request.bIncludeCollision) MCPTrace::EmitCollision(Row, Primitive, Request.CollisionChannel);
 
 		FVector WorldScale = FVector::OneVector;
 		bool bHasTransform = false;
@@ -1392,6 +1406,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 {
 	MCP_CHECK_GAME_THREAD();
 	MCPReadParamsAhead(Params, {
+		TEXT("includeCollision"), TEXT("collisionChannel"),
 		TEXT("componentClass"), TEXT("actorClass"), TEXT("matchSubclasses"), TEXT("componentNameContains"),
 		TEXT("actorLabelPrefix"), TEXT("actorLabelContains"), TEXT("actorTag"), TEXT("folderPath"), TEXT("folderPathPrefix"),
 		TEXT("fields"), TEXT("propertyNames"), TEXT("actorPropertyNames"), TEXT("where"), TEXT("whereMode"),
