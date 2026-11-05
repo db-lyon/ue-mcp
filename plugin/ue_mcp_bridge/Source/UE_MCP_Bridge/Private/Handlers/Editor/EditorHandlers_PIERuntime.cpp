@@ -18,6 +18,7 @@
 #include "HandlerJsonProperty.h"
 #include "HandlerPropertyText.h"
 #include "HandlerSkinnedAsset.h"
+#include "HandlerStaticMeshAsset.h"
 #include "JsonSerializer.h"
 
 #include "Components/SkeletalMeshComponent.h"
@@ -1897,6 +1898,30 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
 		MCPSetNoRollback(MeshResult,
 			TEXT("No rollback payload is built for a mesh swap here. Restore previousValue with level(set_component_skeletal_mesh)."));
+		return MCPResult(MeshResult);
+	}
+
+	// A static mesh component's mesh goes through SetStaticMesh (#1548).
+	if (MCPStaticMeshAsset::IsMeshProperty(Prop))
+	{
+		UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(ExportOwner);
+		FString PreviousMesh;
+		FString MeshErr;
+		if (!MeshComp || !MCPStaticMeshAsset::AssignFromJson(MeshComp, NewValue, PreviousMesh, MeshErr))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName,
+				MeshComp ? *MeshErr : TEXT("the owning static mesh component could not be resolved")));
+		}
+		auto MeshResult = MCPSuccess();
+		MCPSetUpdated(MeshResult);
+		MeshResult->SetStringField(TEXT("target"), Description);
+		MeshResult->SetStringField(TEXT("objectPath"), Target->GetPathName());
+		MeshResult->SetStringField(TEXT("propertyName"), ResolvedName);
+		MeshResult->SetStringField(TEXT("resolvedPropertyName"), PathInfo.IndexedPath);
+		if (PathInfo.bUsedKeySelector) MeshResult->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+		MCPStaticMeshAsset::Report(MeshResult, MeshComp, PreviousMesh);
+		MCPSetNoRollback(MeshResult,
+			TEXT("No rollback payload is built for a mesh swap here. Restore previousValue with this action and value set to it."));
 		return MCPResult(MeshResult);
 	}
 

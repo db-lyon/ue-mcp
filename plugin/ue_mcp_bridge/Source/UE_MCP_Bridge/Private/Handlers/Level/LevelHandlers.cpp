@@ -4,6 +4,7 @@
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
+#include "HandlerStaticMeshAsset.h"
 #include "LevelSpawnFinalize.h"
 #include "Handlers/VolumeHelpers_Internal.h"
 #include "EditorScriptingUtilities/Public/EditorLevelLibrary.h"
@@ -3142,6 +3143,40 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 		return MCPResult(MeshResult);
 	}
 
+	// A static mesh component's mesh goes through SetStaticMesh (#1548).
+	if (MCPStaticMeshAsset::IsMeshProperty(Prop))
+	{
+		UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(static_cast<UObject*>(CurrentContainer));
+		if (!MeshComp)
+		{
+			return MCPError(TEXT("The static mesh component could not be resolved."));
+		}
+		FString PreviousMesh;
+		FString MeshErr;
+		if (!MCPStaticMeshAsset::AssignFromJson(MeshComp, *ValueField, PreviousMesh, MeshErr))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *MeshErr));
+		}
+		MeshComp->MarkPackageDirty();
+
+		auto MeshResult = MCPSuccess();
+		MCPSetUpdated(MeshResult);
+		MeshResult->SetStringField(TEXT("actorLabel"), ActorLabel);
+		MeshResult->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
+		MeshResult->SetStringField(TEXT("componentClass"), MeshComp->GetClass()->GetName());
+		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
+		MCPStaticMeshAsset::Report(MeshResult, MeshComp, PreviousMesh);
+
+		TSharedPtr<FJsonObject> MeshPayload = MakeShared<FJsonObject>();
+		MeshPayload->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
+		MeshPayload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		if (!ComponentName.IsEmpty()) MeshPayload->SetStringField(TEXT("componentName"), ComponentName);
+		MeshPayload->SetStringField(TEXT("propertyName"), PropertyName);
+		MeshPayload->SetStringField(TEXT("value"), PreviousMesh.IsEmpty() ? FString(TEXT("None")) : PreviousMesh);
+		MCPSetRollback(MeshResult, TEXT("set_component_property"), MeshPayload);
+		return MCPResult(MeshResult);
+	}
+
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(CurrentContainer, LeafArrayIndex);
 
 	// Capture previous value as a string for self-inverse rollback.
@@ -3239,9 +3274,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 	// #539: writing RelativeLocation/RelativeRotation/RelativeScale3D on a scene
 	// component only moves it once the transform is recomputed. Refresh so the
 	// change is visible and persisted, not just stored on the property.
+	// UpdateComponentToWorld skips the bounds when the transform is unchanged,
+	// so a write that changes the geometry refreshes them itself (#1548).
 	if (USceneComponent* SceneComp = Cast<USceneComponent>(TargetComp))
 	{
 		SceneComp->UpdateComponentToWorld();
+		SceneComp->UpdateBounds();
 		SceneComp->MarkRenderStateDirty();
 	}
 	{
@@ -4096,6 +4134,39 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 		MeshResult->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
 		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
 		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
+
+		TSharedPtr<FJsonObject> MeshPayload = MakeShared<FJsonObject>();
+		MeshPayload->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
+		MeshPayload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		MeshPayload->SetStringField(TEXT("propertyName"), PropertyName);
+		MeshPayload->SetStringField(TEXT("value"), PreviousMesh.IsEmpty() ? FString(TEXT("None")) : PreviousMesh);
+		MCPSetRollback(MeshResult, TEXT("set_actor_property"), MeshPayload);
+		return MCPResult(MeshResult);
+	}
+
+	// A static mesh component's mesh goes through SetStaticMesh (#1548).
+	if (MCPStaticMeshAsset::IsMeshProperty(Prop))
+	{
+		UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(static_cast<UObject*>(CurrentContainer));
+		if (!MeshComp)
+		{
+			return MCPError(TEXT("The static mesh component could not be resolved. Use level(set_component_property) on the component."));
+		}
+		TargetActor->Modify();
+		FString PreviousMesh;
+		FString MeshErr;
+		if (!MCPStaticMeshAsset::AssignFromJson(MeshComp, *ValueField, PreviousMesh, MeshErr))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *MeshErr));
+		}
+		TargetActor->MarkPackageDirty();
+
+		auto MeshResult = MCPSuccess();
+		MCPSetUpdated(MeshResult);
+		MeshResult->SetStringField(TEXT("actorLabel"), ActorLabel);
+		MeshResult->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
+		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
+		MCPStaticMeshAsset::Report(MeshResult, MeshComp, PreviousMesh);
 
 		TSharedPtr<FJsonObject> MeshPayload = MakeShared<FJsonObject>();
 		MeshPayload->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
