@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1211,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -3668,6 +3668,12 @@
           "type": "array",
           "required": true,
           "description": "Values to append, validated before any is written"
+        },
+        {
+          "name": "unique",
+          "type": "boolean",
+          "required": false,
+          "description": "Skip values already in the array or earlier in elements (default false)"
         },
         {
           "name": "save",
@@ -29659,6 +29665,58 @@
           "type": "string",
           "required": false,
           "description": "Notify state class to match. Pass at least one of notifyName and notifyStateClass; both filters apply together"
+        }
+      ]
+    },
+    "remove_asset_array_elements": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Asset path; a Blueprint path writes its generated-class CDO",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": true,
+          "description": "Path of the TArray property"
+        },
+        {
+          "name": "indices",
+          "type": "array",
+          "required": false,
+          "description": "Element indices to remove; each must exist",
+          "items": "integer"
+        },
+        {
+          "name": "elements",
+          "type": "array",
+          "required": false,
+          "description": "Values to remove; every element equal to one of them goes"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the package after the write (default true)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "indices"
+            ],
+            [
+              "elements"
+            ]
+          ]
         }
       ]
     },

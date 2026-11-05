@@ -778,8 +778,16 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")),
 		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Path of the TArray property")),
 		MCPParam::Required(TEXT("elements"), EType::Array, TEXT("Values to append, validated before any is written")),
+		MCPParam::Optional(TEXT("unique"), EType::Boolean, TEXT("Skip values already in the array or earlier in elements (default false)")),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")),
 	});
+	Registry.RegisterHandler(TEXT("remove_asset_array_elements"), &RemoveAssetArrayElements, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset path; a Blueprint path writes its generated-class CDO")).Alias(TEXT("path")),
+		MCPParam::Required(TEXT("propertyName"), EType::String, TEXT("Path of the TArray property")),
+		MCPParam::Optional(TEXT("indices"), EType::Array, TEXT("Element indices to remove; each must exist")).Items(EType::Integer),
+		MCPParam::Optional(TEXT("elements"), EType::Array, TEXT("Values to remove; every element equal to one of them goes")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package after the write (default true)")),
+	}, MCPSpec::ExactlyOne({ { TEXT("indices") }, { TEXT("elements") } }));
 	Registry.RegisterHandler(TEXT("bulk_set_asset_properties"), &BulkSetAssetProperties, {
 		MCPParam::Required(TEXT("items"), EType::Array, TEXT("Asset updates: [{assetPath, properties}], max 500")).Items(EType::Object),
 		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the changed packages (default true)")),
@@ -5326,6 +5334,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 	const TArray<TSharedPtr<FJsonValue>>* Elements = nullptr;
 	const bool bHasElements = TryGetArrayParam(Params, TEXT("elements"), Elements);
 	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	const bool bUnique = OptionalBool(Params, TEXT("unique"), false);
 	if (!bHasElements || !Elements)
 	{
 		return MCPError(TEXT("Missing 'elements' array parameter"));
@@ -5419,7 +5428,55 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 
 	FScriptArrayHelper ArrayHelper(ArrayProp, ValuePtr);
 	const int32 PreviousNum = ArrayHelper.Num();
+
+	// unique=true drops a value the array already holds, or one an earlier
+	// element of this batch adds, compared the way the property type compares.
+	TArray<TSharedPtr<FJsonValue>> SkippedElements;
+	if (bUnique)
+	{
+		TArray<void*> Kept;
+		for (int32 Index = 0; Index < StagedElements.Num(); ++Index)
+		{
+			void* Candidate = StagedElements[Index];
+			bool bDuplicate = false;
+			for (int32 Existing = 0; Existing < PreviousNum && !bDuplicate; ++Existing)
+			{
+				bDuplicate = ArrayProp->Inner->Identical(ArrayHelper.GetRawPtr(Existing), Candidate, PPF_None);
+			}
+			for (int32 Prior = 0; Prior < Kept.Num() && !bDuplicate; ++Prior)
+			{
+				bDuplicate = ArrayProp->Inner->Identical(Kept[Prior], Candidate, PPF_None);
+			}
+			if (bDuplicate)
+			{
+				ArrayProp->Inner->DestroyAndFreeValue(Candidate);
+				SkippedElements.Add(MakeShared<FJsonValueNumber>(Index));
+			}
+			else
+			{
+				Kept.Add(Candidate);
+			}
+		}
+		StagedElements = MoveTemp(Kept);
+	}
 	const int32 AppendedCount = StagedElements.Num();
+
+	if (AppendedCount == 0)
+	{
+		// Every value is already present: nothing to write, save or roll back.
+		auto Unchanged = MCPSuccess();
+		MCPSetExisted(Unchanged);
+		Unchanged->SetStringField(TEXT("assetPath"), AssetPath);
+		Unchanged->SetStringField(TEXT("propertyName"), PropertyName);
+		Unchanged->SetStringField(TEXT("elementType"), ArrayProp->Inner->GetCPPType());
+		Unchanged->SetNumberField(TEXT("previousNum"), PreviousNum);
+		Unchanged->SetNumberField(TEXT("appendedCount"), 0);
+		Unchanged->SetNumberField(TEXT("newNum"), PreviousNum);
+		Unchanged->SetArrayField(TEXT("appendedIndices"), TArray<TSharedPtr<FJsonValue>>());
+		Unchanged->SetArrayField(TEXT("skippedElements"), SkippedElements);
+		Unchanged->SetField(TEXT("value"), PreviousValue);
+		return MCPResult(Unchanged);
+	}
 
 	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "AppendAssetArrayElements", "Append asset array elements"));
 	Asset->Modify();
@@ -5457,7 +5514,177 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 	Result->SetNumberField(TEXT("appendedCount"), AppendedCount);
 	Result->SetNumberField(TEXT("newNum"), PreviousNum + AppendedCount);
 	Result->SetArrayField(TEXT("appendedIndices"), AppendedIndices);
+	if (bUnique) Result->SetArrayField(TEXT("skippedElements"), SkippedElements);
 	Result->SetField(TEXT("previousValue"), PreviousValue);
+	Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, ArrayProp));
+	MCPDescribePropertyWritePersistence(Result, Asset, PropertyName, bSave, bPersisted, PersistReason);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("propertyName"), PathInfo.bUsedKeySelector ? PathInfo.IndexedPath : PropertyName);
+	Payload->SetStringField(TEXT("value"), PreviousText);
+	Payload->SetBoolField(TEXT("save"), bSave);
+	MCPSetRollback(Result, TEXT("set_asset_property"), Payload);
+	return MCPResult(Result);
+}
+
+// Remove TArray elements by index or by value without rewriting the rest of
+// the array (#1659). Every index and value is checked before anything changes.
+TSharedPtr<FJsonValue> FAssetHandlers::RemoveAssetArrayElements(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+
+	const TArray<TSharedPtr<FJsonValue>>* Indices = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Elements = nullptr;
+	const bool bHasIndices = TryGetArrayParam(Params, TEXT("indices"), Indices) && Indices;
+	const bool bHasElements = TryGetArrayParam(Params, TEXT("elements"), Elements) && Elements;
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	if (bHasIndices == bHasElements)
+	{
+		return MCPError(TEXT("Pass exactly one of 'indices' (element positions) or 'elements' (values to remove)"));
+	}
+	if ((bHasIndices && Indices->IsEmpty()) || (bHasElements && Elements->IsEmpty()))
+	{
+		return MCPError(bHasIndices
+			? TEXT("'indices' must contain at least one index")
+			: TEXT("'elements' must contain at least one value"));
+	}
+
+	TSharedPtr<FJsonValue> LoadError;
+	UObject* Asset = MCPRequireAssetObject(AssetPath, LoadError);
+	if (!Asset) return LoadError;
+	UBlueprint* OwningBlueprint = nullptr;
+	Asset = MCPResolveAssetToCDO(Asset, &OwningBlueprint);
+
+	FProperty* FinalProp = nullptr;
+	void* ValuePtr = nullptr;
+	UObject* LeafOwner = nullptr;
+	FString ResolveErr;
+	MCPJsonProperty::FResolvedPathInfo PathInfo;
+	if (!MCPJsonProperty::ResolveDottedPath(Asset, PropertyName, FinalProp, ValuePtr, LeafOwner, ResolveErr, &PathInfo))
+	{
+		return MCPError(ResolveErr);
+	}
+
+	FArrayProperty* ArrayProp = CastField<FArrayProperty>(FinalProp);
+	if (!ArrayProp)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Property '%s' is '%s', not a TArray"),
+			*PropertyName,
+			FinalProp ? *FinalProp->GetCPPType() : TEXT("unknown")));
+	}
+	if (const FObjectPropertyBase* ElementObject = CastField<FObjectPropertyBase>(ArrayProp->Inner))
+	{
+		if (ElementObject->PropertyClass
+			&& ElementObject->PropertyClass->IsChildOf(UEdGraphNode::StaticClass()))
+		{
+			return MCPError(FString::Printf(
+				TEXT("Refusing to remove from '%s': it holds graph nodes. Use asset(action=\"remove_graph_node\"), ")
+				TEXT("which detaches the node's links through the graph's schema."),
+				*PropertyName));
+		}
+	}
+
+	FScriptArrayHelper ArrayHelper(ArrayProp, ValuePtr);
+	const int32 PreviousNum = ArrayHelper.Num();
+	TSet<int32> ToRemove;
+
+	if (bHasIndices)
+	{
+		for (int32 Slot = 0; Slot < Indices->Num(); ++Slot)
+		{
+			double Number = 0;
+			const TSharedPtr<FJsonValue>& Entry = (*Indices)[Slot];
+			if (!Entry.IsValid() || !Entry->TryGetNumber(Number) || Number != FMath::FloorToDouble(Number))
+			{
+				return MCPError(FString::Printf(TEXT("indices[%d] is not an integer"), Slot));
+			}
+			if (Number < 0 || Number >= PreviousNum)
+			{
+				return MCPError(FString::Printf(
+					TEXT("indices[%d] = %.0f is out of range: '%s' has %d element(s)"),
+					Slot, Number, *PropertyName, PreviousNum));
+			}
+			ToRemove.Add(static_cast<int32>(Number));
+		}
+	}
+	else
+	{
+		for (int32 Slot = 0; Slot < Elements->Num(); ++Slot)
+		{
+			void* Staged = ArrayProp->Inner->AllocateAndInitializeValue();
+			FString ElementError;
+			if (!MCPJsonProperty::SetJsonOnProperty(ArrayProp->Inner, Staged, (*Elements)[Slot], ElementError))
+			{
+				ArrayProp->Inner->DestroyAndFreeValue(Staged);
+				return MCPError(FString::Printf(
+					TEXT("Failed to convert elements[%d] for '%s': %s"), Slot, *PropertyName, *ElementError));
+			}
+			for (int32 Index = 0; Index < PreviousNum; ++Index)
+			{
+				if (ArrayProp->Inner->Identical(ArrayHelper.GetRawPtr(Index), Staged, PPF_None))
+				{
+					ToRemove.Add(Index);
+				}
+			}
+			ArrayProp->Inner->DestroyAndFreeValue(Staged);
+		}
+	}
+
+	TArray<int32> Removed = ToRemove.Array();
+	Removed.Sort();
+	TArray<TSharedPtr<FJsonValue>> RemovedIndices;
+	for (const int32 Index : Removed)
+	{
+		RemovedIndices.Add(MakeShared<FJsonValueNumber>(Index));
+	}
+
+	const TSharedPtr<FJsonValue> PreviousValue = FMCPJsonSerializer::SerializeValue(ValuePtr, ArrayProp);
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	if (PathInfo.bUsedKeySelector) Result->SetStringField(TEXT("indexedPath"), PathInfo.IndexedPath);
+	Result->SetStringField(TEXT("elementType"), ArrayProp->Inner->GetCPPType());
+	Result->SetNumberField(TEXT("previousNum"), PreviousNum);
+	Result->SetNumberField(TEXT("removedCount"), Removed.Num());
+	Result->SetNumberField(TEXT("newNum"), PreviousNum - Removed.Num());
+	Result->SetArrayField(TEXT("removedIndices"), RemovedIndices);
+
+	if (Removed.IsEmpty())
+	{
+		// No value matched: nothing to write, save or roll back.
+		MCPSetExisted(Result);
+		Result->SetField(TEXT("value"), PreviousValue);
+		return MCPResult(Result);
+	}
+
+	FString PreviousText;
+	ArrayProp->ExportText_Direct(PreviousText, ValuePtr, ValuePtr, LeafOwner, PPF_None);
+
+	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "RemoveAssetArrayElements", "Remove asset array elements"));
+	Asset->Modify();
+	if (LeafOwner && LeafOwner != Asset) LeafOwner->Modify();
+
+	for (int32 Cursor = Removed.Num() - 1; Cursor >= 0; --Cursor)
+	{
+		ArrayHelper.RemoveValues(Removed[Cursor], 1);
+	}
+
+	if (LeafOwner && LeafOwner != Asset) LeafOwner->PostEditChange();
+	Asset->PostEditChange();
+	Asset->MarkPackageDirty();
+	MCPNoteBlueprintCDOWrite(OwningBlueprint, PropertyName);
+
+	FString PersistReason;
+	const bool bPersisted = MCPPersistAssetWrite(Asset, OwningBlueprint, bSave, PersistReason);
+
+	MCPSetUpdated(Result);
+	Result->SetField(TEXT("previousValue"), PreviousValue);
+	Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, ArrayProp));
 	MCPDescribePropertyWritePersistence(Result, Asset, PropertyName, bSave, bPersisted, PersistReason);
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
