@@ -1053,6 +1053,10 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::Revert(const TSharedPtr<FJsonObje
 			const FString File = State->GetFilename();
 			FString Copy;
 			if (!State->IsDeleted() || FPaths::FileExists(File) || !RestoreFrom->TryGetStringField(File, Copy)) continue;
+			// Copies come only from the stash mark_for_delete writes under Saved.
+			FString StashCopy, StashError;
+			if (!MCPResolvePathInside(Copy, { FPaths::ProjectSavedDir() }, StashCopy, StashError)) continue;
+			Copy = StashCopy;
 			if (FPaths::FileExists(Copy) && IFileManager::Get().Copy(*File, *Copy) == COPY_OK) Restored.Add(File);
 		}
 		if (Restored.Num() > 0) Provider->Execute(ISourceControlOperation::Create<FMarkForAdd>(), Restored);

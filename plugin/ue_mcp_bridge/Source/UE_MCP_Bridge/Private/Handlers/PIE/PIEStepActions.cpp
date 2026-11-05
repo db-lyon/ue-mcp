@@ -1,5 +1,6 @@
 #include "Handlers/PIE/PIEStepActions.h"
 
+#include "HandlerPathGuard.h"
 #include "Handlers/PIE/PIELog.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
 #include "MCPPIEInputInjector.h"
@@ -376,7 +377,8 @@ namespace MCPPIE
 	{
 		const FString Label = A.Command.IsEmpty() ? FString::FromInt(Captures.Num() + 1) : A.Command;
 		const FString File = FString::Printf(TEXT("captures/step%02d_client%d_%s.jpg"), StepNumber, A.Client, *Label);
-		const FString Path = CaptureRoot / File;
+		FString Path;
+		if (!MCPResolvePathInside(CaptureRoot / File, { CaptureRoot }, Path, Err)) return false;
 		if (A.Client > 0)
 		{
 			UMCPPIERemoteControl* Remote = PIERemotePlayers::Find(A.Client, Err);

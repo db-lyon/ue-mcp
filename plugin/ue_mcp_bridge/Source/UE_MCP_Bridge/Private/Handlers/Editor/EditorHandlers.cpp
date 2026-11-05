@@ -2818,6 +2818,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 	{
 		Filename += TEXT(".png");
 	}
+	// A relative name lands in Saved/Screenshots; the result is absolute from here on.
+	{
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(Filename, Resolved, FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots")))) return Err;
+		Filename = Resolved;
+	}
 
 	// #64: Force the active level viewport to render even if the editor window is not focused
 	if (!GEditor)
@@ -4717,7 +4723,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 		if (NotDrawn.Num() > 0) RuntimeComponents->SetArrayField(TEXT("notDrawn"), NotDrawn);
 	}
 
-	FString AbsPath = UEMCP::SceneCapture::ResolveOutputPath(OutputPath);
+	FString AbsPath;
+	if (auto Err = MCPRequireWritablePath(OutputPath, AbsPath)) return Err;
 	if (!AbsPath.EndsWith(TEXT(".png"))) AbsPath += TEXT(".png");
 
 	// Asked before the export, because it is the difference between creating a

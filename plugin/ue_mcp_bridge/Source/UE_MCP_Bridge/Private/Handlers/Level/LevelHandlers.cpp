@@ -4514,9 +4514,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::ExportActorFbx(const TSharedPtr<FJsonObje
 	}
 	if (!MeshAsset) return MCPError(FString::Printf(TEXT("Actor '%s' has no skeletal/static mesh to export"), *ActorLabel));
 
-	FString AbsPath = OutputPath;
-	if (FPaths::IsRelative(AbsPath)) AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
-	AbsPath = FPaths::ConvertRelativePathToFull(AbsPath);
+	FString AbsPath;
+	if (auto Err = MCPRequireWritablePath(OutputPath, AbsPath)) return Err;
 	if (!AbsPath.EndsWith(TEXT(".fbx"))) AbsPath += TEXT(".fbx");
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsPath), /*Tree*/ true);
 
