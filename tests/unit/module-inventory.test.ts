@@ -151,6 +151,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "daemon/events.ts": "A numbered, bounded event log. No editor is involved.",
   "daemon/editor-step.ts": "Reads one editor operation step's result text. Pure logic over its arguments.",
   "daemon/activity.ts": "Reads an MCP tools/call into a category and action. Pure logic.",
+  "extensions/package-paths.ts": "Resolves a manifest path inside the package it is handed. Pure path logic over its arguments.",
   "core/open-url.ts": "Opens a URL in the system browser. No editor is involved.",
   "core/spawn-outside-tree.ts": "Starts a process through a trampoline that exits. Pure process plumbing over its arguments.",
   "core/safe-spawn.ts": "Builds argv invocations and checks the values they carry. Pure process plumbing over its arguments.",

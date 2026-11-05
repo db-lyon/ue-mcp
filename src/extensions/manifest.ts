@@ -4,6 +4,7 @@ import { FlowStepKeySchema } from "../flow/schema.js";
 import * as path from "node:path";
 import { z } from "zod";
 import yaml from "js-yaml";
+import { UE_PLUGIN_NAME_RE } from "./package-paths.js";
 
 /**
  * Schema for ue-mcp.plugin.yml, the author-side declaration shipped inside
@@ -108,7 +109,8 @@ const FlowEntrySchema = z.object({
  *       record_start: { description: "..." }
  */
 const NativeModuleSchema = z.object({
-  uePluginName: z.string().min(1),
+  // Becomes a folder under the project's Plugins/, so it is an Unreal name and never a path.
+  uePluginName: z.string().regex(UE_PLUGIN_NAME_RE, { message: "uePluginName must be an Unreal plugin name (letters, digits, underscore; not starting with a digit)" }),
   minBridgeApi: z.number().int().nonnegative(),
   source: z.string().min(1),
   supportedEngineVersions: z.array(z.string().min(1)).default([]),

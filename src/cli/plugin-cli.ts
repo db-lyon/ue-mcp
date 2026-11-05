@@ -28,6 +28,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { UnsafeArgumentError, assertPackageSpec, runNpmSync } from "../core/safe-spawn.js";
+import { UE_PLUGIN_NAME_RE } from "../extensions/package-paths.js";
 import { loadManifest, manifestActionNames, type PluginManifest } from "../extensions/manifest.js";
 import { satisfiesMinimum } from "../extensions/version.js";
 import { findInstalledPackage } from "../extensions/resolver.js";
@@ -469,7 +470,12 @@ async function cmdUninstall(args: string[], editor: string | undefined): Promise
   // The UE plugin the package deployed: from the install record, or, for a
   // superseded plugin installed before the record existed, from its entry.
   const nativeState = readNativeModulesState(proj.projectDir);
-  const uePluginName = nativeState[name]?.uePluginName ?? supersededByName(name)?.[1].uePluginName;
+  const recorded = nativeState[name]?.uePluginName ?? supersededByName(name)?.[1].uePluginName;
+  // The record is a file in the project, so a name that is not an Unreal name never becomes a folder to delete.
+  if (recorded !== undefined && !UE_PLUGIN_NAME_RE.test(recorded)) {
+    fail(`the install record names ${JSON.stringify(recorded)} as the Unreal plugin, which is not a plugin name. Nothing was removed.`);
+  }
+  const uePluginName = recorded;
   const uproject = findUProject(proj.projectDir);
   const pluginDir = uePluginName ? path.join(proj.projectDir, "Plugins", uePluginName) : null;
   const pluginDirExists = pluginDir !== null && fs.existsSync(pluginDir);
