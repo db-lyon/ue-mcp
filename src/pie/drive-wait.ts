@@ -68,6 +68,8 @@ export async function driveFollowUp(
       const latest = status ?? body;
       return {
         ...latest,
+        // Still running, so the drive_stop inverse the start answered with still applies.
+        ...(body.rollback ? { rollback: body.rollback } : {}),
         wait: { state: "timed_out", durationMs: clock.now() - started },
         warnings: [`The drive is still running after ${timeoutSeconds}s; read it with pie(drive_status) or end it with pie(drive_stop).`],
       };

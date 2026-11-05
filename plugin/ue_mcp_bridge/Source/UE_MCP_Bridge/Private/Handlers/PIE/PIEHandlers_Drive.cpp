@@ -493,7 +493,20 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieDrivePawn(const TSharedPtr<FJsonObject>&
 
 	Drive::Remember(D);
 	if (D->State == TEXT("running")) Drive::EnsureTicking();
-	return MCPResult(Drive::Report(*D, false));
+	TSharedPtr<FJsonObject> Result = Drive::Report(*D, false);
+	MCPSetCreated(Result);
+	if (D->State == TEXT("running"))
+	{
+		// A running drive is undone by stopping it; the distance already walked stays walked.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("driveId"), D->Id);
+		MCPSetRollback(Result, TEXT("pie_drive_stop"), Payload);
+	}
+	else
+	{
+		MCPSetNoRollback(Result, TEXT("The drive ended on its first frame, so there is nothing left to stop"));
+	}
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPIEHandlers::PieDriveStatus(const TSharedPtr<FJsonObject>& Params)
@@ -518,5 +531,6 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieDriveStop(const TSharedPtr<FJsonObject>&
 	Drive::Finish(*D, TEXT("stopped"));
 	auto R = Drive::Report(*D, true);
 	R->SetBoolField(TEXT("alreadyStopped"), !bWasRunning);
+	MCPSetNoRollback(R, TEXT("A stopped drive is not resumed; drive_pawn starts a new one from where the pawn stands"));
 	return MCPResult(R);
 }

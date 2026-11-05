@@ -84,7 +84,9 @@ const BASELINE = {
   // 170: editor(discard_dirty) clears named dirty flags; no action restores
   // those flags, and closing the editor loses the unsaved contents. The
   // handler reports that limit through MCPSetNoRollback.
-  mutationsWithoutRollback: 172,
+  // 173: pie(drive_stop) ends a pawn drive, which is not resumed; it says so through
+  // MCPSetNoRollback, as every other pie stop does (#1735).
+  mutationsWithoutRollback: 173,
   // Zero, and held there by a flat assertion. Every mutation with no inverse
   // now says so in its own result body with the reason, which is the half a
   // caller can act on.
