@@ -196,6 +196,11 @@ TSharedPtr<FJsonValue> FCheckpointHandlers::Arm(const TSharedPtr<FJsonObject>& P
 		return MCPResult(Result);
 	}
 	if (PendingDir.IsEmpty()) return MCPError(TEXT("pendingDir is required when enabled is true"));
+	{
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(PendingDir, Resolved)) return Err;
+		PendingDir = Resolved;
+	}
 
 	const FString Previous = R.bArmed ? R.PendingDir : FString();
 	R.PendingDir = CheckpointFullPath(PendingDir);

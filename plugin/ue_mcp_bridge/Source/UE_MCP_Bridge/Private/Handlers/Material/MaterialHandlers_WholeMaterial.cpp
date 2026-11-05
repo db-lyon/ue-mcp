@@ -686,6 +686,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RenderMaterialPreview(const TSharedPtr
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	FString OutputPath;
 	if (auto Err = RequireString(Params, TEXT("outputPath"), OutputPath)) return Err;
+	{
+		FString Resolved;
+		if (auto Err = MCPRequireWritablePath(OutputPath, Resolved)) return Err;
+		OutputPath = Resolved;
+	}
 	const int32 Width  = OptionalInt(Params, TEXT("width"), 256);
 	const int32 Height = OptionalInt(Params, TEXT("height"), 256);
 

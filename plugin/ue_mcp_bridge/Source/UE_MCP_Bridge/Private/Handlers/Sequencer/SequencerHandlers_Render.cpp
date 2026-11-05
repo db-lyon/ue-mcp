@@ -180,7 +180,8 @@ TSharedPtr<FJsonValue> FSequencerHandlers::RenderSequenceFrames(const TSharedPtr
 
 	const FString OutputDirIn = OptionalString(Params, TEXT("outputDir"),
 		FString::Printf(TEXT("Saved/SequenceFrames/%s"), *Sequence->GetName()));
-	FString OutputDir = FPaths::ConvertRelativePathToFull(UEMCP::SceneCapture::ResolveOutputPath(OutputDirIn));
+	FString OutputDir;
+	if (auto Err = MCPRequireWritablePath(OutputDirIn, OutputDir)) return Err;
 	FPaths::NormalizeDirectoryName(OutputDir);
 	if (!IFileManager::Get().MakeDirectory(*OutputDir, /*Tree*/ true))
 	{

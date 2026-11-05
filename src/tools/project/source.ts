@@ -5,6 +5,17 @@ import { listContent } from "../../codeintel/content-index.js";
 import { specBp } from "../specs/project.generated.js";
 import type { ToolContext, ActionSpec } from "../../core/types.js";
 import { recordBeforeWrite } from "../../checkpoints/service.js";
+import { resolveInside, requireModuleName } from "../../core/path-guard.js";
+
+/**
+ * A project file named by a path relative to one of the Source roots, or an
+ * absolute path. Either way it must stay inside the project directory.
+ */
+function resolveProjectSourceFile(projectDir: string, projectName: string | null, rel: string): string {
+  if (path.isAbsolute(rel)) return resolveInside([projectDir], rel);
+  const candidates = findSourceRoots(projectDir, projectName).map((r) => resolveInside([projectDir], rel, { base: r }));
+  return candidates.find((c) => fs.existsSync(c)) ?? resolveInside([projectDir], rel, { base: path.join(projectDir, "Source") });
+}
 
 /**
  * Resolve a module name to its Source/<Module> directory, searching the project
@@ -13,6 +24,7 @@ import { recordBeforeWrite } from "../../checkpoints/service.js";
  * (#543: plugin-module source authoring.)
  */
 function resolveSourceModuleDir(projectDir: string, projectName: string | null, moduleName: string): string | null {
+  if (moduleName) requireModuleName(moduleName, "module");
   const roots = [...findSourceRoots(projectDir, projectName)];
   // Add each plugin's Source dir as a search root.
   const pluginsDir = path.join(projectDir, "Plugins");
@@ -54,12 +66,7 @@ export const sourceActions: Record<string, ActionSpec> = {
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const headerPath = p.headerPath as string;
-      let resolved = headerPath;
-      if (!path.isAbsolute(headerPath)) {
-        const roots = findSourceRoots(ctx.project.projectDir!, ctx.project.projectName);
-        const candidate = roots.map(r => path.join(r, headerPath)).find(c => fs.existsSync(c));
-        resolved = candidate ?? path.join(ctx.project.projectDir!, "Source", headerPath);
-      }
+      const resolved = resolveProjectSourceFile(ctx.project.projectDir!, ctx.project.projectName, headerPath);
       if (!fs.existsSync(resolved)) throw new Error(`Header not found: ${resolved}`);
       return parseHeader(fs.readFileSync(resolved, "utf-8"), resolved);
     },
@@ -113,11 +120,13 @@ export const sourceActions: Record<string, ActionSpec> = {
       let searchDirs: string[] = roots;
       if (p.directory) {
         const sub = p.directory as string;
+        const projectDir = ctx.project.projectDir!;
         if (path.isAbsolute(sub)) {
-          if (!fs.existsSync(sub)) throw new Error(`Directory not found: ${sub}`);
-          searchDirs = [sub];
+          const dir = resolveInside([projectDir], sub);
+          if (!fs.existsSync(dir)) throw new Error(`Directory not found: ${dir}`);
+          searchDirs = [dir];
         } else {
-          const matches = roots.map(r => path.join(r, sub)).filter(d => fs.existsSync(d));
+          const matches = roots.map(r => resolveInside([projectDir], sub, { base: r })).filter(d => fs.existsSync(d));
           if (matches.length === 0) throw new Error(`Directory '${sub}' not found under any source root: ${roots.join(", ")}`);
           searchDirs = matches;
         }
@@ -174,12 +183,12 @@ export const sourceActions: Record<string, ActionSpec> = {
   list_files: {
     kind: "handler",
     effect: "read",
-    description: "List files on disk under a directory, optionally filtered by extension(s) and by name. Runs in the MCP server process (no editor round-trip). Params: directory (absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), namePattern? (case-insensitive substring of the file name; maxResults counts matches, so a name search over a large tree is not cut short by files that do not match), recursive? (default false), maxResults? (default 1000) (#608)",
+    description: "List files on disk under a directory, optionally filtered by extension(s) and by name. Runs in the MCP server process (no editor round-trip). Params: directory (inside the project: absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), namePattern? (case-insensitive substring of the file name; maxResults counts matches, so a name search over a large tree is not cut short by files that do not match), recursive? (default false), maxResults? (default 1000) (#608)",
     handler: async (ctx, p) => {
       ctx.project.ensureLoaded();
       const dirArg = p.directory as string;
       if (!dirArg) throw new Error("Missing 'directory'");
-      const base = path.isAbsolute(dirArg) ? dirArg : path.join(ctx.project.projectDir!, dirArg);
+      const base = resolveInside([ctx.project.projectDir!], dirArg);
       if (!fs.existsSync(base)) throw new Error(`Directory not found: ${base}`);
       const extsRaw = p.extensions;
       const exts = (Array.isArray(extsRaw) ? extsRaw : extsRaw ? [extsRaw] : [])
@@ -234,11 +243,7 @@ export const sourceActions: Record<string, ActionSpec> = {
       const content = p.content as string;
       if (typeof content !== "string") throw new Error("Missing or invalid 'content' parameter (must be a string)");
 
-      const resolved = path.isAbsolute(rel) ? path.resolve(rel) : path.resolve(sourceDir, rel);
-      const sourceAbs = path.resolve(sourceDir);
-      if (!resolved.startsWith(sourceAbs + path.sep) && resolved !== sourceAbs) {
-        throw new Error(`Refusing to write outside project Source/: ${resolved}`);
-      }
+      const resolved = resolveInside([sourceDir], rel);
       if (!/\.(h|cpp|inl|cs)$/i.test(resolved)) {
         throw new Error(`write_cpp_file only accepts .h/.cpp/.inl/.cs files (got '${path.extname(resolved)}')`);
       }
@@ -265,12 +270,7 @@ export const sourceActions: Record<string, ActionSpec> = {
       ctx.project.ensureLoaded();
       const sp = p.sourcePath as string;
       if (!sp) throw new Error("Missing 'sourcePath' parameter");
-      let resolved = sp;
-      if (!path.isAbsolute(sp)) {
-        const roots = findSourceRoots(ctx.project.projectDir!, ctx.project.projectName);
-        const candidate = roots.map(r => path.join(r, sp)).find(c => fs.existsSync(c));
-        resolved = candidate ?? path.join(ctx.project.projectDir!, "Source", sp);
-      }
+      const resolved = resolveProjectSourceFile(ctx.project.projectDir!, ctx.project.projectName, sp);
       if (!fs.existsSync(resolved)) throw new Error(`File not found: ${resolved}`);
       const content = fs.readFileSync(resolved, "utf-8");
       return { path: resolved, bytes: content.length, content };
@@ -294,7 +294,7 @@ export const sourceActions: Record<string, ActionSpec> = {
       const moduleDir = resolveSourceModuleDir(ctx.project.projectDir!, ctx.project.projectName, moduleName);
       if (!moduleDir) throw new Error(`Module not found: '${moduleName || "(default)"}'. Use list_modules to see available modules.`);
 
-      const target = vis ? path.join(moduleDir, vis, fileName) : path.join(moduleDir, fileName);
+      const target = resolveInside([moduleDir], fileName, { base: vis ? path.join(moduleDir, vis) : moduleDir });
       if (!/\.(h|cpp|inl)$/i.test(target)) throw new Error(`write_source_file only accepts .h/.cpp/.inl files (got '${path.extname(target)}')`);
 
       const overwrote = fs.existsSync(target);
@@ -327,9 +327,10 @@ export const sourceActions: Record<string, ActionSpec> = {
       const moduleDir = resolveSourceModuleDir(ctx.project.projectDir!, ctx.project.projectName, moduleName);
       if (!moduleDir) throw new Error(`Module not found: '${moduleName || "(default)"}'`);
 
-      const candidates = visibility
-        ? [path.join(moduleDir, /^public$/i.test(visibility) ? "Public" : "Private", fileName)]
-        : [path.join(moduleDir, "Public", fileName), path.join(moduleDir, "Private", fileName), path.join(moduleDir, fileName)];
+      const bases = visibility
+        ? [path.join(moduleDir, /^public$/i.test(visibility) ? "Public" : "Private")]
+        : [path.join(moduleDir, "Public"), path.join(moduleDir, "Private"), moduleDir];
+      const candidates = bases.map((base) => resolveInside([moduleDir], fileName, { base }));
       const found = candidates.find(c => fs.existsSync(c));
       if (!found) throw new Error(`Source file not found: ${fileName} in module '${path.basename(moduleDir)}'`);
       const content = fs.readFileSync(found, "utf-8");
@@ -347,11 +348,13 @@ export const sourceActions: Record<string, ActionSpec> = {
       const dependency = p.dependency as string;
       const access = ((p.access as string) || "private").toLowerCase();
       if (!moduleName || !dependency) throw new Error("Missing 'moduleName' and/or 'dependency'");
+      requireModuleName(moduleName);
+      requireModuleName(dependency, "dependency");
       if (access !== "public" && access !== "private") {
         throw new Error("'access' must be 'public' or 'private'");
       }
 
-      const buildCs = path.join(ctx.project.projectDir!, "Source", moduleName, `${moduleName}.Build.cs`);
+      const buildCs = resolveInside([ctx.project.projectDir!], path.join("Source", moduleName, `${moduleName}.Build.cs`));
       if (!fs.existsSync(buildCs)) {
         throw new Error(`Build.cs not found for module '${moduleName}' at ${buildCs}`);
       }
@@ -422,11 +425,7 @@ export const sourceActions: Record<string, ActionSpec> = {
         throw new Error("'access' must be 'public' | 'protected' | 'private'");
       }
       const sourceDir = path.join(ctx.project.projectDir!, "Source");
-      const resolved = path.isAbsolute(headerPath) ? path.resolve(headerPath) : path.resolve(sourceDir, headerPath);
-      const sourceAbs = path.resolve(sourceDir);
-      if (!resolved.startsWith(sourceAbs + path.sep) && resolved !== sourceAbs) {
-        throw new Error(`Refusing to write outside project Source/: ${resolved}`);
-      }
+      const resolved = resolveInside([sourceDir], headerPath);
       if (!/\.h$/i.test(resolved)) {
         throw new Error(`add_cpp_member only accepts .h files (got '${path.extname(resolved)}')`);
       }
