@@ -10556,6 +10556,11 @@
           "suite": "live",
           "file": "tests/live/bcov-niagara.test.ts",
           "test": "create_niagara_emitter and create_niagara_system_from_spec build a system the reads list, and remove_emitter_from_system drops one"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-niagara.test.ts",
+          "test": "set_emitter_property renames the emitter, and its rollback renames it back by the new name"
         }
       ]
     },
@@ -19254,6 +19259,11 @@
           "suite": "live",
           "file": "tests/live/bcov-niagara.test.ts",
           "test": "set_emitter_property disables the emitter, which get_niagara_info and validate_niagara_system both see"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-niagara.test.ts",
+          "test": "set_emitter_property renames the emitter, and its rollback renames it back by the new name"
         }
       ]
     },
