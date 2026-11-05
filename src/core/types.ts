@@ -178,6 +178,12 @@ export interface ToolContext {
    * rather than leaving the user staring at a call that looks frozen.
    */
   client?: { name: string; version?: string };
+  /**
+   * A flow run started over HTTP with `stepApproval`: every task it creates
+   * asks this registered approver first (flow/step-approval.ts). Never set by
+   * the MCP surface.
+   */
+  flowStepApproval?: { approver: string; token: string };
 }
 
 export interface ProgressUpdate {

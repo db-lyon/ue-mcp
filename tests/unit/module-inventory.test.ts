@@ -223,6 +223,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "extensions/superseded.ts": "A constant list of plugins core replaced. No editor is involved.",
   "flow/schema.ts": "Shared flow schema declarations.",
   "flow/model-provider.ts": "One process-wide model for flow agent steps, registered by a daemon extension or read from the environment. No editor is involved.",
+  "flow/step-approval.ts": "Process-wide approvers registered by daemon extensions, asked per task of a run that names one. The run carries its own session; the approver is told no editor.",
   "flow/agent-step.ts": "Puts the resolved model on an agent step's context. No editor is involved.",
   "flow/rollback.ts": "Pure shaping of a rollback record.",
   "flow/flow-inputs.ts": "Pure derivation of a flow's inputs from the tool graph and config it is handed.",
