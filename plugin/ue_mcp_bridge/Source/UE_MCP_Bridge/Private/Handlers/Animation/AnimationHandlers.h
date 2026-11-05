@@ -149,6 +149,7 @@ private:
 	static TSharedPtr<FJsonValue> CaptureControlRigPose(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ApplyControlRigEdits(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BakeControlRigEdit(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BakeSequenceAnimation(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AnalyzeAnimation(const TSharedPtr<FJsonObject>& Params);
 
 	// v0.7.11 - depth

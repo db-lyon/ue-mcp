@@ -55,7 +55,8 @@ namespace
 			TEXT("rootMotionEnabled"), TEXT("rootMotionRootLock"), TEXT("forceRootLock"),
 			TEXT("useNormalizedRootMotionScale"), TEXT("targetSkeletonPath"), TEXT("boneCount"),
 			TEXT("hasNotifies"), TEXT("hasCurves"), TEXT("notifyCount"), TEXT("curveCount"),
-			TEXT("notifies"), TEXT("curveNames"),
+			TEXT("notifies"), TEXT("curveNames"), TEXT("interpolation"), TEXT("retargetSource"),
+			TEXT("retargetSourceAsset"),
 		};
 		return Names;
 	}
@@ -117,6 +118,19 @@ namespace
 		Result->SetBoolField(TEXT("useNormalizedRootMotionScale"), AnimSeq->bUseNormalizedRootMotionScale);
 		Result->SetStringField(TEXT("targetSkeletonPath"), Skeleton ? Skeleton->GetPathName() : FString());
 		Result->SetNumberField(TEXT("boneCount"), Skeleton ? Skeleton->GetReferenceSkeleton().GetNum() : 0);
+		Result->SetStringField(TEXT("interpolation"),
+			AnimSeq->Interpolation == EAnimInterpolationType::Step ? TEXT("step") : TEXT("linear"));
+		// The pose the clip's bone lengths are retargeted from on playback (#1642):
+		// the skeleton's named retargetSource when set, else retargetSourceAsset,
+		// else the skeleton's reference pose when both are empty.
+		Result->SetStringField(TEXT("retargetSource"), AnimSeq->RetargetSource.IsNone() ? FString() : AnimSeq->RetargetSource.ToString());
+#if UE_MCP_HAS_5_5_API
+		const TSoftObjectPtr<USkeletalMesh>& RetargetSourceAsset = AnimSeq->GetRetargetSourceAsset();
+#else
+		const TSoftObjectPtr<USkeletalMesh>& RetargetSourceAsset = AnimSeq->RetargetSourceAsset;
+#endif
+		Result->SetStringField(TEXT("retargetSourceAsset"),
+			RetargetSourceAsset.IsNull() ? FString() : RetargetSourceAsset.ToSoftObjectPath().ToString());
 
 		const TArray<FFloatCurve>& Curves = AnimSeq->GetCurveData().FloatCurves;
 		Result->SetBoolField(TEXT("hasNotifies"), AnimSeq->Notifies.Num() > 0);
