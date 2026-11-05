@@ -2824,6 +2824,45 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "set_buffer_visualization": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "buffer",
+        "type": "string",
+        "required": true,
+        "description": "Buffer to show full screen: Velocity, SceneDepth, BaseColor, WorldNormal and the rest this engine defines (an unknown name lists them); Overview for the grid of all buffers; off to leave buffer visualization"
+      },
+      {
+        "name": "target",
+        "type": "string",
+        "required": false,
+        "description": "editor (default) for a level viewport, pie for the running game viewport",
+        "enum": [
+          "editor",
+          "pie"
+        ]
+      },
+      {
+        "name": "viewMode",
+        "type": "string",
+        "required": false,
+        "description": "With buffer=off, the view mode to return to (default Lit)"
+      },
+      {
+        "name": "viewportIndex",
+        "type": "number",
+        "required": false,
+        "description": "Level viewport to act on (default the active one)"
+      },
+      {
+        "name": "pieInstance",
+        "type": "number",
+        "required": false,
+        "description": "PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances"
+      }
+    ]
+  },
   "set_cvars": {
     "category": "editor",
     "params": [
@@ -3989,6 +4028,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   save_dirty: "Params: includeMaps?, includeContent?, commitDeletes?",
   scrub_sequence: "Params: sequencePath? (or assetPath, or path), seconds?, frame?, timeUnit?",
   search_log: "Params: query, maxResults?, cursor?, limit?",
+  set_buffer_visualization: "Params: buffer, target?, viewMode?, viewportIndex?, pieInstance?",
   set_cvars: "Params: cvars",
   set_dialog_policy: "Params: pattern, at least one of response/buttonLabel",
   set_game_view: "Params: enabled?, viewportIndex?",
@@ -4046,6 +4086,7 @@ export const schema: Record<string, z.ZodType> = {
   bones: z.array(z.string()).optional().describe("Bone or socket names; omit for every bone up to limit"),
   bookmark: z.boolean().optional().describe("Also drop a trace bookmark at the stall (default true)"),
   bookmarkName: z.string().optional().describe("Label for the timeline marker"),
+  buffer: z.string().optional().describe("Buffer to show full screen: Velocity, SceneDepth, BaseColor, WorldNormal and the rest this engine defines (an unknown name lists them); Overview for the grid of all buffers; off to leave buffer visualization"),
   buttonIndex: z.number().optional().describe("Index of the button to press, in the order list_windows reports (press_window_button). Index of the button to press, in the order list_dialogs reports (respond_to_dialog)"),
   buttonLabel: z.string().optional().describe("Label of the button to press, matched exactly first, then as a substring; refused when ambiguous (press_window_button). Label of the button to press, matched exactly first, then as a substring (respond_to_dialog). Button a matched dialog gets pressed for it, matched exactly first, then as a substring. Reaches buttons no response names, such as Don't Save (set_dialog_policy)"),
   calls: z.array(z.object({ functionName: z.string().describe("UFUNCTION to call"), objectPath: z.string().optional().describe("Object path of the live instance. Wins over target"), target: z.string().optional().describe("gameinstance | gamemode | gamestate | playercontroller | playerpawn | subsystem"), subsystemClass: z.string().optional().describe("Subsystem class name or /Script path, with target=subsystem: world, game instance, local player (by playerIndex), engine or editor"), playerIndex: z.number().int().optional().describe("Player index for target=playercontroller, playerpawn, or a LocalPlayer subsystem (default 0)"), propertyPath: z.string().optional().describe("Dotted chain of object-reference properties followed from objectPath or target to the object actually used, e.g. GameSettings.Game Settings; a segment may index an array (Items[2]) or name a component on an actor"), args: z.union([z.record(z.string(), z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))]))])), z.array(z.string()), z.array(z.object({ name: z.string(), value: z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))]))]).optional() })), z.string()], { error: "args must be an object mapping parameter name to value (e.g. {\"bEnabled\": true}), an array of positional strings, an entry list ([{\"name\": \"bEnabled\", \"value\": true}]), or a string" }).optional().describe("This call's arguments, in any form invoke_object_function takes") })).optional().describe("1 to 64 calls, run in order in one game-thread dispatch; the first failure stops the sequence"),
@@ -4196,7 +4237,7 @@ export const schema: Record<string, z.ZodType> = {
   pattern: z.string().optional().describe("Exact pattern of the policy to clear; omit to clear every policy (clear_dialog_policy). Substring matched against every registered console variable. Pass at least one of name, names and pattern (get_cvars). Case-insensitive substring of the library class name (list_function_libraries). Substring matched case-insensitively against the dialog title and message (set_dialog_policy)"),
   paused: z.boolean().optional().describe("true pauses the running trace, false resumes it (default true) (pause_insights_trace). true pauses, false resumes (set_pie_paused)"),
   pieAction: z.string().optional().describe("start | stop | status (default status)"),
-  pieInstance: z.number().optional().describe("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (capture_scene_png, capture_screenshot, execute_command, find_object, get_object_properties, get_runtime_value, get_runtime_values, invoke_function, invoke_object_function, invoke_object_functions, invoke_static_function, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances (get_pie_pawn). PIE instance index when several clients run (get_sequence_runtime_bindings)"),
+  pieInstance: z.number().optional().describe("PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (capture_scene_png, capture_screenshot, execute_command, find_object, get_object_properties, get_runtime_value, get_runtime_values, invoke_function, invoke_object_function, invoke_object_functions, invoke_static_function, pose_debug_camera, read_bone_transforms, restore_runtime_visibility, set_buffer_visualization, set_movement_mode, set_object_property, set_pie_paused, set_pie_view_target, set_runtime_visibility, teleport_runtime_actor). PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances (get_pie_pawn). PIE instance index when several clients run (get_sequence_runtime_bindings)"),
   pitch: z.number().optional().describe("Control-rotation pitch"),
   platform: z.string().optional().describe("Target platform (default Windows)"),
   playerIndex: z.number().optional().describe("Local player whose console runs a PIE command (default 0) (execute_command). Player index for target=playercontroller, playerpawn, or a LocalPlayer subsystem (default 0) (get_object_properties, invoke_object_function, set_object_property). 0-based player index (default 0) (get_pie_pawn). Local player whose debug camera is used (default 0) (pose_debug_camera). Player whose view target is set (default 0) (set_pie_view_target)"),
@@ -4246,7 +4287,7 @@ export const schema: Record<string, z.ZodType> = {
   subText: z.string().optional().describe("Second line under the headline"),
   sweep: z.boolean().optional().describe("Collide on the way (default false)"),
   tabId: z.string().optional().describe("Registered editor tab id, e.g. ProjectSettings, OutputLog or ContentBrowserTab1"),
-  target: z.string().optional().describe("auto (default) | pie | editor | window (capture_screenshot). gameinstance | gamemode | gamestate | playercontroller | playerpawn | subsystem (get_object_properties, invoke_object_function, set_object_property)"),
+  target: z.string().optional().describe("auto (default) | pie | editor | window (capture_screenshot). gameinstance | gamemode | gamestate | playercontroller | playerpawn | subsystem (get_object_properties, invoke_object_function, set_object_property). editor (default) for a level viewport, pie for the running game viewport (set_buffer_visualization)"),
   templateLevel: z.string().optional().describe("Level to copy; omit, Empty or None for a blank level"),
   text: z.string().optional().describe("Headline of the toast"),
   timeUnit: z.string().optional().describe("How to read frame: display (default, the frame numbers Sequencer shows) | tick (the units get_sequence_info's playbackRange reports)"),
@@ -4259,7 +4300,7 @@ export const schema: Record<string, z.ZodType> = {
   value: z.unknown().optional().describe("New value as structured JSON, the form get_property returns under value"),
   velocity: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Velocity written to the CharacterMovementComponent"),
   viewDirection: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Direction from subject toward camera (default 1,-1.35,0.9), finite and nonzero"),
-  viewMode: z.string().optional().describe("Lit | Unlit | Wireframe | LightingOnly | DetailLighting | ShaderComplexity | ... get_viewport_state lists what this build supports"),
+  viewMode: z.string().optional().describe("With buffer=off, the view mode to return to (default Lit) (set_buffer_visualization). Lit | Unlit | Wireframe | LightingOnly | DetailLighting | ShaderComplexity | ... get_viewport_state lists what this build supports (set_view_mode)"),
   viewportIndex: z.number().optional().describe("Level viewport to act on (default the active one)"),
   viewportType: z.string().optional().describe("Perspective | Top | Bottom | Left | Right | Front | Back | OrthoFreelook"),
   waitForAssetRegistry: z.boolean().optional().describe("start only: block until the AssetRegistry initial scan completes, since PIE silently no-ops during it on a cold editor (default true)"),
