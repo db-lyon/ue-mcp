@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1230,
+  "handlerCount": 1231,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -18237,7 +18237,7 @@
           "name": "includeSectionDetails",
           "type": "boolean",
           "required": false,
-          "description": "Include attach sockets and first-key transform values per track"
+          "description": "Add each section's blend type, attach socket, first-key transform values and channels with key times. Without it every section still lists its class, range, isActive and rowIndex"
         }
       ]
     },
@@ -27606,6 +27606,26 @@
           "aliases": [
             "path"
           ]
+        }
+      ]
+    },
+    "read_anim_curve_keys": {
+      "category": "animation",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "AnimSequence asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "curveName",
+          "type": "string",
+          "required": false,
+          "description": "Float curve to read (case-insensitive); omit for every curve"
         }
       ]
     },

@@ -1152,7 +1152,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "includeSectionDetails",
         "type": "boolean",
         "required": false,
-        "description": "Include attach sockets and first-key transform values per track"
+        "description": "Add each section's blend type, attach socket, first-key transform values and channels with key times. Without it every section still lists its class, range, isActive and rowIndex"
       }
     ]
   },
@@ -4038,7 +4038,7 @@ export const schema: Record<string, z.ZodType> = {
   includeFunctions: z.boolean().optional().describe("Include each library's static BlueprintCallable functions (default true)"),
   includeMaps: z.boolean().optional().describe("Include map packages (default true)"),
   includeProperties: z.boolean().optional().describe("Include reflected property metadata (default true)"),
-  includeSectionDetails: z.boolean().optional().describe("Include attach sockets and first-key transform values per track"),
+  includeSectionDetails: z.boolean().optional().describe("Add each section's blend type, attach socket, first-key transform values and channels with key times. Without it every section still lists its class, range, isActive and rowIndex"),
   includeValues: z.boolean().optional().describe("Include current property values (default false)"),
   index: z.number().optional().describe("Which open transaction to cancel (default 0)"),
   inputMode: z.string().optional().describe("gameOnly (default) | gameAndUI | uiOnly"),

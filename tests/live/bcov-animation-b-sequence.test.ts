@@ -86,7 +86,7 @@ describe("sequence authoring", () => {
     expect(rows[0].boneTrackNames).toContain("spine_01");
   }, 120_000);
 
-  it("set_anim_curve_keys adds a keyed curve and remove_anim_curve takes it away", async () => {
+  it("set_anim_curve_keys adds a keyed curve, read_anim_curve_keys reads its keys, and remove_anim_curve takes it away", async () => {
     const curveNames = async (): Promise<string[]> => (await readSequence(IDLE)).curveNames as string[];
     const first = await call("set_anim_curve_keys", {
       assetPath: IDLE,
@@ -103,6 +103,20 @@ describe("sequence authoring", () => {
     });
     expect(second.curveCreated).toBe(false);
     expect(second.previousKeyCount).toBe(2);
+
+    // read_anim_curve_keys returns the keys just written, in the shape set_anim_curve_keys takes (#1644).
+    const read = await call("read_anim_curve_keys", { assetPath: IDLE, curveName: "bcovcurve" });
+    const curves = read.curves as Array<{ name: string; keyCount: number; keys: Array<{ time: number; value: number; interp: string }> }>;
+    expect(curves).toHaveLength(1);
+    expect(curves[0].name).toBe("BCovCurve");
+    expect(curves[0].keyCount).toBe(3);
+    expect(curves[0].keys.map((k) => k.time)).toEqual([0, 0.25, 0.5]);
+    expect(curves[0].keys[1].value).toBeCloseTo(0.5, 5);
+    expect(curves[0].keys[1].interp).toBe("linear");
+    const all = await call("read_anim_curve_keys", { assetPath: IDLE });
+    expect((all.curves as Array<{ name: string }>).map((c) => c.name)).toContain("BCovCurve");
+    const miss = await callBridge(bridge, "read_anim_curve_keys", { assetPath: IDLE, curveName: "BCovNoSuchCurve" });
+    expect(succeeded(miss)).toBe(false);
 
     const removed = await call("remove_anim_curve", { assetPath: IDLE, curveName: "BCovCurve" });
     expect(removed.removedKeyCount).toBe(3);

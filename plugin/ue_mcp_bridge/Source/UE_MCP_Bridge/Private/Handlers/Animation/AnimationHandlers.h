@@ -110,6 +110,7 @@ private:
 	static TSharedPtr<FJsonValue> AddCurve(const TSharedPtr<FJsonObject>& Params);
 	// #712: set float-curve key VALUES directly (add_curve only names an empty curve).
 	static TSharedPtr<FJsonValue> SetAnimCurveKeys(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadAnimCurveKeys(const TSharedPtr<FJsonObject>& Params);
 	// #712: instantiate + run a UAnimationModifier subclass on an AnimSequence
 	// (e.g. DistanceCurveModifier to bake a Distance curve from root motion).
 	static TSharedPtr<FJsonValue> ApplyAnimationModifier(const TSharedPtr<FJsonObject>& Params);

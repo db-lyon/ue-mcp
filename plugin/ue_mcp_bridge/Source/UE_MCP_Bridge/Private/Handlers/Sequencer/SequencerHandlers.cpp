@@ -81,7 +81,7 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("creates a Level Sequence asset")));
 	Registry.RegisterHandler(TEXT("get_sequence_info"), &ReadSequenceInfo, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Level Sequence asset path")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("includeSectionDetails"), EType::Boolean, TEXT("Include attach sockets and first-key transform values per track")),
+		MCPParam::Optional(TEXT("includeSectionDetails"), EType::Boolean, TEXT("Add each section's blend type, attach socket, first-key transform values and channels with key times. Without it every section still lists its class, range, isActive and rowIndex")),
 	});
 	Registry.RegisterHandler(TEXT("add_sequence_track"), &AddTrack, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Level Sequence asset path")).Alias(TEXT("path")),
@@ -345,9 +345,29 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 
 	auto ExtractSectionDetails = [&](UMovieSceneTrack* Track, const TSharedPtr<FJsonObject>& TrackObj)
 	{
-		if (!bIncludeDetails || !Track) return;
+		if (!Track) return;
 
 		const TArray<UMovieSceneSection*>& AllSections = Track->GetAllSections();
+		if (!bIncludeDetails)
+		{
+			// Every section's range and activity, unbudgeted: a few fields per
+			// section, enough to tell what a binding still holds (#1644).
+			TArray<TSharedPtr<FJsonValue>> Summary;
+			for (int32 SectionIndex = 0; SectionIndex < AllSections.Num(); ++SectionIndex)
+			{
+				const UMovieSceneSection* Section = AllSections[SectionIndex];
+				if (!Section) continue;
+				TSharedPtr<FJsonObject> SObj = MakeShared<FJsonObject>();
+				SObj->SetNumberField(TEXT("index"), SectionIndex);
+				SObj->SetStringField(TEXT("class"), Section->GetClass()->GetName());
+				UEMCP::SequencerInfo::SetTimingRangeFields(*SObj, Section->GetTrueRange(), TickResolution, DisplayRate);
+				SObj->SetBoolField(TEXT("isActive"), Section->IsActive());
+				SObj->SetNumberField(TEXT("rowIndex"), Section->GetRowIndex());
+				Summary.Add(MakeShared<FJsonValueObject>(SObj));
+			}
+			TrackObj->SetArrayField(TEXT("sections"), Summary);
+			return;
+		}
 		TArray<TSharedPtr<FJsonValue>> SectionsArr;
 		for (int32 SectionIndex = 0; SectionIndex < AllSections.Num(); ++SectionIndex)
 		{
@@ -536,6 +556,10 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 		TSharedPtr<FJsonObject> TrackObj = MakeShared<FJsonObject>();
 		TrackObj->SetStringField(TEXT("name"), Track->GetTrackName().ToString());
 		TrackObj->SetStringField(TEXT("class"), Track->GetClass()->GetName());
+#if WITH_EDITORONLY_DATA
+		// The label Sequencer shows, e.g. the rig name on a Control Rig track.
+		TrackObj->SetStringField(TEXT("displayName"), Track->GetDisplayName().ToString());
+#endif
 		TrackObj->SetNumberField(TEXT("sectionCount"), Track->GetAllSections().Num());
 		ExtractSectionDetails(Track, TrackObj);
 		return TrackObj;
