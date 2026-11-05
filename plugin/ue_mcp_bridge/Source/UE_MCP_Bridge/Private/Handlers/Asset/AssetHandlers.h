@@ -129,6 +129,8 @@ private:
 	static TSharedPtr<FJsonValue> GetCurveTableKeys(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetCurveTableKeys(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddCurveTableKey(const TSharedPtr<FJsonObject>& Params);
+	// #1687: keys of one channel of a CurveFloat, CurveVector or CurveLinearColor.
+	static TSharedPtr<FJsonValue> SetCurveAssetKeys(const TSharedPtr<FJsonObject>& Params);
 
 	// FBX import handlers
 	static TSharedPtr<FJsonValue> ImportStaticMesh(const TSharedPtr<FJsonObject>& Params);

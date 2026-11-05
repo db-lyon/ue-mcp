@@ -953,6 +953,13 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("interpMode"), EType::String, TEXT("linear (default) | constant | cubic | none")),
 		MCPParam::Optional(TEXT("keyTimeTolerance"), EType::Number, TEXT("How close an existing key must be to be updated rather than added")),
 	});
+	Registry.RegisterHandler(TEXT("set_curve_keys"), &SetCurveAssetKeys, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("CurveFloat, CurveVector or CurveLinearColor asset path")).Alias(TEXT("path")),
+		MCPParam::Optional(TEXT("channel"), EType::Number, TEXT("Channel index to replace: 0 on a CurveFloat, 0-2 on a CurveVector, 0-3 on a CurveLinearColor (default 0)")),
+		MCPParam::Optional(TEXT("channelName"), EType::String, TEXT("Channel to replace by name, instead of channel: Value, X/Y/Z or R/G/B/A")),
+		MCPParam::Required(TEXT("keys"), EType::Array, TEXT("Replacement keys, [] to clear: [{time, value, interpMode? (cubic default, linear, constant, none), tangentMode? (auto|smartAuto|user|break|none), tangentWeightMode? (none|arrive|leave|both), arriveTangent?, leaveTangent?, arriveTangentWeight?, leaveTangentWeight?}]. A tangent given without tangentMode is kept as a user tangent")).Items(EType::Object),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the package (default true); false leaves it dirty")),
+	});
 
 	// Generic reimport / export
 	Registry.RegisterHandler(TEXT("reimport_asset"), &ReimportAsset, {

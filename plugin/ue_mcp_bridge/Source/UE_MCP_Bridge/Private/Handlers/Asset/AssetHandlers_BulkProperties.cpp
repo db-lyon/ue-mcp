@@ -263,7 +263,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 					// bad payload is caught without touching the live asset.
 					void* TemporaryValue = FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment());
 					Property->InitializeValue(TemporaryValue);
-					Property->CopyCompleteValue(TemporaryValue, ValueAddress);
+					Property->CopySingleValue(TemporaryValue, ValueAddress);
 					FString SetError;
 					const bool bValidValue = MCPJsonProperty::SetJsonOnProperty(Property, TemporaryValue, Pair.Value, SetError);
 					FString ProposedText;

@@ -1881,7 +1881,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	// rather than as a false mismatch.
 	const bool bComparable = MCPJsonProperty::PropertyIsComparableByIdentity(Property);
 	FDefaultConstructedPropertyElement PreviousRaw(Property);
-	Property->CopyCompleteValue(PreviousRaw.GetObjAddress(), PropertyValue);
+	Property->CopySingleValue(PreviousRaw.GetObjAddress(), PropertyValue);
 
 	// Prove the round trip rather than asserting it: apply the exact value the
 	// rollback would send to a scratch copy and compare. The two ways this can
