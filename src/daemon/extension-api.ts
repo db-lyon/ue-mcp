@@ -8,6 +8,7 @@ import type { DisconnectCause } from "./disconnect.js";
 import type { DaemonEvent } from "./events.js";
 import type { UiBundleInfo, UiManifest } from "./ui-bundles.js";
 import type { ModelProvider } from "../flow/model-provider.js";
+import type { FlowStepApprover } from "../flow/step-approval.js";
 import type { AssetDiff, ChangesResult, CheckpointResult, CheckpointState, NativeDiffResult, RestoreResult } from "../checkpoints/service.js";
 import type { DaemonSkill } from "../extensions/skills-list.js";
 import type { ContextProjection, ContextProjectionOptions } from "../server/context-projection.js";
@@ -245,9 +246,25 @@ export interface DaemonExtensionApi {
    *                              bundles no loaded extension names, never another extension's
    *   "ui.extensions"            `ui.own` gives this extension's own bundle, served at /ui/ext/<name>/
    *   "extension.services"       `services` lets extensions provide and use each other's objects in process
+   *   "flows.stepApproval"       `flows.approveSteps` asks this extension before each task of a run that
+   *                              names it (POST /v1/flows/<name>/run with `stepApproval`)
    * Absent on a daemon older than the field.
    */
   features?: readonly string[];
+
+  /**
+   * Approve each flow step as it runs (feature "flows.stepApproval").
+   * `approveSteps` registers `approver` under this extension's name, replacing
+   * an earlier one, and returns the function that removes it. A run started
+   * with `stepApproval: { approver: <this extension's name>, token }` asks it
+   * before every task it creates, rollbacks excepted, with the task's
+   * resolved options and the run's token; a denial fails that step with the
+   * reason and the task never runs. A run naming an approver that is not
+   * registered fails its first step instead of running unapproved.
+   */
+  flows?: {
+    approveSteps(approver: FlowStepApprover): () => void;
+  };
 
   /** Objects shared with other extensions in process (feature "extension.services"). */
   services?: ExtensionServicesApi;

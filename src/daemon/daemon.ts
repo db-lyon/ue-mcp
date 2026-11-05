@@ -58,10 +58,10 @@ import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type
 import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 
 /** What this daemon's extension API offers beyond its version number. */
-export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services"];
+export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions"];
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval"];
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
@@ -72,6 +72,7 @@ import { editorOwnsProject, probeEditorProcessList } from "../editor/engine-obse
 import { applyUpdate, checkForUpdate, readPendingUpdate, repinClientConfigs, settlePendingUpdate } from "../editor/bridge-update.js";
 import { subscribeFlowEvents } from "../flow/events.js";
 import { registerModelProvider } from "../flow/model-provider.js";
+import { registerFlowStepApprover } from "../flow/step-approval.js";
 import { subscribeScriptEvents } from "../pie/script-events.js";
 import { stopAllScriptWatches } from "../pie/script-watch.js";
 import { pluginRoutes } from "./plugin-routes.js";
@@ -487,6 +488,9 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       }),
       models: {
         register: (provider) => registerModelProvider(provider),
+      },
+      flows: {
+        approveSteps: (approver) => registerFlowStepApprover(name, approver),
       },
       skills: {
         list: () => listDaemonSkills(projectDir),

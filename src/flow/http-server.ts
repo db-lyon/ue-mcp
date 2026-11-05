@@ -1,4 +1,5 @@
 import * as http from "node:http";
+import { parseStepApproval, type FlowStepApprovalSpec } from "./step-approval.js";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { createFlowTool } from "./flow-tool.js";
 import type { ToolContext } from "../core/types.js";
@@ -222,11 +223,20 @@ export async function handleFlowRoute(
     // active when this server started.
     let runCtx = activeContext();
     let targeted = false;
+    let approval: FlowStepApprovalSpec | null = null;
     if (body && typeof body === "object") {
       const b = body as Record<string, unknown>;
       if (b.params !== undefined) params.params = b.params;
       if (b.skip !== undefined) params.skip = b.skip;
       if (b.rollback_on_failure !== undefined) params.rollback_on_failure = b.rollback_on_failure;
+      // Each step asks a registered extension before it runs (flow/step-approval.ts).
+      let stepApproval: FlowStepApprovalSpec | null;
+      try {
+        stepApproval = parseStepApproval(b.stepApproval);
+      } catch (e) {
+        return send(400, { error: e instanceof Error ? e.message : String(e) });
+      }
+      if (stepApproval) approval = stepApproval;
       // #817: the HTTP surface addresses an editor the same way the MCP
       // surface does. Resolving here (rather than forwarding `editor` into
       // the flow) keeps the routing instruction off every step's options.
@@ -252,7 +262,7 @@ export async function handleFlowRoute(
       });
       if (refusal) return send(400, { error: refusal });
     }
-    const ran = await gatedFlow(runCtx, params, "flow.run");
+    const ran = await gatedFlow(approval ? { ...runCtx, flowStepApproval: approval } : runCtx, params, "flow.run");
     if ("refused" in ran) return send(409, ran.refused);
     const result = ran.value;
     return send(200, result);
