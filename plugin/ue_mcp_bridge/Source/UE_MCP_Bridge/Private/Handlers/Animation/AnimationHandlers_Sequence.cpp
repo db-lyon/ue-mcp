@@ -49,7 +49,7 @@ namespace
 	const TArray<FString>& AnimReadSeqFieldNames()
 	{
 		static const TArray<FString> Names = {
-			TEXT("assetPath"), TEXT("name"), TEXT("class"), TEXT("sequenceLength"), TEXT("rateScale"),
+			TEXT("assetPath"), TEXT("name"), TEXT("class"), TEXT("sequenceLength"), TEXT("rateScale"), TEXT("loop"),
 			TEXT("numberOfFrames"), TEXT("samplingFrameRate"), TEXT("skeleton"), TEXT("isAdditive"),
 			TEXT("additiveType"), TEXT("lengthSeconds"), TEXT("numFrames"), TEXT("frameRate"),
 			TEXT("rootMotionEnabled"), TEXT("rootMotionRootLock"), TEXT("forceRootLock"),
