@@ -4,7 +4,7 @@
  * while more than one exists.
  */
 
-import { editorOwnsProject, listEditorProcesses, probeEditorProcessList, sameProjectFile, type EditorProcess } from "./engine-observer.js";
+import { editorOwnsProject, probeEditorProcessList, sameProjectFile, type EditorProcess } from "./engine-observer.js";
 import { isPidAlive, readBridgeInstanceRecords } from "../bridge/editor-target.js";
 
 export interface ProjectHolder {
@@ -28,12 +28,16 @@ export interface ProjectHolders {
  * table. `recordPids` are live pids from this project's bridge instance
  * records: a process whose command line the probe could not read still holds
  * the project if it published an address in the project's own Saved dir.
+ * `processTableRead` says the editor process list was read: a record pid
+ * missing from it is not an editor, so a crashed editor's recycled pid is
+ * not counted (#1633).
  */
 export function describeProjectHolders(
   processes: EditorProcess[],
   projectPath: string,
   answeringPid: number | null,
   recordPids: number[] = [],
+  processTableRead = false,
 ): ProjectHolders | null {
   const byPid = new Map<number, ProjectHolder>();
   for (const proc of processes) {
@@ -45,6 +49,8 @@ export function describeProjectHolders(
     const proc = processes.find((p) => p.pid === pid);
     // A pid the probe saw with another project open reused a dead editor's pid.
     if (proc && proc.projectPath !== null) continue;
+    // So did a pid the probe did not list as an editor at all.
+    if (!proc && processTableRead && pid !== answeringPid) continue;
     byPid.set(pid, { pid, headless: proc ? proc.headless : null, answering: pid === answeringPid });
   }
   if (byPid.size < 2) return null;
@@ -104,12 +110,20 @@ export async function detectProjectHolders(
     return null;
   }
   let processes: EditorProcess[] = [];
+  let processTableRead = false;
   try {
-    processes = await (deps.listProcesses ?? listEditorProcesses)();
+    if (deps.listProcesses) {
+      processes = await deps.listProcesses();
+      processTableRead = true;
+    } else {
+      const probe = await probeEditorProcessList();
+      processes = probe.processes;
+      processTableRead = !probe.failed;
+    }
   } catch {
     // The records alone still name the holders.
   }
-  const holders = describeProjectHolders(processes, projectPath, answeringPid, recordPids);
+  const holders = describeProjectHolders(processes, projectPath, answeringPid, recordPids, processTableRead);
   rememberProjectHolders(projectPath, holders);
   return holders;
 }
