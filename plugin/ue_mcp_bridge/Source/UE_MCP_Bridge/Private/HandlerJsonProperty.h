@@ -901,8 +901,10 @@ namespace MCPJsonProperty
 			return bOk;
 		}
 
+		// ValueAddr is one element. On a fixed array (ArrayDim > 1) it may be
+		// element N, so a complete copy would run past the owner (#1687).
 		FDefaultConstructedPropertyElement Backup(Prop);
-		Prop->CopyCompleteValue(Backup.GetObjAddress(), ValueAddr);
+		Prop->CopySingleValue(Backup.GetObjAddress(), ValueAddr);
 
 		++NestDepth;
 		const bool bOk = SetJsonOnPropertyImpl(Prop, ValueAddr, InValue, OutError);
@@ -910,7 +912,7 @@ namespace MCPJsonProperty
 
 		if (!bOk)
 		{
-			Prop->CopyCompleteValue(ValueAddr, Backup.GetObjAddress());
+			Prop->CopySingleValue(ValueAddr, Backup.GetObjAddress());
 		}
 		return bOk;
 	}

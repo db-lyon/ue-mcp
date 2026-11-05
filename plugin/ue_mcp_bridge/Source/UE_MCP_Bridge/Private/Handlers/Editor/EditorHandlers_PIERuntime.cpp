@@ -1917,7 +1917,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	// rollback can be verified before it is advertised.
 	const bool bComparable = MCPJsonProperty::PropertyIsComparableByIdentity(Prop);
 	FDefaultConstructedPropertyElement PreviousRaw(Prop);
-	Prop->CopyCompleteValue(PreviousRaw.GetObjAddress(), ValueAddr);
+	Prop->CopySingleValue(PreviousRaw.GetObjAddress(), ValueAddr);
 
 	// Prove the round trip rather than asserting it, keeping the two ways it
 	// can fail apart: a value the setter REFUSES cannot be rolled back at all
@@ -1947,7 +1947,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(Prop, ValueAddr, NewValue, ExportOwner, SetError))
 	{
 		// A refused write may have landed part of the value; put it back.
-		Prop->CopyCompleteValue(ValueAddr, PreviousRaw.GetObjAddress());
+		Prop->CopySingleValue(ValueAddr, PreviousRaw.GetObjAddress());
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *ResolvedName, *SetError));
 	}
 
