@@ -336,7 +336,7 @@ export const batchAction: HandlerActionSpec = {
   description:
     "Run several actions as ONE game-thread job in the editor, so no call from any other session can land between them. "
     + "This is the fix for multi-step edits that other agents interleave with: add a variable, add a node and connect its pins "
-    + "arrive as one unit, and a rename from another session cannot slip in between. calls is an ordered list of "
+    + "arrive as one unit, and a rename from another session cannot slip in between. ops is an ordered list of "
     + "{category, method, args}, each prepared exactly as a direct call to that action would be (paths repaired, the action's "
     + "own parameter contract checked) BEFORE anything is sent, and a batch with one bad step is refused whole. Every step must "
     + "be an action the editor runs: an action served by this server process (start_editor, execute_python, flows, another "
