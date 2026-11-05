@@ -57,6 +57,7 @@ namespace
 			if (!S.LastFrameDir.IsEmpty()) Last->SetStringField(TEXT("frame_dir"), S.LastFrameDir);
 			if (S.LastFrameCount > 0) Last->SetNumberField(TEXT("frame_count"), S.LastFrameCount);
 			if (!S.LastContactSheetPath.IsEmpty()) Last->SetStringField(TEXT("contact_sheet_path"), S.LastContactSheetPath);
+			if (!S.LastReplayCSVPath.IsEmpty()) Last->SetStringField(TEXT("replay_csv_path"), S.LastReplayCSVPath);
 			R->SetObjectField(TEXT("last_result"), Last);
 		}
 	}

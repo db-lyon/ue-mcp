@@ -102,6 +102,7 @@ namespace MCPPIE
 		FString LastFrameDir;
 		int32 LastFrameCount = 0;
 		FString LastContactSheetPath;
+		FString LastReplayCSVPath;
 	};
 
 	struct FLiveReplaySnapshot
@@ -203,6 +204,16 @@ namespace MCPPIE
 		FString TargetResolveError;
 
 		double AttachTime = 0.0;
+		// Time alignment for drift (#1690). Replay steps fire SettleMs after
+		// attach, so replay time minus the settle is compared with the source
+		// row at the same offset from the source's first row.
+		int32 SourceCursor = 0;
+		bool bSourceExhausted = false;
+		uint64 ReplayFrameIndex = 0;
+		double AlignOffsetMs = 0.0;
+		double SourceInputOnsetMs = -1.0;
+		double ReplayInputOnsetMs = -1.0;
+		TArray<FCSVRow> ReplayRows;
 		int32 NextStepIndex = 0;
 		int32 ExecutedSteps = 0;
 		FString StartedAt;

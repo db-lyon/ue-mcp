@@ -331,6 +331,13 @@ namespace MCPPIE
 		CaptureDir.Reset();
 		NextStepIndex = 0;
 		ExecutedSteps = 0;
+		SourceCursor = 0;
+		bSourceExhausted = false;
+		ReplayFrameIndex = 0;
+		AlignOffsetMs = 0.0;
+		SourceInputOnsetMs = -1.0;
+		ReplayInputOnsetMs = -1.0;
+		ReplayRows.Reset();
 		for (const FHoldHandle& H : ActiveHolds)
 		{
 			FPIEInputInjector::StopAny(H.InjectionId);
@@ -521,6 +528,13 @@ namespace MCPPIE
 			const FStep& S = ActiveSequence.Steps[NextStepIndex];
 			if (S.DelayMs > ElapsedMs) break;
 
+			const bool bInputStep = S.Type == EStepType::Input || S.Type == EStepType::Hold || S.Type == EStepType::InputTape;
+			if (bInputStep && ReplayInputOnsetMs < 0.0)
+			{
+				SourceInputOnsetMs = S.DelayMs;
+				ReplayInputOnsetMs = ElapsedMs;
+			}
+
 			switch (S.Type)
 			{
 			case EStepType::Input:
@@ -604,7 +618,7 @@ namespace MCPPIE
 				// fall back to the step's own sequence index to avoid every
 				// capture collapsing onto the same filename.
 				const uint64 FrameIdx = (SourceFrames.Num() > 0)
-					? static_cast<uint64>(FramesCompared)
+					? ReplayFrameIndex
 					: static_cast<uint64>(NextStepIndex);
 				const FString Safe = SanitizeCaptureName(S.CaptureName);
 				const FString FullPath = Dir / FString::Printf(TEXT("%s_frame%05llu.png"), *Safe, FrameIdx);
@@ -752,19 +766,51 @@ namespace MCPPIE
 				CaptureFrameCounter++;
 			}
 
-			// Drift sampling: sample current pawn state + compare to source by
-			// frame index since attach.
-			if (SourceFrames.Num() > 0)
+			// Drift sampling: compare with the source row at the same time on
+			// the source timeline. Steps fire Settle ms after attach, so that
+			// much is taken off the replay clock; before it has elapsed the
+			// replay has not started and nothing is compared.
+			const uint64 ReplayFrame = ReplayFrameIndex++;
+			AlignOffsetMs = Pending.bMonitor ? 0.0 : static_cast<double>(Settle);
+			const double ReplayT = (Now - AttachTime) - AlignOffsetMs / 1000.0;
+			if (SourceFrames.Num() > 0 && bSourceExhausted)
 			{
-				const uint64 ReplayFrame = static_cast<uint64>(FramesCompared);
-				if (ReplayFrame < static_cast<uint64>(SourceFrames.Num()))
+				FramesMissingInReplay++;
+			}
+			else if (SourceFrames.Num() > 0 && ReplayT < 0.0)
+			{
+				// Pre-roll: sampled only to keep the sampler's velocity
+				// history current for the first compared frame.
+				Sampler.SampleFrame(PIEWorld, ReplayFrame, Now, PIEWorld->GetDeltaSeconds());
+			}
+			else if (SourceFrames.Num() > 0)
+			{
+				const double SrcBase = SourceFrames[0].Time;
+				const double SrcLast = SourceFrames.Last().Time - SrcBase;
+				const double HalfFrame = 0.5 / FMath::Max(1, ActiveSequence.SampleHz);
+				while (SourceCursor + 1 < SourceFrames.Num()
+					&& FMath::Abs(SourceFrames[SourceCursor + 1].Time - SrcBase - ReplayT)
+						<= FMath::Abs(SourceFrames[SourceCursor].Time - SrcBase - ReplayT))
 				{
-					FCSVRow Row = Sampler.SampleFrame(PIEWorld, ReplayFrame, Now, PIEWorld->GetDeltaSeconds());
-					const FSourceFrame& Src = SourceFrames[static_cast<int32>(ReplayFrame)];
+					++SourceCursor;
+				}
+				if (ReplayT > SrcLast + HalfFrame)
+				{
+					bSourceExhausted = true;
+					FramesMissingInReplay++;
+				}
+				else
+				{
+					FCSVRow Row = Sampler.SampleFrame(PIEWorld, ReplayFrame, SrcBase + ReplayT, PIEWorld->GetDeltaSeconds());
+					const FSourceFrame& Src = SourceFrames[SourceCursor];
 					FDriftFrameEntry E;
 					E.Frame = ReplayFrame;
-					E.PositionDeltaCm = static_cast<float>((Row.PawnLocation - Src.PawnLocation).Size());
-					E.VelocityDeltaCms = static_cast<float>((Row.PawnVelocity - Src.PawnVelocity).Size());
+					E.SourceFrame = Src.Frame;
+					E.Time = ReplayT;
+					E.PositionDelta = Row.PawnLocation - Src.PawnLocation;
+					E.VelocityDelta = Row.PawnVelocity - Src.PawnVelocity;
+					E.PositionDeltaCm = static_cast<float>(E.PositionDelta.Size());
+					E.VelocityDeltaCms = static_cast<float>(E.VelocityDelta.Size());
 					E.RotationDeltaDeg = static_cast<float>(FMath::Abs((Row.PawnRotation - Src.PawnRotation).Euler().Size()));
 					if (E.PositionDeltaCm > MaxPosDriftCm) { MaxPosDriftCm = E.PositionDeltaCm; MaxPosDriftFrame = ReplayFrame; }
 					if (E.VelocityDeltaCms > MaxVelDriftCms) MaxVelDriftCms = E.VelocityDeltaCms;
@@ -810,9 +856,7 @@ namespace MCPPIE
 							FDriftDivergence& Fd = FirstDivergence;
 							Fd.bFound = true;
 							Fd.Frame = ReplayFrame;
-							Fd.Time = (ActiveSequence.SampleHz > 0)
-								? static_cast<double>(ReplayFrame) / ActiveSequence.SampleHz
-								: 0.0;
+							Fd.Time = ReplayT;
 
 							if (VelR >= PosR && VelR >= RotR && VelR > 0.0)
 							{
@@ -863,12 +907,11 @@ namespace MCPPIE
 						}
 					}
 
-					// Per-tracked-actor drift: walk the same frame index in
-					// the source tracked.jsonl, re-resolve each id in the
-					// replay world, and accumulate max |delta| per id.
-					if (SourceActorRows.Num() > 0 && static_cast<int32>(ReplayFrame) < SourceActorRows.Num())
+					// Per-tracked-actor drift: tracked.jsonl has one row per
+					// recorded frame, so the source cursor indexes it too.
+					if (SourceActorRows.IsValidIndex(SourceCursor))
 					{
-						const FTrackedActorRow& SrcRow = SourceActorRows[static_cast<int32>(ReplayFrame)];
+						const FTrackedActorRow& SrcRow = SourceActorRows[SourceCursor];
 						for (const TPair<FString, FActorState>& KV : SrcRow.Actors)
 						{
 							FActorDrift& Acc = ActorDriftAccum.FindOrAdd(KV.Key);
@@ -900,11 +943,8 @@ namespace MCPPIE
 							if (DRot > Acc.MaxRotationDeg) Acc.MaxRotationDeg = DRot;
 						}
 					}
+					ReplayRows.Add(MoveTemp(Row));
 					FramesCompared++;
-				}
-				else
-				{
-					FramesMissingInReplay++;
 				}
 			}
 
@@ -924,7 +964,7 @@ namespace MCPPIE
 			{
 				// Stay in Replaying for one more sample frame to let drift catch
 				// any straggler frames the source had after the last step.
-				if (SourceFrames.Num() == 0 || FramesCompared >= SourceFrames.Num())
+				if (SourceFrames.Num() == 0 || bSourceExhausted)
 				{
 					State = EReplayerState::Completed;
 				}
@@ -999,6 +1039,38 @@ namespace MCPPIE
 			D.TrackedValueMaxDeltas = MaxTrackedDeltas;
 			D.ActorDrift = ActorDriftAccum;
 			D.FramesOverThreshold = DriftFrames;
+			D.Alignment = TEXT("time");
+			D.ReplayOffsetMs = AlignOffsetMs;
+			if (ReplayInputOnsetMs >= 0.0)
+			{
+				D.bHasInputOnset = true;
+				D.SourceInputOnsetMs = SourceInputOnsetMs;
+				D.ReplayInputOnsetMs = ReplayInputOnsetMs;
+			}
+			if (ReplayRows.Num() > 0)
+			{
+				FCSVHeader H;
+				H.RecordingId = D.SourceRecordingId;
+				H.SampleHz = ActiveSequence.SampleHz;
+				H.RngSeed = ActiveSequence.RngSeed;
+				H.Actions = Sampler.GetActions();
+				H.TrackedValues = Sampler.GetTrackedValues();
+				FString Body;
+				for (const FCSVRow& Row : ReplayRows)
+				{
+					AppendCSVRow(Body, Row, H);
+				}
+				FString CsvErr;
+				const FString ReplayCSVPath = FPaths::GetPath(CurrentDriftPath) / TEXT("replay.csv");
+				if (SaveCSV(ReplayCSVPath, BuildCSVHeader(H) + Body, CsvErr))
+				{
+					D.ReplayCSVFile = TEXT("replay.csv");
+				}
+				else
+				{
+					UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-REP] replay.csv write failed: %s"), *CsvErr);
+				}
+			}
 
 			// Item 1c: synthesise the lead the agent reads instead of the CSV.
 			D.Summary.bValid = true;
@@ -1132,6 +1204,7 @@ namespace MCPPIE
 		bTargetResolved = false;
 		TargetResolveStartSeconds = 0.0;
 		TargetResolveError.Reset();
+		ReplayRows.Reset();
 		State = EReplayerState::Idle;
 		bEndPIERequested = false;
 		// Retain the outcome so a poller (replay_status) can read the drift
@@ -1192,6 +1265,10 @@ namespace MCPPIE
 			S.LastFrameDir = LastFinish.FrameDir;
 			S.LastFrameCount = LastFinish.FrameCount;
 			S.LastContactSheetPath = LastFinish.ContactSheetPath;
+			if (!LastFinish.Drift.ReplayCSVFile.IsEmpty() && !LastFinish.DriftReportPath.IsEmpty())
+			{
+				S.LastReplayCSVPath = FPaths::GetPath(LastFinish.DriftReportPath) / LastFinish.Drift.ReplayCSVFile;
+			}
 		}
 		return S;
 	}

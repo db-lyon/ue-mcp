@@ -579,12 +579,42 @@ namespace MCPPIE
 		{
 			TSharedRef<FJsonObject> FO = MakeShared<FJsonObject>();
 			FO->SetNumberField(TEXT("frame"), static_cast<double>(F.Frame));
+			FO->SetNumberField(TEXT("source_frame"), static_cast<double>(F.SourceFrame));
+			FO->SetNumberField(TEXT("time"), F.Time);
 			FO->SetNumberField(TEXT("position_delta_cm"), F.PositionDeltaCm);
 			FO->SetNumberField(TEXT("velocity_delta_cms"), F.VelocityDeltaCms);
 			FO->SetNumberField(TEXT("rotation_delta_deg"), F.RotationDeltaDeg);
+			auto Vec = [](const FVector& V)
+			{
+				TSharedRef<FJsonObject> VO = MakeShared<FJsonObject>();
+				VO->SetNumberField(TEXT("x"), V.X);
+				VO->SetNumberField(TEXT("y"), V.Y);
+				VO->SetNumberField(TEXT("z"), V.Z);
+				return VO;
+			};
+			FO->SetObjectField(TEXT("position_delta"), Vec(F.PositionDelta));
+			FO->SetObjectField(TEXT("velocity_delta"), Vec(F.VelocityDelta));
 			Frames.Add(MakeShared<FJsonValueObject>(FO));
 		}
 		O->SetArrayField(TEXT("frames_over_threshold"), Frames);
+
+		if (!D.Alignment.IsEmpty())
+		{
+			O->SetStringField(TEXT("alignment"), D.Alignment);
+			O->SetNumberField(TEXT("replay_offset_ms"), D.ReplayOffsetMs);
+		}
+		if (D.bHasInputOnset)
+		{
+			TSharedRef<FJsonObject> On = MakeShared<FJsonObject>();
+			On->SetNumberField(TEXT("source_ms"), D.SourceInputOnsetMs);
+			On->SetNumberField(TEXT("replay_ms"), D.ReplayInputOnsetMs);
+			On->SetNumberField(TEXT("offset_ms"), D.ReplayInputOnsetMs - D.SourceInputOnsetMs);
+			O->SetObjectField(TEXT("input_onset"), On);
+		}
+		if (!D.ReplayCSVFile.IsEmpty())
+		{
+			O->SetStringField(TEXT("replay_csv"), D.ReplayCSVFile);
+		}
 
 		// Synthesised lead (item 1c): first divergence + ranked channels + errors.
 		if (D.Summary.bValid)
@@ -702,9 +732,34 @@ namespace MCPPIE
 				DD = 0; FO->TryGetNumberField(TEXT("position_delta_cm"), DD); E.PositionDeltaCm = static_cast<float>(DD);
 				DD = 0; FO->TryGetNumberField(TEXT("velocity_delta_cms"), DD); E.VelocityDeltaCms = static_cast<float>(DD);
 				DD = 0; FO->TryGetNumberField(TEXT("rotation_delta_deg"), DD); E.RotationDeltaDeg = static_cast<float>(DD);
+				DD = 0; FO->TryGetNumberField(TEXT("source_frame"), DD); E.SourceFrame = static_cast<uint64>(DD);
+				FO->TryGetNumberField(TEXT("time"), E.Time);
+				auto ReadVec = [&FO](const TCHAR* Key, FVector& OutV)
+				{
+					const TSharedPtr<FJsonObject>* VO = nullptr;
+					if (FO->TryGetObjectField(Key, VO) && VO)
+					{
+						(*VO)->TryGetNumberField(TEXT("x"), OutV.X);
+						(*VO)->TryGetNumberField(TEXT("y"), OutV.Y);
+						(*VO)->TryGetNumberField(TEXT("z"), OutV.Z);
+					}
+				};
+				ReadVec(TEXT("position_delta"), E.PositionDelta);
+				ReadVec(TEXT("velocity_delta"), E.VelocityDelta);
 				Out.FramesOverThreshold.Add(E);
 			}
 		}
+
+		Obj->TryGetStringField(TEXT("alignment"), Out.Alignment);
+		Obj->TryGetNumberField(TEXT("replay_offset_ms"), Out.ReplayOffsetMs);
+		const TSharedPtr<FJsonObject>* OnsetObj = nullptr;
+		if (Obj->TryGetObjectField(TEXT("input_onset"), OnsetObj) && OnsetObj)
+		{
+			Out.bHasInputOnset = true;
+			(*OnsetObj)->TryGetNumberField(TEXT("source_ms"), Out.SourceInputOnsetMs);
+			(*OnsetObj)->TryGetNumberField(TEXT("replay_ms"), Out.ReplayInputOnsetMs);
+		}
+		Obj->TryGetStringField(TEXT("replay_csv"), Out.ReplayCSVFile);
 
 		const TSharedPtr<FJsonObject>* SumObj = nullptr;
 		if (Obj->TryGetObjectField(TEXT("summary"), SumObj) && SumObj)
