@@ -2,7 +2,7 @@
 /**
  * Static mesh edits on copies of engine meshes, each read back through a
  * second action: sockets, material slots, navigation, build settings, the
- * measured geometry, and a pivot recenter.
+ * measured geometry, a baked geometry scale and a pivot recenter.
  * Refs #1223
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -13,6 +13,8 @@ const DIR = "/Game/MCPTest/BCov/AssetB/Mesh";
 const CUBE = `${DIR}/SM_BCovB_Cube`;
 const SCALED = `${DIR}/SM_BCovB_Scaled`;
 const OFFSET = `${DIR}/SM_BCovB_Offset`;
+const GEO = `${DIR}/SM_BCovB_GeoScaled`;
+const GEO_COPY = `${DIR}/SM_BCovB_GeoCopy`;
 const WORLD_GRID = "/Engine/EngineMaterials/WorldGridMaterial";
 const DEFAULT_MATERIAL = "/Engine/EngineMaterials/DefaultMaterial";
 // Engine meshes whose bounds may sit off the origin; the first that does is the recenter fixture.
@@ -150,6 +152,61 @@ describe("static mesh geometry", () => {
       expect(String((set.warnings as string[])[0])).toContain("scale_mesh_geometry");
     }
   }, 180_000);
+
+  it("scale_mesh_geometry bakes a per-axis scale into geometry, bounds and sockets (#1652)", async () => {
+    await callBridge(bridge, "delete_asset", { assetPath: GEO, force: true });
+    await call("duplicate_asset", { sourcePath: "/Engine/BasicShapes/Cube", destinationPath: GEO });
+    await call("add_socket", { assetPath: GEO, socketName: "BCov_Top", relativeLocation: { x: 0, y: 40, z: 50 } });
+
+    const scaled = await call("scale_mesh_geometry", { assetPath: GEO, factor: { x: 2, y: 1, z: 0.5 } });
+    expect(scaled.updated).toBe(true);
+    expect(scaled.rebuilt).toBe(true);
+    expect(scaled.socketsScaled).toBe(1);
+    expect((scaled.collision as { scaled: number }).scaled).toBeGreaterThan(0);
+
+    const bounds = await call("get_mesh_bounds", { assetPath: GEO });
+    const extent = bounds.boxExtent as Vec;
+    expect(extent.x).toBeCloseTo(100, 0);
+    expect(extent.y).toBeCloseTo(50, 0);
+    expect(extent.z).toBeCloseTo(25, 0);
+    const dims = (await call("measure_mesh_geometry", { assetPath: GEO })).dimensions as Vec;
+    expect(dims.x).toBeCloseTo(200, 0);
+    expect(dims.y).toBeCloseTo(100, 0);
+    expect(dims.z).toBeCloseTo(50, 0);
+    const socket = ((await call("list_sockets", { assetPath: GEO })).sockets as Socket[]).find((s) => s.name === "BCov_Top")!;
+    expect(socket.relativeLocation.y).toBeCloseTo(40, 3);
+    expect(socket.relativeLocation.z).toBeCloseTo(25, 3);
+
+    // The rollback record is the inverse scale, and applying it restores the cube.
+    const rollback = scaled.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("scale_mesh_geometry");
+    await call("scale_mesh_geometry", rollback.payload);
+    const restored = (await call("get_mesh_bounds", { assetPath: GEO })).boxExtent as Vec;
+    expect(restored.x).toBeCloseTo(50, 0);
+    expect(restored.y).toBeCloseTo(50, 0);
+    expect(restored.z).toBeCloseTo(50, 0);
+  }, 300_000);
+
+  it("scale_mesh_geometry with outputPath scales a copy about a pivot and leaves the source alone", async () => {
+    await callBridge(bridge, "delete_asset", { assetPath: GEO_COPY, force: true });
+    const copied = await call("scale_mesh_geometry", {
+      assetPath: CUBE,
+      outputPath: GEO_COPY,
+      factor: 0.2,
+      pivot: { x: 0, y: 0, z: -50 },
+    });
+    expect(copied.created).toBe(true);
+    expect((copied.rollback as { method: string }).method).toBe("delete_asset");
+
+    const copy = await call("get_mesh_bounds", { assetPath: GEO_COPY });
+    expect((copy.boxExtent as Vec).x).toBeCloseTo(10, 1);
+    expect((copy.min as Vec).z).toBeCloseTo(-50, 1);
+    expect((copy.max as Vec).z).toBeCloseTo(-30, 1);
+    expect(((await call("get_mesh_bounds", { assetPath: CUBE })).boxExtent as Vec).x).toBeCloseTo(50, 1);
+
+    const refused = await callBridge(bridge, "scale_mesh_geometry", { assetPath: CUBE, factor: { x: -1, y: 1, z: 1 } });
+    expect(succeeded(refused)).toBe(false);
+  }, 300_000);
 
   it("recenter_pivot shifts the mesh by the offset it reports", async () => {
     let source = "";
