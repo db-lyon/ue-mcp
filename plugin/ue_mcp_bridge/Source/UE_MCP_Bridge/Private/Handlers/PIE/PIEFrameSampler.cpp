@@ -300,7 +300,6 @@ namespace MCPPIE
 		PendingMarkerLabels.Reset();
 		Warnings.Reset();
 		TrackedActorRefs.Reset();
-		AttachBlocker.Reset();
 		PrevPawnLocation = FVector::ZeroVector;
 		// Re-seed from the current config so AttachToPIE can run again.
 		SeedTrackedValues();
