@@ -79,7 +79,9 @@ namespace
 		{
 			return nullptr;
 		}
-		const FString Sddl = FString::Printf(bDirectory ? TEXT("D:P(A;OICI;FA;;;%s)") : TEXT("D:P(A;;FA;;;%s)"), *Sid);
+		const FString Sddl = bDirectory
+			? FString::Printf(TEXT("D:P(A;OICI;FA;;;%s)"), *Sid)
+			: FString::Printf(TEXT("D:P(A;;FA;;;%s)"), *Sid);
 		PSECURITY_DESCRIPTOR Descriptor = nullptr;
 		if (!::ConvertStringSecurityDescriptorToSecurityDescriptorW(*Sddl, SDDL_REVISION_1, &Descriptor, nullptr))
 		{
