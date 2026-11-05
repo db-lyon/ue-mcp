@@ -62,6 +62,7 @@ Every route is on `127.0.0.1` and needs `Authorization: Bearer <token>`. The ser
 | `GET /v1/health` | Version, `apiVersion`, editors, clients, calls in flight, extensions, UI bundle, `features` |
 | `GET /v1/events` | Server-sent events, resumable by `Last-Event-ID` |
 | `WS /v1/mcp` | One MCP session per socket |
+| `GET /v1/sessions`, `GET`/`PUT /v1/sessions/<id>/access` | Open MCP sessions and each one's access mode (`read-write` or `read-only`) |
 | `GET /v1/install`, `GET /v1/update`, `POST /v1/update/apply` | Install state and updates |
 | `POST /v1/editor/{start,stop,restart,rebuild}` | Editor operations, announced on the event stream |
 | `/v1/checkpoints` | Checkpoints per editor session (`checkpoint-routes.ts`, see [Checkpoints](checkpoints.md)) |

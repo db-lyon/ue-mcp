@@ -617,6 +617,11 @@
       "summary": "a daemon extension reads and sets the project's playtest mode through api.modes, and its own callAction is not gated by it"
     },
     {
+      "id": "daemon.sessions-access",
+      "group": "daemon",
+      "summary": "the daemon lists each MCP session over /v1/sessions and PUT /v1/sessions/<id>/access switches one to read-only, refusing its state-changing calls while another session on the same editor stays writable"
+    },
+    {
       "id": "package.dist-server",
       "group": "daemon",
       "summary": "the compiled package, laid out as npm installs it, starts from dist/index.js and serves what the source does"

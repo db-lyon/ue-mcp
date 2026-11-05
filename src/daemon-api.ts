@@ -33,6 +33,7 @@ export {
   type DaemonExtensionApi,
   type ExtensionServicesApi,
   type DaemonHealth,
+  type McpSessionInfo,
   type EditorStatus,
   type ExtensionHandler,
   type ExtensionRequest,

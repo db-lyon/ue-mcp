@@ -16,6 +16,7 @@
  *   GET  /v1/skills     every skill a client of this project can load, see skills-list.ts
  *   GET  /v1/context/projection  what a strategy and category scope advertise, see context-projection.ts
  *   GET  /v1/actions    each action's effect and destructive flag, see action-effects.ts
+ *   GET  /v1/sessions   open MCP sessions and their access mode; PUT /v1/sessions/<id>/access sets it
  *   WS   /v1/mcp        one MCP session per socket
  */
 import * as fs from "node:fs";
@@ -54,14 +55,16 @@ import { userDir } from "../core/user-dir.js";
 import { readRegistryAuth } from "../extensions/registry-auth.js";
 import { getDialogModeScopes, getFeedbackModeScopes, setDialogMode, setFeedbackMode, setPlaytestMode } from "../config/user-state.js";
 import { resolvePlaytestMode } from "../editor/playtest-mode.js";
-import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus, type RefusedExtension } from "./extension-api.js";
+import { EXTENSION_API_VERSION, type DaemonExtensionApi, type DaemonHealth, type EditorStatus, type McpSessionInfo, type RefusedExtension } from "./extension-api.js";
+import { randomUUID } from "node:crypto";
+import { SessionAccess, parseSessionAccessMode, SESSION_ACCESS_MODES } from "../flow/session-access.js";
 import { existingGuard, onDialogEvent } from "../editor/dialog-guard.js";
 
 /** What this daemon's extension API offers beyond its version number. */
-export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval"];
+export const EXTENSION_FEATURES: readonly string[] = ["callAction.dialogPrompt", "callAction.elicit", "callAction.access", "checkpoints", "checkpoints.assetDiff", "events.dialog", "events.script", "models.provider", "modes", "modes.playtest", "skills", "context.projection", "actions.effects", "extension.versions", "ui.scopedKeys", "ui.extensions", "extension.services", "flows.stepApproval"];
 
 /** What this daemon's HTTP API offers beyond DAEMON_API_VERSION, reported by /v1/health. */
-export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval"];
+export const DAEMON_FEATURES: readonly string[] = ["checkpoints", "checkpoints.assetDiff", "skills", "context.projection", "actions.effects", "install.pendingBuild", "editor.rebuild", "ui.scopedKeys", "ui.extensions", "flows.stepApproval", "sessions.access"];
 import { extensionsDir, loadExtensions, matchRoute, normalizeResponse, type LoadedExtension } from "./extensions.js";
 import { installedCopies, recordedVersion, versionsOf } from "./extension-versions.js";
 import { UiBundleStore, contentType, type UiBundleOwner } from "./ui-bundles.js";
@@ -302,22 +305,37 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
   const wss = new WebSocketServer({ noServer: true });
   let clients = 0;
   const transports = new Set<WebSocketServerTransport>();
+  // Every open MCP session by id, with the access mode its calls run under (#1484).
+  const mcpSessions = new Map<string, { client: () => string; connectedAt: string; access: SessionAccess }>();
+  const sessionIds = new WeakMap<http.IncomingMessage, string>();
+  const listSessions = (): McpSessionInfo[] => [...mcpSessions].map(([id, m]) =>
+    ({ id, client: m.client(), connectedAt: m.connectedAt, access: m.access.mode }));
+  // The id goes back on the upgrade response, so a client on the socket knows which session it is.
+  wss.on("headers", (headers, req) => {
+    const id = randomUUID();
+    sessionIds.set(req, id);
+    headers.push(`x-ue-mcp-session: ${id}`);
+  });
 
   wss.on("connection", (ws, req) => {
     clients += 1;
     const header = String(req.headers["x-ue-mcp-client"] ?? "unknown");
     const transport = new WebSocketServerTransport(ws);
     transports.add(transport);
-    const { server, dispose } = createMcpServer(rt);
+    const sessionId = sessionIds.get(req) ?? randomUUID();
+    // A client can open its session read-only, so no call slips through before it sets the mode.
+    const access = new SessionAccess(parseSessionAccessMode(req.headers["x-ue-mcp-access"]));
+    const { server, dispose } = createMcpServer(rt, { access });
     // The MCP client's own name once it has introduced itself, else what the shim said.
     const client = (): string => server.server.getClientVersion()?.name ?? header;
+    mcpSessions.set(sessionId, { client, connectedAt: new Date().toISOString(), access });
 
     // Every call, attributed by client, for the activity feed.
     const started = new Map<string | number, { at: number; label: CallLabel }>();
     transport.observe = (direction, message) => {
       if (direction === "in" && "method" in message && message.method === "initialize") {
         const info = (message.params as { clientInfo?: { name?: string; version?: string } } | undefined)?.clientInfo;
-        events.publish("client.connected", { client: info?.name ?? header, version: info?.version ?? null, clients });
+        events.publish("client.connected", { client: info?.name ?? header, version: info?.version ?? null, clients, session: sessionId, access: access.mode });
       } else if (direction === "in" && "method" in message && message.method === "tools/call" && "id" in message) {
         const label = describeToolCall(message.params);
         started.set(message.id as string | number, { at: Date.now(), label });
@@ -339,9 +357,10 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     ws.on("close", () => {
       clients -= 1;
       transports.delete(transport);
+      mcpSessions.delete(sessionId);
       dispose();
       void server.close().catch(() => {});
-      events.publish("client.disconnected", { client: client(), clients });
+      events.publish("client.disconnected", { client: client(), clients, session: sessionId });
       touch();
     });
   });
@@ -388,6 +407,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
     ui: ui.active()?.manifest.version ?? null,
     uiBundles: ui.extensionBundles(),
     features: DAEMON_FEATURES,
+    sessions: listSessions(),
   });
   const editors = (): EditorState[] => rt.sessions.list().map((s) => states.get(s) ?? {
     name: s.name, connected: s.bridge.isConnected, port: s.bridge.port, pid: null, lastDisconnect: null,
@@ -476,6 +496,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
           ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
           ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
           ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
+          ...(callOpts?.access ? { access: callOpts.access } : {}),
         });
         return { isError: !!r.isError, content: r.content };
       },
@@ -509,6 +530,7 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
               ...(callOpts?.dialogPrompt ? { dialogPrompt: callOpts.dialogPrompt } : {}),
               ...(callOpts?.dialogWaitMs !== undefined ? { dialogWaitMs: callOpts.dialogWaitMs } : {}),
               ...(callOpts?.elicit ? { elicit: callOpts.elicit } : {}),
+              ...(callOpts?.access ? { access: callOpts.access } : {}),
             },
           );
           return { isError: !!r.isError, content: r.content };
@@ -696,6 +718,27 @@ export async function startDaemon(opts: DaemonOptions): Promise<Daemon> {
       } catch (e) {
         json(res, e instanceof ContextProjectionError ? 400 : 500, { error: e instanceof Error ? e.message : String(e) });
       }
+      return;
+    }
+    if (url.pathname === "/v1/sessions" || url.pathname.startsWith("/v1/sessions/")) {
+      const sub = url.pathname.slice("/v1/sessions".length).replace(/\/+$/, "");
+      if (req.method === "GET" && sub === "") return json(res, 200, { sessions: listSessions() });
+      const hit = /^\/([^/]+)\/access$/.exec(sub);
+      if (!hit) return json(res, 404, { error: "not found" });
+      const id = decodeURIComponent(hit[1]);
+      const session = mcpSessions.get(id);
+      if (!session) return json(res, 404, { error: `no open MCP session '${id}'` });
+      if (req.method === "GET") return json(res, 200, { id, access: session.access.mode });
+      if (req.method !== "PUT" && req.method !== "POST") return json(res, 405, { error: "GET or PUT" });
+      readBody(req).then((body) => {
+        const mode = parseSessionAccessMode((body as { mode?: unknown } | undefined)?.mode);
+        if (!mode) return json(res, 400, { error: `mode is one of ${SESSION_ACCESS_MODES.join(", ")}` });
+        if (session.access.set(mode)) {
+          info("daemon", `session ${id} (${session.client()}) is now ${mode}`);
+          events.publish("session.access", { session: id, client: session.client(), access: mode });
+        }
+        json(res, 200, { id, access: session.access.mode });
+      }, (e) => json(res, 400, { error: e instanceof Error ? e.message : String(e) }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/v1/shutdown") {
