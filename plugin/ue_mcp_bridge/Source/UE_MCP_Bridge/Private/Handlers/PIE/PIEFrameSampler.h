@@ -117,7 +117,6 @@ namespace MCPPIE
 		TArray<FTrackedAction> Tracked;
 		TArray<FString> PendingMarkerLabels;
 		TArray<FString> Warnings;
-<<<<<<< HEAD
 		// Actor lookups for actor-qualified tracked values (#1655). A miss is
 		// retried at most once a second so an unresolved path does not walk
 		// every actor in the world each frame.
@@ -127,9 +126,7 @@ namespace MCPPIE
 			double NextRetrySeconds = 0.0;
 		};
 		TMap<FString, FTrackedActorRef> TrackedActorRefs;
-=======
 		FString AttachBlocker;
->>>>>>> refs/triage/pr1711
 		FVector PrevPawnLocation = FVector::ZeroVector;
 	};
 }

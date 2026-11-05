@@ -220,11 +220,8 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
-<<<<<<< HEAD
 	FEditorHandlers::ShutdownMeshStudioRenders();
-=======
 	UEMCP::SceneCapture::ShutdownWarmCapture();
->>>>>>> refs/triage/pr1697
 	if (G_EditorReadyTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(G_EditorReadyTicker);
