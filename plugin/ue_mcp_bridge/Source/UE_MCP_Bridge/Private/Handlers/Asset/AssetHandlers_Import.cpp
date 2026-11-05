@@ -4587,6 +4587,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CompareTextures(const TSharedPtr<FJsonObj
 	UTexture2D* B = LoadAssetByPath<UTexture2D>(PathB);
 	if (!A) return MCPAssetLoadError(PathA, TEXT("Texture2D"));
 	if (!B) return MCPAssetLoadError(PathB, TEXT("Texture2D"));
+	// A texture still compiling reads as the 32 x 32 placeholder (#1550).
+	FTextureCompilingManager::Get().FinishCompilation({ A, B });
 
 	const bool bSameDims = A->GetSizeX() == B->GetSizeX() && A->GetSizeY() == B->GetSizeY();
 	const bool bSameFormat = A->GetPixelFormat() == B->GetPixelFormat();
