@@ -510,8 +510,39 @@ export const handlerSpecs: HandlerSpecs = {
       {
         "name": "assetPath",
         "type": "string",
-        "required": true,
-        "description": "NiagaraEmitter asset path"
+        "required": false,
+        "description": "NiagaraEmitter asset path, or a NiagaraSystem asset path to read one of its emitters"
+      },
+      {
+        "name": "systemPath",
+        "type": "string",
+        "required": false,
+        "description": "NiagaraSystem whose emitter to read, picked by emitterName or emitterIndex"
+      },
+      {
+        "name": "emitterName",
+        "type": "string",
+        "required": false,
+        "description": "Emitter handle name. Omit to address the emitter by emitterIndex"
+      },
+      {
+        "name": "emitterIndex",
+        "type": "number",
+        "required": false,
+        "description": "Emitter handle index, used when emitterName is omitted"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "assetPath"
+          ],
+          [
+            "systemPath"
+          ]
+        ]
       }
     ]
   },
@@ -1574,7 +1605,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   create_niagara_system: "Params: name, packagePath?, onConflict?",
   create_niagara_system_from_spec: "Params: name, packagePath?, onConflict?, emitters?",
   create_scratch_module: "Params: name, packagePath?, onConflict?, inputs?, outputs?",
-  get_emitter_info: "Params: assetPath",
+  get_emitter_info: "Params: assetPath OR systemPath, emitterName?, emitterIndex?",
   get_niagara_compiled_hlsl: "Params: systemPath, emitterName?, emitterIndex?",
   get_niagara_custom_hlsl: "Params: scriptPath OR systemPath, stackContext?, emitterName?, emitterIndex?, nodeIndex?",
   get_niagara_info: "Params: assetPath (or path)",
@@ -1614,7 +1645,7 @@ export const schema: Record<string, z.ZodType> = {
   actorLabel: z.string().optional().describe("Editor label of the actor holding the NiagaraComponent; a label naming several actors is refused"),
   actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector"),
   advanceSimulation: z.boolean().optional().describe("Advance one tick before the first frame too (default false)"),
-  assetPath: z.string().optional().describe("NiagaraEmitter asset path (get_emitter_info). NiagaraSystem asset path (get_niagara_info). Alias for systemPath (set_emitter_property)"),
+  assetPath: z.string().optional().describe("NiagaraEmitter asset path, or a NiagaraSystem asset path to read one of its emitters (get_emitter_info). NiagaraSystem asset path (get_niagara_info). Alias for systemPath (set_emitter_property)"),
   attributeCaptureMode: z.string().optional().describe("All (default) | RenderingOnly | ExplicitAttributes"),
   attributes: z.array(z.string()).optional().describe("Attribute names to read. Bare (Position) or qualified (Particles.Position). Omit to list the layout only"),
   autoDestroy: z.boolean().optional().describe("Destroy the spawned host actor once the system finishes (default false)"),
@@ -1622,7 +1653,7 @@ export const schema: Record<string, z.ZodType> = {
   cursor: z.string().optional().describe("Resume a paged read: pass back the 'nextCursor' from the previous page, unmodified"),
   dynamicInputScript: z.string().optional().describe("The dynamic-input NiagaraScript to wire in"),
   emitterIndex: z.number().optional().describe("Emitter handle index, used when emitterName is omitted"),
-  emitterName: z.string().optional().describe("Emitter handle name. Omit to address the emitter by emitterIndex (add_emitter_renderer, add_niagara_event_handler, add_niagara_module, add_niagara_simulation_stage, get_niagara_compiled_hlsl, get_niagara_custom_hlsl, list_emitter_renderers, list_niagara_dynamic_inputs, list_niagara_module_inputs, list_niagara_static_switches, remove_emitter_from_system, remove_emitter_renderer, remove_niagara_dynamic_input, remove_niagara_event_handler, remove_niagara_module, remove_niagara_simulation_stage, set_niagara_custom_hlsl, set_niagara_dynamic_input, set_niagara_module_enabled, set_niagara_module_input, set_niagara_static_switch, set_renderer_property). Emitter to read (default: the only emitter; required when there are several) (read_niagara_sim_cache). Emitter handle name (default: the first emitter) (set_emitter_property)"),
+  emitterName: z.string().optional().describe("Emitter handle name. Omit to address the emitter by emitterIndex (add_emitter_renderer, add_niagara_event_handler, add_niagara_module, add_niagara_simulation_stage, get_emitter_info, get_niagara_compiled_hlsl, get_niagara_custom_hlsl, list_emitter_renderers, list_niagara_dynamic_inputs, list_niagara_module_inputs, list_niagara_static_switches, remove_emitter_from_system, remove_emitter_renderer, remove_niagara_dynamic_input, remove_niagara_event_handler, remove_niagara_module, remove_niagara_simulation_stage, set_niagara_custom_hlsl, set_niagara_dynamic_input, set_niagara_module_enabled, set_niagara_module_input, set_niagara_static_switch, set_renderer_property). Emitter to read (default: the only emitter; required when there are several) (read_niagara_sim_cache). Emitter handle name (default: the first emitter) (set_emitter_property)"),
   emitterPath: z.string().optional().describe("NiagaraEmitter asset to add"),
   emitters: z.array(z.object({ path: z.string().describe("NiagaraEmitter asset path, e.g. /Game/VFX/E_Fire") })).optional().describe("Emitters to add; one that does not load is skipped"),
   enabled: z.boolean().optional().describe("Create the stage enabled (default true) (add_niagara_simulation_stage). The state to set (set_niagara_module_enabled)"),
@@ -1665,7 +1696,7 @@ export const schema: Record<string, z.ZodType> = {
   stageName: z.string().optional().describe("Simulation stage name"),
   summarize: z.boolean().optional().describe("Include per-component min/max/avg (default true)"),
   switchName: z.string().optional().describe("Static switch input name"),
-  systemPath: z.string().optional().describe("NiagaraSystem asset path (add_emitter_renderer, add_emitter_to_system, add_niagara_event_handler, add_niagara_module, add_niagara_simulation_stage, compile_niagara_system, get_niagara_compiled_hlsl, inspect_data_interface, list_emitter_renderers, list_emitters_in_system, list_niagara_dynamic_inputs, list_niagara_module_inputs, list_niagara_static_switches, list_niagara_system_parameters, remove_emitter_from_system, remove_emitter_renderer, remove_niagara_dynamic_input, remove_niagara_event_handler, remove_niagara_module, remove_niagara_simulation_stage, set_emitter_property, set_niagara_dynamic_input, set_niagara_module_enabled, set_niagara_module_input, set_niagara_static_switch, set_renderer_property, spawn_niagara_actor, spawn_niagara_at_location, validate_niagara_system). NiagaraSystem whose emitter stack holds the CustomHLSL node (get_niagara_custom_hlsl, set_niagara_custom_hlsl)"),
+  systemPath: z.string().optional().describe("NiagaraSystem asset path (add_emitter_renderer, add_emitter_to_system, add_niagara_event_handler, add_niagara_module, add_niagara_simulation_stage, compile_niagara_system, get_niagara_compiled_hlsl, inspect_data_interface, list_emitter_renderers, list_emitters_in_system, list_niagara_dynamic_inputs, list_niagara_module_inputs, list_niagara_static_switches, list_niagara_system_parameters, remove_emitter_from_system, remove_emitter_renderer, remove_niagara_dynamic_input, remove_niagara_event_handler, remove_niagara_module, remove_niagara_simulation_stage, set_emitter_property, set_niagara_dynamic_input, set_niagara_module_enabled, set_niagara_module_input, set_niagara_static_switch, set_renderer_property, spawn_niagara_actor, spawn_niagara_at_location, validate_niagara_system). NiagaraSystem whose emitter to read, picked by emitterName or emitterIndex (get_emitter_info). NiagaraSystem whose emitter stack holds the CustomHLSL node (get_niagara_custom_hlsl, set_niagara_custom_hlsl)"),
   targetIndex: z.number().int().optional().describe("Stack insert position; -1 (default) appends"),
   templatePath: z.string().optional().describe("Emitter asset to copy as the starting point (default: the empty emitter with the standard modules and a sprite renderer)"),
   tickDelta: z.number().optional().describe("Seconds per advanced tick (default 1/60)"),

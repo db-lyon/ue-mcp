@@ -16936,8 +16936,39 @@
         {
           "name": "assetPath",
           "type": "string",
-          "required": true,
-          "description": "NiagaraEmitter asset path"
+          "required": false,
+          "description": "NiagaraEmitter asset path, or a NiagaraSystem asset path to read one of its emitters"
+        },
+        {
+          "name": "systemPath",
+          "type": "string",
+          "required": false,
+          "description": "NiagaraSystem whose emitter to read, picked by emitterName or emitterIndex"
+        },
+        {
+          "name": "emitterName",
+          "type": "string",
+          "required": false,
+          "description": "Emitter handle name. Omit to address the emitter by emitterIndex"
+        },
+        {
+          "name": "emitterIndex",
+          "type": "number",
+          "required": false,
+          "description": "Emitter handle index, used when emitterName is omitted"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "assetPath"
+            ],
+            [
+              "systemPath"
+            ]
+          ]
         }
       ]
     },
