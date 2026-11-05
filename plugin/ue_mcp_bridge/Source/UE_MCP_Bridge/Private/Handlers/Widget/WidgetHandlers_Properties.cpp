@@ -1662,7 +1662,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BuildTree(const TSharedPtr<FJsonObject>&
 		{
 			for (const auto& Pair : Nodes[i].Properties->Values)
 			{
-				FString Head = Pair.Key;
+				FString Head(Pair.Key);
 				int32 Dot = INDEX_NONE;
 				if (Head.FindChar(TEXT('.'), Dot)) Head.LeftInline(Dot);
 				Explicit.Add(FName(*Head));
