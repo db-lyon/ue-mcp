@@ -139,6 +139,8 @@ The shutdown "Save Content" prompt does not have to be raised at all. `editor(re
 
 Precedence, highest first: `UE_MCP_DIALOG_MODE`, the project's `dialog.mode` in `~/.ue-mcp/state.json`, your user `dialog.mode` in the same file, then the default. **The default is `interactive` when your MCP client supports elicitation and `defer` when it does not. It is never `auto`.** An environment value that names no mode is ignored, and the result says so.
 
+opencode 2.1.4 and later show the form, so they get `interactive`. Earlier opencode builds advertise elicitation but never display the form, so ue-mcp treats them as unable to elicit: dialogs are handled as `defer`, even when `interactive` is set, and the refusal says to upgrade.
+
 Set it with `npx ue-mcp dialog mode <interactive|auto|defer>`. Add `--editor <name>` to scope it to one project; `default` clears it.
 
 What counts as blocking: the modal stack, then every top-level window that is modal or parented to another regular window. Menus, tooltips and notifications are not regular windows. Visibility is not consulted, because a window drawn behind the editor still blocks. Detection lives in the C++ bridge, so it changes only when the plugin is rebuilt.

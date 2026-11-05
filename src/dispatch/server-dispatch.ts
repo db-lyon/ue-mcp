@@ -32,6 +32,7 @@ import {
 } from "../editor/dialog-guard.js";
 import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
+import { elicitationUnrenderedNote } from "./client-quirks.js";
 import { playtestRefusal } from "../editor/playtest-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
@@ -143,12 +144,18 @@ export function buildElicit(mcp: McpServer): ElicitFn {
         "Connected MCP client did not advertise the `elicitation` capability - cannot obtain a deterministic user approval. Upgrade your client (Claude Code >= 2.1.76) or run the action from a client that supports MCP elicitation.",
       );
     }
+    // Advertised but never drawn: the request would wait on a form nobody sees.
+    const unrendered = elicitationUnrenderedNote(mcp.server.getClientVersion());
+    if (unrendered) throw new McpError(ErrorCode.UNKNOWN_ACTION, unrendered);
     const result = await mcp.server.elicitInput(params, { timeout: ELICIT_TIMEOUT_MS });
     return result as Awaited<ReturnType<ElicitFn>>;
   };
   // The function exists whatever the client supports, so its presence proves
-  // nothing. Callers deciding whether the user CAN be asked read this.
-  elicit.clientAdvertisesElicitation = () => !!mcp.server.getClientCapabilities()?.elicitation;
+  // nothing. Callers deciding whether the user CAN be asked read this, and a
+  // client known to drop the forms it advertises cannot be asked (#1459).
+  elicit.clientAdvertisesElicitation = () =>
+    !!mcp.server.getClientCapabilities()?.elicitation &&
+    elicitationUnrenderedNote(mcp.server.getClientVersion()) === null;
   elicit.client = () => mcp.server.getClientVersion();
   return elicit;
 }

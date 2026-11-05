@@ -14,7 +14,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { findUProject } from "../config/uproject-path.js";
-import { readLiveDiscovery } from "../daemon/discovery.js";
+import { readAnsweringDiscovery } from "../daemon/discovery.js";
 import { extensionsDir } from "../daemon/extensions.js";
 import { installExtension, removeExtension, useExtensionVersion } from "../daemon/extension-install.js";
 import { installedCopies, migrateLegacy, recordedVersion, versionsOf } from "../daemon/extension-versions.js";
@@ -37,7 +37,7 @@ function flag(argv: string[], name: string): string | undefined {
 /** Stop the project's daemon and start a new one, so it loads the current extensions. */
 async function restartDaemon(uproject: string): Promise<boolean> {
   const dir = path.dirname(path.resolve(uproject));
-  const d = readLiveDiscovery(dir);
+  const d = await readAnsweringDiscovery(dir);
   if (!d) return false;
   await fetch(`http://127.0.0.1:${d.port}/v1/shutdown`, { method: "POST", headers: { authorization: `Bearer ${d.token}` } }).catch(() => undefined);
   // Wait for the process to end, not just its record: a new daemon started beside a live old one leaves two attached to the editor.

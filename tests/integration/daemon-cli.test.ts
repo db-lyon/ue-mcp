@@ -176,6 +176,8 @@ describe("handoff", () => {
     covers("daemon.handoff");
     const project = sb.makeProject("Handoff");
     const fake = await FakeHttp.start((req) => {
+      // The newer daemon first checks the record is a daemon answering for it (#1460).
+      if (req.url === "/v1/health") return { json: { ok: true, pid: process.pid } };
       // The older daemon goes away when asked, taking its record with it.
       if (req.url === "/v1/handoff") setTimeout(() => fs.rmSync(discoveryFile(sb, project), { force: true }), 300);
       return { status: 202 };
@@ -214,16 +216,40 @@ describe("handoff", () => {
     }
   });
 
+  it("a daemon starts in place of a record whose pid was reused (#1460)", async () => {
+    covers("daemon.handoff");
+    const project = sb.makeProject("Recycled");
+    // A live pid (this test process) on a port where no daemon answers.
+    const fake = await FakeHttp.start(() => ({ status: 404 }));
+    try {
+      publishFake(project, fake, "999.0.0");
+      const status = await daemon(["status", project, "--json"]);
+      expect(JSON.parse(status.stdout)).toEqual({ ok: true, running: false });
+      expect(fs.existsSync(discoveryFile(sb, project))).toBe(false);
+
+      publishFake(project, fake, "999.0.0");
+      const d = await startDaemonCli(sb, project);
+      expect(d.pid).not.toBe(process.pid);
+      expect(fake.requests.map((q) => q.url)).toEqual(["/v1/health", "/v1/health"]);
+      expect((await call(d, "GET", "/v1/health")).body.pid).toBe(d.pid);
+      expect((await call(d, "POST", "/v1/handoff")).status).toBe(202);
+      await waitGone(sb, project, d.pid);
+    } finally {
+      await fake.stop();
+    }
+  });
+
   it("a daemon defers to a newer one that is already running", async () => {
     covers("daemon.handoff");
     const project = sb.makeProject("Newer");
-    const fake = await FakeHttp.start(() => ({ status: 202 }));
+    const fake = await FakeHttp.start((req) => (req.url === "/v1/health" ? { json: { ok: true, pid: process.pid } } : { status: 202 }));
     try {
       publishFake(project, fake, "999.0.0");
       const r = await daemon(["run", project], { UE_MCP_LOG_LEVEL: "info" });
       expect(r.code).toBe(0);
       expect(plain(r.stderr)).toContain("daemon 999.0.0 already running");
-      expect(fake.requests).toEqual([]);
+      // It only asked the running daemon to answer for its record.
+      expect(fake.requests.map((q) => q.url)).toEqual(["/v1/health"]);
       expect(readDiscovery(sb, project)).toMatchObject({ pid: process.pid, version: "999.0.0" });
     } finally {
       fs.rmSync(discoveryFile(sb, project), { force: true });

@@ -9,7 +9,7 @@
  */
 import * as path from "node:path";
 import { findUProject } from "../config/uproject-path.js";
-import { readLiveDiscovery } from "../daemon/discovery.js";
+import { readAnsweringDiscovery } from "../daemon/discovery.js";
 import { runDaemon } from "../daemon/daemon.js";
 import { ensureDaemon } from "../daemon/shim.js";
 import { waitForExit } from "../daemon/supersede-watch.js";
@@ -82,7 +82,8 @@ export async function run(argv: string[]): Promise<number | void> {
     return 0;
   }
 
-  const d = readLiveDiscovery(projectDir);
+  // A record whose pid was reused by another process is no daemon to stop or report (#1460).
+  const d = await readAnsweringDiscovery(projectDir);
   if (!d) {
     if (json) out({ ok: true, running: false });
     else ok("no daemon running for this project");
