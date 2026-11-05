@@ -8,7 +8,6 @@
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionMakeMaterialAttributes.h"
 #include "Materials/MaterialExpressionSetMaterialAttributes.h"
-#include "MaterialAttributeDefinitionMap.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Guid.h"
 #include "UObject/Package.h"

@@ -115,7 +115,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::InsertExpressionBetween(const TSharedP
 	{
 		for (const auto& Pair : (*Properties)->Values)
 		{
-			const FString Name = FString(Pair.Key);
+			const FString Name = FString(*Pair.Key);
 			FProperty* Field = MCPJsonProperty::FindMemberProperty(Class, Name);
 			if (!Field || !Field->HasAnyPropertyFlags(CPF_Edit) || Field->HasAnyPropertyFlags(CPF_EditConst))
 				return MCPError(FString::Printf(TEXT("Property '%s' is not editable on this expression"), *Name));
