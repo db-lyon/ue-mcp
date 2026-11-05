@@ -158,7 +158,7 @@ If an update succeeds but the running server still reports an old version, run:
 npx ue-mcp doctor
 ```
 
-It prints every version source (registry latest, npm global, the running servers, the deployed bridge plugin) and flags a project-local `node_modules/ue-mcp` that **shadows** the global install: with `ue-mcp` in a project's `package.json`, `npx ue-mcp` runs that local copy. `ue-mcp update` aligns a stale local copy. `doctor` also flags a client config pinned to a version other than the installed bridge's, and one that launches without `--min-release-age=0`.
+It prints every version source (registry latest, npm global, the running servers, the deployed bridge plugin) and flags a project-local `node_modules/ue-mcp` that **shadows** the global install: with `ue-mcp` in a project's `package.json`, `npx ue-mcp` runs that local copy. `ue-mcp update` never installs into the project; it tells you how to remove the local copy. `doctor` also flags a client config pinned to a version other than the installed bridge's, and one that launches without `--min-release-age=0`.
 
 After removing the bridge or a project, MCP client configs can be left pointing at it. `doctor` names each such entry, in the project's configs and the machine-wide ones, and `--fix` removes exactly those entries (and adds `--min-release-age=0` where it is missing):
 

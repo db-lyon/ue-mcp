@@ -63,8 +63,14 @@ namespace MCPPIE
 		// Walk the PIE world's first player and bind to its pawn's
 		// EnhancedInputComponent. Returns true once attached; subsequent
 		// calls are no-ops. Safe to call every frame until it succeeds.
-		bool AttachToPIE(UWorld* PIEWorld);
+		// bRequireInputComponent=false attaches to a pawn that has no input
+		// component (input disabled, or a pawn left behind by an earlier run).
+		bool AttachToPIE(UWorld* PIEWorld, bool bRequireInputComponent = true);
 		bool IsAttached() const { return bAttached; }
+		// Why the last AttachToPIE call did not attach. Empty once attached.
+		const FString& GetAttachBlocker() const { return AttachBlocker; }
+		// The last AttachToPIE call found the pawn and only its input component was missing.
+		bool IsBlockedOnInputComponent() const { return bBlockedOnInputComponent; }
 
 		// Sample one frame. Caller supplies the absolute game time, dt, and
 		// frame index. Returns the populated row, including edge events
@@ -110,6 +116,8 @@ namespace MCPPIE
 
 		FConfig Config;
 		bool bAttached = false;
+		FString AttachBlocker;
+		bool bBlockedOnInputComponent = false;
 		FString PawnClassPath;
 		FString PIEWorldPath;
 		TArray<FActionSpec> Actions;

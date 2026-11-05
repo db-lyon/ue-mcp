@@ -198,6 +198,11 @@
         {
           "suite": "integration",
           "file": "tests/integration/cli-install.test.ts",
+          "test": "never runs npm install in the project folder (#1630)"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/cli-install.test.ts",
           "test": "stops at the deploy with --no-build and leaves the engine alone"
         },
         {

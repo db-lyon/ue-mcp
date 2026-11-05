@@ -2046,6 +2046,7 @@ namespace MCPPIE
 			Finish(EScriptRunState::Finished, Err.IsEmpty() ? FString(TEXT("observation ended")) : Err);
 			return;
 		}
+		Run.WaitingFor = Clock.WaitingFor;
 		if (Clock.State != EObserverState::Observing || Clock.FramesSampled == 0) return;
 
 		const int64 Frame = static_cast<int64>(Clock.LastFrame);
@@ -2109,6 +2110,7 @@ namespace MCPPIE
 
 		Run.State = FinalState;
 		Run.StopReason = Reason;
+		Run.WaitingFor.Reset();
 		Run.EndedAt = ScriptNowIso();
 		if (Run.StartedAt.IsEmpty()) Run.StartedAt = Run.EndedAt;
 

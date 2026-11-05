@@ -252,6 +252,8 @@ namespace MCPPIE
 		FString StartedAt;
 		FString EndedAt;
 		FString StopReason;
+		// While armed: what the observation is waiting on before the clock starts. Not serialised.
+		FString WaitingFor;
 		double NowMs = 0.0;
 		int64 Frame = -1;
 		bool bClockStarted = false;
