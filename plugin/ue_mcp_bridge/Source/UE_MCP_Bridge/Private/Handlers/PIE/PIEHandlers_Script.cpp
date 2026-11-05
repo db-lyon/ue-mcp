@@ -167,6 +167,8 @@ namespace
 		if (!Run.RecordingId.IsEmpty()) R->SetStringField(TEXT("recording_id"), Run.RecordingId);
 		if (Run.bReplay) R->SetStringField(TEXT("replay_of"), Run.ReplayOf);
 		R->SetNumberField(TEXT("elapsed_ms"), Run.NowMs);
+		if (!Run.WaitingFor.IsEmpty()) R->SetStringField(TEXT("waiting_for"), Run.WaitingFor);
+		if (!Run.StopReason.IsEmpty()) R->SetStringField(TEXT("stop_reason"), Run.StopReason);
 
 		TArray<TSharedPtr<FJsonValue>> Steps;
 		for (int32 I = 0; I < Run.Steps.Num(); ++I)

@@ -236,6 +236,8 @@ namespace MCPPIE
 	void FPIEFrameSampler::Reset()
 	{
 		bAttached = false;
+		AttachBlocker.Reset();
+		bBlockedOnInputComponent = false;
 		PawnClassPath.Reset();
 		PIEWorldPath.Reset();
 		Actions.Reset();
@@ -312,14 +314,16 @@ namespace MCPPIE
 		}
 	}
 
-	bool FPIEFrameSampler::AttachToPIE(UWorld* PIEWorld)
+	bool FPIEFrameSampler::AttachToPIE(UWorld* PIEWorld, bool bRequireInputComponent)
 	{
 		if (bAttached)
 		{
 			return true;
 		}
+		bBlockedOnInputComponent = false;
 		if (!PIEWorld)
 		{
+			AttachBlocker = TEXT("no PIE world");
 			return false;
 		}
 
@@ -327,20 +331,36 @@ namespace MCPPIE
 		FString Error;
 		if (!PIEWorldResolver::ResolvePlayerInWorld(PIEWorld, Config.ClientIndex, Target, Error))
 		{
+			AttachBlocker = Error;
 			return false;
 		}
 
 		APlayerController* PC = Target.PlayerController;
 		if (!PC)
 		{
+			AttachBlocker = FString::Printf(TEXT("local player %d has no player controller"), Config.ClientIndex);
 			return false;
 		}
 		APawn* Pawn = PC->GetPawn();
-		if (!Pawn || !Pawn->InputComponent)
+		if (!Pawn)
 		{
+			AttachBlocker = FString::Printf(TEXT("player controller %s possesses no pawn"), *PC->GetName());
 			return false;
 		}
+		if (!Pawn->InputComponent)
+		{
+			AttachBlocker = FString::Printf(TEXT("pawn %s has no input component"), *Pawn->GetName());
+			bBlockedOnInputComponent = true;
+			if (bRequireInputComponent)
+			{
+				return false;
+			}
+			UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-SAMPLER] Attaching to %s without an input component; bound actions are found once it has one"),
+				*Pawn->GetName());
+		}
 
+		AttachBlocker.Reset();
+		bBlockedOnInputComponent = false;
 		PawnClassPath = Pawn->GetClass()->GetPathName();
 		PIEWorldPath = PIEWorld->GetPathName();
 		DiscoverActions(PC, Pawn);

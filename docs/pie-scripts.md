@@ -157,7 +157,7 @@ pie(action="script_run", script="/Game/PIEStudio/Scripts/DoorOpens", start_pie=t
 | `profile` | the script's | The observation profile to arm. |
 | `map` | the script's | The level to play in. When another level is open, the run opens this one before it arms anything, and is refused when the open level has unsaved changes or PIE is running in another level. With no map the run plays whatever level is open. `mode=manual` leaves the open level as it is. |
 | `record` | `true` | Arm the recorder too, so the run can be replayed. With `record=false` the run has no recording and cannot be replayed. |
-| `start_pie` | `false` | Start PIE when it is not running. Otherwise the run waits for the next PIE session. |
+| `start_pie` | `false` | Start PIE when it is not running. Otherwise the run waits for the next PIE session. A session already running is used as it is. |
 | `block_on_manual` | `true` | Hold the run at a manual step until it has a verdict. Consecutive manual steps are put up together and the run holds until each has one. `false` starts each manual step and moves on. |
 | `mode` | `full` | `manual` judges the script by its manual steps with no PIE. See [Manual runs](#manual-runs). |
 | `default_within_ms` | the script's, or `5000` | The window for an auto step that names none. |
@@ -205,7 +205,7 @@ With `wait=true` the answer is merged with the run's final status, without `even
 
 ### Status
 
-`script_status` (`run_id?`, `since_seq?`, `wait?`, `timeout_seconds?`) reports a run with the same fields as the `script_run` answer, plus `active`. Run states are `armed`, `running`, `awaiting_verdict`, `finished`, `stopped` and `idle`. Step statuses are `pending`, `running`, `passed`, `failed`, `awaiting_verdict` and `skipped`.
+`script_status` (`run_id?`, `since_seq?`, `wait?`, `timeout_seconds?`) reports a run with the same fields as the `script_run` answer, plus `active`, `stop_reason` once the run has ended, and `waiting_for` while an armed run waits for the player or its pawn (such as `player controller PC_0 possesses no pawn`). Run states are `armed`, `running`, `awaiting_verdict`, `finished`, `stopped` and `idle`. Step statuses are `pending`, `running`, `passed`, `failed`, `awaiting_verdict` and `skipped`.
 
 The editor holds one run in memory: the active one, or the last one to end. An older run id answers from that run's `results.json`, events included, with `live: false`. A run id with no `results.json`, and any call before the first run, answers `state: "idle"` with empty `steps`, `awaiting` and `events`, and `last_seq` equal to `since_seq`.
 
@@ -215,7 +215,7 @@ The editor holds one run in memory: the active one, or the last one to end. An o
 
 ### How a run ends
 
-A run finishes with `stop_reason` `all steps settled` once every step has passed, failed or been skipped. It also finishes when PIE ends (`PIE ended`) or the observation ends (`observation ended`). An auto step still running then fails with `run ended before the step settled (<reason>)`. Pending steps stay `pending` and manual steps without a verdict stay `awaiting_verdict`.
+A run finishes with `stop_reason` `all steps settled` once every step has passed, failed or been skipped. It also finishes when PIE ends (`PIE ended`) or the observation ends (`observation ended`). An observation that cannot resolve the player within 10 seconds, or attach to its pawn within 30 seconds of resolving it, ends the run with the reason as `stop_reason`, such as `No pawn to observe after 30 s in UEDPIE_0_Map: player controller PC_0 possesses no pawn`. A pawn without an input component is attached anyway after 2 seconds of game time, so a session left running by an earlier run can be observed. An auto step still running then fails with `run ended before the step settled (<reason>)`. Pending steps stay `pending` and manual steps without a verdict stay `awaiting_verdict`.
 
 `script_stop` (`run_id?`, `reason?`) ends the active run the same way with state `stopped` and `stop_reason` set to `reason` (default `stopped`), writes `results.json`, and answers with the run's fields, `stopped: true` and `changed: true`. A `run_id` that is not the active run is refused. With no active run the answer has `success: false`, `alreadyStopped: true`, and the last run's `run_id`, `state` and `results_path`.
 

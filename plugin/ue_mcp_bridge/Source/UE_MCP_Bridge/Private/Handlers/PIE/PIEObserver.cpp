@@ -131,6 +131,10 @@ namespace MCPPIE
 		}
 
 		constexpr double ObserverTargetResolveTimeoutSeconds = 10.0;
+		// A resolved player whose pawn cannot be attached fails the run after this long (#1625).
+		constexpr double ObserverPawnAttachTimeoutSeconds = 30.0;
+		// Game time a pawn may go without an input component before it is attached without one.
+		constexpr double ObserverInputComponentGraceSeconds = 2.0;
 	}
 
 	bool IsWidgetOnScreen(const UWidget* Widget)
@@ -381,6 +385,9 @@ namespace MCPPIE
 			S.bTargetResolved = false;
 			S.TargetResolveStartSeconds = FPlatformTime::Seconds();
 			S.TargetResolveError.Reset();
+			S.PawnWaitStartSeconds = 0.0;
+			S.InputComponentWaitStartGameSeconds = -1.0;
+			S.AttachError.Reset();
 			FPIEFrameSampler::FConfig SC;
 			SC.AxisThreshold = 0.15f;
 			SC.bCapturePawnState = S.bCapturePawnState;
@@ -447,21 +454,48 @@ namespace MCPPIE
 
 			if (S.State == EObserverState::WaitingForPawn)
 			{
-				if (S.Sampler.AttachToPIE(PIEWorld))
+				const double Now = FPlatformTime::Seconds();
+				const double GameNow = PIEWorld->GetTimeSeconds();
+				if (S.PawnWaitStartSeconds <= 0.0)
 				{
-					S.AttachTime = PIEWorld->GetTimeSeconds();
-
-					S.CSVHdr = FCSVHeader();
-					S.CSVHdr.RecordingId = S.RunId;
-					S.CSVHdr.SampleHz = S.Config.SampleHz > 0 ? S.Config.SampleHz : 60;
-					S.CSVHdr.Actions = S.Sampler.GetActions();
-					S.CSVHdr.TrackedValues = S.Sampler.GetTrackedValues();
-					S.CSVHeaderStr = BuildCSVHeader(S.CSVHdr);
-					S.CSVBody.Reset();
-
-					S.State = EObserverState::Observing;
-					UE_LOG(LogMCPPIE, Log, TEXT("[PIE-OBS] Pawn attached, observing: %s"), *S.RunId);
+					S.PawnWaitStartSeconds = Now;
 				}
+				// A pawn that keeps no input component (input disabled, or left by an earlier
+				// run in a session still running) is still observable once startup is past.
+				if (!S.Sampler.IsBlockedOnInputComponent())
+				{
+					S.InputComponentWaitStartGameSeconds = -1.0;
+				}
+				else if (S.InputComponentWaitStartGameSeconds < 0.0)
+				{
+					S.InputComponentWaitStartGameSeconds = GameNow;
+				}
+				const bool bRequireInputComponent = S.InputComponentWaitStartGameSeconds < 0.0
+					|| GameNow - S.InputComponentWaitStartGameSeconds < ObserverInputComponentGraceSeconds;
+				if (!S.Sampler.AttachToPIE(PIEWorld, bRequireInputComponent))
+				{
+					if (Now - S.PawnWaitStartSeconds >= ObserverPawnAttachTimeoutSeconds)
+					{
+						S.AttachError = FString::Printf(TEXT("No pawn to observe after %.0f s in %s: %s"),
+							ObserverPawnAttachTimeoutSeconds, *PIEWorld->GetName(), *S.Sampler.GetAttachBlocker());
+						UE_LOG(LogMCPPIE, Warning, TEXT("[PIE-OBS] %s (run %s)"), *S.AttachError, *S.RunId);
+						FinaliseSession(S);
+					}
+					continue;
+				}
+
+				S.AttachTime = GameNow;
+
+				S.CSVHdr = FCSVHeader();
+				S.CSVHdr.RecordingId = S.RunId;
+				S.CSVHdr.SampleHz = S.Config.SampleHz > 0 ? S.Config.SampleHz : 60;
+				S.CSVHdr.Actions = S.Sampler.GetActions();
+				S.CSVHdr.TrackedValues = S.Sampler.GetTrackedValues();
+				S.CSVHeaderStr = BuildCSVHeader(S.CSVHdr);
+				S.CSVBody.Reset();
+
+				S.State = EObserverState::Observing;
+				UE_LOG(LogMCPPIE, Log, TEXT("[PIE-OBS] Pawn attached, observing: %s"), *S.RunId);
 				continue;
 			}
 
@@ -528,10 +562,11 @@ namespace MCPPIE
 		if (S.FramesSampled == 0)
 		{
 			const bool bTargetFailed = !S.bTargetResolved && !S.TargetResolveError.IsEmpty();
-			R.bSuccess = !bTargetFailed;
-			if (bTargetFailed)
+			const FString Failure = bTargetFailed ? S.TargetResolveError : S.AttachError;
+			R.bSuccess = Failure.IsEmpty();
+			if (!R.bSuccess)
 			{
-				R.Error = S.TargetResolveError;
+				R.Error = Failure;
 				LastError = R.Error;
 			}
 			S.State = EObserverState::Completed;
@@ -674,6 +709,10 @@ namespace MCPPIE
 		if (S->State == EObserverState::Observing && S->FramesSampled > 0)
 		{
 			Out.ElapsedSeconds = FMath::Max(0.0, S->LastRow.Time - S->AttachTime);
+		}
+		if (S->State == EObserverState::WaitingForPawn)
+		{
+			Out.WaitingFor = S->bTargetResolved ? S->Sampler.GetAttachBlocker() : S->TargetResolveError;
 		}
 		return true;
 	}

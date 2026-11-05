@@ -55,6 +55,8 @@ namespace MCPPIE
 		uint64 LastFrame = 0;
 		// Game seconds since the pawn attached (the run's first observed frame).
 		double ElapsedSeconds = 0.0;
+		// While waiting for the pawn: why the run has not attached yet.
+		FString WaitingFor;
 	};
 
 	// True when the widget and every ancestor are visible and it is rooted in the viewport or a Slate parent.
@@ -103,6 +105,11 @@ namespace MCPPIE
 		bool bTargetResolved = false;
 		double TargetResolveStartSeconds = 0.0;
 		FString TargetResolveError;
+		// Set once the player resolves; the pawn attach timeout counts from here.
+		double PawnWaitStartSeconds = 0.0;
+		// PIE game time the pawn was first seen without an input component.
+		double InputComponentWaitStartGameSeconds = -1.0;
+		FString AttachError;
 		FPIEFrameSampler Sampler;
 		FCSVHeader CSVHdr;
 		FString CSVHeaderStr;
