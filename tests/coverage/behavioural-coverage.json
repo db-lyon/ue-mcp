@@ -9884,6 +9884,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-level-multilevel.test.ts",
+          "test": "list_actor_descs finds the descriptor by its package, full or by its tail, and names the missing ones"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-multilevel.test.ts",
           "test": "list_actor_descs finds the saved actor's descriptor"
         }
       ]
@@ -11526,6 +11531,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-multilevel.test.ts",
           "test": "load_actor_descs pins and unpins the descriptor"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-multilevel.test.ts",
+          "test": "load_actor_descs takes the same packages filter"
         }
       ]
     },
@@ -18361,6 +18371,11 @@
           "suite": "live",
           "file": "tests/live/bcov-level-actors.test.ts",
           "test": "set_actor_folder_path moves the actor into a folder and back to the root"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-level-multilevel.test.ts",
+          "test": "World Partition actor descriptors"
         }
       ]
     },
