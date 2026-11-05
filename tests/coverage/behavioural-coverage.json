@@ -2409,6 +2409,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AssetBulkReadTests.cpp",
           "test": "UE.MCP.Asset.BulkRead.Contract"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AssetKeyedArrayPathTests.cpp",
+          "test": "UE.MCP.Asset.SetProperty.KeyedArraySelector"
         }
       ]
     },
@@ -8794,6 +8799,11 @@
       "tests": [
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AssetKeyedArrayPathTests.cpp",
+          "test": "UE.MCP.Asset.SetProperty.KeyedArraySelector"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/MCPInstancedStructPathTests.cpp",
           "test": "UE.MCP.Editor.Property.InstancedStruct.WrapperArrayPaths"
         },
@@ -14670,6 +14680,11 @@
       "tests": [
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AssetKeyedArrayPathTests.cpp",
+          "test": "UE.MCP.Asset.SetProperty.KeyedArraySelector"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AssetNestedArrayPathTests.cpp",
           "test": "UE.MCP.Asset.SetProperty.NestedArrayStructFieldUnsaved"
         },
@@ -18599,6 +18614,11 @@
       "registeredIn": "AssetHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AssetKeyedArrayPathTests.cpp",
+          "test": "UE.MCP.Asset.SetProperty.KeyedArraySelector"
+        },
         {
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/AssetNestedArrayPathTests.cpp",

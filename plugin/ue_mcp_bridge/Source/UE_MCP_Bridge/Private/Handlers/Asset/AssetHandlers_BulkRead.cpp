@@ -329,17 +329,21 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 
 		TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
 		TArray<FString> MissingProperties;
+		TSharedPtr<FJsonObject> ResolvedPaths = MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> MissingReasons = MakeShared<FJsonObject>();
 		bool bAnyNull = false;
 		for (const FString& PropertyPath : PropertyPaths)
 		{
-			FString ResolvedType;
-			const TSharedPtr<FJsonValue> Value = MCPQuery::ReadDottedProperty(Target, PropertyPath, ResolvedType);
+			FString ResolvedType, ResolvedPath, SelectorError;
+			const TSharedPtr<FJsonValue> Value = MCPQuery::ReadDottedProperty(Target, PropertyPath, ResolvedType, &ResolvedPath, &SelectorError);
 			if (!Value.IsValid())
 			{
 				// Absent is not null. "This class has no such property" and
 				// "this property is unset" are different findings, and
 				// collapsing them is what makes an audit unactionable.
 				MissingProperties.Add(PropertyPath);
+				// Items[Id=Foo] matching nothing, or two elements, says so.
+				if (!SelectorError.IsEmpty()) MissingReasons->SetStringField(PropertyPath, SelectorError);
 				continue;
 			}
 			if (Value->Type == EJson::Null)
@@ -347,6 +351,7 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 				bAnyNull = true;
 			}
 			Props->SetField(PropertyPath, Value);
+			if (ResolvedPath != PropertyPath) ResolvedPaths->SetStringField(PropertyPath, ResolvedPath);
 		}
 
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -360,6 +365,9 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 		}
 		Row->SetObjectField(TEXT("props"), Props);
 		Row->SetArrayField(TEXT("missingProperties"), MCPStringListToJson(MissingProperties));
+		if (MissingReasons->Values.Num() > 0) Row->SetObjectField(TEXT("missingReasons"), MissingReasons);
+		// Each Items[Field=Value] path as the numeric index it matched on this asset.
+		if (ResolvedPaths->Values.Num() > 0) Row->SetObjectField(TEXT("resolvedPropertyNames"), ResolvedPaths);
 		Row->SetBoolField(TEXT("suspect"), MissingProperties.Num() > 0 || bAnyNull);
 
 		if (!MCPQuery::EvaluateAll(Predicates, Row, WhereMode == TEXT("all")))
