@@ -775,7 +775,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecFolderPath, SpecFolderPathPrefix,
 		MCPParam::Optional(TEXT("includeChildActors"), EType::Boolean, TEXT("Match a ChildActorComponent's child actor by the actor filters of the top-level actor that owns it (default false)")),
 		MCPParam::Optional(TEXT("fields"), EType::Array, TEXT("Field groups: transform, bounds, localBounds, shadow, nanite, navigation, tick, materials, mesh, decal, health, physics, attachment, customPrimitiveData")).Items(EType::String),
-		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Component UPROPERTY names projected under props.*, at most 32")).Items(EType::String),
+		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Component property names or dotted struct paths (AttachEndTo.ComponentProperty) projected under props.*, at most 32")).Items(EType::String),
 		MCPParam::Optional(TEXT("actorPropertyNames"), EType::Array, TEXT("Owning actor property names or dotted paths, Blueprint variables included, projected under actorProps.*, at most 32")).Items(EType::String),
 		MCPParam::Optional(TEXT("where"), EType::Array, TEXT("Predicates evaluated in the editor, at most 24")).Items(EType::Object).WithFields({
 			MCPParam::RequiredField(TEXT("field"), EType::String, TEXT("Dot path into the row, such as shadow.effectiveCastShadow or props.CullDistance")),

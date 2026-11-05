@@ -28065,7 +28065,7 @@
           "name": "propertyNames",
           "type": "array",
           "required": false,
-          "description": "Component UPROPERTY names projected under props.*, at most 32",
+          "description": "Component property names or dotted struct paths (AttachEndTo.ComponentProperty) projected under props.*, at most 32",
           "items": "string"
         },
         {

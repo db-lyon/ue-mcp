@@ -2421,7 +2421,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "propertyNames",
         "type": "array",
         "required": false,
-        "description": "Component UPROPERTY names projected under props.*, at most 32",
+        "description": "Component property names or dotted struct paths (AttachEndTo.ComponentProperty) projected under props.*, at most 32",
         "items": "string"
       },
       {
@@ -5581,7 +5581,7 @@ export const schema: Record<string, z.ZodType> = {
   projectPoint: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World point to project onto the spline"),
   properties: z.record(z.string(), z.unknown()).optional().describe("Property name to value, applied to the new transformer instance (add_runtime_cell_transformer). Property name to value, dotted paths supported (batch_set_actor_properties). Property name to value (set_volume_properties). Property name to value applied to every spawn (spawn_actors_batch). Property name to value, applied before initialisation (spawn_transient_actor)"),
   propertyName: z.string().optional().describe("Property name, dotted paths supported (bulk_set_component_property, set_actor_property, set_component_property, set_water_body_property). Only this property, with includeProperties (get_actor_details). FPostProcessSettings property on that component (get_post_process_settings, set_fixed_exposure, set_post_process_settings)"),
-  propertyNames: z.array(z.string()).optional().describe("Restrict includeValues to these properties (get_component_details). Component UPROPERTY names projected under props.*, at most 32 (query_components)"),
+  propertyNames: z.array(z.string()).optional().describe("Restrict includeValues to these properties (get_component_details). Component property names or dotted struct paths (AttachEndTo.ComponentProperty) projected under props.*, at most 32 (query_components)"),
   radius: z.number().optional().describe("Positive sphere or capsule radius in cm"),
   recaptureSky: z.boolean().optional().describe("Recapture a SkyLight after the change"),
   recursiveFolder: z.boolean().optional().describe("Also take brushes in folders nested under folderPath (default true)"),
