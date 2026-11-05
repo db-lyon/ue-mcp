@@ -100,6 +100,14 @@ describe("blueprint functions and locals", () => {
     const sig = await call("list_graph_parameters", { assetPath: BP, functionName: "BCovCompute" });
     expect(names(sig, "inputs")).toContain("Speed");
     expect(sig.kind).toBe("function");
+    expect(rows(sig, "inputs").find((r) => r.name === "Speed")).toMatchObject({ isReference: false, isConst: false });
+
+    await call("add_function_parameter", {
+      assetPath: BP, functionName: "BCovCompute", parameterName: "Target", parameterType: "Vector",
+      isReference: true, isConst: true,
+    });
+    const refSig = await call("list_graph_parameters", { assetPath: BP, functionName: "BCovCompute" });
+    expect(rows(refSig, "inputs").find((r) => r.name === "Target")).toMatchObject({ isReference: true, isConst: true });
 
     const set = await call("set_function_properties", {
       assetPath: BP, functionName: "BCovCompute", pure: true, category: "BCov", tooltip: "Computes",
