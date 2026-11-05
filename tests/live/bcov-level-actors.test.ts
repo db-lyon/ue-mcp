@@ -329,6 +329,53 @@ describe("delete_actors by outliner folder (#1529)", () => {
   }, 120_000);
 });
 
+describe("outliner folders (#1529)", () => {
+  const ROOT = "BCov_OutFolder";
+  type Row = { folderPath: string; status: string; reason?: string; actorCount?: number; folders?: string[] };
+  const rows = (out: Json): Row[] => (out.results ?? []) as Row[];
+  const statusOf = (out: Json, path: string) => rows(out).find((r) => r.folderPath === path)?.status;
+
+  afterAll(async () => {
+    await callBridge(bridge, "delete_actors", { folderPathPrefix: ROOT });
+    await callBridge(bridge, "delete_outliner_folder", { folderPath: ROOT });
+  });
+
+  it("create_outliner_folder makes empty folders and delete_outliner_folder removes them, refusing one that holds an actor", async () => {
+    const made = await call("create_outliner_folder", { folderPaths: [`${ROOT}/Empty/Deep`, `${ROOT}/Other`] });
+    expect(statusOf(made, `${ROOT}/Empty/Deep`)).toBe("created");
+    expect(statusOf(made, `${ROOT}/Other`)).toBe("created");
+    expect((made.rollback as Json).method).toBe("delete_outliner_folder");
+    expect(statusOf(await call("create_outliner_folder", { folderPath: `${ROOT}/Other` }), `${ROOT}/Other`)).toBe("existed");
+
+    const label = `${PREFIX}FolderOccupant`;
+    await cube(label, { x: 0, y: 29500, z: 0 });
+    await call("set_actor_folder_path", { folderPath: `${ROOT}/Occupied`, actorLabels: [label] });
+
+    const refused = await call("delete_outliner_folder", { folderPath: ROOT });
+    const row = rows(refused).find((r) => r.folderPath === ROOT)!;
+    expect(row.status).toBe("failed");
+    expect(row.reason).toBe("not_empty");
+    expect(row.actorCount).toBe(1);
+    expect(refused.deletedCount).toBe(0);
+    expect((await call("get_actors_by_class", { className: "StaticMeshActor", labelPrefix: label })).count).toBe(1);
+
+    const preview = await call("delete_outliner_folder", { folderPath: `${ROOT}/Empty`, dryRun: true });
+    expect(statusOf(preview, `${ROOT}/Empty`)).toBe("would_delete");
+    expect(statusOf(await call("create_outliner_folder", { folderPath: `${ROOT}/Empty/Deep` }), `${ROOT}/Empty/Deep`)).toBe("existed");
+
+    const removed = await call("delete_outliner_folder", { folderPath: `${ROOT}/Empty` });
+    expect(statusOf(removed, `${ROOT}/Empty`)).toBe("deleted");
+    expect(removed.deletedFolders).toEqual(expect.arrayContaining([`${ROOT}/Empty`, `${ROOT}/Empty/Deep`]));
+    expect((removed.rollback as Json).method).toBe("create_outliner_folder");
+    expect(statusOf(await call("create_outliner_folder", { folderPath: `${ROOT}/Empty/Deep` }), `${ROOT}/Empty/Deep`)).toBe("created");
+
+    expect((await call("delete_actors", { folderPathPrefix: ROOT })).deleted).toBe(1);
+    const cleared = await call("delete_outliner_folder", { folderPath: ROOT });
+    expect(statusOf(cleared, ROOT)).toBe("deleted");
+    expect(statusOf(await call("delete_outliner_folder", { folderPath: ROOT }), ROOT)).toBe("absent");
+  }, 120_000);
+});
+
 describe("level class queries", () => {
   it("count_actors_by_class counts the placed target points", async () => {
     const before = await call("count_actors_by_class");

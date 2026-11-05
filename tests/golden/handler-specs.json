@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1221,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -11555,6 +11555,38 @@
       ],
       "contractExempt": "Creates and saves a system under the contract values; nothing it reads fails first"
     },
+    "create_outliner_folder": {
+      "category": "level",
+      "params": [
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder to create, such as Props/Lights"
+        },
+        {
+          "name": "folderPaths",
+          "type": "array",
+          "required": false,
+          "description": "World Outliner folders; combined with folderPath",
+          "items": "string"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "folderPath"
+            ],
+            [
+              "folderPaths"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "The contract value is a valid folder name, so the call would create a folder in the editor world"
+    },
     "create_pcg_graph": {
       "category": "pcg",
       "params": [
@@ -13053,6 +13085,43 @@
           "type": "boolean",
           "required": false,
           "description": "List the orphans without deleting them (default false)"
+        }
+      ]
+    },
+    "delete_outliner_folder": {
+      "category": "level",
+      "params": [
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder to delete, with the empty folders under it"
+        },
+        {
+          "name": "folderPaths",
+          "type": "array",
+          "required": false,
+          "description": "World Outliner folders; combined with folderPath",
+          "items": "string"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would be deleted without deleting (default false)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "folderPath"
+            ],
+            [
+              "folderPaths"
+            ]
+          ]
         }
       ]
     },

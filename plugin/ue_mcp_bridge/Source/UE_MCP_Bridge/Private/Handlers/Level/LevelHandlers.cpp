@@ -589,6 +589,18 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecTransactionLabel,
 	}, MCPSpec::AtLeastOne({ { TEXT("actorLabels") }, { TEXT("labelPrefix") }, { TEXT("className") }, { TEXT("tag") } })
 		.ContractExempt(TEXT("Opens an undo transaction and runs its write loop under the contract values, which match no actor; nothing it reads fails first")));
+	const FMCPParamSpec SpecOutlinerFolderPaths = MCPParam::Optional(TEXT("folderPaths"), EType::Array, TEXT("World Outliner folders; combined with folderPath")).Items(EType::String);
+	Registry.RegisterHandler(TEXT("create_outliner_folder"), &CreateOutlinerFolder, {
+		MCPParam::Optional(TEXT("folderPath"), EType::String, TEXT("World Outliner folder to create, such as Props/Lights")),
+		SpecOutlinerFolderPaths,
+	}, MCPSpec::AtLeastOne({ { TEXT("folderPath") }, { TEXT("folderPaths") } })
+		.ContractExempt(TEXT("The contract value is a valid folder name, so the call would create a folder in the editor world")));
+	// The contract value names no folder, so every entry reports absent and nothing is deleted.
+	Registry.RegisterHandler(TEXT("delete_outliner_folder"), &DeleteOutlinerFolder, {
+		MCPParam::Optional(TEXT("folderPath"), EType::String, TEXT("World Outliner folder to delete, with the empty folders under it")),
+		SpecOutlinerFolderPaths,
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be deleted without deleting (default false)")),
+	}, MCPSpec::AtLeastOne({ { TEXT("folderPath") }, { TEXT("folderPaths") } }));
 	const FMCPParamSpec SpecDescFilter = MCPParam::Optional(TEXT("filter"), EType::String, TEXT("Case-insensitive substring over label, name, class and path"));
 	const FMCPParamSpec SpecDescClassName = MCPParam::Optional(TEXT("className"), EType::String, TEXT("Actor class filter"));
 	const FMCPParamSpec SpecDescGuids = MCPParam::Optional(TEXT("guids"), EType::Array, TEXT("Exact actor GUIDs")).Items(EType::String);
