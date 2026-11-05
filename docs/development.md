@@ -13,6 +13,8 @@ cd ue-mcp
 npm install
 ```
 
+The checked-in `.claude/settings.json` holds the shared Claude Code settings: attribution, a deny list and a few read-only allows. It does not bypass permissions. Keep personal permissions in `.claude/settings.local.json`, which git ignores.
+
 ## Resolving an issue with Claude Code
 
 From inside a `ue-mcp` clone:
