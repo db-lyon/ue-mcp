@@ -2825,6 +2825,78 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "rename_actor_object": {
+    "category": "level",
+    "params": [
+      {
+        "name": "actorLabel",
+        "type": "string",
+        "required": false,
+        "description": "Actor editor label; pass actorLabel or actorPath"
+      },
+      {
+        "name": "actorPath",
+        "type": "string",
+        "required": false,
+        "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+      },
+      {
+        "name": "newName",
+        "type": "string",
+        "required": false,
+        "description": "New object name; omitted, a unique name is generated from the actor's class"
+      },
+      {
+        "name": "renames",
+        "type": "array",
+        "required": false,
+        "description": "Batch form, at most 512; replaces actorLabel/actorPath/newName",
+        "items": "object",
+        "fields": [
+          {
+            "name": "actorPath",
+            "type": "string",
+            "required": false,
+            "description": "Full actor object path; wins over actorLabel"
+          },
+          {
+            "name": "actorLabel",
+            "type": "string",
+            "required": false,
+            "description": "Actor editor label"
+          },
+          {
+            "name": "newName",
+            "type": "string",
+            "required": false,
+            "description": "New object name; omitted, one is generated from the class"
+          }
+        ]
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Report what would change without writing"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "actorLabel"
+          ],
+          [
+            "actorPath"
+          ],
+          [
+            "renames"
+          ]
+        ]
+      }
+    ]
+  },
   "rerun_construction_scripts": {
     "category": "level",
     "params": [
@@ -5184,6 +5256,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   remove_components_by_class: "Params: componentClass, matchComponentSubclasses?, componentNameContains?, actorLabels?, labelPrefix?, labelContains?, tag?, classFilter? (or actorClassFilter), folderPath?, folderPathPrefix?, matchSubclasses?, dryRun?, save?, transactionLabel?",
   remove_instance: "Params: actorLabel?, actorPath?, componentName?, index",
   remove_streaming_sublevel: "Params: levelName (or levelPath)",
+  rename_actor_object: "Params: at least one of actorLabel/actorPath/renames, newName?, dryRun?",
   rerun_construction_scripts: "Params: at least one of actorLabels/className, matchSubclasses?, world?, pieInstance?",
   resolve_actor: "Params: internalName",
   restore_component_relative_transform: "Params: actorLabel OR actorPath, componentName, relativeTransform, world?, pieInstance?",
@@ -5229,13 +5302,13 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   actorClass: z.string().optional().describe("Actor class: short name, /Script path or Blueprint class path (place_actor, spawn_actors_batch, spawn_transient_actor). Owning actor class, resolved as a class or matched as a substring (query_components)"),
   actorClassFilter: z.string().optional().describe("Alias for classFilter"),
-  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor)"),
+  actorLabel: z.string().optional().describe("Actor editor label; pass actorLabel or actorPath (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor label (destroy_transient_actor)"),
   actorLabelA: z.string().optional().describe("First actor label; pass actorLabelA or actorPathA"),
   actorLabelB: z.string().optional().describe("Second actor label; pass actorLabelB or actorPathB"),
   actorLabelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   actorLabelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"),
   actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"),
-  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor)"),
+  actorPath: z.string().optional().describe("Full actor object path; the unambiguous selector, and it wins over actorLabel (add_actor_tag, add_component_to_actor, add_hismc_instances, add_instances, add_post_process_blendable, aim_actor_at, delete_actor, export_actor_fbx, get_actor_bounds, get_actor_details, get_component_details, get_component_tree, get_instance_transforms, get_post_process_settings, get_spline_info, get_water_state, list_actor_tags, move_actor, nudge_component, read_actor_motion, rebuild_water_zone, remove_actor_tag, remove_component_from_actor, remove_instance, rename_actor_object, restore_component_relative_transform, set_actor_material, set_actor_mobility, set_actor_property, set_actor_tags, set_component_property, set_component_skeletal_mesh, set_fixed_exposure, set_fog_properties, set_light_properties, set_post_process_settings, set_spline_points, set_volume_properties, set_water_body_property, snap_actor_to_floor, snap_instances_to_surface, update_instance_transform). Transient actor object path (destroy_transient_actor)"),
   actorPathA: z.string().optional().describe("First actor object path"),
   actorPathB: z.string().optional().describe("Second actor object path"),
   actorPaths: z.array(z.string()).optional().describe("Full actor object paths"),
@@ -5283,7 +5356,7 @@ export const schema: Record<string, z.ZodType> = {
   direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally (line_trace, shape_trace). Trace direction (default straight down) (snap_instances_to_surface)"),
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   distance: z.number().optional().describe("Ray length when direction is given (default 200000)"),
-  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
+  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, rename_actor_object, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
   duplicateTransformTolerance: z.number().optional().describe("Centimetre bucket for duplicate-transform detection"),
   editorHidden: z.boolean().optional().describe("Only editor-hidden (true) or only visible (false) actors"),
   editorVisible: z.boolean().optional().describe("Editor viewport visibility"),
@@ -5377,6 +5450,7 @@ export const schema: Record<string, z.ZodType> = {
   nameContains: z.string().optional().describe("Case-insensitive substring over the actor's internal name (delete_actors). Substring over the setting name (get_post_process_settings)"),
   nameFilter: z.string().optional().describe("Case-sensitive substring over the internal name or the label"),
   names: z.array(z.string()).optional().describe("Exact setting names to return"),
+  newName: z.string().optional().describe("New object name; omitted, a unique name is generated from the actor's class"),
   offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World-space offset added to each actor's location"),
   onConflict: z.string().optional().describe("When the label or name is taken: skip (default) | error"),
   onlyColliding: z.boolean().optional().describe("Only colliding components contribute to the bounds"),
@@ -5407,6 +5481,7 @@ export const schema: Record<string, z.ZodType> = {
   relativeRotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Relative rotation set after the attach, in the parent component or socket frame"),
   relativeTo: z.string().optional().describe("Scene component on the same actor (instance name); every scene component and socket row also reports its transform in that component's space"),
   relativeTransform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Relative location"), quaternion: z.record(z.string(), z.unknown()).describe("Relative rotation {x, y, z, w}; this is what is applied"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Relative scale"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("The same rotation as a rotator, for reading only") }).optional().describe("The relative transform to put back, as nudge_component's rollback records it"),
+  renames: z.array(z.object({ actorPath: z.string().optional().describe("Full actor object path; wins over actorLabel"), actorLabel: z.string().optional().describe("Actor editor label"), newName: z.string().optional().describe("New object name; omitted, one is generated from the class") })).optional().describe("Batch form, at most 512; replaces actorLabel/actorPath/newName"),
   restoreOriginalLevel: z.boolean().optional().describe("Reopen the map that was open before the call (default true)"),
   roll: z.number().optional().describe("Roll in degrees (default 0)"),
   rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, update_instance_transform). DirectionalLight sun angle (set_light_properties)"),

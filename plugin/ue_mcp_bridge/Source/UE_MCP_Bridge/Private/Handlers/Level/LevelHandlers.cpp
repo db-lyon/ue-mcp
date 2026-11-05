@@ -652,6 +652,17 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_actor_tags"), &ListActorTags, {
 		SpecActorLabel, SpecActorPath, SpecCursor, SpecLimit,
 	});
+	// The contract selectors resolve no actor, which is refused before anything is renamed.
+	Registry.RegisterHandler(TEXT("rename_actor_object"), &RenameActorObject, {
+		SpecActorLabel, SpecActorPath,
+		MCPParam::Optional(TEXT("newName"), EType::String, TEXT("New object name; omitted, a unique name is generated from the actor's class")),
+		MCPParam::Optional(TEXT("renames"), EType::Array, TEXT("Batch form, at most 512; replaces actorLabel/actorPath/newName")).Items(EType::Object).WithFields({
+			MCPParam::OptionalField(TEXT("actorPath"), EType::String, TEXT("Full actor object path; wins over actorLabel")),
+			MCPParam::OptionalField(TEXT("actorLabel"), EType::String, TEXT("Actor editor label")),
+			MCPParam::OptionalField(TEXT("newName"), EType::String, TEXT("New object name; omitted, one is generated from the class")),
+		}),
+		SpecDryRun,
+	}, MCPSpec::AtLeastOne({ { TEXT("actorLabel") }, { TEXT("actorPath") }, { TEXT("renames") } }));
 	Registry.RegisterHandler(TEXT("attach_actor"), &AttachActor, {
 		SpecChildLabel, SpecChildPath, SpecParentLabel, SpecParentPath, SpecAttachRule, SpecSocketName,
 	});

@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1220,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -31549,6 +31549,78 @@
           "type": "string",
           "required": true,
           "description": "Reflected property name on the widget"
+        }
+      ]
+    },
+    "rename_actor_object": {
+      "category": "level",
+      "params": [
+        {
+          "name": "actorLabel",
+          "type": "string",
+          "required": false,
+          "description": "Actor editor label; pass actorLabel or actorPath"
+        },
+        {
+          "name": "actorPath",
+          "type": "string",
+          "required": false,
+          "description": "Full actor object path; the unambiguous selector, and it wins over actorLabel"
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "required": false,
+          "description": "New object name; omitted, a unique name is generated from the actor's class"
+        },
+        {
+          "name": "renames",
+          "type": "array",
+          "required": false,
+          "description": "Batch form, at most 512; replaces actorLabel/actorPath/newName",
+          "items": "object",
+          "fields": [
+            {
+              "name": "actorPath",
+              "type": "string",
+              "required": false,
+              "description": "Full actor object path; wins over actorLabel"
+            },
+            {
+              "name": "actorLabel",
+              "type": "string",
+              "required": false,
+              "description": "Actor editor label"
+            },
+            {
+              "name": "newName",
+              "type": "string",
+              "required": false,
+              "description": "New object name; omitted, one is generated from the class"
+            }
+          ]
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would change without writing"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "actorLabel"
+            ],
+            [
+              "actorPath"
+            ],
+            [
+              "renames"
+            ]
+          ]
         }
       ]
     },
