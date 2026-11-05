@@ -21,6 +21,12 @@ class FFabHandlers
 public:
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
+	/** Opens a URL, writing a failure to OutError. fab_open_search's launcher. */
+	using FUrlLauncher = TFunction<void(const FString& Url, FString& OutError)>;
+
+	/** Test seam: replaces FPlatformProcess::LaunchURL for fab_open_search. An unset function restores it. */
+	static void SetUrlLauncherForTesting(FUrlLauncher Launcher);
+
 private:
 	static TSharedPtr<FJsonValue> Status(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> Login(const TSharedPtr<FJsonObject>& Params);
@@ -31,4 +37,6 @@ private:
 	static TSharedPtr<FJsonValue> ClearCache(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ImportFile(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> OpenSearch(const TSharedPtr<FJsonObject>& Params);
+
+	static FUrlLauncher UrlLauncherOverride;
 };

@@ -353,6 +353,13 @@ TSharedPtr<FJsonValue> FFabHandlers::ImportFile(const TSharedPtr<FJsonObject>& P
 #endif
 }
 
+FFabHandlers::FUrlLauncher FFabHandlers::UrlLauncherOverride;
+
+void FFabHandlers::SetUrlLauncherForTesting(FUrlLauncher Launcher)
+{
+	UrlLauncherOverride = MoveTemp(Launcher);
+}
+
 TSharedPtr<FJsonValue> FFabHandlers::OpenSearch(const TSharedPtr<FJsonObject>& Params)
 {
 	// Builds fab.com's own search page URL and hands it to the user's browser.
@@ -379,7 +386,8 @@ TSharedPtr<FJsonValue> FFabHandlers::OpenSearch(const TSharedPtr<FJsonObject>& P
 	}
 
 	FString LaunchError;
-	FPlatformProcess::LaunchURL(*Url, nullptr, &LaunchError);
+	if (UrlLauncherOverride) UrlLauncherOverride(Url, LaunchError);
+	else FPlatformProcess::LaunchURL(*Url, nullptr, &LaunchError);
 	if (!LaunchError.IsEmpty())
 	{
 		return MCPError(FString::Printf(TEXT("Could not open %s in the default browser: %s"), *Url, *LaunchError));

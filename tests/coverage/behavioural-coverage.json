@@ -6678,9 +6678,14 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/FabOpenSearchTests.cpp",
+          "test": "UE.MCP.Fab.OpenSearch.LaunchesTheSearchUrl"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-fab.test.ts",
-          "test": "fab_open_search builds the fab.com search URL from each filter, and opens it by default"
+          "test": "fab_open_search builds the fab.com search URL from each filter without opening it"
         }
       ]
     },

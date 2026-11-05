@@ -105,7 +105,9 @@ describe("fab local state", () => {
     expect(assets.some((a) => a.name.toLowerCase().includes(BASE.toLowerCase())), JSON.stringify(assets)).toBe(true);
   }, 120_000);
 
-  it("fab_open_search builds the fab.com search URL from each filter, and opens it by default", async () => {
+  it("fab_open_search builds the fab.com search URL from each filter without opening it", async () => {
+    // open:false only: the live suite runs unattended, so nothing here launches
+    // a browser. The open path is UE.MCP.Fab.OpenSearch.LaunchesTheSearchUrl.
     const base = "https://www.fab.com/search";
     const bare = await call("fab_open_search", { query: "stone wall", open: false });
     expect(bare.url).toBe(`${base}?q=stone%20wall&asset_formats=unreal-engine`);
@@ -126,9 +128,5 @@ describe("fab local state", () => {
 
     const missing = await callBridge(bridge, "fab_open_search", { open: false });
     expect(succeeded(missing)).toBe(false);
-
-    const opened = await call("fab_open_search", { query: "ue-mcp" });
-    expect(opened.url).toBe(`${base}?q=ue-mcp&asset_formats=unreal-engine`);
-    expect(opened.opened).toBe(true);
   }, 60_000);
 });
