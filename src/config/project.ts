@@ -287,6 +287,9 @@ export class ProjectContext {
         `'contentPath' must be a mount path such as /Game or /Game/Characters (got '${contentPath}').`,
       );
     }
+    if (normalized.split("/").some((part) => part === "." || part === "..")) {
+      throw new Error(`'contentPath' names a folder inside a mount and cannot contain '.' or '..' (got '${contentPath}').`);
+    }
     if (isGamePath(normalized)) {
       if (!this.contentDir) throw new Error("No project is loaded, so /Game has no directory to read.");
       return path.join(this.contentDir, ...stripGamePrefix(normalized).split("/").filter(Boolean));
