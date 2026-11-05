@@ -145,7 +145,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecLabelContains = MCPParam::Optional(TEXT("labelContains"), EType::String, TEXT("Case-insensitive substring over the actor's editor label"));
 	const FMCPParamSpec SpecSelectorTag = MCPParam::Optional(TEXT("tag"), EType::String, TEXT("Actor must carry this tag"));
 	const FMCPParamSpec SpecFolderPath = MCPParam::Optional(TEXT("folderPath"), EType::String, TEXT("World Outliner folder, matched exactly"));
-	const FMCPParamSpec SpecFolderPathPrefix = MCPParam::Optional(TEXT("folderPathPrefix"), EType::String, TEXT("World Outliner folder prefix"));
+	const FMCPParamSpec SpecFolderPathPrefix = MCPParam::Optional(TEXT("folderPathPrefix"), EType::String, TEXT("World Outliner folder, matched with every folder nested under it"));
 	const FMCPParamSpec SpecMatchSubclasses = MCPParam::Optional(TEXT("matchSubclasses"), EType::Boolean, TEXT("Match subclasses of the class filter (default true)"));
 
 	Registry.RegisterHandler(TEXT("get_world_outliner"), &GetOutliner, {
@@ -813,7 +813,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("tag"), EType::String, TEXT("Actor must carry this tag")),
 			MCPParam::OptionalField(TEXT("classFilter"), EType::String, TEXT("Actor class, resolved as a class or matched as a substring")),
 			MCPParam::OptionalField(TEXT("folderPath"), EType::String, TEXT("World Outliner folder, matched exactly")),
-			MCPParam::OptionalField(TEXT("folderPathPrefix"), EType::String, TEXT("World Outliner folder prefix")),
+			MCPParam::OptionalField(TEXT("folderPathPrefix"), EType::String, TEXT("World Outliner folder, matched with every folder nested under it")),
 			MCPParam::OptionalField(TEXT("matchSubclasses"), EType::Boolean, TEXT("Match subclasses of classFilter (default true)")),
 			MCPParam::OptionalField(TEXT("space"), EType::String, TEXT("local (default, the component's own orientation) | world (axis-aligned bounds)")),
 			MCPParam::OptionalField(TEXT("offset"), EType::Vec3, TEXT("Offset added to the computed point")),
@@ -1002,21 +1002,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		{
 			continue;
 		}
-		if (!FolderPathFilter.IsEmpty() || !FolderPathPrefixFilter.IsEmpty())
+		if (!MCPActorInFolder(Actor, FolderPathFilter, FolderPathPrefixFilter))
 		{
-			const FString Folder = MCPActorFolderPath(Actor);
-			if (!FolderPathFilter.IsEmpty() && !Folder.Equals(FolderPathFilter, ESearchCase::IgnoreCase))
-			{
-				continue;
-			}
-			// A folder prefix matches the folder itself and everything nested
-			// under it, so "Gameplay" does not also match "GameplayOld".
-			if (!FolderPathPrefixFilter.IsEmpty() &&
-				!Folder.Equals(FolderPathPrefixFilter, ESearchCase::IgnoreCase) &&
-				!Folder.StartsWith(FolderPathPrefixFilter + TEXT("/"), ESearchCase::IgnoreCase))
-			{
-				continue;
-			}
+			continue;
 		}
 
 #if WITH_EDITOR

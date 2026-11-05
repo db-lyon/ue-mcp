@@ -141,17 +141,7 @@ namespace
 		{
 			return false;
 		}
-		if (!Selector.FolderPath.IsEmpty() &&
-			!MCPActorFolderPath(Actor).Equals(Selector.FolderPath, ESearchCase::IgnoreCase))
-		{
-			return false;
-		}
-		if (!Selector.FolderPathPrefix.IsEmpty() &&
-			!MCPActorFolderPath(Actor).StartsWith(Selector.FolderPathPrefix, ESearchCase::IgnoreCase))
-		{
-			return false;
-		}
-		return true;
+		return MCPActorInFolder(Actor, Selector.FolderPath, Selector.FolderPathPrefix);
 	}
 
 	/** Every actor the selector picks, in a deterministic order. */

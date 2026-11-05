@@ -1161,8 +1161,7 @@ namespace
 			if (!ActorTag.IsEmpty() && !Actor->ActorHasTag(FName(*ActorTag))) continue;
 
 			const FString ActorFolder = MCPActorFolderPath(Actor);
-			if (!FolderPath.IsEmpty() && !ActorFolder.Equals(FolderPath, ESearchCase::IgnoreCase)) continue;
-			if (!FolderPathPrefix.IsEmpty() && !ActorFolder.StartsWith(FolderPathPrefix, ESearchCase::IgnoreCase)) continue;
+			if (!MCPFolderMatches(ActorFolder, FolderPath, FolderPathPrefix)) continue;
 
 			const bool bOwnerHidden = Actor->IsHidden();
 			const APawn* OwnerPawn = Cast<APawn>(Actor);

@@ -5891,7 +5891,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -7187,7 +7187,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -18552,7 +18552,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "editorHidden",
@@ -27086,7 +27086,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "fields",
@@ -29994,7 +29994,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -34137,7 +34137,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -35349,7 +35349,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -42545,7 +42545,7 @@
               "name": "folderPathPrefix",
               "type": "string",
               "required": false,
-              "description": "World Outliner folder prefix"
+              "description": "World Outliner folder, matched with every folder nested under it"
             },
             {
               "name": "matchSubclasses",

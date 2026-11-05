@@ -61,6 +61,38 @@ inline FString MCPActorFolderPath(const AActor* Actor)
 	return Folder.IsNone() ? FString() : Folder.ToString();
 }
 
+/** The outliner folder selector every level action shares. FolderPath matches one folder exactly;
+ *  FolderPathPrefix matches that folder and everything nested under it, so "Gameplay" does not
+ *  also match "GameplayOld". Both are case-insensitive and an empty filter matches anything. */
+inline bool MCPFolderMatches(const FString& Folder, const FString& FolderPath, const FString& FolderPathPrefix)
+{
+	if (!FolderPath.IsEmpty() && !Folder.Equals(FolderPath, ESearchCase::IgnoreCase))
+	{
+		return false;
+	}
+	if (!FolderPathPrefix.IsEmpty())
+	{
+		FString Prefix = FolderPathPrefix;
+		while (Prefix.EndsWith(TEXT("/")))
+		{
+			Prefix.LeftChopInline(1);
+		}
+		if (!Prefix.IsEmpty() &&
+			!Folder.Equals(Prefix, ESearchCase::IgnoreCase) &&
+			!Folder.StartsWith(Prefix + TEXT("/"), ESearchCase::IgnoreCase))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+inline bool MCPActorInFolder(const AActor* Actor, const FString& FolderPath, const FString& FolderPathPrefix)
+{
+	return (FolderPath.IsEmpty() && FolderPathPrefix.IsEmpty())
+		|| MCPFolderMatches(MCPActorFolderPath(Actor), FolderPath, FolderPathPrefix);
+}
+
 inline AActor* MCPFindActorByPath(UWorld* World, const FString& Path)
 {
 	if (!World || Path.IsEmpty()) return nullptr;
