@@ -257,6 +257,14 @@ describe.sequential("a turn's asset diffs", () => {
     expect(actors.some((r) => r.diffType === "OBJECT_ADDED" && r.group === "CkNew")).toBe(true);
     expect(actors.some((r) => r.diffType === "OBJECT_REMOVED" && r.group === "CkDoomed")).toBe(true);
     expect(actors.some((r) => String(r.group).startsWith("CkMover") && /Relative\s*Location/i.test(String(r.path)))).toBe(true);
+    // Both versions drawn from the level itself, one camera framed on the changed actors (#1568).
+    for (const [v, label] of [[d.before, "level before"], [d.after, "level after"]] as const) {
+      expectPicture(v, label);
+      expect(v.thumbnail.source, label).toBe("rendered");
+      expect(v.thumbnail.note, label).toMatch(/^Framed on the changed actors: .*CkNew/);
+    }
+    const thumbs = path.join(projectDir, "Saved", "UE_MCP_Bridge", "shadow-thumbs");
+    expect(fs.readFileSync(thumbnailFile(thumbs, d.before.thumbnail.id)).equals(fs.readFileSync(thumbnailFile(thumbs, d.after.thumbnail.id)))).toBe(false);
   });
 
   it("an added asset has no before and says what it is; a deleted one has no after", () => {
