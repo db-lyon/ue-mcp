@@ -346,7 +346,12 @@ namespace MCPMaterialDesigner
 		ForEachObjectWithOuter(Model, [&Found, &C](UObject* Inner)
 		{
 			if (!Found && Inner->IsA(C.EditorOnlyData)) Found = Inner;
-		}, false);
+		},
+#if UE_MCP_HAS_5_8_API
+		EGetObjectsFlags::None);
+#else
+		/*bIncludeNestedObjects=*/false);
+#endif
 		return Found;
 	}
 
