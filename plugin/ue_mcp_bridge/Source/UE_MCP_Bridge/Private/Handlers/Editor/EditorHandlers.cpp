@@ -2183,7 +2183,17 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetConfig(const TSharedPtr<FJsonObject>&
 		ConfigName = FString::Printf(TEXT("Default%s.ini"), *ConfigName);
 	}
 
-	FString ConfigDir = FPaths::ProjectConfigDir();
+	// configName names a file in the project's Config folder, never a path out of it.
+	if (!FPaths::IsRelative(ConfigName))
+	{
+		return MCPError(FString::Printf(TEXT("configName must be a file name inside the project's Config folder, not an absolute path: %s"), *ConfigName));
+	}
+	const FString ConfigDir = FPaths::ProjectConfigDir();
+	{
+		FString Contained;
+		if (auto Err = MCPRequirePathInside(ConfigName, { ConfigDir }, Contained, ConfigDir)) return Err;
+	}
+	// The config cache keys files by this exact string, so it keeps its usual form.
 	FString IniPath = FPaths::Combine(ConfigDir, ConfigName);
 
 	// A file only this call loads is dropped from the config cache again when it
