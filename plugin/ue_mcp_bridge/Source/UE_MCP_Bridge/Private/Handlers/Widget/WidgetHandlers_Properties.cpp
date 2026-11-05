@@ -1115,37 +1115,107 @@ namespace
 		return nullptr;
 	}
 
+	/** What writing a property onto the live play widgets did. */
+	struct FMCPWidgetLiveWrite
+	{
+		int32 Updated = 0;
+		TArray<FString> Missed;
+	};
+
+	/**
+	 * Write the property onto every live widget made from WidgetBP in the play
+	 * world, through the same routes the template write took, and push it to
+	 * Slate. This makes a property edit visible during play without the compile
+	 * that would reinstance those widgets and drop their runtime content (#1553).
+	 */
+	FMCPWidgetLiveWrite MCPWidgetWriteLiveWidgets(
+		UWidgetBlueprint* WidgetBP, const FString& WidgetName, const FString& PropertyName, const FString& PropertyValue)
+	{
+		FMCPWidgetLiveWrite Outcome;
+		for (UUserWidget* Live : MCPWidgetPlaySession::LiveWidgets(WidgetBP))
+		{
+			UWidget* Target = Live->GetWidgetFromName(FName(*WidgetName));
+			if (!Target)
+			{
+				Outcome.Missed.Add(Live->GetPathName());
+				continue;
+			}
+			FMCPWidgetPropertyCapture Unused;
+			bool bSet = MCPWidgetApplyTypedProperty(Target, PropertyName, PropertyValue);
+			if (!bSet && PropertyName.StartsWith(TEXT("slot."), ESearchCase::IgnoreCase))
+			{
+				MCPWidgetApplySlotProperty(WidgetBP, Target, PropertyName, PropertyValue, Unused, bSet);
+			}
+			if (!bSet)
+			{
+				MCPWidgetApplyReflectedProperty(Target, PropertyName, PropertyValue, Unused, bSet);
+			}
+			if (!bSet)
+			{
+				Outcome.Missed.Add(Live->GetPathName());
+				continue;
+			}
+			Target->SynchronizeProperties();
+			if (Target->Slot) Target->Slot->SynchronizeProperties();
+			++Outcome.Updated;
+		}
+		return Outcome;
+	}
+
 	/** Compile and save a widget Blueprint whose property was written, and the
-	 *  result with the rollback the capture allows. */
+	 *  result with the rollback the capture allows. With LiveWrite the compile
+	 *  and save wait for play to end instead. */
 	TSharedPtr<FJsonValue> MCPWidgetFinishSetProperty(
 		UWidgetBlueprint* WidgetBP, const FString& AssetPath, const FString& WidgetName,
 		const FString& PropertyName, const FString& PropertyValue, const FMCPWidgetPropertyCapture& Capture,
-		const MCPWidgetGuidMap::FCompileBaseline& CompileBaseline)
+		const MCPWidgetGuidMap::FCompileBaseline& CompileBaseline, const FMCPWidgetLiveWrite* LiveWrite = nullptr)
 	{
 		const FString& PreviousPropertyValue = Capture.PreviousPropertyValue;
 		const bool bCapturedPreviousValue = Capture.bCapturedPreviousValue;
 		const bool bCapturedOnFlatWidgetProperty = Capture.bCapturedOnFlatWidgetProperty;
 		const FString& FlatWidgetPropertyName = Capture.FlatWidgetPropertyName;
 		const bool bFlatCaptureWasStringProperty = Capture.bFlatCaptureWasStringProperty;
-		// Mark package dirty and save
-		WidgetBP->MarkPackageDirty();
-		// #728: see ClearWidgetBinding. A property write compiles the blueprint,
-		// and the compile is where a missing widget variable GUID surfaces.
-		const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
-		if (GuidSync.WasRefused())
-		{
-			return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
-		}
-		FString SaveError;
-		const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
 
 		auto Result = MCPSuccess();
 		MCPSetUpdated(Result);
-		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+		MCPWidgetGuidMap::FSyncReport GuidSync;
+		if (LiveWrite)
+		{
+			MCPWidgetPlaySession::DeferCompile(WidgetBP, CompileBaseline);
+			Result->SetBoolField(TEXT("saved"), false);
+			Result->SetBoolField(TEXT("compileDeferred"), true);
+			Result->SetStringField(TEXT("compileStatus"), WidgetCompileStatusString(WidgetBP));
+			Result->SetNumberField(TEXT("liveWidgetsUpdated"), LiveWrite->Updated);
+			if (LiveWrite->Missed.Num())
+			{
+				TArray<TSharedPtr<FJsonValue>> Missed;
+				for (const FString& Path : LiveWrite->Missed) Missed.Add(MakeShared<FJsonValueString>(Path));
+				Result->SetArrayField(TEXT("liveWidgetsMissed"), Missed);
+			}
+			Result->SetStringField(TEXT("playSessionNote"), FString::Printf(
+				TEXT("A play-in-editor session is running, so '%s' was not compiled: compiling would reinstance the live widgets made ")
+				TEXT("from it and drop the content the game built into them. The value was written to the asset and to %d live ")
+				TEXT("widget(s) instead. The asset is compiled and saved when play ends."),
+				*AssetPath, LiveWrite->Updated));
+		}
+		else
+		{
+			WidgetBP->MarkPackageDirty();
+			// #728: see ClearWidgetBinding. A property write compiles the blueprint,
+			// and the compile is where a missing widget variable GUID surfaces.
+			GuidSync = MCPWidgetGuidMap::CompileChecked(WidgetBP, CompileBaseline);
+			if (GuidSync.WasRefused())
+			{
+				return MCPWidgetGuidMap::BlockedError(AssetPath, GuidSync);
+			}
+			FString SaveError;
+			const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
+			MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+			MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
+		}
 		Result->SetStringField(TEXT("widgetName"), WidgetName);
 		Result->SetStringField(TEXT("propertyName"), PropertyName);
 		Result->SetStringField(TEXT("propertyValue"), PropertyValue);
-		MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
 
 		if (bCapturedPreviousValue) { Result->SetStringField(TEXT("previousPropertyValue"), PreviousPropertyValue); }
 		if (bCapturedPreviousValue && !PreviousPropertyValue.IsEmpty())
@@ -1214,8 +1284,11 @@ namespace
 				TEXT("UPROPERTY name and rolls back exactly."), *PropertyName));
 		}
 
-		MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
-			FString::Printf(TEXT("'%s' on '%s' was set"), *PropertyName, *WidgetName));
+		if (!LiveWrite)
+		{
+			MCPSetWidgetCompileOutcome(Result, WidgetBP, AssetPath, GuidSync,
+				FString::Printf(TEXT("'%s' on '%s' was set"), *PropertyName, *WidgetName));
+		}
 		return MCPResult(Result);
 	}
 }
@@ -1279,6 +1352,15 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	if (!bPropertySet)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to set property '%s' on widget '%s'. Property not found or value format invalid."), *PropertyName, *WidgetName));
+	}
+
+	// #1553: during play a compile would reinstance the live widgets and empty
+	// them, so the write goes to them directly and the compile waits for play
+	// to end. A blueprint already in error compiles now, as its baseline needs.
+	if (MCPWidgetPlaySession::IsActive() && WidgetBP->Status != BS_Error)
+	{
+		const FMCPWidgetLiveWrite LiveWrite = MCPWidgetWriteLiveWidgets(WidgetBP, WidgetName, PropertyName, PropertyValue);
+		return MCPWidgetFinishSetProperty(WidgetBP, AssetPath, WidgetName, PropertyName, PropertyValue, Capture, CompileBaseline, &LiveWrite);
 	}
 	return MCPWidgetFinishSetProperty(WidgetBP, AssetPath, WidgetName, PropertyName, PropertyValue, Capture, CompileBaseline);
 }

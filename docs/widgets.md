@@ -45,6 +45,14 @@ The compile never saves on its own, whatever the editor's save-on-compile settin
 
 A refusal to compile is a different error: two widget variables share a GUID. Nothing is compiled or saved, and the message names the variables to recreate.
 
+## Editing a widget while PIE runs
+
+Compiling a Widget Blueprint during play reinstances every live widget made from it. A reinstanced widget is rebuilt from its class, so children added at runtime, pages pushed into a stack and text set by game code are lost.
+
+`widget(set_property)` therefore does not compile during play. It writes the value to the asset and to every live widget made from it, where it shows at once, and compiles and saves the asset when play ends. The result carries `compileDeferred: true`, `saved: false`, `liveWidgetsUpdated`, `liveWidgetsMissed` (live widgets that lack the named widget, when any) and `playSessionNote`. A blueprint that already fails to compile is the exception: it compiles at once, as outside play.
+
+Every other authoring action changes the asset in a way only a compile can carry, so it still compiles during play. Its result adds `reinstancedPlayWidgets`, the number of live widgets the compile rebuilt, and `playSessionWarning`. Stop play first to keep the running screens intact.
+
 ## Where the runtime actions stop
 
 The runtime actions are point-in-time: one read of the current state, or one

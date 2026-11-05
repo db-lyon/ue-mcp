@@ -8,6 +8,8 @@
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Widget.h"
+#include "Components/PanelWidget.h"
+#include "Components/TextBlock.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "EdGraph/EdGraph.h"
@@ -114,6 +116,7 @@ bool FWidgetCompileOutcomeTest::RunTest(const FString& Parameters)
 		AddWidgetParams(PackageName, TEXT("TextBlock"), TEXT("UnrelatedLabel"), TEXT("RootPanel")));
 	if (!TestTrue(TEXT("unrelated add_widget returns an object"), Unrelated.IsValid())) return false;
 	TestTrue(TEXT("pre-existing errors do not block an unrelated edit"), BoolField(Unrelated, TEXT("success")));
+	TestFalse(TEXT("an edit outside play carries no play warning (#1553)"), Unrelated->HasField(TEXT("playSessionWarning")));
 	TestTrue(TEXT("the unrelated edit is saved"), BoolField(Unrelated, TEXT("saved")));
 	TestFalse(TEXT("the blueprint still does not compile"), BoolField(Unrelated, TEXT("compiled")));
 	TestEqual(TEXT("no error is attributed to the unrelated edit"), Unrelated->GetIntegerField(TEXT("introducedCompileErrors")), 0);
@@ -128,6 +131,115 @@ bool FWidgetCompileOutcomeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("a report that never compiled reads as refused"), Refused.WasRefused());
 	const FString Refusal = MCPWidgetGuidMap::BlockedError(TEXT("/Game/TestWidget"), Refused)->AsObject()->GetStringField(TEXT("error"));
 	TestTrue(TEXT("GUID refusal keeps its preflight explanation"), Refusal.Contains(TEXT("Nothing was compiled or saved")));
+	return true;
+}
+
+// #1553: a compile that still runs during play reports the reinstanced widgets.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWidgetCompileDuringPlayTest,
+	"UE.MCP.Widget.CompileDuringPlayWarning",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FWidgetCompileDuringPlayTest::RunTest(const FString& Parameters)
+{
+	MCPWidgetGuidMap::FSyncReport Editing;
+	Editing.bCompileAttempted = true;
+	Editing.bCompiled = true;
+	TSharedPtr<FJsonObject> Quiet = MakeShared<FJsonObject>();
+	MCPSetWidgetGuidOutcome(Quiet, Editing, TEXT("/Game/WBP_Page"));
+	TestFalse(TEXT("no warning outside play"), Quiet->HasField(TEXT("playSessionWarning")));
+	TestFalse(TEXT("no reinstance count outside play"), Quiet->HasField(TEXT("reinstancedPlayWidgets")));
+
+	MCPWidgetGuidMap::FSyncReport Playing = Editing;
+	Playing.bCompiledDuringPlay = true;
+	Playing.LivePlayWidgets = 2;
+	TSharedPtr<FJsonObject> Warned = MakeShared<FJsonObject>();
+	Warned->SetBoolField(TEXT("success"), true);
+	MCPSetWidgetGuidOutcome(Warned, Playing, TEXT("/Game/WBP_Page"));
+	TestEqual(TEXT("reinstanced widgets are counted"), Warned->GetIntegerField(TEXT("reinstancedPlayWidgets")), 2);
+	const FString Warning = Warned->GetStringField(TEXT("playSessionWarning"));
+	TestTrue(TEXT("the warning names the asset"), Warning.Contains(TEXT("/Game/WBP_Page")));
+	TestTrue(TEXT("the warning gives the count"), Warning.Contains(TEXT("2 live widget(s)")));
+	TestTrue(TEXT("the warning names the way to avoid it"), Warning.Contains(TEXT("pieAction=\"stop\"")));
+	TestTrue(TEXT("the warning does not withdraw success"), Warned->GetBoolField(TEXT("success")));
+
+	TestTrue(TEXT("no live widget reads as none found"),
+		MCPWidgetPlaySessionWarning(TEXT("/Game/WBP_Page"), 0).Contains(TEXT("no live widget made from it")));
+	return true;
+}
+
+// #1553: set_property during play writes the live widget and leaves its runtime
+// content alone; the compile and save wait for play to end.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWidgetSetPropertyDuringPlayTest,
+	"UE.MCP.Widget.SetPropertyDuringPlay",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FWidgetSetPropertyDuringPlayTest::RunTest(const FString& Parameters)
+{
+	using namespace MCPWidgetCompileOutcomeTests;
+	FMCPScopedTestMount Mount(
+		TEXT("/UEMCPWidgetPlay_") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT("/"), TEXT("UEMCPWidgetPlay"));
+	const FString PackageName = Mount.RootPath + TEXT("WBP_PlayProbe");
+
+	UPackage* Package = CreatePackage(*PackageName);
+	UWidgetBlueprint* Blueprint = Cast<UWidgetBlueprint>(FKismetEditorUtilities::CreateBlueprint(
+		UUserWidget::StaticClass(), Package, FName(TEXT("WBP_PlayProbe")), BPTYPE_Normal,
+		UWidgetBlueprint::StaticClass(), UWidgetBlueprintGeneratedClass::StaticClass()));
+	if (!TestNotNull(TEXT("widget blueprint fixture created"), Blueprint)) return false;
+	FString FixtureSaveError;
+	if (!TestTrue(TEXT("fixture saves"), SaveAssetPackageChecked(Blueprint, FixtureSaveError))) return false;
+
+	FMCPHandlerRegistry Registry;
+	FWidgetHandlers::RegisterHandlers(Registry);
+	if (!TestTrue(TEXT("root panel added"), BoolField(Call(Registry, TEXT("add_widget"),
+		AddWidgetParams(PackageName, TEXT("VerticalBox"), TEXT("Page"), nullptr)), TEXT("success")))) return false;
+	if (!TestTrue(TEXT("label added"), BoolField(Call(Registry, TEXT("add_widget"),
+		AddWidgetParams(PackageName, TEXT("TextBlock"), TEXT("Title"), TEXT("Page"))), TEXT("success")))) return false;
+
+	// The live screen, with a child the game added at runtime.
+	UClass* ClassBefore = Blueprint->GeneratedClass;
+	UUserWidget* Live = NewObject<UUserWidget>(GetTransientPackage(), ClassBefore);
+	if (!TestTrue(TEXT("live widget initializes"), Live->Initialize())) return false;
+	Live->TakeWidget();
+	UPanelWidget* LivePage = Cast<UPanelWidget>(Live->GetWidgetFromName(TEXT("Page")));
+	if (!TestNotNull(TEXT("live page exists"), LivePage)) return false;
+	UTextBlock* RuntimeChild = NewObject<UTextBlock>(Live->WidgetTree);
+	LivePage->AddChild(RuntimeChild);
+	const int32 ChildrenBefore = LivePage->GetChildrenCount();
+
+	TSharedPtr<FJsonObject> Result;
+	{
+		MCPWidgetPlaySession::FScopedTestPlaySession Play({ Live });
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("assetPath"), PackageName);
+		Params->SetStringField(TEXT("widgetName"), TEXT("Title"));
+		Params->SetStringField(TEXT("propertyName"), TEXT("Text"));
+		Params->SetStringField(TEXT("value"), TEXT("Live value"));
+		Result = Call(Registry, TEXT("set_widget_property"), Params);
+	}
+	if (!TestTrue(TEXT("set_property during play succeeds"), BoolField(Result, TEXT("success")))) return false;
+	TestTrue(TEXT("the compile is deferred"), BoolField(Result, TEXT("compileDeferred")));
+	TestFalse(TEXT("nothing is saved during play"), BoolField(Result, TEXT("saved")));
+	TestEqual(TEXT("the live widget was written"), Result->GetIntegerField(TEXT("liveWidgetsUpdated")), 1);
+	TestFalse(TEXT("no reinstance warning, nothing was compiled"), Result->HasField(TEXT("playSessionWarning")));
+	TestTrue(TEXT("the result says why"), Result->HasTypedField<EJson::String>(TEXT("playSessionNote")));
+
+	TestTrue(TEXT("the class was not regenerated"), Blueprint->GeneratedClass == ClassBefore && Live->GetClass() == ClassBefore);
+	UTextBlock* LiveTitle = Cast<UTextBlock>(Live->GetWidgetFromName(TEXT("Title")));
+	if (!TestNotNull(TEXT("live title still exists"), LiveTitle)) return false;
+	TestEqual(TEXT("the live widget shows the new value"), LiveTitle->GetText().ToString(), FString(TEXT("Live value")));
+	TestEqual(TEXT("runtime content survives"), LivePage->GetChildrenCount(), ChildrenBefore);
+	TestTrue(TEXT("the runtime child is still parented"), RuntimeChild->GetParent() == LivePage);
+	TestTrue(TEXT("the blueprint waits for its compile"), MCPWidgetPlaySession::IsDeferred(Blueprint));
+	TestTrue(TEXT("the package holds the unsaved edit"), Package->IsDirty());
+
+	// Play ends: the deferred compile runs and saves the template edit.
+	MCPWidgetPlaySession::FlushDeferred();
+	TestFalse(TEXT("nothing is left deferred"), MCPWidgetPlaySession::IsDeferred(Blueprint));
+	TestFalse(TEXT("the edit is saved once play ends"), Package->IsDirty());
+	TestTrue(TEXT("the blueprint compiles once play ends"), Blueprint->Status == BS_UpToDate || Blueprint->Status == BS_UpToDateWithWarnings);
+	UTextBlock* Template = Cast<UTextBlock>(Blueprint->WidgetTree->FindWidget(FName(TEXT("Title"))));
+	if (!TestNotNull(TEXT("template title exists"), Template)) return false;
+	TestEqual(TEXT("the template keeps the value"), Template->GetText().ToString(), FString(TEXT("Live value")));
 	return true;
 }
 
