@@ -253,6 +253,25 @@ Observation output goes to `Saved/MCPObservations/<run_id>/`: `manifest.json`, `
 | `inject_input_stop` | Release a hold or stop a tape |
 | `inject_input_tape` | Play a per-frame value array at a given rate |
 
+### Walking the player
+
+`drive_pawn` moves the player's pawn without an Input Action: movement input every frame along `direction` or toward `targetLocation`, or with `mode=navigate` a navmesh move from the player controller. It samples the pawn every `sampleEvery` seconds (location, rotation, controller rotation, velocity, map) and, with `wait` (the default), answers once the drive ends with the whole track.
+
+```
+pie(action="drive_pawn", direction={x:0, y:1, z:0}, durationSeconds=20)
+pie(action="drive_pawn", targetLocation={x:1200, y:300, z:90}, acceptanceRadius=50)
+pie(action="drive_pawn", targetLocation={x:1200, y:300, z:90}, mode="navigate")
+```
+
+| Field | Meaning |
+|-------|---------|
+| `state` | `completed` (direction ran its duration), `arrived`, `timeout`, `no_path`, `nav_ended`, `map_changed`, `stopped`, `pie_ended` |
+| `samples` | `{t, location, rotation, controlRotation, velocity, map}` per sample |
+| `mapChanges` | `{t, from, to, location, controlRotation}` for each level change during the drive |
+| `navPath` | `{valid, partial, length, points}` for a navigate drive |
+
+The pawn is resolved again every frame, so a drive keeps going after `OpenLevel` and reports the level it arrived in; `stopOnMapChange=true` ends it there instead. `drive_status` reads a drive and `drive_stop` ends one. Related reads: `editor(get_pie_pawn)` for the pawn's location, `controlRotation` and current `map`, `editor(teleport_runtime_actor)` to place it, and `gameplay(find_nav_path, world="pie")` to query the running session's navmesh.
+
 ### Remote players and acceptance runs
 
 | Action | Purpose |

@@ -5,6 +5,7 @@
 #include "Handlers/PIE/PIEInputRecorder.h"
 #include "Handlers/PIE/PIEInputReplayer.h"
 #include "Handlers/PIE/PIEObserver.h"
+#include "Handlers/PIE/PIEPawnDrive.h"
 #include "Handlers/PIE/PIERemotePlayers.h"
 #include "Handlers/PIE/PIEScriptRunner.h"
 #include "Handlers/PIE/PIESessionLog.h"
@@ -106,7 +107,8 @@ void FPIEHandlers::StartupSystems()
 				|| MCPPIE::FPIEInputReplayer::Get().IsActive()
 				|| MCPPIE::FPIEObserver::Get().IsActive()
 				|| MCPPIE::FPIEUatRunner::Get().IsRunning()
-				|| MCPPIE::FPIEScriptRunner::Get().IsActive();
+				|| MCPPIE::FPIEScriptRunner::Get().IsActive()
+				|| MCPPIE::PIEPawnDrive::IsActive();
 		});
 		GEditor->ShouldDisableCPUThrottlingDelegates.Add(Suppress);
 		GThrottleTicker.Reset();
@@ -130,6 +132,7 @@ void FPIEHandlers::ShutdownSystems()
 		SMCPPIEStudioPanel::UnregisterTab();
 		GPanelRegistered = false;
 	}
+	MCPPIE::PIEPawnDrive::Shutdown();
 	MCPPIE::FPIEScriptRunner::Get().Shutdown();
 	MCPPIE::FPIESessionLog::Get().Shutdown();
 	MCPPIE::FPIEObserver::Get().Shutdown();
@@ -204,6 +207,33 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, PieInstanceDoc).Min(0),
 		MCPParam::Optional(TEXT("client"), EType::Integer, RemoteClientDoc).Min(0),
 	}, MCPSpec::ContractExempt(TEXT("Plays a value tape into the running PIE session")));
+
+	// Pawn driving (#1565)
+	const TCHAR* const DriveIdDoc = TEXT("Drive id from drive_pawn (default: the most recent drive)");
+	Registry.RegisterHandler(TEXT("pie_drive_pawn"), &PieDrivePawn, {
+		MCPParam::Optional(TEXT("direction"), EType::Vec3, TEXT("World direction to push movement input in every frame")),
+		MCPParam::Optional(TEXT("targetLocation"), EType::Vec3, TEXT("World point to steer toward; the drive ends as arrived within acceptanceRadius")),
+		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("input (default): movement input on the pawn; navigate: a navmesh move from the player controller, needs targetLocation")).Enum({ TEXT("input"), TEXT("navigate") }),
+		MCPParam::Optional(TEXT("durationSeconds"), EType::Number, TEXT("Real seconds to drive before ending as completed or timeout (default 5, at most 600)")).Range(0, 600),
+		MCPParam::Optional(TEXT("scale"), EType::Number, TEXT("Movement input scale (default 1)")).Range(-1, 1),
+		MCPParam::Optional(TEXT("sampleEvery"), EType::Number, TEXT("Seconds between track samples; 0 samples every frame (default 0.1)")).Min(0),
+		MCPParam::Optional(TEXT("acceptanceRadius"), EType::Number, TEXT("Distance in cm from targetLocation that counts as arrived (default 50)")).Min(0),
+		MCPParam::Optional(TEXT("planar"), EType::Boolean, TEXT("Steer and measure arrival on the XY plane (default true); false for flying or swimming pawns")),
+		MCPParam::Optional(TEXT("stopOnMapChange"), EType::Boolean, TEXT("End the drive as map_changed when the player arrives in another level (default false: keep driving there)")),
+		MCPParam::Optional(TEXT("playerIndex"), EType::Integer, TEXT("Local player index in the PIE world (default 0)")),
+		MCPParam::Optional(TEXT("pieInstance"), EType::Integer, PieInstanceDoc),
+		MCPParam::Optional(TEXT("driveId"), EType::String, TEXT("Caller-chosen drive id (minted when absent)")),
+		MCPParam::Optional(TEXT("wait"), EType::Boolean, TEXT("Return only when the drive ends, with its whole track (default true)")),
+		MCPParam::Optional(TEXT("timeoutSeconds"), EType::Number, TEXT("Longest wait=true waits (default durationSeconds + 30)")).Min(0),
+	}, MCPSpec::ExactlyOne({ { TEXT("direction") }, { TEXT("targetLocation") } })
+		.ContractExempt(TEXT("Drives the PIE player's pawn over later frames; pie(drive_stop) ends it")));
+	Registry.RegisterHandler(TEXT("pie_drive_status"), &PieDriveStatus, {
+		MCPParam::Optional(TEXT("driveId"), EType::String, DriveIdDoc),
+		MCPParam::Optional(TEXT("includeSamples"), EType::Boolean, TEXT("Include the sampled track (default true)")),
+	});
+	Registry.RegisterHandler(TEXT("pie_drive_stop"), &PieDriveStop, {
+		MCPParam::Optional(TEXT("driveId"), EType::String, DriveIdDoc),
+	}, MCPSpec::ContractExempt(TEXT("Ends a running pawn drive")));
 
 	// Multiplayer players
 	Registry.RegisterHandler(TEXT("pie_clients"), &PieClients, {});
