@@ -6734,6 +6734,11 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-a-mesh.test.ts",
           "test": "generate_mesh_collision clears and rebuilds the simple collision get_mesh_collision reports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-asset-a-mesh.test.ts",
+          "test": "generate_mesh_collision keeps render bounds, welds unwelded faces and fits a BoundingBox (#1653)"
         }
       ]
     },
@@ -8174,6 +8179,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-asset-a-mesh.test.ts",
+          "test": "generate_mesh_collision keeps render bounds, welds unwelded faces and fits a BoundingBox (#1653)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-asset-a-mesh.test.ts",
           "test": "get_mesh_geometry and get_mesh_bounds describe the 100 cm cube"
         }
       ]
@@ -8188,6 +8198,11 @@
           "suite": "live",
           "file": "tests/live/bcov-asset-a-mesh.test.ts",
           "test": "generate_mesh_collision clears and rebuilds the simple collision get_mesh_collision reports"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-asset-a-mesh.test.ts",
+          "test": "generate_mesh_collision keeps render bounds, welds unwelded faces and fits a BoundingBox (#1653)"
         },
         {
           "suite": "live",

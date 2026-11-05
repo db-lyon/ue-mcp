@@ -331,7 +331,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandlerWithTimeout(TEXT("generate_mesh_collision"), &GenerateMeshCollision, 300.0f, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh whose collision to build or clear")).Alias(TEXT("path")),
 		MCPParam::Optional(TEXT("op"), EType::String, TEXT("generate (default) | clear")),
-		MCPParam::Optional(TEXT("method"), EType::String, TEXT("AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets")),
+		MCPParam::Optional(TEXT("method"), EType::String, TEXT("AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets | BoundingBox (one box fitted to the whole mesh)")),
 		MCPParam::Optional(TEXT("maxConvexHulls"), EType::Integer, TEXT("Convex hulls the decomposition may produce (default 1)")),
 		MCPParam::Optional(TEXT("hullTargetFaceCount"), EType::Integer, TEXT("Faces to simplify each hull down to (default 25)")),
 		MCPParam::Optional(TEXT("maxShapeCount"), EType::Integer, TEXT("Cap on the shapes produced (default 0, uncapped)")),
@@ -345,6 +345,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("decompositionSearchFactor"), EType::Number, TEXT("0 to 1, how hard the decomposition searches for a better split (default 0.5)")),
 		MCPParam::Optional(TEXT("sweptHullAxis"), EType::String, TEXT("X | Y | Z (default) | SmallestBoxDimension | SmallestVolume (method SweptHulls)")),
 		MCPParam::Optional(TEXT("markAsCustomized"), EType::Boolean, TEXT("Mark the collision customized so a reimport keeps it (default true)")),
+		MCPParam::Optional(TEXT("weldFirst"), EType::Boolean, TEXT("Weld coincident edges before fitting, so unwelded faces fit as one island rather than one shape each (default true)")),
+		MCPParam::Optional(TEXT("weldTolerance"), EType::Number, TEXT("How close two edges must be to weld (default 1e-6)")),
 		SpecGeoLodType, SpecGeoLodIndex, SpecGeoSave, SpecGeoDryRun,
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("apply_mesh_fracture"), &FractureMesh, 600.0f, {

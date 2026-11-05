@@ -61,6 +61,12 @@
 #include "Engine/StaticMesh.h"
 #include "PhysicsEngine/AggregateGeom.h"
 #include "PhysicsEngine/BodySetup.h"
+#include "Components/StaticMeshComponent.h"
+#include "MeshDescription.h"
+#include "ScopedTransaction.h"
+#include "StaticMeshCompiler.h"
+#include "StaticMeshResources.h"
+#include "UObject/UObjectIterator.h"
 
 #include "Math/RandomStream.h"
 #include "Modules/ModuleManager.h"
@@ -799,6 +805,182 @@ FVector MCPGeoAxisVector(const FString& Axis)
 	return FVector::UpVector;
 }
 
+// ─── Collision write and render-data guard ───────────────────────────────────
+
+/** Replace a StaticMesh's simple collision. Refreshes only what reads the body
+ *  setup (physics meshes, nav collision, component physics state); a collision
+ *  edit has no reason to rebuild render data (#1653). */
+void MCPGeoWriteSimpleCollision(UStaticMesh* Mesh, const FKAggregateGeom& NewGeom, bool bMarkCustomized)
+{
+	const FScopedTransaction Transaction(NSLOCTEXT("UE_MCP", "MCPGeoWriteCollision", "Update Static Mesh Collision"));
+	Mesh->Modify();
+	if (!Mesh->GetBodySetup()) Mesh->CreateBodySetup();
+	UBodySetup* Setup = Mesh->GetBodySetup();
+	if (!Setup) return;
+
+	Setup->Modify();
+	Setup->RemoveSimpleCollision();
+	Setup->AggGeom = NewGeom;
+	Setup->CreatePhysicsMeshes();
+	Mesh->RecreateNavCollision();
+
+	for (TObjectIterator<UStaticMeshComponent> It; It; ++It)
+	{
+		if (It->GetStaticMesh() == Mesh && It->IsPhysicsStateCreated())
+		{
+			It->RecreatePhysicsState();
+		}
+	}
+
+	// Through reflection: the member is deprecated for direct access from 5.7
+	// and its accessors do not exist on older engines.
+	if (bMarkCustomized)
+	{
+		if (FBoolProperty* Customized = FindFProperty<FBoolProperty>(UStaticMesh::StaticClass(), TEXT("bCustomizedCollision")))
+		{
+			Customized->SetPropertyValue_InContainer(Mesh, true);
+		}
+	}
+	Mesh->MarkPackageDirty();
+}
+
+/** Whether a StaticMesh's render data can be drawn: LOD 0 exists with
+ *  triangles and the bounds components use are finite and non-zero. Waits for
+ *  an async build first, since bounds read mid-build are placeholders. */
+bool MCPGeoRenderDataValid(UStaticMesh* Mesh, FString& OutProblem)
+{
+	OutProblem.Reset();
+	FStaticMeshCompilingManager::Get().FinishCompilation({ Mesh });
+
+	const FStaticMeshRenderData* RenderData = Mesh->GetRenderData();
+	if (!RenderData || RenderData->LODResources.Num() == 0)
+	{
+		OutProblem = TEXT("the mesh has no render data LODs");
+		return false;
+	}
+	const int32 Triangles = RenderData->LODResources[0].GetNumTriangles();
+	if (Triangles <= 0)
+	{
+		OutProblem = TEXT("LOD 0 render data has no triangles");
+		return false;
+	}
+	const FBoxSphereBounds Bounds = Mesh->GetBounds();
+	if (Bounds.Origin.ContainsNaN() || Bounds.BoxExtent.ContainsNaN()
+		|| Bounds.Origin.GetAbsMax() > 1.0e10 || Bounds.BoxExtent.GetAbsMax() > 1.0e10)
+	{
+		OutProblem = TEXT("the mesh bounds are not finite");
+		return false;
+	}
+	if (Bounds.BoxExtent.GetAbsMax() < 1.0e-4)
+	{
+		OutProblem = FString::Printf(
+			TEXT("the mesh bounds have zero extent although LOD 0 has %d triangles, so components using it are culled"),
+			Triangles);
+		return false;
+	}
+	return true;
+}
+
+/** Check render data after a collision write and repair it when it cannot be
+ *  drawn: recompute the extended bounds, then a full build from the source
+ *  models, then a direct build from the source mesh descriptions (the path
+ *  that bypasses any cached build). Returns the report; bOutValid says whether
+ *  the mesh is drawable at the end. */
+TSharedPtr<FJsonObject> MCPGeoEnsureRenderData(UStaticMesh* Mesh, bool bValidBefore, bool& bOutValid)
+{
+	TSharedPtr<FJsonObject> Report = MakeShared<FJsonObject>();
+	Report->SetBoolField(TEXT("validBefore"), bValidBefore);
+
+	FString Problem;
+	bOutValid = MCPGeoRenderDataValid(Mesh, Problem);
+	FString Repair = TEXT("none");
+
+	if (!bOutValid)
+	{
+		Report->SetStringField(TEXT("problemFound"), Problem);
+
+		const FStaticMeshRenderData* RenderData = Mesh->GetRenderData();
+		if (RenderData && RenderData->LODResources.Num() > 0
+			&& !RenderData->Bounds.BoxExtent.ContainsNaN() && RenderData->Bounds.BoxExtent.GetAbsMax() >= 1.0e-4)
+		{
+			FStaticMeshComponentRecreateRenderStateContext Recreate(Mesh, false, true);
+			Mesh->CalculateExtendedBounds();
+			Repair = TEXT("extendedBounds");
+			bOutValid = MCPGeoRenderDataValid(Mesh, Problem);
+		}
+
+		if (!bOutValid)
+		{
+			Mesh->Build(/*bInSilent*/ true);
+			Repair = TEXT("rebuild");
+			bOutValid = MCPGeoRenderDataValid(Mesh, Problem);
+		}
+
+		if (!bOutValid && Mesh->GetNumSourceModels() > 0 && Mesh->IsSourceModelValid(0))
+		{
+			TArray<FMeshDescription> Descriptions;
+			for (int32 LOD = 0; LOD < Mesh->GetNumSourceModels() && Mesh->IsSourceModelValid(LOD); ++LOD)
+			{
+				if (const FMeshDescription* Description = Mesh->GetMeshDescription(LOD))
+				{
+					Descriptions.Add(*Description);
+				}
+				else
+				{
+					break;
+				}
+			}
+			TArray<const FMeshDescription*> Pointers;
+			for (const FMeshDescription& Description : Descriptions) Pointers.Add(&Description);
+
+			if (Pointers.Num() > 0)
+			{
+				UStaticMesh::FBuildMeshDescriptionsParams BuildParams;
+				BuildParams.bFastBuild = true;
+				BuildParams.bCommitMeshDescription = false;
+				BuildParams.bBuildSimpleCollision = false;
+				BuildParams.bMarkPackageDirty = false;
+				Mesh->BuildFromMeshDescriptions(Pointers, BuildParams);
+				if (UBodySetup* Setup = Mesh->GetBodySetup())
+				{
+					Setup->CreatePhysicsMeshes();
+				}
+				Repair = TEXT("directBuildFromSource");
+				bOutValid = MCPGeoRenderDataValid(Mesh, Problem);
+			}
+		}
+	}
+
+	Report->SetStringField(TEXT("repair"), Repair);
+	Report->SetBoolField(TEXT("valid"), bOutValid);
+	if (!bOutValid) Report->SetStringField(TEXT("problem"), Problem);
+	const FBoxSphereBounds Bounds = Mesh->GetBounds();
+	TSharedPtr<FJsonObject> Extent = MakeShared<FJsonObject>();
+	Extent->SetNumberField(TEXT("x"), Bounds.BoxExtent.X);
+	Extent->SetNumberField(TEXT("y"), Bounds.BoxExtent.Y);
+	Extent->SetNumberField(TEXT("z"), Bounds.BoxExtent.Z);
+	Report->SetObjectField(TEXT("boundsExtent"), Extent);
+	return Report;
+}
+
+/** Attach the render-data report to a collision result, turning it into a
+ *  failure when the mesh is left undrawable. */
+void MCPGeoAttachRenderData(const TSharedPtr<FJsonObject>& Result, UStaticMesh* Mesh, const FString& AssetPath, bool bValidBefore)
+{
+	bool bValid = false;
+	Result->SetObjectField(TEXT("renderData"), MCPGeoEnsureRenderData(Mesh, bValidBefore, bValid));
+	if (!bValid)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("reason"), TEXT("render_data_invalid"));
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("The collision on '%s' was written, but the mesh's render data cannot be drawn and a rebuild ")
+				TEXT("did not restore it (see renderData.problem). Rebuild it with ")
+				TEXT("asset(set_static_mesh_build_settings) or reimport the mesh."),
+			*AssetPath));
+	}
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -1471,8 +1653,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillMeshHoles(const TSharedPtr<FJsonObjec
 // asset(generate_mesh_collision)
 //
 // Build simple collision shapes for a StaticMesh from its own geometry, or
-// clear them. Eight generation methods, from axis-aligned boxes to a full
-// convex decomposition.
+// clear them. Eight solver methods, from axis-aligned boxes to a full convex
+// decomposition, plus BoundingBox: one box fitted to the whole mesh.
 //
 // asset(set_property) cannot do this. UBodySetup::AggGeom is a UPROPERTY, but
 // what would have to be written into it is the OUTPUT of a decomposition solver
@@ -1492,7 +1674,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 		TEXT("maxShapeCount"), TEXT("minThickness"), TEXT("autoDetectSpheres"), TEXT("autoDetectBoxes"),
 		TEXT("autoDetectCapsules"), TEXT("simplifyHulls"), TEXT("removeFullyContainedShapes"),
 		TEXT("decompositionErrorTolerance"), TEXT("decompositionSearchFactor"), TEXT("sweptHullAxis"),
-		TEXT("markAsCustomized"), TEXT("lodType"), TEXT("lodIndex"), TEXT("save"), TEXT("dryRun") });
+		TEXT("markAsCustomized"), TEXT("weldFirst"), TEXT("weldTolerance"), TEXT("lodType"), TEXT("lodIndex"),
+		TEXT("save"), TEXT("dryRun") });
 
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
@@ -1551,12 +1734,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 			return MCPResult(Result);
 		}
 
-		Setup->Modify();
-		Setup->AggGeom.EmptyElements();
-		Setup->InvalidatePhysicsData();
-		Mesh->Modify();
-		Mesh->PostEditChange();
-		Mesh->MarkPackageDirty();
+		FString RenderProblem;
+		const bool bRenderValidBefore = MCPGeoRenderDataValid(Mesh, RenderProblem);
+		MCPGeoWriteSimpleCollision(Mesh, FKAggregateGeom(), /*bMarkCustomized*/ false);
 
 		MCPSetUpdated(Result);
 		Result->SetBoolField(TEXT("changed"), true);
@@ -1578,6 +1758,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 		{
 			Result->SetBoolField(TEXT("saved"), false);
 		}
+		MCPGeoAttachRenderData(Result, Mesh, AssetPath, bRenderValidBefore);
 		return MCPResult(Result);
 	}
 
@@ -1585,7 +1766,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	const FString Method = OptionalString(Params, TEXT("method"), TEXT("ConvexHulls"));
 	const TCHAR* const KnownMethods =
 		TEXT("AlignedBoxes, OrientedBoxes, MinimalSpheres, Capsules, ConvexHulls, SweptHulls, ")
-		TEXT("MinVolumeShapes, LevelSets");
+		TEXT("MinVolumeShapes, LevelSets, BoundingBox");
+	// BoundingBox is one box fitted to the whole mesh, computed here rather
+	// than by the solver, so it ignores how the mesh splits into islands.
+	const bool bBoundingBox = Method.Equals(TEXT("BoundingBox"), ESearchCase::IgnoreCase);
 
 	if (!MCPGeometryScript::EnsureLoaded({ MCPGeometryScript::StaticMeshFunctions }))
 	{
@@ -1595,7 +1779,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 				TEXT("still work."));
 	}
 
-	const int64 MethodValue = MCPGeometryScript::EnumValue(MCPGeoCollisionMethodEnum, Method);
+	const int64 MethodValue = bBoundingBox
+		? 0
+		: MCPGeometryScript::EnumValue(MCPGeoCollisionMethodEnum, Method);
 	if (MethodValue == INDEX_NONE)
 	{
 		return MCPError(FString::Printf(
@@ -1623,6 +1809,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	const double DecompositionErrorTolerance = OptionalNumber(Params, TEXT("decompositionErrorTolerance"), 0.0);
 	const double DecompositionSearchFactor = OptionalNumber(Params, TEXT("decompositionSearchFactor"), 0.5);
 	const bool bMarkAsCustomized = OptionalBool(Params, TEXT("markAsCustomized"), true);
+	const bool bWeldFirst = OptionalBool(Params, TEXT("weldFirst"), true);
+	const double WeldTolerance = OptionalNumber(Params, TEXT("weldTolerance"), 1.0e-6);
 
 	FString RequestedLODType = OptionalString(Params, TEXT("lodType"));
 	const FString LODTypeName = MCPGeometryScript::ResolveLODType(RequestedLODType);
@@ -1665,6 +1853,27 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 
 	const FMCPGeoMeshStats SourceStats = MCPGeoReadStats(Dynamic);
 
+	// The solver fits shapes per connected island, so a mesh whose faces are
+	// not welded (every triangle its own island) gets one shape per face.
+	// Welding coincident edges first makes those faces one island (#1653).
+	const bool bWeld = bWeldFirst && !bBoundingBox;
+	FMCPGeoMeshStats FitStats = SourceStats;
+	if (bWeld)
+	{
+		FString WeldBindError;
+		FMCPReflectedCall Weld;
+		if (!Weld.Bind(MCPGeoRepairFunctions, TEXT("WeldMeshEdges"), WeldBindError))
+		{
+			return MCPGeometryScript::UnavailableError(WeldBindError);
+		}
+		Weld.SetObject(TEXT("TargetMesh"), Dynamic);
+		Weld.SetStructNumber(TEXT("WeldOptions"), TEXT("Tolerance"), WeldTolerance);
+		Weld.SetObject(TEXT("Debug"), Debug);
+		Weld.Invoke();
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
+		FitStats = MCPGeoReadStats(Dynamic);
+	}
+
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("op"), Op);
@@ -1674,6 +1883,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 	Result->SetNumberField(TEXT("previousShapeCount"), PreviousShapeCount);
 	Result->SetStringField(TEXT("previousCollisionSignature"), PreviousSignature);
 	Result->SetObjectField(TEXT("sourceMesh"), SourceStats.ToJson());
+	{
+		TSharedPtr<FJsonObject> WeldReport = MakeShared<FJsonObject>();
+		WeldReport->SetBoolField(TEXT("applied"), bWeld);
+		WeldReport->SetNumberField(TEXT("tolerance"), WeldTolerance);
+		WeldReport->SetNumberField(TEXT("islandsBefore"), SourceStats.Islands);
+		WeldReport->SetNumberField(TEXT("islandsAfter"), FitStats.Islands);
+		Result->SetObjectField(TEXT("weld"), WeldReport);
+	}
 	Result->SetBoolField(TEXT("repeatIsIdempotent"), true);
 	Result->SetStringField(TEXT("repeatNote"),
 		TEXT("Generation from the same mesh with the same options is deterministic, so a repeat produces the ")
@@ -1695,37 +1912,78 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 		return MCPResult(Result);
 	}
 
-	FString BindError;
-	FMCPReflectedCall Generate;
-	if (!Generate.Bind(MCPGeoCollisionFunctions, TEXT("SetStaticMeshCollisionFromMesh"), BindError))
+	FString RenderProblem;
+	const bool bRenderValidBefore = MCPGeoRenderDataValid(Mesh, RenderProblem);
+
+	// The signature counts shapes, so a box of a new size reads as unchanged;
+	// BoundingBox tracks its own write.
+	bool bWroteBoundingBox = false;
+	if (bBoundingBox)
 	{
-		return MCPGeometryScript::UnavailableError(BindError);
+		FBox Box;
+		if (!MCPGeoReadBounds(Dynamic, Box))
+		{
+			return MCPError(FString::Printf(
+				TEXT("'%s' has no readable geometry at %s[%d], so there is no box to fit."),
+				*AssetPath, *LODTypeName, ReadRequest.LODIndex));
+		}
+		FKBoxElem Elem;
+		Elem.Center = Box.GetCenter();
+		const FVector Size = Box.GetSize();
+		Elem.X = FMath::Max(Size.X, MinThickness);
+		Elem.Y = FMath::Max(Size.Y, MinThickness);
+		Elem.Z = FMath::Max(Size.Z, MinThickness);
+
+		// A repeat fits the same box, so leave the asset alone when it is there.
+		const FKAggregateGeom* Existing = Setup ? &Setup->AggGeom : nullptr;
+		const bool bSameBox = Existing && Existing->GetElementCount() == 1 && Existing->BoxElems.Num() == 1
+			&& Existing->BoxElems[0].Center.Equals(Elem.Center, 1.0e-3)
+			&& Existing->BoxElems[0].Rotation.IsNearlyZero(1.0e-3)
+			&& FMath::IsNearlyEqual(Existing->BoxElems[0].X, Elem.X, 1.0e-3)
+			&& FMath::IsNearlyEqual(Existing->BoxElems[0].Y, Elem.Y, 1.0e-3)
+			&& FMath::IsNearlyEqual(Existing->BoxElems[0].Z, Elem.Z, 1.0e-3);
+		if (!bSameBox)
+		{
+			FKAggregateGeom NewGeom;
+			NewGeom.BoxElems.Add(Elem);
+			MCPGeoWriteSimpleCollision(Mesh, NewGeom, bMarkAsCustomized);
+			bWroteBoundingBox = true;
+		}
 	}
-	Generate.SetObject(TEXT("FromDynamicMesh"), Dynamic);
-	Generate.SetObject(TEXT("ToStaticMeshAsset"), Mesh);
-	Generate.SetStructEnum(TEXT("Options"), TEXT("Method"), MethodValue);
-	Generate.SetStructBool(TEXT("Options"), TEXT("bEmitTransaction"), true);
-	Generate.SetStructBool(TEXT("Options"), TEXT("bAutoDetectSpheres"), bAutoDetectSpheres);
-	Generate.SetStructBool(TEXT("Options"), TEXT("bAutoDetectBoxes"), bAutoDetectBoxes);
-	Generate.SetStructBool(TEXT("Options"), TEXT("bAutoDetectCapsules"), bAutoDetectCapsules);
-	Generate.SetStructNumber(TEXT("Options"), TEXT("MinThickness"), MinThickness);
-	Generate.SetStructBool(TEXT("Options"), TEXT("bSimplifyHulls"), bSimplifyHulls);
-	Generate.SetStructNumber(TEXT("Options"), TEXT("ConvexHullTargetFaceCount"), HullTargetFaceCount);
-	Generate.SetStructNumber(TEXT("Options"), TEXT("MaxConvexHullsPerMesh"), MaxHulls);
-	Generate.SetStructNumber(TEXT("Options"), TEXT("ConvexDecompositionSearchFactor"), DecompositionSearchFactor);
-	Generate.SetStructNumber(TEXT("Options"), TEXT("ConvexDecompositionErrorTolerance"), DecompositionErrorTolerance);
-	Generate.SetStructEnum(TEXT("Options"), TEXT("SweptHullAxis"), SweptHullAxisValue);
-	Generate.SetStructBool(TEXT("Options"), TEXT("bRemoveFullyContainedShapes"), bRemoveContained);
-	Generate.SetStructNumber(TEXT("Options"), TEXT("MaxShapeCount"), MaxShapeCount);
-	Generate.SetStructBool(TEXT("StaticMeshCollisionOptions"), TEXT("bMarkAsCustomized"), bMarkAsCustomized);
-	Generate.SetObject(TEXT("Debug"), Debug);
-	Generate.Invoke();
-	Messages.Append(MCPGeometryScript::DrainDebug(Debug));
+	else
+	{
+		FString BindError;
+		FMCPReflectedCall Generate;
+		if (!Generate.Bind(MCPGeoCollisionFunctions, TEXT("SetStaticMeshCollisionFromMesh"), BindError))
+		{
+			return MCPGeometryScript::UnavailableError(BindError);
+		}
+		Generate.SetObject(TEXT("FromDynamicMesh"), Dynamic);
+		Generate.SetObject(TEXT("ToStaticMeshAsset"), Mesh);
+		Generate.SetStructEnum(TEXT("Options"), TEXT("Method"), MethodValue);
+		Generate.SetStructBool(TEXT("Options"), TEXT("bEmitTransaction"), true);
+		Generate.SetStructBool(TEXT("Options"), TEXT("bAutoDetectSpheres"), bAutoDetectSpheres);
+		Generate.SetStructBool(TEXT("Options"), TEXT("bAutoDetectBoxes"), bAutoDetectBoxes);
+		Generate.SetStructBool(TEXT("Options"), TEXT("bAutoDetectCapsules"), bAutoDetectCapsules);
+		Generate.SetStructNumber(TEXT("Options"), TEXT("MinThickness"), MinThickness);
+		Generate.SetStructBool(TEXT("Options"), TEXT("bSimplifyHulls"), bSimplifyHulls);
+		Generate.SetStructNumber(TEXT("Options"), TEXT("ConvexHullTargetFaceCount"), HullTargetFaceCount);
+		Generate.SetStructNumber(TEXT("Options"), TEXT("MaxConvexHullsPerMesh"), MaxHulls);
+		Generate.SetStructNumber(TEXT("Options"), TEXT("ConvexDecompositionSearchFactor"), DecompositionSearchFactor);
+		Generate.SetStructNumber(TEXT("Options"), TEXT("ConvexDecompositionErrorTolerance"), DecompositionErrorTolerance);
+		Generate.SetStructEnum(TEXT("Options"), TEXT("SweptHullAxis"), SweptHullAxisValue);
+		Generate.SetStructBool(TEXT("Options"), TEXT("bRemoveFullyContainedShapes"), bRemoveContained);
+		Generate.SetStructNumber(TEXT("Options"), TEXT("MaxShapeCount"), MaxShapeCount);
+		Generate.SetStructBool(TEXT("StaticMeshCollisionOptions"), TEXT("bMarkAsCustomized"), bMarkAsCustomized);
+		Generate.SetObject(TEXT("Debug"), Debug);
+		Generate.Invoke();
+		Messages.Append(MCPGeometryScript::DrainDebug(Debug));
+	}
 
 	UBodySetup* NewSetup = Mesh->GetBodySetup();
 	const int32 ShapeCount = MCPGeoCollisionShapeCount(NewSetup);
 	const FString Signature = MCPGeoCollisionSignature(NewSetup);
-	const bool bChanged = Signature != PreviousSignature;
+	const bool bChanged = Signature != PreviousSignature || bWroteBoundingBox;
 
 	Result->SetNumberField(TEXT("shapeCount"), ShapeCount);
 	Result->SetStringField(TEXT("collisionSignature"), Signature);
@@ -1740,6 +1998,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 				TEXT("asset(apply_mesh_hole_fill) first, or try method='ConvexHulls' which tolerates an open surface."),
 			*Method, *AssetPath));
 		Result->SetStringField(TEXT("reason"), TEXT("no_shapes_generated"));
+		bool bRenderValidAfter = false;
+		Result->SetObjectField(TEXT("renderData"), MCPGeoEnsureRenderData(Mesh, bRenderValidBefore, bRenderValidAfter));
 		MCPGeometryScript::AttachMessages(Result, Messages);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1792,6 +2052,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GenerateMeshCollision(const TSharedPtr<FJ
 		Result->SetBoolField(TEXT("saved"), false);
 	}
 
+	MCPGeoAttachRenderData(Result, Mesh, AssetPath, bRenderValidBefore);
 	MCPGeometryScript::AttachMessages(Result, Messages);
 	return MCPResult(Result);
 }

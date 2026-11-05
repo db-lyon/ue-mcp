@@ -15227,7 +15227,7 @@
           "name": "method",
           "type": "string",
           "required": false,
-          "description": "AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets"
+          "description": "AlignedBoxes | OrientedBoxes | MinimalSpheres | Capsules | ConvexHulls (default) | SweptHulls | MinVolumeShapes | LevelSets | BoundingBox (one box fitted to the whole mesh)"
         },
         {
           "name": "maxConvexHulls",
@@ -15306,6 +15306,18 @@
           "type": "boolean",
           "required": false,
           "description": "Mark the collision customized so a reimport keeps it (default true)"
+        },
+        {
+          "name": "weldFirst",
+          "type": "boolean",
+          "required": false,
+          "description": "Weld coincident edges before fitting, so unwelded faces fit as one island rather than one shape each (default true)"
+        },
+        {
+          "name": "weldTolerance",
+          "type": "number",
+          "required": false,
+          "description": "How close two edges must be to weld (default 1e-6)"
         },
         {
           "name": "lodType",
