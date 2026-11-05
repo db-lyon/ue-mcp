@@ -314,6 +314,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("max_velocity_drift_cms"), EType::Number, TEXT("Most velocity drift allowed (default 50)")),
 		MCPParam::Optional(TEXT("max_rotation_drift_deg"), EType::Number, TEXT("Most rotation drift allowed (default 5)")),
 		MCPParam::Optional(TEXT("max_errors"), EType::Integer, TEXT("Most errors logged during the run (default 0)")).Min(0),
+		MCPParam::Optional(TEXT("start_when"), EType::Object, TEXT("Replay gate test_run uses, as replay_run's start_when")),
 	}, MCPSpec::ContractExempt(TEXT("Writes test.json beside the recording")));
 	Registry.RegisterHandler(TEXT("pie_test_run"), &PieTestRun, {
 		MCPParam::Optional(TEXT("test_path"), EType::String, TEXT("Explicit test.json path")),

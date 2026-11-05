@@ -191,6 +191,8 @@ Unreal Insights traces are `editor(start_trace)` and `editor(stop_trace)`.
 | `scenario_scaffold` | Generate an arrange, act, assert `scenario.json` from a recording |
 | `scenario_validate` | Check a scenario's structure and predicates without running it |
 
+`test_scaffold` takes `start_when`, the replay gate described under Replay, and stores it in `test.json`; `test_run` replays with it. `test_run` judges its predicates against the replay it ran: the replay trajectory (`replay.csv`) and the errors its PIE session logged, named in the result as `predicates_series` and `predicates_errors`. A replay that compared no frame, or whose `start_when` never opened, fails.
+
 A predicate binds a channel or event to an operator under a temporal quantifier: `{name, channel|event, op, value|min+max|tol, hold, from_s, to_s, within_s, after_event, severity}`. Operators are `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `approx`, `between`, `changed`, `increased`, `decreased` and `crossed`. `hold` is `always`, `never`, `eventually`, `at_end` or `once_then_always`. Channels are series columns (`pos_z`, `speed2d`, `game_ms`), tracked values by path (`t:Boss.Health`) and the pseudo-channels `$errors`, `$warnings`, `$frame` and `$time`. Events are `montage`, `marker` and `error`.
 
 A scenario file's `act` list (kinds `replay`, `inject_tape`, `drive`, `goto`, `face`, `follow` and `call`) is written by `scenario_scaffold` and checked by `scenario_validate`, but no action runs it. Its arrange entries (`spawn`, `set`, `call`) run as a test script step's `arrange`, and `uat_run`'s step actions as its `act`. See [Arrange and act](pie-scripts.md#arrange-and-act).

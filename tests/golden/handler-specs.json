@@ -26270,6 +26270,12 @@
           "required": false,
           "description": "Most errors logged during the run (default 0)",
           "minimum": 0
+        },
+        {
+          "name": "start_when",
+          "type": "object",
+          "required": false,
+          "description": "Replay gate test_run uses, as replay_run's start_when"
         }
       ],
       "contractExempt": "Writes test.json beside the recording"
