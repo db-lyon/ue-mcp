@@ -1725,6 +1725,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LandscapeTargetLayerTests.cpp",
+          "test": "UE.MCP.Landscape.TargetLayer.ErosionWritesOnlyItsChange"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-landscape.test.ts",
           "test": "apply_landscape_erosion slumps a spike toward its neighbours"
@@ -18359,6 +18364,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LandscapeTargetLayerTests.cpp",
+          "test": "UE.MCP.Landscape.TargetLayer.SculptRegionWritesOnlyItsChange"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-landscape.test.ts",
           "test": "sculpt_landscape raises a brush that sculpt_landscape_region flattens again"
@@ -19587,6 +19597,21 @@
       "registeredIn": "LandscapeHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LandscapeTargetLayerTests.cpp",
+          "test": "UE.MCP.Landscape.TargetLayer.ErosionWritesOnlyItsChange"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LandscapeTargetLayerTests.cpp",
+          "test": "UE.MCP.Landscape.TargetLayer.SculptRegionWritesOnlyItsChange"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LandscapeTargetLayerTests.cpp",
+          "test": "UE.MCP.Landscape.TargetLayer.SetHeightRegionReportsTheTargetLayer"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-landscape.test.ts",
