@@ -42,6 +42,7 @@ import { taskEffect } from "../surface/action-effects.js";
 import { LOCAL_ACTIONS } from "../dispatch/offline.js";
 import { EDITOR_OPERATION_TASKS } from "./editor-op-task.js";
 import { deriveFlowInputs } from "./flow-inputs.js";
+import { withStepApproval } from "./step-approval.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -232,7 +233,9 @@ async function runFlow(
   const policy: EditorLossPolicy = def?.on_editor_loss ?? "resume";
   const snapshot: SnapshotHolder = {};
   const guard = makeLossGuard(ctx, policy, def?.editor_loss_timeout_seconds, snapshot);
-  const runner = makeRunner(guard ? guard.wrap(registry) : registry, config, ctx, runId, flowName, snapshot, guard);
+  const guarded = guard ? guard.wrap(registry) : registry;
+  const approved = ctx.flowStepApproval ? withStepApproval(guarded, ctx.flowStepApproval, runId, flowName) : guarded;
+  const runner = makeRunner(approved, config, ctx, runId, flowName, snapshot, guard);
   try {
     // Under on_editor_loss: rollback a failed run unwinds, unless the caller said otherwise.
     const rollback = rollback_on_failure ?? (policy === "rollback" ? true : undefined);
