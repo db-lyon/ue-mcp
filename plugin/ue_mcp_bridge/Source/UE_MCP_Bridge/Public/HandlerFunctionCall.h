@@ -1086,17 +1086,18 @@ inline TSharedPtr<FJsonValue> MCPRejectUnknownFunctionArgs(const UFunction* Func
 	}
 	for (const auto& Entry : Args->Values)
 	{
-		if (Inputs.Contains(Entry.Key)) continue;
+		const FString Key(Entry.Key);
+		if (Inputs.Contains(Key)) continue;
 		const FString Accepted = Inputs.Num() > 0 ? FString::Join(Inputs, TEXT(", ")) : FString(TEXT("none"));
-		if (Outputs.Contains(Entry.Key))
+		if (Outputs.Contains(Key))
 		{
 			return MCPError(FString::Printf(
 				TEXT("Argument '%s' is an output of %s, not an input, so it cannot be passed. Its inputs: %s"),
-				*Entry.Key, *Func->GetName(), *Accepted));
+				*Key, *Func->GetName(), *Accepted));
 		}
 		return MCPError(FString::Printf(
 			TEXT("Argument '%s' is not a parameter of %s, so it would never be read. Its inputs: %s"),
-			*Entry.Key, *Func->GetName(), *Accepted));
+			*Key, *Func->GetName(), *Accepted));
 	}
 	return nullptr;
 }
