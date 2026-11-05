@@ -1572,6 +1572,11 @@
       "status": "covered",
       "tests": [
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
+          "test": "UE.MCP.Widget.CompileOutcome"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "add_widget, move_widget, reorder_child and remove_widget reshape the tree read_widget_tree reads"
@@ -3891,6 +3896,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/PCGHandlerTests.cpp",
           "test": "UE.MCP.PCG.Component.GraphAndParameterOverrides"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
+          "test": "UE.MCP.Widget.CompileOutcome"
         },
         {
           "suite": "live",
