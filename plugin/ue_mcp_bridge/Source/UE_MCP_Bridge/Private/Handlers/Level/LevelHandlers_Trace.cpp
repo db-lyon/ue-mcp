@@ -1,4 +1,4 @@
-// World-space line and shape traces, shared collision inspection, and floor snap.
+// World-space line and shape traces, box region queries, shared collision inspection, and floor snap.
 // Translation-unit partition of FLevelHandlers - registration stays in
 // LevelHandlers.cpp::RegisterHandlers.
 
@@ -10,6 +10,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/WorldSettings.h"
 #include "Components/PrimitiveComponent.h"
 #include "CollisionQueryParams.h"
 #include "Engine/CollisionProfile.h"
@@ -526,4 +527,104 @@ TSharedPtr<FJsonValue> FLevelHandlers::ShapeTrace(const TSharedPtr<FJsonObject>&
 	TSharedPtr<FJsonValue> Error;
 	UWorld* World = MCPTrace::ResolveTraceWorld(Params, Error);
 	return World ? MCPTrace::Execute(World, Params, true) : Error;
+}
+
+// #1564: every actor whose bounds meet a world-space box. Bounds are computed
+// the way get_actor_bounds computes them, so the two reads agree on an actor.
+TSharedPtr<FJsonValue> FLevelHandlers::ActorsInBox(const TSharedPtr<FJsonObject>& Params)
+{
+	MCPReadParamsAhead(Params, { TEXT("min"), TEXT("max"), TEXT("mode"), TEXT("includeHidden"),
+		TEXT("classFilter"), TEXT("onlyColliding"), TEXT("limit"), TEXT("world"), TEXT("pieInstance") });
+
+	if (!HasParam(Params, TEXT("min")) || !HasParam(Params, TEXT("max")))
+		return MCPError(TEXT("Pass both 'min' and 'max' as world-space vectors"));
+	const FVector Min = OptionalVec3(Params, TEXT("min"));
+	const FVector Max = OptionalVec3(Params, TEXT("max"));
+	if (Min.ContainsNaN() || Max.ContainsNaN())
+		return MCPError(TEXT("'min' and 'max' must be finite"));
+	if (Min.X > Max.X || Min.Y > Max.Y || Min.Z > Max.Z)
+		return MCPError(TEXT("'max' must be at least 'min' on every axis"));
+	const FBox Region(Min, Max);
+
+	const FString Mode = OptionalString(Params, TEXT("mode"), TEXT("overlap"));
+	if (Mode != TEXT("overlap") && Mode != TEXT("contained"))
+		return MCPError(FString::Printf(TEXT("Unknown mode '%s'. Use overlap or contained"), *Mode));
+	const bool bContainedOnly = Mode == TEXT("contained");
+	const bool bIncludeHidden = OptionalBool(Params, TEXT("includeHidden"), false);
+	const bool bOnlyColliding = OptionalBool(Params, TEXT("onlyColliding"), false);
+	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
+	const int32 Limit = FMath::Clamp(OptionalInt(Params, TEXT("limit"), 200), 1, 2000);
+
+	TSharedPtr<FJsonValue> WorldError;
+	UWorld* World = MCPTrace::ResolveTraceWorld(Params, WorldError);
+	if (!World) return WorldError;
+	const bool bGameWorld = World->IsGameWorld();
+
+	struct FRow { FString Label; TSharedPtr<FJsonObject> Object; };
+	TArray<FRow> Rows;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor) || Actor->IsA<AWorldSettings>()) continue;
+		if (!ClassFilter.IsEmpty() && !Actor->GetClass()->GetName().Contains(ClassFilter, ESearchCase::IgnoreCase)) continue;
+
+		const bool bHiddenInGame = Actor->IsHidden();
+#if WITH_EDITOR
+		const bool bEditorHidden = Actor->IsHiddenEd();
+#else
+		const bool bEditorHidden = false;
+#endif
+		// Hidden means hidden in the world being queried: the viewport for the
+		// editor world, the game for a PIE world.
+		if (!bIncludeHidden && (bGameWorld ? bHiddenInGame : bEditorHidden)) continue;
+
+		// An actor with no primitive (an empty Actor, a bare light) is its location.
+		FBox Bounds = Actor->GetComponentsBoundingBox(/*bNonColliding*/ !bOnlyColliding, /*bIncludeFromChildActors*/ true);
+		const bool bFromComponents = Bounds.IsValid != 0;
+		if (!bFromComponents)
+		{
+			if (bOnlyColliding) continue;
+			Bounds = FBox(Actor->GetActorLocation(), Actor->GetActorLocation());
+		}
+		const bool bContained = Region.IsInsideOrOn(Bounds.Min) && Region.IsInsideOrOn(Bounds.Max);
+		// FBox::Intersect counts touching faces, so a wall flush with the region is in it.
+		if (bContainedOnly ? !bContained : !Region.Intersect(Bounds)) continue;
+
+		auto Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("label"), Actor->GetActorLabel());
+		Row->SetStringField(TEXT("path"), Actor->GetPathName());
+		Row->SetStringField(TEXT("class"), Actor->GetClass()->GetName());
+		Row->SetStringField(TEXT("folderPath"), MCPActorFolderPath(Actor));
+		Row->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Actor->GetActorLocation()));
+		Row->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Actor->GetActorRotation()));
+		Row->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Actor->GetActorScale3D()));
+		auto BoundsObj = MakeShared<FJsonObject>();
+		BoundsObj->SetObjectField(TEXT("origin"), MCPVec3ToJsonObject(Bounds.GetCenter()));
+		BoundsObj->SetObjectField(TEXT("extent"), MCPVec3ToJsonObject(Bounds.GetExtent()));
+		BoundsObj->SetObjectField(TEXT("min"), MCPVec3ToJsonObject(Bounds.Min));
+		BoundsObj->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(Bounds.Max));
+		BoundsObj->SetStringField(TEXT("source"), bFromComponents ? TEXT("components") : TEXT("location"));
+		Row->SetObjectField(TEXT("bounds"), BoundsObj);
+		Row->SetBoolField(TEXT("contained"), bContained);
+		Row->SetBoolField(TEXT("editorHidden"), bEditorHidden);
+		Row->SetBoolField(TEXT("hiddenInGame"), bHiddenInGame);
+		Rows.Add({ Actor->GetActorLabel(), Row });
+	}
+	// Sorted so limit cuts the same rows on every call.
+	Rows.Sort([](const FRow& A, const FRow& B) { return A.Label < B.Label; });
+
+	TArray<TSharedPtr<FJsonValue>> Actors;
+	for (int32 Index = 0; Index < FMath::Min(Rows.Num(), Limit); ++Index)
+		Actors.Add(MakeShared<FJsonValueObject>(Rows[Index].Object));
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("actors"), Actors);
+	Result->SetNumberField(TEXT("count"), Actors.Num());
+	Result->SetNumberField(TEXT("total"), Rows.Num());
+	Result->SetBoolField(TEXT("truncated"), Rows.Num() > Limit);
+	Result->SetStringField(TEXT("mode"), Mode);
+	Result->SetObjectField(TEXT("min"), MCPVec3ToJsonObject(Min));
+	Result->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(Max));
+	Result->SetStringField(TEXT("world"), MCPTrace::DescribeTracedWorld(World));
+	return MCPResult(Result);
 }

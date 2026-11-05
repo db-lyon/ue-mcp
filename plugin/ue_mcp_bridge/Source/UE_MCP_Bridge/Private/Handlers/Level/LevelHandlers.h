@@ -137,6 +137,8 @@ private:
 	static TSharedPtr<FJsonValue> ShapeTrace(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LineTrace(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BulkLineTrace(const TSharedPtr<FJsonObject>& Params);
+	// #1564: actors whose bounds meet a world-space box
+	static TSharedPtr<FJsonValue> ActorsInBox(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SnapActorToFloor(const TSharedPtr<FJsonObject>& Params);
 	// #453: per-actor motion snapshot for telemetry / driving probes.
 	static TSharedPtr<FJsonValue> ReadActorMotion(const TSharedPtr<FJsonObject>& Params);

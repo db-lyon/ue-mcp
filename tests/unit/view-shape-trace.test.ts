@@ -68,4 +68,16 @@ describe("native view and shape traces", () => {
     expect(levelTool.schema.multi.safeParse("yes").success).toBe(false);
   });
 
+  it("exposes actors_in_box as a read with a required box (#1564)", () => {
+    const action = levelTool.actions.actors_in_box;
+    expect(levelTool.schema.action.safeParse("actors_in_box").success).toBe(true);
+    expect(action.bridge).toBe("actors_in_box");
+    expect(action.mapParams).toBeUndefined();
+    expect(declaredActionEffect(levelTool.name, "actors_in_box")).toBe("read");
+    const params = { min: { x: -500, y: -500, z: 0 }, max: { x: 500, y: 500, z: 400 }, mode: "contained",
+      includeHidden: true, classFilter: "StaticMeshActor", onlyColliding: true, limit: 50, world: "pie", pieInstance: 1 };
+    expect(parseTraceParams(action, params)).toEqual(params);
+    expect(() => parseTraceParams(action, { min: params.min })).toThrow();
+    expect(() => parseTraceParams(action, { ...params, limit: 1.5 })).toThrow();
+  });
 });

@@ -1,6 +1,65 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1220,
   "handlers": {
+    "actors_in_box": {
+      "category": "level",
+      "params": [
+        {
+          "name": "min",
+          "type": "vec3",
+          "required": true,
+          "description": "Box minimum corner, world space"
+        },
+        {
+          "name": "max",
+          "type": "vec3",
+          "required": true,
+          "description": "Box maximum corner, world space; at least min on every axis"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "overlap (default): bounds intersect the box | contained: bounds lie fully inside it"
+        },
+        {
+          "name": "includeHidden",
+          "type": "boolean",
+          "required": false,
+          "description": "Include actors hidden in the queried world (default false)"
+        },
+        {
+          "name": "classFilter",
+          "type": "string",
+          "required": false,
+          "description": "Case-insensitive substring over the actor class name"
+        },
+        {
+          "name": "onlyColliding",
+          "type": "boolean",
+          "required": false,
+          "description": "Only colliding components contribute to the bounds (default false)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Rows returned (default 200, max 2000)"
+        },
+        {
+          "name": "world",
+          "type": "string",
+          "required": false,
+          "description": "World scope: editor (default) | pie"
+        },
+        {
+          "name": "pieInstance",
+          "type": "integer",
+          "required": false,
+          "description": "Which PIE world when world is pie: 0 = server or primary, 1..N = clients"
+        }
+      ]
+    },
     "add_ability_system_component": {
       "category": "gas",
       "params": [

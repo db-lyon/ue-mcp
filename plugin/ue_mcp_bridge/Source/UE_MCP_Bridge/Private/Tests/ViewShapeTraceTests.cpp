@@ -327,4 +327,90 @@ bool FLineTraceMultiTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorsInBoxTest, "UE.MCP.Level.ActorsInBox",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FActorsInBoxTest::RunTest(const FString& Parameters)
+{
+	FScopedTraceTestWorld Fixture;
+	FMCPHandlerRegistry Registry;
+	FLevelHandlers::RegisterHandlers(Registry);
+	UBoxComponent* Inside = Fixture.Box(FVector(0, 0, 0));
+	Inside->GetOwner()->SetActorLabel(TEXT("MCPBoxInside"), false);
+	UBoxComponent* Straddling = Fixture.Box(FVector(100, 0, 0));
+	Straddling->GetOwner()->SetActorLabel(TEXT("MCPBoxStraddling"), false);
+	UBoxComponent* Outside = Fixture.Box(FVector(500, 0, 0));
+	Outside->GetOwner()->SetActorLabel(TEXT("MCPBoxOutside"), false);
+	UBoxComponent* Hidden = Fixture.Box(FVector(0, 50, 0));
+	Hidden->GetOwner()->SetActorLabel(TEXT("MCPBoxHidden"), false);
+	Hidden->GetOwner()->SetActorHiddenInGame(true);
+
+	auto Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("world"), TEXT("pie"));
+	Params->SetNumberField(TEXT("pieInstance"), Fixture.Instance);
+	Params->SetObjectField(TEXT("min"), MCPVec3ToJsonObject(FVector(-100, -100, -100)));
+	Params->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(FVector(95, 100, 100)));
+
+	auto Labels = [](const TSharedPtr<FJsonObject>& Result)
+	{
+		TMap<FString, TSharedPtr<FJsonObject>> Out;
+		for (const TSharedPtr<FJsonValue>& Row : Result->GetArrayField(TEXT("actors")))
+			Out.Add(Row->AsObject()->GetStringField(TEXT("label")), Row->AsObject());
+		return Out;
+	};
+
+	const auto Overlap = TraceTestRun(Registry, TEXT("actors_in_box"), Params);
+	TestTrue(TEXT("overlap query succeeds"), Overlap->GetBoolField(TEXT("success")));
+	const auto OverlapRows = Labels(Overlap);
+	TestTrue(TEXT("inside actor listed"), OverlapRows.Contains(TEXT("MCPBoxInside")));
+	TestTrue(TEXT("straddling actor listed in overlap mode"), OverlapRows.Contains(TEXT("MCPBoxStraddling")));
+	TestFalse(TEXT("outside actor excluded"), OverlapRows.Contains(TEXT("MCPBoxOutside")));
+	TestFalse(TEXT("hidden actor excluded by default"), OverlapRows.Contains(TEXT("MCPBoxHidden")));
+	if (const TSharedPtr<FJsonObject>* Row = OverlapRows.Find(TEXT("MCPBoxInside")))
+	{
+		TestTrue(TEXT("inside row is contained"), (*Row)->GetBoolField(TEXT("contained")));
+		TestEqual(TEXT("row carries the actor path"), (*Row)->GetStringField(TEXT("path")), Inside->GetOwner()->GetPathName());
+		const auto Bounds = (*Row)->GetObjectField(TEXT("bounds"));
+		TestTrue(TEXT("bounds extent is the box extent"), OptionalVec3(Bounds, TEXT("extent")).Equals(FVector(10), 0.01));
+		TestTrue(TEXT("bounds min is origin minus extent"), OptionalVec3(Bounds, TEXT("min")).Equals(FVector(-10), 0.01));
+		TestEqual(TEXT("bounds come from components"), Bounds->GetStringField(TEXT("source")), FString(TEXT("components")));
+		TestTrue(TEXT("location reported"), OptionalVec3(*Row, TEXT("location")).Equals(FVector::ZeroVector, 0.01));
+		TestFalse(TEXT("visible in game"), (*Row)->GetBoolField(TEXT("hiddenInGame")));
+	}
+	if (const TSharedPtr<FJsonObject>* Row = OverlapRows.Find(TEXT("MCPBoxStraddling")))
+		TestFalse(TEXT("straddling row is not contained"), (*Row)->GetBoolField(TEXT("contained")));
+
+	Params->SetStringField(TEXT("mode"), TEXT("contained"));
+	const auto ContainedRows = Labels(TraceTestRun(Registry, TEXT("actors_in_box"), Params));
+	TestTrue(TEXT("contained keeps inside actor"), ContainedRows.Contains(TEXT("MCPBoxInside")));
+	TestFalse(TEXT("contained drops straddling actor"), ContainedRows.Contains(TEXT("MCPBoxStraddling")));
+
+	Params->SetStringField(TEXT("mode"), TEXT("overlap"));
+	Params->SetBoolField(TEXT("includeHidden"), true);
+	const auto WithHidden = Labels(TraceTestRun(Registry, TEXT("actors_in_box"), Params));
+	TestTrue(TEXT("includeHidden lists the hidden actor"), WithHidden.Contains(TEXT("MCPBoxHidden")));
+	if (const TSharedPtr<FJsonObject>* Row = WithHidden.Find(TEXT("MCPBoxHidden")))
+		TestTrue(TEXT("hidden row reports hiddenInGame"), (*Row)->GetBoolField(TEXT("hiddenInGame")));
+
+	Params->SetStringField(TEXT("classFilter"), TEXT("NoSuchClassName"));
+	TestEqual(TEXT("classFilter narrows"), TraceTestRun(Registry, TEXT("actors_in_box"), Params)->GetArrayField(TEXT("actors")).Num(), 0);
+	Params->RemoveField(TEXT("classFilter"));
+
+	// Only the four fixture boxes carry a primitive, so restrict to colliding bounds
+	// to keep any engine-spawned helper actor out of the count.
+	Params->SetBoolField(TEXT("onlyColliding"), true);
+	Params->SetNumberField(TEXT("limit"), 1);
+	const auto Limited = TraceTestRun(Registry, TEXT("actors_in_box"), Params);
+	TestEqual(TEXT("limit cuts rows"), Limited->GetArrayField(TEXT("actors")).Num(), 1);
+	TestTrue(TEXT("truncation explicit"), Limited->GetBoolField(TEXT("truncated")));
+	TestEqual(TEXT("total counts every match"), static_cast<int32>(Limited->GetNumberField(TEXT("total"))), 3);
+	Params->RemoveField(TEXT("limit"));
+
+	Params->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(FVector(-200, 100, 100)));
+	TestFalse(TEXT("inverted box refused"), TraceTestRun(Registry, TEXT("actors_in_box"), Params)->GetBoolField(TEXT("success")));
+	Params->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(FVector(95, 100, 100)));
+	Params->SetStringField(TEXT("mode"), TEXT("sideways"));
+	TestFalse(TEXT("unknown mode refused"), TraceTestRun(Registry, TEXT("actors_in_box"), Params)->GetBoolField(TEXT("success")));
+	return true;
+}
 #endif

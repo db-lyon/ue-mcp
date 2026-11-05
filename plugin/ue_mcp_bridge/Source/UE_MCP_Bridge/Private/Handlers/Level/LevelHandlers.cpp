@@ -440,6 +440,17 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		}),
 		SpecWorld, SpecPieInstance,
 	});
+	// #1564: every actor whose bounds meet a world-space box, in one call.
+	Registry.RegisterHandler(TEXT("actors_in_box"), &ActorsInBox, {
+		MCPParam::Required(TEXT("min"), EType::Vec3, TEXT("Box minimum corner, world space")),
+		MCPParam::Required(TEXT("max"), EType::Vec3, TEXT("Box maximum corner, world space; at least min on every axis")),
+		MCPParam::Optional(TEXT("mode"), EType::String, TEXT("overlap (default): bounds intersect the box | contained: bounds lie fully inside it")),
+		MCPParam::Optional(TEXT("includeHidden"), EType::Boolean, TEXT("Include actors hidden in the queried world (default false)")),
+		MCPParam::Optional(TEXT("classFilter"), EType::String, TEXT("Case-insensitive substring over the actor class name")),
+		MCPParam::Optional(TEXT("onlyColliding"), EType::Boolean, TEXT("Only colliding components contribute to the bounds (default false)")),
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Rows returned (default 200, max 2000)")),
+		SpecWorld, SpecPieInstance,
+	});
 	// #453: per-actor motion snapshot for telemetry probes. Reads location,
 	// rotation, velocity, angular velocity, scale, and ground state in one
 	// call. Caller is expected to invoke at the desired sample interval.
