@@ -408,9 +408,31 @@ TSharedPtr<FJsonValue> FPIEHandlers::PieReplayAnalyze(const TSharedPtr<FJsonObje
 		return MCPError(FString::Printf(TEXT("Could not read drift report at %s: %s"), *DriftPath, *Err));
 	}
 
-	// The serialized report already carries the summary block.
+	// The serialized report already carries the summary block. The per-frame
+	// list can run to thousands of entries, so it is paged (#1657).
+	const int32 Limit = FMath::Max(0, OptionalInt(Params, TEXT("limit"), 50));
+	const int32 Offset = FMath::Max(0, OptionalInt(Params, TEXT("offset"), 0));
 	TSharedRef<FJsonObject> Report = DriftToJson(D);
 	Report->SetStringField(TEXT("drift_report_path"), DriftPath);
+	{
+		const TArray<TSharedPtr<FJsonValue>>* All = nullptr;
+		if (Report->TryGetArrayField(TEXT("frames_over_threshold"), All) && All)
+		{
+			const int32 Total = All->Num();
+			TArray<TSharedPtr<FJsonValue>> Page;
+			for (int32 i = Offset; i < Total && Page.Num() < Limit; ++i)
+			{
+				Page.Add((*All)[i]);
+			}
+			Report->SetNumberField(TEXT("frames_over_threshold_total"), Total);
+			Report->SetNumberField(TEXT("frames_over_threshold_offset"), Offset);
+			if (Offset + Page.Num() < Total)
+			{
+				Report->SetNumberField(TEXT("frames_over_threshold_next_offset"), Offset + Page.Num());
+			}
+			Report->SetArrayField(TEXT("frames_over_threshold"), Page);
+		}
+	}
 
 	// Images bracketing the divergence frame, if frames were captured.
 	if (D.Summary.First.bFound)

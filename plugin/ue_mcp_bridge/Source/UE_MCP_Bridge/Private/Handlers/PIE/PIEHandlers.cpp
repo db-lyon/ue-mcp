@@ -296,6 +296,8 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("pie_replay_analyze"), &PieReplayAnalyze, {
 		MCPParam::Optional(TEXT("recording_id"), EType::String, RecordingIdDoc),
 		MCPParam::Optional(TEXT("recording_dir"), EType::String, RecordingDirDoc),
+		MCPParam::Optional(TEXT("limit"), EType::Integer, TEXT("Most frames_over_threshold entries returned (default 50)")).Min(0),
+		MCPParam::Optional(TEXT("offset"), EType::Integer, TEXT("First frames_over_threshold entry returned")).Min(0),
 	});
 	Registry.RegisterHandler(TEXT("pie_replay_state"), &PieReplayState, {
 		MCPParam::Optional(TEXT("recording_id"), EType::String, RecordingIdDoc),

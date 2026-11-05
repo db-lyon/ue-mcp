@@ -25135,6 +25135,20 @@
           "type": "string",
           "required": false,
           "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Most frames_over_threshold entries returned (default 50)",
+          "minimum": 0
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "First frames_over_threshold entry returned",
+          "minimum": 0
         }
       ]
     },

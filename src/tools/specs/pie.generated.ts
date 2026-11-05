@@ -968,6 +968,20 @@ export const handlerSpecs: HandlerSpecs = {
         "type": "string",
         "required": false,
         "description": "Recordings root, or with no id the recording folder itself (default Saved/MCPRecordings)"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Most frames_over_threshold entries returned (default 50)",
+        "minimum": 0
+      },
+      {
+        "name": "offset",
+        "type": "integer",
+        "required": false,
+        "description": "First frames_over_threshold entry returned",
+        "minimum": 0
       }
     ]
   },
@@ -2178,7 +2192,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   pie_record_status: "Params: none",
   pie_record_stop: "Params: none",
   pie_remote_result: "Params: request_id (or injection_id)",
-  pie_replay_analyze: "Params: recording_id?, recording_dir?",
+  pie_replay_analyze: "Params: recording_id?, recording_dir?, limit?, offset?",
   pie_replay_arm: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
   pie_replay_disarm: "Params: none",
   pie_replay_run: "Params: recording_id?, sequence_path?, recording_dir?, steps?, settle_ms?, sample_hz?, rng_seed?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, capture_frame_every?, encode_gif?, fixed_timestep?, client_id?, pie_instance?, drift_thresholds?, start_when?",
@@ -2253,7 +2267,7 @@ export const schema: Record<string, z.ZodType> = {
   include_values: z.boolean().optional().describe("series: include the downsampled values (default false)"),
   injection_id: z.string().optional().describe("Caller-chosen hold id (minted when absent) (pie_inject_input_start). Hold or tape id to stop (pie_inject_input_stop). Caller-chosen tape id (minted when absent) (pie_inject_input_tape). Hold id from inject_input_start (pie_inject_input_update). Alias for request_id (pie_remote_result)"),
   label: z.string().optional().describe("Marker label"),
-  limit: z.number().int().min(1).optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most runs, newest first (default 50) (pie_script_runs). Most entries per list (default 400) (pie_script_values)"),
+  limit: z.number().int().optional().describe("Most rows (default 200) (pie_observe_list, pie_record_list, pie_session_log). csv/tracked: most rows (default 1000) (pie_observe_read). csv: most rows (default 1000) (pie_record_read). Most frames_over_threshold entries returned (default 50) (pie_replay_analyze). Most runs, newest first (default 50) (pie_script_runs). Most entries per list (default 400) (pie_script_values)"),
   manual_only: z.boolean().optional().describe("Every step is judged by a verdict: allows a script with no auto step that has an expect (default false)"),
   map: z.string().optional().describe("Level the script plays in, as a package or object path such as /Game/Maps/L_Arena. A run opens it before PIE and refuses when the open level has unsaved changes; empty plays whatever level is open (pie_script_create). Level to open before PIE; overrides the script's. Mode manual leaves the open level as it is (pie_script_run). Level the script plays in; empty clears it (pie_script_update). Level the script would play in (pie_script_validate)"),
   max_errors: z.number().int().min(0).optional().describe("no-errors predicate threshold (default 0) (pie_scenario_scaffold). Most errors logged during the run (default 0) (pie_test_scaffold)"),
@@ -2265,7 +2279,7 @@ export const schema: Record<string, z.ZodType> = {
   mode: z.string().optional().describe("replay drives input; monitor only samples (default replay) (pie_replay_arm, pie_replay_run). full (default) plays the script in PIE; manual starts no PIE, observer or recording, leaves auto steps unchecked and puts every manual step up for its verdict at once (pie_script_run)"),
   name: z.string().optional().describe("Asset name (pie_profile_create, pie_script_create). Scenario name (default scenario) (pie_scenario_scaffold). Name for an inline run (default inline) (pie_script_run). Test name (default repro) (pie_test_run, pie_test_scaffold)"),
   note: z.string().optional().describe("Tester's note"),
-  offset: z.number().int().min(0).optional().describe("csv/tracked: first row (pie_observe_read). Rows to skip (pie_record_list). csv: first row (pie_record_read). First row (pie_session_log)"),
+  offset: z.number().int().min(0).optional().describe("csv/tracked: first row (pie_observe_read). Rows to skip (pie_record_list). csv: first row (pie_record_read). First frames_over_threshold entry returned (pie_replay_analyze). First row (pie_session_log)"),
   onConflict: z.string().optional().describe("What to do when the asset exists (default skip) (pie_profile_create). When the asset exists: skip (default), update or replace (overwrite it), error (pie_script_create)"),
   output_dir: z.string().optional().describe("Observation root (default Saved/MCPObservations)"),
   package_path: z.string().optional().describe("Content folder (default /Game/Observation) (pie_profile_create). Package folder (default /Game/PIEStudio/Scripts) (pie_script_create)"),
