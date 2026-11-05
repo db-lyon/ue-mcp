@@ -24,6 +24,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Editor.h"
+#include "Engine/Blueprint.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Misc/PackageName.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -1991,6 +1994,32 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		bRollbackApplies = true;
 	}
 
+	// An object inside a package that is saved to disk (a Widget Blueprint's
+	// WidgetTree template, a Blueprint, an actor placed in an editor level) is
+	// part of that asset, not a live instance: the write is dirtied and
+	// reported as pending a save instead of as lost (#1544). A PIE world, the
+	// transient package, /Temp and anything under a transient outer stay
+	// live-only and are never dirtied.
+	UPackage* OwnerPackage = ExportOwner->GetPackage();
+	bool bTransientOuter = false;
+	for (const UObject* Outer = ExportOwner; Outer; Outer = Outer->GetOuter())
+	{
+		if (Outer->HasAnyFlags(RF_Transient)) { bTransientOuter = true; break; }
+	}
+	const bool bInSavedPackage = OwnerPackage
+		&& OwnerPackage != GetTransientPackage()
+		&& !OwnerPackage->HasAnyPackageFlags(PKG_PlayInEditor)
+		&& !bTransientOuter
+		&& !OwnerPackage->GetName().StartsWith(TEXT("/Temp/"));
+	UBlueprint* OwningBlueprint = nullptr;
+	const bool bInLevel = bInSavedPackage && ExportOwner->GetTypedOuter<UWorld>() != nullptr;
+	if (bInSavedPackage)
+	{
+		OwningBlueprint = Cast<UBlueprint>(ExportOwner);
+		if (!OwningBlueprint) OwningBlueprint = ExportOwner->GetTypedOuter<UBlueprint>();
+		ExportOwner->Modify(false);
+	}
+
 	FString SetError;
 	if (!MCPJsonProperty::SetJsonOnPropertyWithOwner(Prop, ValueAddr, NewValue, ExportOwner, SetError))
 	{
@@ -1999,10 +2028,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *ResolvedName, *SetError));
 	}
 
-	// Deliberately no Modify/MarkPackageDirty/save. A live instance is not an
-	// asset, and dirtying a PIE package or a spawned widget's outer would ask
-	// the editor to save something that does not exist on disk. Asset writes
-	// belong in editor(set_property).
+	// No save here, and no dirtying of a live instance: a PIE package or a
+	// spawned widget's outer does not exist on disk. Saving belongs to
+	// editor(set_property) and asset(save).
 	if (bPostEditChange)
 	{
 		FPropertyChangedEvent ChangeEvent(Prop);
@@ -2013,6 +2041,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	// agree on values that differ past the sixth decimal.
 	const bool bChanged = !bComparable
 		|| !Prop->Identical(ValueAddr, PreviousRaw.GetObjAddress(), PPF_None);
+
+	if (bInSavedPackage && bChanged)
+	{
+		// A Blueprint's own templates reach its generated class only through a
+		// compile, so it is flagged as needing one, as a Details-panel edit is.
+		if (OwningBlueprint) FBlueprintEditorUtils::MarkBlueprintAsModified(OwningBlueprint);
+		else ExportOwner->MarkPackageDirty();
+	}
 
 	auto Result = MCPSuccess();
 	if (bChanged) MCPSetUpdated(Result);
@@ -2031,7 +2067,30 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		Result->SetStringField(TEXT("world"), World->GetPathName());
 		Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
 	}
-	Result->SetStringField(TEXT("note"), TEXT("Written to the live instance only. It is not saved and does not survive PIE ending or the object being destroyed; use editor(set_property) to write an asset."));
+	Result->SetStringField(TEXT("owner"), bInSavedPackage ? (bInLevel ? TEXT("level") : TEXT("asset")) : TEXT("liveInstance"));
+	if (bInSavedPackage)
+	{
+		Result->SetStringField(TEXT("package"), OwnerPackage->GetName());
+		Result->SetBoolField(TEXT("packageDirty"), OwnerPackage->IsDirty());
+		Result->SetBoolField(TEXT("saveRequired"), OwnerPackage->IsDirty());
+		if (OwningBlueprint)
+		{
+			Result->SetStringField(TEXT("blueprint"), OwningBlueprint->GetPathName());
+			Result->SetBoolField(TEXT("compileRequired"), bChanged || OwningBlueprint->Status == BS_Dirty);
+		}
+		const FString SaveHint = bInLevel
+			? TEXT("level(save)")
+			: FString::Printf(TEXT("asset(save, assetPath=\"%s\")"), *OwnerPackage->GetName());
+		Result->SetStringField(TEXT("note"), OwningBlueprint
+			? FString::Printf(TEXT("Written to an object that is part of the Blueprint %s and marked dirty, not yet saved. Run blueprint(compile) to carry it into the generated class, then %s to keep it on disk."),
+				*OwningBlueprint->GetPathName(), *SaveHint)
+			: FString::Printf(TEXT("Written to an object that is part of %s and marked dirty, not yet saved. Run %s to keep it on disk."),
+				*OwnerPackage->GetName(), *SaveHint));
+	}
+	else
+	{
+		Result->SetStringField(TEXT("note"), TEXT("Written to the live instance only. It is not saved and does not survive PIE ending or the object being destroyed; use editor(set_property) to write an asset."));
+	}
 	Result->SetBoolField(TEXT("changed"), bChanged);
 	// changeDetected has ONE meaning everywhere it appears: true when `changed`
 	// came from comparing the value before against the value after.
