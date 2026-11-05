@@ -156,6 +156,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "core/spawn-outside-tree.ts": "Starts a process through a trampoline that exits. Pure process plumbing over its arguments.",
   "daemon/dir-watch.ts": "Watches the one directory it is handed and retries after a failure. Pure filesystem plumbing over its arguments.",
   "editor/launch-args.ts": "Pure launch-argument rules: window-mode precedence, extraArgs splitting and argv building for whatever project it is handed.",
+  "editor/module-owner.ts": "Finds the plugin that declares a module under the project and engine roots it is handed. Pure filesystem lookup over its arguments.",
   "daemon/ws-transport.ts": "MCP's transport over one WebSocket. No editor is involved.",
   "surface/action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
   "surface/action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",
