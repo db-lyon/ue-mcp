@@ -317,6 +317,26 @@ namespace MCPPIE
 		const double BaseTime = Rows[0].Time;
 		const int32 GapTol = FMath::Max(0, Pending.RunGapFrames);
 
+		// A tape plays one entry per 1/SampleHz of world time, so the run is
+		// resampled at that rate rather than taken one entry per frame (#1657).
+		auto ResampleRun = [this](const FString& ActionName, int32 First, int32 Last, TArray<FVector>& OutValues)
+		{
+			const int32 Hz = FMath::Max(1, Pending.SampleHz);
+			const double T0 = Rows[First].Time;
+			const int32 Count = FMath::FloorToInt((Rows[Last].Time - T0) * Hz + 1e-6) + 1;
+			int32 Cursor = First;
+			for (int32 k = 0; k < Count; ++k)
+			{
+				const double T = T0 + static_cast<double>(k) / Hz;
+				while (Cursor < Last && FMath::Abs(Rows[Cursor + 1].Time - T) <= FMath::Abs(Rows[Cursor].Time - T))
+				{
+					++Cursor;
+				}
+				const FVector* V = Rows[Cursor].ActionValues.Find(ActionName);
+				OutValues.Add(V ? *V : FVector::ZeroVector);
+			}
+		};
+
 		// Group rows by action.
 		for (const FActionSpec& A : Sampler.GetActions())
 		{
@@ -376,11 +396,7 @@ namespace MCPPIE
 						S.Type = EStepType::InputTape;
 						S.Action = A.Path;
 						S.DelayMs = static_cast<int32>(FMath::RoundToInt((Rows[RunStart].Time - BaseTime) * 1000.0));
-						for (int32 i = RunStart; i <= RunEnd; ++i)
-						{
-							const FVector* V = Rows[i].ActionValues.Find(A.Name);
-							S.TapeValues.Add(V ? *V : FVector::ZeroVector);
-						}
+						ResampleRun(A.Name, RunStart, RunEnd, S.TapeValues);
 						Out.Steps.Add(S);
 						RunStart = Idx;
 					}
@@ -391,11 +407,7 @@ namespace MCPPIE
 				S.Type = EStepType::InputTape;
 				S.Action = A.Path;
 				S.DelayMs = static_cast<int32>(FMath::RoundToInt((Rows[RunStart].Time - BaseTime) * 1000.0));
-				for (int32 i = RunStart; i <= RunEnd; ++i)
-				{
-					const FVector* V = Rows[i].ActionValues.Find(A.Name);
-					S.TapeValues.Add(V ? *V : FVector::ZeroVector);
-				}
+				ResampleRun(A.Name, RunStart, RunEnd, S.TapeValues);
 				Out.Steps.Add(S);
 			}
 		}

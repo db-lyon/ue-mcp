@@ -154,7 +154,7 @@ Steps in `sequence.json`:
 { "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
 ```
 
-`delay_ms` is cumulative from sequence start, scheduled against time since pawn attach plus `settle_ms`. Tape values are `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D) or `[0.1, 0.2, 0.3]` (Axis3D). Tape entries are spaced `1/sample_hz` apart on the PIE world clock, so a frame rate below `sample_hz` skips entries instead of stretching the tape.
+`delay_ms` is cumulative from sequence start, scheduled against time since pawn attach plus `settle_ms`. Tape values are `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D) or `[0.1, 0.2, 0.3]` (Axis3D). Tape entries are spaced `1/sample_hz` apart on the PIE world clock, so a frame rate below `sample_hz` skips entries instead of stretching the tape. The recorder resamples each tape at `sample_hz` from the frames it captured, so the tape keeps the recorded timing at any frame rate.
 
 ### Analysis and comparison
 
