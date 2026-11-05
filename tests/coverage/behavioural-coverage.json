@@ -3161,6 +3161,11 @@
         {
           "suite": "live",
           "file": "tests/live/checkpoint-asset-diff.test.ts",
+          "test": "blueprint(open_diff_window) shows the checkpoint's Blueprint against the asset now, and unloads it on close (#1483)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/checkpoint-asset-diff.test.ts",
           "test": "open_checkpoint_diff opens Unreal's diff window for the material, and it closes"
         },
         {
@@ -6776,6 +6781,11 @@
           "suite": "live",
           "file": "tests/live/bcov-widget-editor-utility.test.ts",
           "test": "create_editor_utility_widget makes a utility widget run_editor_utility_widget opens"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/checkpoint-asset-diff.test.ts",
+          "test": "blueprint(open_diff_window) shows the checkpoint's Blueprint against the asset now, and unloads it on close (#1483)"
         }
       ]
     },
@@ -11791,6 +11801,11 @@
       "registeredIn": "DialogHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/checkpoint-asset-diff.test.ts",
+          "test": "blueprint(open_diff_window) shows the checkpoint's Blueprint against the asset now, and unloads it on close (#1483)"
+        },
         {
           "suite": "live",
           "file": "tests/live/checkpoint-asset-diff.test.ts",
@@ -21972,6 +21987,11 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "diff compares against a named older revision, by id and by prefix (#1483)"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/source-control.test.ts",
           "test": "diff refuses once with source_control_not_enabled"
         }
@@ -22028,6 +22048,11 @@
           "suite": "live",
           "file": "tests/live/source-control-provider.test.ts",
           "test": "blueprint diff against a submitted revision reports a node added since, by GUID (#1487)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/source-control-provider.test.ts",
+          "test": "diff compares against a named older revision, by id and by prefix (#1483)"
         },
         {
           "suite": "live",
