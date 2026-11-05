@@ -114,6 +114,8 @@ private:
 	static TSharedPtr<FJsonValue> RemoveActorTag(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetActorTags(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListActorTags(const TSharedPtr<FJsonObject>& Params);
+	// #1574: rename an actor's object name, keeping its label
+	static TSharedPtr<FJsonValue> RenameActorObject(const TSharedPtr<FJsonObject>& Params);
 	// #205: actor attach/detach + mobility
 	static TSharedPtr<FJsonValue> AttachActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DetachActor(const TSharedPtr<FJsonObject>& Params);
