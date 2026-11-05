@@ -35,7 +35,7 @@ const ACTIONS: Record<string, { bridge: string; effect: "read" | "mutate"; param
   checkout: { bridge: "source_control_checkout", effect: "mutate", params: ["paths"], method: "Checkout" },
   add: { bridge: "source_control_add", effect: "mutate", params: ["paths"], method: "MarkForAdd" },
   revert: { bridge: "source_control_revert", effect: "mutate", params: ["paths", "dryRun", "discardUnsaved", "restoreFrom"], method: "Revert" },
-  diff: { bridge: "source_control_diff", effect: "read", params: ["path", "openEditor", "contextLines", "maxLines"], method: "Diff" },
+  diff: { bridge: "source_control_diff", effect: "read", params: ["path", "revision", "openEditor", "contextLines", "maxLines"], method: "Diff" },
   submit: { bridge: "source_control_submit", effect: "mutate", params: ["paths", "description"], method: "Submit" },
   set_checkout_mode: { bridge: "source_control_set_checkout_mode", effect: "mutate", params: ["mode"], method: "SetCheckoutMode" },
   mark_for_delete: { bridge: "source_control_mark_for_delete", effect: "mutate", params: ["paths"], method: "MarkForDelete" },
