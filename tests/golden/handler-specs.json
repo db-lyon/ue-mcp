@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1221,
+  "handlerCount": 1222,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -18109,6 +18109,46 @@
     "get_selected_actors": {
       "category": "level",
       "params": []
+    },
+    "get_sequence_binding_components": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "sequencePath",
+          "type": "string",
+          "required": true,
+          "description": "Level Sequence asset path",
+          "aliases": [
+            "assetPath",
+            "path"
+          ]
+        },
+        {
+          "name": "bindingGuid",
+          "type": "string",
+          "required": false,
+          "description": "Report only this binding"
+        },
+        {
+          "name": "bindingName",
+          "type": "string",
+          "required": false,
+          "description": "Report only the binding with this name"
+        },
+        {
+          "name": "componentClass",
+          "type": "string",
+          "required": false,
+          "description": "Report only components of this class or a subclass (ImagePlateComponent, CineCameraComponent, PrimitiveComponent)"
+        },
+        {
+          "name": "propertyNames",
+          "type": "array",
+          "required": false,
+          "description": "Properties or dotted paths to read, in C++ or Python spelling (bHoldout, cast_shadow, LightingChannels.bChannel1); [\"*\"] reads every editable property. Default: the primitive rendering flags (CastShadow, bAffectDynamicIndirectLighting, bVisibleInRayTracing, bHoldout, LightingChannels, custom depth and stencil, visibility)",
+          "items": "string"
+        }
+      ]
     },
     "get_sequence_channel_keys": {
       "category": "editor",

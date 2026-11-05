@@ -1049,6 +1049,46 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "get_sequence_binding_components": {
+    "category": "editor",
+    "params": [
+      {
+        "name": "sequencePath",
+        "type": "string",
+        "required": true,
+        "description": "Level Sequence asset path",
+        "aliases": [
+          "assetPath",
+          "path"
+        ]
+      },
+      {
+        "name": "bindingGuid",
+        "type": "string",
+        "required": false,
+        "description": "Report only this binding"
+      },
+      {
+        "name": "bindingName",
+        "type": "string",
+        "required": false,
+        "description": "Report only the binding with this name"
+      },
+      {
+        "name": "componentClass",
+        "type": "string",
+        "required": false,
+        "description": "Report only components of this class or a subclass (ImagePlateComponent, CineCameraComponent, PrimitiveComponent)"
+      },
+      {
+        "name": "propertyNames",
+        "type": "array",
+        "required": false,
+        "description": "Properties or dotted paths to read, in C++ or Python spelling (bHoldout, cast_shadow, LightingChannels.bChannel1); [\"*\"] reads every editable property. Default: the primitive rendering flags (CastShadow, bAffectDynamicIndirectLighting, bVisibleInRayTracing, bHoldout, LightingChannels, custom depth and stencil, visibility)",
+        "items": "string"
+      }
+    ]
+  },
   "get_sequence_channel_keys": {
     "category": "editor",
     "params": [
@@ -3867,6 +3907,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_property: "Params: objectPath (or path, or assetPath), propertyName",
   get_runtime_value: "Params: actorLabel?, actorPath?, propertyName, world?, pieInstance?",
   get_runtime_values: "Params: classFilter?, componentName?, paths, world?, pieInstance?",
+  get_sequence_binding_components: "Params: sequencePath (or assetPath, or path), bindingGuid?, bindingName?, componentClass?, propertyNames?",
   get_sequence_channel_keys: "Params: sequencePath (or assetPath, or path), trackType?, trackName?, trackIndex?, bindingGuid?, bindingName?, actorLabel?, actorPath?, sectionIndex?, channel?, sampleStartFrame?, sampleEndFrame?, sampleStep?",
   get_sequence_info: "Params: assetPath (or path), includeSectionDetails?",
   get_sequence_runtime_bindings: "Params: world?, pieInstance?, sequencePath?, actorLabel?",
@@ -3966,11 +4007,11 @@ export const schema: Record<string, z.ZodType> = {
   animation: z.string().optional().describe("AnimSequence, AnimComposite or AnimStreamable a SkeletalAnimation section plays. Without endSeconds the section spans the clip after offsets and play rate"),
   args: z.union([z.record(z.string(), z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))]))])), z.array(z.string()), z.array(z.object({ name: z.string(), value: z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.union([z.string(), z.number(), z.boolean(), z.null()]), z.object({}).passthrough().meta({ additionalProperties: true }), z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))]))]).optional() })), z.string()], { error: "args must be an object mapping parameter name to value (e.g. {\"bEnabled\": true}), an array of positional strings, an entry list ([{\"name\": \"bEnabled\", \"value\": true}]), or a string" }).optional().describe("Function arguments: an object mapping parameter name to value (a struct value takes a JSON object such as {X,Y,Z} or export text), an entry list [{name, value}], or a JSON string of either (invoke_function, invoke_object_function, invoke_static_function). Positional arguments, as sys.argv[1:] or, with entryPoint, the call's arguments: a list of strings, a JSON array string, or one string. A parameter map is refused (run_python_file)"),
   asMain: z.boolean().optional().describe("Shorthand for runName __main__ (default false)"),
-  assetPath: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Level Sequence asset path (add_sequence_track, get_sequence_info). Alias for objectPath (describe_object, get_property, set_property). Asset to open in its editor (open_asset). One exact package or object path to validate (validate_assets)"),
+  assetPath: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_binding_components, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Level Sequence asset path (add_sequence_track, get_sequence_info). Alias for objectPath (describe_object, get_property, set_property). Asset to open in its editor (open_asset). One exact package or object path to validate (validate_assets)"),
   assetPaths: z.array(z.string()).optional().describe("Exact package or object paths to validate"),
   assetRegistryTimeoutSeconds: z.number().optional().describe("start only: how long to wait for that scan (default 180)"),
-  bindingGuid: z.string().optional().describe("Look in this binding's tracks instead of the root tracks (get_sequence_channel_keys, remove_sequence_section, set_sequence_channel_keys). The possessable to retarget. Pass this or bindingName (rebind_possessable). Report only this binding (resolve_sequence_bindings)"),
-  bindingName: z.string().optional().describe("Look in the binding with this name (get_sequence_channel_keys, remove_sequence_section, set_sequence_channel_keys). The possessable's name, when it is unique (rebind_possessable). Report only the binding with this name (resolve_sequence_bindings)"),
+  bindingGuid: z.string().optional().describe("Report only this binding (get_sequence_binding_components, resolve_sequence_bindings). Look in this binding's tracks instead of the root tracks (get_sequence_channel_keys, remove_sequence_section, set_sequence_channel_keys). The possessable to retarget. Pass this or bindingName (rebind_possessable)"),
+  bindingName: z.string().optional().describe("Report only the binding with this name (get_sequence_binding_components, resolve_sequence_bindings). Look in the binding with this name (get_sequence_channel_keys, remove_sequence_section, set_sequence_channel_keys). The possessable's name, when it is unique (rebind_possessable)"),
   blendTime: z.number().optional().describe("Seconds to blend from the current view (default 0, a cut)"),
   bones: z.array(z.string()).optional().describe("Bone or socket names; omit for every bone up to limit"),
   bookmark: z.boolean().optional().describe("Also drop a trace bookmark at the stall (default true)"),
@@ -3997,6 +4038,7 @@ export const schema: Record<string, z.ZodType> = {
   command: z.string().optional().describe("Console command to run (execute_command). Full console command; wins over name (run_stat_command)"),
   commitDeletes: z.boolean().optional().describe("Use the editor's dirty-package save, which deletes the packages of deleted World Partition actors and reports written and deleted files (default false)"),
   component: z.string().optional().describe("Component subobject name to call the function on instead of the actor"),
+  componentClass: z.string().optional().describe("Report only components of this class or a subclass (ImagePlateComponent, CineCameraComponent, PrimitiveComponent)"),
   componentClasses: z.array(z.string()).optional().describe("Only SceneComponents of these classes; implies affectComponents"),
   componentMap: z.record(z.string(), z.unknown()).optional().describe("{childBindingNameOrGuid: componentName} for children whose component name differs from the binding name"),
   componentName: z.string().optional().describe("Root every path at the component with this instance name (get_runtime_values). SkeletalMeshComponent to read; omit for the first one (read_bone_transforms)"),
@@ -4117,7 +4159,7 @@ export const schema: Record<string, z.ZodType> = {
   packagePath: z.string().optional().describe("Destination folder (default /Game/Cinematics)"),
   packages: z.array(z.string()).optional().describe("Long package names to clear, as editor(list_dirty_packages) reports them (e.g. /Engine/Maps/Entry). Only these are touched"),
   parameterType: z.string().optional().describe("scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"),
-  path: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Alias for assetPath (add_sequence_track, get_sequence_info, open_asset). Alias for objectPath (describe_object, get_property, set_property). Alias for filePath (run_python_file)"),
+  path: z.string().optional().describe("Alias for sequencePath (add_sequence_section, get_sequence_binding_components, get_sequence_channel_keys, play_sequence, rebind_possessable, remove_sequence_section, render_sequence_frames, resolve_sequence_bindings, scrub_sequence, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Alias for assetPath (add_sequence_track, get_sequence_info, open_asset). Alias for objectPath (describe_object, get_property, set_property). Alias for filePath (run_python_file)"),
   paths: z.array(z.string()).optional().describe("Dotted property or function paths to evaluate per match. A function segment may carry literal arguments, e.g. GetBalance(gold, 2)"),
   pattern: z.string().optional().describe("Exact pattern of the policy to clear; omit to clear every policy (clear_dialog_policy). Substring matched against every registered console variable. Pass at least one of name, names and pattern (get_cvars). Case-insensitive substring of the library class name (list_function_libraries). Substring matched case-insensitively against the dialog title and message (set_dialog_policy)"),
   paused: z.boolean().optional().describe("true pauses the running trace, false resumes it (default true) (pause_insights_trace). true pauses, false resumes (set_pie_paused)"),
@@ -4132,7 +4174,7 @@ export const schema: Record<string, z.ZodType> = {
   projection: z.string().optional().describe("perspective | top | bottom | left | right | front | back | orthoFreelook. Switched before the pose is applied"),
   propagateToChildren: z.boolean().optional().describe("Also take each matched component's descendants (default true)"),
   propertyName: z.string().optional().describe("Property name; dotted and indexed paths reach component and struct fields"),
-  propertyNames: z.array(z.string()).optional().describe("Dotted or indexed property paths to report instead of every property (describe_object). Only these properties. The Details-panel spelling is accepted, and a dotted or indexed path (StashWorld.KickRadiusCm, CharacterMovement.GroundFriction, Items[0].Count) reads into structs, subobjects and components (get_object_properties)"),
+  propertyNames: z.array(z.string()).optional().describe("Dotted or indexed property paths to report instead of every property (describe_object). Only these properties. The Details-panel spelling is accepted, and a dotted or indexed path (StashWorld.KickRadiusCm, CharacterMovement.GroundFriction, Items[0].Count) reads into structs, subobjects and components (get_object_properties). Properties or dotted paths to read, in C++ or Python spelling (bHoldout, cast_shadow, LightingChannels.bChannel1); [\"*\"] reads every editable property. Default: the primitive rendering flags (CastShadow, bAffectDynamicIndirectLighting, bVisibleInRayTracing, bHoldout, LightingChannels, custom depth and stencil, visibility) (get_sequence_binding_components)"),
   propertyPath: z.string().optional().describe("Dotted chain of object-reference properties followed from objectPath or target to the object actually used, e.g. GameSettings.Game Settings; a segment may index an array (Items[2]) or name a component on an actor"),
   quality: z.string().optional().describe("Preview (default) | Medium | High | Production"),
   query: z.string().optional().describe("Case-insensitive substring to search the captured log for"),
@@ -4159,7 +4201,7 @@ export const schema: Record<string, z.ZodType> = {
   section: z.string().optional().describe("Settings section, e.g. Physics, or a combined Engine.Physics"),
   sectionIndex: z.number().int().optional().describe("Section index on the track (default 0) (get_sequence_channel_keys, set_sequence_channel_keys). Index of the section to remove, as get_sequence_info lists them (remove_sequence_section). Target section index (default 0) (set_sequence_keyframes)"),
   sequenceAction: z.string().optional().describe("play (default) | pause | stop"),
-  sequencePath: z.string().optional().describe("Level Sequence asset path (add_sequence_section, get_sequence_channel_keys, rebind_possessable, remove_sequence_section, resolve_sequence_bindings, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Report only actors playing this sequence (get_sequence_runtime_bindings). Level Sequence to open and drive; omit to drive the one already open (play_sequence). Level Sequence to render (render_sequence_frames). Level Sequence to open and scrub; omit to scrub the one already open (scrub_sequence)"),
+  sequencePath: z.string().optional().describe("Level Sequence asset path (add_sequence_section, get_sequence_binding_components, get_sequence_channel_keys, rebind_possessable, remove_sequence_section, resolve_sequence_bindings, set_sequence_channel_keys, set_sequence_display_rate, set_sequence_keyframes, set_sequence_playback_range). Report only actors playing this sequence (get_sequence_runtime_bindings). Level Sequence to open and drive; omit to drive the one already open (play_sequence). Level Sequence to render (render_sequence_frames). Level Sequence to open and scrub; omit to scrub the one already open (scrub_sequence)"),
   severity: z.string().optional().describe("Severity-name substring: Error | Warning | PerformanceWarning | Info (get_message_log). Icon and colour of the toast (default info) (show_notification)"),
   showMouseCursor: z.boolean().optional().describe("Show the mouse cursor (default false for gameOnly, true otherwise)"),
   space: z.string().optional().describe("world (default) | component"),
