@@ -838,6 +838,16 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		{ TEXT("actorLabels") }, { TEXT("labelPrefix") }, { TEXT("tag") }, { TEXT("classFilter") },
 		{ TEXT("componentClass") }, { TEXT("componentNameContains") },
 	}));
+	// The contract mesh path loads no StaticMesh, so the call is refused before
+	// any component is rebuilt or package saved.
+	Registry.RegisterHandlerWithTimeout(TEXT("resave_mesh_users"), &ResaveMeshUsers, 300.0f, {
+		MCPParam::Required(TEXT("meshPaths"), EType::Array, TEXT("StaticMesh asset paths whose loaded users to rebuild and save, matched by object path, case-insensitive (at most 256)")).Items(EType::String),
+		MCPParam::Optional(TEXT("componentClass"), EType::String, TEXT("any (default, every StaticMeshComponent and subclass) | StaticMeshComponent (all but spline meshes) | SplineMeshComponent")),
+		MCPParam::Optional(TEXT("recreateCollision"), EType::Boolean, TEXT("Recreate each match's physics state, and rebuild a SplineMeshComponent's collision copy from the current mesh even when the GUID did not change (default true)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the packages of the matched actors and no others (default true)")),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("List the matched components and packages without rebuilding or saving (default TRUE)")),
+		MCPParam::Optional(TEXT("maxActors"), EType::Integer, TEXT("Refuse to act on more than this many actors (default 256)")),
+	});
 	Registry.RegisterHandler(TEXT("test_component_overlap"), &TestComponentOverlap, {
 		MCPParam::Optional(TEXT("actorLabelA"), EType::String, TEXT("First actor label; pass actorLabelA or actorPathA")),
 		MCPParam::Optional(TEXT("actorPathA"), EType::String, TEXT("First actor object path")),

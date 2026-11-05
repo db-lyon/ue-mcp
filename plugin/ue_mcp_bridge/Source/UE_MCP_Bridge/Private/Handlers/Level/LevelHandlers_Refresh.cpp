@@ -17,22 +17,32 @@
 //         its scaled bounds, and there was no way to ask whether two
 //         components actually overlap without a physics query that depends on
 //         the collision state #915 is about.
+//   resave_mesh_users  A SplineMeshComponent saves its own copy of its mesh's
+//         collision with the actor, and an edit to the mesh that left its
+//         BodySetupGuid alone left every copy stale in memory and on disk.
 
 #include "LevelHandlers.h"
+#include "Handlers/Asset/AssetHandlers.h"
 
 #include "Components/ActorComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SplineMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 #include "Engine/EngineTypes.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "HAL/FileManager.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "PhysicsEngine/BodySetup.h"
+#include "UObject/Package.h"
 
 namespace
 {
@@ -220,6 +230,80 @@ namespace
 				MCPVec3ToJsonObject(BoxComponent->GetScaledBoxExtent()));
 		}
 		return Object;
+	}
+
+	FString MCPMeshUsersGuidString(const FGuid& Guid)
+	{
+		return Guid.ToString(EGuidFormats::DigitsWithHyphens);
+	}
+
+	/** The mesh GUID a SplineMeshComponent last rebuilt its collision copy from. Read through reflection: it is a
+	 *  saved UPROPERTY, and what this action has to report is the value that will be written. */
+	FGuid MCPMeshUsersCachedGuid(const USplineMeshComponent* Spline)
+	{
+		static const FName CachedGuidName(TEXT("CachedMeshBodySetupGuid"));
+		const FStructProperty* Property = FindFProperty<FStructProperty>(USplineMeshComponent::StaticClass(), CachedGuidName);
+		if (!Spline || !Property || Property->Struct != TBaseStructure<FGuid>::Get()) return FGuid();
+		return *Property->ContainerPtrToValuePtr<FGuid>(Spline);
+	}
+
+	/** The collision a component is using now: its body setup's GUID and the bounds of its simple shapes in the
+	 *  component's own space. A SplineMeshComponent's body setup is its own deformed copy, not the mesh's. */
+	TSharedPtr<FJsonObject> MCPMeshUsersCollisionState(UStaticMeshComponent* Component)
+	{
+		TSharedPtr<FJsonObject> State = MakeShared<FJsonObject>();
+		State->SetStringField(TEXT("collisionEnabled"), MCPRefreshCollisionName(Component->GetCollisionEnabled()));
+		State->SetBoolField(TEXT("physicsStateCreated"), Component->IsPhysicsStateCreated());
+		UBodySetup* Setup = Component->GetBodySetup();
+		State->SetBoolField(TEXT("hasBodySetup"), Setup != nullptr);
+		if (Setup)
+		{
+			State->SetStringField(TEXT("bodySetupGuid"), MCPMeshUsersGuidString(Setup->BodySetupGuid));
+			State->SetNumberField(TEXT("shapeCount"), Setup->AggGeom.GetElementCount());
+			if (Setup->AggGeom.GetElementCount() > 0)
+			{
+				const FBox Box = Setup->AggGeom.CalcAABB(FTransform::Identity);
+				TSharedPtr<FJsonObject> Bounds = MakeShared<FJsonObject>();
+				Bounds->SetObjectField(TEXT("min"), MCPVec3ToJsonObject(Box.Min));
+				Bounds->SetObjectField(TEXT("max"), MCPVec3ToJsonObject(Box.Max));
+				Bounds->SetObjectField(TEXT("size"), MCPVec3ToJsonObject(Box.GetSize()));
+				State->SetObjectField(TEXT("bodySetupBounds"), Bounds);
+			}
+		}
+		if (const USplineMeshComponent* Spline = Cast<USplineMeshComponent>(Component))
+		{
+			UStaticMesh* Mesh = Spline->GetStaticMesh();
+			const UBodySetup* MeshSetup = Mesh ? Mesh->GetBodySetup() : nullptr;
+			const FGuid Cached = MCPMeshUsersCachedGuid(Spline);
+			State->SetStringField(TEXT("cachedMeshBodySetupGuid"), MCPMeshUsersGuidString(Cached));
+			State->SetBoolField(TEXT("copyMatchesMeshGuid"), MeshSetup && Cached == MeshSetup->BodySetupGuid);
+		}
+		return State;
+	}
+
+	/** A package's file as it is on disk right now, so a save can be judged by what changed rather than by its
+	 *  return value. Modification times are whole seconds, so a same-size rewrite within one second reads as no
+	 *  change; the save status is the other half of the answer. */
+	struct FMCPMeshUsersFileState
+	{
+		FString File;
+		bool bExists = false;
+		int64 Size = -1;
+		FDateTime Stamp = FDateTime::MinValue();
+	};
+
+	FMCPMeshUsersFileState MCPMeshUsersReadFile(UPackage* Package)
+	{
+		FMCPMeshUsersFileState State;
+		if (!ResolvePackageFileName(Package, State.File)) return State;
+		IFileManager& FileManager = IFileManager::Get();
+		State.bExists = FileManager.FileExists(*State.File);
+		if (State.bExists)
+		{
+			State.Size = FileManager.FileSize(*State.File);
+			State.Stamp = FileManager.GetTimeStamp(*State.File);
+		}
+		return State;
 	}
 }
 
@@ -589,6 +673,402 @@ TSharedPtr<FJsonValue> FLevelHandlers::RecreatePhysicsState(const TSharedPtr<FJs
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
 		TEXT("Recreating physics state discards a stale body and rebuilds it from the component's collision settings, which this call does not change. There is nothing to restore and no call that would restore it."));
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// resave_mesh_users
+//
+// A SplineMeshComponent keeps its own deformed copy of its mesh's body setup,
+// saved with the actor, and rebuilds it in OnCreatePhysicsState only when the
+// mesh's BodySetupGuid differs from the GUID it cached. A collision edit that
+// left the GUID alone (an AggGeom write through Python) leaves every copy
+// stale, and a rebuild in memory still leaves the saved actor packages holding
+// the old one. This rebuilds the copies from the current mesh and saves exactly
+// the packages that own those actors, through asset(save, assetPaths)'s
+// targeted save, so no other dirty package in the session is written.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FLevelHandlers::ResaveMeshUsers(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+	MCPReadParamsAhead(Params, {
+		TEXT("meshPaths"), TEXT("componentClass"), TEXT("recreateCollision"), TEXT("save"), TEXT("dryRun"), TEXT("maxActors"),
+	});
+
+	TArray<FString> MeshPaths;
+	{
+		const TArray<TSharedPtr<FJsonValue>>* MeshValues = nullptr;
+		if (TryGetArrayParam(Params, TEXT("meshPaths"), MeshValues) && MeshValues)
+		{
+			MeshPaths = JsonArrayToStringList(MeshValues);
+		}
+	}
+	const FString ComponentClassSpec = OptionalString(Params, TEXT("componentClass"), TEXT("any")).TrimStartAndEnd();
+	const bool bRecreate = OptionalBool(Params, TEXT("recreateCollision"), true);
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	// dryRun defaults to TRUE, as recreate_physics_state's does: which actors
+	// and packages this would rebuild and write is the preflight.
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), true);
+	const int32 MaxActors = FMath::Clamp(OptionalInt(Params, TEXT("maxActors"), 256), 1, MCPRefreshMaxActors);
+
+	constexpr int32 MaxMeshPaths = 256;
+	if (MeshPaths.IsEmpty())
+	{
+		return MCPError(TEXT("'meshPaths' must be a non-empty array of StaticMesh asset paths. Nothing was rebuilt or saved."));
+	}
+	if (MeshPaths.Num() > MaxMeshPaths)
+	{
+		return MCPError(FString::Printf(TEXT("%d meshPaths is over the limit of %d. Nothing was rebuilt or saved."), MeshPaths.Num(), MaxMeshPaths));
+	}
+
+	enum class EMCPMeshUserClass : uint8 { Any, StaticMesh, SplineMesh };
+	EMCPMeshUserClass ClassMode;
+	if (ComponentClassSpec.Equals(TEXT("any"), ESearchCase::IgnoreCase)) ClassMode = EMCPMeshUserClass::Any;
+	else if (ComponentClassSpec.Equals(TEXT("StaticMeshComponent"), ESearchCase::IgnoreCase)) ClassMode = EMCPMeshUserClass::StaticMesh;
+	else if (ComponentClassSpec.Equals(TEXT("SplineMeshComponent"), ESearchCase::IgnoreCase)) ClassMode = EMCPMeshUserClass::SplineMesh;
+	else
+	{
+		return MCPError(FString::Printf(
+			TEXT("Unknown componentClass '%s'. Use any, StaticMeshComponent or SplineMeshComponent. Nothing was rebuilt or saved."),
+			*ComponentClassSpec));
+	}
+
+	// Saving during PIE is refused by the editor for maps and races the play
+	// world for everything else, and a rebuild there would reach PIE copies.
+	if (GEditor && (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor))
+	{
+		TSharedPtr<FJsonObject> Refused = MCPErrorObject(
+			TEXT("Play In Editor is running. Stop it with editor(action=\"play_in_editor\", pieAction=\"stop\"), then run this again. Nothing was rebuilt or saved."));
+		Refused->SetStringField(TEXT("reason"), TEXT("play_in_editor_active"));
+		return MakeShared<FJsonValueObject>(Refused);
+	}
+
+	REQUIRE_EDITOR_WORLD(World);
+
+	// Every mesh resolves before anything is touched, so a typo refuses the call
+	// rather than quietly matching nothing.
+	TSet<FString> WantedMeshPaths;
+	TArray<TSharedPtr<FJsonValue>> MeshRows;
+	TArray<FString> Unresolved;
+	for (const FString& Path : MeshPaths)
+	{
+		UObject* Found = MCPLoadAssetObject(Path);
+		UStaticMesh* Mesh = Cast<UStaticMesh>(Found);
+		if (!Mesh)
+		{
+			Unresolved.Add(Found
+				? FString::Printf(TEXT("%s (a %s, not a StaticMesh)"), *Path, *Found->GetClass()->GetName())
+				: FString::Printf(TEXT("%s (not found)"), *Path));
+			continue;
+		}
+		WantedMeshPaths.Add(Mesh->GetPathName().ToLower());
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("requested"), Path);
+		Row->SetStringField(TEXT("objectPath"), Mesh->GetPathName());
+		if (const UBodySetup* MeshSetup = Mesh->GetBodySetup())
+		{
+			Row->SetStringField(TEXT("bodySetupGuid"), MCPMeshUsersGuidString(MeshSetup->BodySetupGuid));
+		}
+		MeshRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+	if (!Unresolved.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> Refused = MCPErrorObject(FString::Printf(
+			TEXT("%d of %d meshPaths did not resolve to a StaticMesh, so nothing was rebuilt or saved. The first: %s"),
+			Unresolved.Num(), MeshPaths.Num(), *Unresolved[0]));
+		Refused->SetArrayField(TEXT("unresolved"), MCPStringListToJson(Unresolved));
+		return MakeShared<FJsonValueObject>(Refused);
+	}
+
+	struct FMCPMeshUser
+	{
+		AActor* Actor = nullptr;
+		TArray<UStaticMeshComponent*> Components;
+	};
+	TArray<FMCPMeshUser> Users;
+	int32 MatchedComponents = 0;
+	int32 MatchedSplines = 0;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor)) continue;
+		FMCPMeshUser User;
+		User.Actor = Actor;
+		TInlineComponentArray<UStaticMeshComponent*> Components(Actor);
+		for (UStaticMeshComponent* Component : Components)
+		{
+			if (!IsValid(Component)) continue;
+			const bool bSpline = Component->IsA<USplineMeshComponent>();
+			if (ClassMode == EMCPMeshUserClass::StaticMesh && bSpline) continue;
+			if (ClassMode == EMCPMeshUserClass::SplineMesh && !bSpline) continue;
+			const UStaticMesh* Mesh = Component->GetStaticMesh();
+			if (!Mesh || !WantedMeshPaths.Contains(Mesh->GetPathName().ToLower())) continue;
+			User.Components.Add(Component);
+			if (bSpline) ++MatchedSplines;
+		}
+		if (User.Components.Num() > 0)
+		{
+			MatchedComponents += User.Components.Num();
+			Users.Add(MoveTemp(User));
+		}
+	}
+	Users.Sort([](const FMCPMeshUser& A, const FMCPMeshUser& B) { return A.Actor->GetPathName() < B.Actor->GetPathName(); });
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("dryRun"), bDryRun);
+	Result->SetStringField(TEXT("componentClass"), ComponentClassSpec);
+	Result->SetBoolField(TEXT("recreateCollision"), bRecreate);
+	Result->SetBoolField(TEXT("save"), bSave);
+	Result->SetArrayField(TEXT("meshes"), MeshRows);
+	Result->SetNumberField(TEXT("matchedActors"), Users.Num());
+	Result->SetNumberField(TEXT("matchedComponents"), MatchedComponents);
+	Result->SetNumberField(TEXT("matchedSplineMeshComponents"), MatchedSplines);
+	const bool bPartitioned = World->IsPartitionedWorld();
+	Result->SetBoolField(TEXT("worldPartition"), bPartitioned);
+	Result->SetStringField(TEXT("scope"), TEXT("loaded"));
+	Result->SetStringField(TEXT("scopeNote"), bPartitioned
+		? TEXT("World Partition: only actors resident in the editor world were scanned. Actors in unloaded cells are not seen, rebuilt or saved. Load them first with level(load_actor_descs), then run this again.")
+		: TEXT("Only actors in levels loaded into the editor world were scanned. An unloaded streaming level's actors are not seen, rebuilt or saved."));
+
+	if (Users.Num() > MaxActors)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Matched %d actors, over maxActors (%d). Nothing was rebuilt or saved. Narrow meshPaths or componentClass, or raise maxActors deliberately."),
+			Users.Num(), MaxActors));
+		return MCPResult(Result);
+	}
+
+	// One entry per package: the actor's external package under one file per
+	// actor, the level's own package otherwise, where every matched actor of
+	// that level shares one save.
+	TArray<UPackage*> PackageOrder;
+	TMap<UPackage*, TArray<int32>> UsersByPackage;
+	TMap<UPackage*, bool> DirtyBefore;
+	for (int32 Index = 0; Index < Users.Num(); ++Index)
+	{
+		UPackage* Package = Users[Index].Actor->GetPackage();
+		if (!Package) continue;
+		if (!UsersByPackage.Contains(Package))
+		{
+			PackageOrder.Add(Package);
+			DirtyBefore.Add(Package, Package->IsDirty());
+		}
+		UsersByPackage.FindOrAdd(Package).Add(Index);
+	}
+
+	// Component state before anything is rebuilt, so a caller can see a stale
+	// spline copy in the preflight and compare it with the result.
+	TMap<UStaticMeshComponent*, TSharedPtr<FJsonObject>> StateBefore;
+	for (const FMCPMeshUser& User : Users)
+	{
+		for (UStaticMeshComponent* Component : User.Components)
+		{
+			StateBefore.Add(Component, MCPMeshUsersCollisionState(Component));
+		}
+	}
+
+	int32 Recreated = 0;
+	int32 SplineCopiesRebuilt = 0;
+	if (!bDryRun)
+	{
+		for (const FMCPMeshUser& User : Users)
+		{
+			for (UStaticMeshComponent* Component : User.Components)
+			{
+				if (USplineMeshComponent* Spline = Cast<USplineMeshComponent>(Component))
+				{
+					// The copy and its cached GUID are saved with the actor, so its
+					// package must be dirty for the save below to write them.
+					if (bRecreate || bSave)
+					{
+						Spline->Modify();
+						Spline->MarkPackageDirty();
+					}
+					if (bRecreate)
+					{
+						// Rebuilt from the mesh as it is now, whatever the GUID says.
+						Spline->RecreateCollision();
+						++SplineCopiesRebuilt;
+					}
+				}
+				if (bRecreate)
+				{
+					Component->RecreatePhysicsState();
+					++Recreated;
+				}
+			}
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> PackageRows;
+	int32 SavedCount = 0;
+	int32 NotDirtyCount = 0;
+	int32 FailedCount = 0;
+	int32 FileChangedCount = 0;
+	int32 ComponentRows = 0;
+	FString FirstFailure;
+	for (UPackage* Package : PackageOrder)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		const TArray<int32>& PackageUsers = UsersByPackage.FindChecked(Package);
+		Row->SetStringField(TEXT("package"), Package->GetName());
+		Row->SetBoolField(TEXT("external"), Users[PackageUsers[0]].Actor->IsPackageExternal());
+		Row->SetBoolField(TEXT("isMap"), IsMapPackage(Package));
+		Row->SetBoolField(TEXT("wasDirty"), DirtyBefore.FindRef(Package));
+
+		int32 PackageComponents = 0;
+		bool bPackageHasSpline = false;
+		TArray<TSharedPtr<FJsonValue>> ActorRows;
+		for (const int32 Index : PackageUsers)
+		{
+			const FMCPMeshUser& User = Users[Index];
+			for (UStaticMeshComponent* Component : User.Components)
+			{
+				bPackageHasSpline |= Component->IsA<USplineMeshComponent>();
+			}
+			TSharedPtr<FJsonObject> ActorRow = MakeShared<FJsonObject>();
+			ActorRow->SetStringField(TEXT("actorLabel"), User.Actor->GetActorLabel());
+			ActorRow->SetStringField(TEXT("actorPath"), User.Actor->GetPathName());
+			ActorRow->SetNumberField(TEXT("componentCount"), User.Components.Num());
+			TArray<TSharedPtr<FJsonValue>> ComponentValues;
+			for (UStaticMeshComponent* Component : User.Components)
+			{
+				++PackageComponents;
+				if (ComponentRows >= MCPRefreshMaxResultRows) continue;
+				++ComponentRows;
+				TSharedPtr<FJsonObject> ComponentRow = MakeShared<FJsonObject>();
+				ComponentRow->SetStringField(TEXT("componentName"), Component->GetName());
+				ComponentRow->SetStringField(TEXT("componentClass"), Component->GetClass()->GetName());
+				ComponentRow->SetStringField(TEXT("meshPath"), Component->GetStaticMesh() ? Component->GetStaticMesh()->GetPathName() : FString());
+				ComponentRow->SetStringField(TEXT("status"), bDryRun
+					? (bRecreate ? TEXT("would_recreate") : TEXT("would_keep"))
+					: (bRecreate ? TEXT("recreated") : TEXT("kept")));
+				ComponentRow->SetObjectField(TEXT("before"), StateBefore.FindRef(Component));
+				if (!bDryRun) ComponentRow->SetObjectField(TEXT("after"), MCPMeshUsersCollisionState(Component));
+				ComponentValues.Add(MakeShared<FJsonValueObject>(ComponentRow));
+			}
+			ActorRow->SetArrayField(TEXT("components"), ComponentValues);
+			ActorRows.Add(MakeShared<FJsonValueObject>(ActorRow));
+		}
+		Row->SetNumberField(TEXT("componentCount"), PackageComponents);
+		Row->SetArrayField(TEXT("actors"), ActorRows);
+
+		const FMCPMeshUsersFileState Before = MCPMeshUsersReadFile(Package);
+		Row->SetStringField(TEXT("file"), Before.File);
+		Row->SetBoolField(TEXT("existedOnDisk"), Before.bExists);
+		Row->SetNumberField(TEXT("fileSizeBefore"), static_cast<double>(Before.Size));
+		if (Before.bExists) Row->SetStringField(TEXT("modifiedUtcBefore"), Before.Stamp.ToIso8601());
+
+		if (bDryRun || !bSave)
+		{
+			// A real run dirties a package only through a spline copy it saves.
+			const TCHAR* Planned = bPackageHasSpline || DirtyBefore.FindRef(Package) ? TEXT("wouldSave") : TEXT("wouldBeNotDirty");
+			Row->SetStringField(TEXT("status"), bDryRun && bSave ? Planned : TEXT("notSaved"));
+			Row->SetBoolField(TEXT("dirtyNow"), Package->IsDirty());
+			PackageRows.Add(MakeShared<FJsonValueObject>(Row));
+			continue;
+		}
+
+		// The same targeted save asset(save, assetPaths) runs, one package per
+		// call so one read-only file does not stop the others being written.
+		TArray<TSharedPtr<FJsonValue>> One;
+		One.Add(MakeShared<FJsonValueString>(Package->GetName()));
+		const TSharedPtr<FJsonValue> SaveValue = FAssetHandlers::SaveNamedPackages(One);
+		const TSharedPtr<FJsonObject> Saved = SaveValue.IsValid() ? SaveValue->AsObject() : nullptr;
+		FString Status = TEXT("failed");
+		FString Reason = TEXT("the targeted save returned no result");
+		if (Saved.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* RefusedRows = nullptr;
+			if (Saved->TryGetArrayField(TEXT("results"), Rows) && Rows && Rows->Num() > 0 && (*Rows)[0]->AsObject().IsValid())
+			{
+				const TSharedPtr<FJsonObject> First = (*Rows)[0]->AsObject();
+				First->TryGetStringField(TEXT("status"), Status);
+				Reason.Reset();
+				First->TryGetStringField(TEXT("reason"), Reason);
+			}
+			else if (Saved->TryGetArrayField(TEXT("refused"), RefusedRows) && RefusedRows && RefusedRows->Num() > 0 && (*RefusedRows)[0]->AsObject().IsValid())
+			{
+				Reason.Reset();
+				(*RefusedRows)[0]->AsObject()->TryGetStringField(TEXT("reason"), Reason);
+			}
+			else
+			{
+				Saved->TryGetStringField(TEXT("error"), Reason);
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Diagnostics = nullptr;
+			if (Saved->TryGetArrayField(TEXT("saveDiagnostics"), Diagnostics) && Diagnostics)
+			{
+				Row->SetArrayField(TEXT("saveDiagnostics"), *Diagnostics);
+			}
+		}
+		if (Status == TEXT("saved")) ++SavedCount;
+		else if (Status == TEXT("notDirty")) ++NotDirtyCount;
+		else
+		{
+			Status = TEXT("failed");
+			++FailedCount;
+			if (FirstFailure.IsEmpty()) FirstFailure = FString::Printf(TEXT("%s: %s"), *Package->GetName(), *Reason);
+		}
+		Row->SetStringField(TEXT("status"), Status);
+		if (!Reason.IsEmpty()) Row->SetStringField(TEXT("reason"), Reason);
+
+		const FMCPMeshUsersFileState After = MCPMeshUsersReadFile(Package);
+		Row->SetBoolField(TEXT("existsOnDisk"), After.bExists);
+		Row->SetNumberField(TEXT("fileSizeAfter"), static_cast<double>(After.Size));
+		if (After.bExists) Row->SetStringField(TEXT("modifiedUtcAfter"), After.Stamp.ToIso8601());
+		const bool bFileChanged = After.bExists && (!Before.bExists || After.Size != Before.Size || After.Stamp != Before.Stamp);
+		Row->SetBoolField(TEXT("fileChanged"), bFileChanged);
+		if (bFileChanged) ++FileChangedCount;
+		Row->SetBoolField(TEXT("dirtyNow"), Package->IsDirty());
+		PackageRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	Result->SetNumberField(TEXT("packageCount"), PackageOrder.Num());
+	Result->SetArrayField(TEXT("packages"), PackageRows);
+	Result->SetBoolField(TEXT("componentRowsTruncated"), ComponentRows < MatchedComponents);
+	Result->SetNumberField(bDryRun ? TEXT("wouldRecreate") : TEXT("recreated"), bDryRun ? (bRecreate ? MatchedComponents : 0) : Recreated);
+	Result->SetNumberField(TEXT("splineCopiesRebuilt"), SplineCopiesRebuilt);
+	Result->SetNumberField(TEXT("savedCount"), SavedCount);
+	Result->SetNumberField(TEXT("notDirtyCount"), NotDirtyCount);
+	Result->SetNumberField(TEXT("failedCount"), FailedCount);
+	Result->SetNumberField(TEXT("filesChanged"), FileChangedCount);
+	Result->SetStringField(TEXT("saveNote"),
+		TEXT("Only the packages listed here are saved. A SplineMeshComponent's package is marked dirty first because its collision copy is saved with the actor; ")
+		TEXT("a package holding only StaticMeshComponents has nothing collision-related of its own to write and is reported notDirty unless it already had unsaved edits. ")
+		TEXT("wasDirty=true means the package held other unsaved edits before this call, and saving it wrote those too."));
+	if (Users.IsEmpty())
+	{
+		Result->SetStringField(TEXT("zeroMatchNote"), bPartitioned
+			? TEXT("No loaded component uses these meshes. On a World Partition map the users may be in unloaded cells: load them with level(load_actor_descs) and run this again.")
+			: TEXT("No loaded component uses these meshes with the componentClass given."));
+	}
+	if (bDryRun)
+	{
+		Result->SetStringField(TEXT("dryRunNote"),
+			TEXT("dryRun defaults to TRUE for this action: it lists the components that would be rebuilt and the packages that would be saved, with each component's current collision. Pass dryRun=false to rebuild and save them."));
+	}
+
+	const bool bChanged = Recreated > 0 || SavedCount > 0;
+	if (bChanged)
+	{
+		MCPSetUpdated(Result);
+	}
+	Result->SetBoolField(TEXT("unchanged"), !bChanged);
+
+	if (FailedCount > 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("%d of %d packages did not save. The first: %s"), FailedCount, PackageOrder.Num(), *FirstFailure));
+	}
+
+	MCPSetNoRollback(Result,
+		TEXT("Rebuilding a component's collision discards the copy it held and rebuilds it from the mesh as it is now, and saving overwrites each actor package on disk. ")
+		TEXT("Neither the old copy nor the old file is kept, and the bridge has no action that restores a package file; source control holds the previous revision. ")
+		TEXT("Running this again rebuilds from the same mesh and lands on the same state."));
 	return MCPResult(Result);
 }
 

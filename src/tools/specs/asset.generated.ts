@@ -5601,6 +5601,91 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "set_mesh_simple_collision": {
+    "category": "asset",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "StaticMesh asset path"
+      },
+      {
+        "name": "shapes",
+        "type": "array",
+        "required": true,
+        "description": "Shapes to write, at most 256: [{type, center, rotation?, extent (box), radius (sphere, capsule), length (capsule)}]",
+        "items": "object",
+        "fields": [
+          {
+            "name": "type",
+            "type": "string",
+            "required": true,
+            "description": "box | sphere | capsule",
+            "enum": [
+              "box",
+              "sphere",
+              "capsule"
+            ]
+          },
+          {
+            "name": "center",
+            "type": "vec3",
+            "required": true,
+            "description": "Shape centre in the mesh's local space, in cm"
+          },
+          {
+            "name": "rotation",
+            "type": "rotator",
+            "required": false,
+            "description": "Shape rotation (box and capsule; default none)"
+          },
+          {
+            "name": "extent",
+            "type": "vec3",
+            "required": false,
+            "description": "Box only: FULL lengths along X, Y and Z, the FKBoxElem X/Y/Z values, not half extents"
+          },
+          {
+            "name": "radius",
+            "type": "number",
+            "required": false,
+            "description": "Sphere and capsule radius, in cm"
+          },
+          {
+            "name": "length",
+            "type": "number",
+            "required": false,
+            "description": "Capsule only: the straight section between the hemispheres, so the full height is length + 2 x radius"
+          }
+        ]
+      },
+      {
+        "name": "replace",
+        "type": "boolean",
+        "required": false,
+        "description": "Remove every existing simple shape, convex hulls included, before writing (default true); false appends"
+      },
+      {
+        "name": "collisionTraceFlag",
+        "type": "string",
+        "required": false,
+        "description": "UseDefault | UseSimpleAndComplex | UseSimpleAsComplex | UseComplexAsSimple, with or without the CTF_ prefix (default unchanged)"
+      },
+      {
+        "name": "save",
+        "type": "boolean",
+        "required": false,
+        "description": "Save the mesh (default true)"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Preflight and report without writing (default false)"
+      }
+    ]
+  },
   "set_sk_material_slots": {
     "category": "asset",
     "params": [
@@ -6362,6 +6447,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   set_mesh_material: "Params: assetPath (or path), materialPath, slotIndex?",
   set_mesh_materials_batch: "Params: assignments, save?, dryRun?, continueOnError?",
   set_mesh_nav: "Params: assetPath, bHasNavigationData?, clearNavCollision?",
+  set_mesh_simple_collision: "Params: assetPath, shapes, replace?, collisionTraceFlag?, save?, dryRun?",
   set_sk_material_slots: "Params: assetPath (or path), slots",
   set_skeletal_mesh_optimize_for_instancing: "Params: assetPath, enabled, lodIndex?, allLods?",
   set_skeletal_mesh_skin_weights: "Params: assetPath, edits, lodIndex?, profileName?, restoreRawWeights?",
@@ -6389,7 +6475,7 @@ export const schema: Record<string, z.ZodType> = {
   applyPlaneCut: z.boolean().optional().describe("Remove the geometry on the far side of the plane before reflecting (default true)"),
   assetLodIndex: z.number().int().optional().describe("LOD inside the clothing asset (default: lodIndex, clamped)"),
   assetName: z.string().optional().describe("Alias for name"),
-  assetPath: z.string().optional().describe("CurveTable asset path (add_curvetable_key, add_curvetable_row, get_curvetable_keys, import_curvetable, list_curvetable_rows, read_curvetable, remove_curvetable_row, rename_curvetable_row, set_curvetable_keys). DataTable asset path (add_datatable_row, clone_datatable_rows, fill_datatable_from_json, get_datatable_row, read_datatable, reimport_datatable, remove_datatable_row, rename_datatable_row, set_datatable_cell, set_datatable_cells, set_datatable_row, update_datatable_row). EdGraph-backed asset path (add_graph_node, connect_graph_pins, disconnect_graph_pins, read_asset_graph, remove_graph_node). StaticMesh, SkeletalMesh or Skeleton asset path (add_socket, list_asset_sockets, list_sockets, remove_socket). Asset path; a Blueprint path writes its generated-class CDO (append_asset_array_elements, set_asset_property). StaticMesh to cut; it is never modified (apply_mesh_fracture). StaticMesh to read (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). Asset to check (asset_health_check). Alias for skeletalMeshPath (bind_cloth_to_section, read_cloth_data, set_cloth_config, unbind_cloth_from_section). StaticMesh or SkeletalMesh asset path (check_uvs, export_uv_layout, get_mesh_bounds, get_mesh_geometry, get_mesh_info, measure_mesh_geometry, read_uv_channels, set_socket_transform, set_uv_channel_count, transform_uvs, unwrap_uvs). CustomizableObject asset path (compile_customizable_object). Object path of the new pipeline (create_interchange_pipeline). Asset that owns the new subobject (create_subobject). Asset to delete (delete_asset). Blueprint, Skeleton or SkeletalMesh to diff from (diff_asset). Data asset path (edit_collection_entry). UserDefinedEnum asset path (edit_user_defined_enum). UserDefinedStruct asset path (edit_user_defined_struct, list_struct_fields, rename_struct_field). Asset to export (export_asset). Texture2D asset path (export_texture, get_texture_info, set_texture_settings). Asset to reload from disk (force_reload_asset). StaticMesh asset path (generate_lightmap_uvs, get_mesh_collision, get_static_mesh_build_settings, set_mesh_material, set_mesh_nav, set_static_mesh_build_settings). StaticMesh whose collision to build or clear (generate_mesh_collision). One SkeletalMesh (generate_skeletal_mesh_lods). Asset path; a Blueprint path reads its generated-class CDO (get_asset_properties, read_asset_properties). StringTable asset path (get_stringtable_entry, import_stringtable, import_stringtable_csv, list_stringtable_keys, read_stringtable, remove_stringtable_entry, set_stringtable_entry). UEnum or UserDefinedEnum asset path (list_enum_values). SkeletalMesh or Skeleton asset path (list_skeleton_bones). Asset to rename in its own folder, together with newName (move_asset, rename_asset). Asset path (read_asset). Imported asset path (read_import_sources). SkeletalMesh asset path (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_build_settings, read_skeletal_mesh_skin_weights, set_sk_material_slots, set_skeletal_mesh_optimize_for_instancing, set_skeletal_mesh_skin_weights). StaticMesh to recenter (recenter_pivot). Imported asset to rebuild from its source file (reimport_asset). Asset whose package to reload (reload_package). Asset to save; omit it and assetPaths to save every dirty asset under /Game (save_asset)"),
+  assetPath: z.string().optional().describe("CurveTable asset path (add_curvetable_key, add_curvetable_row, get_curvetable_keys, import_curvetable, list_curvetable_rows, read_curvetable, remove_curvetable_row, rename_curvetable_row, set_curvetable_keys). DataTable asset path (add_datatable_row, clone_datatable_rows, fill_datatable_from_json, get_datatable_row, read_datatable, reimport_datatable, remove_datatable_row, rename_datatable_row, set_datatable_cell, set_datatable_cells, set_datatable_row, update_datatable_row). EdGraph-backed asset path (add_graph_node, connect_graph_pins, disconnect_graph_pins, read_asset_graph, remove_graph_node). StaticMesh, SkeletalMesh or Skeleton asset path (add_socket, list_asset_sockets, list_sockets, remove_socket). Asset path; a Blueprint path writes its generated-class CDO (append_asset_array_elements, set_asset_property). StaticMesh to cut; it is never modified (apply_mesh_fracture). StaticMesh to read (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). Asset to check (asset_health_check). Alias for skeletalMeshPath (bind_cloth_to_section, read_cloth_data, set_cloth_config, unbind_cloth_from_section). StaticMesh or SkeletalMesh asset path (check_uvs, export_uv_layout, get_mesh_bounds, get_mesh_geometry, get_mesh_info, measure_mesh_geometry, read_uv_channels, set_socket_transform, set_uv_channel_count, transform_uvs, unwrap_uvs). CustomizableObject asset path (compile_customizable_object). Object path of the new pipeline (create_interchange_pipeline). Asset that owns the new subobject (create_subobject). Asset to delete (delete_asset). Blueprint, Skeleton or SkeletalMesh to diff from (diff_asset). Data asset path (edit_collection_entry). UserDefinedEnum asset path (edit_user_defined_enum). UserDefinedStruct asset path (edit_user_defined_struct, list_struct_fields, rename_struct_field). Asset to export (export_asset). Texture2D asset path (export_texture, get_texture_info, set_texture_settings). Asset to reload from disk (force_reload_asset). StaticMesh asset path (generate_lightmap_uvs, get_mesh_collision, get_static_mesh_build_settings, set_mesh_material, set_mesh_nav, set_mesh_simple_collision, set_static_mesh_build_settings). StaticMesh whose collision to build or clear (generate_mesh_collision). One SkeletalMesh (generate_skeletal_mesh_lods). Asset path; a Blueprint path reads its generated-class CDO (get_asset_properties, read_asset_properties). StringTable asset path (get_stringtable_entry, import_stringtable, import_stringtable_csv, list_stringtable_keys, read_stringtable, remove_stringtable_entry, set_stringtable_entry). UEnum or UserDefinedEnum asset path (list_enum_values). SkeletalMesh or Skeleton asset path (list_skeleton_bones). Asset to rename in its own folder, together with newName (move_asset, rename_asset). Asset path (read_asset). Imported asset path (read_import_sources). SkeletalMesh asset path (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_build_settings, read_skeletal_mesh_skin_weights, set_sk_material_slots, set_skeletal_mesh_optimize_for_instancing, set_skeletal_mesh_skin_weights). StaticMesh to recenter (recenter_pivot). Imported asset to rebuild from its source file (reimport_asset). Asset whose package to reload (reload_package). Asset to save; omit it and assetPaths to save every dirty asset under /Game (save_asset)"),
   assetPathA: z.string().optional().describe("First Texture2D"),
   assetPathB: z.string().optional().describe("Second Texture2D"),
   assetPaths: z.array(z.string()).optional().describe("The exact assets to read (bulk_read_asset_properties). Assets to delete (delete_asset_batch). The exact assets to act on, the safest way to drive it (fix_asset_hygiene). SkeletalMeshes, at most 500 (generate_skeletal_mesh_lods). Texture2D asset paths, 1-500; use instead of assetPath (get_texture_info, set_texture_settings). StaticMeshes to recenter together; the first sets the reference pivot (recenter_pivot). Save exactly these loaded packages (asset, object or package paths) and no others; each is reported saved, notDirty or failed (save_asset)"),
@@ -6421,6 +6507,7 @@ export const schema: Record<string, z.ZodType> = {
   clearNavCollision: z.boolean().optional().describe("Remove the mesh's NavCollision"),
   clones: z.array(z.object({ sourceRow: z.string().describe("Existing row to copy"), rowName: z.string().describe("Unused destination row name"), overrides: z.record(z.string(), z.unknown()).optional().describe("Nested or dotted struct field patches; omitted fields are preserved") })).optional().describe("1-500 row clone requests; destinations must be unused"),
   clothingAsset: z.string().optional().describe("Clothing asset by name (optional when the mesh has one) (bind_cloth_to_section). Only the clothing asset with this name (set_cloth_config). Refuse unless the section is bound to this clothing asset (unbind_cloth_from_section)"),
+  collisionTraceFlag: z.string().optional().describe("UseDefault | UseSimpleAndComplex | UseSimpleAsComplex | UseComplexAsSimple, with or without the CTF_ prefix (default unchanged)"),
   columns: z.array(z.string()).optional().describe("Row-struct fields to return; each row keeps Name and these fields, and an unknown name is refused with the valid list"),
   combineMeshes: z.boolean().optional().describe("Combine every mesh in the file into one (default false)"),
   compressionSettings: z.string().optional().describe("Compression setting such as Default, Normalmap, Grayscale, HDR or BC7, applied to the imported texture (import_texture). Compression enum name, with or without TC_: Default, Normalmap, Masks, BC7 and the other engine values (set_texture_settings)"),
@@ -6450,7 +6537,7 @@ export const schema: Record<string, z.ZodType> = {
   discardAttributes: z.boolean().optional().describe("Throw away UVs, normals and material IDs so the remesher moves freely (default false)"),
   discardUnsaved: z.boolean().optional().describe("Reload even when the package has unsaved changes, discarding them (default false)"),
   displayName: z.string().optional().describe("Display text for the enumerator (add_value, rename_value)"),
-  dryRun: z.boolean().optional().describe("Run the operation and report the result without writing (default false) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Preflight and report without writing (default false) (bulk_set_asset_properties, set_mesh_materials_batch). Run the full preflight and report the planned statuses without writing (default false) (bulk_upsert_data_assets). Validate the entire batch and return proposedRows without changes (default false) (clone_datatable_rows). Validate and return proposedValue without changing the asset (default false) (edit_collection_entry). Validate and report without importing, writing or saving (default false) (export_asset, import_skeletal_mesh, import_texture_batch, set_texture_settings). Name every asset and destination without changing anything (default TRUE) (fix_asset_hygiene). Report the redirectors, referencers and packages it would load and save, and stop (default false) (fixup_redirectors). Report without writing (generate_lightmap_uvs, set_uv_channel_count, transform_uvs, unwrap_uvs). Report each mesh's LODs and what would happen without changing anything (generate_skeletal_mesh_lods). Run the boolean and report the counts without writing (default false) (mesh_boolean). Validate every cell and report what would change without writing (default false) (set_datatable_cells)"),
+  dryRun: z.boolean().optional().describe("Run the operation and report the result without writing (default false) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Preflight and report without writing (default false) (bulk_set_asset_properties, set_mesh_materials_batch, set_mesh_simple_collision). Run the full preflight and report the planned statuses without writing (default false) (bulk_upsert_data_assets). Validate the entire batch and return proposedRows without changes (default false) (clone_datatable_rows). Validate and return proposedValue without changing the asset (default false) (edit_collection_entry). Validate and report without importing, writing or saving (default false) (export_asset, import_skeletal_mesh, import_texture_batch, set_texture_settings). Name every asset and destination without changing anything (default TRUE) (fix_asset_hygiene). Report the redirectors, referencers and packages it would load and save, and stop (default false) (fixup_redirectors). Report without writing (generate_lightmap_uvs, set_uv_channel_count, transform_uvs, unwrap_uvs). Report each mesh's LODs and what would happen without changing anything (generate_skeletal_mesh_lods). Run the boolean and report the counts without writing (default false) (mesh_boolean). Validate every cell and report what would change without writing (default false) (set_datatable_cells)"),
   dumpToFile: z.boolean().optional().describe("Write the geometry JSON to a file instead of returning it"),
   duplicateMethod: z.string().optional().describe("content (same class, size and saved hash) | name (same name and class in several folders) | both (default)"),
   edgeLength: z.number().optional().describe("Target edge length in centimetres (simplifyMode edgeLength or clusterEdgeLength)"),
@@ -6629,6 +6716,7 @@ export const schema: Record<string, z.ZodType> = {
   removeFullyContainedShapes: z.boolean().optional().describe("Drop shapes entirely inside another (default true)"),
   removeRedundantKeys: z.boolean().optional().describe("Strip keys that do not change the value (default true)"),
   renames: z.array(z.object({ sourcePath: z.string().optional().describe("Asset to move, with destinationPath or with newPackagePath + newName"), destinationPath: z.string().optional().describe("Full destination package path including the asset name, e.g. /Game/Props/SM_Rock; a path naming an existing folder is refused"), assetPath: z.string().optional().describe("Asset to rename in place, with newName"), newPackagePath: z.string().optional().describe("Destination folder, with sourcePath and newName"), newName: z.string().optional().describe("New asset name, with assetPath or with sourcePath + newPackagePath") })).optional().describe("Rename descriptors, each exactly one of {sourcePath, destinationPath}, {assetPath, newName} or {sourcePath, newPackagePath, newName}; any other key is refused"),
+  replace: z.boolean().optional().describe("Remove every existing simple shape, convex hulls included, before writing (default true); false appends"),
   replaceExisting: z.boolean().optional().describe("Overwrite the output file (default true) (export_asset). Replace an asset already at the destination (default true) (import_file, import_skeletal_mesh). Remove entries the CSV does not carry (default false) (import_stringtable_csv)"),
   reprojectToInputMesh: z.boolean().optional().describe("Pull new vertices back onto the original surface each pass (default true)"),
   requireExactKeys: z.boolean().optional().describe("Also fail when the CSV carries keys expectedKeys does not list (default false)"),
@@ -6642,7 +6730,7 @@ export const schema: Record<string, z.ZodType> = {
   rows: z.record(z.string(), z.unknown()).optional().describe("Rows to upsert: {rowName: {field: value}}"),
   rowStruct: z.string().optional().describe("Row struct, e.g. /Script/Module.MyRow or a UserDefinedStruct path"),
   sampleLimit: z.number().int().optional().describe("Sample asset names per group (default 5, max 25)"),
-  save: z.boolean().optional().describe("Save the asset after the edit (default true) (add_graph_node, connect_graph_pins, disconnect_graph_pins, remove_graph_node). Save the package after the write (default true) (append_asset_array_elements, set_asset_property). Save the written asset (default true) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision, mesh_boolean). Save the changed packages (default true) (bulk_set_asset_properties, bulk_upsert_data_assets). Save the table after editing (default true) (clone_datatable_rows). Save the new asset (default true) (create_customizable_object). Save the owning package (default true) (create_subobject). Save the package after editing (default true) (edit_collection_entry). Save what changed (default true) (fix_asset_hygiene). Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference (fixup_redirectors). Save the mesh (default true) (generate_lightmap_uvs, set_uv_channel_count, transform_uvs, unwrap_uvs). Save each changed mesh (default true) (generate_skeletal_mesh_lods, set_mesh_materials_batch). Save each imported asset and report saved per asset (default true; false leaves them dirty) (import_file). Save all imported assets (default false) (import_skeletal_mesh). Save the table (default true) (import_stringtable_csv). Save changed assets (default true) (import_texture_batch). Save the reimported asset's package (default false: it is left dirty) (reimport_asset). Save after removing rows (default true) (remove_datatable_row). Save the package after the write (default false) (set_datatable_cells). Save the mesh after the rebuild (default true) (set_static_mesh_build_settings). Save changed textures (default false; otherwise leave the packages dirty) (set_texture_settings)"),
+  save: z.boolean().optional().describe("Save the asset after the edit (default true) (add_graph_node, connect_graph_pins, disconnect_graph_pins, remove_graph_node). Save the package after the write (default true) (append_asset_array_elements, set_asset_property). Save the written asset (default true) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision, mesh_boolean). Save the changed packages (default true) (bulk_set_asset_properties, bulk_upsert_data_assets). Save the table after editing (default true) (clone_datatable_rows). Save the new asset (default true) (create_customizable_object). Save the owning package (default true) (create_subobject). Save the package after editing (default true) (edit_collection_entry). Save what changed (default true) (fix_asset_hygiene). Save the repointed referencers (default true); false leaves them dirty in memory and keeps every redirector they reference (fixup_redirectors). Save the mesh (default true) (generate_lightmap_uvs, set_mesh_simple_collision, set_uv_channel_count, transform_uvs, unwrap_uvs). Save each changed mesh (default true) (generate_skeletal_mesh_lods, set_mesh_materials_batch). Save each imported asset and report saved per asset (default true; false leaves them dirty) (import_file). Save all imported assets (default false) (import_skeletal_mesh). Save the table (default true) (import_stringtable_csv). Save changed assets (default true) (import_texture_batch). Save the reimported asset's package (default false: it is left dirty) (reimport_asset). Save after removing rows (default true) (remove_datatable_row). Save the package after the write (default false) (set_datatable_cells). Save the mesh after the rebuild (default true) (set_static_mesh_build_settings). Save changed textures (default false; otherwise leave the packages dirty) (set_texture_settings)"),
   saveContentPackages: z.boolean().optional().describe("Include content packages (default true)"),
   saveMapPackages: z.boolean().optional().describe("Include map packages (default true)"),
   scale: z.record(z.string(), z.unknown()).optional().describe("UV-space scale {u, v}; a zero component is refused"),
@@ -6651,6 +6739,7 @@ export const schema: Record<string, z.ZodType> = {
   selection: z.record(z.string(), z.unknown()).optional().describe("What to transform: {mode: all|island|normal|polygonGroup, islandIndices?, normalDirection?, normalAngleTolerance?, polygonGroups?, materialSlotNames?}"),
   setLightmapCoordinateIndex: z.boolean().optional().describe("Point LightMapCoordinateIndex at the destination channel (default true)"),
   settings: z.record(z.string(), z.unknown()).optional().describe("FMeshBuildSettings fields to write by name, e.g. {bRecomputeNormals: true}; get_static_mesh_build_settings lists them (set_static_mesh_build_settings). Texture settings {compressionSettings?, lodGroup?, sRGB?, neverStream?, flipGreenChannel?, maxTextureSize?}; top-level fields override this object (set_texture_settings)"),
+  shapes: z.array(z.object({ type: z.enum(["box","sphere","capsule"]).describe("box | sphere | capsule"), center: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Shape centre in the mesh's local space, in cm"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Shape rotation (box and capsule; default none)"), extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Box only: FULL lengths along X, Y and Z, the FKBoxElem X/Y/Z values, not half extents"), radius: z.number().optional().describe("Sphere and capsule radius, in cm"), length: z.number().optional().describe("Capsule only: the straight section between the hemispheres, so the full height is length + 2 x radius") })).optional().describe("Shapes to write, at most 256: [{type, center, rotation?, extent (box), radius (sphere, capsule), length (capsule)}]"),
   showGrid: z.boolean().optional().describe("Draw the unit-square border (default true)"),
   showIslands: z.boolean().optional().describe("Colour each island separately (default true)"),
   showOverlaps: z.boolean().optional().describe("Highlight overlapping texels (default true)"),

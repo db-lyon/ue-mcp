@@ -1091,6 +1091,25 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_mesh_collision"), &GetMeshCollision, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")),
 	});
+	// Explicit shapes, the half generate_mesh_collision cannot write. The mesh
+	// is rebuilt through PostEditChange, as the editor's own collision tools do,
+	// which is what the longer timeout is for. The contract path loads no mesh
+	// and is refused before anything is written.
+	Registry.RegisterHandlerWithTimeout(TEXT("set_mesh_simple_collision"), &SetMeshSimpleCollision, 300.0f, {
+		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")),
+		MCPParam::Required(TEXT("shapes"), EType::Array, TEXT("Shapes to write, at most 256: [{type, center, rotation?, extent (box), radius (sphere, capsule), length (capsule)}]")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("type"), EType::String, TEXT("box | sphere | capsule")).Enum({ TEXT("box"), TEXT("sphere"), TEXT("capsule") }),
+			MCPParam::RequiredField(TEXT("center"), EType::Vec3, TEXT("Shape centre in the mesh's local space, in cm")),
+			MCPParam::OptionalField(TEXT("rotation"), EType::Rotator, TEXT("Shape rotation (box and capsule; default none)")),
+			MCPParam::OptionalField(TEXT("extent"), EType::Vec3, TEXT("Box only: FULL lengths along X, Y and Z, the FKBoxElem X/Y/Z values, not half extents")),
+			MCPParam::OptionalField(TEXT("radius"), EType::Number, TEXT("Sphere and capsule radius, in cm")),
+			MCPParam::OptionalField(TEXT("length"), EType::Number, TEXT("Capsule only: the straight section between the hemispheres, so the full height is length + 2 x radius")),
+		}),
+		MCPParam::Optional(TEXT("replace"), EType::Boolean, TEXT("Remove every existing simple shape, convex hulls included, before writing (default true); false appends")),
+		MCPParam::Optional(TEXT("collisionTraceFlag"), EType::String, TEXT("UseDefault | UseSimpleAndComplex | UseSimpleAsComplex | UseComplexAsSimple, with or without the CTF_ prefix (default unchanged)")),
+		MCPParam::Optional(TEXT("save"), EType::Boolean, TEXT("Save the mesh (default true)")),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Preflight and report without writing (default false)")),
+	});
 	Registry.RegisterHandler(TEXT("set_mesh_nav"), &SetMeshNav, {
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("StaticMesh asset path")),
 		MCPParam::Optional(TEXT("bHasNavigationData"), EType::Boolean, TEXT("Whether the mesh generates navigation data")),
@@ -3866,6 +3885,11 @@ namespace
 			TEXT("bridge holds no copy, so there is no un-save. There is no inverse action."));
 		return MCPResult(Result);
 	}
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::SaveNamedPackages(const TArray<TSharedPtr<FJsonValue>>& PathValues)
+{
+	return MCPSaveNamedPackages(PathValues, /*bForce=*/false);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::SaveAsset(const TSharedPtr<FJsonObject>& Params)
