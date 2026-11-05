@@ -206,7 +206,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Multiplayer acceptance runs
 	Registry.RegisterHandler(TEXT("pie_uat_run"), &PieUatRun, {
-		MCPParam::Optional(TEXT("scenario"), EType::Object, TEXT("Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[], forbid[], window_ms}]}; see docs/pie.md")),
+		MCPParam::Optional(TEXT("scenario"), EType::Object, TEXT("Scenario object: {name, map, pie:{players, net_mode, one_process, windowless, client_fps}, join_timeout_s, settle_ms, steps:[{name, do[], expect[{log host|client:N, pattern (regex), min, max, since step|run}], forbid[], window_ms}]}. A rule reads only lines logged after its step began unless since is run; see docs/pie.md")),
 		MCPParam::Optional(TEXT("path"), EType::String, TEXT("Scenario JSON file, relative to the project directory")),
 	}, MCPSpec::ExactlyOne({ { TEXT("scenario") }, { TEXT("path") } })
 		.ContractExempt(TEXT("Opens the scenario map and starts a multiplayer PIE session")));
