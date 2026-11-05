@@ -42,8 +42,10 @@ private:
 	// editor(diff_checkpoint_asset): any package's versions (fromFile, toFile; a missing
 	// one did not exist) loaded with DiffUtils::LoadPackageForDiff, with the engine's diff
 	// records for the class serialized, facts about each version, and a thumbnail of each
-	// written to fromThumbnail and toThumbnail. Params: originalFile, fromFile?, toFile?,
-	// fromThumbnail?, toThumbnail?, maxRecords?. In DiffHandlers_Checkpoint.cpp.
+	// written to fromThumbnail and toThumbnail. A Blueprint changed only in its graphs also
+	// gets the changed graph drawn per version, written to fromGraphPicture and toGraphPicture.
+	// Params: originalFile, fromFile?, toFile?, fromThumbnail?, toThumbnail?,
+	// fromGraphPicture?, toGraphPicture?, maxRecords?. In DiffHandlers_Checkpoint.cpp.
 	// items: [{ those params }] diffs several packages and answers results, one per item,
 	// unloading the versions once at the end: each unload is a full garbage collection.
 	static TSharedPtr<FJsonValue> DiffCheckpointAsset(const TSharedPtr<FJsonObject>& Params);
