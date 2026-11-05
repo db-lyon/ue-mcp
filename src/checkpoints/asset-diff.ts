@@ -12,25 +12,40 @@
  *
  * Each version also gets a picture rendered with ThumbnailTools::RenderThumbnail
  * on the object loaded for diff, kept per blob id, so a version always has the
- * same picture.
+ * same picture. A level is drawn from the level itself, framed on the actors
+ * that changed, so its pictures are kept per pair (pictureId).
  */
 import { unifiedDiff } from "./text-diff.js";
+import * as crypto from "node:crypto";
 import * as path from "node:path";
 
 /** Bumped when the bridge's records or pictures change, so cached diffs are recomputed. */
-export const ASSET_DIFF_FORMAT = 4;
+export const ASSET_DIFF_FORMAT = 5;
 
 /**
  * Bumped when the bridge's pictures change, so a picture kept for a version is
  * rendered again. 2: the bridge no longer writes a blank picture (a Blueprint
  * loaded for diff is not compiled, so its renderer drew nothing but black).
  * 3: an Actor Blueprint loaded for diff is drawn, rather than its saved thumbnail.
+ * 4: a level is drawn from the level, framed on the actors that changed.
  */
-export const THUMBNAIL_FORMAT = 3;
+export const THUMBNAIL_FORMAT = 4;
 
 /** Where the picture (png) of a version, or what is known about it (json), is kept. */
 export function thumbnailFile(dir: string, version: string, ext: "png" | "json" = "png"): string {
   return path.join(dir, `${version}.v${THUMBNAIL_FORMAT}.${ext}`);
+}
+
+/**
+ * The id one side's picture is kept under. Most pictures depend on the version
+ * alone, so they are kept per blob id. A level's picture is framed on the actors
+ * that changed between the two versions, so it is kept per pair and side.
+ */
+export function pictureId(packagePath: string, a: string | null, b: string | null, side: "before" | "after"): string | null {
+  const version = side === "before" ? a : b;
+  if (!version) return null;
+  if (!/\.umap$/i.test(packagePath)) return version;
+  return crypto.createHash("sha1").update(["level", a ?? "-", b ?? "-", side].join("\n")).digest("hex");
 }
 
 /** How many packages one list_changes diffs up front; the rest are diffed on request, per path. */

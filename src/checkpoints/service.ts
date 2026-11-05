@@ -30,6 +30,7 @@ import {
 import {
   ASSET_DIFF_FORMAT,
   thumbnailFile,
+  pictureId,
   MAX_ASSET_DIFFS,
   assetDiffDeferred,
   assetDiffError,
@@ -503,8 +504,8 @@ export class SessionCheckpoints {
           diffs[job.index] = assetDiffError(`Preparing the diff failed: ${e instanceof Error ? e.message : String(e)}`);
           continue;
         }
-        const fromThumbnail = want(job.a);
-        const toThumbnail = want(job.b);
+        const fromThumbnail = want(pictureId(job.c.path, job.a, job.b, "before"));
+        const toThumbnail = want(pictureId(job.c.path, job.a, job.b, "after"));
         job.params = {
           originalFile: path.join(this.projectDir, job.c.path),
           ...(job.fromFile ? { fromFile: job.fromFile } : {}),
@@ -566,7 +567,7 @@ export class SessionCheckpoints {
     const thumb = (v: string) => thumbnailFile(repo.thumbsDir, v);
     try {
       const picture = (side: "before" | "after", t: Json | undefined): AssetThumbnail | undefined => {
-        const version = side === "before" ? job.a : job.b;
+        const version = pictureId(job.c.path, job.a, job.b, side);
         if (!version) return undefined;
         const meta = thumbnailFile(repo.thumbsDir, version, "json");
         if (t && typeof t.file === "string") {

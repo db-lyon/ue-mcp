@@ -5,6 +5,7 @@ import {
   assetDiffFromBridge,
   describeRecord,
   nativeDiffOf,
+  pictureId,
   summarizeAssetDiff,
   type AssetDiff,
   type AssetDiffRecord,
@@ -188,5 +189,27 @@ describe("an asset diff's summary", () => {
 
   it("summarizes an error and a deferred diff in the same words everywhere", () => {
     expect(summarizeAssetDiff({ state: "deferred", summary: "", nativeDiff: { available: false } })).toMatch(/^Not diffed yet/);
+  });
+});
+
+describe("the id a picture is kept under", () => {
+  const a = "a".repeat(40);
+  const b = "b".repeat(40);
+  const c = "c".repeat(40);
+
+  it("keeps a version's picture under its blob id, whatever it is compared with", () => {
+    expect(pictureId("Content/M_Blue.uasset", a, b, "before")).toBe(a);
+    expect(pictureId("Content/M_Blue.uasset", c, a, "after")).toBe(a);
+    expect(pictureId("Content/M_Blue.uasset", null, b, "before")).toBeNull();
+  });
+
+  it("keeps a level's picture per pair and side, since it is framed on what changed between them (#1568)", () => {
+    const before = pictureId("Content/Maps/Arena.umap", a, b, "before");
+    expect(before).toMatch(/^[0-9a-f]{40}$/);
+    expect(before).not.toBe(a);
+    expect(pictureId("Content/Maps/Arena.umap", a, b, "before")).toBe(before);
+    expect(pictureId("Content/Maps/Arena.umap", a, c, "before")).not.toBe(before);
+    expect(pictureId("Content/Maps/Arena.umap", c, a, "after")).not.toBe(before);
+    expect(pictureId("Content/Maps/Arena.UMAP", a, null, "after")).toBeNull();
   });
 });
