@@ -359,6 +359,12 @@
           "type": "string",
           "required": false,
           "description": "ChildActorClass for an added ChildActorComponent: a Blueprint path with or without _C, or a C++ class"
+        },
+        {
+          "name": "asRoot",
+          "type": "boolean",
+          "required": false,
+          "description": "Make this scene component the Blueprint's root: it replaces DefaultSceneRoot, whose children move under it, or takes the current root as its child. Applies to an existing component of this name too. Not combinable with parentComponent or parentSocket"
         }
       ]
     },
