@@ -17712,6 +17712,12 @@
           "type": "number",
           "required": false,
           "description": "0-based player index (default 0)"
+        },
+        {
+          "name": "pieInstance",
+          "type": "number",
+          "required": false,
+          "description": "PIE world to read (default: the primary world, or the first client world when the primary is a dedicated server). See list_pie_instances"
         }
       ]
     },

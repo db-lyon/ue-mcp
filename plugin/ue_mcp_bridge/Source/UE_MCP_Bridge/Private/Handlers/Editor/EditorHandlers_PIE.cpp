@@ -1396,21 +1396,62 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetPiePawn(const TSharedPtr<FJsonObject>
 {
 	// Read before PIE is checked, so the parameter counts either way (#1057).
 	const int32 PlayerIndex = OptionalInt(Params, TEXT("playerIndex"), 0);
+	int32 PieInstance = INDEX_NONE;
+	double RawInstance = 0.0;
+	if (TryGetNumberParam(Params, TEXT("pieInstance"), RawInstance))
+	{
+		PieInstance = FMath::RoundToInt(RawInstance);
+	}
 
 	if (!GEditor) return MCPError(TEXT("Editor not available"));
 
-	FWorldContext* PieCtx = GEditor->GetPIEWorldContext();
-	UWorld* PieWorld = PieCtx ? PieCtx->World() : nullptr;
+	UWorld* PieWorld = nullptr;
+	if (PieInstance != INDEX_NONE)
+	{
+		PieWorld = GetPIEWorldByInstance(PieInstance);
+		if (!PieWorld)
+		{
+			return MCPError(FString::Printf(TEXT("No PIE instance %d - see list_pie_instances"), PieInstance));
+		}
+	}
+	else
+	{
+		FWorldContext* PieCtx = GEditor->GetPIEWorldContext();
+		PieWorld = PieCtx ? PieCtx->World() : nullptr;
+		// A dedicated server's controllers are the clients' server-side copies,
+		// not a player of its own, so default to the first client world (#1657).
+		if (PieWorld && PieWorld->GetNetMode() == NM_DedicatedServer)
+		{
+			for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+			{
+				UWorld* W = Ctx.World();
+				if (Ctx.WorldType == EWorldType::PIE && W && W->GetNetMode() != NM_DedicatedServer
+					&& W->GetGameInstance() && W->GetGameInstance()->GetFirstGamePlayer())
+				{
+					PieWorld = W;
+					break;
+				}
+			}
+		}
+	}
 	if (!PieWorld)
 	{
 		return MCPError(TEXT("PIE not running - start PIE before resolving the player pawn"));
 	}
+	const FWorldContext* ResolvedCtx = GEngine->GetWorldContextFromWorld(PieWorld);
+	const int32 ResolvedInstance = ResolvedCtx ? ResolvedCtx->PIEInstance : INDEX_NONE;
 
 	APlayerController* PC = UGameplayStatics::GetPlayerController(PieWorld, PlayerIndex);
 	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
-	if (!Pawn) return MCPError(FString::Printf(TEXT("No controlled pawn for player index %d"), PlayerIndex));
+	if (!Pawn)
+	{
+		return MCPError(FString::Printf(TEXT("No controlled pawn for player index %d in PIE instance %d (%s)"),
+			PlayerIndex, ResolvedInstance, *DescribePIENetMode(PieWorld)));
+	}
 
 	auto Result = MCPSuccess();
+	Result->SetNumberField(TEXT("pieInstance"), ResolvedInstance);
+	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(PieWorld));
 	Result->SetStringField(TEXT("actorLabel"), Pawn->GetActorLabel());
 	Result->SetStringField(TEXT("actorName"), Pawn->GetName());
 	Result->SetStringField(TEXT("class"), Pawn->GetClass()->GetPathName());
