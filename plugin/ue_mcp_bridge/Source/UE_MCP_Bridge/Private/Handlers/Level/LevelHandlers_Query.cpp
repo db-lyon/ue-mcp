@@ -1230,8 +1230,7 @@ namespace
 
 			const FString ActorFolder = MCPActorFolderPath(Actor);
 			const FString SelectorFolder = SelectorActor == Actor ? ActorFolder : MCPActorFolderPath(SelectorActor);
-			if (!FolderPath.IsEmpty() && !SelectorFolder.Equals(FolderPath, ESearchCase::IgnoreCase)) continue;
-			if (!FolderPathPrefix.IsEmpty() && !SelectorFolder.StartsWith(FolderPathPrefix, ESearchCase::IgnoreCase)) continue;
+			if (!MCPFolderMatches(SelectorFolder, FolderPath, FolderPathPrefix)) continue;
 
 			const bool bOwnerHidden = Actor->IsHidden();
 			const APawn* OwnerPawn = Cast<APawn>(Actor);

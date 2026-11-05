@@ -148,7 +148,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	const FMCPParamSpec SpecLabelContains = MCPParam::Optional(TEXT("labelContains"), EType::String, TEXT("Case-insensitive substring over the actor's editor label"));
 	const FMCPParamSpec SpecSelectorTag = MCPParam::Optional(TEXT("tag"), EType::String, TEXT("Actor must carry this tag"));
 	const FMCPParamSpec SpecFolderPath = MCPParam::Optional(TEXT("folderPath"), EType::String, TEXT("World Outliner folder, matched exactly"));
-	const FMCPParamSpec SpecFolderPathPrefix = MCPParam::Optional(TEXT("folderPathPrefix"), EType::String, TEXT("World Outliner folder prefix"));
+	const FMCPParamSpec SpecFolderPathPrefix = MCPParam::Optional(TEXT("folderPathPrefix"), EType::String, TEXT("World Outliner folder, matched with every folder nested under it"));
 	const FMCPParamSpec SpecMatchSubclasses = MCPParam::Optional(TEXT("matchSubclasses"), EType::Boolean, TEXT("Match subclasses of the class filter (default true)"));
 
 	Registry.RegisterHandler(TEXT("get_world_outliner"), &GetOutliner, {
@@ -586,10 +586,12 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecSelectorTag,
 		MCPParam::Optional(TEXT("classPathContains"), EType::String, TEXT("Case-insensitive substring of the generated class path")),
 		MCPParam::Optional(TEXT("classPathContainsAny"), EType::Array, TEXT("Match when the class path contains any of these case-insensitive substrings")).Items(EType::String),
+		SpecFolderPath, SpecFolderPathPrefix,
 		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report the matches without deleting them (default false)")),
 	}, MCPSpec::AtLeastOne({
 		{ TEXT("labelPrefix") }, { TEXT("labelContains") }, { TEXT("nameContains") }, { TEXT("className") },
 		{ TEXT("tag") }, { TEXT("classPathContains") }, { TEXT("classPathContainsAny") },
+		{ TEXT("folderPath") }, { TEXT("folderPathPrefix") },
 	}));
 	// Its onMissing check refuses the contract value before any map is loaded.
 	Registry.RegisterHandlerWithTimeout(TEXT("delete_exact_labeled_actors_in_levels"), &DeleteExactLabeledActorsInLevels, 300.0f, {
@@ -611,6 +613,18 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecTransactionLabel,
 	}, MCPSpec::AtLeastOne({ { TEXT("actorLabels") }, { TEXT("labelPrefix") }, { TEXT("className") }, { TEXT("tag") } })
 		.ContractExempt(TEXT("Opens an undo transaction and runs its write loop under the contract values, which match no actor; nothing it reads fails first")));
+	const FMCPParamSpec SpecOutlinerFolderPaths = MCPParam::Optional(TEXT("folderPaths"), EType::Array, TEXT("World Outliner folders; combined with folderPath")).Items(EType::String);
+	Registry.RegisterHandler(TEXT("create_outliner_folder"), &CreateOutlinerFolder, {
+		MCPParam::Optional(TEXT("folderPath"), EType::String, TEXT("World Outliner folder to create, such as Props/Lights")),
+		SpecOutlinerFolderPaths,
+	}, MCPSpec::AtLeastOne({ { TEXT("folderPath") }, { TEXT("folderPaths") } })
+		.ContractExempt(TEXT("The contract value is a valid folder name, so the call would create a folder in the editor world")));
+	// The contract value names no folder, so every entry reports absent and nothing is deleted.
+	Registry.RegisterHandler(TEXT("delete_outliner_folder"), &DeleteOutlinerFolder, {
+		MCPParam::Optional(TEXT("folderPath"), EType::String, TEXT("World Outliner folder to delete, with the empty folders under it")),
+		SpecOutlinerFolderPaths,
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Report what would be deleted without deleting (default false)")),
+	}, MCPSpec::AtLeastOne({ { TEXT("folderPath") }, { TEXT("folderPaths") } }));
 	const FMCPParamSpec SpecDescFilter = MCPParam::Optional(TEXT("filter"), EType::String, TEXT("Case-insensitive substring over label, name, class and path"));
 	const FMCPParamSpec SpecDescClassName = MCPParam::Optional(TEXT("className"), EType::String, TEXT("Actor class filter"));
 	const FMCPParamSpec SpecDescGuids = MCPParam::Optional(TEXT("guids"), EType::Array, TEXT("Exact actor GUIDs")).Items(EType::String);
@@ -849,7 +863,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("tag"), EType::String, TEXT("Actor must carry this tag")),
 			MCPParam::OptionalField(TEXT("classFilter"), EType::String, TEXT("Actor class, resolved as a class or matched as a substring")),
 			MCPParam::OptionalField(TEXT("folderPath"), EType::String, TEXT("World Outliner folder, matched exactly")),
-			MCPParam::OptionalField(TEXT("folderPathPrefix"), EType::String, TEXT("World Outliner folder prefix")),
+			MCPParam::OptionalField(TEXT("folderPathPrefix"), EType::String, TEXT("World Outliner folder, matched with every folder nested under it")),
 			MCPParam::OptionalField(TEXT("matchSubclasses"), EType::Boolean, TEXT("Match subclasses of classFilter (default true)")),
 			MCPParam::OptionalField(TEXT("space"), EType::String, TEXT("local (default, the component's own orientation) | world (axis-aligned bounds)")),
 			MCPParam::OptionalField(TEXT("offset"), EType::Vec3, TEXT("Offset added to the computed point")),
@@ -1038,21 +1052,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		{
 			continue;
 		}
-		if (!FolderPathFilter.IsEmpty() || !FolderPathPrefixFilter.IsEmpty())
+		if (!MCPActorInFolder(Actor, FolderPathFilter, FolderPathPrefixFilter))
 		{
-			const FString Folder = MCPActorFolderPath(Actor);
-			if (!FolderPathFilter.IsEmpty() && !Folder.Equals(FolderPathFilter, ESearchCase::IgnoreCase))
-			{
-				continue;
-			}
-			// A folder prefix matches the folder itself and everything nested
-			// under it, so "Gameplay" does not also match "GameplayOld".
-			if (!FolderPathPrefixFilter.IsEmpty() &&
-				!Folder.Equals(FolderPathPrefixFilter, ESearchCase::IgnoreCase) &&
-				!Folder.StartsWith(FolderPathPrefixFilter + TEXT("/"), ESearchCase::IgnoreCase))
-			{
-				continue;
-			}
+			continue;
 		}
 
 #if WITH_EDITOR
@@ -5072,6 +5074,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 	const FString NameContains = OptionalString(Params, TEXT("nameContains"));
 	const FString ClassName = OptionalString(Params, TEXT("className"));
 	const FString Tag = OptionalString(Params, TEXT("tag"));
+	const FString FolderPath = OptionalString(Params, TEXT("folderPath")).TrimStartAndEnd().Replace(TEXT("\\"), TEXT("/"));
+	const FString FolderPathPrefix = OptionalString(Params, TEXT("folderPathPrefix")).TrimStartAndEnd().Replace(TEXT("\\"), TEXT("/"));
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
 
 	TArray<FString> ClassPathNeedles;
@@ -5093,13 +5097,20 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 		}
 	}
 
+	// #1529: a prefix of "/" would pass the folder match for every actor in the level.
+	if (HasParam(Params, TEXT("folderPathPrefix")) && FolderPathPrefix.Replace(TEXT("/"), TEXT("")).IsEmpty())
+	{
+		return MCPError(TEXT("folderPathPrefix must name a folder; it is a delete filter and an empty prefix would match every actor"));
+	}
+
 	// #924 added the class-path filters and #963 added the label/name ones. Both
 	// are live, so the guard has to accept either family; requiring only one
 	// family's filters would make the other silently unusable.
 	if (LabelPrefix.IsEmpty() && LabelContains.IsEmpty() && NameContains.IsEmpty() &&
-		ClassName.IsEmpty() && Tag.IsEmpty() && ClassPathNeedles.Num() == 0)
+		ClassName.IsEmpty() && Tag.IsEmpty() && ClassPathNeedles.Num() == 0 &&
+		FolderPath.IsEmpty() && FolderPathPrefix.IsEmpty())
 	{
-		return MCPError(TEXT("Provide at least one filter: labelPrefix (case-sensitive prefix over the editor label), labelContains (case-insensitive substring over the label), nameContains (case-insensitive substring over the internal name), className, tag, classPathContains, or classPathContainsAny"));
+		return MCPError(TEXT("Provide at least one filter: labelPrefix (case-sensitive prefix over the editor label), labelContains (case-insensitive substring over the label), nameContains (case-insensitive substring over the internal name), className, tag, classPathContains, classPathContainsAny, folderPath (one outliner folder) or folderPathPrefix (a folder and everything under it)"));
 	}
 
 	TArray<AActor*> Matches;
@@ -5116,6 +5127,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 			if (!CName.Contains(ClassName)) continue;
 		}
 		if (!Tag.IsEmpty() && !A->ActorHasTag(FName(*Tag))) continue;
+		if (!MCPActorInFolder(A, FolderPath, FolderPathPrefix)) continue;
 		if (ClassPathNeedles.Num() > 0)
 		{
 			const FString ClassPath = A->GetClass()->GetPathName();
@@ -5135,10 +5147,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 
 	TArray<TSharedPtr<FJsonValue>> Labels;
 	TArray<TSharedPtr<FJsonValue>> ClassPaths;
+	TArray<TSharedPtr<FJsonValue>> FolderPaths;
 	for (AActor* A : Matches)
 	{
 		Labels.Add(MakeShared<FJsonValueString>(A->GetActorLabel()));
 		ClassPaths.Add(MakeShared<FJsonValueString>(A->GetClass()->GetPathName()));
+		FolderPaths.Add(MakeShared<FJsonValueString>(MCPActorFolderPath(A)));
 	}
 
 	int32 Deleted = 0;
@@ -5167,6 +5181,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 	Result->SetBoolField(TEXT("unchanged"), Deleted == 0);
 	Result->SetArrayField(TEXT("labels"), Labels);
 	Result->SetArrayField(TEXT("classPaths"), ClassPaths);
+	Result->SetArrayField(TEXT("folderPaths"), FolderPaths);
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
 		TEXT("This deletes whatever the filters matched, across any number of classes, and nothing here spawns a list of actors of differing classes at captured transforms. The actors' transforms, properties, components and attachments are not captured before the destroy, so no call can put them back. dryRun=true is the preflight; the editor's undo stack is the recovery path."));
@@ -5185,6 +5200,32 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 		if (const TSharedPtr<FJsonObject> Hint = MCPDescribeZeroActorMatch(World, Needle))
 		{
 			Result->SetObjectField(TEXT("zeroMatchHint"), Hint);
+		}
+		// A folder filter that names no folder is the likely wrong zero, so list
+		// the folders the level does have that share its last segment.
+		const FString FolderNeedle = !FolderPath.IsEmpty() ? FolderPath : FolderPathPrefix;
+		if (!FolderNeedle.IsEmpty())
+		{
+			FString Leaf = FolderNeedle;
+			int32 Slash = INDEX_NONE;
+			if (Leaf.FindLastChar(TEXT('/'), Slash)) Leaf = Leaf.Mid(Slash + 1);
+			TSet<FString> Similar;
+			for (TActorIterator<AActor> It(World); It; ++It)
+			{
+				const FString Folder = MCPActorFolderPath(*It);
+				if (!Folder.IsEmpty() && (Leaf.IsEmpty() || Folder.Contains(Leaf, ESearchCase::IgnoreCase)))
+				{
+					Similar.Add(Folder);
+				}
+			}
+			TArray<FString> Sorted = Similar.Array();
+			Sorted.Sort();
+			TArray<TSharedPtr<FJsonValue>> Folders;
+			for (int32 i = 0; i < Sorted.Num() && i < 20; ++i)
+			{
+				Folders.Add(MakeShared<FJsonValueString>(Sorted[i]));
+			}
+			Result->SetArrayField(TEXT("similarFolders"), Folders);
 		}
 		MCPNoteLoadedOnlyEnumeration(World, Result);
 	}

@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1246,
+  "handlerCount": 1248,
   "handlers": {
     "actors_in_box": {
       "category": "level",
@@ -6327,7 +6327,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -7629,7 +7629,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -12036,6 +12036,38 @@
       ],
       "contractExempt": "Creates and saves a system under the contract values; nothing it reads fails first"
     },
+    "create_outliner_folder": {
+      "category": "level",
+      "params": [
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder to create, such as Props/Lights"
+        },
+        {
+          "name": "folderPaths",
+          "type": "array",
+          "required": false,
+          "description": "World Outliner folders; combined with folderPath",
+          "items": "string"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "folderPath"
+            ],
+            [
+              "folderPaths"
+            ]
+          ]
+        }
+      ],
+      "contractExempt": "The contract value is a valid folder name, so the call would create a folder in the editor world"
+    },
     "create_pcg_graph": {
       "category": "pcg",
       "params": [
@@ -13181,6 +13213,18 @@
           "items": "string"
         },
         {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder, matched exactly"
+        },
+        {
+          "name": "folderPathPrefix",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder, matched with every folder nested under it"
+        },
+        {
           "name": "dryRun",
           "type": "boolean",
           "required": false,
@@ -13211,6 +13255,12 @@
             ],
             [
               "classPathContainsAny"
+            ],
+            [
+              "folderPath"
+            ],
+            [
+              "folderPathPrefix"
             ]
           ]
         }
@@ -13516,6 +13566,43 @@
           "type": "boolean",
           "required": false,
           "description": "List the orphans without deleting them (default false)"
+        }
+      ]
+    },
+    "delete_outliner_folder": {
+      "category": "level",
+      "params": [
+        {
+          "name": "folderPath",
+          "type": "string",
+          "required": false,
+          "description": "World Outliner folder to delete, with the empty folders under it"
+        },
+        {
+          "name": "folderPaths",
+          "type": "array",
+          "required": false,
+          "description": "World Outliner folders; combined with folderPath",
+          "items": "string"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would be deleted without deleting (default false)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "folderPath"
+            ],
+            [
+              "folderPaths"
+            ]
+          ]
         }
       ]
     },
@@ -19255,7 +19342,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "editorHidden",
@@ -28058,7 +28145,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "fields",
@@ -31194,7 +31281,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -35584,7 +35671,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -36844,7 +36931,7 @@
           "name": "folderPathPrefix",
           "type": "string",
           "required": false,
-          "description": "World Outliner folder prefix"
+          "description": "World Outliner folder, matched with every folder nested under it"
         },
         {
           "name": "matchSubclasses",
@@ -44429,7 +44516,7 @@
               "name": "folderPathPrefix",
               "type": "string",
               "required": false,
-              "description": "World Outliner folder prefix"
+              "description": "World Outliner folder, matched with every folder nested under it"
             },
             {
               "name": "matchSubclasses",
