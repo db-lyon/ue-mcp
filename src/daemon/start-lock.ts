@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { isPidAlive } from "../bridge/editor-target.js";
 import { info } from "../core/log.js";
-import { daemonDir, projectKey, readLiveDiscovery, type DaemonDiscovery } from "./discovery.js";
+import { daemonDir, projectKey, readAnsweringDiscovery, readLiveDiscovery, type DaemonDiscovery } from "./discovery.js";
 
 /** A lock older than this is stale even if its pid is alive, which covers pid reuse. */
 export const START_LOCK_STALE_MS = 5 * 60_000;
@@ -25,6 +25,8 @@ export interface StartLockOptions {
   isAlive?: (pid: number) => boolean;
   now?: () => number;
   staleMs?: number;
+  /** Probe the published daemon and drop a record proven stale (#1460). */
+  isStale?: (d: DaemonDiscovery) => Promise<boolean>;
 }
 
 export function startLockPath(projectDir: string): string {
@@ -118,17 +120,19 @@ export async function waitForStartTurn(
   opts: StartLockOptions & { pollMs?: number } = {},
 ): Promise<StartTurn> {
   const pid = opts.pid ?? process.pid;
-  const live = (): DaemonDiscovery | null => {
-    const d = readLiveDiscovery(projectDir, opts.isAlive);
+  const live = async (): Promise<DaemonDiscovery | null> => {
+    const d = opts.isStale
+      ? await readAnsweringDiscovery(projectDir, { isAlive: opts.isAlive, isStale: opts.isStale })
+      : readLiveDiscovery(projectDir, opts.isAlive);
     return d && d.pid !== pid ? d : null;
   };
   let reported = false;
   for (;;) {
-    const before = live();
+    const before = await live();
     if (before && satisfies(before)) return { action: "defer", live: before };
     if (tryTakeStartLock(projectDir, opts)) {
       // A daemon may have published between the read and the take.
-      const after = live();
+      const after = await live();
       if (after && satisfies(after)) {
         releaseStartLock(projectDir, pid);
         return { action: "defer", live: after };

@@ -36,6 +36,7 @@ import { createMcpServer } from "../server/mcp-server.js";
 import { startFlowHttpServer } from "../flow/http-server.js";
 import {
   DAEMON_API_VERSION,
+  discoveryIsStale,
   newToken,
   projectKey,
   readLiveDiscovery,
@@ -966,7 +967,7 @@ export async function runDaemon(projects: string[]): Promise<number> {
     return 2;
   }
   const projectDir = path.dirname(path.resolve(projects[0]));
-  const turn = await waitForStartTurn(projectDir, (d) => !isOlder(d.version, packageVersion()));
+  const turn = await waitForStartTurn(projectDir, (d) => !isOlder(d.version, packageVersion()), { isStale: discoveryIsStale });
   if (turn.action === "defer") {
     info("daemon", `daemon ${turn.live.version} already running (pid ${turn.live.pid}); not starting another`);
     return 0;
