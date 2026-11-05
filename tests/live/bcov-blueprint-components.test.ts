@@ -18,6 +18,7 @@ const CHILD = `${DIR}/BP_BCovCompChild`;
 const ALL = [CHILD, PARENT, CHAR, BP];
 const CUBE = "/Engine/BasicShapes/Cube.Cube";
 const SHAPE_MATERIAL = "/Engine/BasicShapes/BasicShapeMaterial";
+const TICK_LABEL = "BCovTickInstance";
 
 type Json = Record<string, unknown>;
 type Row = Record<string, unknown>;
@@ -43,6 +44,7 @@ async function componentValue(path: string, componentName: string, propertyName:
 
 beforeAll(async () => {
   bridge = await getBridge();
+  await callBridge(bridge, "delete_actor", { actorLabel: TICK_LABEL });
   for (const p of ALL) await callBridge(bridge, "delete_asset", { assetPath: p, force: true });
   await call("create_blueprint", { assetPath: BP, parentClass: "Actor" });
   await call("create_blueprint", { assetPath: CHAR, parentClass: "Character" });
@@ -50,6 +52,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (bridge) {
+    await callBridge(bridge, "delete_actor", { actorLabel: TICK_LABEL });
     for (const p of ALL) await callBridge(bridge, "delete_asset", { assetPath: p, force: true });
     disconnectBridge();
   }
@@ -162,6 +165,16 @@ describe("class defaults", () => {
     expect(Number(interval.valueText)).toBeCloseTo(0.5, 5);
     const startEnabled = await call("get_blueprint_variable_default", { assetPath: BP, name: "PrimaryActorTick.bStartWithTickEnabled" });
     expect(String(startEnabled.valueText)).toBe("False");
+  }, 120_000);
+
+  it("set_actor_tick_settings carries bCanEverTick to an actor placed before the call (#1655)", async () => {
+    await call("set_actor_tick_settings", { assetPath: BP, bCanEverTick: false });
+    await call("place_actor", { actorClass: `${BP}.BP_BCovComponents_C`, label: TICK_LABEL, location: { x: 0, y: -4200, z: 100 } });
+    const set = await call("set_actor_tick_settings", { assetPath: BP, bCanEverTick: true });
+    expect(Number(set.instancesUpdated)).toBeGreaterThanOrEqual(1);
+    const details = await call("get_actor_details", { actorLabel: TICK_LABEL, includeProperties: true, propertyName: "PrimaryActorTick" });
+    const tick = JSON.stringify(rows(details, "properties"));
+    expect(tick).toMatch(/bCanEverTick=True/);
   }, 120_000);
 
   it("set_cdo_property and get_cdo_properties round-trip on the test Blueprint's class", async () => {

@@ -6840,6 +6840,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "set_actor_tick_settings carries bCanEverTick to an actor placed before the call (#1655)"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-demo.test.ts",
           "test": "demo_step builds the demo level, its materials and the floor"
         },
@@ -13933,6 +13938,11 @@
         },
         {
           "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "set_actor_tick_settings carries bCanEverTick to an actor placed before the call (#1655)"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-editor-world.test.ts",
           "test": "get_message_log lists the registered listings and reads MapCheck after a map check"
         },
@@ -18450,6 +18460,11 @@
       "registeredIn": "BlueprintHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-blueprint-components.test.ts",
+          "test": "set_actor_tick_settings carries bCanEverTick to an actor placed before the call (#1655)"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-blueprint-components.test.ts",

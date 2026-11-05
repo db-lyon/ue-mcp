@@ -1356,11 +1356,59 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	// the claim and the contradiction in the same result.
 	bool bSaved = true;
 	FString SaveError;
+	int32 InstancesUpdated = 0;
+	int32 InstancesKeptOverride = 0;
 	if (!bNoChange)
 	{
+		// Placed instances and child templates whose field still equals the old
+		// default follow the new one, as the details panel propagates a default.
+		// Without this, an actor placed before the call keeps the old value and
+		// the level saves it as an override, so a Tick never runs (#1655).
+		struct FTickFollower
+		{
+			TWeakObjectPtr<AActor> Actor;
+			bool bCanEverTick = false;
+			bool bStartWithTickEnabled = false;
+			bool bTickInterval = false;
+		};
+		TArray<FTickFollower> Followers;
+		TArray<UObject*> Instances;
+		CDO->GetArchetypeInstances(Instances);
+		for (UObject* Instance : Instances)
+		{
+			AActor* A = Cast<AActor>(Instance);
+			if (!IsValid(A) || A == CDO) continue;
+			if (A->GetClass()->HasAnyClassFlags(CLASS_NewerVersionExists)) continue;
+			if (A->GetOutermost()->HasAnyPackageFlags(PKG_PlayInEditor)) continue;
+			FTickFollower F;
+			F.Actor = A;
+			bool bOverride = false;
+			const auto Follow = [&bOverride](bool bFieldChanges, bool bMatchesOld, bool& bOut)
+			{
+				if (!bFieldChanges) return;
+				if (bMatchesOld) bOut = true; else bOverride = true;
+			};
+			Follow(bCanEverTick != bPrevCanEverTick, A->PrimaryActorTick.bCanEverTick == bPrevCanEverTick, F.bCanEverTick);
+			Follow(bStartWithTickEnabled != bPrevStartWithTickEnabled, A->PrimaryActorTick.bStartWithTickEnabled == bPrevStartWithTickEnabled, F.bStartWithTickEnabled);
+			Follow(NewTickInterval != PrevTickInterval, A->PrimaryActorTick.TickInterval == PrevTickInterval, F.bTickInterval);
+			if (bOverride) ++InstancesKeptOverride;
+			if (F.bCanEverTick || F.bStartWithTickEnabled || F.bTickInterval) Followers.Add(F);
+		}
+
 		CDO->PrimaryActorTick.bCanEverTick = bCanEverTick;
 		CDO->PrimaryActorTick.bStartWithTickEnabled = bStartWithTickEnabled;
 		CDO->PrimaryActorTick.TickInterval = NewTickInterval;
+
+		for (const FTickFollower& F : Followers)
+		{
+			AActor* A = F.Actor.Get();
+			if (!A) continue;
+			A->Modify();
+			if (F.bCanEverTick) A->PrimaryActorTick.bCanEverTick = bCanEverTick;
+			if (F.bStartWithTickEnabled) A->PrimaryActorTick.bStartWithTickEnabled = bStartWithTickEnabled;
+			if (F.bTickInterval) A->PrimaryActorTick.TickInterval = NewTickInterval;
+			++InstancesUpdated;
+		}
 
 		Blueprint->MarkPackageDirty();
 		bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
@@ -1377,6 +1425,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	Result->SetBoolField(TEXT("previousStartWithTickEnabled"), bPrevStartWithTickEnabled);
 	Result->SetNumberField(TEXT("previousTickInterval"), PrevTickInterval);
 	Result->SetBoolField(TEXT("unchanged"), bNoChange);
+	Result->SetNumberField(TEXT("instancesUpdated"), InstancesUpdated);
+	Result->SetNumberField(TEXT("instancesKeptOverride"), InstancesKeptOverride);
 
 	if (bNoChange)
 	{
