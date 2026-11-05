@@ -1139,7 +1139,7 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::ReadSkeletalMeshVertices(const TSh
 		const TSharedPtr<FJsonObject>* MaxObject = nullptr;
 		FVector Min = FVector::ZeroVector;
 		FVector Max = FVector::ZeroVector;
-		if (!Params->TryGetObjectField(TEXT("box"), BoxObject) || !BoxObject || !(*BoxObject).IsValid()
+		if (!TryGetObjectParam(Params, TEXT("box"), BoxObject) || !BoxObject || !(*BoxObject).IsValid()
 			|| !(*BoxObject)->TryGetObjectField(TEXT("min"), MinObject) || !MinObject
 			|| !(*BoxObject)->TryGetObjectField(TEXT("max"), MaxObject) || !MaxObject
 			|| !ReadVec3FieldsStrict(*MinObject, Min) || !ReadVec3FieldsStrict(*MaxObject, Max))
