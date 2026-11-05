@@ -803,7 +803,9 @@ namespace MCPPIE
 				break;
 			default:
 			{
-				const bool bCovered = ProfileValuePaths.ContainsByPredicate([&S](const FString& P)
+				// A pawn channel is read off the sampled pawn state, not tracked.
+				const bool bCovered = IsPawnChannelName(S.Expect.Value)
+					|| ProfileValuePaths.ContainsByPredicate([&S](const FString& P)
 				{
 					return TrackedValuePathMatches(P, S.Expect.Value);
 				});

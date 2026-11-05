@@ -6,6 +6,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Handlers/PIE/PIEScriptRunner.h"
+#include "Handlers/PIE/PIEObserver.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -819,6 +820,33 @@ bool FPIEScriptArrangeActManualTest::RunTest(const FString& /*Parameters*/)
 	SettleUnfinishedScriptSteps(Stopped, TEXT("stopped"));
 	TestTrue(TEXT("act failed on stop"), Stopped.Steps[0].Act.State == EScriptActState::Failed);
 	TestTrue(TEXT("step failed on stop"), Stopped.Steps[0].Status == EScriptStepStatus::Failed);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPIEScriptPawnChannelTest,
+	"UE.MCP.PIE.Script.PawnChannels",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPIEScriptPawnChannelTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MCPPIE;
+	FCSVRow Row;
+	Row.PawnLocation = FVector(-1326.8, 20.0, 90.0);
+	Row.PawnVelocity = FVector(375.0, 0.0, -10.0);
+	Row.PawnRotation = FRotator(0.0, 45.0, 0.0);
+	Row.Speed2D = 375.f;
+	double V = 0.0;
+	TestTrue(TEXT("pos_x reads"), ReadPawnChannel(Row, TEXT("pos_x"), V));
+	TestEqual(TEXT("pos_x value"), V, -1326.8);
+	TestTrue(TEXT("case-insensitive"), ReadPawnChannel(Row, TEXT("VEL_Z"), V));
+	TestEqual(TEXT("vel_z value"), V, -10.0);
+	TestTrue(TEXT("rot_yaw reads"), ReadPawnChannel(Row, TEXT("rot_yaw"), V));
+	TestEqual(TEXT("rot_yaw value"), V, 45.0);
+	TestTrue(TEXT("speed2d reads"), ReadPawnChannel(Row, TEXT("speed2d"), V));
+	TestFalse(TEXT("an unknown name is not a channel"), ReadPawnChannel(Row, TEXT("Health"), V));
+	TestTrue(TEXT("pos_z is a channel name"), IsPawnChannelName(TEXT("pos_z")));
+	TestFalse(TEXT("x alone is not"), IsPawnChannelName(TEXT("x")));
 	return true;
 }
 
