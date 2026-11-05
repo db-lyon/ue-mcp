@@ -102,6 +102,7 @@ const PER_SESSION: Record<string, string> = {
   "cli/uninstall-hooks.ts": "Removes one project's hooks, chosen with --editor.",
   "cli/resolve.ts": "Runs the issue workflow against one project, chosen with --editor.",
   "cli/build-cli.ts": "Builds one project, chosen with --editor.",
+  "cli/flow-cli.ts": "Lists, plans and runs the flows of one project, chosen with --editor.",
   "cli/deploy-cli.ts": "Deploys into one project, chosen with --editor.",
   "cli/context-cli.ts": "Writes one project's context strategy, chosen with --editor.",
   "cli/plugin-cli.ts": "Installs and inspects plugins for one project, chosen with --editor.",

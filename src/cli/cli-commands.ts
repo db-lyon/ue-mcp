@@ -44,6 +44,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "playtest", summary: "Set who starts playtest runs", load: () => import("./playtest-cli.js"), ownHelp: true },
   { name: "resolve", summary: "Work a GitHub issue into a pull request", load: () => import("./resolve.js") },
   { name: "build", summary: "Build a project's editor target", load: () => import("./build-cli.js") },
+  { name: "flow", summary: "List, plan or run a project's flows", load: () => import("./flow-cli.js") },
   { name: "plugin", summary: "Install, create and publish plugins", load: () => import("./plugin-cli.js") },
   { name: "context", summary: "Read or set the context strategy", load: () => import("./context-cli.js"), ownHelp: true },
   {

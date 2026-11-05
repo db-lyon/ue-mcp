@@ -267,6 +267,26 @@
       "summary": "ue-mcp resolve works a GitHub issue into a pull request through gh, git and claude"
     },
     {
+      "id": "cli.flow.list",
+      "group": "cli",
+      "summary": "ue-mcp flow list prints the flows of the project in the working directory, merged with the built-ins, without reaching the editor"
+    },
+    {
+      "id": "cli.flow.plan",
+      "group": "cli",
+      "summary": "ue-mcp flow plan <name> prints a flow's resolved steps and params without running any, and exits 1 for an unknown flow"
+    },
+    {
+      "id": "cli.flow.run",
+      "group": "cli",
+      "summary": "ue-mcp flow run <name> runs the flow in process against the project's editor, prints each step as it finishes and exits 1 when it fails"
+    },
+    {
+      "id": "cli.flow.json",
+      "group": "cli",
+      "summary": "ue-mcp flow list|plan|run --json prints the flow tool's JSON result only"
+    },
+    {
       "id": "cli.plugin.install",
       "group": "cli",
       "summary": "ue-mcp plugin install adds a plugin package, validates its manifest and records it in ue-mcp.yml"
