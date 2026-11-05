@@ -674,6 +674,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
+          "test": "add_material_expression sets the node's own constants through properties"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-material-graph.test.ts",
           "test": "set_custom_expression rebuilds a Custom node's code and input pins"
         },
         {
@@ -2356,7 +2361,17 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
+          "test": "build_material_graph adds native nodes with constants, rewires BaseColor and deletes the Custom node"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-material-graph.test.ts",
           "test": "build_material_graph creates named nodes and wires a property"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-material-graph.test.ts",
+          "test": "build_material_graph refuses a wire to an expression it is removing and changes nothing"
         },
         {
           "suite": "live",
@@ -3717,6 +3732,11 @@
           "suite": "live",
           "file": "tests/live/bcov-landscape.test.ts",
           "test": "set_landscape_holes punches and fills a region that get_landscape_holes reads back"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-material-graph.test.ts",
+          "test": "add_material_expression sets the node's own constants through properties"
         }
       ]
     },
@@ -8643,6 +8663,16 @@
           "suite": "live",
           "file": "tests/live/bcov-editor-world.test.ts",
           "test": "invoke_object_function, invoke_function and invoke_object_functions change what get_object_properties reads"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-material-graph.test.ts",
+          "test": "add_material_expression sets the node's own constants through properties"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-material-graph.test.ts",
+          "test": "build_material_graph adds native nodes with constants, rewires BaseColor and deletes the Custom node"
         },
         {
           "suite": "live",

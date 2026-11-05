@@ -223,6 +223,12 @@ export const handlerSpecs: HandlerSpecs = {
         "description": "ComponentMask channels {r,g,b,a} as bools"
       },
       {
+        "name": "properties",
+        "type": "object",
+        "required": false,
+        "description": "Any other UPROPERTY on the node by name, e.g. {ConstB: 12.92} on Divide, {ConstY: 0.04} on Step, {ConstExponent: 2.4} on Power. A bad name or value adds nothing"
+      },
+      {
         "name": "positionX",
         "type": "number",
         "required": false,
@@ -861,6 +867,13 @@ export const handlerSpecs: HandlerSpecs = {
             "description": "Source output index, instead of output"
           }
         ]
+      },
+      {
+        "name": "removeExpressions",
+        "type": "array",
+        "required": false,
+        "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
+        "items": "string"
       }
     ]
   },
@@ -1522,6 +1535,13 @@ export const handlerSpecs: HandlerSpecs = {
             "description": "Source output index, instead of output"
           }
         ]
+      },
+      {
+        "name": "removeExpressions",
+        "type": "array",
+        "required": false,
+        "description": "Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)",
+        "items": "string"
       }
     ]
   },
@@ -2671,7 +2691,7 @@ export const handlerSpecs: HandlerSpecs = {
 export const paramsClauses: Readonly<Record<string, string>> = {
   add_expression_in_function: "Params: functionPath (or materialFunctionPath), expressionType, positionX?, positionY?, inputName?, inputType?, outputName?, name?",
   add_material_designer_layer: "Params: assetPath OR actorLabel OR actorPath, componentName?, slotIndex?, slotName?, world?, pieInstance?, designerSlot?, materialProperty?, layerName?",
-  add_material_expression: "Params: materialPath (or path, or assetPath), expressionType, name? (or expressionName), parameterName?, group?, sortPriority?, defaultValue?, value?, channels?, positionX?, positionY?",
+  add_material_expression: "Params: materialPath (or path, or assetPath), expressionType, name? (or expressionName), parameterName?, group?, sortPriority?, defaultValue?, value?, channels?, properties?, positionX?, positionY?",
   add_rvt_output: "Params: materialPath (or assetPath), expressionName?, mirrorProperties?, positionX?, positionY?, recompile?",
   add_rvt_sampler: "Params: materialPath (or assetPath), rvtPath, expressionName?, connectOutputs?, positionX?, positionY?, recompile?",
   add_rvt_volume: "Params: rvtPath (or assetPath), actorLabel?, boundsMode?, boundsAlignActor?",
@@ -2679,7 +2699,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   batch_set_material_instances: "Params: instances",
   begin_material_transaction: "Params: label?",
   build_material: "Params: materialPath (or assetPath) OR name, packagePath?, textures?, textureParameters?, parameters?, nodes?, connections?, propertyConnections?, instances?, samplerTypes?, clearExisting?, assignToMesh? (or meshPath), meshSlots?",
-  build_material_graph: "Params: assetPath (or materialPath), nodes, connections?, propertyConnections?",
+  build_material_graph: "Params: assetPath (or materialPath), nodes, connections?, propertyConnections?, removeExpressions?",
   clear_material_instance_parameters: "Params: assetPath (or path, or materialPath)",
   connect_expressions_in_function: "Params: functionPath (or materialFunctionPath), sourceExpression, sourceOutput?, targetExpression, targetInput?",
   connect_material_expressions: "Params: materialPath (or path, or assetPath), sourceExpression, sourceOutput?, targetExpression, targetInput?",
@@ -2699,7 +2719,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   export_material_graph: "Params: assetPath (or materialPath)",
   get_material_shader_stats: "Params: assetPath (or materialPath)",
   get_material_usage: "Params: assetPath (or path)",
-  import_material_graph: "Params: assetPath (or materialPath), nodes, connections?, propertyConnections?",
+  import_material_graph: "Params: assetPath (or materialPath), nodes, connections?, propertyConnections?, removeExpressions?",
   list_expression_types: "Params: cursor?, limit?",
   list_expressions_in_function: "Params: functionPath (or materialFunctionPath)",
   list_material_expressions: "Params: materialPath (or path, or assetPath), includeInputs?, cursor?, limit?",
@@ -2804,12 +2824,14 @@ export const schema: Record<string, z.ZodType> = {
   pieInstance: z.number().optional().describe("Which PIE world when several run (0 = server/primary). See editor(list_pie_instances)"),
   positionX: z.number().optional().describe("Graph editor X position for a new node"),
   positionY: z.number().optional().describe("Graph editor Y position for a new node"),
+  properties: z.record(z.string(), z.unknown()).optional().describe("Any other UPROPERTY on the node by name, e.g. {ConstB: 12.92} on Divide, {ConstY: 0.04} on Step, {ConstExponent: 2.4} on Power. A bad name or value adds nothing"),
   property: z.string().optional().describe("Material property: BaseColor, Normal, Roughness, Metallic, EmissiveColor, etc. (default BaseColor) (connect_texture_to_material). Material property: BaseColor, Normal, Roughness, Metallic, EmissiveColor, etc. (connect_to_material_property, disconnect_material_property)"),
   propertyConnections: z.array(z.object({ property: z.string().describe("BaseColor, Metallic, Specular, Roughness, Normal, EmissiveColor, Opacity, OpacityMask, AmbientOcclusion and the rest"), from: z.string().describe("Source node, named as in connections"), output: z.unknown().optional().describe("Source output by name or index (default 0)"), outputIndex: z.number().int().optional().describe("Source output index, instead of output") })).optional().describe("Wires into the material's outputs"),
   propertyName: z.string().optional().describe("Any other UPROPERTY on the node, set from value by reflection, e.g. SamplerType (#663) (set_expression_value). Component property to write, e.g. Value, Offset, Tiling, Rotation, Text, bEnabled, LayerName (set_material_designer_value)"),
   rebuild: z.boolean().optional().describe("Request a material build after the write (default true when no setter ran)"),
   recompile: z.boolean().optional().describe("Recompile the material after the graph edit (default true)"),
   recompileChildren: z.boolean().optional().describe("Cascade to every MaterialInstanceConstant whose parent chain reaches this material (#421)"),
+  removeExpressions: z.array(z.string()).optional().describe("Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)"),
   roughness: z.number().optional().describe("Roughness constant"),
   rvtPath: z.string().optional().describe("RuntimeVirtualTexture asset path (add_rvt_sampler, add_rvt_volume, read_runtime_virtual_texture). One RuntimeVirtualTexture asset path, instead of rvtPaths (assign_rvt_to_landscape). RuntimeVirtualTexture whose one bound volume to refit (set_rvt_volume_bounds)"),
   rvtPaths: z.array(z.string()).optional().describe("RuntimeVirtualTexture asset paths"),

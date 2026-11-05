@@ -154,6 +154,10 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("outputIndex"), EType::Integer, TEXT("Source output index, instead of output")),
 		});
 	};
+	auto SpecRemoveExpressions = []()
+	{
+		return MCPParam::Optional(TEXT("removeExpressions"), EType::Array, TEXT("Existing expressions to delete once the new nodes are wired, named as delete_expression takes them (description, class, parameter name, index or engine name). Resolved before anything changes; a connection may not use one (#1461)")).Items(EType::String);
+	};
 	auto SpecSourceExpression = []()
 	{
 		return MCPParam::Required(TEXT("sourceExpression"), EType::String, TEXT("Expression the wire leaves (name, or index inside a MaterialFunction)"));
@@ -251,6 +255,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("defaultValue"), EType::Number, TEXT("ScalarParameter default (a number) or VectorParameter default ({r,g,b,a})")).Or(EType::Object),
 		MCPParam::Optional(TEXT("value"), EType::Any, TEXT("A number for Constant, {r,g,b} for Constant3Vector, {x,y} for Constant2Vector")),
 		MCPParam::Optional(TEXT("channels"), EType::Object, TEXT("ComponentMask channels {r,g,b,a} as bools")),
+		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Any other UPROPERTY on the node by name, e.g. {ConstB: 12.92} on Divide, {ConstY: 0.04} on Step, {ConstExponent: 2.4} on Power. A bad name or value adds nothing")),
 		SpecPositionX(),
 		SpecPositionY(),
 	});
@@ -399,12 +404,14 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecGraphNodes(),
 		SpecGraphConnections(),
 		SpecPropertyConnections(),
+		SpecRemoveExpressions(),
 	});
 	Registry.RegisterHandler(TEXT("build_material_graph"), &BuildMaterialGraph, {
 		SpecGraphAssetPath(),
 		SpecGraphNodes(),
 		SpecGraphConnections(),
 		SpecPropertyConnections(),
+		SpecRemoveExpressions(),
 	});
 	Registry.RegisterHandler(TEXT("delete_orphan_expressions"), &DeleteOrphanExpressions, {
 		SpecGraphAssetPath(),
@@ -2083,6 +2090,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	// Read on the new node, after the load; which ones apply depends on its class.
 	MCPReadParamsAhead(Params, { TEXT("name"), TEXT("parameterName"), TEXT("group"), TEXT("sortPriority"),
 		TEXT("defaultValue"), TEXT("value"), TEXT("channels"), TEXT("positionX"), TEXT("positionY") });
+	const TSharedPtr<FJsonObject>* Properties = nullptr;
+	const bool bHasProperties = TryGetObjectParam(Params, TEXT("properties"), Properties) && Properties;
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
@@ -2102,6 +2111,18 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	Material->GetExpressionCollection().AddExpression(NewExpression);
 
 	ApplyExpressionSpec(NewExpression, Params);
+
+	// #1461: per-node constants in the same call. A bad one removes the node again.
+	if (bHasProperties)
+	{
+		FString PropError;
+		if (!ApplyExpressionProperties(NewExpression, *Properties, PropError))
+		{
+			UMaterialEditingLibrary::DeleteMaterialExpression(Material, NewExpression);
+			Material->PostEditChange();
+			return MCPError(FString::Printf(TEXT("%s. Nothing was added."), *PropError));
+		}
+	}
 
 	// Set position
 	double PosX = 0, PosY = 0;

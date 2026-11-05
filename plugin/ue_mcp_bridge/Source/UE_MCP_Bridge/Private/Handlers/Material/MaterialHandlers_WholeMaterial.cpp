@@ -432,11 +432,41 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ImportMaterialGraph(const TSharedPtr<F
 			(*AsObject)->SetStringField(TEXT("aliasOf"), TEXT("build_material_graph"));
 			(*AsObject)->SetBoolField(TEXT("rollbackPossible"), false);
 			(*AsObject)->SetStringField(TEXT("rollbackNote"), FString::Printf(
-				TEXT("import_material_graph is build_material_graph under another name, and it ADDS to the graph rather than replacing it: there is no replace mode that could be handed a snapshot of the previous graph, and no bulk delete for material expressions, so no single call undoes it. %s"),
+				TEXT("import_material_graph is build_material_graph under another name, and it ADDS to the graph rather than replacing it: there is no replace mode that could be handed a snapshot of the previous graph, so no single call undoes it. %s"),
 				*DelegatedNote));
 		}
 	}
 	return Delegated;
+}
+
+
+bool FMaterialHandlers::ApplyExpressionProperties(UMaterialExpression* Expression, const TSharedPtr<FJsonObject>& Properties, FString& OutError)
+{
+	if (!Expression || !Properties.IsValid()) return true;
+	for (const auto& Pair : Properties->Values)
+	{
+		const FString Key(Pair.Key);
+		FProperty* Prop = Expression->GetClass()->FindPropertyByName(FName(*Key));
+		if (!Prop)
+		{
+			for (TFieldIterator<FProperty> It(Expression->GetClass()); It; ++It)
+			{
+				if (It->GetName().Equals(Key, ESearchCase::IgnoreCase)) { Prop = *It; break; }
+			}
+		}
+		if (!Prop)
+		{
+			OutError = FString::Printf(TEXT("%s has no property '%s'"), *Expression->GetClass()->GetName(), *Key);
+			return false;
+		}
+		FString SetError;
+		if (!MCPJsonProperty::SetJsonOnProperty(Prop, Prop->ContainerPtrToValuePtr<void>(Expression), Pair.Value, SetError))
+		{
+			OutError = FString::Printf(TEXT("property '%s': %s"), *Key, *SetError);
+			return false;
+		}
+	}
+	return true;
 }
 
 
@@ -455,9 +485,32 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	const bool bHasPropertyConnections = TryGetArrayParam(Params, TEXT("propertyConnections"), PropArr) && PropArr;
 	const TArray<TSharedPtr<FJsonValue>>* ConnArr = nullptr;
 	const bool bHasConnections = TryGetArrayParam(Params, TEXT("connections"), ConnArr) && ConnArr;
+	const TArray<TSharedPtr<FJsonValue>>* RemoveArr = nullptr;
+	const bool bHasRemovals = TryGetArrayParam(Params, TEXT("removeExpressions"), RemoveArr) && RemoveArr;
 
 	UMaterial* Material = LoadMaterialFromPath(AssetPath);
 	if (!Material) return MCPError(FString::Printf(TEXT("Material not found: %s"), *AssetPath));
+
+	// #1461: resolved before any node exists, so a new node's description cannot
+	// shadow the expression being replaced. Deleted last, once every wire is in.
+	TArray<UMaterialExpression*> ToRemove;
+	if (bHasRemovals)
+	{
+		for (int32 i = 0; i < RemoveArr->Num(); ++i)
+		{
+			FString RemoveName;
+			if (!(*RemoveArr)[i].IsValid() || !(*RemoveArr)[i]->TryGetString(RemoveName) || RemoveName.IsEmpty())
+			{
+				return MCPError(FString::Printf(TEXT("removeExpressions[%d] must be a non-empty expression name"), i));
+			}
+			UMaterialExpression* Existing = FindExpressionByName(Material, RemoveName);
+			if (!Existing)
+			{
+				return MCPError(FString::Printf(TEXT("removeExpressions[%d]: no expression '%s' in %s (read_graph lists them). Nothing was changed."), i, *RemoveName, *AssetPath));
+			}
+			ToRemove.AddUnique(Existing);
+		}
+	}
 
 	// Preflight every node and property name, so a typo fails before the graph changes.
 	struct FNodeSpec { FString Name; UClass* Class; TSharedPtr<FJsonObject> Obj; };
@@ -546,22 +599,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 		const TSharedPtr<FJsonObject>* Props = nullptr;
 		if (Spec.Obj->TryGetObjectField(TEXT("properties"), Props) && Props)
 		{
-			for (const auto& Pair : (*Props)->Values)
+			FString PropError;
+			if (!ApplyExpressionProperties(Expr, *Props, PropError))
 			{
-				FProperty* Prop = Expr->GetClass()->FindPropertyByName(FName(*Pair.Key));
-				if (!Prop)
-				{
-					for (TFieldIterator<FProperty> It(Expr->GetClass()); It; ++It)
-					{
-						if (It->GetName().Equals(FString(Pair.Key), ESearchCase::IgnoreCase)) { Prop = *It; break; }
-					}
-				}
-				if (!Prop) return Abort(FString::Printf(TEXT("Node '%s' (%s) has no property '%s'."), *Spec.Name, *Spec.Class->GetName(), *Pair.Key));
-				FString SetError;
-				if (!MCPJsonProperty::SetJsonOnProperty(Prop, Prop->ContainerPtrToValuePtr<void>(Expr), Pair.Value, SetError))
-				{
-					return Abort(FString::Printf(TEXT("Node '%s' property '%s': %s."), *Spec.Name, *Pair.Key, *SetError));
-				}
+				return Abort(FString::Printf(TEXT("Node '%s': %s."), *Spec.Name, *PropError));
 			}
 		}
 		ByName.Add(Spec.Name, Expr);
@@ -597,6 +638,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 			UMaterialExpression* Target = FindNode(To);
 			if (!Source) return Abort(FString::Printf(TEXT("connections[%d]: no node '%s'."), i, *From));
 			if (!Target) return Abort(FString::Printf(TEXT("connections[%d]: no node '%s'."), i, *To));
+			if (ToRemove.Contains(Source) || ToRemove.Contains(Target))
+			{
+				return Abort(FString::Printf(TEXT("connections[%d]: '%s' is listed in removeExpressions, so a wire to it would be deleted with it."), i, ToRemove.Contains(Source) ? *From : *To));
+			}
 			int32 OutIndex = 0, InIndex = 0;
 			FString PinError;
 			if (!ResolveExpressionOutputIndex(Source, FromOutput, OutIndex, PinError)) return Abort(FString::Printf(TEXT("connections[%d]: %s."), i, *PinError));
@@ -623,6 +668,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 			ParseMaterialProperty(PropName, Prop);
 			UMaterialExpression* Source = FindNode(FromName);
 			if (!Source) return Abort(FString::Printf(TEXT("propertyConnections[%d]: no node '%s'."), i, *FromName));
+			if (ToRemove.Contains(Source))
+			{
+				return Abort(FString::Printf(TEXT("propertyConnections[%d]: '%s' is listed in removeExpressions."), i, *FromName));
+			}
 			int32 OutIndex = 0;
 			FString PinError;
 			if (!ResolveExpressionOutputIndex(Source, Output, OutIndex, PinError)) return Abort(FString::Printf(TEXT("propertyConnections[%d]: %s."), i, *PinError));
@@ -639,6 +688,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 			In->Connect(OutIndex, Source);
 			++Connections;
 		}
+	}
+
+	// Deleting breaks every link to the expression, material outputs included.
+	TArray<TSharedPtr<FJsonValue>> RemovedExpressionNames;
+	for (UMaterialExpression* Expr : ToRemove)
+	{
+		RemovedExpressionNames.Add(MakeShared<FJsonValueString>(Expr->GetName()));
+		UMaterialEditingLibrary::DeleteMaterialExpression(Material, Expr);
 	}
 
 	Material->PostEditChange();
@@ -670,12 +727,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	Result->SetArrayField(TEXT("createdExpressions"), CreatedExpressionNames);
 	Result->SetArrayField(TEXT("nodes"), NodeMap);
 	Result->SetArrayField(TEXT("overwrittenProperties"), OverwrittenProperties);
+	Result->SetNumberField(TEXT("expressionsRemoved"), RemovedExpressionNames.Num());
+	Result->SetArrayField(TEXT("removedExpressions"), RemovedExpressionNames);
 
 	// One rollback record carries one call, and this created many nodes.
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
-		TEXT("No single call undoes this: %d expression(s) were created, %d wire(s) and %d property connection(s) written. Undo it with one delete_material_expression per name in createdExpressions, then reconnect anything listed in overwrittenProperties with connect_to_material_property. Wrapping the build in begin_transaction / end_transaction gives a one-step undo instead."),
-		Specs.Num(), Wires, Connections));
+		TEXT("No single call undoes this: %d expression(s) were created, %d removed, %d wire(s) and %d property connection(s) written. Undo the additions with one delete_material_expression per name in createdExpressions, then reconnect anything listed in overwrittenProperties with connect_to_material_property; removed expressions are not restorable that way. Wrapping the build in begin_transaction / end_transaction gives a one-step undo instead."),
+		Specs.Num(), RemovedExpressionNames.Num(), Wires, Connections));
 	return MCPResult(Result);
 }
 
