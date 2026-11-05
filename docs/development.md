@@ -23,7 +23,7 @@ From inside a `ue-mcp` clone:
 npx ue-mcp resolve 16
 ```
 
-This fetches issue #16 from the repository the `origin` remote names, creates a `resolve/16` branch from `origin/main`, and runs `claude --print --dangerously-skip-permissions` with the issue and the repo conventions. Claude implements the fix, runs `npx tsc --noEmit` and commits. The command then pushes the branch and opens a pull request. It needs the `gh` and `claude` CLIs and push access to `origin`, and works on the current checkout.
+This fetches issue #16 from the repository the `origin` remote names, creates a `resolve/16` branch from `origin/main`, and runs `claude --print` with the issue and the repo conventions. Claude runs in `dontAsk` permission mode with a fixed tool list: reading and editing files, `npx tsc --noEmit`, and `git status`, `diff`, `add` and `commit`. Anything else is denied. The issue text goes into the prompt as untrusted data. Claude implements the fix, runs `npx tsc --noEmit` and commits. The command then pushes the branch and opens a pull request. It needs the `gh` and `claude` CLIs and push access to `origin`, and works on the current checkout.
 
 ## Building
 
