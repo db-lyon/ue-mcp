@@ -151,6 +151,8 @@ Each shard of `npm run test:live` is a copy of `tests/ue_mcp` with its own edito
 - `tests/live/crash-class-inputs.test.ts` drives inputs that have crashed the editor and follows each call with a liveness probe.
 - `tests/live/matrix.ts` records where each case's assertion lives, and `tests/live/coverage.test.ts` checks each reference resolves.
 
+See [batch component properties](blueprint-component-properties-batch.md) for batch template edits and rollback limits.
+
 ## Adding an action or category
 
 ### TypeScript side

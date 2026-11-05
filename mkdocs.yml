@@ -63,6 +63,7 @@ nav:
   - Control Rig Animation: control-rig-animation.md
   - Spatial Instructions: spatial-instructions.md
   - Collection and Input Editing: collection-and-input-editing.md
+  - Blueprint Component Properties: blueprint-component-properties-batch.md
   - Native Tools: native-tools.md
   - Native Asset Pipeline: native-asset-pipeline.md
   - Shader Compilation: shader-compilation.md

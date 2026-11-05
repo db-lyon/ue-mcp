@@ -3225,6 +3225,26 @@
         },
         {
           "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.DirectorySelection"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.InheritedAndReferences"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.NativePersistenceAndRollback"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.ValidationAndReadOnly"
+        },
+        {
+          "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintTransactionalNodeTests.cpp",
           "test": "UE.MCP.Blueprint.TransactionalNodes.AnimationHandlers"
         },
@@ -3856,6 +3876,26 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintCompareClassDefaultsTests.cpp",
           "test": "UE.MCP.Blueprint.CompareClassDefaults"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.DirectorySelection"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.InheritedAndReferences"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.NativePersistenceAndRollback"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.ValidationAndReadOnly"
         },
         {
           "suite": "automation",
@@ -18655,6 +18695,34 @@
           "suite": "live",
           "file": "tests/live/bcov-animation-b-sequence.test.ts",
           "test": "populate_blendspace sets the axis and samples, and set_blend_sample moves one"
+        }
+      ]
+    },
+    {
+      "method": "set_blueprint_component_properties_batch",
+      "category": "blueprint",
+      "registeredIn": "BlueprintHandlers.cpp",
+      "status": "covered",
+      "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.DirectorySelection"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.InheritedAndReferences"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.NativePersistenceAndRollback"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/BlueprintComponentPropertiesBatchTests.cpp",
+          "test": "UE.MCP.Blueprint.ComponentPropertiesBatch.ValidationAndReadOnly"
         }
       ]
     },

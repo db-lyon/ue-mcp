@@ -311,6 +311,20 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecPropertyName,
 		SpecValue,
 	});
+	Registry.RegisterHandlerWithTimeout(TEXT("set_blueprint_component_properties_batch"), &SetComponentPropertiesBatch, 600.0f, {
+		MCPParam::Optional(TEXT("items"), EType::Array, TEXT("Explicit [{assetPath, componentName, properties:{name:value}}]; mutually exclusive with directory")).Items(EType::Object).WithFields({
+			MCPParam::RequiredField(TEXT("assetPath"), EType::String, TEXT("Blueprint asset path")),
+			MCPParam::RequiredField(TEXT("componentName"), EType::String, TEXT("Component instance name, property name or unambiguous class")),
+			MCPParam::RequiredField(TEXT("properties"), EType::Object, TEXT("Property name to JSON value or Unreal export text; null clears references")),
+		}),
+		MCPParam::Optional(TEXT("directory"), EType::String, TEXT("Select Blueprint assets under this content path instead of items")),
+		MCPParam::Optional(TEXT("classFilter"), EType::String, TEXT("Directory mode: only Blueprints deriving from this actor class")),
+		MCPParam::Optional(TEXT("componentName"), EType::String, TEXT("Directory mode: component instance name, property name or unambiguous component class")),
+		MCPParam::Optional(TEXT("properties"), EType::Object, TEXT("Directory mode: property map applied to each matching Blueprint")),
+		MCPParam::Optional(TEXT("recursive"), EType::Boolean, TEXT("Directory mode: include subdirectories (default true)")),
+		MCPParam::Optional(TEXT("maxBlueprints"), EType::Integer, TEXT("Maximum candidate Blueprints, default 200, maximum 2000; overflow refuses the batch")).Range(1, 2000),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate values on transient copies without editing, compiling or saving (default false)")),
+	});
 	// #442: dedicated OverrideMaterials writer that takes a materialPaths array
 	// directly, avoiding any value coercion concerns on the generic path.
 	Registry.RegisterHandler(TEXT("set_component_override_materials"), &SetComponentOverrideMaterials, {
