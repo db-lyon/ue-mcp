@@ -198,13 +198,14 @@ namespace MCPPIE
 	{
 		static const TCHAR* const Known[] = {
 			TEXT("pawn_at_rest"), TEXT("max_speed_cms"), TEXT("hold_ms"), TEXT("log_contains"), TEXT("timeout_ms") };
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : Obj->Values)
+		for (const auto& KV : Obj->Values)
 		{
+			const FString Key(KV.Key);
 			bool bKnown = false;
-			for (const TCHAR* K : Known) { bKnown |= KV.Key == K; }
+			for (const TCHAR* K : Known) { bKnown |= Key == K; }
 			if (!bKnown)
 			{
-				OutError = FString::Printf(TEXT("start_when.%s is not a field (pawn_at_rest, max_speed_cms, hold_ms, log_contains, timeout_ms)"), *KV.Key);
+				OutError = FString::Printf(TEXT("start_when.%s is not a field (pawn_at_rest, max_speed_cms, hold_ms, log_contains, timeout_ms)"), *Key);
 				return false;
 			}
 		}
