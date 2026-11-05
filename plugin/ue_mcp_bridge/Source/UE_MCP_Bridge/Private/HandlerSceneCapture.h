@@ -13,6 +13,7 @@
 #include "ContentStreaming.h"
 #include "HandlerSceneCaptureJob.h"
 #include "RenderingThread.h"
+#include "SceneManagement.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -123,6 +124,41 @@ namespace UEMCP::SceneCapture
 			}
 			Comp->CaptureScene();
 			FlushRenderingCommands();
+		}
+
+		/** A one-shot capture has no view state, so it renders without Lumen
+		 *  and with a fixed exposure from the middle of the auto exposure
+		 *  range, which leaves an interior near black (#1549). This keeps one,
+		 *  renders unexported passes so Lumen's surface cache fills, and cuts
+		 *  the camera on the second-to-last pass so eye adaptation snaps to the
+		 *  exposure the settled frame meters. The final pass is the image. */
+		void CaptureSettled(bool bFullyLoadTextures, int32 SettlePasses)
+		{
+			USceneCaptureComponent2D* Capturer = GetComponent();
+			if (!Capturer) return;
+			Capturer->bAlwaysPersistRenderingState = true;
+			if (UWorld* CaptureWorld = Capturer->GetWorld()) CaptureWorld->SendAllEndOfFrameUpdates();
+			if (bFullyLoadTextures)
+			{
+				IStreamingManager::Get().StreamAllResources(0.0f);
+				FlushRenderingCommands();
+			}
+			const int32 Passes = FMath::Max(SettlePasses, 1);
+			for (int32 Pass = 0; Pass <= Passes; ++Pass)
+			{
+				if (Pass == Passes - 1) Capturer->bCameraCutThisFrame = true;
+				Capturer->CaptureScene();
+				FlushRenderingCommands();
+			}
+		}
+
+		/** The exposure the capture's own eye adaptation last read back, or 0
+		 *  when there is no view state or no readback has landed yet. */
+		float GetLastExposure() const
+		{
+			USceneCaptureComponent2D* Capturer = GetComponent();
+			FSceneViewStateInterface* State = Capturer ? Capturer->GetViewState(0) : nullptr;
+			return State ? State->GetLastEyeAdaptationExposure() : 0.0f;
 		}
 
 		/** Writes the target to AbsPath, which must already end in .png. Encoded here so the file holds

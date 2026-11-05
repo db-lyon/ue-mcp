@@ -5145,7 +5145,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	// Preserve the legacy streaming drain and double capture. This is not a
 	// guarantee that every visible texture has its highest mip resident.
 	const bool bFullyLoadTextures = OptionalBool(Params, TEXT("fullyLoadTextures"), true);
-	Rig.Capture(bFullyLoadTextures);
+	// #1549: settle Lumen and eye adaptation, or an interior renders near black.
+	constexpr int32 SettlePasses = 6;
+	Rig.CaptureSettled(bFullyLoadTextures, SettlePasses);
 
 	// #1203: components spawned at runtime are flushed to the renderer before
 	// the capture. Name the ones it still cannot show: no render state, or
@@ -5220,6 +5222,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	CaptureMetadata->SetNumberField(TEXT("height"), RT->SizeY);
 	CaptureMetadata->SetNumberField(TEXT("worldTimeSeconds"), World->GetTimeSeconds());
 	CaptureMetadata->SetBoolField(TEXT("fullyLoadTextures"), bFullyLoadTextures);
+	auto ExposureMetadata = MakeShared<FJsonObject>();
+	ExposureMetadata->SetStringField(TEXT("source"), TEXT("captureAutoExposure"));
+	ExposureMetadata->SetNumberField(TEXT("settlePasses"), SettlePasses);
+	const float LastExposure = Rig.GetLastExposure();
+	if (LastExposure > 0.0f) ExposureMetadata->SetNumberField(TEXT("lastEyeAdaptationExposure"), LastExposure);
+	CaptureMetadata->SetObjectField(TEXT("exposure"), ExposureMetadata);
 	if (FocusMetadata) CaptureMetadata->SetObjectField(TEXT("focus"), FocusMetadata);
 	if (RuntimeComponents) CaptureMetadata->SetObjectField(TEXT("runtimeComponents"), RuntimeComponents);
 	Result->SetObjectField(TEXT("captureMetadata"), CaptureMetadata);
