@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1213,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -21263,6 +21263,35 @@
         }
       ]
     },
+    "list_loaded_regions": {
+      "category": "level",
+      "params": [
+        {
+          "name": "includeUnloaded",
+          "type": "boolean",
+          "required": false,
+          "description": "Also list regions and location volumes that exist but are not loaded (default false)"
+        },
+        {
+          "name": "bounds",
+          "type": "object",
+          "required": false,
+          "description": "{min:{x,y,z}, max:{x,y,z}} intersection test"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Rows on this page"
+        }
+      ]
+    },
     "list_local_variables": {
       "category": "blueprint",
       "params": [
@@ -22351,6 +22380,36 @@
         }
       ],
       "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
+    },
+    "load_region": {
+      "category": "level",
+      "params": [
+        {
+          "name": "bounds",
+          "type": "object",
+          "required": true,
+          "description": "{min:{x,y,z}, max:{x,y,z}} box to load"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "description": "Region label (default Loaded Region, the editor's own)"
+        },
+        {
+          "name": "maxActors",
+          "type": "integer",
+          "required": false,
+          "description": "Refuse to act on more than this many actors (default 256)"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would change without writing"
+        }
+      ],
+      "contractExempt": "Creates a loader adapter and streams actors in; the bounds read is the only thing the contract values reach, and it is checked from source instead"
     },
     "measure_mesh_geometry": {
       "category": "asset",
@@ -43342,6 +43401,55 @@
           "type": "string",
           "required": false,
           "description": "undo (default) | redo"
+        }
+      ]
+    },
+    "unload_loaded_regions": {
+      "category": "level",
+      "params": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": false,
+          "description": "Region ids from list_loaded_regions",
+          "items": "string"
+        },
+        {
+          "name": "bounds",
+          "type": "object",
+          "required": false,
+          "description": "{min:{x,y,z}, max:{x,y,z}} intersection test"
+        },
+        {
+          "name": "maxRegions",
+          "type": "integer",
+          "required": false,
+          "description": "Refuse to unload more than this many regions (default 8)"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "Unload even when a region holds actors with unsaved changes (default false)"
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false,
+          "description": "Report what would change without writing"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "atLeastOne",
+          "branches": [
+            [
+              "ids"
+            ],
+            [
+              "bounds"
+            ]
+          ]
         }
       ]
     },

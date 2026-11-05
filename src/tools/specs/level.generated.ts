@@ -1803,6 +1803,35 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "list_loaded_regions": {
+    "category": "level",
+    "params": [
+      {
+        "name": "includeUnloaded",
+        "type": "boolean",
+        "required": false,
+        "description": "Also list regions and location volumes that exist but are not loaded (default false)"
+      },
+      {
+        "name": "bounds",
+        "type": "object",
+        "required": false,
+        "description": "{min:{x,y,z}, max:{x,y,z}} intersection test"
+      },
+      {
+        "name": "cursor",
+        "type": "string",
+        "required": false,
+        "description": "Resume a paged read: pass back the nextCursor from the previous page, unmodified"
+      },
+      {
+        "name": "limit",
+        "type": "integer",
+        "required": false,
+        "description": "Rows on this page"
+      }
+    ]
+  },
   "list_streaming_sublevels": {
     "category": "level",
     "params": []
@@ -1945,6 +1974,36 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ],
     "contractExempt": "Ends any play session, collects garbage and swaps the open map before the contract path can fail"
+  },
+  "load_region": {
+    "category": "level",
+    "params": [
+      {
+        "name": "bounds",
+        "type": "object",
+        "required": true,
+        "description": "{min:{x,y,z}, max:{x,y,z}} box to load"
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "required": false,
+        "description": "Region label (default Loaded Region, the editor's own)"
+      },
+      {
+        "name": "maxActors",
+        "type": "integer",
+        "required": false,
+        "description": "Refuse to act on more than this many actors (default 256)"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Report what would change without writing"
+      }
+    ],
+    "contractExempt": "Creates a loader adapter and streams actors in; the bounds read is the only thing the contract values reach, and it is checked from source instead"
   },
   "move_actor": {
     "category": "level",
@@ -4959,6 +5018,55 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "unload_loaded_regions": {
+    "category": "level",
+    "params": [
+      {
+        "name": "ids",
+        "type": "array",
+        "required": false,
+        "description": "Region ids from list_loaded_regions",
+        "items": "string"
+      },
+      {
+        "name": "bounds",
+        "type": "object",
+        "required": false,
+        "description": "{min:{x,y,z}, max:{x,y,z}} intersection test"
+      },
+      {
+        "name": "maxRegions",
+        "type": "integer",
+        "required": false,
+        "description": "Refuse to unload more than this many regions (default 8)"
+      },
+      {
+        "name": "force",
+        "type": "boolean",
+        "required": false,
+        "description": "Unload even when a region holds actors with unsaved changes (default false)"
+      },
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "required": false,
+        "description": "Report what would change without writing"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "atLeastOne",
+        "branches": [
+          [
+            "ids"
+          ],
+          [
+            "bounds"
+          ]
+        ]
+      }
+    ]
+  },
   "update_instance_transform": {
     "category": "level",
     "params": [
@@ -5063,11 +5171,13 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   list_actor_descs: "Params: filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, cursor?, limit?",
   list_actor_tags: "Params: actorLabel?, actorPath?, cursor?, limit?",
   list_levels: "Params: cursor?, limit?",
+  list_loaded_regions: "Params: includeUnloaded?, bounds?, cursor?, limit?",
   list_streaming_sublevels: "Params: none",
   list_transient_actors: "Params: world?, pieInstance?, cursor?, limit?",
   list_volumes: "Params: volumeType?, cursor?, limit?",
   load_actor_descs: "Params: mode?, filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, maxActors?, dryRun?",
   load_level: "Params: levelPath, saveFirst? (or saveCurrent), discardUnsaved?",
+  load_region: "Params: bounds, label?, maxActors?, dryRun?",
   move_actor: "Params: actorLabel?, actorPath?, location?, rotation?, scale?, world?, pieInstance?",
   nav_project_point: "Params: point, extent?, world?, pieInstance?",
   nudge_component: "Params: actorLabel OR actorPath, componentName, frame?, translationDelta?, axisRotation?, viewRotation?, scaleMultiplier?, dryRun?, world?, pieInstance?",
@@ -5119,6 +5229,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   spawn_volume: "Params: volumeType, onConflict?, label?, location?, extent?, graphPath?",
   summarize_static_mesh_usage: "Params: world?, pieInstance?, maxResults?, includeOccurrences?, maxOccurrences?",
   test_component_overlap: "Params: actorLabelA?, actorPathA?, actorLabelB?, actorPathB?, componentNameA?, componentNameB?, method?, world?, pieInstance?",
+  unload_loaded_regions: "Params: at least one of ids/bounds, maxRegions?, force?, dryRun?",
   update_instance_transform: "Params: actorLabel?, actorPath?, componentName?, index, worldSpace?, location?, rotation?, scale?",
 };
 
@@ -5148,7 +5259,7 @@ export const schema: Record<string, z.ZodType> = {
   attenuationRadius: z.number().optional().describe("Point, spot and rect lights only"),
   axisRotation: z.object({ axis: z.string().describe("forward | right | up"), degrees: z.number().describe("Signed rotation in degrees") }).optional().describe("Quaternion rotation about one frame axis; not with viewRotation"),
   bias: z.number().optional().describe("AutoExposureBias (exposure compensation)"),
-  bounds: z.record(z.string(), z.unknown()).optional().describe("{min:{x,y,z}, max:{x,y,z}} intersection test"),
+  bounds: z.record(z.string(), z.unknown()).optional().describe("{min:{x,y,z}, max:{x,y,z}} intersection test (list_actor_descs, list_loaded_regions, load_actor_descs, unload_loaded_regions). {min:{x,y,z}, max:{x,y,z}} box to load (load_region)"),
   brightness: z.number().optional().describe("Alias for exposure"),
   cellSize: z.number().optional().describe("Streaming cell size in world centimetres"),
   channel: z.string().optional().describe("Collision channel (default Visibility)"),
@@ -5179,7 +5290,7 @@ export const schema: Record<string, z.ZodType> = {
   direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally (line_trace). Trace direction (default straight down) (snap_instances_to_surface)"),
   discardUnsaved: z.boolean().optional().describe("Switch even though the open map has unsaved changes, discarding them (default false)"),
   distance: z.number().optional().describe("Ray length when direction is given (default 200000)"),
-  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
+  dryRun: z.boolean().optional().describe("Report what would change without writing (batch_set_actor_properties, bulk_set_component_property, load_actor_descs, load_region, set_actor_hlod_layer, set_component_materials, snap_instances_to_surface, unload_loaded_regions). Report what would be removed without removing it (default true) (clear_level_script). Report the verdict per brush without converting (default TRUE) (convert_brushes_to_static_mesh). Report the matches without deleting them (default false) (delete_actors). Preview without deleting (default TRUE) (delete_exact_labeled_actors_in_levels). Inspect and preview the requested transform without writing (default false) (nudge_component). List what would be rebuilt without rebuilding it (default TRUE) (recreate_physics_state). Report what would be removed without removing it (default TRUE) (remove_components_by_class). Report the matches without moving them (default false) (set_actor_folder_path). Return every computed transform without spawning (spawn_actors_batch)"),
   duplicateTransformTolerance: z.number().optional().describe("Centimetre bucket for duplicate-transform detection"),
   editorHidden: z.boolean().optional().describe("Only editor-hidden (true) or only visible (false) actors"),
   editorVisible: z.boolean().optional().describe("Editor viewport visibility"),
@@ -5201,7 +5312,7 @@ export const schema: Record<string, z.ZodType> = {
   fogInscatteringColor: z.record(z.string(), z.unknown()).optional().describe("Inscattering colour {r, g, b} in 0-255"),
   folderPath: z.string().optional().describe("World Outliner folder, matched exactly (batch_set_actor_properties, bulk_set_component_property, get_world_outliner, query_components, remove_components_by_class, set_actor_hlod_layer, set_component_materials). World Outliner folder whose brushes are converted (convert_brushes_to_static_mesh). World Outliner folder; an empty string moves the actors to the root (set_actor_folder_path)"),
   folderPathPrefix: z.string().optional().describe("World Outliner folder prefix"),
-  force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property)"),
+  force: z.boolean().optional().describe("Bypass EditDefaultsOnly to write per-instance overrides (batch_set_actor_properties). Write a package even when it is already clean (default false) (save_level). Bypass EditDefaultsOnly to write a per-instance override (set_actor_property). Unload even when a region holds actors with unsaved changes (default false) (unload_loaded_regions)"),
   frame: z.string().optional().describe("Frame for translation and axis rotation: world | actor (default) | parent | component"),
   fromComponents: z.object({ componentClass: z.string().optional().describe("Component class the components must be"), componentNameContains: z.string().optional().describe("Case-insensitive substring over the component name"), actorLabels: z.array(z.string()).optional().describe("Exact actor editor labels"), labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label"), labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"), tag: z.string().optional().describe("Actor must carry this tag"), classFilter: z.string().optional().describe("Actor class, resolved as a class or matched as a substring"), folderPath: z.string().optional().describe("World Outliner folder, matched exactly"), folderPathPrefix: z.string().optional().describe("World Outliner folder prefix"), matchSubclasses: z.boolean().optional().describe("Match subclasses of classFilter (default true)"), space: z.string().optional().describe("local (default, the component's own orientation) | world (axis-aligned bounds)"), offset: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Offset added to the computed point"), extentFraction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Fraction of the box extent added per axis, such as {z: 0.72}"), inheritRotation: z.boolean().optional().describe("Spawn with the component's rotation (default false)") }).optional().describe("One spawn per matched component, placed from its bounds"),
   globalGravityZ: z.number().optional().describe("Global gravity Z"),
@@ -5213,12 +5324,14 @@ export const schema: Record<string, z.ZodType> = {
   hidden: z.boolean().optional().describe("true hides the actors in the editor, false shows them"),
   hideFromOutliner: z.boolean().optional().describe("Keep the actor out of the World Outliner (default false)"),
   hlodLayer: z.string().nullable().optional().describe("HLODLayer asset path, or null to clear the per-actor override"),
+  ids: z.array(z.string()).optional().describe("Region ids from list_loaded_regions"),
   ignoreActors: z.array(z.string()).optional().describe("Actor labels to skip"),
   includeExternalActors: z.boolean().optional().describe("Also save the level's loaded external actor and folder packages (default true)"),
   includeOccurrences: z.boolean().optional().describe("Include example actor and component occurrences per mesh"),
   includeProperties: z.boolean().optional().describe("Include reflected UPROPERTY values"),
   includeStreaming: z.boolean().optional().describe("Include World Partition streaming-proxy and HLOD actors (default false)"),
   includeTransforms: z.boolean().optional().describe("Include each actor's location, rotation and scale (default true)"),
+  includeUnloaded: z.boolean().optional().describe("Also list regions and location volumes that exist but are not loaded (default false)"),
   includeValues: z.boolean().optional().describe("Dump UPROPERTY values"),
   includeVolumes: z.boolean().optional().describe("Also convert volume brushes, which are collision rather than visible geometry"),
   index: z.number().int().optional().describe("Instance index"),
@@ -5232,14 +5345,14 @@ export const schema: Record<string, z.ZodType> = {
   internalName: z.string().optional().describe("Internal UObject name, such as StaticMeshActor_141"),
   jitter: z.number().optional().describe("Per-axis location jitter"),
   killZ: z.number().optional().describe("KillZ height"),
-  label: z.string().optional().describe("Actor label; an existing actor with this label is reported rather than duplicated (place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_volume). Actor label (spawn_transient_actor)"),
+  label: z.string().optional().describe("Region label (default Loaded Region, the editor's own) (load_region). Actor label; an existing actor with this label is reported rather than duplicated (place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_volume). Actor label (spawn_transient_actor)"),
   labelContains: z.string().optional().describe("Case-insensitive substring over the actor's editor label"),
   labelPrefix: z.string().optional().describe("Case-sensitive prefix over the actor's editor label (batch_set_actor_properties, bulk_set_component_property, delete_actors, get_actors_by_class, recreate_physics_state, remove_components_by_class, set_actor_folder_path, set_actor_hlod_layer, set_component_materials). Label prefix for the spawned actors (spawn_actors_batch). Label prefix for the spawned actors (default Grid) (spawn_grid)"),
   levelName: z.string().optional().describe("Streaming sub-level name or package path (remove_streaming_sublevel, set_streaming_sublevel_properties). Loaded sub-level to make current (set_current_edit_level)"),
   levelPath: z.string().optional().describe("Map package to add as a streaming sub-level (add_streaming_sublevel). Map package to open (load_level). Query another map: opened temporarily, refused while anything is dirty, and the open map restored (query_components). Alias for levelName (remove_streaming_sublevel, set_current_edit_level, set_streaming_sublevel_properties)"),
   levels: z.array(z.object({ levelPath: z.string().describe("Long package name of the .umap, such as /Game/Maps/Arena"), actorLabels: z.array(z.string()).describe("Exact editor labels to delete in that map, at most 256, no duplicates"), expectedClassPath: z.string().optional().describe("Actor class every matched actor must be, such as /Script/Engine.StaticMeshActor") })).optional().describe("Per-map targets, at most 16"),
   lightType: z.string().optional().describe("point | spot | directional | rect | sky"),
-  limit: z.number().int().optional().describe("Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_transient_actors, list_volumes). Rows returned (default 200, max 2000) (query_components)"),
+  limit: z.number().int().optional().describe("Rows on this page (get_world_outliner, list_actor_descs, list_actor_tags, list_levels, list_loaded_regions, list_transient_actors, list_volumes). Rows returned (default 200, max 2000) (query_components)"),
   loadedOnly: z.boolean().optional().describe("Only actors currently streamed in"),
   loadingRange: z.number().optional().describe("Streaming loading range in world centimetres"),
   location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Sub-level offset (add_streaming_sublevel, set_streaming_sublevel_properties). World location (move_actor, place_actor, spawn_light, spawn_skeletal_mesh_actor, spawn_transient_actor, spawn_volume, update_instance_transform)"),
@@ -5259,6 +5372,7 @@ export const schema: Record<string, z.ZodType> = {
   maxInstances: z.number().int().optional().describe("Cap on instances processed in one call"),
   maxOccurrences: z.number().int().optional().describe("Cap on occurrence examples per mesh"),
   maxPasses: z.number().int().optional().describe("Rebuild passes before giving up on a stable QuadTreeResolution, 2..8 (default 4)"),
+  maxRegions: z.number().int().optional().describe("Refuse to unload more than this many regions (default 8)"),
   maxResults: z.number().int().optional().describe("Cap on result rows; full-scan totals are still reported"),
   maxSpawn: z.number().int().optional().describe("Refuse a plan larger than this (default 500, max 5000)"),
   meshPath: z.string().optional().describe("Alias for assetPath (get_nanite_info, set_nanite_settings). The older spelling of skeletalMesh (spawn_skeletal_mesh_actor)"),

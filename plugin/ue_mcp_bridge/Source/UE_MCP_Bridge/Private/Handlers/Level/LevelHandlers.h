@@ -107,6 +107,11 @@ private:
 	// them in, instead of every actor query silently reporting zero for them.
 	static TSharedPtr<FJsonValue> ListActorDescs(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LoadActorDescs(const TSharedPtr<FJsonObject>& Params);
+	// World Partition editor loader adapters: the regions and location volumes
+	// that keep actors resident, which load_actor_descs(unpin) cannot release.
+	static TSharedPtr<FJsonValue> ListLoadedRegions(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> UnloadLoadedRegions(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> LoadRegion(const TSharedPtr<FJsonObject>& Params);
 	// #219: actor tag CRUD
 	static TSharedPtr<FJsonValue> AddActorTag(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveActorTag(const TSharedPtr<FJsonObject>& Params);
