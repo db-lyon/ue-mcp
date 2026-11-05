@@ -365,6 +365,24 @@ The plugin reads `bridge.port` from the same layered files as the client: `~/.ue
 
 If an editor is killed rather than closed, its lockfile stays behind and `stop_editor` reports the stale PID. Delete `<project>/Saved/UE_MCP_Bridge/port.json` to clear it.
 
+### How the editor is launched
+
+`editor(start_editor)` and `editor(restart_editor)` take three optional parameters, and `ue-mcp.yml` sets defaults for the first two:
+
+| Parameter | `ue-mcp.yml` | What it does |
+|-----------|--------------|--------------|
+| `window` | `editor.window` | `normal` (the default) shows the editor. `offscreen` passes `-RenderOffScreen`, so no editor window or dialog appears on screen, and `-ini:EditorSettings:[/Script/UnrealEd.EditorPerformanceSettings]:bThrottleCPUWhenNotForeground=False`, so the unfocused editor is not throttled to a few frames per second. |
+| `ide` | `editor.ide` | `none` passes `-ini:EditorSettings:[/Script/SourceCodeAccess.SourceCodeAccessSettings]:PreferredAccessor=NullSourceCodeAccessor`, so the editor opens no IDE. Unset, an offscreen editor gets `none` and a normal one `allow`. |
+| `extraArgs` | (`editor.launchArgs`, a list) | A string of further editor arguments, split on whitespace with double quotes grouping. |
+
+The command line is the project, the `window` and `ide` arguments, `editor.launchArgs` item by item, then `extraArgs`, each argument once. On Windows it is passed as written, without quoting it again, because Unreal reads the raw command line and skips quoted text when it looks for a switch. A malformed `editor.window`, `editor.ide` or `editor.launchArgs` refuses the launch and names the key.
+
+The result reports the `window` and `ide` the editor got, read from its final arguments, and `get_engine_state` reports a running editor's `window` from its command line.
+
+An offscreen editor's dialogs are invisible but still block. Read them with `editor(list_dialogs)`, answer with `editor(respond_to_dialog)`, and arm a known startup prompt with `start_editor`'s `dialogPolicy`.
+
+`launch_standalone_game` from an offscreen editor launches the game offscreen too: the bridge adds `-RenderOffScreen` to the game's command line unless `extraArgs` already holds it, and the result reports `renderOffScreen`.
+
 ### Bridge state files
 
 The plugin keeps these under `<project>/Saved/UE_MCP_Bridge/`, each published by rename so a reader never sees a half-written file.
