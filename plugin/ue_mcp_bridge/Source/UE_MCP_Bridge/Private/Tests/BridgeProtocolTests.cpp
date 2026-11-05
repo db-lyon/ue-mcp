@@ -577,6 +577,12 @@ bool FMCPBridgeInstanceReapTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("a bind-failed record of a running process is live"),
 		FMCPBridgeStateFiles::IsInstanceLive(FailedHere));
 
+	// #1633: a crashed editor's pid recycled onto a live process, and this
+	// bridge bound the same port. The bind is exclusive, so the record is stale.
+	FMCPInstanceRecord OnOurPort = MakeRecord(FPlatformProcess::GetCurrentProcessId(), 49604, TEXT("listening"));
+	TestFalse(TEXT("a live pid whose record names this bridge's own port is not live"),
+		FMCPBridgeStateFiles::IsInstanceLive(OnOurPort, /*OwnBoundPort*/ 49604));
+
 	RemoveScratchDir(Dir);
 	return true;
 }
