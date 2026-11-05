@@ -60,6 +60,9 @@ Results include every imported asset and `meshes`, whose entries contain bounds,
 
 `asset(get_mesh_info)` summarizes static and skeletal meshes, including `sockets` and `socketCount` with the same details as `asset(list_sockets)`.
 
+For source versus built render geometry, use [static mesh inspection](static-mesh-inspection.md).
+`asset(get_static_mesh_geometry)` captures all standard corner attributes and pages an immutable snapshot, including UV seams, colors and material groups. Set `dumpToFile=true` to export the complete snapshot in one call to a new JSON file.
+
 Assign another skeleton to an existing skeletal mesh with `asset(set_property)`:
 
 ```json
