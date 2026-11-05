@@ -426,8 +426,7 @@ namespace MeshStudioRender
 				for (AActor* Actor : Actors) World->DestroyActor(Actor, false, false);
 				if (GEngine) GEngine->DestroyWorldContext(World);
 				// Release the render scene even on a partially-created item.
-				World->DestroyWorld(false);
-				World->MarkObjectsPendingKill();
+				MCPDestroyDisposableWorld(World);
 				World = nullptr;
 			}
 			Textures.Reset();

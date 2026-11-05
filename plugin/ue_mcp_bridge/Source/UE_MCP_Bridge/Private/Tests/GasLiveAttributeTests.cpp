@@ -2,6 +2,7 @@
 
 #include "Handlers/Gas/GasHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerWorld.h"
 #include "Misc/AutomationTest.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemTestAttributeSet.h"
@@ -42,7 +43,7 @@ bool FGasAdoptOwnerAttributeSetsTest::RunTest(const FString& Parameters)
 	}
 	ON_SCOPE_EXIT
 	{
-		World->DestroyWorld(false);
+		MCPDestroyDisposableWorld(World);
 	};
 
 	AActor* Actor = World->SpawnActor<AActor>();

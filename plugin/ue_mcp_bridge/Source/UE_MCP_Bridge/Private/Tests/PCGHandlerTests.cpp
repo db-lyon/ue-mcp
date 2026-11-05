@@ -74,7 +74,7 @@ namespace PCGHandlerTests
 		{
 			if (!World) return;
 			GEditor->GetEditorWorldContext().SetCurrentWorld(OriginalWorld);
-			World->DestroyWorld(false);
+			MCPDestroyDisposableWorld(World);
 		}
 	};
 }
