@@ -34,7 +34,7 @@ npm run up:build         # stop the test editor, build, relaunch
 
 `npm run build` builds only the `ue_mcpEditor` target of `tests/ue_mcp/ue_mcp.uproject` and refuses any other project. The test editor holds the module DLLs, so close it first or use `npm run up:build`. Neither command runs the deployer: run `node scripts/deploy.mjs` after editing `plugin/`.
 
-The build passes `-NoEngineChanges`, so Unreal aborts and prints the offending files if the build would overwrite anything already in the engine tree. Engine selection order is `UE_MCP_TEST_ENGINE_ROOT`, then `UE_BUILD_TOOL_PATH`, then the default install locations. A pinned root with no build tool is an error.
+The build passes `-NoEngineChanges`, so Unreal aborts and prints the offending files if the build would overwrite anything already in the engine tree. Engine selection order is `UE_MCP_TEST_ENGINE_ROOT`, then `UE_ROOT`, then `UE_BUILD_TOOL_PATH`, then the default install locations. `UE_ROOT` is the engine root some build hosts set for a pinned Unreal engine, so a build there needs no ue-mcp-specific variable. A pinned root with no build tool is an error.
 
 ```powershell
 # Roots the build and run scripts must never touch, whatever else is set.
