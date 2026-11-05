@@ -2,6 +2,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "WidgetGuidMap.h"
+#include "WidgetClassDefaults.h"
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
 #include <type_traits>
@@ -1143,6 +1144,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	{
 		return MCPError(FString::Printf(TEXT("Failed to construct widget of class '%s'"), *WidgetClassName));
 	}
+	MCPWidgetClassDefaults::FSnapshot ClassDefaults;
+	MCPWidgetClassDefaults::Capture(NewWidget, {}, ClassDefaults);
 
 	// ── Place in hierarchy ──
 	bool bIsRoot = false;
@@ -1212,6 +1215,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	{
 		PersistedName = AddedWidget->GetName();
 	}
+	const TArray<TSharedPtr<FJsonValue>> RestoredDefaults = MCPWidgetClassDefaults::Restore(WidgetBP, ClassDefaults);
 
 	FString SaveError;
 	const bool bSaved = MCPWidgetGuidMap::SaveIfCompiled(WidgetBP, GuidSync, SaveError);
@@ -1236,6 +1240,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 		Result->SetStringField(TEXT("parentWidgetName"), ParentWidgetName);
 	}
 	MCPSetWidgetGuidOutcome(Result, GuidSync, AssetPath);
+	MCPWidgetClassDefaults::Report(Result, RestoredDefaults);
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);

@@ -45,6 +45,10 @@ The compile never saves on its own, whatever the editor's save-on-compile settin
 
 A refusal to compile is a different error: two widget variables share a GUID. Nothing is compiled or saved, and the message names the variables to recreate.
 
+## Placing a Widget Blueprint inside another
+
+`add_widget` and `build_tree` accept a Widget Blueprint as `widgetClass`, so one page can be placed in another screen. The placed template takes the class defaults the child class has at that moment, including ones just written with `blueprint(set_class_default)`. After the compile, the bridge checks every property the child class declares against those values, in the designer tree and in the compiled tree, and writes back any the compile lost before saving. Each one is listed in `classDefaultsRestored` with `widgetName`, `property`, the `value` written back and the value `found`; `classDefaultNow` appears when the child class default itself changed since placement. Properties a `build_tree` node sets in `properties` are left as the call set them.
+
 ## Editing a widget while PIE runs
 
 Compiling a Widget Blueprint during play reinstances every live widget made from it. A reinstanced widget is rebuilt from its class, so children added at runtime, pages pushed into a stack and text set by game code are lost.

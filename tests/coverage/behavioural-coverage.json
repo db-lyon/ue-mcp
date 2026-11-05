@@ -1577,6 +1577,16 @@
           "test": "UE.MCP.Widget.CompileOutcome"
         },
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
+          "test": "UE.MCP.Widget.SetPropertyDuringPlay"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetPlacedClassDefaultsTests.cpp",
+          "test": "UE.MCP.Widget.PlacedClassDefaults"
+        },
+        {
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "add_widget, move_widget, reorder_child and remove_widget reshape the tree read_widget_tree reads"
@@ -3259,6 +3269,11 @@
           "test": "UE.MCP.PCG.Component.GraphAndParameterOverrides"
         },
         {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetPlacedClassDefaultsTests.cpp",
+          "test": "UE.MCP.Widget.PlacedClassDefaults"
+        },
+        {
           "suite": "live",
           "file": "tests/live/asset-native-pipeline.test.ts",
           "test": "reads static mesh sockets, regex metadata and collision with reference details"
@@ -3906,6 +3921,16 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
           "test": "UE.MCP.Widget.CompileOutcome"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
+          "test": "UE.MCP.Widget.SetPropertyDuringPlay"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetPlacedClassDefaultsTests.cpp",
+          "test": "UE.MCP.Widget.PlacedClassDefaults"
         },
         {
           "suite": "live",
@@ -21228,6 +21253,11 @@
       "registeredIn": "WidgetHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/WidgetCompileOutcomeTests.cpp",
+          "test": "UE.MCP.Widget.SetPropertyDuringPlay"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
