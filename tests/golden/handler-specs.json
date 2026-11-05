@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1211,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -35491,6 +35491,39 @@
           "aliases": [
             "fields",
             "data"
+          ]
+        }
+      ]
+    },
+    "set_developer_setting": {
+      "category": "project",
+      "params": [
+        {
+          "name": "settingsClass",
+          "type": "string",
+          "required": true,
+          "description": "Config class as a short name (GameMapsSettings) or /Script/<Module>.<Class> path"
+        },
+        {
+          "name": "propertyName",
+          "type": "string",
+          "required": true,
+          "description": "Config property; a dotted or indexed path reaches inside a struct or array"
+        },
+        {
+          "name": "settingValue",
+          "type": "any",
+          "required": true,
+          "description": "New value as structured JSON, the form editor(get_property) returns under value"
+        },
+        {
+          "name": "persist",
+          "type": "string",
+          "required": false,
+          "description": "default writes Default<Config>.ini; user writes the per-user config. Omitted follows the Project Settings dialog: default for a defaultconfig class, user otherwise",
+          "enum": [
+            "default",
+            "user"
           ]
         }
       ]
