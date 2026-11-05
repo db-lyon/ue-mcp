@@ -288,6 +288,19 @@ Step actions, each with `client`: `tape {action, values}`, `press {action, frame
 
 Both session actions default to the live or most recent session; pass `session` to read a finished one from `Saved/MCPSessions/`. Actor and subsystem properties are `editor(get_object_properties, world="pie")` (`target="subsystem"` with `subsystemClass`) and `editor(get_runtime_values)`.
 
+### Rendering validation in PIE
+
+These are the native routes for a before/after or performance pass on a running game (#1645).
+
+| Task | Call |
+|------|------|
+| Instance counts, cull distances and MinLOD of every instanced mesh component, including ones an actor holds only in a C++ array | `editor(get_runtime_values, world="pie", classFilter="InstancedStaticMeshComponent", paths=["GetInstanceCount", "InstanceStartCullDistance", "InstanceEndCullDistance", "MinLOD"])`. It walks each actor's owned components, so no UPROPERTY path to the component is needed, and returns one row per component. |
+| Switch quality during PIE | `editor(set_scalability, level="Low")`, or a single setting with `editor(set_cvars)`. Both apply to the running game. |
+| CSV profile and GPU profile around a timed window | `editor(execute_command, command="csvprofile start")`, then `csvprofile stop` when the window ends; the CSV lands in `Saved/Profiling/CSV`. `editor(execute_command, command="profilegpu")` captures one frame's GPU timings to the log, read back with `editor(get_log)`. For a trace Unreal Insights can open, use `editor(start_trace)` and `editor(stop_trace)`. |
+| Fixed-interval frame sequence | `editor(capture_screenshot_sequence, filename="Validation/run", frameCount=20, intervalMs=250)` captures the PIE viewport on a fixed schedule and reports each frame's lateness. |
+| Pose a pawn while paused | `editor(set_pie_paused, paused=true)`, then `editor(teleport_runtime_actor)` with `location` and `rotation`. |
+| Override a material scalar at runtime | `editor(invoke_object_function, world="pie", target="playerpawn", propertyPath="Mesh", functionName="CreateDynamicMaterialInstance", args={ElementIndex: 0})` returns the dynamic instance's path under `returnValues`; call `SetScalarParameterValue` on that `objectPath` with `{ParameterName, Value}`. |
+
 ## Multiplayer targeting
 
 Actions that inject, record, replay or observe accept `pie_instance`, the exact `FWorldContext::PIEInstance`. `client_id` is the local player index inside that world. An explicit `pie_instance` fails when the instance is missing, is dedicated-server only, or lacks the requested local player; it never falls back. Values must be non-negative integers within the int32 range.
