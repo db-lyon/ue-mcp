@@ -10,30 +10,30 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetShaderCompileStatus(const TSharedPtr<
 	const bool WaitUntilIdle = OptionalBool(Params, TEXT("waitUntilIdle"), false);
 	const int32 OutstandingJobs = GShaderCompilingManager ? GShaderCompilingManager->GetNumRemainingJobs() : 0;
 	const bool IsCompiling = GShaderCompilingManager && GShaderCompilingManager->IsCompiling();
-	TSet<uint32> PendingShaderMaps;
 	TSet<const FMaterial*> PendingMaterials;
+#if WITH_EDITOR
 	if (GShaderCompilingManager)
 	{
-		// The engine's shader map list is private, so read each loaded material's
-		// resource for the active platform. Instances sharing a parent resource count once.
+		// The engine's shader map list is private, so ask each loaded material's
+		// resource for the active platform. Instances sharing a resource count once.
 		for (TObjectIterator<UMaterialInterface> It; It; ++It)
 		{
 			const UMaterialInterface* Material = *It;
 			const FMaterialResource* Resource = Material->GetMaterialResource(GMaxRHIShaderPlatform);
-			if (!Resource || PendingMaterials.Contains(Resource)) continue;
-			const uint32 Id = Resource->GetGameThreadCompilingShaderMapId();
-			if (Id == 0 || !GShaderCompilingManager->IsCompilingShaderMap(Id)) continue;
-			PendingShaderMaps.Add(Id);
+			if (!Resource || PendingMaterials.Contains(Resource) || Resource->IsCompilationFinished()) continue;
 			PendingMaterials.Add(Resource);
 		}
 	}
-	const bool Idle = !IsCompiling && OutstandingJobs == 0 && PendingShaderMaps.IsEmpty();
+#endif
+	// A resource compiles one shader map at a time, so the counts match.
+	const int32 PendingShaderMaps = PendingMaterials.Num();
+	const bool Idle = !IsCompiling && OutstandingJobs == 0 && PendingShaderMaps == 0;
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("managerAvailable"), GShaderCompilingManager != nullptr);
 	Result->SetNumberField(TEXT("outstandingJobs"), OutstandingJobs);
 	Result->SetBoolField(TEXT("isCompiling"), IsCompiling);
 	Result->SetNumberField(TEXT("pendingMaterials"), PendingMaterials.Num());
-	Result->SetNumberField(TEXT("pendingShaderMaps"), PendingShaderMaps.Num());
+	Result->SetNumberField(TEXT("pendingShaderMaps"), PendingShaderMaps);
 	Result->SetBoolField(TEXT("idle"), Idle);
 	Result->SetBoolField(TEXT("waitUntilIdle"), WaitUntilIdle);
 	Result->SetStringField(TEXT("state"), Idle ? TEXT("idle") : (WaitUntilIdle ? TEXT("waiting") : TEXT("compiling")));
