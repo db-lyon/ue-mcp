@@ -1,6 +1,16 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetBlueprintGeneratedClass.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/CanvasPanel.h"
+#include "Components/ProgressBar.h"
 #include "Framework/Application/SlateApplication.h"
+#include "K2Node_CallFunction.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "WidgetBlueprint.h"
 #include "HAL/FileManager.h"
 #include "HandlerPackageSave.h"
 #include "HandlerRegistry.h"
@@ -231,6 +241,132 @@ bool FMCPCheckpointAssetDiffMaterialTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("with the same records as on its own"), First->GetIntegerField(TEXT("recordCount")), Diff->GetIntegerField(TEXT("recordCount")));
 		TestFalse(TEXT("the unloadable item fails in its place"), (*Results)[1]->AsObject()->GetBoolField(TEXT("success")));
 		TestEqual(TEXT("and the item after it still runs"), (*Results)[2]->AsObject()->GetStringField(TEXT("status")), FString(TEXT("added")));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPCheckpointAssetDiffWidgetBlueprintTest,
+	"UE.MCP.Diff.CheckpointAsset.WidgetTreeDefaultsAndGraph",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPCheckpointAssetDiffWidgetBlueprintTest::RunTest(const FString& Parameters)
+{
+	FMCPScopedTestMount Mount(TEXT("/UEMCPCkWidgetTest/"), TEXT("UEMCPCkWidgetTest"));
+	const FString DiffDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::DiffDir(), TEXT("UE_MCP_CkDiffTest")));
+	ON_SCOPE_EXIT { IFileManager::Get().DeleteDirectory(*DiffDir, false, true); };
+
+	UPackage* Package = CreatePackage(TEXT("/UEMCPCkWidgetTest/WBP_CkDiff"));
+	UWidgetBlueprint* Widget = Cast<UWidgetBlueprint>(FKismetEditorUtilities::CreateBlueprint(
+		UUserWidget::StaticClass(), Package, FName(TEXT("WBP_CkDiff")), BPTYPE_Normal,
+		UWidgetBlueprint::StaticClass(), UWidgetBlueprintGeneratedClass::StaticClass()));
+	if (!TestNotNull(TEXT("the fixture Widget Blueprint is created"), Widget)) return false;
+	UCanvasPanel* Root = Widget->WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("Root"));
+	Widget->WidgetTree->RootWidget = Root;
+	UProgressBar* Meter = Widget->WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("WardMeter"));
+	Root->AddChild(Meter);
+	FKismetEditorUtilities::CompileBlueprint(Widget);
+	FString Reason;
+	if (!TestTrue(TEXT("first version saves"), SaveAssetPackageChecked(Widget, Reason))) { AddError(Reason); return false; }
+	const FString Before = CkDiffTestSnapshot(Package, TEXT("WBP_CkDiff-before"));
+
+	// A property of a widget in the widget tree, a node in the event graph, and a class default.
+	Meter->SetRenderOpacity(0.25f);
+	UEdGraph* Graph = FBlueprintEditorUtils::FindEventGraph(Widget);
+	if (!TestNotNull(TEXT("the Widget Blueprint has an event graph"), Graph)) return false;
+	UK2Node_CallFunction* Call = NewObject<UK2Node_CallFunction>(Graph);
+	Call->CreateNewGuid();
+	Call->FunctionReference.SetExternalMember(GET_FUNCTION_NAME_CHECKED(UKismetSystemLibrary, PrintString), UKismetSystemLibrary::StaticClass());
+	Graph->AddNode(Call, false, false);
+	Call->PostPlacedNewNode();
+	Call->AllocateDefaultPins();
+	FKismetEditorUtilities::CompileBlueprint(Widget);
+	UUserWidget* Defaults = Widget->GeneratedClass->GetDefaultObject<UUserWidget>();
+	Defaults->SetColorAndOpacity(FLinearColor(1.f, 0.f, 0.f, 1.f));
+	Defaults->MarkPackageDirty();
+	if (!TestTrue(TEXT("second version saves"), SaveAssetPackageChecked(Widget, Reason))) { AddError(Reason); return false; }
+	const FString After = CkDiffTestSnapshot(Package, TEXT("WBP_CkDiff-after"));
+	FString Original;
+	FPackageName::TryConvertLongPackageNameToFilename(Package->GetName(), Original, FPackageName::GetAssetPackageExtension());
+
+	FMCPHandlerRegistry Registry;
+	FDiffHandlers::RegisterHandlers(Registry);
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("originalFile"), Original);
+	Params->SetStringField(TEXT("fromFile"), Before);
+	Params->SetStringField(TEXT("toFile"), After);
+	Params->SetStringField(TEXT("fromThumbnail"), DiffDir / TEXT("wbp-before.png"));
+	Params->SetStringField(TEXT("toThumbnail"), DiffDir / TEXT("wbp-after.png"));
+	const TSharedPtr<FJsonObject> Diff = CkDiffTestCall(*this, Registry, TEXT("checkpoint_diff_asset"), Params);
+	if (!Diff.IsValid() || !TestTrue(TEXT("diff succeeds"), Diff->GetBoolField(TEXT("success")))) return false;
+	TestEqual(TEXT("asset class"), Diff->GetStringField(TEXT("assetClass")), FString(TEXT("WidgetBlueprint")));
+	TestTrue(TEXT("the type's own diff ran"), Diff->GetObjectField(TEXT("engine"))->GetBoolField(TEXT("blueprintTypeDiff")));
+
+	// The widget tree: UWidgetBlueprint::FindDiffs pairs WardMeter in both versions, and its record carries path, label and both values.
+	const TSharedPtr<FJsonObject> Tree = CkDiffTestSection(Diff, TEXT("Widget Blueprint"));
+	bool bOpacity = false;
+	if (TestTrue(TEXT("a Widget Blueprint section, named as SBlueprintDiff names it"), Tree.IsValid()))
+	{
+		TestEqual(TEXT("from the type's own diff"), Tree->GetStringField(TEXT("engineSource")), FString(TEXT("UBlueprint::FindDiffs")));
+		for (const TSharedPtr<FJsonValue>& V : Tree->GetArrayField(TEXT("entries")))
+		{
+			const TSharedPtr<FJsonObject> R = V->AsObject();
+			FString Property;
+			if (!R->TryGetStringField(TEXT("property"), Property) || Property != TEXT("RenderOpacity")) continue;
+			bOpacity = R->GetStringField(TEXT("group")).Contains(TEXT("WardMeter"))
+				&& R->GetStringField(TEXT("path")) == TEXT("RenderOpacity")
+				&& R->GetStringField(TEXT("label")) == TEXT("Render Opacity")
+				&& R->GetStringField(TEXT("before")).StartsWith(TEXT("1.0"))
+				&& R->GetStringField(TEXT("after")).StartsWith(TEXT("0.25"))
+				&& R->GetStringField(TEXT("diffType")) == TEXT("PropertyValueChanged")
+				&& !R->HasField(TEXT("hidden"));
+		}
+	}
+	TestTrue(TEXT("Widget WardMeter: Render Opacity 1.0 to 0.25"), bOpacity);
+
+	// Defaults: the class default object's ColorAndOpacity.
+	const TSharedPtr<FJsonObject> Cdo = CkDiffTestSection(Diff, TEXT("Defaults"));
+	bool bColor = false;
+	if (TestTrue(TEXT("a Defaults section"), Cdo.IsValid()))
+	{
+		for (const TSharedPtr<FJsonValue>& V : Cdo->GetArrayField(TEXT("entries")))
+		{
+			const TSharedPtr<FJsonObject> R = V->AsObject();
+			FString Property;
+			if (R->TryGetStringField(TEXT("property"), Property) && Property == TEXT("ColorAndOpacity"))
+			{
+				bColor = R->GetStringField(TEXT("before")) != R->GetStringField(TEXT("after")) && R->GetStringField(TEXT("after")).Contains(TEXT("G=0.0"));
+			}
+		}
+	}
+	TestTrue(TEXT("Color and Opacity white to red, on the class defaults"), bColor);
+
+	// The event graph: the added Print String node.
+	bool bNode = false;
+	for (const TSharedPtr<FJsonValue>& S : Diff->GetArrayField(TEXT("sections")))
+	{
+		const TSharedPtr<FJsonObject> SO = S->AsObject();
+		if (!SO->GetStringField(TEXT("category")).StartsWith(TEXT("Graph: "))) continue;
+		for (const TSharedPtr<FJsonValue>& V : SO->GetArrayField(TEXT("entries")))
+		{
+			if (V->AsObject()->GetStringField(TEXT("diffType")) == TEXT("NODE_ADDED")) bNode = true;
+		}
+	}
+	TestTrue(TEXT("the added Print String is a NODE_ADDED record"), bNode);
+
+	// A Widget Blueprint loaded for diff is not compiled, so its renderer draws nothing: never a blank picture, and the reason.
+	for (const TCHAR* Side : { TEXT("before"), TEXT("after") })
+	{
+		const TSharedPtr<FJsonObject> Thumb = Diff->GetObjectField(Side)->GetObjectField(TEXT("thumbnail"));
+		FString Source;
+		if (Thumb->TryGetStringField(TEXT("source"), Source))
+		{
+			TestEqual(FString::Printf(TEXT("%s picture, if any, is the one saved with the version"), Side), Source, FString(TEXT("saved")));
+		}
+		else
+		{
+			TestTrue(FString::Printf(TEXT("%s has no picture, and says why"), Side), Thumb->GetStringField(TEXT("error")).Contains(TEXT("drew nothing")));
+		}
 	}
 	return true;
 }

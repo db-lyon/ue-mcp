@@ -16,6 +16,7 @@ import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge/bridge.js";
+import { thumbnailFile } from "../../src/checkpoints/asset-diff.js";
 import { LiveServer, resultJson, type LiveCallResult } from "./server.js";
 import { closeLiveBridges, liveTarget } from "./harness.js";
 
@@ -73,8 +74,8 @@ const allProps = (d: Json): Json[] => records(d).flatMap((r) => [r, ...((r.prope
 
 function expectPicture(v: Json | null | undefined, label: string): void {
   expect(v, label).toBeTruthy();
-  expect(v!.thumbnail?.id, `${label}: ${JSON.stringify(v!.thumbnail)}`).toMatch(/^[0-9a-f]{40}$/);
-  const file = path.join(projectDir, "Saved", "UE_MCP_Bridge", "shadow-thumbs", `${v!.thumbnail.id}.png`);
+  expect(String(v!.thumbnail?.id), `${label}: ${JSON.stringify(v!.thumbnail)}`).toMatch(/^[0-9a-f]{40}$/);
+  const file = thumbnailFile(path.join(projectDir, "Saved", "UE_MCP_Bridge", "shadow-thumbs"), v!.thumbnail.id);
   expect(fs.statSync(file).size, file).toBeGreaterThan(100);
   expect(v!.thumbnail.url).toContain(`/v1/checkpoints/thumbnails/${v!.thumbnail.id}.png`);
 }
@@ -216,8 +217,12 @@ describe.sequential("a turn's asset diffs", () => {
     expect(JSON.stringify(d.blueprint)).toContain("CkHealth");
     const change = changes.find((c) => c.path === rel(BP))!;
     expect(JSON.stringify(change.blueprintDiff)).toContain("CkHealth");
-    expectPicture(d.before, "Blueprint before");
-    expectPicture(d.after, "Blueprint after");
+    // This Blueprint has nothing to draw (a light and a variable), so its thumbnail is one flat colour:
+    // no picture, and the reason, never a blank square.
+    for (const [v, label] of [[d.before, "Blueprint before"], [d.after, "Blueprint after"]] as const) {
+      if (v.thumbnail && "id" in v.thumbnail) expectPicture(v, label);
+      else expect(v.thumbnail?.error, label).toMatch(/drew nothing|no thumbnail renderer/);
+    }
   });
 
   it("a static mesh carries the changed property and its LOD facts", () => {
