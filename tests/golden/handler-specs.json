@@ -43474,7 +43474,7 @@
           "name": "value",
           "type": "any",
           "required": true,
-          "description": "New value as UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8)",
+          "description": "New value: UE export text, e.g. (Left=8,Top=8,Right=8,Bottom=8), or a JSON object or array that fills a struct or array field by field. An enum takes its short, full or prefixed name or an enumerator number",
           "aliases": [
             "propertyValue"
           ]

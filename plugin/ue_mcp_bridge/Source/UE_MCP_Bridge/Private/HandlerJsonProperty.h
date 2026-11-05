@@ -720,6 +720,15 @@ namespace MCPJsonProperty
 				const FText DisplayName = Enum->GetDisplayNameTextByIndex(i);
 				if (DisplayName.ToString().ToLower() == InLower) { OutValue = Enum->GetValueByIndex(i); return true; }
 			}
+			// 4. A number naming a real enumerator ("2"). Any other number is refused (#1540).
+			// A JSON number arrives rendered as text, so "2.0" is the number 2.
+			const double Number = InStr.IsNumeric() ? FCString::Atod(*InStr) : 0.5;
+			if (FMath::Abs(Number) < 1e15 && Number == FMath::TruncToDouble(Number))
+			{
+				V = static_cast<int64>(Number);
+				const int32 Index = Enum->GetIndexByValue(V);
+				if (Index != INDEX_NONE && Index < Enum->NumEnums() - 1) { OutValue = V; return true; }
+			}
 			return false;
 		};
 

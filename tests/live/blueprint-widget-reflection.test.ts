@@ -130,6 +130,53 @@ describe("widget slot alignment on every slot class (#1541)", () => {
   }, 180_000);
 });
 
+describe("widget set_property enum names and JSON values (#1540)", () => {
+  const read = async (widgetName: string): Promise<{ properties: Record<string, string>; slot: { properties: Record<string, string> } }> =>
+    (await call("get_widget_properties", { assetPath: WIDGET, widgetName })).widget as never;
+  const refused = async (propertyName: string, value: unknown, mention: string): Promise<void> => {
+    const r = await callBridge(bridge, "set_widget_property", { assetPath: WIDGET, widgetName: "EnumText", propertyName, value });
+    expect(succeeded(r)).toBe(false);
+    expect(JSON.stringify(r.result ?? r.error)).toContain(mention);
+  };
+
+  it("takes long, prefixed and numeric enum values, refuses bad ones, and fills structs from JSON", async () => {
+    const built = await call("build_tree", {
+      assetPath: WIDGET,
+      parentWidgetName: "Root",
+      tree: { widgetClass: "VerticalBox", widgetName: "EnumForm", children: [{ widgetClass: "TextBlock", widgetName: "EnumText" }] },
+    });
+    const set = (propertyName: string, value: unknown) =>
+      call("set_widget_property", { assetPath: WIDGET, widgetName: "EnumText", propertyName, value });
+
+    await set("Slot.VerticalAlignment", "VAlign_Bottom");
+    expect((await read("EnumText")).slot.properties.VerticalAlignment).toBe("VAlign_Bottom");
+    await set("Slot.HorizontalAlignment", "EHorizontalAlignment::HAlign_Right");
+    expect((await read("EnumText")).slot.properties.HorizontalAlignment).toBe("HAlign_Right");
+    await set("Slot.VerticalAlignment", 2);
+    expect((await read("EnumText")).slot.properties.VerticalAlignment).toBe("VAlign_Center");
+    await refused("Slot.VerticalAlignment", "9", "9");
+    expect((await read("EnumText")).slot.properties.VerticalAlignment).toBe("VAlign_Center");
+
+    await set("Justification", "ETextJustify::Right");
+    expect((await read("EnumText")).properties.Justification).toMatch(/Right$/);
+    await set("Justification", "Center");
+    expect((await read("EnumText")).properties.Justification).toMatch(/Center$/);
+    await refused("Justification", "Sideways", "Sideways");
+    expect((await read("EnumText")).properties.Justification).toMatch(/Center$/);
+
+    const padded = await set("Slot.Padding", { Left: 14, Top: 10, Right: 14, Bottom: 10 });
+    expect(String(padded.propertyValue)).toContain("Left=14");
+    const padding = (await read("EnumText")).slot.properties.Padding;
+    for (const field of ["Left=14", "Top=10", "Right=14", "Bottom=10"]) expect(padding).toContain(field);
+    expect((padded.rollback as { payload: Json }).payload.value).toMatch(/^\(Left=0/);
+    await refused("Slot.Padding", { Sideways: 3 }, "Sideways");
+
+    const rollback = built.rollback as { method: string; payload: Json };
+    await call(rollback.method, rollback.payload);
+    expect(await treeNames()).toEqual(["Root"]);
+  }, 180_000);
+});
+
 describe("widget check_structure (#1350)", () => {
   it("passes a healthy Widget Blueprint with each widget's outer reported", async () => {
     const checked = await call("check_widget_structure", { assetPath: WIDGET });
