@@ -15164,17 +15164,37 @@
         {
           "name": "assetPath",
           "type": "string",
-          "required": true,
+          "required": false,
           "description": "Asset to reload from disk",
           "aliases": [
             "path"
           ]
         },
         {
+          "name": "assetPaths",
+          "type": "array",
+          "required": false,
+          "description": "Assets to reload from disk together in one pass, 1-500; use instead of assetPath",
+          "items": "string"
+        },
+        {
           "name": "discardUnsaved",
           "type": "boolean",
           "required": false,
-          "description": "Reload even when the package has unsaved changes, discarding them (default false)"
+          "description": "Reload even when a package has unsaved changes, discarding them (default false)"
+        }
+      ],
+      "choices": [
+        {
+          "mode": "exactlyOne",
+          "branches": [
+            [
+              "assetPath"
+            ],
+            [
+              "assetPaths"
+            ]
+          ]
         }
       ]
     },

@@ -819,9 +819,10 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to check")).Alias(TEXT("path")),
 	});
 	Registry.RegisterHandler(TEXT("force_reload_asset"), &ForceReload, {
-		MCPParam::Required(TEXT("assetPath"), EType::String, TEXT("Asset to reload from disk")).Alias(TEXT("path")),
-		MCPParam::Optional(TEXT("discardUnsaved"), EType::Boolean, TEXT("Reload even when the package has unsaved changes, discarding them (default false)")),
-	});
+		MCPParam::Optional(TEXT("assetPath"), EType::String, TEXT("Asset to reload from disk")).Alias(TEXT("path")),
+		MCPParam::Optional(TEXT("assetPaths"), EType::Array, TEXT("Assets to reload from disk together in one pass, 1-500; use instead of assetPath")).Items(EType::String),
+		MCPParam::Optional(TEXT("discardUnsaved"), EType::Boolean, TEXT("Reload even when a package has unsaved changes, discarding them (default false)")),
+	}, MCPSpec::ExactlyOne({ { TEXT("assetPath") }, { TEXT("assetPaths") } }));
 
 	// Additional DataTable handlers
 	Registry.RegisterHandler(TEXT("create_datatable"), &CreateDataTable, {
@@ -5060,32 +5061,145 @@ TSharedPtr<FJsonValue> FAssetHandlers::HealthCheck(const TSharedPtr<FJsonObject>
 	return MCPResult(Result);
 }
 
+namespace
+{
+	/** One asset in a force_reload call, captured before anything is released. */
+	struct FMCPForceReloadEntry
+	{
+		FString AssetPath;
+		FString PackageName;
+		FString ObjectPath;
+		UPackage* ExistingPkg = nullptr;
+		UObject* PreviousObject = nullptr;
+		TWeakObjectPtr<UObject> PreviousWeak;
+		bool bWasDirty = false;
+		bool bClosedEditor = false;
+	};
+
+	/** The per-asset result: the single-asset response shape, and one row of a batch. */
+	TSharedPtr<FJsonObject> MCPForceReloadEntryResult(
+		const FMCPForceReloadEntry& Entry, const FString& ReloadMethod, const FString& ReloadError)
+	{
+		UObject* Reloaded = LoadObject<UObject>(nullptr, *Entry.ObjectPath, nullptr, LOAD_None);
+		const bool bSuccess = Reloaded != nullptr;
+		// A package that was already in memory must come back as a new object for
+		// the read to be trustworthy. Same pointer means the editor kept its copy.
+		const bool bReplaced = Entry.PreviousObject == nullptr || !Entry.PreviousWeak.IsValid() || Reloaded != Entry.PreviousObject;
+
+		auto Result = MCPSuccess();
+		Result->SetStringField(TEXT("path"), Entry.AssetPath);
+		Result->SetStringField(TEXT("packageName"), Entry.PackageName);
+		Result->SetBoolField(TEXT("reloaded"), bSuccess && bReplaced);
+		Result->SetStringField(TEXT("method"), ReloadMethod);
+		Result->SetBoolField(TEXT("wasLoaded"), Entry.PreviousObject != nullptr);
+		Result->SetBoolField(TEXT("objectReplaced"), bReplaced);
+		// Never true: every path that reaches here has already run ReloadPackages,
+		// its ResetLoaders fallback, or at minimum a collection. !bReplaced means
+		// the editor refused to release the package, reported as a failure below.
+		Result->SetBoolField(TEXT("unchanged"), false);
+		if (Entry.bWasDirty) Result->SetBoolField(TEXT("discardedUnsavedChanges"), true);
+		if (Entry.bClosedEditor) Result->SetBoolField(TEXT("closedOpenEditor"), true);
+		if (Reloaded) Result->SetStringField(TEXT("class"), Reloaded->GetClass()->GetName());
+		if (!bSuccess)
+		{
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), ReloadError.IsEmpty()
+				? TEXT("LoadObject returned null after reset; the package file may be corrupt or contain a class the editor cannot resolve.")
+				: ReloadError);
+		}
+		else if (!bReplaced)
+		{
+			// Loud rather than misleading: the caller would otherwise read stale
+			// container values and conclude the file on disk was wrong (#820).
+			Result->SetBoolField(TEXT("success"), false);
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("Package '%s' could not be released, so the object still holds its pre-reload state. Values read now may be stale. Close anything referencing it, or restart the editor.%s"),
+				*Entry.PackageName, ReloadError.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" Editor reported: %s"), *ReloadError)));
+		}
+		return Result;
+	}
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::ForceReload(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	// Every parameter is read before anything can refuse (#1057).
+	FString SinglePath;
+	const bool bHasSingle = TryGetStringParam(Params, TEXT("assetPath"), SinglePath) && !SinglePath.IsEmpty();
+	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
+	const bool bBatch = TryGetArrayParam(Params, TEXT("assetPaths"), PathsArr) && PathsArr;
 	const bool bDiscardUnsaved = OptionalBool(Params, TEXT("discardUnsaved"), false);
-
-	const FMCPAssetPathForms Forms = MCPAssetPathForms(AssetPath);
-	const FString PackageName = Forms.PackagePath;
-	FString PackageFileName;
-	if (!FPackageName::DoesPackageExist(PackageName, &PackageFileName))
+	if (bHasSingle == bBatch)
 	{
-		return MCPError(FString::Printf(TEXT("Package not found on disk: %s"), *PackageName));
+		return MCPError(TEXT("Pass exactly one of 'assetPath' or 'assetPaths'."));
 	}
 
-	// Close any open asset editors so they don't pin stale references.
-	bool bClosedEditor = false;
+	TArray<FString> Requested;
+	if (bBatch)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *PathsArr)
+		{
+			FString P;
+			if (!V.IsValid() || !V->TryGetString(P) || P.IsEmpty())
+			{
+				return MCPError(TEXT("'assetPaths' must hold only non-empty asset path strings."));
+			}
+			Requested.Add(P);
+		}
+		if (Requested.Num() == 0 || Requested.Num() > 500)
+		{
+			return MCPError(TEXT("'assetPaths' must hold 1 to 500 asset paths."));
+		}
+	}
+	else
+	{
+		Requested.Add(SinglePath);
+	}
+
+	// Validate the whole set before releasing anything, so one bad path or one
+	// dirty package refuses the call rather than reloading half of it.
+	TArray<FMCPForceReloadEntry> Entries;
+	TSet<FString> SeenPackages;
+	TArray<FString> DirtyPackages;
+	for (const FString& AssetPath : Requested)
+	{
+		const FMCPAssetPathForms Forms = MCPAssetPathForms(AssetPath);
+		FString PackageFileName;
+		if (!FPackageName::DoesPackageExist(Forms.PackagePath, &PackageFileName))
+		{
+			return MCPError(FString::Printf(TEXT("Package not found on disk: %s"), *Forms.PackagePath));
+		}
+		if (SeenPackages.Contains(Forms.PackagePath)) continue;
+		SeenPackages.Add(Forms.PackagePath);
+
+		FMCPForceReloadEntry& Entry = Entries.AddDefaulted_GetRef();
+		Entry.AssetPath = AssetPath;
+		Entry.PackageName = Forms.PackagePath;
+		Entry.ObjectPath = Forms.ObjectPath;
+		Entry.ExistingPkg = FindPackage(nullptr, *Forms.PackagePath);
+		Entry.PreviousObject = StaticFindObject(UObject::StaticClass(), nullptr, *Forms.ObjectPath);
+		Entry.PreviousWeak = Entry.PreviousObject;
+		Entry.bWasDirty = Entry.ExistingPkg != nullptr && Entry.ExistingPkg->IsDirty();
+		if (Entry.bWasDirty) DirtyPackages.Add(Forms.PackagePath);
+	}
+	if (DirtyPackages.Num() > 0 && !bDiscardUnsaved)
+	{
+		return MCPError(FString::Printf(
+			TEXT("%s unsaved changes; reloading would discard them. Save first, or pass discardUnsaved=true: %s"),
+			DirtyPackages.Num() == 1 ? TEXT("A package has") : TEXT("Packages have"),
+			*FString::Join(DirtyPackages, TEXT(", "))));
+	}
+
+	// Close any open asset editors so they do not pin stale references.
 	if (GEditor)
 	{
 		if (UAssetEditorSubsystem* AES = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
 		{
-			if (UObject* Existing = StaticFindObject(UObject::StaticClass(), nullptr, *Forms.ObjectPath))
+			for (FMCPForceReloadEntry& Entry : Entries)
 			{
-				if (AES->FindEditorsForAsset(Existing).Num() > 0)
+				if (Entry.PreviousObject && AES->FindEditorsForAsset(Entry.PreviousObject).Num() > 0)
 				{
-					AES->CloseAllEditorsForAsset(Existing);
-					bClosedEditor = true;
+					AES->CloseAllEditorsForAsset(Entry.PreviousObject);
+					Entry.bClosedEditor = true;
 				}
 			}
 		}
@@ -5096,25 +5210,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::ForceReload(const TSharedPtr<FJsonObject>
 	// all) still read their pre-reload contents while scalars looked restored.
 	// UPackageTools::ReloadPackages is the editor's own re-read: it rebuilds the
 	// package, recompiles the Blueprint and reinstances against the new class.
-	// A package the editor refuses to release is reported, not papered over.
-	UPackage* ExistingPkg = FindPackage(nullptr, *PackageName);
-	UObject* PreviousObject = StaticFindObject(UObject::StaticClass(), nullptr, *Forms.ObjectPath);
-	const TWeakObjectPtr<UObject> PreviousWeak(PreviousObject);
-	const bool bWasDirty = ExistingPkg != nullptr && ExistingPkg->IsDirty();
-	if (bWasDirty && !bDiscardUnsaved)
+	// A batch goes through one call, so a material and its instances are re-read
+	// together and point at each other's new objects (#1645).
+	TArray<UPackage*> ToReload;
+	for (const FMCPForceReloadEntry& Entry : Entries)
 	{
-		return MCPError(FString::Printf(
-			TEXT("Package '%s' has unsaved changes; reloading would discard them. Save it first, or pass discardUnsaved=true."),
-			*PackageName));
+		if (Entry.ExistingPkg) ToReload.Add(Entry.ExistingPkg);
 	}
 
 	FString ReloadMethod = TEXT("load");
 	FString ReloadError;
-	if (ExistingPkg)
+	if (ToReload.Num() > 0)
 	{
 		FText PackageToolsError;
-		TArray<UPackage*> ToReload;
-		ToReload.Add(ExistingPkg);
 		const bool bChanged = UPackageTools::ReloadPackages(
 			ToReload, PackageToolsError, EReloadPackagesInteractionMode::AssumePositive);
 		ReloadMethod = TEXT("reloadPackages");
@@ -5127,10 +5235,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ForceReload(const TSharedPtr<FJsonObject>
 		{
 			// Fall back to the loader reset, which recovers the half-shutdown
 			// state ReloadPackages will not touch (#279).
-			if (UPackage* StillThere = FindPackage(nullptr, *PackageName))
+			for (const FMCPForceReloadEntry& Entry : Entries)
 			{
-				ResetLoaders(StillThere);
-				StillThere->ClearFlags(RF_WasLoaded);
+				if (UPackage* StillThere = FindPackage(nullptr, *Entry.PackageName))
+				{
+					ResetLoaders(StillThere);
+					StillThere->ClearFlags(RF_WasLoaded);
+				}
 			}
 			CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
 			ReloadMethod = TEXT("resetLoaders");
@@ -5141,58 +5252,50 @@ TSharedPtr<FJsonValue> FAssetHandlers::ForceReload(const TSharedPtr<FJsonObject>
 		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
 	}
 
-	UObject* Reloaded = LoadObject<UObject>(nullptr, *Forms.ObjectPath, nullptr, LOAD_None);
-	const bool bSuccess = Reloaded != nullptr;
-	// A package that was already in memory must come back as a new object for
-	// the read to be trustworthy. Same pointer means the editor kept its copy.
-	const bool bReplaced = PreviousObject == nullptr || !PreviousWeak.IsValid() || Reloaded != PreviousObject;
-
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("path"), AssetPath);
-	Result->SetStringField(TEXT("packageName"), PackageName);
-	Result->SetBoolField(TEXT("reloaded"), bSuccess && bReplaced);
-	Result->SetStringField(TEXT("method"), ReloadMethod);
-	Result->SetBoolField(TEXT("wasLoaded"), PreviousObject != nullptr);
-	Result->SetBoolField(TEXT("objectReplaced"), bReplaced);
-	// Never true, and answered the same way asset(reload_package) answers it.
-	// Every path that reaches here has already run ReloadPackages, or its
-	// fallback of ResetLoaders plus ClearFlags plus a collection, or at minimum
-	// a bare CollectGarbage, so editor state moved before this line.
-	//
-	// !bReplaced does NOT mean nothing happened. It means the editor refused to
-	// release the package, which is the same state the branch below reports as
-	// success:false with an error saying the object still holds its pre-reload
-	// contents. Keeping it in this term produced success:false, reloaded:false
-	// and unchanged:true on one result, and a dirty package whose unsaved edits
-	// had just been discarded could read unchanged:true as well.
-	Result->SetBoolField(TEXT("unchanged"), false);
-	Result->SetStringField(TEXT("idempotencyNote"),
+	const TCHAR* IdempotencyNote =
 		TEXT("A forced reload is never a no-op: it releases and re-reads the package every time it is called rather than ")
 		TEXT("recognising it has nothing to do. wasLoaded, objectReplaced, closedOpenEditor and discardedUnsavedChanges on this ")
-		TEXT("result say what it actually moved."));
-	Result->SetBoolField(TEXT("rollbackPossible"), false);
-	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("result say what it actually moved.");
+	const TCHAR* RollbackNote =
 		TEXT("A forced reload throws the in-memory package away and re-reads the file. With discardUnsaved=true anything that ")
 		TEXT("was in memory and not on disk is gone, and reloading again re-reads the same file rather than restoring it. ")
-		TEXT("There is no inverse action."));
-	if (bWasDirty) Result->SetBoolField(TEXT("discardedUnsavedChanges"), true);
-	if (bClosedEditor) Result->SetBoolField(TEXT("closedOpenEditor"), true);
-	if (Reloaded) Result->SetStringField(TEXT("class"), Reloaded->GetClass()->GetName());
-	if (!bSuccess)
+		TEXT("There is no inverse action.");
+
+	if (!bBatch)
 	{
-		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(TEXT("error"), ReloadError.IsEmpty()
-			? TEXT("LoadObject returned null after reset; the package file may be corrupt or contain a class the editor cannot resolve.")
-			: ReloadError);
+		TSharedPtr<FJsonObject> Result = MCPForceReloadEntryResult(Entries[0], ReloadMethod, ReloadError);
+		Result->SetStringField(TEXT("idempotencyNote"), IdempotencyNote);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), RollbackNote);
+		return MCPResult(Result);
 	}
-	else if (!bReplaced)
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TArray<FString> Failed;
+	for (const FMCPForceReloadEntry& Entry : Entries)
 	{
-		// Loud rather than misleading: the caller would otherwise read stale
-		// container values and conclude the file on disk was wrong (#820).
+		TSharedPtr<FJsonObject> Row = MCPForceReloadEntryResult(Entry, ReloadMethod, ReloadError);
+		if (!Row->GetBoolField(TEXT("success"))) Failed.Add(Entry.PackageName);
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("results"), Rows);
+	Result->SetNumberField(TEXT("requested"), Requested.Num());
+	Result->SetNumberField(TEXT("packages"), Entries.Num());
+	Result->SetNumberField(TEXT("reloadedCount"), Entries.Num() - Failed.Num());
+	Result->SetNumberField(TEXT("failedCount"), Failed.Num());
+	Result->SetStringField(TEXT("method"), ReloadMethod);
+	Result->SetBoolField(TEXT("unchanged"), false);
+	Result->SetStringField(TEXT("idempotencyNote"), IdempotencyNote);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), RollbackNote);
+	if (Failed.Num() > 0)
+	{
 		Result->SetBoolField(TEXT("success"), false);
 		Result->SetStringField(TEXT("error"), FString::Printf(
-			TEXT("Package '%s' could not be released, so the object still holds its pre-reload state. Values read now may be stale. Close anything referencing it, or restart the editor.%s"),
-			*PackageName, ReloadError.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" Editor reported: %s"), *ReloadError)));
+			TEXT("%d of %d packages did not come back as fresh objects: %s. Each row's error says why."),
+			Failed.Num(), Entries.Num(), *FString::Join(Failed, TEXT(", "))));
 	}
 	return MCPResult(Result);
 }

@@ -2771,17 +2771,37 @@ export const handlerSpecs: HandlerSpecs = {
       {
         "name": "assetPath",
         "type": "string",
-        "required": true,
+        "required": false,
         "description": "Asset to reload from disk",
         "aliases": [
           "path"
         ]
       },
       {
+        "name": "assetPaths",
+        "type": "array",
+        "required": false,
+        "description": "Assets to reload from disk together in one pass, 1-500; use instead of assetPath",
+        "items": "string"
+      },
+      {
         "name": "discardUnsaved",
         "type": "boolean",
         "required": false,
-        "description": "Reload even when the package has unsaved changes, discarding them (default false)"
+        "description": "Reload even when a package has unsaved changes, discarding them (default false)"
+      }
+    ],
+    "choices": [
+      {
+        "mode": "exactlyOne",
+        "branches": [
+          [
+            "assetPath"
+          ],
+          [
+            "assetPaths"
+          ]
+        ]
       }
     ]
   },
@@ -6300,7 +6320,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   fill_datatable_from_json: "Params: assetPath (or path), rows?, jsonString?",
   fix_asset_hygiene: "Params: fix, assetPaths?, directory?, directories?, recursive?, maxAssets?, classNames?, excludePaths?, keepPaths?, namingRules?, namingRuleMode?, unreferencedAction?, quarantineFolder?, ignoreRedirectorReferencers?, maxFixes?, continueOnError?, save?, dryRun?",
   fixup_redirectors: "Params: paths, dryRun?, save?, allowProjectWide?",
-  force_reload_asset: "Params: assetPath (or path), discardUnsaved?",
+  force_reload_asset: "Params: assetPath (or path) OR assetPaths, discardUnsaved?",
   generate_lightmap_uvs: "Params: assetPath (or path), lodIndex?, enable?, sourceChannel?, destinationChannel?, minLightmapResolution?, lightmapResolution?, setLightmapCoordinateIndex?, force?, save?, dryRun?, rasterSize?",
   generate_mesh_collision: "Params: assetPath (or path), op?, method?, maxConvexHulls?, hullTargetFaceCount?, maxShapeCount?, minThickness?, autoDetectSpheres?, autoDetectBoxes?, autoDetectCapsules?, simplifyHulls?, removeFullyContainedShapes?, decompositionErrorTolerance?, decompositionSearchFactor?, sweptHullAxis?, markAsCustomized?, lodType?, lodIndex?, save?, dryRun?",
   generate_skeletal_mesh_lods: "Params: assetPath OR assetPaths OR directory, recursive?, lodCount, trianglePercentages?, regenerateImported?, skipExisting?, dryRun?, save?",
@@ -6410,7 +6430,7 @@ export const schema: Record<string, z.ZodType> = {
   assetPath: z.string().optional().describe("CurveTable asset path (add_curvetable_key, add_curvetable_row, get_curvetable_keys, import_curvetable, list_curvetable_rows, read_curvetable, remove_curvetable_row, rename_curvetable_row, set_curvetable_keys). DataTable asset path (add_datatable_row, clone_datatable_rows, fill_datatable_from_json, get_datatable_row, read_datatable, reimport_datatable, remove_datatable_row, rename_datatable_row, set_datatable_cell, set_datatable_cells, set_datatable_row, update_datatable_row). EdGraph-backed asset path (add_graph_node, connect_graph_pins, disconnect_graph_pins, read_asset_graph, remove_graph_node). StaticMesh, SkeletalMesh or Skeleton asset path (add_socket, list_asset_sockets, list_sockets, remove_socket). Asset path; a Blueprint path writes its generated-class CDO (append_asset_array_elements, set_asset_property). StaticMesh to cut; it is never modified (apply_mesh_fracture). StaticMesh to read (apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify). Asset to check (asset_health_check). Alias for skeletalMeshPath (bind_cloth_to_section, read_cloth_data, set_cloth_config, unbind_cloth_from_section). StaticMesh or SkeletalMesh asset path (check_uvs, export_uv_layout, get_mesh_bounds, get_mesh_geometry, get_mesh_info, measure_mesh_geometry, read_mesh_materials, read_uv_channels, set_socket_transform, set_uv_channel_count, transform_uvs, unwrap_uvs). CustomizableObject asset path (compile_customizable_object). Object path of the new pipeline (create_interchange_pipeline). Asset that owns the new subobject (create_subobject). Asset to delete (delete_asset). Blueprint, Skeleton or SkeletalMesh to diff from (diff_asset). Data asset path (edit_collection_entry). UserDefinedEnum asset path (edit_user_defined_enum). UserDefinedStruct asset path (edit_user_defined_struct, list_struct_fields, rename_struct_field). Asset to export (export_asset). Texture2D asset path (export_texture, get_texture_info, set_texture_settings). Asset to reload from disk (force_reload_asset). StaticMesh asset path (generate_lightmap_uvs, get_mesh_collision, get_static_mesh_build_settings, set_mesh_material, set_mesh_nav, set_static_mesh_build_settings). StaticMesh whose collision to build or clear (generate_mesh_collision). One SkeletalMesh (generate_skeletal_mesh_lods). Asset path; a Blueprint path reads its generated-class CDO (get_asset_properties, read_asset_properties). StringTable asset path (get_stringtable_entry, import_stringtable, import_stringtable_csv, list_stringtable_keys, read_stringtable, remove_stringtable_entry, set_stringtable_entry). UEnum or UserDefinedEnum asset path (list_enum_values). SkeletalMesh or Skeleton asset path (list_skeleton_bones). Asset to rename in its own folder, together with newName (move_asset, rename_asset). Asset path (read_asset). Imported asset path (read_import_sources). SkeletalMesh asset path (read_skeletal_mesh_bone_vertex_bounds, read_skeletal_mesh_build_settings, read_skeletal_mesh_skin_weights, set_sk_material_slots, set_skeletal_mesh_optimize_for_instancing, set_skeletal_mesh_skin_weights). StaticMesh to recenter (recenter_pivot). Imported asset to rebuild from its source file (reimport_asset). Asset whose package to reload (reload_package). Asset to save; omit it and assetPaths to save every dirty asset under /Game (save_asset)"),
   assetPathA: z.string().optional().describe("First Texture2D"),
   assetPathB: z.string().optional().describe("Second Texture2D"),
-  assetPaths: z.array(z.string()).optional().describe("The exact assets to read (bulk_read_asset_properties). Assets to delete (delete_asset_batch). The exact assets to act on, the safest way to drive it (fix_asset_hygiene). SkeletalMeshes, at most 500 (generate_skeletal_mesh_lods). Texture2D asset paths, 1-500; use instead of assetPath (get_texture_info, set_texture_settings). StaticMeshes to recenter together; the first sets the reference pivot (recenter_pivot). Save exactly these loaded packages (asset, object or package paths) and no others; each is reported saved, notDirty or failed (save_asset)"),
+  assetPaths: z.array(z.string()).optional().describe("The exact assets to read (bulk_read_asset_properties). Assets to delete (delete_asset_batch). The exact assets to act on, the safest way to drive it (fix_asset_hygiene). Assets to reload from disk together in one pass, 1-500; use instead of assetPath (force_reload_asset). SkeletalMeshes, at most 500 (generate_skeletal_mesh_lods). Texture2D asset paths, 1-500; use instead of assetPath (get_texture_info, set_texture_settings). StaticMeshes to recenter together; the first sets the reference pivot (recenter_pivot). Save exactly these loaded packages (asset, object or package paths) and no others; each is reported saved, notDirty or failed (save_asset)"),
   assignments: z.array(z.object({ assetPath: z.string().describe("StaticMesh or SkeletalMesh asset path"), materialPath: z.string().describe("Material to assign"), slotName: z.string().optional().describe("Slot by name, which survives a reimport reordering slot indices"), slotIndex: z.number().int().optional().describe("Slot by index (default 0); refused when it disagrees with slotName") })).optional().describe("Slot assignments, max 500"),
   autoCompact: z.boolean().optional().describe("Close the gaps the collapse leaves in the index space (default true)"),
   autoDetectBoxes: z.boolean().optional().describe("Use a box where one fits (default true)"),
@@ -6466,7 +6486,7 @@ export const schema: Record<string, z.ZodType> = {
   directories: z.array(z.string()).optional().describe("Content paths to sweep, mount-rooted such as /Game/Characters (default /Game)"),
   directory: z.string().optional().describe("Content path to sweep, added to directories (default /Game) (audit_asset_hygiene, fix_asset_hygiene). Content folder to sweep, narrowed by classNames (bulk_read_asset_properties). Every SkeletalMesh in this folder (generate_skeletal_mesh_lods). Content path to list (default /Game) (list_assets). Only textures whose object path starts with this (default /Game/) (list_textures). Content path to rescan (default /Game) (reindex_assets_fts)"),
   discardAttributes: z.boolean().optional().describe("Throw away UVs, normals and material IDs so the remesher moves freely (default false)"),
-  discardUnsaved: z.boolean().optional().describe("Reload even when the package has unsaved changes, discarding them (default false)"),
+  discardUnsaved: z.boolean().optional().describe("Reload even when a package has unsaved changes, discarding them (default false)"),
   displayName: z.string().optional().describe("Display text for the enumerator (add_value, rename_value)"),
   dryRun: z.boolean().optional().describe("Run the operation and report the result without writing (default false) (apply_mesh_fracture, apply_mesh_hole_fill, apply_mesh_mirror, apply_mesh_remesh, apply_mesh_simplify, generate_mesh_collision). Preflight and report without writing (default false) (bulk_set_asset_properties, set_mesh_materials_batch). Run the full preflight and report the planned statuses without writing (default false) (bulk_upsert_data_assets). Validate the entire batch and return proposedRows without changes (default false) (clone_datatable_rows). Validate and return proposedValue without changing the asset (default false) (edit_collection_entry). Validate and report without importing, writing or saving (default false) (export_asset, import_skeletal_mesh, import_texture_batch, set_texture_settings). Name every asset and destination without changing anything (default TRUE) (fix_asset_hygiene). Report the redirectors, referencers and packages it would load and save, and stop (default false) (fixup_redirectors). Report without writing (generate_lightmap_uvs, set_uv_channel_count, transform_uvs, unwrap_uvs). Report each mesh's LODs and what would happen without changing anything (generate_skeletal_mesh_lods). Run the boolean and report the counts without writing (default false) (mesh_boolean). Validate every cell and report what would change without writing (default false) (set_datatable_cells)"),
   dumpToFile: z.boolean().optional().describe("Write the geometry JSON to a file instead of returning it"),

@@ -6857,6 +6857,16 @@
           "suite": "live",
           "file": "tests/live/animation-skeleton-create.test.ts",
           "test": "creates, assigns, saves, reloads, and precisely replays a factory skeleton"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/asset-force-reload-batch.test.ts",
+          "test": "re-reads a material and its instance together as fresh objects"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/asset-force-reload-batch.test.ts",
+          "test": "refuses the whole set when one package is not on disk"
         }
       ]
     },
@@ -15601,6 +15611,11 @@
       "registeredIn": "MaterialHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/asset-force-reload-batch.test.ts",
+          "test": "re-reads a material and its instance together as fresh objects"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-material-graph.test.ts",
