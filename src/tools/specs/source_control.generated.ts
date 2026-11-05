@@ -60,7 +60,7 @@ export const handlerSpecs: HandlerSpecs = {
         "name": "revision",
         "type": "string",
         "required": false,
-        "description": "Revision to diff against: an id, a revision number or a unique prefix of 4 or more characters, as source_control(history) lists them (default the latest)"
+        "description": "Revision to diff against: the provider's id, a unique prefix of 7 or more characters of it, its number, or head, as source_control(history) lists them (default head)"
       },
       {
         "name": "openEditor",
@@ -271,7 +271,7 @@ export const schema: Record<string, z.ZodType> = {
   path: z.string().optional().describe("One asset path or file to diff against a repository revision (source_control_diff). One asset path or file whose revision history to read (source_control_history)"),
   paths: z.array(z.string()).optional().describe("Asset or package paths (/Game/X), content folders, or files on disk (absolute or relative to the project) (source_control_add, source_control_checkout, source_control_get_status, source_control_mark_for_delete, source_control_revert, source_control_submit). Folders or files to look under (default the project's Content, Config, Source and Plugins folders and its .uproject) (source_control_list_changes). Folders or files to sync to the latest revision (default the project's Content, Config, Source and Plugins folders and its .uproject) (source_control_sync)"),
   restoreFrom: z.record(z.string(), z.unknown()).optional().describe("File to saved copy, as mark_for_delete's rollback carries it: a deleted file the provider cannot revert is put back from its copy and marked for add"),
-  revision: z.string().optional().describe("Revision to diff against: an id, a revision number or a unique prefix of 4 or more characters, as source_control(history) lists them (default the latest)"),
+  revision: z.string().optional().describe("Revision to diff against: the provider's id, a unique prefix of 7 or more characters of it, its number, or head, as source_control(history) lists them (default head)"),
 };
 
 /** Declare an action for a spec'd bridge method: effect, summary, method. */

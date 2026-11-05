@@ -121,9 +121,16 @@ describe("diff package lifetime in the bridge", () => {
 
   it("source_control_diff picks the named revision and opens the window on a /Temp copy it unloads on close", () => {
     const diff = sourceControl.slice(sourceControl.indexOf("FSourceControlHandlers::Diff("));
-    expect(diff).toContain("MCPDiffPackage::FindRevision(State.ToSharedRef(), WantedRevision, FindError)");
+    expect(diff).toContain("MCPDiffPackage::FindRevision(*State, WantedRevision, FindError)");
     expect(diff).toContain("MCPDiffPackage::LoadRevision(Revision.ToSharedRef(), Path.PackageName)");
     expect(diff).toContain("MCPDiffPackage::KeepUntilClosed(Window.ToSharedRef(), { Old.Package })");
     expect(diff).not.toMatch(/\.DiffAgainstDepot\(/);
+  });
+
+  it("blueprint(diff) against a revision finds and loads it with the same shared helper", () => {
+    const diffHandlers = read("Private/Handlers/Diff/DiffHandlers.cpp");
+    expect(diffHandlers).toContain("MCPDiffPackage::FindRevision(*State, Wanted, FindError)");
+    expect(diffHandlers).toContain("MCPDiffPackage::LoadRevision(Revision.ToSharedRef(),");
+    expect(diffHandlers).not.toContain("FindBlueprintDiffRevision");
   });
 });

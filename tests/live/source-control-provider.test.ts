@@ -236,6 +236,6 @@ describe("source control with a provider (#1357)", () => {
     }
     const missing = await callBridge(bridge, "source_control_diff", { path: PROBE_REL, revision: "zzzzzzzz" });
     expect(body(missing).success).toBe(false);
-    expect(String(body(missing).error)).toContain("no revision zzzzzzzz");
+    expect(String(body(missing).error)).toContain("No revision 'zzzzzzzz'");
   });
 });

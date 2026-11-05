@@ -32,22 +32,19 @@ namespace MCPDiffPackage
 	};
 
 	/**
-	 * The revision of State's history named by Revision: an exact id, a
-	 * revision number, or a unique prefix of 4 or more characters. Empty: the
-	 * latest. Null with OutError saying why when none matches.
+	 * The history entry Revision names: the provider's revision id, a unique
+	 * prefix of 7 or more characters of it (a git hash), its revision number,
+	 * or head (or empty) for the newest. Null with OutError set when none or
+	 * several match. blueprint(diff) and source_control(diff) share it.
 	 */
 	UE_MCP_BRIDGE_API TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FindRevision(
-		const TSharedRef<ISourceControlState, ESPMode::ThreadSafe>& State, const FString& Revision, FString& OutError);
+		const ISourceControlState& State, const FString& Revision, FString& OutError);
 
 	/**
-	 * Load the long package PackageName as it was at source control revision
-	 * Revision (exact, a prefix of 4 or more characters, or a revision number;
-	 * empty: the latest) into a /Temp package with DiffUtils::LoadPackageForDiff.
-	 * The caller keeps it alive with KeepUntilClosed, or unloads it with Unload.
+	 * Fetch Revision of the long package PackageName from the provider and load
+	 * it into a /Temp package with DiffUtils::LoadPackageForDiff. The caller
+	 * keeps it with KeepUntilClosed, or unloads it with Unload.
 	 */
-	UE_MCP_BRIDGE_API FRevisionPackage LoadAtRevision(const FString& PackageName, const FString& Revision);
-
-	/** As LoadAtRevision, for a revision already found in the package file's history. */
 	UE_MCP_BRIDGE_API FRevisionPackage LoadRevision(const TSharedRef<ISourceControlRevision, ESPMode::ThreadSafe>& Revision, const FString& PackageName);
 
 	/** Unload diff packages now, except those an open window or editor still shows. */

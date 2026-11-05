@@ -1118,10 +1118,10 @@ TSharedPtr<FJsonValue> FSourceControlHandlers::Diff(const TSharedPtr<FJsonObject
 		return MCPError(FString::Printf(TEXT("The %s provider returned no history for '%s', so it cannot be diffed here."), *Provider->GetName().ToString(), *Path.File));
 	}
 	FString FindError;
-	const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = MCPDiffPackage::FindRevision(State.ToSharedRef(), WantedRevision, FindError);
+	const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = MCPDiffPackage::FindRevision(*State, WantedRevision, FindError);
 	if (!Revision.IsValid())
 	{
-		return MCPError(FString::Printf(TEXT("'%s': %s."), *Path.File, *FindError));
+		return MCPError(FString::Printf(TEXT("'%s': %s"), *Path.File, *FindError));
 	}
 	TSharedPtr<FJsonObject> Against = MakeShared<FJsonObject>();
 	Against->SetStringField(TEXT("revision"), Revision->GetRevision());
@@ -1646,7 +1646,7 @@ void FSourceControlHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("Reverts files in the configured provider when called")));
 	Registry.RegisterHandlerWithTimeout(TEXT("source_control_diff"), &Diff, 120.0f, {
 		MCPParam::Required(TEXT("path"), EType::String, TEXT("One asset path or file to diff against a repository revision")),
-		MCPParam::Optional(TEXT("revision"), EType::String, TEXT("Revision to diff against: an id, a revision number or a unique prefix of 4 or more characters, as source_control(history) lists them (default the latest)")),
+		MCPParam::Optional(TEXT("revision"), EType::String, TEXT("Revision to diff against: the provider's id, a unique prefix of 7 or more characters of it, its number, or head, as source_control(history) lists them (default head)")),
 		MCPParam::Optional(TEXT("openEditor"), EType::Boolean, TEXT("For a package, open the editor's asset diff window (default false)")),
 		MCPParam::Optional(TEXT("contextLines"), EType::Integer, TEXT("Unchanged lines around each text change (default 3)")),
 		MCPParam::Optional(TEXT("maxLines"), EType::Integer, TEXT("Most diff lines to return (default 400); truncated says when cut")),

@@ -58,91 +58,36 @@ namespace
 
 namespace MCPDiffPackage
 {
-	TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FindRevision(const TSharedRef<ISourceControlState, ESPMode::ThreadSafe>& State, const FString& Revision, FString& OutError)
+	TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FindRevision(const ISourceControlState& State, const FString& InWanted, FString& OutError)
 	{
-		// An exact id, then a revision number, then a unique prefix of 4 or more characters.
-		const FString Wanted = Revision.TrimStartAndEnd();
-		TArray<TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>> Items;
-		for (int32 Index = 0; Index < State->GetHistorySize(); ++Index)
+		const FString Wanted = InWanted.TrimStartAndEnd();
+		const int32 Count = State.GetHistorySize();
+		if (Count == 0)
 		{
-			if (TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Item = State->GetHistoryItem(Index)) Items.Add(Item);
-		}
-		if (Wanted.IsEmpty() && Items.Num()) return Items[0];
-		for (const auto& Item : Items)
-		{
-			if (Item->GetRevision().Equals(Wanted, ESearchCase::IgnoreCase)) return Item;
-		}
-		if (Wanted.IsNumeric())
-		{
-			for (const auto& Item : Items)
-			{
-				if (Item->GetRevisionNumber() == FCString::Atoi(*Wanted)) return Item;
-			}
-		}
-		TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Found;
-		TArray<FString> Prefixed;
-		for (const auto& Item : Items)
-		{
-			if (Wanted.Len() >= 4 && Item->GetRevision().StartsWith(Wanted, ESearchCase::IgnoreCase))
-			{
-				if (!Found.IsValid()) Found = Item;
-				Prefixed.Add(Item->GetRevision());
-			}
-		}
-		if (Prefixed.Num() > 1)
-		{
-			OutError = FString::Printf(TEXT("revision %s matches %d revisions: %s"), *Wanted, Prefixed.Num(), *FString::Join(Prefixed, TEXT(", ")));
+			OutError = TEXT("The provider returned no history for the file. A file marked for add has no revision yet.");
 			return nullptr;
 		}
-		if (!Found.IsValid())
+		if (Wanted.IsEmpty() || Wanted.Equals(TEXT("head"), ESearchCase::IgnoreCase) || Wanted.Equals(TEXT("latest"), ESearchCase::IgnoreCase))
 		{
-			OutError = Wanted.IsEmpty()
-				? FString(TEXT("the provider returned no history"))
-				: FString::Printf(TEXT("no revision %s among its %d; source_control(history) lists them"), *Wanted, State->GetHistorySize());
+			return State.GetHistoryItem(0);
 		}
-		return Found;
-	}
-
-	FRevisionPackage LoadAtRevision(const FString& PackageName, const FString& Revision)
-	{
-		FRevisionPackage Out;
-		FString File;
-		if (!FPackageName::DoesPackageExist(PackageName, &File))
+		const bool bNumeric = Wanted.IsNumeric();
+		const int32 WantedNumber = bNumeric ? FCString::Atoi(*Wanted) : INDEX_NONE;
+		TArray<TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>> Prefixed;
+		for (int32 Index = 0; Index < Count; ++Index)
 		{
-			Out.Error = FString::Printf(TEXT("%s has no package file on disk"), *PackageName);
-			return Out;
+			TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = State.GetHistoryItem(Index);
+			if (!Revision.IsValid()) continue;
+			const FString Id = Revision->GetRevision();
+			if (Id.Equals(Wanted, ESearchCase::IgnoreCase)) return Revision;
+			if (bNumeric && Revision->GetRevisionNumber() == WantedNumber) return Revision;
+			if (Wanted.Len() >= 7 && Id.StartsWith(Wanted, ESearchCase::IgnoreCase)) Prefixed.Add(Revision);
 		}
-		File = FPaths::ConvertRelativePathToFull(File);
-		ISourceControlModule& Module = ISourceControlModule::Get();
-		if (!Module.IsEnabled() || !Module.GetProvider().IsAvailable())
-		{
-			Out.Error = TEXT("No source control provider is connected, so there is no revision to load");
-			return Out;
-		}
-		ISourceControlProvider& Provider = Module.GetProvider();
-		TSharedRef<FUpdateStatus, ESPMode::ThreadSafe> Update = ISourceControlOperation::Create<FUpdateStatus>();
-		Update->SetUpdateHistory(true);
-		Provider.Execute(Update, File);
-		const FSourceControlStatePtr State = Provider.GetState(File, EStateCacheUsage::Use);
-		if (!State.IsValid() || !State->IsSourceControlled())
-		{
-			Out.Error = FString::Printf(TEXT("%s is not under source control"), *File);
-			return Out;
-		}
-		if (State->GetHistorySize() == 0)
-		{
-			Out.Error = FString::Printf(TEXT("The %s provider returned no history for %s"), *Provider.GetName().ToString(), *File);
-			return Out;
-		}
-
-		FString FindError;
-		const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Found = FindRevision(State.ToSharedRef(), Revision, FindError);
-		if (!Found.IsValid())
-		{
-			Out.Error = FString::Printf(TEXT("%s: %s"), *File, *FindError);
-			return Out;
-		}
-		return LoadRevision(Found.ToSharedRef(), PackageName);
+		if (Prefixed.Num() == 1) return Prefixed[0];
+		OutError = Prefixed.Num() > 1
+			? FString::Printf(TEXT("'%s' matches %d revisions in the file's history; give more of it."), *Wanted, Prefixed.Num())
+			: FString::Printf(TEXT("No revision '%s' in the file's history (%d revisions). source_control(history) lists them."), *Wanted, Count);
+		return nullptr;
 	}
 
 	FRevisionPackage LoadRevision(const TSharedRef<ISourceControlRevision, ESPMode::ThreadSafe>& Found, const FString& PackageName)
