@@ -15,6 +15,8 @@ import { daemonDir, projectKey, readLiveDiscovery, writeDiscovery, type DaemonDi
 import { isOlder } from "../../src/daemon/daemon.js";
 import { ensureDaemon } from "../../src/daemon/shim.js";
 import { packageVersion } from "../../src/core/package-root.js";
+import { userSandboxEnv } from "../helpers/user-sandbox.js";
+import { covers } from "../helpers/covers.js";
 import {
   liveStartLock, releaseStartLock, startLockPath, tryTakeStartLock, waitForStartTurn, START_LOCK_STALE_MS,
 } from "../../src/daemon/start-lock.js";
@@ -161,6 +163,8 @@ describe("several `daemon run` processes at once", () => {
   });
 
   it("leave exactly one daemon running, the one that published", async () => {
+
+    covers("daemon.start-lock", "cli.daemon.run");
     const projectDir = path.join(dir, "Raced");
     fs.mkdirSync(path.join(projectDir, "Content"), { recursive: true });
     const uproject = path.join(projectDir, "Raced.uproject");
@@ -170,8 +174,7 @@ describe("several `daemon run` processes at once", () => {
     Object.assign(env, {
       UE_MCP_PORT: "1",
       UE_MCP_HOST: "127.0.0.1",
-      UE_MCP_STATE_DIR: path.join(dir, "state"),
-      UE_MCP_CONFIG_DIR: path.join(dir, "config"),
+      ...userSandboxEnv(path.join(dir, "home")),
       UE_MCP_DAEMON_DIR: path.join(dir, "daemons"),
       UE_MCP_DISABLE_UPDATE_CHECK: "1",
       UE_MCP_DAEMON_IDLE_MS: "60000",

@@ -1,6 +1,8 @@
-// The behavioural-coverage files and the one rule the ratchet adds on top of
-// the inventory: the grandfathered gap list may only shrink (#1223).
-// Shared by the generator, its unit test and the release gate.
+// The coverage files and the one rule the ratchet adds on top of an
+// inventory: the grandfathered gap list may only shrink (#1223). Two
+// inventories share it: bridge actions (behavioural-*) and every other
+// user-facing surface (integration-*). Shared by both generators, their unit
+// tests and the release gate.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -14,6 +16,12 @@ export const INVENTORY_FILE = `${COVERAGE_DIR}/behavioural-coverage.json`;
 export const RATCHET_FILE = `${COVERAGE_DIR}/behavioural-gaps.json`;
 export const EXEMPTIONS_FILE = `${COVERAGE_DIR}/behavioural-exemptions.json`;
 
+/** The non-bridge surfaces: the hand-kept manifest, its generated inventory, gaps and exemptions. */
+export const INTEGRATION_MANIFEST_FILE = `${COVERAGE_DIR}/integration-surfaces.json`;
+export const INTEGRATION_INVENTORY_FILE = `${COVERAGE_DIR}/integration-coverage.json`;
+export const INTEGRATION_RATCHET_FILE = `${COVERAGE_DIR}/integration-gaps.json`;
+export const INTEGRATION_EXEMPTIONS_FILE = `${COVERAGE_DIR}/integration-exemptions.json`;
+
 /** An exemption reason shorter than this is a label, not a reason. */
 export const MIN_EXEMPTION_REASON = 40;
 
@@ -22,15 +30,15 @@ export const MIN_EXEMPTION_REASON = 40;
  * @param {string} text
  * @returns {string[]}
  */
-export function parseRatchet(text) {
+export function parseRatchet(text, file = RATCHET_FILE) {
   const parsed = JSON.parse(text);
-  if (!parsed || !Array.isArray(parsed.gaps)) throw new Error(`${RATCHET_FILE} has no "gaps" array`);
+  if (!parsed || !Array.isArray(parsed.gaps)) throw new Error(`${file} has no "gaps" array`);
   return parsed.gaps.map(String);
 }
 
 /** @returns {string[]} */
-export function readRatchet(root = REPO_ROOT) {
-  return parseRatchet(fs.readFileSync(path.join(root, RATCHET_FILE), "utf8"));
+export function readRatchet(root = REPO_ROOT, file = RATCHET_FILE) {
+  return parseRatchet(fs.readFileSync(path.join(root, file), "utf8"), file);
 }
 
 /**
@@ -38,17 +46,17 @@ export function readRatchet(root = REPO_ROOT) {
  * @param {string} text
  * @returns {Record<string, string>}
  */
-export function parseExemptions(text) {
+export function parseExemptions(text, file = EXEMPTIONS_FILE) {
   const parsed = JSON.parse(text);
   if (!parsed || typeof parsed.exemptions !== "object" || parsed.exemptions === null) {
-    throw new Error(`${EXEMPTIONS_FILE} has no "exemptions" object`);
+    throw new Error(`${file} has no "exemptions" object`);
   }
   return Object.fromEntries(Object.entries(parsed.exemptions).map(([k, v]) => [k, String(v)]));
 }
 
 /** @returns {Record<string, string>} */
-export function readExemptions(root = REPO_ROOT) {
-  return parseExemptions(fs.readFileSync(path.join(root, EXEMPTIONS_FILE), "utf8"));
+export function readExemptions(root = REPO_ROOT, file = EXEMPTIONS_FILE) {
+  return parseExemptions(fs.readFileSync(path.join(root, file), "utf8"), file);
 }
 
 /**

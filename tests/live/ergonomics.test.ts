@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * The action-schema and dispatch-ergonomics work, driven through the shipped
  * server against a real editor.

@@ -548,11 +548,40 @@ function describeAction(src, masked, start, end, specBuilders = new Map()) {
 }
 
 /**
+ * `movedAction(someTool, "action")`: the old address of an action that moved
+ * to another category. Its description is the canonical action's, read from
+ * the category file `someTool` is imported from, behind the same prefix
+ * src/surface/moved-action.ts writes. Null when the value is not that call.
+ * The declared return type breaks the inference cycle through readCategory.
+ *
+ * @returns {string | null}
+ */
+function describeMoved(file, src, masked, start, end) {
+  const call = masked.slice(start, end).match(/(?:^|[^\w$])movedAction\s*\(/);
+  if (!call) return null;
+  const args = topLevelArgs(masked, start + call.index + call[0].length - 1);
+  if (!args || args.length < 2) return "";
+  const toolRef = src.slice(args[0][0], args[0][1]).trim();
+  const action = concatenatedLiterals(src, masked, args[1][0], args[1][1]);
+  for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"(\.\.?\/[^"]+)\.js"/g)) {
+    const names = m[1].split(",").map((x) => x.trim().split(/\s+as\s+/).pop());
+    if (!names.includes(toolRef)) continue;
+    const canonical = readCategory(path.resolve(path.dirname(file), `${m[2]}.ts`));
+    const target = canonical?.actions.find((a) => a.name === action);
+    if (!target) return "";
+    return `Deprecated address, removed in the next release: use ${canonical.name}(${action}). ${target.description}`.trimEnd();
+  }
+  return "";
+}
+
+/**
  * An action's description, following a bare reference to a spec declared
  * elsewhere (`build_project: buildProjectAction`) to the object that declares
  * it, in this file or in the module this file imports it from.
  */
 function describeValue(file, src, masked, start, end, specBuilders) {
+  const moved = describeMoved(file, src, masked, start, end);
+  if (moved !== null) return moved;
   const direct = describeAction(src, masked, start, end, specBuilders);
   const ref = masked.slice(start, end).trim();
   if (direct !== "" || !/^[A-Za-z_$][\w$]*$/.test(ref)) return direct;

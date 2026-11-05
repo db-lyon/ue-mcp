@@ -265,9 +265,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundClass(const TSharedPtr<FJsonOb
 	if (TryGetStringParam(Params, TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
 	{
 		Parent = LoadAssetByPath<USoundClass>(ParentPath);
-#if WITH_EDITOR
-		if (Parent) SoundClass->SetParentClass(Parent);
-#endif
+		if (Parent) MCPAudio::SetSoundClassParent(SoundClass, Parent);
 	}
 
 	auto Res = MCPSuccess();

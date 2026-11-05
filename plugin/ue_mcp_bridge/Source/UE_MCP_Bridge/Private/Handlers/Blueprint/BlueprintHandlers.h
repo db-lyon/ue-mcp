@@ -106,6 +106,7 @@ private:
 	// issues #182/#183: C++ class CDO property access
 	static TSharedPtr<FJsonValue> SetCdoProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetCdoProperties(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CompareClassDefaults(const TSharedPtr<FJsonObject>& Params);
 
 	// issue #195: run construction script and inspect resulting components
 	static TSharedPtr<FJsonValue> RunConstructionScript(const TSharedPtr<FJsonObject>& Params);

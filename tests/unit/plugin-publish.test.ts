@@ -40,7 +40,7 @@ describe("derivedListingFields", () => {
   });
 
   it("lists flows only when the manifest ships some", () => {
-    const m = PluginManifestSchema.parse({ actionPrefix: "x", flows: { f: { description: "d", steps: { a: { task: "t" } } } } });
+    const m = PluginManifestSchema.parse({ actionPrefix: "x", flows: { f: { description: "d", steps: { "1": { task: "t" } } } } });
     expect(derivedListingFields(m, false).provides).toEqual(["flows"]);
   });
 });

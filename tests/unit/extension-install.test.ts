@@ -36,24 +36,24 @@ function zipExtension(version: string, pkg: Record<string, unknown> = {}): { zip
 }
 
 describe("installExtension", () => {
-  it("installs a zip under its extension name and replaces an older copy", async () => {
+  it("installs a zip under its name and version, and prunes an older copy no project records", async () => {
     const root = path.join(dir, "extensions");
     const v1 = zipExtension("0.1.0");
     await installExtension(v1.zip, { sha256: v1.sha256, root });
     const v2 = zipExtension("0.2.0");
     const installed = await installExtension(v2.zip, { root });
     expect(installed).toMatchObject({ name: "studio", version: "0.2.0", sha256: v2.sha256 });
-    expect(fs.readFileSync(path.join(root, "studio", "dist", "index.js"), "utf-8")).toContain("0.2.0");
-    expect(fs.readdirSync(root)).toEqual(["studio"]);
+    expect(fs.readFileSync(path.join(root, "studio@0.2.0", "dist", "index.js"), "utf-8")).toContain("0.2.0");
+    expect(fs.readdirSync(root)).toEqual(["studio@0.2.0"]);
     expect(removeExtension("studio", root)).toBe(true);
-    expect(fs.existsSync(path.join(root, "studio"))).toBe(false);
+    expect(fs.readdirSync(root)).toEqual([]);
   });
 
   it("refuses a zip whose hash does not match and leaves nothing behind", async () => {
     const root = path.join(dir, "extensions");
     const v1 = zipExtension("0.1.0");
     await expect(installExtension(v1.zip, { sha256: "0".repeat(64), root })).rejects.toThrow(/does not match the expected SHA-256/);
-    expect(fs.existsSync(path.join(root, "studio"))).toBe(false);
+    expect(fs.existsSync(root) ? fs.readdirSync(root) : []).toEqual([]);
   });
 
   it("refuses a URL without a hash", async () => {
@@ -70,20 +70,20 @@ describe("installExtension", () => {
 });
 
 describe("copies an interrupted install leaves", () => {
-  it("are swept by the next install, so only the extension's own folder remains", async () => {
+  it("are swept by the next install, so only the extension's own folders remain", async () => {
     const root = path.join(dir, "extensions");
     const v1 = zipExtension("0.1.0");
     await installExtension(v1.zip, { root });
-    for (const spare of ["studio.old-64024", "studio.staging-64024"]) fs.cpSync(path.join(root, "studio"), path.join(root, spare), { recursive: true });
+    for (const spare of ["studio.old-64024", "studio@0.1.0.staging-64024"]) fs.cpSync(path.join(root, "studio@0.1.0"), path.join(root, spare), { recursive: true });
     fs.mkdirSync(path.join(root, "studio-other.old-1"), { recursive: true });
     await installExtension(zipExtension("0.2.0").zip, { root });
-    expect(fs.readdirSync(root).sort()).toEqual(["studio", "studio-other.old-1"]);
+    expect(fs.readdirSync(root).sort()).toEqual(["studio-other.old-1", "studio@0.2.0"]);
   });
 
   it("are never loaded beside the extension", async () => {
     const root = path.join(dir, "extensions");
     await installExtension(zipExtension("0.2.0").zip, { root });
-    fs.cpSync(path.join(root, "studio"), path.join(root, "studio.old-64024"), { recursive: true });
+    fs.cpSync(path.join(root, "studio@0.2.0"), path.join(root, "studio@0.2.0.old-64024"), { recursive: true });
     const loaded = await loadExtensions((name) => ({ name }) as never, root);
     expect(loaded.map((e) => `${e.name} ${e.version}`)).toEqual(["studio 0.2.0"]);
   });

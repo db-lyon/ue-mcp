@@ -232,6 +232,25 @@ inline UObject* MCPLoadAssetObject(const FString& AssetPath)
 			{
 				if (MCPIsLiveAssetObject(InPackage)) return InPackage;
 			}
+
+			// A bare package path names the package's one asset even when that asset is not named after the
+			// package, as in a .uasset copied or renamed outside the editor (#1183). An explicit object name
+			// is never swapped for another.
+			if (!Forms.bInputCarriedObjectName)
+			{
+				if (FAssetRegistryModule* Module = FModuleManager::GetModulePtr<FAssetRegistryModule>(TEXT("AssetRegistry")))
+				{
+					TArray<FAssetData> InPackageAssets;
+					Module->Get().GetAssetsByPackageName(FName(*PackageName), InPackageAssets);
+					if (InPackageAssets.Num() == 1)
+					{
+						if (UObject* Sole = FindObject<UObject>(Package, *InPackageAssets[0].AssetName.ToString()))
+						{
+							if (MCPIsLiveAssetObject(Sole)) return Sole;
+						}
+					}
+				}
+			}
 		}
 	}
 	return nullptr;

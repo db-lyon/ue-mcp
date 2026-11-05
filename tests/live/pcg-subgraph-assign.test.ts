@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * `pcg(set_subgraph)` and `pcg(set_subgraph_parameters)`, against a real editor (#1253).
  *

@@ -47,7 +47,7 @@ namespace
 	}
 
 	/** Construct a cue node by friendly type name. Returns null for unknown types. */
-	USoundNode* ConstructCueNode(USoundCue* Cue, const FString& TypeLower)
+	USoundNode* ConstructCueNodeOfType(USoundCue* Cue, const FString& TypeLower)
 	{
 		if (TypeLower == TEXT("wave_player"))  return Cue->ConstructSoundNode<USoundNodeWavePlayer>();
 		if (TypeLower == TEXT("mixer"))        return Cue->ConstructSoundNode<USoundNodeMixer>();
@@ -59,6 +59,14 @@ namespace
 		if (TypeLower == TEXT("delay"))        return Cue->ConstructSoundNode<USoundNodeDelay>();
 		if (TypeLower == TEXT("switch"))       return Cue->ConstructSoundNode<USoundNodeSwitch>();
 		return nullptr;
+	}
+
+	/** As above, with a single-input node given its one slot, as the editor does. */
+	USoundNode* ConstructCueNode(USoundCue* Cue, const FString& TypeLower)
+	{
+		USoundNode* Node = ConstructCueNodeOfType(Cue, TypeLower);
+		MCPAudio::EnsureSingleSlot(Node);
+		return Node;
 	}
 
 	void ApplyNodeProps(USoundNode* Node, const TSharedPtr<FJsonObject>& O)
@@ -156,14 +164,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueConnect(const TSharedPtr<FJsonObj
 		USoundNode* Parent = FindSoundCueNodeByName(Cue, ParentNodeId);
 		if (!Parent) return MCPError(FString::Printf(TEXT("Parent node '%s' not found in cue."), *ParentNodeId));
 
-		int32 Index = bHasChildIndex ? RequestedChildIndex : Parent->ChildNodes.Num();
-		Index = FMath::Clamp(Index, 0, Parent->ChildNodes.Num());
-
-		if (Index >= Parent->GetMaxChildNodes())
-		{
-			return MCPError(FString::Printf(TEXT("Parent node '%s' accepts at most %d children."), *ParentNodeId, Parent->GetMaxChildNodes()));
-		}
-
 		// soundcue_disconnect detaches a child from EVERY slot it occupies under
 		// the named parent, so a child that was already there loses those links
 		// too when the rollback runs. Count them so the result can say so.
@@ -172,8 +172,11 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueConnect(const TSharedPtr<FJsonObj
 			if (Existing == Child) ++PriorLinksToParent;
 		}
 
-		Parent->InsertChildNode(Index);
-		Parent->ChildNodes[Index] = Child;
+		FString PlaceError;
+		if (!MCPAudio::PlaceCueChild(Parent, Child, bHasChildIndex, RequestedChildIndex, PlaceError))
+		{
+			return MCPError(PlaceError);
+		}
 	}
 
 #if WITH_EDITOR
@@ -348,17 +351,13 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAuthor(const TSharedPtr<FJsonObje
 			USoundNode** Parent = NodeMap.Find(ParentId);
 			if (!Parent) { Errors++; Note(TEXT("connection"), Ref, false, TEXT("no such parent")); continue; }
 
-			int32 Index = O->HasField(TEXT("index"))
-				? (int32)O->GetNumberField(TEXT("index"))
-				: (*Parent)->ChildNodes.Num();
-			Index = FMath::Clamp(Index, 0, (*Parent)->ChildNodes.Num());
-			if (Index >= (*Parent)->GetMaxChildNodes())
+			const bool bHasIndex = O->HasField(TEXT("index"));
+			FString PlaceError;
+			if (!MCPAudio::PlaceCueChild(*Parent, *Child, bHasIndex, bHasIndex ? (int32)O->GetNumberField(TEXT("index")) : 0, PlaceError))
 			{
-				Errors++; Note(TEXT("connection"), Ref, false, FString::Printf(TEXT("parent accepts at most %d children"), (*Parent)->GetMaxChildNodes()));
+				Errors++; Note(TEXT("connection"), Ref, false, PlaceError);
 				continue;
 			}
-			(*Parent)->InsertChildNode(Index);
-			(*Parent)->ChildNodes[Index] = *Child;
 			Note(TEXT("connection"), Ref, true, TEXT(""));
 		}
 	}

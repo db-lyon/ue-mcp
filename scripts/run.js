@@ -13,6 +13,7 @@ import {
   isSameOrUnder,
   resolveTestEngine,
 } from './build-utils.js';
+import { TEST_EDITOR_ARGS } from './test-editor-args.mjs';
 
 /**
  * UE_EDITOR_PATH stays supported so an existing setup keeps working, but it
@@ -62,6 +63,20 @@ async function main() {
   log(`Editor: ${editorExe}`);
   log('');
 
+  // An editor already answering for this project is the one to use; a second would fight it for the lockfile.
+  const { askOnce, bridgePortCandidates } = await import('./bridge-target.mjs');
+  const { candidates } = bridgePortCandidates({ projectDir: path.dirname(projectFile) });
+  const lockfile = candidates.find((c) => c.source === 'lockfile');
+  if (lockfile) {
+    try {
+      await askOnce(`ws://127.0.0.1:${lockfile.port}`, 'get_bridge_capabilities', {}, 2000);
+      log(`An editor is already running on this project (bridge port ${lockfile.port}); not launching another.`, 'green');
+      return;
+    } catch {
+      // Nothing answering: launch.
+    }
+  }
+
   log('Launching Unreal Editor...', 'green');
 
   // Launch editor with project file.
@@ -71,7 +86,7 @@ async function main() {
   // never returns when piped, and the editor's own logging would scribble
   // over the progress bar below. The editor writes Saved/Logs either way.
   const launchedAtMs = Date.now();
-  const proc = spawn(editorExe, [projectFile], {
+  const proc = spawn(editorExe, [projectFile, ...TEST_EDITOR_ARGS], {
     stdio: 'ignore',
     detached: true,
   });
@@ -89,7 +104,9 @@ async function main() {
   if (result.ready) {
     log(`Editor ready in ${result.elapsedSeconds.toFixed(1)}s`, 'green');
   } else {
-    log(`Editor did not become ready: ${result.reason}`, 'yellow');
+    // A caller that goes on to test the editor (the release runner) must not read this as a launch.
+    log(`Editor did not become ready: ${result.reason}`, 'red');
+    process.exitCode = 1;
   }
 }
 

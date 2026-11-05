@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Material function nodes are addressable by name.
  *

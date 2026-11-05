@@ -104,6 +104,29 @@ export function readGlobalUeMcpBlock(): Record<string, unknown> {
   return ueMcpBlockOf(readGlobalConfigDoc());
 }
 
+/**
+ * Which `ue-mcp.<env>.yml` overlay a project merges: UE_MCP_ENV, else the
+ * `env:` key from ue-mcp.local.yml, ue-mcp.yml or the user-global file, first
+ * one set wins. Undefined when none names one.
+ */
+export function selectedOverlay(projectDir: string): string | undefined {
+  return (
+    firstString(readEnv("env"))
+    ?? firstString(
+      readUeMcpBlock(localConfigPath(projectDir)).env,
+      readUeMcpBlock(projectConfigPath(projectDir)).env,
+      readGlobalUeMcpBlock().env,
+    )
+  );
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim() !== "") return v.trim();
+  }
+  return undefined;
+}
+
 export type ConfigLayerTarget = "global" | "project" | "env" | "local";
 
 export interface ConfigLayerFile {

@@ -32,12 +32,12 @@ describe("the daemon's plugin routes", () => {
     };
     const onChanged = vi.fn();
     const routes = pluginRoutes({ projectDir: project(""), run, onChanged });
-    expect(await routes("POST", "/install", { name: "pie-studio", version: "^1.0.0" })).toEqual({
+    expect(await routes("POST", "/install", { name: "sample-recorder", version: "^1.0.0" })).toEqual({
       status: 200, body: { ok: true, exitCode: 0, output: "done", restartRequired: true },
     });
     await routes("POST", "/update", {});
     await routes("POST", "/uninstall", { name: "@scope/ue-mcp-x" });
-    expect(calls).toEqual([["install", "pie-studio", "--version", "^1.0.0"], ["update"], ["uninstall", "@scope/ue-mcp-x"]]);
+    expect(calls).toEqual([["install", "sample-recorder", "--version", "^1.0.0"], ["update"], ["uninstall", "@scope/ue-mcp-x"]]);
     expect(onChanged).toHaveBeenCalledTimes(3);
   });
 
@@ -64,11 +64,18 @@ describe("the daemon's plugin routes", () => {
   });
 
   it("reads the registry catalog once and serves it again from memory", async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ plugins: [{ slug: "pie-studio", name: "PIE Studio" }] })));
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ plugins: [{ slug: "sample-recorder", name: "Sample Recorder" }] })));
     const routes = pluginRoutes({ projectDir: project(""), fetchImpl: fetchImpl as unknown as typeof fetch });
-    expect(await routes("GET", "/catalog", undefined)).toEqual({ status: 200, body: { plugins: [{ slug: "pie-studio", name: "PIE Studio" }] } });
+    expect(await routes("GET", "/catalog", undefined)).toEqual({ status: 200, body: { plugins: [{ slug: "sample-recorder", name: "Sample Recorder" }] } });
     await routes("GET", "/catalog", undefined);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a plugin that is now built into core out of the catalog", async () => {
+    const listed = [{ slug: "pie-studio", name: "PIE Studio" }, { slug: "sample-recorder", name: "Sample Recorder" }];
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ plugins: listed })));
+    const routes = pluginRoutes({ projectDir: project(""), fetchImpl: fetchImpl as unknown as typeof fetch });
+    expect(await routes("GET", "/catalog", undefined)).toEqual({ status: 200, body: { plugins: [{ slug: "sample-recorder", name: "Sample Recorder" }] } });
   });
 
   it("answers 502 when the registry cannot be reached, and null for other paths", async () => {

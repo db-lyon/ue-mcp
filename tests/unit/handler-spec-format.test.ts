@@ -265,7 +265,7 @@ describe("the choice check at the TS boundary", () => {
     };
   }
   const tool = () => categoryTool("probe", "Probe.", { set_node_settings: specBp("mutate", "Set.", "probe_settings") }, {
-    assetPath: z.string().optional(), nodeName: z.string().optional(), settings: z.record(z.unknown()).optional(),
+    assetPath: z.string().optional(), nodeName: z.string().optional(), settings: z.record(z.string(), z.unknown()).optional(),
     propertyName: z.string().optional(), propertyValue: z.string().optional(),
   });
 

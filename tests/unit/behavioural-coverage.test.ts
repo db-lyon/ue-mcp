@@ -67,7 +67,7 @@ function fixtureDir(name: string, files: Record<string, string>): string {
   return dir;
 }
 
-const METHODS = new Set(["read_thing", "write_thing", "make_fixture", "list_things", "forwarded_thing", "category_thing"]);
+const METHODS = new Set(["read_thing", "write_thing", "make_fixture", "list_things", "forwarded_thing", "category_thing", "skipped_thing"]);
 const ACTIONS = new Map([["asset", new Map([["read", "category_thing"]])]]);
 
 describe("the live-test scanner", () => {
@@ -94,6 +94,12 @@ describe("the live-test scanner", () => {
         const r = await server.call("asset", { action: "read", assetPath: "/Game/X" });
         expect(r.isError).toBe(false);
       });
+      it.skip("is skipped while it fails", async () => {
+        expect((await callBridge(bridge, "skipped_thing", {})).result.value).toBe(1);
+      });
+      test.todo("is not written yet", async () => {
+        expect((await callBridge(bridge, "skipped_thing", {})).result.value).toBe(2);
+      });
       describe("a group", () => {
         beforeAll(async () => { await callBridge(bridge, "write_thing", {}); });
         it("asserts on what its hook wrote", () => { expect(state).toEqual({}); });
@@ -104,6 +110,10 @@ describe("the live-test scanner", () => {
 
   it("credits a test body that dispatches the action and asserts on the result", () => {
     expect(found.get("read_thing")?.map((r) => r.test)).toEqual(["reads a thing back"]);
+  });
+
+  it("does not credit a test marked skip or todo, which never runs", () => {
+    expect(found.has("skipped_thing")).toBe(false);
   });
 
   it("does not credit a file-level fixture", () => {
@@ -217,10 +227,20 @@ describe("the gate", () => {
     expect(problems.join("\n")).toMatch(/Drop the exemption/);
   });
 
-  it("accepts a reasoned exemption and a still-open gap", () => {
+  it("refuses a mutating action in the gap list", () => {
+    const problems = inventoryProblems(fakeInventory([["writes_thing", "gap"]]), {
+      exemptions: {},
+      ratchet: ["writes_thing"],
+      mutating: new Set(["writes_thing"]),
+    });
+    expect(problems.join("\n")).toMatch(/mutating action\(s\): writes_thing/);
+  });
+
+  it("accepts a reasoned exemption and a still-open read-only gap", () => {
     const problems = inventoryProblems(fakeInventory([["exempt_one", "exempt"], ["gap_one", "gap"]]), {
       exemptions: { exempt_one: reason },
       ratchet: ["gap_one"],
+      mutating: new Set(),
     });
     expect(problems).toEqual([]);
   });

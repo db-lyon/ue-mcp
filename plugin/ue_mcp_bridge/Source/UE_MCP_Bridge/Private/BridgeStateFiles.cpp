@@ -3,6 +3,7 @@
 #include "MCPHandlerRegistration.h"
 #include "Misc/EngineVersion.h"
 #include "MCPBridgeStateDir.h"
+#include "MCPEngineStatus.h"
 #include "UE_MCP_BridgeModule.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
@@ -60,17 +61,7 @@ bool FMCPBridgeStateFiles::PublishJson(const FString& FilePath, const TSharedPtr
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Serialized);
 	FJsonSerializer::Serialize(Payload.ToSharedRef(), Writer);
 
-	const FString TempPath = FString::Printf(TEXT("%s.%u.tmp"), *FilePath, FPlatformProcess::GetCurrentProcessId());
-	if (!FFileHelper::SaveStringToFile(Serialized, *TempPath))
-	{
-		return false;
-	}
-	if (!IFileManager::Get().Move(*FilePath, *TempPath, /*Replace*/ true))
-	{
-		IFileManager::Get().Delete(*TempPath);
-		return false;
-	}
-	return true;
+	return FMCPEngineStatus::PublishAtomically(FilePath, Serialized);
 }
 
 TSharedPtr<FJsonObject> FMCPBridgeStateFiles::LoadJson(const FString& FilePath)

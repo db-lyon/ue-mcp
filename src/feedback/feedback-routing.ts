@@ -16,8 +16,8 @@ import {
  * Decide which tracker a feedback report belongs in.
  *
  * ue-mcp is a core server plus a growing set of npm-distributed plugins, each
- * with its own repo. An agent that hits a wall in a plugin-owned surface (PIE
- * record/replay, Perforce, Meshy, Voxel) has no idea the surface is not core,
+ * with its own repo. An agent that hits a wall in a plugin-owned surface
+ * (Perforce, Meshy, Voxel) has no idea the surface is not core,
  * so every report lands on the core tracker and has to be re-filed by hand.
  *
  * This module reads the published registry (plugins.ue-mcp.com) plus the set
@@ -32,8 +32,10 @@ import {
  *                             refused, so the agent cannot aim a submission at
  *                             an arbitrary GitHub project.
  *   2. installed ownership  - `idealTool` names a category or action that a
- *                             locally loaded plugin actually provides. This is
- *                             a fact, not a guess: confidence "certain".
+ *                             locally loaded plugin actually provides, or the
+ *                             title or summary names an action a loaded plugin
+ *                             injected (`p4_reconcile`, bare or as a call).
+ *                             This is a fact, not a guess: confidence "certain".
  *   3. core anchor          - the text names a real built-in category or action
  *                             (`editor(play_in_editor)`). Core owns it; any
  *                             keyword hit is demoted to a suggestion.
@@ -98,7 +100,7 @@ export interface RoutingInput {
  * or merely flagged.
  *
  *   strong - the plugin's own identity: slug, name, package, and the tool
- *            categories it provides. "pie", "meshy", "perforce".
+ *            categories it provides. "meshy", "perforce", "voxel".
  *   weak   - descriptive tags the listing chose: "import", "replay",
  *            "testing". Real signal, but shared with ordinary Unreal
  *            vocabulary, so "importing a mesh loses its materials" must not
@@ -107,7 +109,7 @@ export interface RoutingInput {
  * A weak match can suggest a plugin at the approval prompt. Only a strong one
  * can make it the default destination.
  */
-const W_STRONG_CALL = 12; // "pie(replay)" / "pie.replay" and pie is not built-in
+const W_STRONG_CALL = 12; // "meshy(generate)" / "meshy.generate" and meshy is not built-in
 const W_STRONG_IDEAL = 10;
 const W_STRONG_TITLE = 6;
 const W_STRONG_SUMMARY = 3;
@@ -115,7 +117,7 @@ const W_WEAK_CALL = 6;
 const W_WEAK_IDEAL = 4;
 const W_WEAK_TITLE = 2;
 const W_WEAK_SUMMARY = 1;
-const W_PHRASE_TITLE = 6; // full multi-word slug, e.g. "pie studio"
+const W_PHRASE_TITLE = 6; // full multi-word slug, e.g. "sample recorder"
 const W_PHRASE_SUMMARY = 4;
 const W_INSTALLED = 3;    // the plugin is actually loaded in this project
 
@@ -168,6 +170,30 @@ function coreSurface(tools: readonly ToolDef[] = NO_TOOLS): CoreSurface {
   return surface;
 }
 
+/**
+ * The graph a caller hands in is the addressed editor's, so it carries every
+ * action a loaded plugin injected (`p4_reconcile` on source_control) and every
+ * category one provides. Those belong to the plugin, not to core, so they are
+ * taken back out before anything is anchored on them.
+ */
+function withoutPluginSurface(core: CoreSurface, installed: PluginInfo[]): CoreSurface {
+  const ownedCategories = new Set<string>();
+  const ownedActions = new Set<string>();
+  for (const p of installed) {
+    for (const cat of Object.keys(p.provided)) ownedCategories.add(cat.toLowerCase());
+    for (const actions of [...Object.values(p.injected), ...Object.values(p.provided)]) {
+      for (const a of actions) ownedActions.add(a.toLowerCase());
+    }
+  }
+  if (ownedCategories.size === 0 && ownedActions.size === 0) return core;
+  const categories = new Set([...core.categories].filter((c) => !ownedCategories.has(c)));
+  const actions = new Map<string, string>();
+  for (const [action, cat] of core.actions) {
+    if (!ownedActions.has(action) && !ownedCategories.has(cat.toLowerCase())) actions.set(action, cat);
+  }
+  return { categories, actions };
+}
+
 /** Test seam: forget the memoised built-in surfaces. */
 export function clearCoreSurfaceCache(): void {
   coreSurfaceCache = new WeakMap();
@@ -184,7 +210,7 @@ function wordRe(token: string): RegExp {
 }
 
 /**
- * `pie(replay)` or `pie.replay` - a tool call, not a mention.
+ * `meshy(generate)` or `meshy.generate` - a tool call, not a mention.
  *
  * Both forms are deliberately strict. The dotted form needs a following
  * identifier, so a sentence ending "...the default grey material." stays
@@ -414,10 +440,10 @@ function coreDecision(
 }
 
 export async function routeFeedback(input: RoutingInput): Promise<RoutingDecision> {
-  const core = coreSurface(input.tools);
+  const installed = input.installed ?? [];
+  const core = withoutPluginSurface(coreSurface(input.tools), installed);
   const catalog = input.catalog ?? (await fetchRegistryCatalog({ timeoutMs: input.timeoutMs }));
   const catalogAvailable = catalog.length > 0;
-  const installed = input.installed ?? [];
 
   const candidates = buildCandidates(catalog, installed, core);
 
@@ -478,6 +504,19 @@ export async function routeFeedback(input: RoutingInput): Promise<RoutingDecisio
       c.score = 100;
       c.confidence = "certain";
       c.reasons.push(`'${idealAction}' carries ${c.name}'s '${c.actionPrefix}_' action prefix`);
+    } else {
+      // An action only this plugin adds, named anywhere in the report: bare
+      // (`p4_reconcile`), or as a call on the category it was injected into.
+      const named = [...c.ownedActions].find((owned) => {
+        const action = owned.slice(owned.indexOf(".") + 1);
+        return action.includes("_") && wordRe(action).test(text);
+      });
+      if (named) {
+        const [cat, action] = named.split(".");
+        c.score = 100;
+        c.confidence = "certain";
+        c.reasons.push(`the report names ${cat}(${action}), which ${c.name} adds in this project`);
+      }
     }
   }
 

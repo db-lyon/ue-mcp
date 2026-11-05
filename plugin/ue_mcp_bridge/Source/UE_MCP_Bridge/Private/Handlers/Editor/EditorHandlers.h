@@ -129,6 +129,7 @@ private:
 	// #727: open a registered editor tab / the Project Settings viewer
 	static TSharedPtr<FJsonValue> OpenTab(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> OpenSettings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ShowNotification(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DescribeObject(const TSharedPtr<FJsonObject>& Params);

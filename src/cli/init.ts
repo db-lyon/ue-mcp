@@ -6,17 +6,17 @@ import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/a
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import type { CliUsage } from "./cli-main.js";
-import { getInstalledHooks } from "../config/user-state.js";
+import { getInstalledHooks, type FeedbackMode } from "../config/user-state.js";
 import { coreSkillsInstalled } from "../extensions/skills.js";
 import { detectMcpClients, isProjectScopedClient, ueMcpServerArgs } from "../integrations/claude-code/mcp-client-config.js";
-import { deriveProjectPort } from "../bridge/port.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { findUProject } from "../config/uproject-path.js";
-import { readEnv } from "../core/env.js";
 import {
   CATEGORIES,
   ENRICHABLE_CATEGORIES,
+  FEEDBACK_MODES,
   apply,
+  bridgePort,
   plan,
   type ContextStrategy,
   type InitChoices,
@@ -81,6 +81,10 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
   if (context !== undefined && context !== "micro" && context !== "lean" && context !== "full") {
     throw new Error(`--context must be micro, lean or full, not '${context}'`);
   }
+  const feedbackMode = flagValue(argv, "--feedback-mode");
+  if (feedbackMode !== undefined && !(FEEDBACK_MODES as readonly string[]).includes(feedbackMode)) {
+    throw new Error(`--feedback-mode must be interactive, auto-approve or defer, not '${feedbackMode}'`);
+  }
   const native = flagBool(argv, "native-tools");
   const exclude = list(flagValue(argv, "--native-exclude"));
   return {
@@ -90,6 +94,7 @@ export function choicesFromFlags(argv: string[], projectPath: string): InitChoic
     contextStrategy: context as ContextStrategy | undefined,
     clients: list(flagValue(argv, "--clients")),
     feedback: flagBool(argv, "feedback"),
+    feedbackMode: feedbackMode as FeedbackMode | undefined,
     promptHook: flagBool(argv, "hook"),
     skills: flagBool(argv, "skills"),
     install: install as InitChoices["install"],
@@ -174,6 +179,14 @@ async function init(argv: string[]): Promise<number | void> {
   const rest = initTarget.rest;
   let uprojectPath = initTarget.projectPath || flagValue(rest, "--project") || firstPositional(rest) || "";
   const machine = rest.includes("--yes") || rest.includes("-y") || rest.includes("--json");
+  if (!machine && !process.stdin.isTTY) {
+    fail(
+      "ue-mcp init asks its questions on a terminal, and stdin is not one. Pass --yes (or --json) to run "
+      + "without prompts; --project, --clients, --context, --disable, --native-exclude and "
+      + "--[no-]feedback, --[no-]hook, --[no-]skills answer them.",
+    );
+    return 2;
+  }
 
   if (!uprojectPath) {
     const found = findUProject(process.cwd());
@@ -206,14 +219,11 @@ async function init(argv: string[]): Promise<number | void> {
 
   ok(`Found UE ${project.engineAssociation ?? "?"} project "${project.projectName}"`);
   // The port this worktree will use, so checkouts on one machine are visibly distinct.
-  const derivedPort = deriveProjectPort(path.dirname(project.projectPath!));
-  const envPort = Number.parseInt(readEnv("port") ?? "", 10);
-  const pinnedPort = Number.isFinite(envPort) && envPort > 0 ? envPort : project.config.bridge?.port;
-  const portOrigin = Number.isFinite(envPort) && envPort > 0 ? "pinned by UE_MCP_PORT" : "pinned by ue-mcp.bridge.port";
+  const port = bridgePort(project);
   info(
-    pinnedPort
-      ? `Bridge port for this worktree: ${DIM}${pinnedPort}${RESET} (${portOrigin}; ${derivedPort} is what the project path derives)`
-      : `Bridge port for this worktree: ${DIM}${derivedPort}${RESET} (derived from the project path; pin with ue-mcp.bridge.port if needed)`,
+    port.pinnedBy
+      ? `Bridge port for this worktree: ${DIM}${port.port}${RESET} (${port.pinnedBy === "env" ? "pinned by UE_MCP_PORT" : "pinned by ue-mcp.bridge.port"}; ${port.derivedPort} is what the project path derives)`
+      : `Bridge port for this worktree: ${DIM}${port.port}${RESET} (derived from the project path; pin with ue-mcp.bridge.port if needed)`,
   );
   console.log("");
 
@@ -227,7 +237,7 @@ async function init(argv: string[]): Promise<number | void> {
     if (c.description) parts.push(c.description);
     if (c.requiredPlugins) parts.push(`requires ${c.requiredPlugins.join(", ")}`);
     return { label: c.label, checked: !existingDisabled.has(c.name), suffix: parts.length > 0 ? parts.join(" - ") : undefined };
-  }));
+  }), "Pass --yes with --disable <categories>.");
   const disabled = optional.filter((_, i) => !states[i]).map((c) => c.name);
   console.log("");
 
@@ -237,7 +247,7 @@ async function init(argv: string[]): Promise<number | void> {
     label: "Enable native Epic 5.8 MCP tools",
     checked: existingNative.enabled !== false,
     suffix: "Wraps Unreal's ToolsetRegistry (GAS, Niagara, PCG, UMG, ...) as first-class actions in the matching categories",
-  }]))[0];
+  }], "Pass --yes with --native-tools or --no-native-tools."))[0];
   let nativeExclude: string[] = [];
   if (nativeEnabled) {
     const existingExclude = new Set(existingNative.exclude ?? []);
@@ -245,6 +255,7 @@ async function init(argv: string[]): Promise<number | void> {
     const includeStates = await checkboxSelect(
       "Include native tools in these categories (uncheck to skip)",
       offer.map((c) => ({ label: c, checked: !existingExclude.has(c) })),
+      "Pass --yes with --native-exclude <categories>.",
     );
     nativeExclude = offer.filter((_, i) => !includeStates[i]);
     console.log("");
@@ -259,7 +270,7 @@ async function init(argv: string[]): Promise<number | void> {
     "lean  - category tools and action names visible, signatures on demand",
     "full  - every action's signature listed inline (largest seed, no discovery calls)",
   ].map((l, i) => (CONTEXT_TIERS[i] === existingStrategy ? `${l}   [current]` : l));
-  const contextStrategy = CONTEXT_TIERS[await singleSelect("Context strategy", tierLabels)] ?? "micro";
+  const contextStrategy = CONTEXT_TIERS[await singleSelect("Context strategy", tierLabels, "Pass --yes with --context micro|lean|full.")] ?? "micro";
   console.log("");
 
   // 3. MCP clients. Global and Desktop configs affect every project, so they start unchecked.
@@ -270,7 +281,7 @@ async function init(argv: string[]): Promise<number | void> {
       label: c.name,
       checked: isProjectScopedClient(c.name),
       suffix: c.configPath,
-    })));
+    })), "Pass --yes with --clients <ids>.");
     selectedClients = detected.filter((_, i) => clientStates[i]).map((c) => c.name);
   } else {
     warn("No MCP clients detected. Add this to your MCP client config:");
@@ -309,7 +320,7 @@ async function init(argv: string[]): Promise<number | void> {
       suffix: "Recommended for Claude Code. Copies skill markdown into .claude/skills/.",
     });
   }
-  const behaviorStates = await checkboxSelect("Agent behavior", behaviorItems);
+  const behaviorStates = await checkboxSelect("Agent behavior", behaviorItems, "Pass --yes with --[no-]feedback, --[no-]hook and --[no-]skills.");
   const feedback = behaviorStates[0];
   const promptHook = configuredClaudeCode && (behaviorStates[1] ?? false) && feedback;
 
@@ -388,6 +399,7 @@ export const usage: CliUsage = {
     { name: "--native-exclude", value: "<categories>", description: "Categories that skip native Epic tools" },
     { name: "--command", value: "<cmd>", description: "Launcher the client config uses instead of npx" },
     ...toggle("feedback", "Enable the feedback(submit) tool"),
+    { name: "--feedback-mode", value: "<interactive|auto-approve|defer>", description: "Feedback approval mode for this project" },
     ...toggle("hook", "Install the feedback nudge hook"),
     ...toggle("skills", "Install the bundled Claude Code skills"),
     ...toggle("native-tools", "Wrap native Epic tools"),

@@ -108,9 +108,9 @@ export const projectTool: ToolDef = categoryTool(
     configName: z.string().optional().describe("For read_config/set_config: config file name"),
     query: z.string().optional().describe("For search_config/search_cpp: search text"),
     headerPath: z.string().optional().describe("For read_cpp_header: path to .h file"),
-    moduleName: z.string().optional().describe("For read_module / is_module_loaded: module name. create_cpp_class: project module to add the class to (default the first)"),
-    filter: z.string().optional().describe("For list_loaded_modules and list_available_plugins: case-insensitive name substring (#689)"),
-    loadedOnly: z.boolean().optional().describe("For list_loaded_modules: only loaded modules (#689)"),
+    moduleName: z.string().optional().describe("For read_module and the deprecated is_module_loaded address: module name. create_cpp_class: project module to add the class to (default the first)"),
+    filter: z.string().optional().describe("For list_available_plugins and the deprecated list_loaded_modules address: case-insensitive name substring (#689)"),
+    loadedOnly: z.boolean().optional().describe("For the deprecated list_loaded_modules address: only loaded modules (#689)"),
     limit: z.number().optional().describe("Max results: search_tools (default 20), find_example_usage (10), find_references (40), find_callers (25), find_callees (100), class_hierarchy descendants (100). The paged list actions: rows on this page (#704)"),
     // The paged list actions in this category resume on a cursor. `limit`
     // is already declared above and shared with the unpaged readers.
@@ -125,7 +125,7 @@ export const projectTool: ToolDef = categoryTool(
     state: z.enum(["available", "blocked", "all"]).optional().describe("list_available_actions: which side of the line to list when includeNames=true (default available)"),
     skipToolchain: z.boolean().optional().describe("check_install: skip the C++ toolchain probe, which shells out to vswhere or the compiler"),
     contentPath: z.string().optional().describe("list_content_assets: mount path to list, e.g. /Game or /Game/Characters (default /Game)"),
-    namePattern: z.string().optional().describe("list_content_assets: case-insensitive substring the asset name must contain"),
+    namePattern: z.string().optional().describe("list_content_assets / list_files: case-insensitive substring the asset or file name must contain"),
     extensions: z.union([z.string(), z.array(z.string())]).optional().describe("For list_files: extension filter (#608)"),
     recursive: z.boolean().optional().describe("For list_files / list_content_assets: recurse into subdirectories (#608)"),
     directory: z.string().optional().describe("For search_cpp: subdirectory"),

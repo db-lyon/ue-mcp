@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Viewport control and the transaction stack, against a real editor.
  *

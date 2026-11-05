@@ -133,6 +133,17 @@ public class UE_MCP_Bridge : ModuleRules
 				"RHI",
 				"UMG",
 				"UMGEditor",
+				// The pie category: its toolbar Record button and PIE Studio panel, and the
+				// runtime half (input injector, remote-player control, viewport capture)
+				// that separate-process PIE clients load.
+				"ToolMenus",
+				"WorkspaceMenuStructure",
+				"EditorStyle",
+				"Kismet",
+				// Checkpoint asset diffs: FGraphDiffControl and FRevisionInfo.
+				"GraphEditor",
+				"AssetDefinition",
+				"UE_MCP_BridgeRuntime",
 			}
 		);
 
@@ -145,6 +156,12 @@ public class UE_MCP_Bridge : ModuleRules
 		if (Target.Version.MajorVersion == 5 && Target.Version.MinorVersion < 5)
 		{
 			PrivateDependencyModuleNames.Add("StructUtils");
+		}
+
+		// pie(uat_run) validates scenario regex patterns with ICU, the engine's regex backend.
+		if (Target.bCompileICU)
+		{
+			AddEngineThirdPartyPrivateStaticDependencies(Target, "ICU");
 		}
 
 		// LiveCoding is Windows-only (Developer/Windows/LiveCoding)

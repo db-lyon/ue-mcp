@@ -1,3 +1,4 @@
+// @live-editor render
 /**
  * Niagara sim cache capture and read (#1394), material orphan cleanup (#1403)
  * and font import (#1377), each read back from the editor.

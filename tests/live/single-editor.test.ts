@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * One editor, before and after (#817, plan 7.3, and the eighteen enumerated
  * single-editor changes).

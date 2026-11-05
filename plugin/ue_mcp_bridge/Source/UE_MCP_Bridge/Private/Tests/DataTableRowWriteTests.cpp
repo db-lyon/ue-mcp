@@ -1379,6 +1379,133 @@ bool FDataTableReadColumnsTest::RunTest(const FString& Parameters)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// read_datatable rowNames returns exactly the named rows, in the order asked
+// for, matched the way the table's own FindRow matches; a name the table lacks
+// is listed in missingRowNames rather than failing the read; and it composes
+// with columns. rowFilter is a substring, so "AlphaOne" there would not
+// exclude a row called "AlphaOneHeavy".
+// ─────────────────────────────────────────────────────────────────────────────
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDataTableReadRowNamesTest,
+	"UE.MCP.Asset.DataTable.ReadRowNamesSelectsExactRows",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDataTableReadRowNamesTest::RunTest(const FString& Parameters)
+{
+	const FName TableName(*FString::Printf(TEXT("DT_UEMCP_RowNames_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	UDataTable* Table = NewObject<UDataTable>(GetTransientPackage(), TableName);
+	if (!TestNotNull(TEXT("transient DataTable was created"), Table)) return false;
+	const FTransientDataTableScope TableScope(Table);
+	Table->RowStruct = FUEMCPDataTableReferenceRow::StaticStruct();
+	{
+		FUEMCPDataTableReferenceRow Row;
+		Row.Count = 1;
+		Table->AddRow(FName(TEXT("AlphaOne")), Row);
+		Row.Count = 11;
+		Table->AddRow(FName(TEXT("AlphaOneHeavy")), Row);
+		Row.Count = 2;
+		Table->AddRow(FName(TEXT("AlphaTwo")), Row);
+		Row.Count = 3;
+		Table->AddRow(FName(TEXT("Beta")), Row);
+	}
+
+	FMCPHandlerRegistry Registry;
+	FAssetHandlers::RegisterHandlers(Registry);
+	if (!TestTrue(
+			TEXT("the handler resolves the transient table by path"),
+			MCPLoadAssetObject(Table->GetPathName()) == Table))
+	{
+		return false;
+	}
+
+	auto Read = [&Registry, Table](const TArray<FString>& RowNames, const TArray<FString>* Columns)
+	{
+		TSharedPtr<FJsonObject> Params = MakeDataTableReadParams(Table, FString(), FString(), Columns);
+		Params->SetArrayField(TEXT("rowNames"), MCPStringListToJson(RowNames));
+		return Registry.ExecuteHandler(TEXT("read_datatable"), Params);
+	};
+
+	// ── Exact rows, in the order asked for, case-insensitive, with a miss.
+	{
+		const TArray<FString> Wanted = { TEXT("Beta"), TEXT("alphaone"), TEXT("NoSuchRow") };
+		FString Error;
+		const TSharedPtr<FJsonValue> Response = Read(Wanted, nullptr);
+		if (!TestTrue(FString::Printf(TEXT("the rowNames read succeeded (%s)"), *Error), ResponseSucceeded(Response, Error))) return false;
+		const TSharedPtr<FJsonObject> Obj = Response->AsObject();
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!TestTrue(TEXT("the rowNames read returns rows"), Obj->TryGetArrayField(TEXT("rows"), Rows))) return false;
+		if (TestEqual(TEXT("exactly the two rows that exist"), Rows->Num(), 2))
+		{
+			TestEqual(TEXT("in the order asked for, first"), (*Rows)[0]->AsObject()->GetStringField(TEXT("Name")), FString(TEXT("Beta")));
+			TestEqual(TEXT("then the case-insensitive match, not its longer neighbour"),
+				(*Rows)[1]->AsObject()->GetStringField(TEXT("Name")), FString(TEXT("AlphaOne")));
+			int32 Count = -1;
+			(*Rows)[1]->AsObject()->TryGetNumberField(TEXT("Count"), Count);
+			TestEqual(TEXT("with its own values"), Count, 1);
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Missing = nullptr;
+		if (TestTrue(TEXT("the miss is reported"), Obj->TryGetArrayField(TEXT("missingRowNames"), Missing)))
+		{
+			TestEqual(TEXT("one name was missing"), Missing->Num(), 1);
+			TestEqual(TEXT("and it is the one that does not exist"), (*Missing)[0]->AsString(), FString(TEXT("NoSuchRow")));
+		}
+		int32 FilteredCount = -1;
+		Obj->TryGetNumberField(TEXT("filteredCount"), FilteredCount);
+		TestEqual(TEXT("filteredCount counts the selected rows"), FilteredCount, 2);
+	}
+
+	// ── rowNames composes with columns.
+	{
+		const TArray<FString> Wanted = { TEXT("AlphaTwo") };
+		const TArray<FString> CountOnly = { TEXT("Count") };
+		FString Error;
+		const TSharedPtr<FJsonValue> Response = Read(Wanted, &CountOnly);
+		if (!TestTrue(FString::Printf(TEXT("the projected rowNames read succeeded (%s)"), *Error), ResponseSucceeded(Response, Error))) return false;
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (TestTrue(TEXT("it returns rows"), Response->AsObject()->TryGetArrayField(TEXT("rows"), Rows)) && TestEqual(TEXT("one row"), Rows->Num(), 1))
+		{
+			const TSharedPtr<FJsonObject> Row = (*Rows)[0]->AsObject();
+			TestEqual(TEXT("holding Name and the named field only"), Row->Values.Num(), 2);
+			TestTrue(TEXT("the named field is there"), Row->HasField(TEXT("Count")));
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Missing = nullptr;
+		if (TestTrue(TEXT("missingRowNames is present"), Response->AsObject()->TryGetArrayField(TEXT("missingRowNames"), Missing)))
+		{
+			TestEqual(TEXT("and empty when every name exists"), Missing->Num(), 0);
+		}
+	}
+
+	// ── With rowFilter, a row the filter drops is not reported as missing.
+	{
+		TSharedPtr<FJsonObject> Params = MakeDataTableReadParams(Table, TEXT("Alpha"), FString());
+		Params->SetArrayField(TEXT("rowNames"), MCPStringListToJson(TArray<FString>{ TEXT("Beta"), TEXT("AlphaTwo") }));
+		const TSharedPtr<FJsonValue> Response = Registry.ExecuteHandler(TEXT("read_datatable"), Params);
+		FString Error;
+		if (!TestTrue(FString::Printf(TEXT("the filtered rowNames read succeeded (%s)"), *Error), ResponseSucceeded(Response, Error))) return false;
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (TestTrue(TEXT("it returns rows"), Response->AsObject()->TryGetArrayField(TEXT("rows"), Rows)) && TestEqual(TEXT("only the row both select"), Rows->Num(), 1))
+		{
+			TestEqual(TEXT("which is AlphaTwo"), (*Rows)[0]->AsObject()->GetStringField(TEXT("Name")), FString(TEXT("AlphaTwo")));
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Missing = nullptr;
+		if (TestTrue(TEXT("missingRowNames is present"), Response->AsObject()->TryGetArrayField(TEXT("missingRowNames"), Missing)))
+		{
+			TestEqual(TEXT("and empty, since Beta is in the table"), Missing->Num(), 0);
+		}
+	}
+
+	// ── An empty list is refused rather than read as "every row".
+	{
+		FString Error;
+		TestFalse(TEXT("an empty rowNames is refused"), ResponseSucceeded(Read(TArray<FString>(), nullptr), Error));
+		const TArray<FString> TooLong = { FString::ChrN(NAME_SIZE, TEXT('a')) };
+		TestFalse(TEXT("a name past the FName limit is refused, not asserted on"), ResponseSucceeded(Read(TooLong, nullptr), Error));
+	}
+	return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // set_datatable_cells: a batch is validated whole, applied whole, and verified
 // against the table as it was before the write.
 // ─────────────────────────────────────────────────────────────────────────────

@@ -54,6 +54,7 @@ export const UeMcpConfigSchema = z
       .object({
         path: z.string().optional(),
         buildToolPath: z.string().optional(),
+        launchArgs: z.array(z.string()).optional(),
       })
       .optional(),
     // Per-project equivalent of UE_MCP_ENV (#817): which `ue-mcp.<env>.yml`
@@ -99,6 +100,20 @@ export const UeMcpConfigSchema = z
         openBrowserOnCrash: z.boolean().optional(),
       })
       .optional(),
+    // Checkpoints (#1482): a shadow git history of every path written through
+    // ue-mcp, with per-file restore. Off unless set. `checkpoints: on` is the
+    // short form; the object form also sets the size above which a file is
+    // kept as a plain copy instead of a git blob (default 1 GB).
+    checkpoints: z
+      .union([
+        z.boolean(),
+        z.enum(["on", "off"]),
+        z.object({
+          enabled: z.union([z.boolean(), z.enum(["on", "off"])]).optional(),
+          largeFileBytes: z.number().int().min(1).optional(),
+        }),
+      ])
+      .optional(),
     // Play In Editor. `allowIgnoreBlueprintErrors` pre-authorizes
     // editor(play_in_editor_ignore_blueprint_errors), the one action that
     // suppresses the editor's unresolved-Blueprint-error prompt. Off by
@@ -118,9 +133,10 @@ export const UeMcpConfigSchema = z
     // tracked ue-mcp.yml. See plugin-groups.ts.
     pluginConfig: z
       .record(
+        z.string(),
         z
           .object({
-            groups: z.record(z.boolean()).optional(),
+            groups: z.record(z.string(), z.boolean()).optional(),
           })
           .passthrough(),
       )

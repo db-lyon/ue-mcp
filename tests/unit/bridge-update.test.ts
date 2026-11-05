@@ -79,6 +79,19 @@ describe("checkForUpdate", () => {
     expect((await checkForUpdate(uproject, releases({ latest: "1.2.0", beta: "1.2.0-beta.1" }, []))).target).toBe("1.2.0");
   });
 
+  it("moves a stable install onto a prerelease channel only when that channel is asked for", async () => {
+    const { uproject } = binaryProject("1.4.7");
+    const tags = { latest: "1.4.7", beta: "1.4.8-beta.2" };
+    expect((await checkForUpdate(uproject, releases(tags, []))).target).toBeNull();
+    expect(await checkForUpdate(uproject, releases(tags, []), "beta")).toMatchObject({ channel: "beta", latest: "1.4.8-beta.2", target: "1.4.8-beta.2" });
+    expect((await checkForUpdate(uproject, releases(tags, []), "latest")).target).toBeNull();
+  });
+
+  it("never moves a beta install back when the stable channel is asked for", async () => {
+    const { uproject } = binaryProject("1.4.8-beta.2");
+    expect((await checkForUpdate(uproject, releases({ latest: "1.4.7", beta: "1.4.8-beta.2" }, []), "latest")).target).toBeNull();
+  });
+
   it("says when a release has no binaries for this engine, and nothing when up to date", async () => {
     const { uproject } = binaryProject("1.0.0");
     expect((await checkForUpdate(uproject, releases({ latest: "1.1.0" }, ["other.zip"]))).binaries?.available).toBe(false);
@@ -116,8 +129,9 @@ describe("applyUpdate from a release", () => {
     const t = { version, engine: "5.7", platform: "Win64" };
     const src = path.join(fixture.root, `release-${version}`, "UE_MCP_Bridge");
     fs.mkdirSync(path.join(src, "Binaries", "Win64"), { recursive: true });
-    fs.writeFileSync(path.join(src, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: version }));
+    fs.writeFileSync(path.join(src, "UE_MCP_Bridge.uplugin"), JSON.stringify({ VersionName: version, Modules: [{ Name: "UE_MCP_Bridge", Type: "Editor" }] }));
     fs.writeFileSync(path.join(src, "Binaries", "Win64", "UnrealEditor-UE_MCP_Bridge.dll"), `new ${version}`);
+    fs.writeFileSync(path.join(src, "Binaries", "Win64", "UnrealEditor.modules"), JSON.stringify({ BuildId: "1", Modules: { UE_MCP_Bridge: "UnrealEditor-UE_MCP_Bridge.dll" } }));
     const zip = path.join(fixture.root, binaryArchiveName(t));
     execFileSync(tar, ["-a", "-c", "-f", zip, "-C", path.dirname(src), "UE_MCP_Bridge"]);
     const bytes = fs.readFileSync(zip);
@@ -140,7 +154,7 @@ describe("applyUpdate from a release", () => {
     expect(result.repinned).toEqual([mcp]);
     expect(JSON.parse(fs.readFileSync(mcp, "utf-8")).mcpServers["ue-mcp"]).toEqual({
       command: "C:/node/npx.cmd",
-      args: ["-y", "ue-mcp@1.1.0", uproject.replace(/\\/g, "/")],
+      args: ["-y", "--min-release-age=0", "ue-mcp@1.1.0", uproject.replace(/\\/g, "/")],
     });
   });
 
@@ -170,6 +184,16 @@ describe("applyUpdate from a release", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/manifest hash/);
     expect(readInstallMarker(pluginDir)?.version).toBe("1.0.0");
+  });
+
+  it("leaves a newer binary bridge alone when no version is asked for", async () => {
+    // `npx ue-mcp update` runs the stable line; a beta bridge is not its to replace.
+    const { uproject, pluginDir } = binaryProject("99.0.0-beta.1");
+    const result = await applyUpdate(uproject, { editorRunning: false });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("newer than this ue-mcp");
+    expect(result.error).toContain("npx ue-mcp@beta update");
+    expect(readInstallMarker(pluginDir)?.version).toBe("99.0.0-beta.1");
   });
 
   it("moves a source install only to the version of the package deploying it", async () => {
@@ -224,7 +248,7 @@ describe.runIf(process.platform === "win32")("swapInPlace against a loaded DLL",
     fs.writeFileSync(path.join(staging, "Binaries", "Win64", "UnrealEditor-UE_MCP_Bridge.dll"), "new module");
     fs.writeFileSync(path.join(staging, "UE_MCP_Bridge.uplugin"), "{}");
 
-    const old = swapInPlace(staging, pluginDir, "1");
+    const old = swapInPlace(staging, pluginDir, { stamp: "1" });
 
     expect(fs.readFileSync(dll, "utf-8")).toBe("new module");
     expect(old).toEqual([`${dll}.old-1`]);

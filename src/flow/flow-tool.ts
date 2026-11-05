@@ -10,11 +10,12 @@ import type {
   FlowDefinition,
 } from "@db-lyon/flowkit";
 import type { FlowContext } from "./context.js";
-import type { FlowConfig } from "./schema.js";
+import { FlowStepKeySchema, type FlowConfig } from "./schema.js";
 import type { ToolDef, ToolContext, ActionSpec } from "../core/types.js";
 import { actionEnum } from "../surface/category-tool.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { nearestActions } from "../surface/action-schema.js";
+import { unknownRecord } from "../surface/context/call-envelope.js";
 import {
   takeSnapshot,
   restoreSnapshot,
@@ -38,6 +39,10 @@ import {
   type EditorLossReport,
 } from "./editor-loss.js";
 import { taskEffect } from "../surface/action-effects.js";
+import { LOCAL_ACTIONS } from "../dispatch/offline.js";
+import { EDITOR_OPERATION_TASKS } from "./editor-op-task.js";
+import { deriveFlowInputs } from "./flow-inputs.js";
+import { withStepApproval } from "./step-approval.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -96,7 +101,8 @@ export function createFlowTool(
       description:
         "Show a flow's execution plan without running a step of it. Params: flowName. Returns the ordered plan, "
         + "and the flow as declared under definition: its description and each step's task or nested flow, "
-        + "options and conditions, with ${steps.N...} references left unresolved.",
+        + "options and conditions, with ${steps.N...} references left unresolved. inputs lists the params a run may pass: "
+        + "each parameter the step tasks read and the steps leave unset, with its type, required flag and the steps that read it.",
       handler: async (ctx, params) => planFlow(registryFor(ctx), configFor(ctx), ctx, params),
     },
     list: {
@@ -131,7 +137,7 @@ export function createFlowTool(
       action: actionEnum(Object.keys(actions) as [string, ...string[]]),
       flowName: z.string().optional().describe("Flow name from ue-mcp.yml"),
       skip: z.array(z.string()).optional().describe("run: step names or numbers to skip"),
-      params: z.record(z.unknown()).optional().describe("run: runtime options merged into every step's options (highest priority)"),
+      params: unknownRecord().optional().describe("run: runtime options merged into every step's options (highest priority)"),
       rollback_on_failure: z.boolean().optional().describe("run: invoke inverse tasks in reverse order on failure"),
     },
     actions,
@@ -163,6 +169,21 @@ function listFlows(config: FlowConfig): Record<string, unknown> {
   return { flowCount: flows.length, flows };
 }
 
+/**
+ * The runner orders steps by their keys as numbers, so a named key is a step
+ * it cannot find. Said before the run instead of as a crash inside it.
+ */
+function refuseUnorderedSteps(config: FlowConfig, flowName: string): void {
+  const def = (config.flows as Record<string, { steps?: Record<string, unknown> } | undefined>)[flowName];
+  const bad = Object.keys(def?.steps ?? {}).filter((key) => !FlowStepKeySchema.safeParse(key).success);
+  if (bad.length > 0) {
+    throw new Error(
+      `Flow '${flowName}' has step key${bad.length > 1 ? "s" : ""} ${bad.map((k) => `"${k}"`).join(", ")}: `
+      + 'a flow step key is its run order, a whole number such as "1" or "2".',
+    );
+  }
+}
+
 async function planFlow(
   registry: TaskRegistry,
   config: FlowConfig,
@@ -171,6 +192,7 @@ async function planFlow(
 ): Promise<unknown> {
   const flowName = params.flowName as string;
   if (!flowName) throw new Error("flowName is required");
+  refuseUnorderedSteps(config, flowName);
 
   // Plan mode short-circuits inside the runner before any hooks fire,
   // so the runId placeholder we pass here is never observed.
@@ -179,7 +201,15 @@ async function planFlow(
   // The plan names each step's task; the definition carries what a reader needs to see how the
   // steps connect, which is the options and the ${steps.N...} references between them.
   const def = (config.flows as Record<string, FlowDefinition | undefined>)[flowName];
-  return def ? { ...planned, definition: { description: def.description, steps: def.steps } } : planned;
+  if (!def) return planned;
+  // What a run may pass in params, derived from the steps' task schemas (#1508).
+  const inputs = await deriveFlowInputs(flowName, {
+    flows: config.flows as Record<string, FlowDefinition>,
+    tasks: config.tasks as Record<string, TaskDefinition>,
+    registry,
+    tools: (ctx as FlowContext).getToolGraph?.() ?? ctx.session?.toolGraph ?? [],
+  });
+  return { ...planned, inputs, definition: { description: def.description, steps: def.steps, ...(def.options_scope ? { options_scope: def.options_scope } : {}) } };
 }
 
 async function runFlow(
@@ -190,6 +220,7 @@ async function runFlow(
 ): Promise<unknown> {
   const flowName = params.flowName as string;
   if (!flowName) throw new Error("flowName is required");
+  refuseUnorderedSteps(config, flowName);
   const skip = (params.skip as string[] | undefined) ?? [];
   const flowParams = params.params as Record<string, unknown> | undefined;
   const rollback_on_failure = params.rollback_on_failure as boolean | undefined;
@@ -202,7 +233,9 @@ async function runFlow(
   const policy: EditorLossPolicy = def?.on_editor_loss ?? "resume";
   const snapshot: SnapshotHolder = {};
   const guard = makeLossGuard(ctx, policy, def?.editor_loss_timeout_seconds, snapshot);
-  const runner = makeRunner(guard ? guard.wrap(registry) : registry, config, ctx, runId, flowName, snapshot, guard);
+  const guarded = guard ? guard.wrap(registry) : registry;
+  const approved = ctx.flowStepApproval ? withStepApproval(guarded, ctx.flowStepApproval, runId, flowName) : guarded;
+  const runner = makeRunner(approved, config, ctx, runId, flowName, snapshot, guard);
   try {
     // Under on_editor_loss: rollback a failed run unwinds, unless the caller said otherwise.
     const rollback = rollback_on_failure ?? (policy === "rollback" ? true : undefined);
@@ -234,6 +267,7 @@ function makeLossGuard(
     policy,
     timeoutMs: timeoutSeconds ? timeoutSeconds * 1000 : DEFAULT_EDITOR_LOSS_TIMEOUT_MS,
     isReadOnly: (taskName) => taskEffect(taskName, graph).effect === "read",
+    needsEditor: (taskName) => !Object.hasOwn(LOCAL_ACTIONS, taskName) && !EDITOR_OPERATION_TASKS.has(taskName),
     // Filesystem only, and only while the editor is away, so it never holds stale copies.
     restoreWhileDown: () => {
       if (!snapshot.current) return false;

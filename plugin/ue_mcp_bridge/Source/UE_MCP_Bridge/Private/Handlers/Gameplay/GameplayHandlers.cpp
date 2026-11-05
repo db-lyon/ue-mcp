@@ -262,7 +262,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("project_point_to_navigation"), &ProjectPointToNavigation, {
 		MCPParam::Required(TEXT("location"), EType::Vec3, TEXT("World point to project onto the navmesh")),
 	});
-	// Enhanced Input asset authoring stays here. pie-studio owns PIE-time
+	// Enhanced Input asset authoring stays here. the pie category owns PIE-time
 	// inject/record/replay; authoring InputAction / InputMappingContext
 	// assets and editing IMC mappings is core ue-mcp.
 	Registry.RegisterHandler(TEXT("create_input_action"), &CreateInputAction, {
@@ -334,12 +334,17 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("clear"), EType::Boolean, TEXT("Empty both arrays; an omitted array then means empty rather than left alone")),
 	});
 	Registry.RegisterHandler(TEXT("set_player_mappable_settings"), &SetPlayerMappableSettings, {
-		MCPParam::Required(TEXT("inputActionPath"), EType::String, TEXT("InputAction asset path")),
-		MCPParam::Required(TEXT("mappingName"), EType::String, TEXT("Stable FName saved with the player mapping; must be non-empty")),
+		MCPParam::Optional(TEXT("inputActionPath"), EType::String, TEXT("InputAction asset path; use this or imcPath plus mappingIndex")),
+		MCPParam::Optional(TEXT("imcPath"), EType::String, TEXT("InputMappingContext for per-mapping overrides")),
+		MCPParam::Optional(TEXT("mappingIndex"), EType::Number, TEXT("Mapping row index, required with imcPath; must be a non-negative integer")),
+		MCPParam::Optional(TEXT("mappingName"), EType::String, TEXT("Stable non-empty FName; required for InputAction edits, optional for existing mapping overrides")),
 		MCPParam::Optional(TEXT("displayName"), EType::String, TEXT("Display name written onto UPlayerMappableKeySettings")),
 		MCPParam::Optional(TEXT("displayCategory"), EType::String, TEXT("Display category (Movement, Combat, ...) written onto UPlayerMappableKeySettings")),
+		MCPParam::Optional(TEXT("settingBehavior"), EType::String, TEXT("Per-mapping behavior: InheritSettingsFromAction, OverrideSettings or IgnoreSettings")).Enum({ TEXT("InheritSettingsFromAction"), TEXT("OverrideSettings"), TEXT("IgnoreSettings") }),
+		MCPParam::Optional(TEXT("playerMappableKeySettings"), EType::Object, TEXT("Per-mapping reflected settings fields; null clears the override subobject")).Nullable(),
+		MCPParam::Optional(TEXT("dryRun"), EType::Boolean, TEXT("Validate and report proposed settings without changing the asset (default false)")),
 		SaveFlag(),
-	});
+	}, MCPSpec::ExactlyOne({ { TEXT("inputActionPath") }, { TEXT("imcPath"), TEXT("mappingIndex") } }));
 	Registry.RegisterHandler(TEXT("apply_mapping_context"), &ApplyMappingContext, {
 		MCPParam::Required(TEXT("mappingContext"), EType::String, TEXT("InputMappingContext asset path to apply to the live player")),
 		MCPParam::Optional(TEXT("priority"), EType::Number, TEXT("Enhanced Input context priority; higher wins for the same key (default 0)")),
@@ -766,9 +771,9 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("behaviorClass"), EType::String, TEXT("Behavior definition asset path or class path")),
 		InstanceProperties(),
 	});
-	// read_imc through get_pie_subsystem_state moved to pie-studio
+	// read_imc through get_pie_subsystem_state moved to the pie category
 	Registry.RegisterHandler(TEXT("get_navmesh_details"), &GetNavmeshDetails, {});
-	// apply_damage_in_pie moved to pie-studio
+	// apply_damage_in_pie moved to the pie category
 }
 
 // ── #416: SmartObject slot authoring (reflection-only) ────────────────
@@ -1414,21 +1419,28 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListSmartObjectSlots(const TSharedPtr<
 		// Pull out common fields explicitly for ergonomics.
 		if (FProperty* Off = SA.SlotStruct->Struct->FindPropertyByName(FName(TEXT("Offset"))))
 		{
-			if (CastField<FStructProperty>(Off))
+			if (const FStructProperty* OffStruct = CastField<FStructProperty>(Off))
 			{
-				const FVector* V = reinterpret_cast<const FVector*>(Off->ContainerPtrToValuePtr<void>(SlotAddr));
+				// The slot stores a float vector (FVector3f); reading it as FVector read garbage.
+				const void* Addr = Off->ContainerPtrToValuePtr<void>(SlotAddr);
+				const FVector V = OffStruct->Struct == TVariantStructure<FVector3f>::Get()
+					? FVector(*static_cast<const FVector3f*>(Addr))
+					: *static_cast<const FVector*>(Addr);
 				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-				O->SetNumberField(TEXT("x"), V->X); O->SetNumberField(TEXT("y"), V->Y); O->SetNumberField(TEXT("z"), V->Z);
+				O->SetNumberField(TEXT("x"), V.X); O->SetNumberField(TEXT("y"), V.Y); O->SetNumberField(TEXT("z"), V.Z);
 				S->SetObjectField(TEXT("offset"), O);
 			}
 		}
 		if (FProperty* Rot = SA.SlotStruct->Struct->FindPropertyByName(FName(TEXT("Rotation"))))
 		{
-			if (CastField<FStructProperty>(Rot))
+			if (const FStructProperty* RotStruct = CastField<FStructProperty>(Rot))
 			{
-				const FRotator* R = reinterpret_cast<const FRotator*>(Rot->ContainerPtrToValuePtr<void>(SlotAddr));
+				const void* Addr = Rot->ContainerPtrToValuePtr<void>(SlotAddr);
+				const FRotator R = RotStruct->Struct == TVariantStructure<FRotator3f>::Get()
+					? FRotator(*static_cast<const FRotator3f*>(Addr))
+					: *static_cast<const FRotator*>(Addr);
 				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-				O->SetNumberField(TEXT("pitch"), R->Pitch); O->SetNumberField(TEXT("yaw"), R->Yaw); O->SetNumberField(TEXT("roll"), R->Roll);
+				O->SetNumberField(TEXT("pitch"), R.Pitch); O->SetNumberField(TEXT("yaw"), R.Yaw); O->SetNumberField(TEXT("roll"), R.Roll);
 				S->SetObjectField(TEXT("rotation"), O);
 			}
 		}
@@ -1685,7 +1697,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListEqsQueries(const TSharedPtr<FJsonO
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
-	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/AIModule"), TEXT("EnvironmentQuery")), Assets, true);
+	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/AIModule"), TEXT("EnvQuery")), Assets, true);
 
 	TArray<TSharedPtr<FJsonValue>> AssetArray;
 	for (const FAssetData& Asset : Assets)
@@ -3525,10 +3537,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 
 	REQUIRE_ASSET(UBlueprint, BP, BPPath);
 
-	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTreeComponent"));
+	// UStateTreeComponent lives in the GameplayStateTree plugin's module.
+	UClass* CompClass = LoadClass<UActorComponent>(nullptr, TEXT("/Script/GameplayStateTreeModule.StateTreeComponent"));
 	if (!CompClass)
 	{
-		return MCPError(TEXT("StateTreeComponent not found. Enable StateTree plugin."));
+		return MCPError(TEXT("StateTreeComponent not found. Enable the GameplayStateTree plugin."));
 	}
 
 	// Idempotency: check for existing component by name/class on the SCS

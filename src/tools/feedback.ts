@@ -180,7 +180,7 @@ function labelsForRepo(labels: string[], repo: GitHubRepo): string[] {
  * Deliberately destination-independent: it states what the classifier found,
  * not where the report ended up. That keeps the posted bytes identical whether
  * the user accepts the suggested tracker or overrides it at the prompt, and it
- * still tells a core maintainer "this looks like it belongs to pie-studio".
+ * still tells a core maintainer which plugin the report looks like it belongs to.
  */
 function routingSection(routing: RoutingDecision | null): string[] {
   if (!routing) return [];
@@ -1127,7 +1127,7 @@ async function submit(ctx: ToolContext, params: Record<string, unknown>) {
 
 export const feedbackTool: ToolDef = categoryTool(
   "feedback",
-  "Submit feedback when a native tool falls short: a missing action, a wrong result, a crash, or a gap you had to work around with execute_python. A python workaround is a common trigger but is not required. Reports are routed to the tracker that owns the surface - ue-mcp core, or the plugin that provides it (PIE Studio, Perforce, Meshy, ...) - by consulting the published plugin registry.",
+  "Submit feedback when a native tool falls short: a missing action, a wrong result, a crash, or a gap you had to work around with execute_python. A python workaround is a common trigger but is not required. Reports are routed to the tracker that owns the surface - ue-mcp core, or the plugin listed in the plugin registry that provides it - by consulting the published plugin registry.",
   {
     submit: {
       kind: "handler",

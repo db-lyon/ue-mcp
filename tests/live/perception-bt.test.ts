@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * AI perception and BehaviorTree runtime, against a real editor (T10, T11).
  *
@@ -43,6 +44,17 @@ const call = async (tool: string, args: Record<string, unknown>) =>
   server.call(tool, { ...args, timeoutMs: 300_000 });
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Call until done(result) holds or timeoutMs passes; PIE ticks slower under a loaded editor. */
+async function until<T>(read: () => Promise<T>, done: (r: T) => boolean, timeoutMs = 20_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let r = await read();
+  while (!done(r) && Date.now() < deadline) {
+    await sleep(250);
+    r = await read();
+  }
+  return r;
+}
 
 /**
  * Answer the editor's own PIE prompts.
@@ -412,9 +424,7 @@ describe("perception at runtime", () => {
       instigatorLabel: TARGET,
       world: "pie",
     });
-    await sleep(2500);
-
-    const body = resultJson<{
+    const body = await until(async () => resultJson<{
       success?: boolean;
       perceives?: boolean;
       currentlySensed?: boolean;
@@ -427,7 +437,7 @@ describe("perception at runtime", () => {
       perceiverLabel: PAWN,
       targetLabel: TARGET,
       world: "pie",
-    }));
+    })), (r) => r.everSensed === true);
 
     expect(body.success).not.toBe(false);
     expect(body.perceives).toBe(true);
@@ -524,8 +534,7 @@ describe("run_behavior_tree", () => {
 describe("get_bt_runtime", () => {
   it("reports the executing node and the composites above it", async () => {
     await ensurePie();
-    await sleep(1500);
-    const body = resultJson<{
+    const body = await until(async () => resultJson<{
       success?: boolean;
       running?: boolean;
       paused?: boolean;
@@ -534,7 +543,7 @@ describe("get_bt_runtime", () => {
       rootTree?: string;
       activeNode?: { nodeName?: string; nodeClass?: string; kind?: string; taskStatus?: string };
       ancestors?: Array<{ nodeName?: string; nodeClass?: string }>;
-    }>(await call("gameplay", { action: "get_bt_runtime", actorLabel: PAWN, world: "pie" }));
+    }>(await call("gameplay", { action: "get_bt_runtime", actorLabel: PAWN, world: "pie" })), (r) => r.activeNode?.nodeName === "MCPWait");
 
     expect(body.success).not.toBe(false);
     expect(body.running).toBe(true);

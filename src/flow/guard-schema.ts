@@ -46,7 +46,7 @@ export const GuardScopeSchema = z
 /** One hook: the task to run, and the options it is built with. */
 export const GuardHookSchema = z.object({
   class_path: z.string().min(1, "a guard hook needs the class_path of the task that implements it"),
-  options: z.record(z.unknown()).default({}),
+  options: z.record(z.string(), z.unknown()).default({}),
 });
 
 export const GuardDeclarationSchema = z

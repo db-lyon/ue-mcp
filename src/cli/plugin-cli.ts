@@ -69,8 +69,11 @@ import { packageVersion } from "../core/package-root.js";
 import { deriveDefaultPrefix, deriveUePluginName, writeScaffold } from "../extensions/plugin-scaffold.js";
 import { ProjectContext } from "../config/project.js";
 import { registryBase } from "../extensions/registry-catalog.js";
+import { isSuperseded, supersededByName, supersededMessage } from "../extensions/superseded.js";
 import { chooseListing, derivedListingFields, listingDiff } from "../extensions/publish-listing.js";
 import { findUProject, projectDirOf } from "../config/uproject-path.js";
+import { removeUProjectPluginEntry, uprojectListsPlugin } from "../config/uproject-plugins.js";
+import { editorsHoldingProject } from "../editor/project-holders.js";
 
 const RESTART_NOTE =
   "Injected actions appear on the next server start. Restart your MCP client (or `ue-mcp restart`).";
@@ -193,8 +196,8 @@ function writePluginsList(configPath: string, plugins: PluginEntry[]): void {
  * short-lived child so this stays synchronous like the rest of the CLI.
  */
 function resolveFromRegistry(name: string): string | null {
-  // A scoped or path-qualified spec is already a real npm name, not a slug.
-  if (name.startsWith("@") || name.includes("/")) return null;
+  // A scoped name is already a real npm name, and a path or tarball is no name at all.
+  if (name.startsWith("@") || !isRegistryName(name)) return null;
   const base = registryBase();
   const url = `${base}/api/resolve?name=${encodeURIComponent(name)}`;
   const script =
@@ -209,6 +212,7 @@ function resolveFromRegistry(name: string): string | null {
 function cmdInstall(args: string[], editor: string | undefined): void {
   const requested = args.shift();
   if (!requested) fail("usage: ue-mcp plugin install <name> [--version x.y.z]");
+  refuseSuperseded(requested);
 
   let version: string | undefined;
   for (let i = 0; i < args.length; i++) {
@@ -219,18 +223,27 @@ function cmdInstall(args: string[], editor: string | undefined): void {
   // names install verbatim, so plain npm packages keep working.
   const resolved = resolveFromRegistry(requested);
   const name = resolved ?? requested;
+  refuseSuperseded(name);
   if (resolved && resolved !== requested) {
     note(`resolved '${requested}' -> '${name}' via the registry`);
   }
 
   const proj = findProjectDir(projectStartDir(editor));
-  const { manifest, nativeDeployed } = installPackage(proj, name, version, version);
-  if (nativeDeployed) note(REBUILD_NOTE);
-  printInstallSummary(name, manifest);
+  const installed = installPackage(proj, name, version, version);
+  if (installed.nativeDeployed) note(REBUILD_NOTE);
+  printInstallSummary(installed.name, installed.manifest);
+}
+
+/** Fail before npm runs when the package now ships in core. */
+function refuseSuperseded(name: string): void {
+  const hit = supersededByName(name);
+  if (hit) fail(supersededMessage(hit[0], hit[1], "installed"));
 }
 
 /** What one run of the install path did. */
 interface InstalledPlugin {
+  /** The package name npm installed, which is what ue-mcp.yml records. */
+  name: string;
   manifest: PluginManifest;
   version: string;
   /** The native module was copied into the project, so the UE project needs a rebuild. */
@@ -239,6 +252,36 @@ interface InstalledPlugin {
 
 const REBUILD_NOTE =
   "REBUILD REQUIRED: run `ue-mcp build` (or rebuild the UE project) before launching the editor so the new C++ module compiles in.";
+
+/** A spec npm resolves from the registry by name, not a folder, tarball or URL. */
+function isRegistryName(spec: string): boolean {
+  return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i.test(spec) && !/\.(tgz|tar|tar\.gz)$/i.test(spec);
+}
+
+function readDependencies(projectDir: string): Record<string, string> {
+  try {
+    return (JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf-8")) as { dependencies?: Record<string, string> }).dependencies ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The package `npm install <spec>` put in node_modules. A registry name is its
+ * own answer. For a folder, tarball or URL it is the dependency the install
+ * added or changed, else a folder's own package.json name.
+ */
+function installedPackageName(spec: string, projectDir: string, before: Record<string, string>): string | null {
+  if (isRegistryName(spec)) return spec;
+  const after = readDependencies(projectDir);
+  const changed = Object.keys(after).filter((k) => after[k] !== before[k]);
+  if (changed.length === 1) return changed[0];
+  try {
+    return (JSON.parse(fs.readFileSync(path.join(path.resolve(projectDir, spec), "package.json"), "utf-8")) as { name?: string }).name ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** The version in an installed package's package.json. */
 function installedVersion(pkgDir: string): string | undefined {
@@ -255,7 +298,7 @@ function installedVersion(pkgDir: string): string | undefined {
  * native module with stale files pruned, and skills. Any failure exits
  * non-zero, so a half-installed plugin is never reported as done.
  */
-function installPackage(proj: ProjectInfo, name: string, version: string | undefined, pin: string | undefined): InstalledPlugin {
+function installPackage(proj: ProjectInfo, requested: string, version: string | undefined, pin: string | undefined): InstalledPlugin {
   let nativeDeployed = false;
   // Ensure a package.json exists. npm install will refuse without one.
   if (!fs.existsSync(path.join(proj.projectDir, "package.json"))) {
@@ -263,9 +306,12 @@ function installPackage(proj: ProjectInfo, name: string, version: string | undef
     runNpm(["init", "-y"], proj.projectDir);
   }
 
-  const spec = version ? `${name}@${version}` : name;
+  const spec = version ? `${requested}@${version}` : requested;
   note(`installing ${spec}`);
+  const before = readDependencies(proj.projectDir);
   runNpm(["install", "--save", spec], proj.projectDir);
+  const name = installedPackageName(requested, proj.projectDir, before);
+  if (!name) fail(`npm install ${spec} succeeded but the package it installed could not be identified`);
 
   // Validate the just-installed plugin BEFORE editing ue-mcp.yml.
   const pkgDir = findInstalledPackage(name, proj.projectDir);
@@ -393,7 +439,7 @@ function installPackage(proj: ProjectInfo, name: string, version: string | undef
     const skills = [...r.installed, ...r.unchanged];
     if (skills.length > 0) note(`skills: ${skills.join(", ")} (in .claude/skills/)`);
   }
-  return { manifest, version: installedVersion(pkgDir) ?? version ?? "?", nativeDeployed };
+  return { name, manifest, version: installedVersion(pkgDir) ?? version ?? "?", nativeDeployed };
 }
 
 function printInstallSummary(name: string, manifest: PluginManifest): void {
@@ -413,32 +459,67 @@ function printInstallSummary(name: string, manifest: PluginManifest): void {
   note(RESTART_NOTE);
 }
 
-function cmdUninstall(args: string[], editor: string | undefined): void {
+async function cmdUninstall(args: string[], editor: string | undefined): Promise<void> {
   const name = args.shift();
   if (!name) fail("usage: ue-mcp plugin uninstall <name>");
   const proj = findProjectDir(projectStartDir(editor));
 
-  // Remove any deployed native module BEFORE npm uninstall so we can still
-  // read the manifest (for diagnostics) and so the state file stays
-  // consistent if anything fails midway.
+  // The UE plugin the package deployed: from the install record, or, for a
+  // superseded plugin installed before the record existed, from its entry.
   const nativeState = readNativeModulesState(proj.projectDir);
+  const uePluginName = nativeState[name]?.uePluginName ?? supersededByName(name)?.[1].uePluginName;
+  const uproject = findUProject(proj.projectDir);
+  const pluginDir = uePluginName ? path.join(proj.projectDir, "Plugins", uePluginName) : null;
+  const pluginDirExists = pluginDir !== null && fs.existsSync(pluginDir);
+  const uprojectText = uproject && uePluginName ? fs.readFileSync(uproject, "utf-8") : null;
+  const listed = uprojectText !== null && uePluginName ? uprojectListsPlugin(uprojectText, uePluginName) : false;
+
+  // An open editor holds the plugin's DLLs and rewrites the .uproject on save,
+  // so nothing is touched while one has the project open.
+  if (uproject && (pluginDirExists || listed)) {
+    const holders = await editorsHoldingProject(proj.projectDir, uproject);
+    if (holders.pids.length > 0) {
+      fail(
+        `an editor has ${path.basename(uproject)} open (pid ${holders.pids.join(", ")}). ` +
+        `Close it, then run \`ue-mcp plugin remove ${name}\` again. Nothing was removed.`,
+      );
+    }
+  }
+
+  // npm goes first: when it fails, the project is left exactly as it was.
+  runNpm(["uninstall", name], proj.projectDir);
+  const removed: string[] = [`package ${name}`];
+
   if (nativeState[name]) {
+    undeployNativeModule(proj.projectDir, name);
+  }
+  if (pluginDir && pluginDirExists) {
+    const rel = path.relative(proj.projectDir, pluginDir).split(path.sep).join("/");
     try {
-      const removed = undeployNativeModule(proj.projectDir, name);
-      note(`removed ${removed} native module file(s) for ${name}`);
+      fs.rmSync(pluginDir, { recursive: true, force: true, maxRetries: 3 });
     } catch (e) {
-      note(`WARNING: could not fully clean up native module for ${name}: ${(e as Error).message}. ` +
-        `Close the editor if it's running and remove leftover files under Plugins/${nativeState[name].uePluginName}/ manually.`);
+      fail(`could not delete ${rel}: ${(e as Error).message}. Close anything holding files in it and run \`ue-mcp plugin remove ${name}\` again.`);
+    }
+    removed.push(`${rel}/ (source, Binaries and Intermediate)`);
+  }
+  if (uproject && uprojectText !== null && uePluginName && listed) {
+    const edited = removeUProjectPluginEntry(uprojectText, uePluginName);
+    if (edited.removed > 0) {
+      fs.writeFileSync(uproject, edited.text);
+      removed.push(`the ${uePluginName} entry in ${path.basename(uproject)}`);
     }
   }
 
   const removedSkills = removeSkillSet(proj.projectDir, name);
-  if (removedSkills.length > 0) note(`removed skills: ${removedSkills.join(", ")}`);
+  if (removedSkills.length > 0) removed.push(`skills ${removedSkills.join(", ")}`);
 
-  const list = readPluginsList(proj.configPath).filter((p) => p.name !== name);
-  writePluginsList(proj.configPath, list);
-  runNpm(["uninstall", name], proj.projectDir);
-  note(`removed ${name}`);
+  const list = readPluginsList(proj.configPath);
+  if (list.some((p) => p.name === name)) {
+    writePluginsList(proj.configPath, list.filter((p) => p.name !== name));
+    removed.push(`the ${name} entry in ${path.basename(proj.configPath)}`);
+  }
+  note(`removed ${name}:`);
+  for (const r of removed) note(`  ${r}`);
   note(RESTART_NOTE);
 }
 
@@ -450,6 +531,11 @@ function cmdList(editor: string | undefined): void {
     return;
   }
   for (const entry of list) {
+    const superseded = supersededByName(entry.name);
+    if (superseded) {
+      console.log(`  ${entry.name} - SKIPPED: ${supersededMessage(superseded[0], superseded[1])}`);
+      continue;
+    }
     const pkgDir = findInstalledPackage(entry.name, proj.projectDir);
     if (!pkgDir) {
       console.log(`  ${entry.name}${entry.version ? `@${entry.version}` : ""} - MISSING (not in node_modules)`);
@@ -554,9 +640,16 @@ function cmdUpdate(args: string[], editor: string | undefined): void {
     if (args[i] === "--version") version = args[++i];
     else if (!args[i].startsWith("-")) requested ??= args[i];
   }
+  if (requested) refuseSuperseded(requested);
   const proj = findProjectDir(projectStartDir(editor));
   const nativeState = readNativeModulesState(proj.projectDir);
-  const plan = planPluginUpdates(readPluginsList(proj.configPath), requested, version, {
+  const declared = readPluginsList(proj.configPath);
+  // A plugin that ships in core is never reinstalled; removing it is the only step left.
+  for (const e of declared) {
+    const hit = supersededByName(e.name);
+    if (hit) note(`WARNING: ${supersededMessage(hit[0], hit[1])}`);
+  }
+  const plan = planPluginUpdates(declared.filter((e) => !isSuperseded(e.name)), requested, version, {
     installed: (name) => {
       const dir = findInstalledPackage(name, proj.projectDir);
       return dir ? installedVersion(dir) : undefined;
@@ -1033,7 +1126,7 @@ async function cmdConfigInteractive(
     label: g,
     checked: isGroupEnabled({ groups: effectiveState }, g),
   }));
-  const states = await checkboxSelect(`${slug}: enable flow groups`, items);
+  const states = await checkboxSelect(`${slug}: enable flow groups`, items, "Pass --enable <groups> or --disable <groups>.");
   const chosen: Record<string, boolean> = {};
   groups.forEach((g, i) => (chosen[g] = states[i]));
 
@@ -1042,7 +1135,7 @@ async function cmdConfigInteractive(
     { label: "you, this project  (ue-mcp.local.yml, untracked)", target: "local" },
     { label: "the team, tracked  (ue-mcp.yml)", target: "project" },
   ];
-  const idx = await singleSelect("Save preference to", targetLabels.map((t) => t.label));
+  const idx = await singleSelect("Save preference to", targetLabels.map((t) => t.label), "Pass --global, --local or --project with --enable or --disable.");
   const target = targetLabels[idx].target;
 
   writeLayerGroups(targetFile(proj.projectDir, target), slug, () => chosen);
@@ -1089,7 +1182,7 @@ export async function run(argv: string[]): Promise<number | void> {
   switch (sub) {
     case "install": cmdInstall(args, editor); break;
     case "uninstall":
-    case "remove": cmdUninstall(args, editor); break;
+    case "remove": await cmdUninstall(args, editor); break;
     case "list":
     case "ls": cmdList(editor); break;
     case "update":

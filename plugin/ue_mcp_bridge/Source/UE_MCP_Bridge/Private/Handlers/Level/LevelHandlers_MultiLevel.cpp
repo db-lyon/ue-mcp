@@ -851,7 +851,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddStreamingSublevel(const TSharedPtr<FJs
 		if (!StreamingClass) StreamingClass = ULevelStreamingDynamic::StaticClass();
 	}
 
+	// AddLevelToWorld makes the added level the current edit level, so new actors
+	// would land in it; the edit level the caller had is put back.
+	ULevel* PreviousEditLevel = World->GetCurrentLevel();
 	ULevelStreaming* SL = UEditorLevelUtils::AddLevelToWorld(World, *LevelPath, StreamingClass);
+	if (PreviousEditLevel && World->GetCurrentLevel() != PreviousEditLevel)
+	{
+		UEditorLevelUtils::MakeLevelCurrent(PreviousEditLevel);
+	}
 	if (!SL)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to add sub-level '%s'"), *LevelPath));

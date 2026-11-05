@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Skeleton editing, UV authoring and MetaSound introspection, live (V3, V2, T13).
  *

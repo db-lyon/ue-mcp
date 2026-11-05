@@ -755,7 +755,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObjec
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), ST->GetPathName());
 	Result->SetStringField(TEXT("stateId"), StateTreeDepthGuid(State->ID));
-	Result->SetStringField(TEXT("statePath"), State->GetPath());
+	Result->SetStringField(TEXT("statePath"), FStateTreeHandlers::StateDotPath(State));
 	Result->SetStringField(TEXT("name"), State->Name.ToString());
 	// The whole point of this action: every field below that has no typed
 	// setter is a UPROPERTY at this path.
@@ -789,7 +789,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObjec
 		{
 			if (const UStateTreeState* Target = EditorData->GetStateByID(State->LinkedSubtree.ID))
 			{
-				LinkObj->SetStringField(TEXT("linkedSubtreeStatePath"), Target->GetPath());
+				LinkObj->SetStringField(TEXT("linkedSubtreeStatePath"), FStateTreeHandlers::StateDotPath(Target));
 			}
 			else
 			{
@@ -856,7 +856,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadState(const TSharedPtr<FJsonObjec
 		{
 			if (const UStateTreeState* Target = EditorData->GetStateByID(T.State.ID))
 			{
-				TObj->SetStringField(TEXT("targetStatePath"), Target->GetPath());
+				TObj->SetStringField(TEXT("targetStatePath"), FStateTreeHandlers::StateDotPath(Target));
 			}
 			else
 			{
@@ -1196,7 +1196,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), ST->GetPathName());
 	Result->SetStringField(TEXT("stateId"), StateTreeDepthGuid(State->ID));
-	Result->SetStringField(TEXT("statePath"), State->GetPath());
+	Result->SetStringField(TEXT("statePath"), FStateTreeHandlers::StateDotPath(State));
 	Result->SetStringField(TEXT("linkType"), LinkType);
 
 	if (bSubtree)
@@ -1245,7 +1245,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 		State->SetLinkedState(Target->GetLinkToState());
 
 		Result->SetStringField(TEXT("targetStateId"), StateTreeDepthGuid(Target->ID));
-		Result->SetStringField(TEXT("targetStatePath"), Target->GetPath());
+		Result->SetStringField(TEXT("targetStatePath"), FStateTreeHandlers::StateDotPath(Target));
 	}
 	else if (bAsset)
 	{
@@ -1269,9 +1269,12 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 	else
 	{
 		State->Modify();
+		// SetLinkedState and SetLinkedStateAsset assert the state is already of
+		// the matching linked type, so a plain state clears both links directly.
 		State->Type = EStateTreeStateType::State;
-		State->SetLinkedState(FStateTreeStateLink());
-		State->SetLinkedStateAsset(nullptr);
+		State->LinkedSubtree = FStateTreeStateLink();
+		State->LinkedAsset = nullptr;
+		State->UpdateParametersFromLinkedSubtree();
 	}
 
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
@@ -1440,7 +1443,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 	}
 
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
-	Result->SetStringField(TEXT("statePath"), State->GetPath());
+	Result->SetStringField(TEXT("statePath"), FStateTreeHandlers::StateDotPath(State));
 	Result->SetStringField(TEXT("parentStateId"), NewParent ? StateTreeDepthGuid(NewParent->ID) : FString());
 	Result->SetBoolField(TEXT("atRoot"), NewParent == nullptr);
 

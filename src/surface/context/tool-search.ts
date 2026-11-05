@@ -16,7 +16,7 @@ export interface ToolSearchHit {
 
 type SearchableTool = {
   name: string;
-  actions?: Record<string, { description?: string; bridge?: string; effect?: string }>;
+  actions?: Record<string, { description?: string; bridge?: string; effect?: string; movedTo?: unknown }>;
 };
 
 // Task-verb / noun synonyms. When a query contains the KEY (or any value), the
@@ -145,6 +145,8 @@ export function searchToolGraph(tools: SearchableTool[], query: string, limit = 
   for (const tool of tools) {
     for (const [actionName, spec] of Object.entries(tool.actions ?? {})) {
       if (DEPRIORITIZE.has(actionName)) continue;
+      // A moved action's old address is the same action; search names the canonical one.
+      if (spec?.movedTo) continue;
       const desc = spec?.description ?? "";
       const nameWords = wordsOf(actionName);
       const descWords = wordsOf(desc);

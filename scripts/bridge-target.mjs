@@ -31,8 +31,29 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** Repository root (the checkout this harness belongs to). */
 export const REPO_ROOT = path.resolve(HERE, "..");
 
-/** The one project any test harness in this repo is allowed to touch. */
-export const TEST_PROJECT_DIR = path.join(REPO_ROOT, "tests", "ue_mcp");
+/** Where the sharded live run keeps its copies of tests/ue_mcp, one per editor. */
+export const LIVE_SHARD_ROOT = path.join(REPO_ROOT, "tests", ".shards");
+
+/**
+ * The shard copy this process drives, from UE_MCP_LIVE_SHARD_DIR, or null.
+ * Only a `ue_mcp` project under LIVE_SHARD_ROOT qualifies; anything else throws.
+ */
+export function liveShardProjectDir(env = process.env) {
+  const raw = env.UE_MCP_LIVE_SHARD_DIR;
+  if (!raw) return null;
+  const dir = path.resolve(raw);
+  const rel = path.relative(LIVE_SHARD_ROOT, dir);
+  const inside = rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+  if (!inside || path.basename(dir) !== "ue_mcp" || !fs.existsSync(path.join(dir, "ue_mcp.uproject"))) {
+    throw new Error(`UE_MCP_LIVE_SHARD_DIR must name a ue_mcp copy under ${LIVE_SHARD_ROOT}; got ${raw}`);
+  }
+  return dir;
+}
+
+const SHARD_DIR = liveShardProjectDir();
+
+/** The one project any test harness in this repo is allowed to touch: tests/ue_mcp, or this process's shard copy of it. */
+export const TEST_PROJECT_DIR = SHARD_DIR ?? path.join(REPO_ROOT, "tests", "ue_mcp");
 export const TEST_PROJECT_UPROJECT = path.join(TEST_PROJECT_DIR, "ue_mcp.uproject");
 
 /** Where the running bridge publishes the port it bound for that project. */
@@ -154,7 +175,8 @@ export function bridgePortCandidates(options = {}) {
 
   add(lockfile.port, "lockfile");
   add(deriveProjectPort(targetDir), "derived from project path");
-  add(LEGACY_BRIDGE_PORT, "legacy fixed port");
+  // A shard editor always publishes its lockfile, and the legacy port could be another shard's.
+  if (!SHARD_DIR) add(LEGACY_BRIDGE_PORT, "legacy fixed port");
   return { candidates, lockfile };
 }
 
@@ -281,6 +303,8 @@ export function liveTestProjectDirs() {
   };
 
   add(TEST_PROJECT_DIR);
+  // A shard drives its own copy and nothing else.
+  if (SHARD_DIR) return dirs;
 
   // A linked worktree's `.git` is a file pointing at
   // <main>/.git/worktrees/<name>. Three levels up from that is the checkout
@@ -324,17 +348,24 @@ export function assertLiveTestProjectDir(reportedDir, allowed = liveTestProjectD
   );
 }
 
+/** What the identity check waits for its answer; see verifyTestProjectTarget. */
+export const PROJECT_IDENTITY_TIMEOUT_MS = 180_000;
+
 /**
- * Run the guard over any RPC caller. `call` takes (method, params) and resolves
- * to the raw handler result (or anything containing it); the identity marker is
- * matched out of the stringified value.
+ * Run the guard over any RPC caller. `call` takes (method, params, timeoutMs) and
+ * resolves to the raw handler result (or anything containing it); the identity
+ * marker is matched out of the stringified value.
  *
- * @param {(method: string, params: Record<string, unknown>) => Promise<unknown>} call
+ * The check is often the first Python call a fresh editor gets, and starting
+ * Python on a render editor still compiling shaders can take over the default
+ * 30 s, so it gets its own budget. It only reads, so a slow answer is safe.
+ *
+ * @param {(method: string, params: Record<string, unknown>, timeoutMs: number) => Promise<unknown>} call
  */
 export async function verifyTestProjectTarget(call) {
   let result;
   try {
-    result = await call("execute_python", { code: PROJECT_IDENTITY_PYTHON });
+    result = await call("execute_python", { code: PROJECT_IDENTITY_PYTHON }, PROJECT_IDENTITY_TIMEOUT_MS);
   } catch (err) {
     throw new Error(
       "Aborting: could not confirm which project the connected editor has open " +

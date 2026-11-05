@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * PCG generation state and generated output (#1365, #1309), read back from a
  * volume the test generates.

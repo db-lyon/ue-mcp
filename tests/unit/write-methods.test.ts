@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyWrite, specWrittenParams } from "../../src/flow/write-methods.js";
+import { classifyWrite, isProviderOperation, specWrittenParams } from "../../src/flow/write-methods.js";
 import { RECORDED_HANDLER_SPECS } from "../../src/tools/specs/index.js";
 
 describe("classifyWrite", () => {
@@ -199,6 +199,31 @@ describe("classifyWrite", () => {
     for (const method of ["mesh_boolean", "add_virtual_bone", "set_bone_retargeting", "add_blueprint_interface",
       "set_foliage_type_settings", "add_expression_in_function", "set_ik_rig_mesh", "delete_asset_batch"]) {
       expect(specWrittenParams(RECORDED_HANDLER_SPECS, method).length, method).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("source control provider operations", () => {
+  const methods = Object.keys(RECORDED_HANDLER_SPECS).filter((m) => m.startsWith("source_control_"));
+
+  it("covers every recorded source_control method", () => {
+    expect(methods.length).toBeGreaterThan(0);
+    for (const m of methods) expect(isProviderOperation(m), m).toBe(true);
+    expect(isProviderOperation("save_asset")).toBe(false);
+  });
+
+  it("writes nothing a guard intercepts, even when handed every path key a guard reads", () => {
+    // Every key the generic and spec layers read, so the exemption cannot rest
+    // on `paths` missing PATH_ARRAY_KEYS or the case-sensitive Paths? pattern.
+    const params = {
+      paths: ["/Game/Foo"],
+      path: "/Game/Foo",
+      assetPath: "/Game/Foo",
+      assetPaths: ["/Game/Bar"],
+      packagePath: "/Game/Baz",
+    };
+    for (const m of [...methods, "source_control_plugin_extra"]) {
+      expect(classifyWrite(m, params), m).toEqual({ writes: false, contentPaths: [] });
     }
   });
 });

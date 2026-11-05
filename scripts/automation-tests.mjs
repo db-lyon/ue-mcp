@@ -12,7 +12,13 @@
  *
  *   node scripts/automation-tests.mjs [--filter UE.MCP.] [--max 500]
  *                                     [--timeout 900000] [--verbose]
+ *                                     [--filters-from <file>]
+ *
+ * --filters-from runs only the tests a selection names: the JSON
+ * scripts/select-tests.ts writes (its `automation` array, or "all"), or one
+ * test name per line. Each name is one run_automation_tests call.
  */
+import fs from "node:fs";
 import { connectTestBridge, TEST_PROJECT_UPROJECT } from "./bridge-target.mjs";
 
 const args = process.argv.slice(2);
@@ -28,6 +34,16 @@ const MAX_TESTS = Number(flag("max", "500"));
 // budget rather than a per-test one.
 const TIMEOUT_MS = Number(flag("timeout", "900000"));
 const VERBOSE = args.includes("--verbose");
+const FILTERS_FROM = flag("filters-from", null);
+
+/** The filters to run: the one --filter, or every name a selection lists. */
+function filters() {
+  if (!FILTERS_FROM) return [FILTER];
+  const text = fs.readFileSync(FILTERS_FROM, "utf8");
+  if (!text.trimStart().startsWith("{")) return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const listed = JSON.parse(text).automation;
+  return listed === "all" ? [FILTER] : listed ?? [];
+}
 
 const RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m", BOLD = "\x1b[1m", DIM = "\x1b[2m";
@@ -35,7 +51,7 @@ const YELLOW = "\x1b[33m", BOLD = "\x1b[1m", DIM = "\x1b[2m";
 async function main() {
   console.log(`\n${BOLD}UE MCP Bridge - C++ automation suite${RESET}`);
   console.log(`${DIM}Project : ${TEST_PROJECT_UPROJECT}${RESET}`);
-  console.log(`${DIM}Filter  : ${FILTER}${RESET}\n`);
+  console.log(`${DIM}Filter  : ${FILTERS_FROM ? `the tests ${FILTERS_FROM} lists` : FILTER}${RESET}\n`);
 
   // The same guard the smoke harness applies. These tests write into temp
   // mounts, but run_automation_tests dispatches every EditorContext test in
@@ -55,9 +71,26 @@ async function main() {
     process.exit(1);
   }
 
+  const wanted = filters();
+  if (wanted.length === 0) {
+    console.log(`${DIM}The selection lists no automation tests, so nothing runs.${RESET}\n`);
+    bridge.close();
+    process.exit(0);
+  }
   let result;
   try {
-    result = await bridge.call("run_automation_tests", { filter: FILTER, maxTests: MAX_TESTS }, TIMEOUT_MS);
+    if (wanted.length === 1) {
+      result = await bridge.call("run_automation_tests", { filter: wanted[0], maxTests: MAX_TESTS }, TIMEOUT_MS);
+    } else {
+      // One call per name; a name that is a prefix of another runs that one too, so keep each test once.
+      const byTest = new Map();
+      for (const filter of wanted) {
+        const part = await bridge.call("run_automation_tests", { filter, maxTests: MAX_TESTS }, TIMEOUT_MS);
+        for (const r of part.results ?? []) if (!byTest.has(r.test)) byTest.set(r.test, r);
+      }
+      const results = [...byTest.values()];
+      result = { results, ran: results.length, passed: results.filter((r) => r.passed).length, failed: results.filter((r) => !r.passed).length };
+    }
   } catch (err) {
     console.error(`${RED}${BOLD}The run did not complete: ${err.message}${RESET}`);
     console.error(`${DIM}A test that takes the editor down looks exactly like this. Check the editor log.${RESET}\n`);

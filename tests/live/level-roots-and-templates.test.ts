@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Rootless actors (#1251) and missing level templates (#1252), against a real editor.
  *

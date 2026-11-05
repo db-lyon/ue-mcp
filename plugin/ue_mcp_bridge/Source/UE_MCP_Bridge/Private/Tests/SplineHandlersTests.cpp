@@ -40,6 +40,7 @@ bool FMCPNativeSplineAuthoringTest::RunTest(const FString& Parameters)
 	const FVector OriginalScale = Second->GetScaleAtSplinePoint(1);
 	const float OriginalLength = Second->GetSplineLength();
 	const int32 OriginalCount = Second->GetNumberOfSplinePoints();
+	const bool bOriginalEdited = Second->bSplineHasBeenEdited;
 
 	FMCPHandlerRegistry Registry; FSplineHandlers::RegisterHandlers(Registry);
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
@@ -61,6 +62,12 @@ bool FMCPNativeSplineAuthoringTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("the first target point is linear"), Second->GetSplinePointType(0), ESplinePointType::Linear);
 	TestEqual(TEXT("the custom tangent point keeps its type"), Second->GetSplinePointType(1), ESplinePointType::CurveCustomTangent);
 	TestTrue(TEXT("world-space input is not transformed twice"), Second->GetLocationAtSplinePoint(0, ESplineCoordinateSpace::World).Equals(FVector(30.0, 0.0, 0.0), 0.01));
+	// markEdited defaults to true, so a construction script rerun keeps the points.
+	TestTrue(TEXT("the spline is marked edited by default"), Second->bSplineHasBeenEdited);
+	TestTrue(TEXT("the result reports the flag"), Response->AsObject()->GetBoolField(TEXT("splineHasBeenEdited")));
+	TestEqual(TEXT("the result reports the flag as it was"), Response->AsObject()->GetBoolField(TEXT("previousSplineHasBeenEdited")), bOriginalEdited);
+	TestTrue(TEXT("the rollback carries the old flag"),
+		Response->AsObject()->GetObjectField(TEXT("rollback"))->GetObjectField(TEXT("payload"))->GetBoolField(TEXT("markEdited")) == bOriginalEdited);
 
 	const FVector BeforeMalformed = Second->GetLocationAtSplinePoint(0, ESplineCoordinateSpace::World);
 	TSharedPtr<FJsonObject> Malformed = MakeShared<FJsonObject>(); Malformed->SetStringField(TEXT("actorLabel"), TEXT("MCP_SplineContractTest")); Malformed->SetStringField(TEXT("componentName"), TEXT("SecondarySpline"));
@@ -80,6 +87,7 @@ bool FMCPNativeSplineAuthoringTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("rollback restores stored rotation"), Second->GetSplinePointsRotation().Points[0].OutVal.Equals(OriginalRotation,1e-5));
 	TestTrue(TEXT("rollback restores scale"), Second->GetScaleAtSplinePoint(1).Equals(OriginalScale,1e-5));
 	TestTrue(TEXT("rollback restores loop parameterization"), FMath::IsNearlyEqual(Second->GetSplineLength(),OriginalLength,.01f));
+	TestEqual(TEXT("rollback restores the edited flag"), Second->bSplineHasBeenEdited, bOriginalEdited);
 	TestTrue(TEXT("successful mutation marks package dirty"), World->GetOutermost()->IsDirty());
 	GEditor->UndoTransaction();
 	TestEqual(TEXT("Undo restores the state before rollback"), Second->GetNumberOfSplinePoints(), 2);

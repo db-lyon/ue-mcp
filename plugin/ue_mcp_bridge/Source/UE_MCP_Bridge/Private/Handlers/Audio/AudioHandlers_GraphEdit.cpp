@@ -1051,7 +1051,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueRemoveNode(const TSharedPtr<FJson
 			O->SetStringField(TEXT("parentNodeId"), Candidate->GetName());
 			O->SetNumberField(TEXT("childIndex"), i);
 			DetachedFrom.Add(MakeShared<FJsonValueObject>(O));
-			Candidate->RemoveChildNode(i);
+			MCPAudio::DetachCueSlot(Candidate, i);
 		}
 	}
 #endif
@@ -1182,7 +1182,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueDisconnect(const TSharedPtr<FJson
 				O->SetStringField(TEXT("parentNodeId"), Candidate->GetName());
 				O->SetNumberField(TEXT("childIndex"), i);
 				Detached.Add(MakeShared<FJsonValueObject>(O));
-				Candidate->RemoveChildNode(i);
+				MCPAudio::DetachCueSlot(Candidate, i);
 			}
 		}
 #endif
@@ -1239,8 +1239,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueDisconnect(const TSharedPtr<FJson
 // Not a property write, for the same reason set_submix_parent is not: a sound
 // class hierarchy is stored on BOTH ends. ParentClass on the child and
 // ChildClasses on the parent, plus a removal from the OLD parent's list.
-// USoundClass::SetParentClass is the call that keeps all three consistent, and
-// it also refuses a cycle. Writing ParentClass alone produces a class the audio
+// USoundClass::SetParentClass only removes from the old list, so
+// MCPAudio::SetSoundClassParent adds to the new one. Writing ParentClass alone produces a class the audio
 // engine walks up from and the mixer never walks down to.
 // ─────────────────────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FAudioHandlers::SetSoundClassParent(const TSharedPtr<FJsonObject>& Params)
@@ -1306,11 +1306,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetSoundClassParent(const TSharedPtr<FJso
 		return MCPResult(Unchanged);
 	}
 
-#if WITH_EDITOR
-	SoundClass->SetParentClass(NewParent);
-#else
-	return MCPError(TEXT("Sound class reparenting requires an editor build."));
-#endif
+	MCPAudio::SetSoundClassParent(SoundClass, NewParent);
 
 
 	auto Result = MCPSuccess();

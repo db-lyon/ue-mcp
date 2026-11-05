@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Editor window control (#1231): list_windows, close_window and
  * press_window_button against a real floating window.

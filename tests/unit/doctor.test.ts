@@ -198,6 +198,22 @@ describe("formatDoctor verdict", () => {
     expect(out).not.toContain("behind latest");
   });
 
+  it("reports what npx runs with nothing installed, and flags a bridge ahead of it", () => {
+    // The support case: a beta bridge, no global install, and a bare `npx ue-mcp`
+    // that resolves to the stable line. doctor said "unknown" and "aligned".
+    const out = stripAnsi(formatDoctor(baseReport({
+      registryLatest: "1.4.10",
+      npmGlobal: { version: null, dir: null },
+      effectiveNpx: "1.4.10",
+      effectiveNpxSource: "registry",
+      bridgePlugin: { version: "1.4.11-beta.8", project: "C:/proj/Vale/Vale.uproject", installKind: "binary" },
+    })));
+    expect(out).toMatch(/effective \(npx\):\s*1\.4\.10\s+\(registry latest; nothing installed\)/);
+    expect(out).not.toContain("unknown");
+    expect(out).not.toContain("Everything aligned");
+    expect(out).toContain("npx ue-mcp@beta <command>");
+  });
+
   it("does not let a server for another project produce a false aligned", () => {
     // Only an unrelated-project server is running; nothing serves the target.
     const out = stripAnsi(formatDoctor(baseReport({

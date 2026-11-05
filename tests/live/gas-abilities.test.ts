@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Granting and diagnosis, against a real editor.
  *

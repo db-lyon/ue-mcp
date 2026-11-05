@@ -46,7 +46,7 @@ export const widgetTool: ToolDef = categoryTool(
     // per-direction fields stay reachable by widget(set_style) afterwards.
     set_navigation: specBp("mutate", "Write UMG navigation rules on a widget: rule is Escape, Explicit, Wrap, Stop, Custom or CustomBoundary, direction is Up, Down, Left, Right, Next or Previous, and widgetToFocus names the target for Explicit. Creates the UWidgetNavigation subobject that set_property cannot make. Pass one write as widgetName + direction + rule, or many as rules[] of {widgetName, direction, rule, widgetToFocus}; the whole batch is validated before anything is written.", "set_widget_navigation"),
     clear_navigation: specBp("mutate", "Reset navigation rules on a widget back to Escape. Omit direction to clear all six. Clearing what is already clear reports unchanged.", "clear_widget_navigation"),
-    restore_navigation: specBp("mutate", "Restore navigation rules from a captured snapshot - the `previous` array that set_navigation and clear_navigation put in their rollback payload, so a failed flow can be undone by hand as well as by the runner.", "restore_widget_navigation"),
+    restore_navigation: { ...specBp("mutate", "Restore navigation rules from a captured snapshot - the `previous` array that set_navigation and clear_navigation put in their rollback payload, so a failed flow can be undone by hand as well as by the runner.", "restore_widget_navigation"), destructive: false },
     audit_focus_chain: specBp("read", "Read-only report over the whole widget tree: which widgets can take focus, their explicit navigation edges, widgets reachable from none of them, edges pointing at a missing/invisible/unfocusable target, and directions whose opposite does not lead back.", "audit_widget_focus_chain"),
     audit_accessibility: specBp("read", "Read-only accessibility report over the whole widget tree: font sizes under minFontSize, interactive widgets whose authored hit area is under minHitSize, and what could not be checked from authored values alone.", "audit_widget_accessibility"),
     get_runtime_focus_path: specBp("read", "Read the live Slate focus path for a user index in PIE - which widget holds focus and the chain of widgets above it. Requires a running PIE or Game world; the editor's own focus is never reported.", "get_runtime_focus_path"),
@@ -115,7 +115,7 @@ export const widgetTool: ToolDef = categoryTool(
     // transport does not strip them before the normalizer can fold them in.
     path: z.string().optional().describe("Legacy alias for assetPath. Use assetPath (#798)"),
     widgetBlueprintPath: z.string().optional().describe("Alias for assetPath. Use assetPath (#798)"),
-    widgetBlueprint: z.union([z.string(), z.record(z.unknown())]).optional().describe("Alias for assetPath, also accepted as the engine's {refPath} object reference. Use assetPath (#798)"),
+    widgetBlueprint: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("Alias for assetPath, also accepted as the engine's {refPath} object reference. Use assetPath (#798)"),
     widgetDisplayName: z.string().optional().describe("Alias for widgetName. Use widgetName (#798)"),
     parentWidget: z.string().optional().describe("Alias for parentWidgetName. Use parentWidgetName (#798)"),
   },

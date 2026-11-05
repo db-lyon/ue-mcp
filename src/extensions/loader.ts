@@ -23,6 +23,12 @@ import {
 import type { NativeContractExtras } from "./native-contract.js";
 import { resolvePackage, type ResolvedPackage } from "./resolver.js";
 import { satisfiesMinimum } from "./version.js";
+import {
+  supersededByName,
+  supersededByUePlugin,
+  supersededMessage,
+  type SupersededPlugin,
+} from "./superseded.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "./injection.js";
 import { buildProvidedTool, type ProvisionPlan } from "./provision.js";
 import { readDeployedBridgeApiVersion } from "./bridge-api.js";
@@ -377,6 +383,8 @@ async function loadOne(
   bridgeApiVersion: number | null,
 ): Promise<LoadOneResult> {
   const base = baseRecord(entry);
+  const supersededEntry = supersededByName(entry.name);
+  if (supersededEntry) return skipSuperseded(base, ...supersededEntry);
   let pkg: ResolvedPackage;
   try {
     pkg = resolvePackage(entry.name, entry.version, projectDir);
@@ -393,6 +401,9 @@ async function loadOne(
     return skip(base, `manifest invalid: ${(e as Error).message}`);
   }
   const manifest = parsed.manifest;
+  // A renamed or forked package that still ships the superseded native module.
+  const supersededNative = supersededByUePlugin(manifest.nativeModule?.uePluginName);
+  if (supersededNative) return skipSuperseded(base, ...supersededNative);
   // Salvaged units: the plugin loads, minus whatever failed validation on its
   // own. Each one is warned individually so the log names the handler rather
   // than leaving the reader to diff the manifest against the live surface.
@@ -588,6 +599,14 @@ function baseRecord(entry: PluginEntry): PluginRecord {
 
 function skip(rec: PluginRecord, reason: string): LoadOneResult {
   warn("plugin", `${rec.name}: ${reason}`);
+  rec.status = "skipped";
+  rec.statusReason = reason;
+  return { record: rec };
+}
+
+function skipSuperseded(rec: PluginRecord, name: string, s: SupersededPlugin): LoadOneResult {
+  const reason = supersededMessage(name, s);
+  warn("plugin", reason);
   rec.status = "skipped";
   rec.statusReason = reason;
   return { record: rec };

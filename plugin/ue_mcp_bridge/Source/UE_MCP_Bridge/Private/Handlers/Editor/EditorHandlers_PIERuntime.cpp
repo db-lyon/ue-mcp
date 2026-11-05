@@ -1659,23 +1659,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 
 namespace
 {
-	/** World kind as a short string, so a caller can tell an editor-world hit
-	 *  from a PIE-world one without parsing the UEDPIE prefix out of the path. */
-	FString DescribeWorldType(const UWorld* World)
-	{
-		if (!World) return FString();
-		switch (World->WorldType)
-		{
-			case EWorldType::Editor:        return TEXT("editor");
-			case EWorldType::PIE:           return TEXT("pie");
-			case EWorldType::Game:          return TEXT("game");
-			case EWorldType::EditorPreview: return TEXT("editorPreview");
-			case EWorldType::GamePreview:   return TEXT("gamePreview");
-			case EWorldType::Inactive:      return TEXT("inactive");
-			default:                        return TEXT("none");
-		}
-	}
-
 	TSharedPtr<FJsonObject> DescribeLiveObject(UObject* Obj)
 	{
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -1688,7 +1671,7 @@ namespace
 		if (UWorld* OwningWorld = Obj->GetTypedOuter<UWorld>())
 		{
 			Entry->SetStringField(TEXT("world"), OwningWorld->GetPathName());
-			Entry->SetStringField(TEXT("worldType"), DescribeWorldType(OwningWorld));
+			Entry->SetStringField(TEXT("worldType"), MCPDescribeWorldType(OwningWorld));
 		}
 		if (AActor* Actor = Cast<AActor>(Obj))
 		{

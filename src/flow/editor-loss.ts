@@ -54,6 +54,8 @@ export interface EditorLossOptions {
   timeoutMs: number;
   /** True for a task whose action is declared read-only, so running it again is its verification. */
   isReadOnly(taskName: string): boolean;
+  /** False for a task that runs without an editor (stop, build, start), which never waits for one. */
+  needsEditor?(taskName: string): boolean;
   /** Restore the git snapshot now. Called at most once, while the editor is away, under `rollback`. */
   restoreWhileDown?(): boolean;
 }
@@ -135,11 +137,14 @@ export class EditorLossGuard {
   ): Promise<TaskResult> {
     // The step boundary. Only once the editor dropped during this run: a flow
     // of offline tasks against no editor at all must not wait for one.
-    if (this.drops > 0 && !this.source.isConnected) await this.waitBack();
+    // A task that runs without an editor never waits for one: a rebuild's build
+    // step would otherwise wait out the whole timeout for the editor it just stopped.
+    const needsEditor = this.options.needsEditor?.(name) ?? true;
+    if (needsEditor && this.drops > 0 && !this.source.isConnected) await this.waitBack();
 
     const before = this.drops;
     const result = await run();
-    if (result.success || this.drops === before) return result;
+    if (result.success || this.drops === before || !needsEditor) return result;
 
     // The step failed and the editor dropped while it ran: its outcome is unknown.
     const cause = this.cause();

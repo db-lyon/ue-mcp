@@ -3,7 +3,7 @@
 import { spawn, exec } from 'child_process';
 import path from 'path';
 import { log, logSection, assertTestProject, createTestBuildPlan } from './build-utils.js';
-import { runHygiene } from './pre-build-hygiene.mjs';
+import { ensureTestBuildConfiguration, runHygiene } from './pre-build-hygiene.mjs';
 
 function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -105,6 +105,10 @@ async function main() {
     deployedDir: path.join(projectRoot, 'Plugins', 'UE_MCP_Bridge'),
     log: (msg) => log(msg, 'yellow'),
   });
+
+  if (ensureTestBuildConfiguration(projectRoot)) {
+    log("Wrote the test project's BuildConfiguration.xml: unity build, no adaptive working set.", 'yellow');
+  }
 
   log('Starting build...');
   log(`Command: ${buildTool} ${buildArgs.join(' ')}`);

@@ -1,7 +1,23 @@
 {
   "note": "Bridge actions with no behavioural test of their own, each with the reason no test in tests/live or the UE.MCP.* automation suite can be credited for it. Read by scripts/behavioural-coverage.ts (#1223). An exemption is not a gap: it says why the inventory cannot see the coverage, and it fails the gate once a test does cover the action.",
   "exemptions": {
+    "bind_cloth_to_section": "No bridge action or engine Python API creates a clothing asset on a skeletal mesh, and neither the test project nor engine content has a clothed mesh to bind.",
+    "build_all": "Runs MAP REBUILD, BUILD LIGHTING and RebuildNavigation on the open map, a long rebuild whose before-state no bridge call can restore and whose lighting half depends on the Swarm agent.",
+    "build_geometry": "MAP REBUILD rewrites the open map BSP model; no bridge action creates a BSP brush or reads the BSP model back, so an empty rebuild is all a test could observe.",
+    "build_hlod": "Runs BuildHLOD on the open map, regenerating HLOD proxies in place; the test project has no HLOD layers and no bridge action reads HLOD output back.",
+    "build_lighting": "Sends a BUILD LIGHTING command that starts an asynchronous Lightmass build through the Swarm agent; the bridge exposes no build state or lightmap data to assert against.",
+    "clear_level_script": "Needs a Level Blueprint with nodes, and no bridge action creates one: every reader, this handler included, resolves the level script with bDontCreate so a scratch map never has one.",
+    "cook_content": "Starts a content cook for a target platform, writing outside the test sandbox, and no bridge action reads cooked output back.",
+    "fab_clear_cache": "Deletes the machine-wide Fab download cache outside the test sandbox, destroying downloads the user may need in other projects.",
+    "fab_login": "Opens the interactive EOS account portal sign-in, which needs a real Fab account and a person to finish it.",
+    "fab_logout": "Clears the machine Fab credentials, user-level state outside the test project, and no action reports the sign-in state back.",
+    "fab_sync_library": "Needs a signed-in Fab account and runs asynchronously against the network, and no action reports its result back.",
+    "generate_project_files": "Launches UnrealBuildTool in a separate process with no completion signal, and UBT rewrites project files only when their content changes, so an unchanged project shows no effect a test could read back.",
+    "hot_reload": "Triggers a Live Coding compile of the running editor modules, which patches the bridge under test and holds the engine-wide Live Coding lock other editors build against.",
+    "play_sound_at_location": "A one-shot sound is an audible event that leaves no state in the level, on disk or in any registry the bridge can read, so there is nothing to read back.",
     "request_editor_shutdown": "The bridge half of editor(stop_editor), a server handler; tests/live/editor-lifecycle.test.ts asserts stop_editor ends the editor process, which is this action's effect, but reaches it through the handler the inventory cannot trace.",
-    "run_automation_tests": "The runner npm run test:automation drives every UE.MCP.* test through (scripts/automation-tests.mjs); each release run asserts its per-test results, so it is exercised by the gate itself rather than by a test body."
+    "run_automation_tests": "The runner npm run test:automation drives every UE.MCP.* test through (scripts/automation-tests.mjs); each release run asserts its per-test results, so it is exercised by the gate itself rather than by a test body.",
+    "set_cloth_config": "No bridge action or engine Python API creates a clothing asset, and no content the test project can reach has one, so there is no cloth config to write and read back.",
+    "unbind_cloth_from_section": "Unbinding needs a section already bound to a clothing asset, and no bridge action or engine Python API can create one in the test project."
   }
 }

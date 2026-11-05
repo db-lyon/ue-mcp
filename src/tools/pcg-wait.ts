@@ -16,7 +16,10 @@ export interface WaitOptions {
   /** Wait for this run (execute/force_regenerate's runId) rather than whatever is in flight. */
   runId?: number;
   timeoutSeconds?: number;
-  /** With no runId and nothing generating, how long to wait for a deferred start before reporting idle. */
+  /**
+   * With no runId and nothing generating, how long to wait for a deferred start before reporting idle. With a runId
+   * whose run settled as not_started, how long to wait for the generation its Generate deferred.
+   */
   graceSeconds?: number;
 }
 
@@ -28,6 +31,12 @@ export interface WaitResult {
   runId?: number;
   componentName?: string;
   lastRun?: unknown;
+  /** not_started only: the component already held generated output, so nothing needed to run. */
+  alreadyGenerated?: boolean;
+  /** not_started only: when the component's most recent generation finished, and how. */
+  lastFinishUtc?: string;
+  lastFinishState?: string;
+  note?: string;
   error?: string;
 }
 
@@ -37,8 +46,10 @@ interface GenerationState {
   busy?: boolean;
   finishCount?: number;
   lastFinishState?: string;
+  lastFinishUtc?: string;
+  generated?: boolean;
   componentName?: string;
-  lastRun?: { id?: number; state?: string } | null;
+  lastRun?: { id?: number; state?: string; deferredStart?: boolean } | null;
 }
 
 /** Injectable for tests. */
@@ -77,6 +88,7 @@ export async function waitForGeneration(ctx: ToolContext, options: WaitOptions, 
     ...(options.runId !== undefined ? { runId: options.runId } : {}),
     ...(last.componentName !== undefined ? { componentName: last.componentName } : {}),
     ...(last.lastRun !== undefined ? { lastRun: last.lastRun } : {}),
+    ...(state === "not_started" ? notStartedDetail(last) : {}),
     ...(error !== undefined ? { error } : {}),
   });
 
@@ -89,7 +101,10 @@ export async function waitForGeneration(ctx: ToolContext, options: WaitOptions, 
   for (;;) {
     if (options.runId !== undefined) {
       const run = last.lastRun;
-      if (run && run.id === options.runId && run.state && FINISHED.has(run.state) && !last.busy) {
+      // Generate can defer its start to a later tick; the editor then moves a not_started run on to that
+      // generation, so not_started is final only once the grace window has passed.
+      const settledEarly = run?.state === "not_started" && clock.now() - started < graceMs;
+      if (run && run.id === options.runId && run.state && FINISHED.has(run.state) && !last.busy && !settledEarly) {
         return finish(run.state as WaitState, last);
       }
       if (run && typeof run.id === "number" && run.id > options.runId && !last.busy) {
@@ -112,6 +127,18 @@ export async function waitForGeneration(ctx: ToolContext, options: WaitOptions, 
     if (last.success === false) return finish("timed_out", last, last.error ?? "get_pcg_generation_state failed");
     if (last.busy) sawBusy = true;
   }
+}
+
+/** What a not_started run found: the component's existing output, so "nothing ran" is not read as "nothing there". */
+function notStartedDetail(last: GenerationState): Partial<WaitResult> {
+  const out: Partial<WaitResult> = {};
+  if (last.generated !== undefined) out.alreadyGenerated = last.generated;
+  if (last.lastFinishUtc !== undefined) out.lastFinishUtc = last.lastFinishUtc;
+  if (last.lastFinishState !== undefined) out.lastFinishState = last.lastFinishState;
+  out.note = last.generated
+    ? "Generate started nothing: the component's output was already up to date. lastFinishUtc says when it was last generated."
+    : "Generate started nothing and the component holds no generated output; check that it has a graph and is active.";
+  return out;
 }
 
 /**

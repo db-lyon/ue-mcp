@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * `blueprint(find_nodes)`, against a real editor (#998/#1015).
  *

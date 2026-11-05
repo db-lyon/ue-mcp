@@ -19,6 +19,20 @@ describe("runtime addressing by label and component name (#1113)", () => {
     expect(mapped).toHaveProperty("componentName", "StashWorld");
   });
 
+  it("get_component_tree declares relativeTo, socketNames and a world path, and forwards them", () => {
+    const declared = RECORDED_HANDLER_SPECS.get_component_tree.params.map((p) => p.name);
+    expect(declared).toEqual(expect.arrayContaining(["relativeTo", "socketNames", "world"]));
+    const mapped = forwarded("get_component_tree", {
+      actorPath: "/Engine/Transient.World_3:PersistentLevel.BP_Arms_C_0",
+      world: "/Engine/Transient.World_3",
+      relativeTo: "FirstPersonCamera",
+      socketNames: ["hand_r", "Muzzle"],
+    });
+    expect(mapped).toHaveProperty("world", "/Engine/Transient.World_3");
+    expect(mapped).toHaveProperty("relativeTo", "FirstPersonCamera");
+    expect(mapped).toHaveProperty("socketNames", ["hand_r", "Muzzle"]);
+  });
+
   it("get_runtime_values declares componentName and forwards the bag as sent", () => {
     // #1057: a spec'd action has no mapParams, so nothing it declares can be
     // dropped on the way to the bridge.

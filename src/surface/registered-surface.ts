@@ -122,6 +122,17 @@ export function unregisteredActionMessage(task: string, method: string, register
   );
 }
 
+/** Every engine toolset the graph's wrapped actions need. */
+export function epicToolsetsOf(graph: readonly ToolDef[]): string[] {
+  const toolsets = new Set<string>();
+  for (const tool of graph) {
+    for (const spec of Object.values(tool.actions)) {
+      if (spec.kind === "bridge" && spec.epicTool?.toolset) toolsets.add(spec.epicTool.toolset);
+    }
+  }
+  return [...toolsets].sort();
+}
+
 /** Whether this task is a generated action wrapping an engine toolset. */
 export function wrapsEpicTool(graph: readonly ToolDef[], task: string): boolean {
   const dot = task.indexOf(".");

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * The C++ correctness actions, against a real installed engine.
  *
@@ -21,10 +22,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LiveServer, resultJson, REPO_ROOT } from "./server.js";
+import { TEST_PROJECT_DIR } from "../../scripts/bridge-target.mjs";
 
 /** Persisted between runs: rebuilding a 31,000-header index per run is minutes. */
 const CACHE_HOME = path.join(REPO_ROOT, ".engine-index-cache");
-const TEST_PROJECT = path.join(REPO_ROOT, "tests", "ue_mcp", "ue_mcp.uproject");
+const TEST_PROJECT = path.join(TEST_PROJECT_DIR, "ue_mcp.uproject");
 
 /** Long enough for a cold build on a machine that has never scanned the tree. */
 const COLD = 1_800_000;
@@ -148,7 +150,7 @@ describe("the index answers from a real engine", () => {
 });
 
 describe("suggest_build_deps against the real Build.cs", () => {
-  const buildCs = path.join(REPO_ROOT, "tests", "ue_mcp", "Source", "ue_mcp", "ue_mcp.Build.cs");
+  const buildCs = path.join(TEST_PROJECT_DIR, "Source", "ue_mcp", "ue_mcp.Build.cs");
 
   it("reports only the modules the file does not already list", async () => {
     const body = resultJson<{
@@ -193,7 +195,7 @@ describe("lint_cpp_header", () => {
   }> => resultJson(await server.call("project", {
     action: "lint_cpp_header",
     path: file,
-    buildCsPath: path.join(REPO_ROOT, "tests", "ue_mcp", "Source", "ue_mcp", "ue_mcp.Build.cs"),
+    buildCsPath: path.join(TEST_PROJECT_DIR, "Source", "ue_mcp", "ue_mcp.Build.cs"),
     timeoutMs: COLD,
   }));
 

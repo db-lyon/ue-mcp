@@ -53,6 +53,14 @@ enum class EMCPActorMatch : uint8
  *  (Actor'/Game/...') and falls back to a case-insensitive compare, because a
  *  path that came back from one action and was pasted into another is the
  *  whole point of having it. */
+/** An actor's outliner folder, empty at the root. GetFolderPath is NAME_None there, whose
+ *  ToString is the word None, which no folder parameter accepts back. */
+inline FString MCPActorFolderPath(const AActor* Actor)
+{
+	const FName Folder = Actor ? Actor->GetFolderPath() : NAME_None;
+	return Folder.IsNone() ? FString() : Folder.ToString();
+}
+
 inline AActor* MCPFindActorByPath(UWorld* World, const FString& Path)
 {
 	if (!World || Path.IsEmpty()) return nullptr;
@@ -125,7 +133,7 @@ inline TSharedPtr<FJsonObject> MCPDescribeActorCandidate(AActor* Actor)
 	Row->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
 	Row->SetStringField(TEXT("actorName"), Actor->GetName());
 	Row->SetStringField(TEXT("actorClass"), Actor->GetClass()->GetName());
-	Row->SetStringField(TEXT("folderPath"), Actor->GetFolderPath().ToString());
+	Row->SetStringField(TEXT("folderPath"), MCPActorFolderPath(Actor));
 	const FVector Loc = Actor->GetActorLocation();
 	TSharedPtr<FJsonObject> LocObj = MakeShared<FJsonObject>();
 	LocObj->SetNumberField(TEXT("x"), Loc.X);

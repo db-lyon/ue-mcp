@@ -13,12 +13,12 @@ import { categoryTool } from "../../src/surface/category-tool.js";
  */
 
 const MANIFEST = `
-actionPrefix: pie
+actionPrefix: recorder
 nativeModule:
-  uePluginName: PIE_Studio
+  uePluginName: Sample_Recorder
   minBridgeApi: 1
-  source: ue/Plugins/PIE_Studio
-  category: pie
+  source: ue/Plugins/Sample_Recorder
+  category: recorder
   categoryDescription: "PIE record, replay, observe"
   handlers:
     record_arm:
@@ -38,11 +38,11 @@ let projectDir: string;
 
 beforeAll(() => {
   projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-892-"));
-  const pkgDir = path.join(projectDir, "node_modules", "pie-studio");
+  const pkgDir = path.join(projectDir, "node_modules", "sample-recorder");
   fs.mkdirSync(pkgDir, { recursive: true });
   fs.writeFileSync(
     path.join(pkgDir, "package.json"),
-    JSON.stringify({ name: "pie-studio", version: "0.5.1" }),
+    JSON.stringify({ name: "sample-recorder", version: "0.5.1" }),
   );
   fs.writeFileSync(path.join(pkgDir, "ue-mcp.plugin.yml"), MANIFEST);
 });
@@ -59,34 +59,34 @@ describe("#892 one malformed param does not take the category down", () => {
   it("keeps the plugin active and provisions its category", async () => {
     const load = await loadPlugins(
       baseTools(),
-      [{ name: "pie-studio" }],
+      [{ name: "sample-recorder" }],
       projectDir,
       "1.2.3",
     );
     const rec = load.records[0];
     expect(rec.status).toBe("active");
     expect(rec.statusReason).toBeUndefined();
-    expect(Object.keys(rec.provided)).toEqual(["pie"]);
+    expect(Object.keys(rec.provided)).toEqual(["recorder"]);
   });
 
   it("surfaces every sound handler and only drops the malformed one", async () => {
     const load = await loadPlugins(
       baseTools(),
-      [{ name: "pie-studio" }],
+      [{ name: "sample-recorder" }],
       projectDir,
       "1.2.3",
     );
-    expect(load.records[0].provided.pie).toEqual(["record_arm", "snapshot"]);
+    expect(load.records[0].provided.recorder).toEqual(["record_arm", "snapshot"]);
 
-    const pieTool = load.tools.find((t) => t.name === "pie");
-    expect(pieTool).toBeDefined();
-    expect(Object.keys(pieTool!.actions).sort()).toEqual(["record_arm", "snapshot"]);
+    const recorderTool = load.tools.find((t) => t.name === "recorder");
+    expect(recorderTool).toBeDefined();
+    expect(Object.keys(recorderTool!.actions).sort()).toEqual(["record_arm", "snapshot"]);
   });
 
   it("names the dropped unit and the reason on the record", async () => {
     const load = await loadPlugins(
       baseTools(),
-      [{ name: "pie-studio" }],
+      [{ name: "sample-recorder" }],
       projectDir,
       "1.2.3",
     );

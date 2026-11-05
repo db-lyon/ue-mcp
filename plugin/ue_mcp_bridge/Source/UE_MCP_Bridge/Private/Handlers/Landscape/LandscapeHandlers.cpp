@@ -647,6 +647,7 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecActorLabel, SpecActorPath, SpecRegion, SpecSpace, SpecCenter, SpecRadius, SpecX, SpecY, SpecPoint, SpecWorldX, SpecWorldY, SpecMaxVertices,
 		MCPParam::Optional(TEXT("includeMask"), EType::Boolean, TEXT("Include the per-vertex hole mask (default true)")),
 		SpecArrayEncodingLimit,
+		SpecEditLayer, SpecEditLayerIndex,
 	});
 	Registry.RegisterHandlerWithTimeout(TEXT("set_landscape_holes"), &SetHoles, 300.0f, {
 		SpecActorLabel, SpecActorPath, SpecRegion, SpecSpace, SpecCenter, SpecRadius, SpecX, SpecY, SpecPoint, SpecWorldX, SpecWorldY, SpecMaxVertices,

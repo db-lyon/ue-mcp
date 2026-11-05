@@ -115,6 +115,58 @@ export function parseRulings(raw: unknown): ParsedRulings {
   return { accepted, rejected };
 }
 
+// ── Which candidates are relevant ──────────────────────────────────────────────
+
+/**
+ * Tool names that name a subsystem a task can be about. A summary that says "pcg" or "niagara" is about that
+ * subsystem; one that says "level" or "asset" is not narrowed, because those words describe almost any task.
+ */
+const GENERIC_TOOLS = new Set([
+  "project", "asset", "level", "editor", "reflection", "gameplay", "feedback", "plugins", "epic", "demo",
+  "conversation", "networking", "source_control", "fab",
+]);
+
+/** Words that name a subsystem by another name than its tool's. */
+const DOMAIN_ALIASES: Record<string, string> = {
+  metasound: "audio", metasounds: "audio", sound: "audio", umg: "widget", anim: "animation", montage: "animation",
+  ability: "gas", abilities: "gas", procedural: "pcg", vfx: "niagara", particle: "niagara", particles: "niagara",
+};
+
+/** A candidate scoring under this share of the best one is noise beside it, not a rival worth a ruling. */
+const RELATIVE_SCORE_FLOOR = 0.5;
+
+/**
+ * Narrow a tool search to the candidates that bear on the summary. When the summary names a subsystem
+ * ("PCG node pin labels"), a candidate from another subsystem that merely shares a word ("pin" on a MetaSound or
+ * Blueprint action) is dropped unless its own description mentions the subsystem; then anything scoring under half
+ * the best remaining candidate is dropped. The gate asks for rulings on what is left.
+ */
+export function relevantCandidates(
+  candidates: GateCandidate[],
+  taskSummary: string,
+  toolNames: readonly string[],
+): GateCandidate[] {
+  const words = new Set(String(taskSummary ?? "").toLowerCase().split(/[^a-z0-9_]+/).filter(Boolean));
+  const domains = new Set<string>();
+  for (const name of toolNames) {
+    if (!GENERIC_TOOLS.has(name) && (words.has(name) || words.has(`${name}s`))) domains.add(name);
+  }
+  for (const word of words) {
+    const tool = DOMAIN_ALIASES[word];
+    if (tool && toolNames.includes(tool)) domains.add(tool);
+  }
+  let kept = candidates;
+  if (domains.size > 0) {
+    const mentions = (c: GateCandidate): boolean => {
+      const own = new Set(`${c.action} ${c.description ?? ""}`.toLowerCase().split(/[^a-z0-9_]+/));
+      return [...domains].some((d) => own.has(d));
+    };
+    kept = candidates.filter((c) => domains.has(c.tool) || mentions(c));
+  }
+  const best = Math.max(0, ...kept.map((c) => c.score ?? 0));
+  return kept.filter((c) => (c.score ?? 0) >= best * RELATIVE_SCORE_FLOOR);
+}
+
 // ── Session-scoped memory ──────────────────────────────────────────────────────
 // Keyed the same way the workaround stack is, so one editor's rulings never
 // answer for another's.

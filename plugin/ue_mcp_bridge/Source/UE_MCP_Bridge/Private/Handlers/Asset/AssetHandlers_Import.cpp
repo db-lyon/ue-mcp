@@ -4,6 +4,10 @@
 // stays in AssetHandlers.cpp::RegisterHandlers.
 
 #include "AssetHandlers.h"
+#include "AssetHandlers_TextureSettings.h"
+#include "../Material/MaterialHandlers.h"
+#include "Materials/MaterialInstance.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
@@ -31,6 +35,8 @@
 #include "Engine/Texture2D.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
+#include "Misc/App.h"
+#include "TextureCompiler.h"
 #include "Animation/Skeleton.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimData/IAnimationDataModel.h"
@@ -481,152 +487,183 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 {
 	FString FileName;
 	if (auto Err = RequireString(Params, TEXT("filePath"), FileName)) return Err;
-
-	FString DestinationPath = OptionalString(Params, TEXT("packagePath"));
-	if (DestinationPath.IsEmpty()) DestinationPath = TEXT("/Game/Meshes");
-
-	// Every parameter is read before anything can fail (#1057).
-	bool bImportMaterials = true;
-	const bool bHasImportMaterials = TryGetBoolParam(Params, TEXT("importMaterials"), bImportMaterials);
-	bool bImportTextures = true;
-	const bool bHasImportTextures = TryGetBoolParam(Params, TEXT("importTextures"), bImportTextures);
-	FString SkeletonPath;
-	const bool bHasSkeletonPath = TryGetStringParam(Params, TEXT("skeletonPath"), SkeletonPath);
-	// #678: morph targets + physics asset creation controls.
+	FString DestinationPath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Meshes"));
+	// The created-asset check below compares against DestinationPath + "/".
+	DestinationPath.RemoveFromEnd(TEXT("/"));
+	const FString AssetName = OptionalString(Params, TEXT("name"), FPaths::GetBaseFilename(FileName));
+	const FString SkeletonPath = OptionalString(Params, TEXT("skeletonPath"));
+	const bool bImportMaterials = OptionalBool(Params, TEXT("importMaterials"), true);
+	const bool bImportTextures = OptionalBool(Params, TEXT("importTextures"), true);
 	const bool bImportMorphTargets = OptionalBool(Params, TEXT("importMorphTargets"), true);
 	const bool bCreatePhysicsAsset = OptionalBool(Params, TEXT("createPhysicsAsset"), false);
-	const double UniformScale = OptionalNumber(Params, TEXT("importUniformScale"), 1.0);
-	// #678: replace_existing now a param (default true preserves prior behavior).
 	const bool bReplaceExisting = OptionalBool(Params, TEXT("replaceExisting"), true);
-	const FString AssetName = OptionalString(Params, TEXT("name"));
-
-	if (!FPaths::FileExists(FileName))
+	const bool bSave = OptionalBool(Params, TEXT("save"), false);
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	const double UniformScale = OptionalNumber(Params, TEXT("importUniformScale"), 1.0);
+	FString Importer = OptionalString(Params, TEXT("importer"), TEXT("auto")).ToLower();
+	if (Importer == TEXT("auto"))
 	{
-		return MCPError(FString::Printf(TEXT("File not found: %s"), *FileName));
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+		Importer = TEXT("interchange");
+#else
+		Importer = TEXT("legacy");
+#endif
 	}
-
-	UFbxFactory* FbxFactory = NewObject<UFbxFactory>();
-	FGCRootScope FactoryRoot(FbxFactory);
-
-	UFbxImportUI* ImportUI = NewObject<UFbxImportUI>();
-	ImportUI->bImportMesh = true;
-	ImportUI->bImportAnimations = false;
-	ImportUI->bImportMaterials = true;
-	ImportUI->bImportTextures = true;
-	ImportUI->bIsObjImport = false;
-	ImportUI->MeshTypeToImport = FBXIT_SkeletalMesh;
-
-	// Apply optional settings
-	if (bHasImportMaterials)
+	if (Importer != TEXT("interchange") && Importer != TEXT("legacy")) return MCPError(TEXT("importer must be auto, interchange or legacy"));
+	if (!FMath::IsFinite(UniformScale) || UniformScale <= 0) return MCPError(TEXT("importUniformScale must be finite and greater than zero"));
+	if (!FPaths::FileExists(FileName)) return MCPError(TEXT("File not found: ") + FileName);
+	const FString Destination = DestinationPath / AssetName;
+	if (AssetName.IsEmpty() || AssetName.Contains(TEXT("/")) || AssetName.Contains(TEXT(".")) || !FPackageName::IsValidLongPackageName(Destination)) return MCPError(TEXT("Invalid mesh destination: ") + Destination);
+	if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount"));
+	if (UObject* Existing = MCPLoadAssetObject(Destination))
 	{
-		ImportUI->bImportMaterials = bImportMaterials;
+		if (!bReplaceExisting) return MCPError(TEXT("Destination exists and replaceExisting is false: ") + Destination);
+		if (!Cast<USkeletalMesh>(Existing)) return MCPAssetWrongTypeError(Destination, Existing, TEXT("SkeletalMesh"));
+		if (auto Blocked = MCPAssetWriteBlockedError(Existing, Destination, TEXT("import skeletal mesh"))) return Blocked;
 	}
-	if (bHasImportTextures)
+	USkeleton* Skeleton = nullptr;
+	if (!SkeletonPath.IsEmpty())
 	{
-		ImportUI->bImportTextures = bImportTextures;
+		Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
+		if (!Skeleton) return MCPAssetLoadError(SkeletonPath, TEXT("Skeleton"));
 	}
-
-	// Optionally set an existing skeleton
-	if (bHasSkeletonPath && !SkeletonPath.IsEmpty())
-	{
-		USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
-		if (Skeleton)
-		{
-			ImportUI->Skeleton = Skeleton;
-		}
-		else
-		{
-			auto Result = MCPSuccess();
-			Result->SetStringField(TEXT("warning"), FString::Printf(TEXT("Skeleton not found: %s, importing without skeleton target"), *SkeletonPath));
-			// Continue with import - don't return here, just note the warning
-		}
-	}
-
-	ImportUI->bCreatePhysicsAsset = bCreatePhysicsAsset;
-	if (ImportUI->SkeletalMeshImportData)
-	{
-		ImportUI->SkeletalMeshImportData->bImportMorphTargets = bImportMorphTargets;
-		// #687: metre-authored FBX (Blender FBX_SCALE_ALL) lands 100x too small
-		// on a cm skeleton. Expose the uniform-scale knob; default 1.0 leaves
-		// cm-authored FBX untouched. Pass 100 for metre FBX.
-		ImportUI->SkeletalMeshImportData->ImportUniformScale = (float)UniformScale;
-	}
-
-	FbxFactory->ImportUI = ImportUI;
 
 	UAssetImportTask* Task = NewObject<UAssetImportTask>();
 	FGCRootScope TaskRoot(Task);
 	Task->bAutomated = true;
+	Task->bAsync = false;
 	Task->bReplaceExisting = bReplaceExisting;
+	Task->bReplaceExistingSettings = true;
 	Task->bSave = false;
 	Task->Filename = FileName;
 	Task->DestinationPath = DestinationPath;
-	Task->Factory = FbxFactory;
-
-	// Optional asset name
-	if (!AssetName.IsEmpty())
+	Task->DestinationName = AssetName;
+	TArray<TUniquePtr<FGCRootScope>> Roots;
+	if (Importer == TEXT("interchange"))
 	{
-		Task->DestinationName = AssetName;
+		UClass* PipelineClass = LoadClass<UObject>(nullptr, TEXT("/Script/InterchangePipelines.InterchangeGenericAssetsPipeline"));
+		UClass* OverrideClass = LoadClass<UObject>(nullptr, TEXT("/Script/InterchangeEngine.InterchangePipelineStackOverride"));
+		if (!PipelineClass || !OverrideClass) return MCPError(TEXT("Interchange import is unavailable; enable the Interchange Editor plugin"));
+		UObject* Pipeline = NewObject<UObject>(GetTransientPackage(), PipelineClass);
+		UObject* Stack = NewObject<UObject>(GetTransientPackage(), OverrideClass);
+		Roots.Add(MakeUnique<FGCRootScope>(Pipeline));
+		Roots.Add(MakeUnique<FGCRootScope>(Stack));
+		auto Settings = MakeShared<FJsonObject>();
+		Settings->SetStringField(TEXT("AssetName"), AssetName);
+		Settings->SetBoolField(TEXT("bUseSourceNameForAsset"), false);
+		Settings->SetStringField(TEXT("ReimportStrategy"), TEXT("ApplyPipelineProperties"));
+		Settings->SetNumberField(TEXT("ImportOffsetUniformScale"), UniformScale);
+		Settings->SetStringField(TEXT("CommonMeshesProperties.ForceAllMeshAsType"), TEXT("SkeletalMesh"));
+		Settings->SetBoolField(TEXT("MeshPipeline.bImportSkeletalMeshes"), true);
+		Settings->SetBoolField(TEXT("MeshPipeline.bImportStaticMeshes"), false);
+		Settings->SetBoolField(TEXT("MeshPipeline.bImportMorphTargets"), bImportMorphTargets);
+		Settings->SetBoolField(TEXT("MeshPipeline.bCreatePhysicsAsset"), bCreatePhysicsAsset);
+		Settings->SetBoolField(TEXT("AnimationPipeline.bImportAnimations"), false);
+		Settings->SetBoolField(TEXT("MaterialPipeline.bImportMaterials"), bImportMaterials);
+		Settings->SetBoolField(TEXT("MaterialPipeline.TexturePipeline.bImportTextures"), bImportTextures);
+		Settings->SetStringField(TEXT("CommonSkeletalMeshesAndAnimationsProperties.Skeleton"), Skeleton ? Skeleton->GetPathName() : TEXT("None"));
+		// Older versions have no automatic skeleton selection setting.
+		FProperty* AutoProperty = nullptr;
+		void* AutoAddress = nullptr;
+		UObject* AutoOwner = nullptr;
+		FString Error;
+		if (MCPJsonProperty::ResolveDottedPath(Pipeline, TEXT("CommonSkeletalMeshesAndAnimationsProperties.bTryAutoSelectSkeleton"), AutoProperty, AutoAddress, AutoOwner, Error))
+			Settings->SetBoolField(TEXT("CommonSkeletalMeshesAndAnimationsProperties.bTryAutoSelectSkeleton"), false);
+		TArray<TSharedPtr<FJsonValue>> Applied;
+		if (!MCPApplyImportSettings({ Pipeline }, Settings, Applied, Error)) return MCPError(Error);
+		auto StackSettings = MakeShared<FJsonObject>();
+		StackSettings->SetArrayField(TEXT("OverridePipelines"), { MakeShared<FJsonValueString>(Pipeline->GetPathName()) });
+		if (!MCPApplyImportSettings({ Stack }, StackSettings, Applied, Error)) return MCPError(Error);
+		Task->Options = Stack;
 	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	TArray<UAssetImportTask*> Tasks;
-	Tasks.Add(Task);
-	AssetToolsModule.Get().ImportAssetTasks(Tasks);
-
-	TArray<TSharedPtr<FJsonValue>> ImportedPaths;
-	if (Task->GetObjects().Num() > 0)
+	else
 	{
-		for (UObject* ImportedObj : Task->GetObjects())
-		{
-			if (ImportedObj)
-			{
-				FString ObjPath = ImportedObj->GetPathName();
-				ImportedPaths.Add(MakeShared<FJsonValueString>(ObjPath));
-			}
-		}
+		UFbxFactory* Factory = NewObject<UFbxFactory>();
+		Roots.Add(MakeUnique<FGCRootScope>(Factory));
+		UFbxImportUI* UI = NewObject<UFbxImportUI>(Factory);
+		UI->bAutomatedImportShouldDetectType = false;
+		UI->bImportMesh = true;
+		UI->bImportAsSkeletal = true;
+		UI->bImportAnimations = false;
+		UI->bImportMaterials = bImportMaterials;
+		UI->bImportTextures = bImportTextures;
+		UI->bCreatePhysicsAsset = bCreatePhysicsAsset;
+		UI->MeshTypeToImport = FBXIT_SkeletalMesh;
+		UI->Skeleton = Skeleton;
+		UI->SkeletalMeshImportData->bImportMorphTargets = bImportMorphTargets;
+		UI->SkeletalMeshImportData->ImportUniformScale = static_cast<float>(UniformScale);
+		Factory->ImportUI = UI;
+		Task->Factory = Factory;
+		Task->Options = UI;
 	}
-
 	auto Result = MCPSuccess();
-	if (ImportedPaths.Num() > 0) { MCPSetCreated(Result); }
+	Result->SetStringField(TEXT("importer"), Importer);
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
-	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
-	Result->SetNumberField(TEXT("importedCount"), ImportedPaths.Num());
-	Result->SetBoolField(TEXT("success"), ImportedPaths.Num() > 0);
 	Result->SetNumberField(TEXT("importUniformScale"), UniformScale);
-
-	// #678: post-import readback so a caller can confirm scale (box extent),
-	// morph-target names, and LOD count without a second round-trip.
-	for (UObject* Obj : Task->GetObjects())
+	Result->SetBoolField(TEXT("dryRun"), bDryRun);
+	if (bDryRun)
 	{
-		if (USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(Obj))
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetBoolField(TEXT("saved"), false);
+		return MCPResult(Result);
+	}
+	TArray<FAssetData> ExistingAssets;
+	FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get().GetAssetsByPath(FName(*DestinationPath), ExistingAssets, true);
+	TSet<FString> ExistingPaths;
+	for (const auto& Asset : ExistingAssets) ExistingPaths.Add(Asset.GetObjectPathString());
+	if (Skeleton) ExistingPaths.Add(Skeleton->GetPathName());
+	FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().ImportAssetTasks({ Task });
+	TArray<TSharedPtr<FJsonValue>> ImportedPaths, Meshes, NewPaths;
+	bool bAllSaved = bSave;
+	for (UObject* Object : Task->GetObjects())
+	{
+		if (!Object) continue;
+		ImportedPaths.Add(MakeShared<FJsonValueString>(Object->GetPathName()));
+		if (Object->GetOutermost()->GetName().StartsWith(DestinationPath + TEXT("/")) && !ExistingPaths.Contains(Object->GetPathName()))
+			NewPaths.Add(MakeShared<FJsonValueString>(Object->GetPathName()));
+		if (USkeletalMesh* Mesh = Cast<USkeletalMesh>(Object))
 		{
-			const FBoxSphereBounds Bounds = SkelMesh->GetBounds();
-			Result->SetObjectField(TEXT("boxExtent"), MCPVec3ToJsonObject(Bounds.BoxExtent));
-			Result->SetNumberField(TEXT("boundsRadius"), Bounds.SphereRadius);
-			TArray<TSharedPtr<FJsonValue>> MorphNames;
-			for (UMorphTarget* MT : SkelMesh->GetMorphTargets())
+			auto ReadParams = MakeShared<FJsonObject>();
+			ReadParams->SetStringField(TEXT("assetPath"), Mesh->GetPathName());
+			Meshes.Add(GetMeshInfo(ReadParams));
+			if (Meshes.Num() == 1)
 			{
-				if (MT) MorphNames.Add(MakeShared<FJsonValueString>(MT->GetName()));
+				Result->SetObjectField(TEXT("boxExtent"), MCPVec3ToJsonObject(Mesh->GetBounds().BoxExtent));
+				Result->SetNumberField(TEXT("boundsRadius"), Mesh->GetBounds().SphereRadius);
+				Result->SetNumberField(TEXT("numLODs"), Mesh->GetLODNum());
+				Result->SetStringField(TEXT("skeleton"), Mesh->GetSkeleton() ? Mesh->GetSkeleton()->GetPathName() : FString());
+				TArray<TSharedPtr<FJsonValue>> MorphNames;
+				for (UMorphTarget* Morph : Mesh->GetMorphTargets()) if (Morph) MorphNames.Add(MakeShared<FJsonValueString>(Morph->GetName()));
+				Result->SetArrayField(TEXT("morphTargets"), MorphNames);
+				Result->SetNumberField(TEXT("morphTargetCount"), MorphNames.Num());
 			}
-			Result->SetArrayField(TEXT("morphTargets"), MorphNames);
-			Result->SetNumberField(TEXT("morphTargetCount"), MorphNames.Num());
-			Result->SetNumberField(TEXT("numLODs"), SkelMesh->GetLODNum());
-			if (USkeleton* Sk = SkelMesh->GetSkeleton())
-			{
-				Result->SetStringField(TEXT("skeleton"), Sk->GetPathName());
-			}
-			break;
+		}
+		if (bSave)
+		{
+			FString SaveError;
+			const bool bSaved = SaveAssetPackageChecked(Object, SaveError);
+			bAllSaved &= bSaved;
+			MCPNoteSaveOutcome(Result, Object->GetPathName(), bSaved, SaveError);
 		}
 	}
-	if (ImportedPaths.Num() == 0)
+	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
+	Result->SetArrayField(TEXT("meshes"), Meshes);
+	Result->SetNumberField(TEXT("importedCount"), ImportedPaths.Num());
+	Result->SetBoolField(TEXT("saved"), bAllSaved && Meshes.Num() > 0);
+	Result->SetBoolField(TEXT("success"), Meshes.Num() > 0 && (!bSave || bAllSaved));
+	if (Meshes.Num() == 0) Result->SetStringField(TEXT("error"), TEXT("Import produced no skeletal meshes"));
+	if (NewPaths.Num() > 0)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
+		MCPSetCreated(Result);
+		auto Rollback = MakeShared<FJsonObject>();
+		Rollback->SetArrayField(TEXT("assetPaths"), NewPaths);
+		MCPSetRollback(Result, TEXT("delete_asset_batch"), Rollback);
 	}
-
-	EmitImportedAssetsRollback(Result, ImportedPaths);
-
+	else Result->SetBoolField(TEXT("rollbackPossible"), false);
+	if (ImportedPaths.Num() > NewPaths.Num()) MCPSetUpdated(Result);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"), TEXT("Rollback deletes only newly imported assets, subject to referencer checks. Replaced meshes and edits to shared skeletons or companion assets require backup restoration."));
 	return MCPResult(Result);
 }
 
@@ -999,400 +1036,292 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>&
 
 TSharedPtr<FJsonValue> FAssetHandlers::ListTextureProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
-
+	const TArray<TSharedPtr<FJsonValue>>* Paths = nullptr;
+	const bool bBatch = TryGetArrayParam(Params, TEXT("assetPaths"), Paths);
+	const FString AssetPath = OptionalString(Params, TEXT("assetPath"));
+	if (bBatch)
+	{
+		if (!AssetPath.IsEmpty() || !Paths || Paths->Num() == 0 || Paths->Num() > 500) return MCPError(TEXT("Supply assetPath or 1-500 assetPaths"));
+		auto Result = MCPSuccess();
+		TArray<TSharedPtr<FJsonValue>> Items;
+		bool bSuccess = true;
+		for (const auto& Path : *Paths)
+		{
+			FString Text;
+			if (!Path->TryGetString(Text) || Text.IsEmpty()) return MCPError(TEXT("assetPaths must contain nonempty strings"));
+			auto Single = MakeShared<FJsonObject>();
+			Single->SetStringField(TEXT("assetPath"), Text);
+			auto Row = ListTextureProperties(Single);
+			bSuccess &= Row->AsObject()->GetBoolField(TEXT("success"));
+			Items.Add(Row);
+		}
+		Result->SetBoolField(TEXT("success"), bSuccess);
+		Result->SetArrayField(TEXT("items"), Items);
+		return MCPResult(Result);
+	}
+	if (AssetPath.IsEmpty()) return MCPError(TEXT("Supply assetPath or assetPaths"));
 	TSharedPtr<FJsonValue> LoadError;
 	UObject* Asset = MCPRequireAssetObject(AssetPath, LoadError);
 	if (!Asset) return LoadError;
-
 	UTexture2D* Texture = Cast<UTexture2D>(Asset);
-	if (!Texture)
-	{
-		return MCPAssetWrongTypeError(AssetPath, Asset, TEXT("Texture2D"));
-	}
-
-	auto Result = MCPSuccess();
+	if (!Texture) return MCPAssetWrongTypeError(AssetPath, Asset, TEXT("Texture2D"));
+	// A texture imported a moment ago may still be compiling, and reads 0 x 0 until it is done.
+	FTextureCompilingManager::Get().FinishCompilation({ Texture });
+	auto Result = AssetTextureSettings::Read(Texture);
+	Result->SetBoolField(TEXT("success"), true);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), Texture->GetName());
-
-	// Dimensions
-	Result->SetNumberField(TEXT("sizeX"), Texture->GetSizeX());
-	Result->SetNumberField(TEXT("sizeY"), Texture->GetSizeY());
-
-	// Compression settings
-	FString CompressionStr;
-	switch (Texture->CompressionSettings)
-	{
-		case TC_Default:         CompressionStr = TEXT("Default"); break;
-		case TC_Normalmap:       CompressionStr = TEXT("Normalmap"); break;
-		case TC_Grayscale:       CompressionStr = TEXT("Grayscale"); break;
-		case TC_Displacementmap: CompressionStr = TEXT("Displacementmap"); break;
-		case TC_VectorDisplacementmap: CompressionStr = TEXT("VectorDisplacementmap"); break;
-		case TC_HDR:             CompressionStr = TEXT("HDR"); break;
-		case TC_EditorIcon:      CompressionStr = TEXT("EditorIcon"); break;
-		case TC_Alpha:           CompressionStr = TEXT("Alpha"); break;
-		case TC_DistanceFieldFont: CompressionStr = TEXT("DistanceFieldFont"); break;
-		case TC_HDR_Compressed:  CompressionStr = TEXT("HDR_Compressed"); break;
-		case TC_BC7:             CompressionStr = TEXT("BC7"); break;
-		default:                 CompressionStr = TEXT("Unknown"); break;
-	}
-	Result->SetStringField(TEXT("compressionSettings"), CompressionStr);
-
-	// LOD group
-	FString LODGroupStr;
-	switch (Texture->LODGroup)
-	{
-		case TEXTUREGROUP_World:           LODGroupStr = TEXT("World"); break;
-		case TEXTUREGROUP_WorldNormalMap:   LODGroupStr = TEXT("WorldNormalMap"); break;
-		case TEXTUREGROUP_WorldSpecular:    LODGroupStr = TEXT("WorldSpecular"); break;
-		case TEXTUREGROUP_Character:        LODGroupStr = TEXT("Character"); break;
-		case TEXTUREGROUP_CharacterNormalMap: LODGroupStr = TEXT("CharacterNormalMap"); break;
-		case TEXTUREGROUP_CharacterSpecular: LODGroupStr = TEXT("CharacterSpecular"); break;
-		case TEXTUREGROUP_Weapon:           LODGroupStr = TEXT("Weapon"); break;
-		case TEXTUREGROUP_WeaponNormalMap:   LODGroupStr = TEXT("WeaponNormalMap"); break;
-		case TEXTUREGROUP_WeaponSpecular:    LODGroupStr = TEXT("WeaponSpecular"); break;
-		case TEXTUREGROUP_Vehicle:           LODGroupStr = TEXT("Vehicle"); break;
-		case TEXTUREGROUP_VehicleNormalMap:   LODGroupStr = TEXT("VehicleNormalMap"); break;
-		case TEXTUREGROUP_VehicleSpecular:    LODGroupStr = TEXT("VehicleSpecular"); break;
-		case TEXTUREGROUP_UI:               LODGroupStr = TEXT("UI"); break;
-		case TEXTUREGROUP_Lightmap:          LODGroupStr = TEXT("Lightmap"); break;
-		case TEXTUREGROUP_Shadowmap:         LODGroupStr = TEXT("Shadowmap"); break;
-		case TEXTUREGROUP_Effects:           LODGroupStr = TEXT("Effects"); break;
-		case TEXTUREGROUP_EffectsNotFiltered: LODGroupStr = TEXT("EffectsNotFiltered"); break;
-		case TEXTUREGROUP_Skybox:            LODGroupStr = TEXT("Skybox"); break;
-		case TEXTUREGROUP_Pixels2D:          LODGroupStr = TEXT("Pixels2D"); break;
-		default:                             LODGroupStr = TEXT("Unknown"); break;
-	}
-	Result->SetStringField(TEXT("lodGroup"), LODGroupStr);
-
-	// Other properties
-	Result->SetBoolField(TEXT("sRGB"), Texture->SRGB);
-	Result->SetBoolField(TEXT("neverStream"), Texture->NeverStream);
-
-	// Num mips
+	// With no RHI there is no platform data to size; the source is the same image.
+	const bool bFromSource = Texture->GetSizeX() == 0 && Texture->Source.IsValid();
+	Result->SetNumberField(TEXT("sizeX"), bFromSource ? Texture->Source.GetSizeX() : Texture->GetSizeX());
+	Result->SetNumberField(TEXT("sizeY"), bFromSource ? Texture->Source.GetSizeY() : Texture->GetSizeY());
 	Result->SetNumberField(TEXT("numMips"), Texture->GetNumMips());
-
-	// Pixel format
 	Result->SetStringField(TEXT("pixelFormat"), GPixelFormats[Texture->GetPixelFormat()].Name);
-
 	return MCPResult(Result);
 }
-
 
 TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
-
-	// Each setting arrives at the top level or inside settings{}; the top level
-	// wins when both carry it. All are read before the load.
-	const TSharedPtr<FJsonObject>* SettingsField = nullptr;
-	const TSharedPtr<FJsonObject> Settings = (TryGetObjectParam(Params, TEXT("settings"), SettingsField) && SettingsField)
-		? *SettingsField : TSharedPtr<FJsonObject>();
-	FString CompressionStr;
-	const bool bHasCompression = TryGetStringParam(Params, TEXT("compressionSettings"), CompressionStr)
-		|| (Settings.IsValid() && Settings->TryGetStringField(TEXT("compressionSettings"), CompressionStr));
-	FString LODGroupStr;
-	const bool bHasLODGroup = TryGetStringParam(Params, TEXT("lodGroup"), LODGroupStr)
-		|| (Settings.IsValid() && Settings->TryGetStringField(TEXT("lodGroup"), LODGroupStr));
-	bool bSRGB = false;
-	const bool bHasSRGB = TryGetBoolParam(Params, TEXT("sRGB"), bSRGB)
-		|| (Settings.IsValid() && Settings->TryGetBoolField(TEXT("sRGB"), bSRGB));
-	bool bNeverStream = false;
-	const bool bHasNeverStream = TryGetBoolParam(Params, TEXT("neverStream"), bNeverStream)
-		|| (Settings.IsValid() && Settings->TryGetBoolField(TEXT("neverStream"), bNeverStream));
-
-	TSharedPtr<FJsonValue> LoadError;
-	UObject* Asset = MCPRequireAssetObject(AssetPath, LoadError);
-	if (!Asset) return LoadError;
-
-	UTexture2D* Texture = Cast<UTexture2D>(Asset);
-	if (!Texture)
+	// Every declared parameter is read before anything can refuse (#1057); Parse
+	// stops at the first bad setting, which left the rest unread.
+	MCPReadParamsAhead(Params, { TEXT("preset"), TEXT("settings"), TEXT("compressionSettings"), TEXT("lodGroup"), TEXT("sRGB"),
+		TEXT("neverStream"), TEXT("flipGreenChannel"), TEXT("maxTextureSize") });
+	const FString AssetPath = OptionalString(Params, TEXT("assetPath"));
+	const TArray<TSharedPtr<FJsonValue>>* Paths = nullptr;
+	const bool bBatch = TryGetArrayParam(Params, TEXT("assetPaths"), Paths);
+	const bool bSave = OptionalBool(Params, TEXT("save"), false);
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	TSharedPtr<FJsonObject> Settings;
+	FString Error;
+	if (!AssetTextureSettings::Parse(Params, Settings, Error)) return MCPError(Error);
+	if (Settings->Values.Num() == 0) return MCPError(TEXT("Supply a preset or texture settings"));
+	TArray<FString> AssetPaths;
+	if (bBatch)
 	{
-		return MCPAssetWrongTypeError(AssetPath, Asset, TEXT("Texture2D"));
-	}
-
-	// Capture previous values for self-inverse rollback. Use reflection paths
-	// since the enum string mapping is long.
-	const TextureCompressionSettings PrevCompression = Texture->CompressionSettings;
-	const TextureGroup PrevLODGroup = Texture->LODGroup;
-	const bool PrevSRGB = Texture->SRGB;
-	const bool PrevNeverStream = Texture->NeverStream;
-
-	TArray<FString> ModifiedProperties;
-
-	// Compression settings
-	if (bHasCompression)
-	{
-		TextureCompressionSettings NewCompression = TC_Default;
-		if (CompressionStr == TEXT("Default"))                    NewCompression = TC_Default;
-		else if (CompressionStr == TEXT("Normalmap"))             NewCompression = TC_Normalmap;
-		else if (CompressionStr == TEXT("Grayscale"))             NewCompression = TC_Grayscale;
-		else if (CompressionStr == TEXT("Displacementmap"))       NewCompression = TC_Displacementmap;
-		else if (CompressionStr == TEXT("VectorDisplacementmap")) NewCompression = TC_VectorDisplacementmap;
-		else if (CompressionStr == TEXT("HDR"))                   NewCompression = TC_HDR;
-		else if (CompressionStr == TEXT("EditorIcon"))            NewCompression = TC_EditorIcon;
-		else if (CompressionStr == TEXT("Alpha"))                 NewCompression = TC_Alpha;
-		else if (CompressionStr == TEXT("DistanceFieldFont"))     NewCompression = TC_DistanceFieldFont;
-		else if (CompressionStr == TEXT("HDR_Compressed"))        NewCompression = TC_HDR_Compressed;
-		else if (CompressionStr == TEXT("BC7"))                   NewCompression = TC_BC7;
-
-		Texture->CompressionSettings = NewCompression;
-		ModifiedProperties.Add(TEXT("compressionSettings"));
-	}
-
-	// LOD group
-	if (bHasLODGroup)
-	{
-		TextureGroup NewGroup = TEXTUREGROUP_World;
-		if (LODGroupStr == TEXT("World"))                    NewGroup = TEXTUREGROUP_World;
-		else if (LODGroupStr == TEXT("WorldNormalMap"))       NewGroup = TEXTUREGROUP_WorldNormalMap;
-		else if (LODGroupStr == TEXT("WorldSpecular"))        NewGroup = TEXTUREGROUP_WorldSpecular;
-		else if (LODGroupStr == TEXT("Character"))            NewGroup = TEXTUREGROUP_Character;
-		else if (LODGroupStr == TEXT("CharacterNormalMap"))   NewGroup = TEXTUREGROUP_CharacterNormalMap;
-		else if (LODGroupStr == TEXT("CharacterSpecular"))    NewGroup = TEXTUREGROUP_CharacterSpecular;
-		else if (LODGroupStr == TEXT("Weapon"))               NewGroup = TEXTUREGROUP_Weapon;
-		else if (LODGroupStr == TEXT("WeaponNormalMap"))      NewGroup = TEXTUREGROUP_WeaponNormalMap;
-		else if (LODGroupStr == TEXT("WeaponSpecular"))       NewGroup = TEXTUREGROUP_WeaponSpecular;
-		else if (LODGroupStr == TEXT("Vehicle"))              NewGroup = TEXTUREGROUP_Vehicle;
-		else if (LODGroupStr == TEXT("VehicleNormalMap"))     NewGroup = TEXTUREGROUP_VehicleNormalMap;
-		else if (LODGroupStr == TEXT("VehicleSpecular"))      NewGroup = TEXTUREGROUP_VehicleSpecular;
-		else if (LODGroupStr == TEXT("UI"))                   NewGroup = TEXTUREGROUP_UI;
-		else if (LODGroupStr == TEXT("Lightmap"))             NewGroup = TEXTUREGROUP_Lightmap;
-		else if (LODGroupStr == TEXT("Shadowmap"))            NewGroup = TEXTUREGROUP_Shadowmap;
-		else if (LODGroupStr == TEXT("Effects"))              NewGroup = TEXTUREGROUP_Effects;
-		else if (LODGroupStr == TEXT("EffectsNotFiltered"))   NewGroup = TEXTUREGROUP_EffectsNotFiltered;
-		else if (LODGroupStr == TEXT("Skybox"))               NewGroup = TEXTUREGROUP_Skybox;
-		else if (LODGroupStr == TEXT("Pixels2D"))             NewGroup = TEXTUREGROUP_Pixels2D;
-
-		Texture->LODGroup = NewGroup;
-		ModifiedProperties.Add(TEXT("lodGroup"));
-	}
-
-	// sRGB
-	if (bHasSRGB)
-	{
-		Texture->SRGB = bSRGB;
-		ModifiedProperties.Add(TEXT("sRGB"));
-	}
-
-	// NeverStream
-	if (bHasNeverStream)
-	{
-		Texture->NeverStream = bNeverStream;
-		ModifiedProperties.Add(TEXT("neverStream"));
-	}
-
-	if (ModifiedProperties.Num() == 0)
-	{
-		return MCPError(TEXT("No valid properties specified to set"));
-	}
-
-	// Notify the engine of property changes and mark dirty
-	Texture->PostEditChange();
-	Texture->MarkPackageDirty();
-
-	TArray<TSharedPtr<FJsonValue>> ModifiedArray;
-	for (const FString& PropName : ModifiedProperties)
-	{
-		ModifiedArray.Add(MakeShared<FJsonValueString>(PropName));
-	}
-
-	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
-	Result->SetStringField(TEXT("assetPath"), AssetPath);
-	Result->SetArrayField(TEXT("modifiedProperties"), ModifiedArray);
-	Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Modified %d texture properties"), ModifiedProperties.Num()));
-
-	// Complete self-inverse, routed the way SetTextureSettingsByType routes its
-	// own: bulk_set_asset_properties writes UPROPERTYs by name and resolves an
-	// enum from its enumerator name, so all four of these come back exactly.
-	//
-	// This deliberately does NOT go back through set_texture_settings. That
-	// action maps compressionSettings from an 11-entry list and lodGroup from a
-	// 19-entry list, and both fall through to a default (TC_Default,
-	// TEXTUREGROUP_World) on anything outside them, so a prior value from
-	// elsewhere in either enum would be silently rewritten to the wrong one.
-	// GetNameStringByValue has no such gap.
-	TSharedPtr<FJsonObject> Prev = MakeShared<FJsonObject>();
-	for (const FString& P : ModifiedProperties)
-	{
-		if (P == TEXT("compressionSettings"))
+		if (!AssetPath.IsEmpty() || !Paths || Paths->Num() == 0 || Paths->Num() > 500) return MCPError(TEXT("Supply assetPath or 1-500 assetPaths"));
+		for (const auto& Path : *Paths)
 		{
-			Prev->SetStringField(TEXT("CompressionSettings"),
-				StaticEnum<TextureCompressionSettings>()->GetNameStringByValue((int64)PrevCompression));
+			FString Text;
+			if (!Path->TryGetString(Text) || Text.IsEmpty()) return MCPError(TEXT("assetPaths must contain nonempty strings"));
+			AssetPaths.AddUnique(Text);
 		}
-		else if (P == TEXT("lodGroup"))
-		{
-			Prev->SetStringField(TEXT("LODGroup"),
-				StaticEnum<TextureGroup>()->GetNameStringByValue((int64)PrevLODGroup));
-		}
-		else if (P == TEXT("sRGB"))       Prev->SetBoolField(TEXT("SRGB"), PrevSRGB);
-		else if (P == TEXT("neverStream")) Prev->SetBoolField(TEXT("NeverStream"), PrevNeverStream);
 	}
-	// ModifiedProperties is never empty here: the handler returns an error above
-	// when nothing was named, so there is always at least one field to restore.
-	TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
-	Item->SetStringField(TEXT("assetPath"), AssetPath);
-	Item->SetObjectField(TEXT("properties"), Prev);
-	TArray<TSharedPtr<FJsonValue>> Items;
-	Items.Add(MakeShared<FJsonValueObject>(Item));
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetArrayField(TEXT("items"), Items);
-	MCPSetRollback(Result, TEXT("bulk_set_asset_properties"), Payload);
-	Result->SetBoolField(TEXT("rollbackLossy"), false);
+	else if (!AssetPath.IsEmpty()) AssetPaths.Add(AssetPath);
+	else return MCPError(TEXT("Supply assetPath or assetPaths"));
 
+	TArray<UTexture2D*> Textures;
+	for (const FString& Path : AssetPaths)
+	{
+		TSharedPtr<FJsonValue> LoadError;
+		UObject* Asset = MCPRequireAssetObject(Path, LoadError);
+		if (!Asset) return LoadError;
+		UTexture2D* Texture = Cast<UTexture2D>(Asset);
+		if (!Texture) return MCPAssetWrongTypeError(Path, Asset, TEXT("Texture2D"));
+		if (auto Blocked = MCPAssetWriteBlockedError(Texture, Path, TEXT("set texture settings"))) return Blocked;
+		Textures.AddUnique(Texture);
+	}
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TArray<TSharedPtr<FJsonValue>> InverseItems;
+	bool bAllSaved = bSave && !bDryRun;
+	FScopedTransaction Transaction(NSLOCTEXT("AssetPipeline", "TextureSettings", "Set texture settings"), !bDryRun);
+	for (UTexture2D* Texture : Textures)
+	{
+		auto Before = AssetTextureSettings::Read(Texture);
+		auto Row = MCPSuccess();
+		Row->SetStringField(TEXT("assetPath"), bBatch ? Texture->GetPathName() : AssetPath);
+		Row->SetObjectField(TEXT("previousSettings"), Before);
+		Row->SetObjectField(TEXT("requestedSettings"), Settings);
+		Row->SetBoolField(TEXT("saved"), false);
+		if (!bDryRun)
+		{
+			Texture->Modify();
+			AssetTextureSettings::Apply(Texture, Settings);
+			Texture->PostEditChange();
+			Texture->MarkPackageDirty();
+			FString SaveError;
+			const bool bSaved = bSave && SaveAssetPackageChecked(Texture, SaveError);
+			Row->SetBoolField(TEXT("saved"), bSaved);
+			if (bSave) MCPNoteSaveOutcome(Row, Texture->GetPathName(), bSaved, SaveError);
+			bAllSaved &= bSaved;
+		}
+		Row->SetObjectField(TEXT("readBack"), AssetTextureSettings::Read(Texture));
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+		auto Inverse = MakeShared<FJsonObject>();
+		Inverse->SetStringField(TEXT("assetPath"), Texture->GetPathName());
+		auto Properties = MakeShared<FJsonObject>();
+		Properties->SetStringField(TEXT("CompressionSettings"), TEXT("TC_") + Before->GetStringField(TEXT("compressionSettings")));
+		Properties->SetStringField(TEXT("LODGroup"), TEXT("TEXTUREGROUP_") + Before->GetStringField(TEXT("lodGroup")));
+		Properties->SetBoolField(TEXT("SRGB"), Before->GetBoolField(TEXT("sRGB")));
+		Properties->SetBoolField(TEXT("NeverStream"), Before->GetBoolField(TEXT("neverStream")));
+		Properties->SetBoolField(TEXT("bFlipGreenChannel"), Before->GetBoolField(TEXT("flipGreenChannel")));
+		Properties->SetNumberField(TEXT("MaxTextureSize"), Before->GetNumberField(TEXT("maxTextureSize")));
+		// Restore only requested fields, preserving unrelated edits made later.
+		for (const auto& Pair : Before->Values)
+		{
+			const FString Key(*Pair.Key);
+			if (Settings->HasField(Key)) continue;
+			const FString PropertyName = Key == TEXT("sRGB") ? TEXT("SRGB")
+				: Key == TEXT("lodGroup") ? TEXT("LODGroup")
+				: Key == TEXT("flipGreenChannel") ? TEXT("bFlipGreenChannel")
+				: Key.Left(1).ToUpper() + Key.Mid(1);
+			Properties->RemoveField(PropertyName);
+		}
+		Inverse->SetObjectField(TEXT("properties"), Properties);
+		InverseItems.Add(MakeShared<FJsonValueObject>(Inverse));
+	}
+	auto Result = bBatch ? MCPSuccess() : Rows[0]->AsObject();
+	if (bBatch) Result->SetArrayField(TEXT("items"), Rows);
+	Result->SetBoolField(TEXT("dryRun"), bDryRun);
+	Result->SetBoolField(TEXT("saved"), bAllSaved);
+	Result->SetBoolField(TEXT("success"), !bSave || bDryRun || bAllSaved);
+	Result->SetNumberField(TEXT("textureCount"), Textures.Num());
+	TArray<TSharedPtr<FJsonValue>> Modified;
+	for (const auto& Pair : Settings->Values) Modified.Add(MakeShared<FJsonValueString>(FString(*Pair.Key)));
+	Result->SetArrayField(TEXT("modifiedProperties"), Modified);
+	if (!bBatch) Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Modified %d texture properties"), bDryRun ? 0 : Modified.Num()));
+	if (!bDryRun)
+	{
+		MCPSetUpdated(Result);
+		auto Rollback = MakeShared<FJsonObject>();
+		Rollback->SetArrayField(TEXT("items"), InverseItems);
+		Rollback->SetBoolField(TEXT("save"), bSave);
+		MCPSetRollback(Result, TEXT("bulk_set_asset_properties"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("Restores only the requested settings on each texture, using the same save choice."));
+	}
+	else Result->SetBoolField(TEXT("unchanged"), true);
 	return MCPResult(Result);
 }
 
-
-// #430: single-call batch of texture imports. Wraps N AssetImportTasks in one
-// ImportAssetTasks call so the loop stays inside the editor (no per-import
-// bridge round-trip). Per-item result records mirror what import_texture
-// would have returned for each individual call.
 TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
 	const bool bHasItems = TryGetArrayParam(Params, TEXT("items"), Items);
 	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
 	const bool bAutomated = OptionalBool(Params, TEXT("automated"), true);
 	const FString DefaultPackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Textures"));
-	if (!bHasItems || !Items)
-	{
-		return MCPError(TEXT("Missing 'items' array. Each entry: { filePath, packagePath?, name?, replaceExisting? }"));
-	}
+	if (!bHasItems || !Items || Items->Num() == 0 || Items->Num() > 500) return MCPError(TEXT("Supply 1-500 items"));
 
 	TArray<UAssetImportTask*> Tasks;
-	TArray<FGCRootScope*> Roots;
-	TArray<TSharedPtr<FJsonObject>> ItemRecords;
-	Tasks.Reserve(Items->Num());
-	ItemRecords.Reserve(Items->Num());
-
-	for (const TSharedPtr<FJsonValue>& Entry : *Items)
+	TArray<TUniquePtr<FGCRootScope>> Roots;
+	TArray<TSharedPtr<FJsonObject>> Settings;
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TSet<FString> Destinations;
+	for (const auto& Entry : *Items)
 	{
-		TSharedPtr<FJsonObject> Obj = Entry.IsValid() ? Entry->AsObject() : nullptr;
-		TSharedPtr<FJsonObject> Rec = MakeShared<FJsonObject>();
-		ItemRecords.Add(Rec);
-		if (!Obj.IsValid())
-		{
-			Rec->SetBoolField(TEXT("success"), false);
-			Rec->SetStringField(TEXT("error"), TEXT("Entry is not an object"));
-			continue;
-		}
+		const TSharedPtr<FJsonObject>* Item = nullptr;
+		if (!Entry->TryGetObject(Item)) return MCPError(TEXT("Each item must be an object"));
 		FString FilePath;
-		if (!Obj->TryGetStringField(TEXT("filePath"), FilePath) || FilePath.IsEmpty())
+		if (auto Err = RequireString(*Item, TEXT("filePath"), FilePath)) return Err;
+		if (!FPaths::FileExists(FilePath)) return MCPError(TEXT("File not found: ") + FilePath);
+		TSharedPtr<FJsonObject> Parsed;
+		FString Error;
+		if (!AssetTextureSettings::Parse(*Item, Parsed, Error)) return MCPError(Error);
+		for (const TCHAR* Key : { TEXT("packagePath"), TEXT("name") })
 		{
-			Rec->SetBoolField(TEXT("success"), false);
-			Rec->SetStringField(TEXT("error"), TEXT("Missing 'filePath'"));
-			continue;
+			FString Value;
+			if (HasParam(*Item, Key) && !TryGetStringParam(*Item, Key, Value)) return MCPError(FString(Key) + TEXT(" must be a string"));
 		}
-		if (!FPaths::FileExists(FilePath))
+		bool bReplace = true;
+		if (HasParam(*Item, TEXT("replaceExisting")) && !TryGetBoolParam(*Item, TEXT("replaceExisting"), bReplace))
+			return MCPError(TEXT("replaceExisting must be boolean"));
+		const FString Folder = OptionalString(*Item, TEXT("packagePath"), DefaultPackagePath);
+		const FString Name = OptionalString(*Item, TEXT("name"), FPaths::GetBaseFilename(FilePath));
+		const FString Destination = Folder / Name;
+		if (Name.IsEmpty() || Name.Contains(TEXT("/")) || Name.Contains(TEXT(".")) || !FPackageName::IsValidLongPackageName(Destination)) return MCPError(TEXT("Invalid texture destination: ") + Destination);
+		if (MCPIsProtectedAssetPath(Destination)) return MCPError(TEXT("Cannot import to a protected mount: ") + Destination);
+		if (UObject* Existing = MCPLoadAssetObject(Destination))
 		{
-			Rec->SetBoolField(TEXT("success"), false);
-			Rec->SetStringField(TEXT("filePath"), FilePath);
-			Rec->SetStringField(TEXT("error"), FString::Printf(TEXT("File not found: %s"), *FilePath));
-			continue;
+			if (auto Blocked = MCPAssetWriteBlockedError(Existing, Destination, TEXT("import texture"))) return Blocked;
 		}
-
-		FString PkgPath = DefaultPackagePath;
-		Obj->TryGetStringField(TEXT("packagePath"), PkgPath);
-		FString AssetName;
-		Obj->TryGetStringField(TEXT("name"), AssetName);
-		bool bReplaceExisting = true;
-		Obj->TryGetBoolField(TEXT("replaceExisting"), bReplaceExisting);
-
+		if (Destinations.Contains(Destination.ToLower())) return MCPError(TEXT("Duplicate destination: ") + Destination);
+		Destinations.Add(Destination.ToLower());
+		const bool bExists = UEditorAssetLibrary::DoesAssetExist(Destination);
+		if (bExists && !bReplace) return MCPError(TEXT("Destination exists and replaceExisting is false: ") + Destination);
+		if (bExists && !LoadAssetByPath<UTexture2D>(Destination)) return MCPError(TEXT("Destination is not a Texture2D: ") + Destination);
+		auto Row = MCPSuccess();
+		Row->SetStringField(TEXT("filePath"), FilePath);
+		Row->SetStringField(TEXT("packagePath"), Folder);
+		Row->SetStringField(TEXT("name"), Name);
+		Row->SetBoolField(TEXT("replacedExisting"), bExists);
+		Row->SetObjectField(TEXT("requestedSettings"), Parsed);
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+		Settings.Add(Parsed);
+		if (bDryRun) continue;
 		UTextureFactory* Factory = NewObject<UTextureFactory>();
 		UAssetImportTask* Task = NewObject<UAssetImportTask>();
-		Roots.Add(new FGCRootScope(Factory));
-		Roots.Add(new FGCRootScope(Task));
+		Roots.Add(MakeUnique<FGCRootScope>(Factory));
+		Roots.Add(MakeUnique<FGCRootScope>(Task));
 		Task->bAutomated = bAutomated;
-		Task->bReplaceExisting = bReplaceExisting;
-		Task->bSave = bSave;
+		Task->bReplaceExisting = bReplace;
+		Task->bSave = false;
 		Task->Filename = FilePath;
-		Task->DestinationPath = PkgPath;
-		if (!AssetName.IsEmpty()) Task->DestinationName = AssetName;
+		Task->DestinationPath = Folder;
+		Task->DestinationName = Name;
 		Task->Factory = Factory;
-
-		Rec->SetStringField(TEXT("filePath"), FilePath);
-		Rec->SetStringField(TEXT("packagePath"), PkgPath);
-		if (!AssetName.IsEmpty()) Rec->SetStringField(TEXT("name"), AssetName);
 		Tasks.Add(Task);
 	}
-
-	if (Tasks.Num() > 0)
-	{
-		FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-		AssetToolsModule.Get().ImportAssetTasks(Tasks);
-	}
-
-	// Map task results back to records by index.
+	if (!bDryRun) FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().ImportAssetTasks(Tasks);
 	int32 Imported = 0;
-	int32 TaskIdx = 0;
-	for (TSharedPtr<FJsonObject>& Rec : ItemRecords)
+	TArray<TSharedPtr<FJsonValue>> CreatedPaths;
+	bool bReplaced = false;
+	for (int32 Index = 0; Index < Tasks.Num(); ++Index)
 	{
-		bool bAlreadyFailed = false;
-		Rec->TryGetBoolField(TEXT("success"), bAlreadyFailed);
-		if (bAlreadyFailed == false && Rec->HasField(TEXT("error"))) continue; // validation rejection
-		if (TaskIdx >= Tasks.Num()) break;
-		UAssetImportTask* Task = Tasks[TaskIdx++];
-		TArray<TSharedPtr<FJsonValue>> ImportedPaths;
-		for (UObject* Imported2 : Task->GetObjects())
+		auto Row = Rows[Index]->AsObject();
+		TArray<TSharedPtr<FJsonValue>> ImportedPaths, ReadBack;
+		bool bSaved = bSave;
+		for (UObject* Object : Tasks[Index]->GetObjects())
 		{
-			if (Imported2) ImportedPaths.Add(MakeShared<FJsonValueString>(Imported2->GetPathName()));
+			UTexture2D* Texture = Cast<UTexture2D>(Object);
+			if (!Texture) continue;
+			// An entry with no settings keeps the import as it is, with no second build.
+			if (Settings[Index]->Values.Num() > 0)
+			{
+				Texture->Modify();
+				AssetTextureSettings::Apply(Texture, Settings[Index]);
+				Texture->PostEditChange();
+				Texture->MarkPackageDirty();
+			}
+			FString SaveError;
+			const bool bTextureSaved = bSave && SaveAssetPackageChecked(Texture, SaveError);
+			bSaved &= bTextureSaved;
+			if (bSave) MCPNoteSaveOutcome(Row, Texture->GetPathName(), bTextureSaved, SaveError);
+			ImportedPaths.Add(MakeShared<FJsonValueString>(Texture->GetPathName()));
+			auto ReadParams = MakeShared<FJsonObject>();
+			ReadParams->SetStringField(TEXT("assetPath"), Texture->GetPathName());
+			ReadBack.Add(ListTextureProperties(ReadParams));
+			if (!Row->GetBoolField(TEXT("replacedExisting"))) CreatedPaths.Add(MakeShared<FJsonValueString>(Texture->GetPathName()));
+			else bReplaced = true;
 		}
-		Rec->SetArrayField(TEXT("importedAssets"), ImportedPaths);
-		Rec->SetBoolField(TEXT("success"), ImportedPaths.Num() > 0);
-		if (ImportedPaths.Num() > 0) Imported++;
+		Row->SetArrayField(TEXT("importedAssets"), ImportedPaths);
+		Row->SetArrayField(TEXT("readBack"), ReadBack);
+		Row->SetBoolField(TEXT("saved"), bSaved && ImportedPaths.Num() > 0);
+		Row->SetBoolField(TEXT("success"), ImportedPaths.Num() > 0 && (!bSave || bSaved));
+		if (ImportedPaths.Num() > 0) ++Imported;
+		else Row->SetStringField(TEXT("error"), TEXT("Import produced no textures"));
 	}
-
-	for (FGCRootScope* G : Roots) delete G;
-
 	auto Result = MCPSuccess();
-	// Guarded: a batch that produced nothing used to report created:true.
-	if (Imported > 0) MCPSetCreated(Result);
-	Result->SetBoolField(TEXT("unchanged"), Imported == 0);
+	Result->SetArrayField(TEXT("items"), Rows);
+	Result->SetBoolField(TEXT("dryRun"), bDryRun);
+	Result->SetBoolField(TEXT("unchanged"), bDryRun || Imported == 0);
 	Result->SetNumberField(TEXT("requested"), Items->Num());
 	Result->SetNumberField(TEXT("imported"), Imported);
-	Result->SetNumberField(TEXT("failed"), Items->Num() - Imported);
-
-	TArray<TSharedPtr<FJsonValue>> RecArray;
-	for (const TSharedPtr<FJsonObject>& Rec : ItemRecords)
+	Result->SetNumberField(TEXT("failed"), bDryRun ? 0 : Items->Num() - Imported);
+	bool bSuccess = true;
+	for (const auto& Row : Rows) bSuccess &= Row->AsObject()->GetBoolField(TEXT("success"));
+	Result->SetBoolField(TEXT("success"), bSuccess);
+	if (CreatedPaths.Num() > 0) MCPSetCreated(Result);
+	if (bReplaced) MCPSetUpdated(Result);
+	if (CreatedPaths.Num() > 0)
 	{
-		RecArray.Add(MakeShared<FJsonValueObject>(Rec));
+		auto Rollback = MakeShared<FJsonObject>();
+		Rollback->SetArrayField(TEXT("assetPaths"), CreatedPaths);
+		MCPSetRollback(Result, TEXT("delete_asset_batch"), Rollback);
 	}
-	Result->SetArrayField(TEXT("items"), RecArray);
-
-	// Rollback: delete exactly the assets this call produced. Lossy, because
-	// entries default to replaceExisting=true: where an import landed on a
-	// texture that was already there, deleting it removes the asset instead of
-	// restoring the version the import overwrote.
-	TArray<TSharedPtr<FJsonValue>> ImportedForRollback;
-	for (const TSharedPtr<FJsonObject>& Rec : ItemRecords)
-	{
-		const TArray<TSharedPtr<FJsonValue>>* Produced = nullptr;
-		if (Rec->TryGetArrayField(TEXT("importedAssets"), Produced) && Produced)
-		{
-			for (const TSharedPtr<FJsonValue>& P : *Produced) ImportedForRollback.Add(P);
-		}
-	}
-	if (ImportedForRollback.Num() > 0)
-	{
-		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetArrayField(TEXT("assetPaths"), ImportedForRollback);
-		MCPSetRollback(Result, TEXT("delete_asset_batch"), Payload);
-		Result->SetBoolField(TEXT("rollbackLossy"), true);
-		Result->SetStringField(TEXT("rollbackNote"),
-			TEXT("The inverse deletes the assets this import produced. Two limits. An entry that landed on an existing texture ")
-			TEXT("(replaceExisting defaults to true) had its previous content overwritten, and deleting the asset does not bring ")
-			TEXT("that back. And the delete runs with the default force=false, so it refuses any imported texture that something ")
-			TEXT("outside the rollback still references, and reports that rather than removing it."));
-	}
-	else
-	{
-		Result->SetBoolField(TEXT("rollbackPossible"), false);
-		Result->SetStringField(TEXT("rollbackNote"), TEXT("No asset was produced, so there is nothing to undo."));
-	}
+	else Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetBoolField(TEXT("rollbackLossy"), bReplaced);
+	Result->SetStringField(TEXT("rollbackNote"), TEXT("Rollback deletes only newly created textures, subject to referencer checks. Replaced source pixels cannot be restored; restore those assets from a backup."));
 	return MCPResult(Result);
 }
 
@@ -1579,11 +1508,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadCurveTable(const TSharedPtr<FJsonObje
 	for (const TPair<FName, FRealCurve*>& Pair : Table->GetRowMap())
 	{
 		const FString Name = Pair.Key.ToString();
-		RowNames.Add(MakeShared<FJsonValueString>(Name));
 		if (!RowFilter.IsEmpty() && !Name.ToLower().Contains(RowFilter))
 		{
 			continue;
 		}
+		RowNames.Add(MakeShared<FJsonValueString>(Name));
 
 		TArray<TSharedPtr<FJsonValue>> Keys = CurveKeysToJson(Pair.Value, Mode);
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -2286,6 +2215,8 @@ namespace
 
 TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObject>& Params)
 {
+	// Every declared parameter is read before anything can refuse (#1057).
+	MCPReadParamsAhead(Params, { TEXT("assetPath"), TEXT("rowFilter"), TEXT("rowNames"), TEXT("columns"), TEXT("outputPath") });
 	FString RowFilter = OptionalString(Params, TEXT("rowFilter"));
 	// A large table overflows the response inline, so outputPath writes the
 	// rows to a file under the shared dump convention (HandlerUtils.h) and
@@ -2301,6 +2232,35 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 	if (bHasColumns && !(TryGetArrayParam(Params, TEXT("columns"), ColumnsJson) && ColumnsJson))
 	{
 		return MCPError(TEXT("'columns' must be an array of row-struct field names"));
+	}
+	// rowNames reads a known set of rows, in the order asked for. rowFilter is
+	// a substring, so "Axe" also returns "AxeHeavy"; an exact list could only
+	// be had by filtering the whole table afterwards.
+	const bool bHasRowNames = HasParam(Params, TEXT("rowNames"));
+	TArray<FName> WantedRows;
+	if (bHasRowNames)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* RowNamesJson = nullptr;
+		if (!TryGetArrayParam(Params, TEXT("rowNames"), RowNamesJson) || !RowNamesJson || RowNamesJson->Num() == 0)
+		{
+			return MCPError(TEXT("'rowNames' must be a non-empty array of row names"));
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *RowNamesJson)
+		{
+			FString RowName;
+			if (!Value.IsValid() || !Value->TryGetString(RowName) || RowName.TrimStartAndEnd().IsEmpty())
+			{
+				return MCPError(TEXT("'rowNames' must be an array of non-empty row names"));
+			}
+			RowName.TrimStartAndEndInline();
+			// FName asserts on a name this long, and no row can carry one.
+			if (RowName.Len() >= NAME_SIZE)
+			{
+				return MCPError(FString::Printf(
+					TEXT("'rowNames' holds a name of %d characters; a row name is at most %d"), RowName.Len(), NAME_SIZE - 1));
+			}
+			WantedRows.AddUnique(FName(*RowName));
+		}
 	}
 
 	FString AssetPath;
@@ -2355,15 +2315,42 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 	TArray<TSharedPtr<FJsonValue>> ParsedRows;
 	TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(JsonString);
 	const bool bParsed = FJsonSerializer::Deserialize(JsonReader, ParsedRows);
-	if (!bParsed && bHasColumns)
+	if (!bParsed && (bHasColumns || bHasRowNames))
 	{
 		// The raw-export fallback below has no rows to narrow.
 		return MCPError(
-			TEXT("The DataTable's JSON export could not be parsed, so 'columns' cannot be applied. ")
-			TEXT("Call read_datatable without columns to get the raw export as rawJson."));
+			TEXT("The DataTable's JSON export could not be parsed, so 'columns' and 'rowNames' cannot be applied. ")
+			TEXT("Call read_datatable without them to get the raw export as rawJson."));
 	}
+	TArray<TSharedPtr<FJsonValue>> MissingRows;
 	if (bParsed)
 	{
+		// Row names are FNames, so they match case-insensitively, as the
+		// table's own FindRow does. A name the table lacks is reported rather
+		// than refused, so one stale name does not cost the rest of the read.
+		// Selected before rowFilter, so a name rowFilter drops is not reported
+		// as missing from the table.
+		if (bHasRowNames)
+		{
+			TMap<FName, TSharedPtr<FJsonValue>> ByName;
+			for (const TSharedPtr<FJsonValue>& RowValue : ParsedRows)
+			{
+				FString RowName;
+				if (RowValue.IsValid() && RowValue->Type == EJson::Object
+					&& RowValue->AsObject()->TryGetStringField(TEXT("Name"), RowName))
+				{
+					ByName.Add(FName(*RowName), RowValue);
+				}
+			}
+			TArray<TSharedPtr<FJsonValue>> Selected;
+			for (const FName& Wanted : WantedRows)
+			{
+				if (const TSharedPtr<FJsonValue>* Found = ByName.Find(Wanted)) Selected.Add(*Found);
+				else MissingRows.Add(MakeShared<FJsonValueString>(Wanted.ToString()));
+			}
+			ParsedRows = MoveTemp(Selected);
+		}
+
 		// Apply row filter if specified
 		if (!RowFilter.IsEmpty())
 		{
@@ -2408,7 +2395,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 			}
 		}
 	}
-	const bool bFiltered = bParsed && !RowFilter.IsEmpty();
+	const bool bFiltered = bParsed && (!RowFilter.IsEmpty() || bHasRowNames);
+	if (bHasRowNames) Result->SetArrayField(TEXT("missingRowNames"), MissingRows);
 
 	if (!OutputPath.IsEmpty())
 	{
@@ -2802,6 +2790,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableRow(const TSharedPtr<FJsonObj
 // Params: assetPath, rowName.
 TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRow(const TSharedPtr<FJsonObject>& Params)
 {
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	if (HasParam(Params, TEXT("rowNames")) || !bSave) return RemoveDataTableRows(Params);
 	FString RowName;
 	const TSharedPtr<FJsonValue> MissingRowName = RequireString(Params, TEXT("rowName"), RowName);
 	FString AssetPath;
@@ -4034,16 +4024,24 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 			*CsvPath, *AssetPath));
 	}
 
+	// The engine importer resets the table before reading the CSV, so a merge
+	// puts back every earlier entry the CSV does not carry.
 	TArray<FString> RemovedKeys;
-	if (bReplaceExisting)
+	for (const TPair<FString, FString>& Entry : Before)
 	{
-		for (const TPair<FString, FString>& Entry : Before)
+		if (Incoming.Contains(Entry.Key)) continue;
+		if (bReplaceExisting)
 		{
-			if (!Incoming.Contains(Entry.Key))
-			{
-				StringTable->GetMutableStringTable()->RemoveSourceString(FTextKey(Entry.Key));
-				RemovedKeys.Add(Entry.Key);
-			}
+			StringTable->GetMutableStringTable()->RemoveSourceString(FTextKey(Entry.Key));
+			RemovedKeys.Add(Entry.Key);
+		}
+		else
+		{
+#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_8_API
+			StringTable->GetMutableStringTable()->SetSourceString(FTextKey(Entry.Key), Entry.Value, FString());
+#else
+			StringTable->GetMutableStringTable()->SetSourceString(FTextKey(Entry.Key), Entry.Value);
+#endif
 		}
 	}
 
@@ -4149,6 +4147,51 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 
 // --- Reimport ---------------------------------------------------------
 
+namespace
+{
+	/** The texture settings a reimport must not change: how the texture is
+	 *  compressed, grouped, streamed, sized, mipped, filtered and addressed.
+	 *  Names the class does not declare (AddressX on a cube) are skipped. */
+	const TCHAR* const GMCPReimportTextureSettings[] = {
+		TEXT("CompressionSettings"), TEXT("LODGroup"), TEXT("SRGB"), TEXT("NeverStream"),
+		TEXT("MaxTextureSize"), TEXT("MipGenSettings"), TEXT("Filter"), TEXT("AddressX"), TEXT("AddressY"),
+		TEXT("CompressionNoAlpha"), TEXT("CompressionQuality"), TEXT("LossyCompressionAmount"),
+		TEXT("VirtualTextureStreaming"), TEXT("PowerOfTwoMode"), TEXT("bFlipGreenChannel"),
+	};
+
+	/** Each listed setting the texture's class declares, as export text. */
+	TMap<FString, FString> MCPReimportSnapshotTextureSettings(UTexture* Texture)
+	{
+		TMap<FString, FString> Out;
+		for (const TCHAR* Name : GMCPReimportTextureSettings)
+		{
+			const FProperty* Property = Texture->GetClass()->FindPropertyByName(Name);
+			if (!Property) continue;
+			FString Text;
+			// ExportText_InContainer skips a value equal to zero (false, 0, the first
+			// enum entry), which is exactly what a reimport tends to flip.
+			Property->ExportTextItem_InContainer(Text, Texture, nullptr, Texture, PPF_None);
+			Out.Add(Name, Text);
+		}
+		return Out;
+	}
+
+	TSharedPtr<FJsonObject> MCPReimportSettingsJson(const TMap<FString, FString>& Settings)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		for (const TPair<FString, FString>& Pair : Settings) Obj->SetStringField(Pair.Key, Pair.Value);
+		return Obj;
+	}
+
+	TSharedPtr<FJsonObject> MCPReimportSourceSize(UTexture* Texture)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("x"), Texture->Source.GetSizeX());
+		Obj->SetNumberField(TEXT("y"), Texture->Source.GetSizeY());
+		return Obj;
+	}
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -4156,6 +4199,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	// Read before anything can fail (#1057). `filename` is an alias of filePath.
 	FString NewSourcePath;
 	const bool bHasNewSourcePath = TryGetStringParam(Params, TEXT("filePath"), NewSourcePath);
+	const bool bPreserveSettings = OptionalBool(Params, TEXT("preserveSettings"), true);
+	const bool bSave = OptionalBool(Params, TEXT("save"), false);
 
 	TSharedPtr<FJsonValue> LoadError;
 	UObject* Asset = MCPRequireAssetObject(AssetPath, LoadError);
@@ -4221,11 +4266,60 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 		bSourceFileUpdated = true;
 	}
 
+	// A texture's settings are the caller's, not the source file's. Whether a
+	// reimport keeps them depends on the import path (the legacy factory copies
+	// them across, an Interchange pipeline may apply its own), so they are read
+	// before and put back after rather than trusted to survive.
+	UTexture* Texture = Cast<UTexture>(Asset);
+	TMap<FString, FString> SettingsBefore;
+	TSharedPtr<FJsonObject> SizeBefore;
+	if (Texture)
+	{
+		SettingsBefore = MCPReimportSnapshotTextureSettings(Texture);
+		SizeBefore = MCPReimportSourceSize(Texture);
+	}
+
 	// Use FReimportManager to reimport
 	bool bSuccess = FReimportManager::Instance()->Reimport(Asset, /*bAskForNewFileIfMissing=*/false, /*bShowNotification=*/false);
 
 	auto Result = MCPSuccess();
 	if (bSuccess) MCPSetUpdated(Result);
+	if (Texture)
+	{
+		TArray<TSharedPtr<FJsonValue>> Restored;
+		if (bSuccess && bPreserveSettings)
+		{
+			const TMap<FString, FString> SettingsReimported = MCPReimportSnapshotTextureSettings(Texture);
+			bool bChanged = false;
+			for (const TPair<FString, FString>& Pair : SettingsBefore)
+			{
+				const FString* Now = SettingsReimported.Find(Pair.Key);
+				if (Now && *Now == Pair.Value) continue;
+				FProperty* Property = Texture->GetClass()->FindPropertyByName(*Pair.Key);
+				if (!Property) continue;
+				if (!bChanged) Texture->PreEditChange(nullptr);
+				bChanged = true;
+				Property->ImportText_InContainer(*Pair.Value, Texture, Texture, PPF_None);
+				TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+				Row->SetStringField(TEXT("name"), Pair.Key);
+				Row->SetStringField(TEXT("reimportedValue"), Now ? *Now : FString());
+				Row->SetStringField(TEXT("restoredValue"), Pair.Value);
+				Restored.Add(MakeShared<FJsonValueObject>(Row));
+			}
+			if (bChanged)
+			{
+				// Rebuilds the platform data under the restored settings.
+				Texture->PostEditChange();
+				Texture->MarkPackageDirty();
+			}
+		}
+		Result->SetBoolField(TEXT("preserveSettings"), bPreserveSettings);
+		Result->SetObjectField(TEXT("settingsBefore"), MCPReimportSettingsJson(SettingsBefore));
+		Result->SetObjectField(TEXT("settingsAfter"), MCPReimportSettingsJson(MCPReimportSnapshotTextureSettings(Texture)));
+		Result->SetArrayField(TEXT("restoredSettings"), Restored);
+		Result->SetObjectField(TEXT("sourceSizeBefore"), SizeBefore);
+		Result->SetObjectField(TEXT("sourceSizeAfter"), MCPReimportSourceSize(Texture));
+	}
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
 	Result->SetBoolField(TEXT("success"), bSuccess);
@@ -4238,6 +4332,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Reimport failed -- check that the asset has a valid source file"));
 	}
+	else if (bSave)
+	{
+		// A reimport leaves the package dirty and unsaved, which is the default:
+		// the caller looks before it keeps. save writes this one package only.
+		FString SaveReason;
+		const bool bSaved = SaveAssetPackageChecked(Asset, SaveReason);
+		MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("saved"), false);
+	}
+	if (UPackage* Package = Asset->GetOutermost()) Result->SetBoolField(TEXT("packageDirty"), Package->IsDirty());
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
 		TEXT("A reimport rebuilds the asset from its source file in place, so the content it replaced is gone and the new ")
@@ -4262,6 +4369,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 	if (auto Err = RequireString(Params, TEXT("outputPath"), OutputPath)) return Err;
 	// Read before anything can fail (#1057); only a DataTable export uses it.
 	const FString RequestedFormat = OptionalString(Params, TEXT("format")).ToLower();
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
+	const bool bReplaceExisting = OptionalBool(Params, TEXT("replaceExisting"), true);
 
 	// #930: same resolution as asset(read), which opened assets this action
 	// reported as missing.
@@ -4305,10 +4414,33 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 		}
 	}
 
+	TSharedPtr<FJsonObject> InstanceData;
+	// A .json outputPath (or format=json) writes the resolved parameters; any
+	// other extension keeps the registered exporter (T3D, COPY).
+	if (UMaterialInstance* Instance = Cast<UMaterialInstance>(Asset))
+	{
+		const bool bJsonExtension = FPaths::GetExtension(AbsOutputPath).Equals(TEXT("json"), ESearchCase::IgnoreCase);
+		if (RequestedFormat == TEXT("json") && !bJsonExtension)
+			return MCPError(TEXT("MaterialInstance format=json requires a .json outputPath"));
+		if (bJsonExtension) InstanceData = FMaterialHandlers::DescribeMaterialInstance(Instance);
+	}
+
 	// Whether the output file was already there decides whether this call
 	// created one or overwrote one. bReplaceIdentical below is true, so
 	// reporting "created" unconditionally would call every overwrite a create.
 	const bool bOutputExisted = IFileManager::Get().FileExists(*AbsOutputPath);
+
+	if (bOutputExisted && !bReplaceExisting) return MCPError(TEXT("Output file exists and replaceExisting is false: ") + AbsOutputPath);
+	if (bDryRun)
+	{
+		auto Result = MCPSuccess();
+		Result->SetBoolField(TEXT("dryRun"), true);
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetStringField(TEXT("outputPath"), AbsOutputPath);
+		Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
+		Result->SetBoolField(TEXT("wouldOverwrite"), bOutputExisted);
+		return MCPResult(Result);
+	}
 
 	// Create parent directory if needed
 	FString OutputDir = FPaths::GetPath(AbsOutputPath);
@@ -4318,7 +4450,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 		PlatformFile.CreateDirectoryTree(*OutputDir);
 	}
 
-	if (DataTable)
+	if (InstanceData.IsValid())
+	{
+		FString Contents;
+		const auto Writer = TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&Contents);
+		if (!FJsonSerializer::Serialize(InstanceData.ToSharedRef(), Writer) || !FFileHelper::SaveStringToFile(Contents, *AbsOutputPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+			return MCPError(TEXT("Failed to write material parameter JSON: ") + AbsOutputPath);
+	}
+	else if (DataTable)
 	{
 		// Match DataTableFunctionLibrary's file exports, including structured
 		// JSON for nested structs and UTF-8 without a BOM.
@@ -4332,8 +4471,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 	}
 	else
 	{
+		// The skeletal mesh exporter reads the render-side mesh object, which a -nullrhi editor
+		// never builds; the engine asserts on it instead of failing the export.
+		if (!FApp::CanEverRender() && Asset->IsA<USkeletalMesh>())
+		{
+			return MCPError(FString::Printf(TEXT("Exporting skeletal mesh '%s' needs an editor that renders; this one runs with -nullrhi. Use -RenderOffScreen for a windowless editor that can export it."), *AssetPath));
+		}
+
 		// Use UE's AssetExportTask - same as unreal.AssetExportTask in Python
 		UAssetExportTask* ExportTask = NewObject<UAssetExportTask>();
+		FGCRootScope ExportTaskRoot(ExportTask);
 		ExportTask->Object = Asset;
 		ExportTask->Filename = AbsOutputPath;
 		ExportTask->bAutomated = true;
@@ -4358,7 +4505,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 	{
 		Result->SetStringField(TEXT("format"), TableFormat);
 		Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
-		Result->SetNumberField(TEXT("bytes"), IFileManager::Get().FileSize(*AbsOutputPath));
+	}
+	Result->SetNumberField(TEXT("bytes"), IFileManager::Get().FileSize(*AbsOutputPath));
+	if (InstanceData.IsValid())
+	{
+		Result->SetStringField(TEXT("format"), TEXT("json"));
+		Result->SetObjectField(TEXT("readBack"), InstanceData);
 	}
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),

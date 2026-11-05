@@ -8,6 +8,7 @@
 
 class UObject;
 class UMaterial;
+class UMaterialInterface;
 class UMaterialFunction;
 class UMaterialExpression;
 
@@ -34,6 +35,7 @@ class FMaterialHandlers
 {
 public:
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
+	static TSharedPtr<FJsonObject> DescribeMaterialInstance(UMaterialInterface* Material);
 
 private:
 	static TSharedPtr<FJsonValue> ListExpressionTypes(const TSharedPtr<FJsonObject>& Params);

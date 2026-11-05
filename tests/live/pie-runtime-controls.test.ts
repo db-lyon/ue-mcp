@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * PIE runtime controls (#1215, #1203, #1250): pausing, the player's view
  * target and the debug camera, each read back from the running session.

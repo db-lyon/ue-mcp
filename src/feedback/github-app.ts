@@ -1,5 +1,5 @@
 import { readEnv } from "../core/env.js";
-import { resolveUserAuth, clearUserAuth, type PendingDeviceFlow } from "./github-auth.js";
+import { resolveUserAuth, clearUserAuth, githubApiBase, type PendingDeviceFlow } from "./github-auth.js";
 import {
   CORE_REPO,
   feedbackBase,
@@ -53,7 +53,7 @@ const SIGNING_TIMEOUT_MS = 20_000;
  * parameter and defaults to core, so existing callers are unaffected.
  */
 function issuesEndpoint(repo: GitHubRepo): string {
-  return `https://api.github.com/repos/${repo.owner}/${repo.repo}/issues`;
+  return `${githubApiBase()}/repos/${repo.owner}/${repo.repo}/issues`;
 }
 
 /**

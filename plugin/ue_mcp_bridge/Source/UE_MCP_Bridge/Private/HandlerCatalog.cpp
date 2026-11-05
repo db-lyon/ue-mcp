@@ -1,6 +1,7 @@
 #include "HandlerCatalog.h"
 #include "HandlerRegistry.h"
 #include "Handlers/Editor/EditorHandlers.h"
+#include "Handlers/Checkpoint/CheckpointHandlers.h"
 #include "Handlers/Asset/AssetHandlers.h"
 #include "Handlers/Asset/AssetHandlers_Geometry.h"
 #include "Handlers/Asset/AssetHandlers_MeshBoolean.h"
@@ -38,6 +39,7 @@
 #include "Handlers/Lock/LockHandlers.h"
 #include "Handlers/Diff/DiffHandlers.h"
 #include "Handlers/SourceControl/SourceControlHandlers.h"
+#include "Handlers/PIE/PIEHandlers.h"
 
 void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -80,5 +82,7 @@ void MCPHandlerCatalog::RegisterAllHandlers(FMCPHandlerRegistry& Registry)
 	FMetaHumanHandlers::RegisterHandlers(Registry);
 	FLockHandlers::RegisterHandlers(Registry);
 	FDiffHandlers::RegisterHandlers(Registry);
+	FCheckpointHandlers::RegisterHandlers(Registry);
 	FSourceControlHandlers::RegisterHandlers(Registry);
+	FPIEHandlers::RegisterHandlers(Registry);
 }

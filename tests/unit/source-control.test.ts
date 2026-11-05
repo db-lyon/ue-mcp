@@ -34,10 +34,22 @@ const ACTIONS: Record<string, { bridge: string; effect: "read" | "mutate"; param
   list_changes: { bridge: "source_control_list_changes", effect: "read", params: ["paths", "limit", "includeUntracked"], method: "ListChanges" },
   checkout: { bridge: "source_control_checkout", effect: "mutate", params: ["paths"], method: "Checkout" },
   add: { bridge: "source_control_add", effect: "mutate", params: ["paths"], method: "MarkForAdd" },
-  revert: { bridge: "source_control_revert", effect: "mutate", params: ["paths", "dryRun", "discardUnsaved"], method: "Revert" },
+  revert: { bridge: "source_control_revert", effect: "mutate", params: ["paths", "dryRun", "discardUnsaved", "restoreFrom"], method: "Revert" },
   diff: { bridge: "source_control_diff", effect: "read", params: ["path", "openEditor", "contextLines", "maxLines"], method: "Diff" },
   submit: { bridge: "source_control_submit", effect: "mutate", params: ["paths", "description"], method: "Submit" },
   set_checkout_mode: { bridge: "source_control_set_checkout_mode", effect: "mutate", params: ["mode"], method: "SetCheckoutMode" },
+  mark_for_delete: { bridge: "source_control_mark_for_delete", effect: "mutate", params: ["paths"], method: "MarkForDelete" },
+  sync: { bridge: "source_control_sync", effect: "mutate", params: ["paths"], method: "Sync" },
+  history: { bridge: "source_control_history", effect: "read", params: ["path", "limit"], method: "History" },
+  connect: { bridge: "source_control_connect", effect: "mutate", params: ["password"], method: "Connect" },
+};
+
+/** The new provider operations and the engine operation each runs. */
+const OPERATIONS: Record<string, { method: string; operation: string }> = {
+  mark_for_delete: { method: "MarkForDelete", operation: "FDelete" },
+  sync: { method: "Sync", operation: "FSync" },
+  history: { method: "History", operation: "FUpdateStatus" },
+  connect: { method: "Connect", operation: "FConnect" },
 };
 
 describe("source_control", () => {
@@ -66,7 +78,8 @@ describe("source_control", () => {
     expect(HANDLERS).toContain("source_control_not_enabled");
     expect(HANDLERS).toContain("source_control_unavailable");
     for (const [name, want] of Object.entries(ACTIONS)) {
-      if (name === "get_provider" || name === "set_checkout_mode") continue;
+      // connect needs an enabled provider, not a connected one, so it has its own refusal.
+      if (name === "get_provider" || name === "set_checkout_mode" || name === "connect") continue;
       expect(body(want.method), name).toContain("RequireProvider(Provider)");
     }
     // get_provider answers enabled=false instead of failing.
@@ -86,12 +99,67 @@ describe("source_control", () => {
     expect(body("Checkout")).toContain('MCPSetRollback(Result, TEXT("source_control_revert"), Payload)');
     expect(body("MarkForAdd")).toContain('MCPSetRollback(Result, TEXT("source_control_revert"), Payload)');
     expect(body("SetCheckoutMode")).toContain('MCPSetRollback(Result, TEXT("source_control_set_checkout_mode"), Payload)');
+    expect(body("MarkForDelete")).toContain('MCPSetRollback(Result, TEXT("source_control_revert"), Payload)');
+  });
+
+  it.each(Object.entries(OPERATIONS))("%s runs its engine operation only where the provider says it can", (name, want) => {
+    const method = body(want.method);
+    expect(method, name).toContain(`ISourceControlOperation::Create<${want.operation}>()`);
+    expect(method, name).toMatch(/if \(auto Err = RequireOperation\(/);
+    // The gate comes before the provider is asked to run anything.
+    expect(method.indexOf("RequireOperation("), name).toBeLessThan(method.indexOf("Execute("));
+  });
+
+  it("asks CanExecuteOperation only on engines that have it, and never names a provider in code", () => {
+    expect(HANDLERS).toMatch(/#define UE_MCP_SCC_HAS_CAN_EXECUTE \(ENGINE_MAJOR_VERSION > 5 \|\| \(ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3\)\)/);
+    for (const call of HANDLERS.matchAll(/CanExecuteOperation\(/g)) {
+      const guard = HANDLERS.lastIndexOf("#if UE_MCP_SCC_HAS_CAN_EXECUTE", call.index);
+      const close = HANDLERS.indexOf("#endif", guard);
+      expect(guard, "CanExecuteOperation outside the version guard").toBeGreaterThan(-1);
+      expect(close).toBeGreaterThan(call.index!);
+    }
+    // Behaviour follows the provider's answers, not its name.
+    expect(HANDLERS).not.toMatch(/GetName\(\)\s*(==|!=|\.Equals|\.ToString\(\)\s*==)/);
+  });
+
+  it("get_provider reports which source_control actions the provider can run", () => {
+    const provider = body("GetProvider");
+    expect(provider).toContain('SetObjectField(TEXT("operations"), Operations)');
+    for (const action of ["checkout", "add", "mark_for_delete", "revert", "sync", "submit", "history", "connect"]) {
+      expect(provider, action).toContain(`Operations->SetBoolField(TEXT("${action}")`);
+      expect(sourceControlTool.actions[action], action).toBeDefined();
+    }
+  });
+
+  it("refuses mark_for_delete and sync over unsaved editor edits before running the operation", () => {
+    for (const method of ["MarkForDelete", "Sync"]) {
+      const b = body(method);
+      expect(b.indexOf("unsavedInEditor"), method).toBeGreaterThan(-1);
+      expect(b.indexOf("unsavedInEditor"), method).toBeLessThan(b.indexOf("Provider->Execute("));
+    }
+    expect(body("Sync")).toContain("UPackageTools::ReloadPackages");
+  });
+
+  it("clears the provider's progress window before answering, so the dialog gate does not refuse the next call", () => {
+    for (const want of Object.values(ACTIONS)) {
+      expect(body(want.method), want.method).toContain("const MCPSourceControlState::FSettleProviderWindows Settle;");
+    }
+    const settle = HANDLERS.slice(HANDLERS.indexOf("struct FSettleProviderWindows"));
+    expect(settle.indexOf("DestroyWindowsImmediately()")).toBeLessThan(settle.indexOf("CaptureNow()"));
+  });
+
+  it("sends a connect password to the provider and never back on the result", () => {
+    const connect = body("Connect");
+    expect(connect).toContain("Operation->SetPassword(Password)");
+    expect(connect).not.toMatch(/SetStringField\([^)]*Password\)/);
+    expect(connect).toContain('SetBoolField(TEXT("passwordSent")');
   });
 
   it("keeps the long provider calls inside a client timeout at least as long as the server's", () => {
-    for (const method of ["source_control_get_status", "source_control_list_changes", "source_control_diff", "source_control_submit"]) {
+    for (const method of ["source_control_get_status", "source_control_list_changes", "source_control_diff", "source_control_submit", "source_control_history", "source_control_connect"]) {
       expect(REGISTERED_HANDLER_TIMEOUT_SECONDS[method], method).toBe(120);
     }
+    expect(REGISTERED_HANDLER_TIMEOUT_SECONDS.source_control_sync).toBe(300);
   });
 });
 

@@ -153,9 +153,10 @@ namespace MCPQuery
 		return nullptr;
 	}
 
-	/** Resolve a dotted field path inside an already-built JSON row. Returns an
-	 *  invalid pointer when the path does not exist, which is what the `exists`
-	 *  and `notExists` operators test. */
+	/** Resolve a dotted field path inside an already-built JSON row. A numeric
+	 *  segment indexes an array, as in materials.0.materialClass (#1303).
+	 *  Returns an invalid pointer when the path does not exist, which is what
+	 *  the `exists` and `notExists` operators test. */
 	inline TSharedPtr<FJsonValue> ResolvePath(const TSharedPtr<FJsonObject>& Row, const FString& Path)
 	{
 		if (!Row.IsValid() || Path.IsEmpty())
@@ -165,32 +166,38 @@ namespace MCPQuery
 
 		TArray<FString> Segments;
 		Path.ParseIntoArray(Segments, TEXT("."), true);
-		TSharedPtr<FJsonObject> Current = Row;
-		for (int32 Index = 0; Index < Segments.Num(); ++Index)
+		TSharedPtr<FJsonValue> Current = MakeShared<FJsonValueObject>(Row);
+		for (const FString& Segment : Segments)
 		{
 			if (!Current.IsValid())
+			{
+				return nullptr;
+			}
+			if (Current->Type == EJson::Array)
+			{
+				if (!Segment.IsNumeric())
+				{
+					return nullptr;
+				}
+				const TArray<TSharedPtr<FJsonValue>>& Items = Current->AsArray();
+				const int32 Item = FCString::Atoi(*Segment);
+				if (!Items.IsValidIndex(Item))
+				{
+					return nullptr;
+				}
+				Current = Items[Item];
+				continue;
+			}
+			if (Current->Type != EJson::Object)
 			{
 				return nullptr;
 			}
 			// FJsonObject::Values is not keyed by FString on UE 5.8, so Find(FString)
 			// does not resolve. TryGetField takes an FStringView and is the
 			// supported lookup regardless of the map's key type.
-			const TSharedPtr<FJsonValue> Found = Current->TryGetField(Segments[Index]);
-			if (!Found.IsValid())
-			{
-				return nullptr;
-			}
-			if (Index == Segments.Num() - 1)
-			{
-				return Found;
-			}
-			if (Found->Type != EJson::Object)
-			{
-				return nullptr;
-			}
-			Current = Found->AsObject();
+			Current = Current->AsObject()->TryGetField(Segment);
 		}
-		return nullptr;
+		return Current;
 	}
 
 	/** One value rendered as the string a group key or a histogram bucket uses. */

@@ -9,7 +9,6 @@ import type { EditorSession, SessionRegistry } from "../sessions/session.js";
 import type { ElicitFn, ProgressFn, ProgressUpdate, ToolContext, ToolDef } from "../core/types.js";
 import { McpError, ErrorCode } from "../core/errors.js";
 import { debug } from "../core/log.js";
-import { consumeUpgradeNotice } from "../core/version-check.js";
 import { unwrapArgsEnvelope, validateCategoryParams } from "../surface/context/call-envelope.js";
 import {
   routeEditorCall,
@@ -29,6 +28,7 @@ import {
 } from "../editor/dialog-guard.js";
 import { connectedEditorOf } from "../editor/editor-control.js";
 import { clientAdvertisesElicitation } from "../editor/dialog-mode.js";
+import { playtestRefusal } from "../editor/playtest-mode.js";
 import { contestedProject } from "../editor/project-holders.js";
 import { withAssetLocks, type LockingConfig } from "./locking.js";
 import { unknownActionMessage } from "../surface/action-schema.js";
@@ -51,11 +51,6 @@ export interface CallExtra {
   _meta?: { progressToken?: string | number };
 }
 
-function withUpgradeNotice(content: TextBlock[]): TextBlock[] {
-  const notice = consumeUpgradeNotice();
-  return notice ? [{ type: "text" as const, text: notice }, ...content] : content;
-}
-
 /**
  * Structured tail for an error a caller has to make a decision about (#799).
  * A bridge timeout is not a failed call: the editor may have finished it. The
@@ -73,7 +68,7 @@ function machineErrorBlock(e: unknown): TextBlock[] {
 /** The one error shape every tool answers with: `Error [CODE]: message`, then any tail. */
 export function errorResult(code: string, message: string, tail: TextBlock[] = []): ToolResult {
   return {
-    content: withUpgradeNotice([{ type: "text" as const, text: `Error [${code}]: ${message}` }, ...tail]),
+    content: [{ type: "text" as const, text: `Error [${code}]: ${message}` }, ...tail],
     isError: true,
   };
 }
@@ -81,7 +76,7 @@ export function errorResult(code: string, message: string, tail: TextBlock[] = [
 /** A refusal payload, returned as the error result it is. */
 function refusalResult(refusal: unknown, tail: TextBlock[] = []): ToolResult {
   return {
-    content: withUpgradeNotice([{ type: "text" as const, text: JSON.stringify(refusal, null, 2) }, ...tail]),
+    content: [{ type: "text" as const, text: JSON.stringify(refusal, null, 2) }, ...tail],
     isError: true,
   };
 }
@@ -163,6 +158,17 @@ export interface DispatchDeps {
   dialogGuardFor: (session: EditorSession, canElicit?: boolean) => DialogGuard;
   elicit: () => ElicitFn | undefined;
   client: () => { name: string; version?: string } | undefined;
+  /**
+   * The load a call runs against in place of the session's own: a context
+   * projection's, whose registry holds the tasks of the tools it advertises.
+   */
+  loadView?: (load: SessionLoad) => SessionLoad;
+  /**
+   * Refuse pie(script_run) and pie(script_replay) while the addressed
+   * project's playtest mode is manual. Set by the MCP server; an in-process
+   * caller enforces its own rules.
+   */
+  gatePlaytest?: boolean;
 }
 
 /** Window actions that can remove the window the dialog gate is holding (#1231). */
@@ -242,6 +248,11 @@ export async function dispatchCategoryCall(
   const untargeted = refuseUntargetedInRegistry(sessions, effectiveTask, routed.targeted, loads.dispatchUnion.tools);
   if (untargeted) return errorResult("INVALID_PARAMS", untargeted);
 
+  if (deps.gatePlaytest) {
+    const refused = playtestRefusal(effectiveTask, session.project.projectDir);
+    if (refused) return refusalResult(refused, attribution(sessions, session));
+  }
+
   // One guard per editor, shared by every route. The mode is read per call,
   // so changing it takes effect without restarting anything.
   const guard = deps.dialogGuardFor(session, clientAdvertisesElicitation(deps.elicit()));
@@ -267,6 +278,7 @@ export async function dispatchCategoryCall(
   let sessionLoad: SessionLoad;
   try {
     sessionLoad = await loads.ensure(session);
+    if (deps.loadView) sessionLoad = deps.loadView(sessionLoad);
   } catch (e) {
     return errorResult(
       "NOT_CONNECTED",
@@ -412,15 +424,15 @@ export async function dispatchCategoryCall(
         });
       }
       blocks.push({ type: "text" as const, text: stringify(result.data.result) });
-      return { content: withUpgradeNotice([...blocks, ...served]) };
+      return { content: [...blocks, ...served] };
     }
 
     return {
-      content: withUpgradeNotice([
+      content: [
         ...answeredNote,
         { type: "text" as const, text: stringify(result.data) },
         ...served,
-      ]),
+      ],
     };
   } catch (e) {
     // A refusal can arrive as a throw (taking an asset lock is a bridge call),
@@ -486,7 +498,7 @@ export async function dispatchFlowCall(
     if (!flowCheck.allow) return refusalResult(flowCheck.refusal, attribution(sessions, session));
     const result = await flowTool.handler(sessionContext(baseCtx, session), params);
     const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-    return { content: withUpgradeNotice([{ type: "text" as const, text }, ...attribution(sessions, session)]) };
+    return { content: [{ type: "text" as const, text }, ...attribution(sessions, session)] };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const code = e instanceof McpError ? e.code : "UNKNOWN";

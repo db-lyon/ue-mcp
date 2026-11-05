@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["outcome", "confidence", "kind", "areas", "summary", "evidence"],
+  "properties": {
+    "outcome": {
+      "type": "string",
+      "enum": ["accept", "duplicate", "fixed", "move", "limitation", "needs-info", "invalid", "needs-human"]
+    },
+    "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+    "kind": { "type": "string", "enum": ["bug", "enhancement", "documentation", "question"] },
+    "areas": { "type": "array", "items": { "type": "string" }, "maxItems": 5 },
+    "duplicateOf": { "type": "integer", "minimum": 1 },
+    "fixCommit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "moveTo": {
+      "type": "string",
+      "enum": ["ue-mcp-studio", "ue-mcp-studio-plugin", "voxel-plugin-tools", "perforce", "meshy", "fab-editor"]
+    },
+    "questions": { "type": "array", "items": { "type": "string", "maxLength": 300 }, "maxItems": 4 },
+    "summary": { "type": "string", "maxLength": 700 },
+    "evidence": { "type": "string", "maxLength": 2000 }
+  }
+}

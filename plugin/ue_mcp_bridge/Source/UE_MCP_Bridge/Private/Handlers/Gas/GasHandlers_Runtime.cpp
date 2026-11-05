@@ -949,7 +949,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetLiveAttributeValue(const TSharedPtr<FJso
 
 // #587 get_asc_state - introspect a live ASC: granted ability specs (class,
 // level, input id, active state, dynamic source tags) plus the ASC's owned
-// gameplay tags. The read half of #587 (input injection lives in pie-studio).
+// gameplay tags. The read half of #587 (input injection lives in the pie category).
 TSharedPtr<FJsonValue> FGasHandlers::GetAscState(const TSharedPtr<FJsonObject>& Params)
 {
 	MCP_CHECK_GAME_THREAD();

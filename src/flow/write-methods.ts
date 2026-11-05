@@ -22,6 +22,11 @@
  * not (create -> skip, it will be `p4 add`ed later), is the caller's job, so a
  * value that names no existing content file costs nothing.
  *
+ * A source control operation (every `source_control_*` method) is classified as
+ * writing nothing, whatever paths it names: it is the provider call a guard
+ * would make, so intercepting it would check a file out before checking it out,
+ * or before reverting or submitting it. See PROVIDER_OPERATION.
+ *
  * A path none of the layers names is not checked out: the write then meets
  * Unreal's own read-only failure, which is visible and can be checked out by
  * hand. Naming a read input instead takes a lock nobody needed, so a spec'd
@@ -74,6 +79,20 @@ const READ_REFERENCES = new Set([
   "rvtPath", "rvtPaths", "soundWavePath", "sourceAnimationPath", "sourceAssetPath",
   "templatePath", "texturePath", "toolPath",
 ]);
+
+/**
+ * Bridge methods that are themselves source control provider operations
+ * (checkout, add, mark_for_delete, revert, sync, submit, connect and the rest).
+ * They change provider state, not asset content, so no write guard intercepts
+ * them. Declared here rather than left to the lowercase `paths` happening to
+ * miss PATH_ARRAY_KEYS and ASSET_REFERENCE.
+ */
+const PROVIDER_OPERATION = /^source_control_/;
+
+/** True when the bridge method is a source control provider operation. */
+export function isProviderOperation(method: string): boolean {
+  return PROVIDER_OPERATION.test(method);
+}
 
 type Extractor = (params: Record<string, unknown>) => string[];
 
@@ -182,6 +201,10 @@ export function classifyWrite(
   params: Record<string, unknown>,
   graph?: readonly ToolDef[],
 ): WriteClassification {
+  if (isProviderOperation(method)) {
+    return { writes: false, contentPaths: [] };
+  }
+
   const explicit = EXPLICIT[method];
   if (explicit) {
     const contentPaths = dedupe(explicit(params));

@@ -1,3 +1,4 @@
+// @live-editor headless
 /**
  * Source control category (#1357), against the test project's editor.
  *
@@ -82,6 +83,26 @@ describe("source control with no provider (#1357)", () => {
   it("submit refuses once with source_control_not_enabled", async (ctx) => {
     if (providerEnabled) ctx.skip("a provider is configured in this editor");
     await expectRefused("source_control_submit", { paths: ["Config/DefaultEngine.ini"], description: "never submitted" });
+  });
+
+  it("mark_for_delete refuses once with source_control_not_enabled", async (ctx) => {
+    if (providerEnabled) ctx.skip("a provider is configured in this editor");
+    await expectRefused("source_control_mark_for_delete", { paths: ["Config/DefaultEngine.ini"] });
+  });
+
+  it("sync refuses once with source_control_not_enabled", async (ctx) => {
+    if (providerEnabled) ctx.skip("a provider is configured in this editor");
+    await expectRefused("source_control_sync", { paths: ["Config/DefaultEngine.ini"] });
+  });
+
+  it("history refuses once with source_control_not_enabled", async (ctx) => {
+    if (providerEnabled) ctx.skip("a provider is configured in this editor");
+    await expectRefused("source_control_history", { path: "Config/DefaultEngine.ini" });
+  });
+
+  it("connect refuses once with source_control_not_enabled", async (ctx) => {
+    if (providerEnabled) ctx.skip("a provider is configured in this editor");
+    await expectRefused("source_control_connect", {});
   });
 
   it("set_checkout_mode switches the session mode and reports the previous one", async () => {

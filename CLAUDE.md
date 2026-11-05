@@ -4,7 +4,7 @@ Operating guide for Claude Code (and any AI agent) working in this repo. Shared 
 
 ## Repo at a glance
 
-- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->29<!-- /count --> category tools with <!-- count:actions -->2030+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
+- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->30<!-- /count --> category tools with <!-- count:actions -->2114+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
 - **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/<Category>/*.cpp`, registers actions with `FMCPHandlerRegistry`.
 - **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
 - **Docs** (`docs/`) - MkDocs site. Release bodies are drafted outside the repo (see Release process).
@@ -48,17 +48,17 @@ The merge style follows the commit count, and writing five commits only to squas
 - TS: `npx tsc --noEmit` for type-checking, `npx tsc` for emit. Build output goes to `dist/`.
 - UE C++: `npm run build`. This calls `scripts/build.js`, which always builds the `ue_mcpEditor` target against `tests/ue_mcp/ue_mcp.uproject` and nothing else.
 - Test builds pass `-NoEngineChanges`, so Unreal aborts with the offending file list if the build would overwrite anything already in the engine tree. Set `UE_MCP_ALLOW_TEST_ENGINE_CHANGES=true` only to bootstrap engine outputs in an engine you are willing to have written to.
-- Optional: `UE_MCP_TEST_ENGINE_ROOT` pins the engine to build and run with, and `UE_MCP_PROTECTED_ENGINE_ROOTS` is a deny list of roots the scripts refuse to touch at all. The deny list outranks every other setting, including the opt-in above.
+- Optional: `UE_MCP_TEST_ENGINE_ROOT` (or, after it, `UE_ROOT`) pins the engine to build and run with, and `UE_MCP_PROTECTED_ENGINE_ROOTS` is a deny list of roots the scripts refuse to touch at all. The deny list outranks every other setting, including the opt-in above.
 - `npm run up:build` stops the editor, builds, and relaunches. Use when iterating live.
 - The deployer (`scripts/deploy.mjs`) syncs `plugin/` → `tests/ue_mcp/Plugins/UE_MCP_Bridge/`. Neither `npm run up` nor `npm run build` runs it, so run it after plugin source edits and before building.
 
-### Smoke tests - REQUIRED
+### Smoke tests
 
-`npm run test:smoke` exercises every registered handler via the live WebSocket bridge. **Run this before shipping a release.**
+`npm run test:smoke` exercises every registered handler via the live WebSocket bridge. A release runs `node scripts/smoke-test.js --uncovered`, only the actions no behavioural test dispatches, because the live and automation tests already call the rest and assert their effect. Run the full sweep after a change to the registration or dispatch layer.
 
 - Target **only** `tests/ue_mcp/ue_mcp.uproject`. Confirm the MCP connection via `project(get_status)` before running. If the editor is connected to anything else (the user's real project, another workspace), abort.
 - Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
-- <!-- count:bridgeActions -->1968<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
+- <!-- count:bridgeActions -->2045<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
 
 ### Golden baseline - the advertised surface
 
@@ -81,13 +81,25 @@ The merge style follows the commit count, and writing five commits only to squas
 
 ### Live tests
 
-`npm run test:live` runs `tests/live/` against an editor that is **already running**, through the shipped server: the connected golden baseline, per-path dispatch and leak assertions, addressing, gating, the union surface, and the records the bridge publishes. It never starts or stops an editor.
+`npm run test:live` runs every file in `tests/live/` through the shipped server, sharded across editors it launches itself, and has a release-gate budget: the whole run must finish in 10 minutes and every test within its own budget (#1436).
 
-- Targets `tests/ue_mcp` only, verified by asking the editor which project it has open, and aborts before sending anything otherwise.
-- One editor is enough. Cases needing more than one use a second session for a project whose editor is not running, since the session count is what arms targeting and gating.
-- The leak assertions need the parameter echo, which is armed at editor startup: launch with `UE_MCP_PARAM_ECHO=1` to include them. Without it they skip and say why.
+- **Shards.** Each shard is a copy of `tests/ue_mcp` under `tests/.shards/<name>/ue_mcp` with its own editor and port, verified by asking the editor which project it has open before anything is sent. The headless and `none` files are one queue, longest first by `tests/live/timing-baseline.json`: each headless editor takes batches that shrink as it drains, and another starts whenever one fits and the queue holds a launch's worth of work. The other kinds keep fixed shards split by measured time and launch first. The results are merged into one report. Shards copy their build output from a snapshot in `tests/.shards/_build`, taken at the start of the run (`--stage-build` takes one alone, `--staged-build` reuses it).
+- **Editor kinds.** Every live file starts with `// @live-editor <kind>`, and `tests/unit/live-shards.test.ts` fails on a file without one:
+  - `headless`: `-nullrhi -unattended`. The default for anything that does not draw.
+  - `render`: `-RenderOffScreen -unattended`, for rendering, shader, landscape-edit, Niagara and skeletal-export cases.
+  - `interactive`: `-RenderOffScreen` without `-unattended`, so modal dialogs come up. No window is shown.
+  - `base`: headless on `tests/ue_mcp` itself, for cases that need its build intermediates (Live Coding). It attaches to an editor already running there and leaves it running.
+  - `scm`: headless, in a copy made into a throwaway git repository with a bare remote and the Git provider on.
+  - `none` needs no editor; `lifecycle` runs only under `--lifecycle`.
+  Tag a file by what it needs, proven by running it headless first. Never move a file to a heavier editor to hide a handler bug.
+- **Memory.** The runner reads free memory at launch, keeps `max(4 GB, 12%)` free for the rest of the machine, and starts only as many headless shards as fit beside the other editors (`EDITOR_PEAK_MB` in `scripts/live-shards.mjs`: about 3.6 GB headless, 4.6 GB render). Each editor waits for room before it starts. `--shards N` caps the headless count; it never raises it past what fits.
+- **An editor that dies** is reported with its cause from its own log (crash, quit, or no crash recorded), and the files it never ran go to a fresh editor. The file it died in stays a failure.
+- **Gates.** The run fails on any failed or skipped test, any file that did not run, a test over its budget (`tests/live/budgets.json`, a default plus named exceptions), or a run over the wall-clock budget. Every run prints the 15 slowest tests and writes `tests/.shards/last-run.json`.
+- **One shard:** `npm run test:live -- --shard r1`, with the shard names the run prints, or `--shard headless` for the headless queue. `--kinds a,b` runs only the files of those kinds. `--files a,b` runs only files whose path contains one of the strings. `--record-timing` on a full run rewrites the committed baseline.
+- **Attach mode:** `--attach`, `--only <file>`, `--record-golden` and `--lifecycle` drive the `tests/ue_mcp` editor that is already running, as the suite did before sharding.
+- The leak assertions need the parameter echo, which shard editors are launched with. In attach mode, launch with `UE_MCP_PARAM_ECHO=1` to include them.
 - `tests/live/matrix.ts` is the written form of plan item 7.3 of #817: every case, and where its assertion lives (live, engine-free and referenced, owned by the C++ suite, or pending on unshipped work). `tests/live/coverage.test.ts` fails when a reference stops resolving.
-- `npm run test:live -- --lifecycle` runs only `tests/live/editor-lifecycle.test.ts`: stop_editor, start_editor, stop_editor after a real crash with the crash reporter up (#1221), build_project against a locked output, and the rebuild flow. It stops, crashes and restarts the tests/ue_mcp editor and leaves one running. The default run skips it.
+- `npm run test:live -- --lifecycle` runs only `tests/live/editor-lifecycle.test.ts`: stop_editor, start_editor, stop_editor after a real crash with the crash reporter up (#1221), build_project against a locked output, and the rebuild flow. It stops, crashes and restarts the tests/ue_mcp editor and leaves one running.
 
 ### Behavioural coverage gate
 
@@ -96,6 +108,15 @@ The merge style follows the commit count, and writing five commits only to squas
 - A new action needs a behavioural test, or an exemption with a reason in `tests/coverage/behavioural-exemptions.json`. Never add it to `tests/coverage/behavioural-gaps.json`.
 - The gap list is the backlog grandfathered when the gate landed. It only shrinks: the unit test fails on an entry that has gained a test (`npm run coverage:behavioural -- --shrink-ratchet`), and the `behavioural-coverage` release gate fails on any entry the merge base did not have.
 - Registration, preflight and refusal suites, file-level fixtures and `expect(x.ok)` do not count. Read the header of `scripts/behavioural-coverage.ts` for the rule.
+
+### Integration coverage gate
+
+Everything a user drives that is not a bridge action (CLI commands, server startup per strategy and mode, the gateway, flows, plugins, the daemon, feedback, auth, config) is listed by id in `tests/coverage/integration-surfaces.json`. `npm run test:integration` runs `tests/integration`: the real CLI, server and daemon spawned in hermetic sandboxes (`tests/integration/harness.ts`) with local fakes for the bridge, npm, the registry, the feedback service and GitHub. It runs in CI.
+
+- A test claims a surface with `covers("<id>")` from `tests/helpers/covers.ts`, and is credited when it asserts on what the process did. `npm run coverage:integration` regenerates `tests/coverage/integration-coverage.json`; `tests/unit/integration-coverage.test.ts` fails when it is stale, a surface is unexplained, or a test claims an id the manifest lacks.
+- A new surface goes into the manifest with its test, or with a reasoned exemption in `tests/coverage/integration-exemptions.json`. `tests/coverage/integration-gaps.json` only shrinks, enforced by the `integration-coverage` release gate.
+- A surface that needs a live editor gets its test in `tests/live`, which the inventory also reads.
+- Never point a test at a real service or the developer's home: start from `Sandbox.env()`, which closes every service origin and redirects every per-user file.
 
 ### Clean plugin rebuild recipe
 
@@ -112,7 +133,22 @@ UBT's incremental build + Live Coding can mask registration failures from earlie
 
 CI **gates the publish job** on a single pre-staged input: the draft GitHub release for `vX.Y.Z`. The draft body must begin with YAML frontmatter declaring a `headline:` array. CI parses, validates against the regex enforced by `scripts/release-headline.mjs`, joins with ` · `, posts the `landing/headline` commit status itself, strips the frontmatter from the body, then promotes the draft. No manual `gh api ... statuses` step.
 
-0. **Green gates first**, all against `tests/ue_mcp`: `npm run test:smoke`, `npm run test:live`, `npm run test:live -- --lifecycle`, `npm run test:automation`, and `node scripts/check-release-gates.mjs all`, whose `behavioural-coverage` gate prints the covered-action share. The release notes state that share.
+**One command, from the release worktree** (`node scripts/release-worktree.mjs` creates `../ue-mcp-release` once and moves it to `origin/main` after that, keeping its build output):
+
+```bash
+npm run release -- --version X.Y.Z[-beta.N] --notes /path/to/notes.md
+```
+
+It checks the notes, bumps on `bump/<version>` with `npm run generate:metadata`, selects the tests, creates the draft, pushes and opens the PR, then runs in parallel: the PR's CI (unit, integration, release gates, once), the bridge binaries (incremental, uploaded to the draft), one editor on `tests/ue_mcp` beside the binaries compile for the lifecycle cases when selected, smoke over the actions no behavioural test dispatches and the selected `UE.MCP.*` automation tests when `plugin/` changed, and the base live files, and once the compile is done, the other selected live files against copies of `tests/ue_mcp`. The run closes every editor it started. `npm run release -- --rehearsal --since <tag>` runs the same lanes on the checkout without publishing anything, replaying that release's plugin changes into the binaries compile, to measure a run. It merges when all of them are green, and the merge publishes. Timing goes to `release-logs/release-timing.json`. The target is a release in under 10 minutes; the runner prints a warning when a run goes over 600 s, and an overrun is a defect to fix, not a budget to raise.
+
+**Test selection** (`scripts/select-tests.ts`, #1509). The runner diffs against the previous release tag, prints what it chose and why, and writes `release-logs/selection.json`, which `test:live -- --files-from` and `scripts/automation-tests.mjs --filters-from` read. Run it alone with `npx tsx scripts/select-tests.ts --base <tag>` or `--files a,b`; `--related` also runs `vitest related` over the unit and integration suites.
+
+- The graph (`scripts/lib/test-graph.ts`): TS imports from the TypeScript compiler's `preProcessFile`, C++ includes from a regex scan of the plugin (clang-scan-deps is not installed with the toolchains here), the actions each `.cpp` registers and defines, and the actions each live and automation test sends. Per-file parses are cached in `node_modules/.cache/ue-mcp/test-graph.json`.
+- Selected: every test that sends an action a changed file reaches, imports or includes a changed file, or is itself changed. A shared header or the dispatch path reaches every action, so the graph selects the full suite. A category module under `src/tools` reaches its own category only.
+- The full suite, because the graph cannot see them: Build.cs, the `.uplugin`, `Config/`, `tests/ue_mcp`, `package.json`, the lockfile, the test runners, and any plugin file that reaches no action or test. A stable release always runs the full suite.
+- A new kind of runtime edge the scan misses (a process spawn, a registry that is not category-keyed) goes into the graph builder with a fixture test in `tests/unit/test-selection.test.ts`, never into a hand-kept list of paths.
+
+Main and `release/*` take only pull requests that are up to date with them and whose `build` check passed (ruleset "Tested once, up to date"). CI builds and tests a commit once, on its PR; the push to main only publishes.
 
 1. **Author release notes locally** with frontmatter. Notes file lives anywhere (gitignored, scratch, /tmp). The frontmatter must be the first thing in the file:
    ```yaml
@@ -137,23 +173,9 @@ CI **gates the publish job** on a single pre-staged input: the draft GitHub rele
    - Joined string (`items.join(" · ")`) must be ≤140 chars.
    - Style: concrete noun phrases naming features. **No sentences. No editorializing the value.** Match the historical voice (see prior releases on the GitHub releases page).
 
-2. **Create the draft release:**
-   ```bash
-   gh release create vX.Y.Z --draft --notes-file /path/to/local-notes.md
-   ```
+2. **Binaries.** `npm run release` builds and uploads them. By hand: `npm run binaries:build` compiles the plugin's editor modules per installed engine in a host project kept under the temp folder between runs, so an unchanged plugin takes seconds and a cold one a few minutes, then `npm run binaries:upload` attaches the zips and manifest to the draft. `--engines 5.7,5.8` narrows the build; `UE_MCP_BINARY_ENGINES="5.4=D:/UE_5.4;5.5=..."` names engines outside the launcher's location. The publish job fails before npm when the draft does not carry `UE_MCP_Bridge-<version>-UE5.7-Win64.zip`, `-UE5.8-Win64.zip` and `UE_MCP_Bridge-<version>-manifest.json` (`scripts/release-binaries.mjs`).
 
-3. **Build and attach the prebuilt bridge binaries** (machines without a C++ toolchain install these). On a machine with the engines installed, after the version bump is committed locally (with `npm run generate:metadata`, which stamps it into the plugin descriptor the binaries carry) and before it is pushed:
-   ```bash
-   npm run binaries:build      # RunUAT BuildPlugin per installed engine -> dist-binaries/
-   npm run binaries:upload     # zips + manifest onto the draft release; refuses a published one
-   ```
-   `--engines 5.7,5.8` narrows the build; `UE_MCP_BINARY_ENGINES="5.4=D:/UE_5.4;5.5=..."` names engines outside the launcher's location. An engine without a build here is an engine whose binary install fails with a plain "no prebuilt bridge for UE x.y" until one is uploaded.
-
-   **CI enforces this.** The publish job fails before npm when the draft does not carry `UE_MCP_Bridge-<version>-UE5.7-Win64.zip`, `-UE5.8-Win64.zip` and `UE_MCP_Bridge-<version>-manifest.json` (`scripts/release-binaries.mjs`). 1.4.0-beta.2 shipped without them and broke every binary install's update.
-
-4. **Push the version bump.** That's it - CI takes over.
-
-5. **CI validates → publishes → promotes.** If the headline frontmatter is missing or malformed, the publish job fails with a pointer to the offending item *before* npm publish runs. On success, the published release page shows the body with frontmatter stripped, and the `landing/headline` commit status is posted automatically.
+3. **CI validates, publishes and promotes** on the merge to main. If the headline frontmatter is missing or malformed, the publish job fails before npm publish runs. On success, the release page shows the body with frontmatter stripped, and the `landing/headline` commit status is posted automatically.
 
 Release notes structure (below the frontmatter): **`## Features` / `## Fixes` / `## Mentions` / `## Contributions`**, in that order. Read `docs/release-notes-style.md` before writing any of it. The rules that get broken most:
 
@@ -210,6 +232,8 @@ Each category has a folder `Private/Handlers/<Category>/` holding a paired `<Cat
 
 The bridge must be self-sufficient. Every system (Niagara, materials, PCG, blueprints, etc.) should be fully creatable and configurable through the bridge without manual editor work or pre-existing placeholder assets. If a handler can't do something, **extend the handler** rather than punt to a Python escape hatch or editor workflow. Every `execute_python` fallback is a gap, and tracked as agent feedback.
 
+Core is a provider-neutral bridge to engine modules and engine-bundled Epic plugins. It holds no third-party credentials and calls no third-party service, except the first-party infrastructure the server needs. Third-party integrations, provider-specific behaviour, opinionated workflows and anything needing an external service or credential belong in a plugin. The full rule is in `docs/plugins.md` under "What belongs in core and what belongs in a plugin".
+
 ## Useful commands
 
 ```bash
@@ -222,8 +246,10 @@ npm run test:live       # Live tests against a running editor (tests/ue_mcp only
 npm run test:automation # The plugin's C++ UE.MCP.* suite, through the bridge
 npm run golden:record   # Re-record tests/golden/editor-down.json (review the diff)
 npm run coverage:behavioural # Regenerate the behavioural-coverage inventory
+npm run coverage:integration # Regenerate the integration-coverage inventory
+npm run test:integration     # Spawned CLI, server and daemon in sandboxes (no editor)
 npm run release:notes   # Compose cumulative stable notes from a version's prereleases
-npm test                # Unit + multi-editor suites (no editor needed)
+npm test                # Unit, multi-editor and integration suites (no editor needed)
 npm run test:suites     # Vitest smoke suites (tests/ue_mcp only)
 node scripts/deploy.mjs # Sync plugin/ → tests/ue_mcp/Plugins/
 ```
