@@ -94,6 +94,8 @@ beforeAll(async () => {
   await call("place_actor", { actorClass: "/Script/Engine.Actor", label: ACTOR, location: { x: 0, y: 0, z: 200 } });
   await call("add_component_to_actor", { actorLabel: ACTOR, componentClass: "SplineMeshComponent", componentName: RAIL });
   await call("set_component_property", { actorLabel: ACTOR, componentName: RAIL, propertyName: "StaticMesh", value: CUBE });
+  // A component added at edit time starts with collision off; the user under test must have a collision copy.
+  await call("set_collision", { actorLabel: ACTOR, componentName: RAIL, collisionEnabled: "QueryAndPhysics" });
   await call("save_level", {});
 }, 300_000);
 
