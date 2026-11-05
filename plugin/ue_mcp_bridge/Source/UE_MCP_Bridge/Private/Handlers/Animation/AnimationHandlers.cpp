@@ -2653,6 +2653,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	// Create the notify event
 	FAnimNotifyEvent& NewEvent = AnimAsset->Notifies.AddDefaulted_GetRef();
 	NewEvent.NotifyName = FName(*NotifyName);
+	// Persona keys a notify node's identity by Guid. Left at the default zero
+	// Guid, every notify added here shares one, so in an editor that already has
+	// the asset open, selecting one selects them all and details-panel edits land
+	// on the wrong notify. PostSerialize repairs it on the next load, which is
+	// why it only shows in the session that added them.
+	NewEvent.Guid = FGuid::NewGuid();
 	NewEvent.Link(AnimAsset, ClampedTime);
 	NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(AnimAsset->CalculateOffsetForNotify(ClampedTime));
 	NewEvent.TrackIndex = 0;
@@ -2660,6 +2666,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	if (NewNotify)
 	{
 		NewEvent.Notify = NewNotify;
+		// What the Persona notify track sets when it places a notify.
+		NewEvent.TriggerWeightThreshold = NewNotify->GetDefaultTriggerWeightThreshold();
 
 		// #528: UAnimNotify_PlayMontageNotify::BranchingPointNotify broadcasts the
 		// NOTIFY OBJECT's own NotifyName, not the FAnimNotifyEvent's. We only set
