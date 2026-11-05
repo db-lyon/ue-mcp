@@ -11,6 +11,7 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "ContentStreaming.h"
+#include "HandlerSceneCaptureJob.h"
 #include "RenderingThread.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"

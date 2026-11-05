@@ -7,7 +7,6 @@
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
 #include "HandlerSceneCapture.h"
-#include "HandlerSceneCaptureJob.h"
 #include "Handlers/Level/LevelHandlers.h"
 #include "Handlers/HandlerEditorState.h"
 #include "Misc/PackageName.h"
