@@ -3325,6 +3325,11 @@
           "suite": "live",
           "file": "tests/live/crash-class-inputs.test.ts",
           "test": "compiles an open Blueprint and reports it compiled"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-object-property-asset.test.ts",
+          "test": "reports the asset it wrote, and compile plus save keep the value across a reload"
         }
       ]
     },
@@ -6857,6 +6862,11 @@
           "suite": "live",
           "file": "tests/live/animation-skeleton-create.test.ts",
           "test": "creates, assigns, saves, reloads, and precisely replays a factory skeleton"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-object-property-asset.test.ts",
+          "test": "reports the asset it wrote, and compile plus save keep the value across a reload"
         }
       ]
     },
@@ -8648,6 +8658,11 @@
           "suite": "live",
           "file": "tests/live/bcov-pie-script-act.test.ts",
           "test": "script_run applies arrange, runs act, then judges the expectation from the end of act"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-object-property-asset.test.ts",
+          "test": "reports the asset it wrote, and compile plus save keep the value across a reload"
         }
       ]
     },
@@ -18356,6 +18371,11 @@
           "suite": "live",
           "file": "tests/live/checkpoints.test.ts",
           "test": "checkpoint_arm with enabled false stops recording"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-object-property-asset.test.ts",
+          "test": "reports the asset it wrote, and compile plus save keep the value across a reload"
         }
       ]
     },
@@ -20302,6 +20322,11 @@
           "suite": "live",
           "file": "tests/live/bcov-widget-tree.test.ts",
           "test": "list_widget_bindings reads a designer binding and clear_widget_binding removes it"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/editor-object-property-asset.test.ts",
+          "test": "reports the asset it wrote, and compile plus save keep the value across a reload"
         }
       ]
     },
