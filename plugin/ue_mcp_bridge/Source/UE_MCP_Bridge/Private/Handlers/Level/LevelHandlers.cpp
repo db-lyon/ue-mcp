@@ -2500,6 +2500,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectComponent(const TSharedPtr<FJsonObj
 		}
 	}
 
+	// Already the selection this call makes: a replay of it changes nothing.
+	USelection* ComponentsBefore = GEditor->GetSelectedComponents();
+	const bool bTargetWasSelected = !SelectTarget || (ComponentsBefore && ComponentsBefore->IsSelected(SelectTarget));
+	const int32 ComponentCountBefore = ComponentsBefore ? ComponentsBefore->Num() : 0;
+	const bool bUnchanged = SelectOwner->IsSelected() && bTargetWasSelected
+		&& (bAddToSelection || (PreviousPaths.Num() == 1 && ComponentCountBefore == (SelectTarget ? 1 : 0)));
+
 	if (!bAddToSelection)
 	{
 		GEditor->SelectNone(false, true, false);
@@ -2539,6 +2546,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectComponent(const TSharedPtr<FJsonObj
 		Result->SetStringField(TEXT("selectedComponent"), SelectTarget->GetPathName());
 		Result->SetStringField(TEXT("selectedComponentName"), SelectTarget->GetName());
 	}
+	Result->SetBoolField(TEXT("unchanged"), bUnchanged);
 	const bool bRedirected = SelectTarget != Component;
 	Result->SetBoolField(TEXT("redirected"), bRedirected);
 	if (bRedirected)
