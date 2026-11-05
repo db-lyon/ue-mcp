@@ -16211,7 +16211,10 @@
           "name": "className",
           "type": "string",
           "required": true,
-          "description": "C++ class name or path"
+          "description": "C++ class name or path, or a Blueprint asset path (reads its generated class)",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "propertyNames",

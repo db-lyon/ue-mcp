@@ -477,7 +477,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		SpecValue,
 	});
 	Registry.RegisterHandler(TEXT("get_cdo_properties"), &GetCdoProperties, {
-		MCPParam::Required(TEXT("className"), EType::String, TEXT("C++ class name or path")),
+		MCPParam::Required(TEXT("className"), EType::String, TEXT("C++ class name or path, or a Blueprint asset path (reads its generated class)")).Alias(TEXT("assetPath")),
 		MCPParam::Optional(TEXT("propertyNames"), EType::Array, TEXT("Property names to read (omit for all)")).Items(EType::String),
 	});
 	Registry.RegisterHandler(TEXT("compare_class_defaults"), &CompareClassDefaults, {
