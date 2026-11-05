@@ -25264,6 +25264,12 @@
           "type": "object",
           "required": false,
           "description": "{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"
+        },
+        {
+          "name": "start_when",
+          "type": "object",
+          "required": false,
+          "description": "Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms"
         }
       ],
       "contractExempt": "Arms the replayer, which drives the next PIE session"
@@ -25405,6 +25411,12 @@
           "type": "object",
           "required": false,
           "description": "{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}"
+        },
+        {
+          "name": "start_when",
+          "type": "object",
+          "required": false,
+          "description": "Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms"
         }
       ],
       "contractExempt": "Arms the replayer and starts PIE"

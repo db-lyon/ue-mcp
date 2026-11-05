@@ -226,6 +226,15 @@ namespace MCPPIE
 		double ReplayInputOnsetMs = 0.0;
 		// Replay trajectory, same columns and timeline as recording.csv.
 		FString ReplayCSVFile;
+		// replay start_when (#1657): whether the gate opened, the source time
+		// the replay resumed at and how it was chosen, and when it opened
+		// (ms since the pawn attached). Blocker names what held it shut.
+		bool bHasStartGate = false;
+		bool bStartGatePassed = false;
+		FString StartGateAnchor;
+		double StartGateSourceMs = 0.0;
+		double StartGateReplayMs = 0.0;
+		FString StartGateBlocker;
 	};
 
 	// CSV row used by both the recorder (writing) and the replayer / diff

@@ -138,8 +138,17 @@ Replay drives the sequence through `UEnhancedInputLocalPlayerSubsystem::InjectIn
 | `encode_gif` | `false` | Also encode an animated GIF |
 | `client_id`, `pie_instance` | `0`, auto | Which player to drive |
 | `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for `frames_over_threshold`; also `tracked_default` and a per-path `tracked` map |
+| `start_when` | none | Hold the steps until the player can act; see below. Replaces `settle_ms` |
 
 Drift is compared by time. Steps fire `settle_ms` after the pawn attaches, so the replayer takes the settle delay off its clock and compares each frame with the source row at the same offset from the start of the recording. `drift.json` records `alignment`, `replay_offset_ms`, and `input_onset` (when the first input step fired on each timeline, and the `offset_ms` between them), so a timing offset is reported apart from drift. Each entry in `frames_over_threshold` has the replay `frame`, the `source_frame` it was compared with, its `time`, and signed `position_delta` and `velocity_delta` (replay minus source). The replay trajectory is written to `replay.csv` beside `drift.json`, on the source's timeline with the same columns as `recording.csv`; `replay_status.last_result.replay_csv_path` names it.
+
+A spawn intro whose length varies between runs (the pawn falls, lands, and ignores input until a cinematic ends) shifts every step that is timed from attach. `start_when` waits for the player instead:
+
+```json
+{ "start_when": { "pawn_at_rest": true, "max_speed_cms": 5, "hold_ms": 500, "log_contains": "Intro finished", "timeout_ms": 60000 } }
+```
+
+The gate opens once the pawn has been at rest (speed at most `max_speed_cms` and, for a Character, on the ground) for `hold_ms`, and a session log line containing `log_contains` has appeared when one is given. Either condition may be dropped, not both. The steps then resume at the matching point of the recording: with `pawn_at_rest`, the moment the source pawn had been at rest for `hold_ms` in the rest that led into its first input, read from `recording.csv`; otherwise the first input itself. Frames before the gate are not compared. `drift.json` reports `alignment: "start_gate"` and `start_gate {passed, anchor (source_rest, first_input or start), source_ms, replay_ms, blocker}`. While the gate is shut, `replay_status.waiting_for` says what it waits on; a gate still shut after `timeout_ms` ends the replay with that reason as `last_error`.
 
 With `capture_frame_every` set, replay saves JPEG frames under `<recording>/frames/` and composes a labelled contact sheet at `<recording>/captures/contact_<timestamp>.jpg`, a grid of keyframes with the frame index on each cell. `replay_status.last_result` returns `frame_dir`, `frame_count` and `contact_sheet_path`. GIF output is opt-in because a vision model cannot read GIF animation. For a frame of the live PIE viewport on demand, use `editor(capture_screenshot, target="pie")` or `editor(capture_scene_png, world="pie")`.
 

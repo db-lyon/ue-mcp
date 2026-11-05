@@ -260,6 +260,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	}, MCPSpec::ContractExempt(TEXT("Writes a marker into the recording in flight")));
 
 	// Replay. replay_arm and replay_run share one parser, so their params stay identical.
+	const TCHAR* const StartWhenDoc = TEXT("Hold the steps until the player can act, then resume at the matching point of the recording: {pawn_at_rest (default true: speed <= max_speed_cms, default 5, and on the ground), hold_ms (default 500), log_contains, timeout_ms (default 60000)}. Replaces settle_ms");
 	const TArray<FMCPParamSpec> ReplayParams = {
 		MCPParam::Optional(TEXT("recording_id"), EType::String, RecordingIdDoc),
 		MCPParam::Optional(TEXT("sequence_path"), EType::String, TEXT("Explicit sequence.json path")),
@@ -281,6 +282,7 @@ void FPIEHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("client_id"), EType::Integer, ClientIdDoc).Min(0),
 		MCPParam::Optional(TEXT("pie_instance"), EType::Integer, PieInstanceDoc).Min(0),
 		MCPParam::Optional(TEXT("drift_thresholds"), EType::Object, TEXT("{position_cm, rotation_deg, velocity_cms, tracked_default, tracked:{path: threshold}}")),
+		MCPParam::Optional(TEXT("start_when"), EType::Object, StartWhenDoc),
 	};
 	Registry.RegisterHandler(TEXT("pie_replay_arm"), &PieReplayArm, ReplayParams,
 		MCPSpec::ContractExempt(TEXT("Arms the replayer, which drives the next PIE session")));
