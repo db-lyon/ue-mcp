@@ -209,6 +209,7 @@ private:
 	// Ranked asset search over the Asset Registry
 	static TSharedPtr<FJsonValue> SearchAssetsFTS(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReindexAssetsFTS(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> QuickSearch(const TSharedPtr<FJsonObject>& Params);
 
 	// v0.7.19 issue #150 - AssetRegistry referencers for a set of packages
 	static TSharedPtr<FJsonValue> GetReferencers(const TSharedPtr<FJsonObject>& Params);
