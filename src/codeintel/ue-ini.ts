@@ -29,19 +29,20 @@ export function findIniFiles(dir: string): string[] {
 }
 
 /** Minimal INI parser. Strips the leading +/-/. modifiers UE uses for array
- *  merge syntax. Lines outside any section land under "Global". */
+ *  merge syntax. Lines outside any section land under "Global". Every object
+ *  has a null prototype, so a section or key named __proto__ is plain data. */
 export function parseIni(content: string): Record<string, Record<string, string>> {
-  const sections: Record<string, Record<string, string>> = {};
+  const sections: Record<string, Record<string, string>> = Object.create(null);
   let current = "Global";
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith(";") || trimmed.startsWith("#")) continue;
     if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
       current = trimmed.slice(1, -1);
-      if (!sections[current]) sections[current] = {};
+      if (!sections[current]) sections[current] = Object.create(null);
       continue;
     }
-    if (!sections[current]) sections[current] = {};
+    if (!sections[current]) sections[current] = Object.create(null);
     const eq = trimmed.indexOf("=");
     if (eq > 0) {
       const key = trimmed.slice(0, eq).replace(/^[+\-.]/, "");
@@ -51,13 +52,13 @@ export function parseIni(content: string): Record<string, Record<string, string>
   return sections;
 }
 
-/** Group dotted gameplay-tag identifiers into a nested tree. */
+/** Group dotted gameplay-tag identifiers into a nested tree of null-prototype objects. */
 export function buildTagTree(tags: string[]): Record<string, unknown> {
-  const tree: Record<string, unknown> = {};
+  const tree: Record<string, unknown> = Object.create(null);
   for (const tag of tags) {
     let current = tree;
     for (const part of tag.split(".")) {
-      if (!current[part]) current[part] = {};
+      if (!current[part]) current[part] = Object.create(null);
       current = current[part] as Record<string, unknown>;
     }
   }
