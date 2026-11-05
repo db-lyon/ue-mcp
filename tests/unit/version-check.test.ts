@@ -233,8 +233,7 @@ describe("version-check", () => {
         vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ version: "9.0.0" }) })));
         const { startVersionCheck } = await import("../../src/core/version-check.js");
         startVersionCheck("1.0.0");
-        for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
-        expect(fs.existsSync(path.join(home, ".ue-mcp", "version-check.json"))).toBe(true);
+        await vi.waitFor(() => expect(fs.existsSync(path.join(home, ".ue-mcp", "version-check.json"))).toBe(true), { timeout: 5000 });
         const src = fs.readFileSync(path.join(__dirname, "../../src/core/version-check.ts"), "utf8");
         expect(src).not.toMatch(/tmpdir\(\)/);
       } finally {
