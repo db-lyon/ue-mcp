@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import yaml from "js-yaml";
 import { writeScaffold } from "../../src/extensions/plugin-scaffold.js";
+import { loadManifest } from "../../src/extensions/manifest.js";
 import { initialize, isServerSpecifier, resolve } from "../../src/extensions/self-resolve-hooks.js";
 import { packageVersion } from "../../src/core/package-root.js";
 
@@ -44,5 +45,21 @@ describe("the server answers a plugin's ue-mcp imports", () => {
     await resolve("js-yaml", { parentURL: "file:///proj/node_modules/plug/dist/t.js" }, next);
     expect(seen).toEqual(["file:///srv/ue-mcp/package.json", "file:///proj/node_modules/plug/dist/t.js"]);
     initialize(undefined);
+  });
+});
+
+describe("the scaffolded knowledge (#1631)", () => {
+  it("declares every file under knowledge/ in the manifest, so the loader reads it", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-scaffold-knowledge-"));
+    try {
+      writeScaffold(dir, "ue-mcp-probe", "probe");
+      const { manifest, dropped } = loadManifest(dir);
+      expect(dropped).toEqual([]);
+      const written = fs.readdirSync(path.join(dir, "knowledge")).map((f) => `knowledge/${f}`).sort();
+      expect(Object.values(manifest.knowledge).sort()).toEqual(written);
+      expect(manifest.knowledge.project).toBe("knowledge/project.md");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
