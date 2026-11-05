@@ -21,6 +21,8 @@ private:
 	// #1098: scrub + capture over a frame range (SequencerHandlers_Render.cpp).
 	static TSharedPtr<FJsonValue> RenderSequenceFrames(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetPlaybackRange(const TSharedPtr<FJsonObject>& Params);
+	// #1641: the sequence's display rate.
+	static TSharedPtr<FJsonValue> SetDisplayRate(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddSection(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetKeyframes(const TSharedPtr<FJsonObject>& Params);
 	// #1407/#1232: channel keys on any section, and section removal (SequencerHandlers_Channels.cpp).

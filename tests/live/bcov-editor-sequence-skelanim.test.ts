@@ -1,7 +1,8 @@
 // @live-editor headless
 /**
- * A Level Sequence that plays an AnimSequence on a placed skeletal mesh: a
- * SkeletalAnimation section's clip, offsets and play rate, read back through
+ * A Level Sequence that plays an AnimSequence on a placed skeletal mesh:
+ * the display rate set at creation and afterwards, and a SkeletalAnimation
+ * section's clip, offsets and play rate, each read back through
  * get_sequence_info. Refs #1641.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -16,6 +17,7 @@ const MESH = "/Engine/Tutorial/SubEditors/TutorialAssets/Character/TutorialTPP";
 const ACTOR = "BCov_SkelAnim_Actor";
 
 type Json = Record<string, unknown>;
+type Rate = { numerator: number; denominator: number };
 type AnimParams = { animation: string; startFrameOffset: number; endFrameOffset: number; startOffsetSeconds: number; endOffsetSeconds: number; playRate?: number; animationLengthSeconds?: number };
 type Section = { class: string; startSeconds?: number; endSeconds?: number; animation?: AnimParams };
 type Track = { class: string; sections?: Section[] };
@@ -57,7 +59,6 @@ beforeAll(async () => {
   bridge = await getBridge();
   await cleanup();
   await call("create_sequence", { name: "AS_BCovSkelAnim", skeletonPath: SKELETON, packagePath: DIR, numFrames: 4, frameRate: 30 });
-  await call("create_level_sequence", { name: "LS_BCovSkelAnim", packagePath: DIR });
   await call("spawn_skeletal_mesh_actor", { skeletalMesh: MESH, label: ACTOR, location: { x: 0, y: 43000, z: 100 } });
 }, 120_000);
 
@@ -69,6 +70,35 @@ afterAll(async () => {
     disconnectBridge();
   }
 }, 120_000);
+
+describe("sequence display rate", () => {
+  it("create_level_sequence sets displayRate up front, and refuses a bad rate without creating the asset", async () => {
+    await refused("create_level_sequence", { name: "LS_BCovSkelAnim_Bad", packagePath: DIR, displayRate: 0 });
+    await refused("get_sequence_info", { assetPath: `${DIR}/LS_BCovSkelAnim_Bad` });
+
+    const created = await call("create_level_sequence", { name: "LS_BCovSkelAnim", packagePath: DIR, displayRate: 30 });
+    expect(created.displayRate).toMatchObject({ numerator: 30, denominator: 1 });
+    expect((await info()).displayRate).toMatchObject({ numerator: 30, denominator: 1 });
+  }, 120_000);
+
+  it("set_sequence_display_rate maps 29.97 to the NTSC rate, reports the previous one, and its rollback restores it", async () => {
+    const set = await call("set_sequence_display_rate", { sequencePath: SEQ, displayRate: 29.97 });
+    expect(set.displayRate).toMatchObject({ numerator: 30000, denominator: 1001 });
+    expect(set.previousDisplayRate).toMatchObject({ numerator: 30, denominator: 1 });
+    expect(set.unchanged).toBe(false);
+    expect((await info()).displayRate).toMatchObject({ numerator: 30000, denominator: 1001 });
+
+    const rollback = set.rollback as { method: string; payload: Json };
+    expect(rollback.method).toBe("set_sequence_display_rate");
+    const restored = await call(rollback.method, rollback.payload);
+    expect(restored.displayRate).toMatchObject({ numerator: 30, denominator: 1 });
+    expect(((await info()).displayRate as Rate)).toMatchObject({ numerator: 30, denominator: 1 });
+
+    const again = await call("set_sequence_display_rate", { sequencePath: SEQ, displayRate: { numerator: 30, denominator: 1 } });
+    expect(again.unchanged).toBe(true);
+    await refused("set_sequence_display_rate", { sequencePath: SEQ, displayRate: 12.3 });
+  }, 120_000);
+});
 
 describe("SkeletalAnimation section clip, offsets and play rate", () => {
   it("add_sequence_section sets the clip and start offset, and spans the clip after the offset", async () => {

@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1220,
+  "handlerCount": 1221,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -11063,6 +11063,12 @@
           "type": "string",
           "required": false,
           "description": "skip (default) returns an existing asset untouched, error refuses"
+        },
+        {
+          "name": "displayRate",
+          "type": "any",
+          "required": false,
+          "description": "Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"
         }
       ],
       "contractExempt": "creates a Level Sequence asset"
@@ -39707,6 +39713,27 @@
           "type": "string",
           "required": false,
           "description": "scalar | bool | vector | vector2d | color: adds a missing parameter to a parameter section. Inferred from the collection on a Material Parameter Collection track"
+        }
+      ]
+    },
+    "set_sequence_display_rate": {
+      "category": "editor",
+      "params": [
+        {
+          "name": "sequencePath",
+          "type": "string",
+          "required": true,
+          "description": "Level Sequence asset path",
+          "aliases": [
+            "assetPath",
+            "path"
+          ]
+        },
+        {
+          "name": "displayRate",
+          "type": "any",
+          "required": true,
+          "description": "Display rate: frames per second (24, 30, 60; 23.976, 29.97 and 59.94 map to the NTSC rates) or {numerator, denominator}. Bakes and display frames sample at this rate"
         }
       ]
     },
