@@ -1834,6 +1834,11 @@
         {
           "suite": "integration",
           "file": "tests/integration/daemon-cli.test.ts",
+          "test": "a daemon starts in place of a record whose pid was reused (#1460)"
+        },
+        {
+          "suite": "integration",
+          "file": "tests/integration/daemon-cli.test.ts",
           "test": "a newer daemon asks an older one to hand off, then publishes itself"
         }
       ]
