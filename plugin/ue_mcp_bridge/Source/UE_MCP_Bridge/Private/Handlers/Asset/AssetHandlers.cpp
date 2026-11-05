@@ -1024,15 +1024,15 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// v0.7.19 #150 - AssetRegistry referencers
 	Registry.RegisterHandler(TEXT("get_asset_referencers"), &GetReferencers, {
-		MCPParam::Optional(TEXT("packages"), EType::Array, TEXT("Package paths to look up")).Items(EType::String),
-		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("One package path, used when packages is omitted")),
+		MCPParam::Optional(TEXT("packages"), EType::Array, TEXT("Package or object paths to look up")).Items(EType::String).Alias(TEXT("assetPaths")),
+		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("One package or object path, used when packages is omitted")).Alias(TEXT("assetPath")),
 		MCPParam::Optional(TEXT("includeDetails"), EType::Boolean, TEXT("Classify Blueprint and map/external-actor references, following Blueprint referencers (default false)")),
 		MCPParam::Optional(TEXT("maxDepth"), EType::Integer, TEXT("Maximum reference depth for includeDetails (default 2)")).Range(1, 8),
 		MCPParam::Optional(TEXT("includeMeshInfo"), EType::Boolean, TEXT("Include mesh summary and static mesh collision for each queried asset (default false)")),
 	});
 	Registry.RegisterHandler(TEXT("get_asset_dependencies"), &GetDependencies, {
-		MCPParam::Optional(TEXT("packages"), EType::Array, TEXT("Package paths to look up")).Items(EType::String),
-		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("One package path, used when packages is omitted")),
+		MCPParam::Optional(TEXT("packages"), EType::Array, TEXT("Package or object paths to look up")).Items(EType::String).Alias(TEXT("assetPaths")),
+		MCPParam::Optional(TEXT("packagePath"), EType::String, TEXT("One package or object path, used when packages is omitted")).Alias(TEXT("assetPath")),
 		MCPParam::Optional(TEXT("hard"), EType::Boolean, TEXT("Include hard dependencies (default true)")),
 		MCPParam::Optional(TEXT("soft"), EType::Boolean, TEXT("Include soft dependencies (default true)")),
 	});
@@ -4450,7 +4450,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetDependencies(const TSharedPtr<FJsonObj
 	for (const FString& Pkg : Packages)
 	{
 		TArray<FName> Deps;
-		AR.GetDependencies(FName(*Pkg), Deps, EDependencyCategory::Package, Query);
+		// An object path (/Game/X/Y.Y) names the same package; the registry keys on the package.
+		const FString PackageName = FPackageName::ObjectPathToPackageName(FPackageName::ExportTextPathToObjectPath(Pkg));
+		AR.GetDependencies(FName(*PackageName), Deps, EDependencyCategory::Package, Query);
 		TArray<TSharedPtr<FJsonValue>> Out;
 		for (const FName& D : Deps) Out.Add(MakeShared<FJsonValueString>(D.ToString()));
 		ByPkg->SetArrayField(Pkg, Out);

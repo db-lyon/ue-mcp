@@ -15711,14 +15711,20 @@
           "name": "packages",
           "type": "array",
           "required": false,
-          "description": "Package paths to look up",
+          "description": "Package or object paths to look up",
+          "aliases": [
+            "assetPaths"
+          ],
           "items": "string"
         },
         {
           "name": "packagePath",
           "type": "string",
           "required": false,
-          "description": "One package path, used when packages is omitted"
+          "description": "One package or object path, used when packages is omitted",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "hard",
@@ -15791,14 +15797,20 @@
           "name": "packages",
           "type": "array",
           "required": false,
-          "description": "Package paths to look up",
+          "description": "Package or object paths to look up",
+          "aliases": [
+            "assetPaths"
+          ],
           "items": "string"
         },
         {
           "name": "packagePath",
           "type": "string",
           "required": false,
-          "description": "One package path, used when packages is omitted"
+          "description": "One package or object path, used when packages is omitted",
+          "aliases": [
+            "assetPath"
+          ]
         },
         {
           "name": "includeDetails",
