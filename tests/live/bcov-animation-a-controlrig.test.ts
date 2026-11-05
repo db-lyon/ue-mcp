@@ -2,8 +2,9 @@
 /**
  * Control Rig authoring on a copy of the engine tutorial mesh: blueprint
  * variables, and the LevelSequence edit session from begin through capture,
- * a keyed offset and the bake to a new AnimSequence.
- * Refs #1223
+ * a keyed offset and the bake to a new AnimSequence. The bakes name the bound
+ * mesh as the retarget source, and a Step clip round-trips key for key.
+ * Refs #1223, #1642
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { callBridge, disconnectBridge, getBridge, type TestResult } from "../setup.js";
@@ -17,7 +18,11 @@ const CONTROL_RIG = `${DIR}/CR_BCovA`;
 const SEQUENCE = `${DIR}/LS_BCovA_Edit`;
 const BAKED = `${DIR}/AS_BCovA_Baked`;
 const TAG = "BCovA_Edit";
-const ASSETS = [BAKED, SEQUENCE, CONTROL_RIG, IDLE, MESH];
+const STEP = `${DIR}/AS_BCovA_CrStep`;
+const STEP_SEQUENCE = `${DIR}/LS_BCovA_Step`;
+const STEP_BAKED = `${DIR}/AS_BCovA_StepBaked`;
+const STEP_TAG = "BCovA_Step";
+const ASSETS = [STEP_BAKED, STEP_SEQUENCE, STEP, BAKED, SEQUENCE, CONTROL_RIG, IDLE, MESH];
 
 type Json = Record<string, unknown>;
 type Vec = { x: number; y: number; z: number };
@@ -45,11 +50,18 @@ async function pelvisAt(assetPath: string, frame: number): Promise<Vec> {
   return (read.samples as Array<{ location: Vec }>)[0].location;
 }
 
+async function boneTrack(assetPath: string, boneName: string, frames: number[]): Promise<Vec[]> {
+  const read = await call("read_bone_track", { assetPath, boneName, frames, space: "component" });
+  return (read.samples as Array<{ location: Vec }>).map((s) => s.location);
+}
+
 beforeAll(async () => {
   bridge = await getBridge();
   for (const path of ASSETS) await callBridge(bridge, "delete_asset", { assetPath: path, force: true });
   await call("duplicate_asset", { sourcePath: `${ENGINE}/TutorialTPP`, destinationPath: MESH });
   await call("duplicate_asset", { sourcePath: `${ENGINE}/Tutorial_Idle`, destinationPath: IDLE });
+  await call("duplicate_asset", { sourcePath: `${ENGINE}/Tutorial_Idle`, destinationPath: STEP });
+  await call("set_property", { objectPath: STEP, propertyName: "Interpolation", value: "Step" });
 }, 300_000);
 
 afterAll(async () => {
@@ -78,6 +90,7 @@ describe("control rig authoring", () => {
     expect(begun.bindingTag).toBe(TAG);
     expect(begun.startFrame).toBe(0);
     expect(begun.endFrameExclusive).toBe(10);
+    expect(begun.sourceInterpolation).toBe("linear");
     const controls = begun.controls as Control[];
     expect(begun.controlCount).toBe(controls.length);
     const pick = controls.find((c) => c.transformControl && c.animatable && c.name.toLowerCase().includes("pelvis"))
@@ -128,12 +141,38 @@ describe("control rig authoring", () => {
     const read = await call("read_anim_sequence", { assetPath: BAKED });
     expect(String(read.skeleton)).toContain("TutorialTPP_Skeleton");
     expect(read.numFrames).toBe(baked.sampledKeyCount);
+    // The bake records the mesh's own bone lengths, so the mesh is the retarget source (#1642).
+    expect(String(baked.retargetSourceAsset)).toContain("SKM_BCovA_Cr");
+    expect(String(read.retargetSourceAsset)).toContain("SKM_BCovA_Cr");
+    expect(read.interpolation).toBe("linear");
     if (control.toLowerCase().includes("pelvis")) {
       const source = await pelvisAt(IDLE, 5);
       const edited = await pelvisAt(BAKED, 5);
       const moved = Math.hypot(edited.x - source.x, edited.y - source.y, edited.z - source.z);
       expect(moved).toBeGreaterThan(5);
       expect(moved).toBeLessThan(15);
+    }
+  }, 300_000);
+
+  it("a Step clip round-trips through an unedited session key for key (#1642)", async () => {
+    const source = await call("read_anim_sequence", { assetPath: STEP });
+    expect(source.interpolation).toBe("step");
+    const begun = await call("begin_control_rig_edit", {
+      sequencePath: STEP_SEQUENCE, skeletalMeshPath: MESH, sourceAnimationPath: STEP, bindingTag: STEP_TAG, endFrame: 10,
+    });
+    expect(begun.sourceInterpolation).toBe("step");
+    const baked = await call("bake_control_rig_edit", { sequencePath: STEP_SEQUENCE, bindingTag: STEP_TAG, outputAssetPath: STEP_BAKED });
+    expect(baked.interpolation).toBe("step");
+    expect(String(baked.retargetSourceAsset)).toContain("SKM_BCovA_Cr");
+
+    const frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    for (const bone of ["pelvis", "hand_r", "foot_l"]) {
+      const want = await boneTrack(STEP, bone, frames);
+      const got = await boneTrack(STEP_BAKED, bone, frames);
+      frames.forEach((frame, i) => {
+        const off = Math.hypot(got[i].x - want[i].x, got[i].y - want[i].y, got[i].z - want[i].z);
+        expect(off, `${bone} frame ${frame} is ${off} cm off the source key`).toBeLessThan(0.01);
+      });
     }
   }, 300_000);
 });

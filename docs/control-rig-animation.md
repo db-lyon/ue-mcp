@@ -373,6 +373,20 @@ The source animation and LevelSequence are unchanged. Key reduction and
 Sequencer links are not supported: omit `reduceKeys` and `createLink` or pass
 `false`. The rollback deletes the created asset.
 
+The bake records the bound mesh's own bone lengths, so the output names that
+mesh as its retarget source asset (`retargetSourceAsset` in the result and in
+`read_sequence`). Without it, a mesh whose proportions differ from the
+skeleton's reference pose is retargeted a second time on playback and limbs
+land centimetres off. Pass `setRetargetSourceAsset=false` only when the clip
+must play from the skeleton's reference pose. `interpolation` defaults to the
+interpolation of the clip the session began from, so a Step clip bakes as Step,
+and `begin_control_rig_edit` samples a Step clip so every frame keeps its own
+key. The rest of the Sequencer bake options are accepted too: `curveInterpolation`,
+`recordInWorldSpace`, `evaluateAllSkeletalMeshComponents`, the `export*` toggles,
+`skipCurvesWithZeroValue`, `includeAnimationNames`, `excludeAnimationNames`,
+`removeExcludedCurves`, `warmUpFrames`, `delayBeforeStart`, `bakeTimecode`,
+`timecodeRate`, and a custom `startFrame`/`endFrame` range.
+
 ## Validation
 
 Run `analyze_animation` on the source and the baked output with the same mesh,

@@ -2045,6 +2045,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-animation-a-controlrig.test.ts",
+          "test": "a Step clip round-trips through an unedited session key for key (#1642)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-animation-a-controlrig.test.ts",
           "test": "bake_control_rig_edit writes the edited range to a new AnimSequence carrying the offset"
         }
       ]
@@ -2156,6 +2161,11 @@
       "registeredIn": "AnimationHandlers.cpp",
       "status": "covered",
       "tests": [
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-animation-a-controlrig.test.ts",
+          "test": "a Step clip round-trips through an unedited session key for key (#1642)"
+        },
         {
           "suite": "live",
           "file": "tests/live/bcov-animation-a-controlrig.test.ts",
@@ -14729,6 +14739,11 @@
         {
           "suite": "live",
           "file": "tests/live/bcov-animation-a-controlrig.test.ts",
+          "test": "a Step clip round-trips through an unedited session key for key (#1642)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-animation-a-controlrig.test.ts",
           "test": "bake_control_rig_edit writes the edited range to a new AnimSequence carrying the offset"
         },
         {
@@ -15135,6 +15150,11 @@
           "suite": "live",
           "file": "tests/live/animation-authoring-gaps.test.ts",
           "test": "transform_bone_tracks rotates a track by the given yaw and the readback matches (#1227)"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-animation-a-controlrig.test.ts",
+          "test": "a Step clip round-trips through an unedited session key for key (#1642)"
         },
         {
           "suite": "live",

@@ -782,7 +782,32 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			}),
 		});
 	}
-	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit, {
+	// The Sequencer bake options both AnimSequence bakes accept (#1642).
+	auto AnimExportOptionParams = [](const TCHAR* InterpolationDefault)
+	{
+		return TArray<FMCPParamSpec>{
+			MCPParam::Optional(TEXT("setRetargetSourceAsset"), EType::Boolean, TEXT("Name the bound mesh as the output's retarget source asset (default true). The bake records that mesh's bone lengths, so leaving it unset retargets them a second time on playback when the mesh differs from the skeleton's reference pose")),
+			MCPParam::Optional(TEXT("interpolation"), EType::String, InterpolationDefault).Enum({ TEXT("linear"), TEXT("step") }),
+			MCPParam::Optional(TEXT("curveInterpolation"), EType::String, TEXT("Interpolation of baked curves (default linear)")).Enum({ TEXT("linear"), TEXT("constant"), TEXT("cubic") }),
+			MCPParam::Optional(TEXT("recordInWorldSpace"), EType::Boolean, TEXT("Record the root in world space (default false)")),
+			MCPParam::Optional(TEXT("evaluateAllSkeletalMeshComponents"), EType::Boolean, TEXT("Evaluate every skeletal mesh component on the bound actor, not only the baked one (default true)")),
+			MCPParam::Optional(TEXT("exportTransforms"), EType::Boolean, TEXT("Bake bone transforms (default true)")),
+			MCPParam::Optional(TEXT("exportMorphTargets"), EType::Boolean, TEXT("Bake morph target curves (default true)")),
+			MCPParam::Optional(TEXT("exportAttributeCurves"), EType::Boolean, TEXT("Bake attribute curves (default true)")),
+			MCPParam::Optional(TEXT("exportMaterialCurves"), EType::Boolean, TEXT("Bake material curves (default true)")),
+			MCPParam::Optional(TEXT("skipCurvesWithZeroValue"), EType::Boolean, TEXT("Leave out curves that stay at zero (default true)")),
+			MCPParam::Optional(TEXT("includeAnimationNames"), EType::Array, TEXT("Bake only the bones and curves whose names match these")).Items(EType::String),
+			MCPParam::Optional(TEXT("excludeAnimationNames"), EType::Array, TEXT("Leave out the bones and curves whose names match these")).Items(EType::String),
+			MCPParam::Optional(TEXT("removeExcludedCurves"), EType::Boolean, TEXT("Remove excluded curves that already exist on the output (default false)")),
+			MCPParam::Optional(TEXT("warmUpFrames"), EType::Integer, TEXT("Display-rate frames evaluated before the start, after any delay (default 0)")).Range(0, 100000),
+			MCPParam::Optional(TEXT("delayBeforeStart"), EType::Integer, TEXT("Display-rate frames to wait before the bake starts (default 0)")).Range(0, 100000),
+			MCPParam::Optional(TEXT("bakeTimecode"), EType::Boolean, TEXT("Bake timecode attributes onto the root (default false)")),
+			MCPParam::Optional(TEXT("timecodeRate"), EType::Number, TEXT("Timecode rate in frames per second for bakeTimecode (default the project timecode rate)")),
+			MCPParam::Optional(TEXT("startFrame"), EType::Integer, TEXT("Custom range start in display-rate frames; pass with endFrame (default the playback range)")),
+			MCPParam::Optional(TEXT("endFrame"), EType::Integer, TEXT("Custom range end in display-rate frames, sampled as the last key; pass with startFrame")),
+		};
+	};
+	TArray<FMCPParamSpec> BakeEditParams = {
 		MCPParam::Required(TEXT("sequencePath"), EType::String, TEXT("LevelSequence holding the Control Rig edit session")),
 		MCPParam::Required(TEXT("bindingTag"), EType::String, TEXT("Edit-session natural key from begin_control_rig_edit")),
 		MCPParam::Required(TEXT("outputAssetPath"), EType::String, TEXT("Destination AnimSequence asset path")),
@@ -791,7 +816,10 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("tolerance"), EType::Number, TEXT("Key-reduction tolerance (default 0.001)")),
 		MCPParam::Optional(TEXT("createLink"), EType::Boolean, TEXT("Sequencer links are not supported yet; omit or pass false")).Literal(false),
 		MCPParam::Optional(TEXT("onConflict"), EType::String, TEXT("skip returns an existing output, error (default) refuses; it never overwrites")),
-	}, MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
+	};
+	BakeEditParams.Append(AnimExportOptionParams(TEXT("Bone key interpolation of the output (default the interpolation of the clip the session began from)")));
+	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit, BakeEditParams,
+		MCPSpec::ContractExempt(TEXT("5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence")));
 	Registry.RegisterHandler(TEXT("analyze_animation"), &AnalyzeAnimation, {
 		AssetPath(TEXT("AnimSequence asset path")),
 		MCPParam::Optional(TEXT("skeletalMeshPath"), EType::String, TEXT("SkeletalMesh whose proportions to sample with; must be compatible with the sequence's skeleton")),

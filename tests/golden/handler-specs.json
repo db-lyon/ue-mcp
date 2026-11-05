@@ -5692,6 +5692,135 @@
           "type": "string",
           "required": false,
           "description": "skip returns an existing output, error (default) refuses; it never overwrites"
+        },
+        {
+          "name": "setRetargetSourceAsset",
+          "type": "boolean",
+          "required": false,
+          "description": "Name the bound mesh as the output's retarget source asset (default true). The bake records that mesh's bone lengths, so leaving it unset retargets them a second time on playback when the mesh differs from the skeleton's reference pose"
+        },
+        {
+          "name": "interpolation",
+          "type": "string",
+          "required": false,
+          "description": "Bone key interpolation of the output (default the interpolation of the clip the session began from)",
+          "enum": [
+            "linear",
+            "step"
+          ]
+        },
+        {
+          "name": "curveInterpolation",
+          "type": "string",
+          "required": false,
+          "description": "Interpolation of baked curves (default linear)",
+          "enum": [
+            "linear",
+            "constant",
+            "cubic"
+          ]
+        },
+        {
+          "name": "recordInWorldSpace",
+          "type": "boolean",
+          "required": false,
+          "description": "Record the root in world space (default false)"
+        },
+        {
+          "name": "evaluateAllSkeletalMeshComponents",
+          "type": "boolean",
+          "required": false,
+          "description": "Evaluate every skeletal mesh component on the bound actor, not only the baked one (default true)"
+        },
+        {
+          "name": "exportTransforms",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake bone transforms (default true)"
+        },
+        {
+          "name": "exportMorphTargets",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake morph target curves (default true)"
+        },
+        {
+          "name": "exportAttributeCurves",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake attribute curves (default true)"
+        },
+        {
+          "name": "exportMaterialCurves",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake material curves (default true)"
+        },
+        {
+          "name": "skipCurvesWithZeroValue",
+          "type": "boolean",
+          "required": false,
+          "description": "Leave out curves that stay at zero (default true)"
+        },
+        {
+          "name": "includeAnimationNames",
+          "type": "array",
+          "required": false,
+          "description": "Bake only the bones and curves whose names match these",
+          "items": "string"
+        },
+        {
+          "name": "excludeAnimationNames",
+          "type": "array",
+          "required": false,
+          "description": "Leave out the bones and curves whose names match these",
+          "items": "string"
+        },
+        {
+          "name": "removeExcludedCurves",
+          "type": "boolean",
+          "required": false,
+          "description": "Remove excluded curves that already exist on the output (default false)"
+        },
+        {
+          "name": "warmUpFrames",
+          "type": "integer",
+          "required": false,
+          "description": "Display-rate frames evaluated before the start, after any delay (default 0)",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        {
+          "name": "delayBeforeStart",
+          "type": "integer",
+          "required": false,
+          "description": "Display-rate frames to wait before the bake starts (default 0)",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        {
+          "name": "bakeTimecode",
+          "type": "boolean",
+          "required": false,
+          "description": "Bake timecode attributes onto the root (default false)"
+        },
+        {
+          "name": "timecodeRate",
+          "type": "number",
+          "required": false,
+          "description": "Timecode rate in frames per second for bakeTimecode (default the project timecode rate)"
+        },
+        {
+          "name": "startFrame",
+          "type": "integer",
+          "required": false,
+          "description": "Custom range start in display-rate frames; pass with endFrame (default the playback range)"
+        },
+        {
+          "name": "endFrame",
+          "type": "integer",
+          "required": false,
+          "description": "Custom range end in display-rate frames, sampled as the last key; pass with startFrame"
         }
       ],
       "contractExempt": "5.8 only: before 5.8 the handler is a stub that reads nothing, and on 5.8 it bakes and saves a new AnimSequence"

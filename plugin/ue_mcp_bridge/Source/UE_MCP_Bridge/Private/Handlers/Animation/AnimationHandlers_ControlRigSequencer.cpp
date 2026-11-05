@@ -338,6 +338,205 @@ namespace
 		return Object;
 	}
 
+	bool ControlRigSequencerReadFrameCount(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, FFrameNumber& Out, FString& OutError)
+	{
+		double Number = 0.0;
+		if (!TryGetNumberParam(Params, Field, Number)) return true;
+		if (!FMath::IsFinite(Number) || !FMath::IsNearlyEqual(Number, FMath::RoundToDouble(Number))
+			|| Number < 0.0 || Number > static_cast<double>(ControlRigSequencerMaxFrames))
+		{
+			OutError = FString::Printf(TEXT("'%s' must be an integer from 0 to %d"), Field, ControlRigSequencerMaxFrames);
+			return false;
+		}
+		Out = FFrameNumber(static_cast<int32>(FMath::RoundToInt(Number)));
+		return true;
+	}
+
+	bool ControlRigSequencerReadNames(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, TArray<FString>& Out, FString& OutError)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!TryGetArrayParam(Params, Field, Values) || !Values) return true;
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			FString Name;
+			if (!Value.IsValid() || !Value->TryGetString(Name) || Name.IsEmpty())
+			{
+				OutError = FString::Printf(TEXT("'%s' must be an array of non-empty strings"), Field);
+				return false;
+			}
+			Out.Add(Name);
+		}
+		return true;
+	}
+
+	const TCHAR* ControlRigSequencerInterpolationName(EAnimInterpolationType Interpolation)
+	{
+		return Interpolation == EAnimInterpolationType::Step ? TEXT("step") : TEXT("linear");
+	}
+
+	// The UAnimSeqExportOption fields an AnimSequence bake accepts (#1642). Every
+	// one is read before the caller creates its output asset. The retarget source
+	// defaults on: the bake records the bound mesh's own bone lengths, so a clip
+	// left on the skeleton's reference pose is retargeted a second time on playback.
+	bool ControlRigSequencerReadExportOptions(
+		const TSharedPtr<FJsonObject>& Params,
+		const FFrameRate& DisplayRate,
+		EAnimInterpolationType DefaultInterpolation,
+		UAnimSeqExportOption& Out,
+		FString& OutError)
+	{
+		Out.bSetRetargetSourceAsset = OptionalBool(Params, TEXT("setRetargetSourceAsset"), true);
+		Out.bExportTransforms = OptionalBool(Params, TEXT("exportTransforms"), true);
+		Out.bExportMorphTargets = OptionalBool(Params, TEXT("exportMorphTargets"), true);
+		Out.bExportAttributeCurves = OptionalBool(Params, TEXT("exportAttributeCurves"), true);
+		Out.bExportMaterialCurves = OptionalBool(Params, TEXT("exportMaterialCurves"), true);
+		Out.bSkipCurvesWithZeroValue = OptionalBool(Params, TEXT("skipCurvesWithZeroValue"), true);
+		Out.bRecordInWorldSpace = OptionalBool(Params, TEXT("recordInWorldSpace"), false);
+		Out.bEvaluateAllSkeletalMeshComponents = OptionalBool(Params, TEXT("evaluateAllSkeletalMeshComponents"), true);
+		Out.bRemoveExcludedCurves = OptionalBool(Params, TEXT("removeExcludedCurves"), false);
+		Out.bBakeTimecode = OptionalBool(Params, TEXT("bakeTimecode"), false);
+
+		const FString Interpolation = OptionalString(Params, TEXT("interpolation")).ToLower();
+		if (Interpolation.IsEmpty()) Out.Interpolation = DefaultInterpolation;
+		else if (Interpolation == TEXT("linear")) Out.Interpolation = EAnimInterpolationType::Linear;
+		else if (Interpolation == TEXT("step")) Out.Interpolation = EAnimInterpolationType::Step;
+		else
+		{
+			OutError = TEXT("'interpolation' must be 'linear' or 'step'");
+			return false;
+		}
+
+		const FString CurveInterpolation = OptionalString(Params, TEXT("curveInterpolation"), TEXT("linear")).ToLower();
+		if (CurveInterpolation == TEXT("linear")) Out.CurveInterpolation = ERichCurveInterpMode::RCIM_Linear;
+		else if (CurveInterpolation == TEXT("constant")) Out.CurveInterpolation = ERichCurveInterpMode::RCIM_Constant;
+		else if (CurveInterpolation == TEXT("cubic")) Out.CurveInterpolation = ERichCurveInterpMode::RCIM_Cubic;
+		else
+		{
+			OutError = TEXT("'curveInterpolation' must be 'linear', 'constant' or 'cubic'");
+			return false;
+		}
+
+		if (!ControlRigSequencerReadNames(Params, TEXT("includeAnimationNames"), Out.IncludeAnimationNames, OutError)) return false;
+		if (!ControlRigSequencerReadNames(Params, TEXT("excludeAnimationNames"), Out.ExcludeAnimationNames, OutError)) return false;
+		if (!ControlRigSequencerReadFrameCount(Params, TEXT("warmUpFrames"), Out.WarmUpFrames, OutError)) return false;
+		if (!ControlRigSequencerReadFrameCount(Params, TEXT("delayBeforeStart"), Out.DelayBeforeStart, OutError)) return false;
+
+		if (HasParam(Params, TEXT("timecodeRate")))
+		{
+			if (!ControlRigSequencerReadRate(Params, TEXT("timecodeRate"), DisplayRate, Out.OverrideTimecodeRate, OutError)) return false;
+			Out.bTimecodeRateOverride = true;
+		}
+
+		const bool bHasStart = HasParam(Params, TEXT("startFrame"));
+		const bool bHasEnd = HasParam(Params, TEXT("endFrame"));
+		if (bHasStart != bHasEnd)
+		{
+			OutError = TEXT("'startFrame' and 'endFrame' bound a custom range together; pass both or neither");
+			return false;
+		}
+		if (bHasStart)
+		{
+			double Start = 0.0;
+			double End = 0.0;
+			TryGetNumberParam(Params, TEXT("startFrame"), Start);
+			TryGetNumberParam(Params, TEXT("endFrame"), End);
+			const auto IsFrame = [](double Value)
+			{
+				return FMath::IsFinite(Value) && FMath::IsNearlyEqual(Value, FMath::RoundToDouble(Value))
+					&& Value >= static_cast<double>(MIN_int32) && Value <= static_cast<double>(MAX_int32);
+			};
+			if (!IsFrame(Start) || !IsFrame(End) || End <= Start
+				|| End - Start > static_cast<double>(ControlRigSequencerMaxFrames))
+			{
+				OutError = FString::Printf(TEXT("'startFrame' and 'endFrame' must be integers with endFrame after startFrame, at most %d frames apart"), ControlRigSequencerMaxFrames);
+				return false;
+			}
+			Out.bUseCustomTimeRange = true;
+			Out.CustomStartFrame = FFrameNumber(static_cast<int32>(FMath::RoundToInt(Start)));
+			Out.CustomEndFrame = FFrameNumber(static_cast<int32>(FMath::RoundToInt(End)));
+			Out.CustomDisplayRate = DisplayRate;
+		}
+		return true;
+	}
+
+	// The AnimSequence a binding's skeletal animation track plays, or null.
+	UAnimSequence* ControlRigSequencerSourceAnimation(UMovieScene* MovieScene, const FGuid& BindingGuid)
+	{
+		if (!MovieScene) return nullptr;
+		for (UMovieSceneTrack* Track : MovieScene->FindTracks(UMovieSceneSkeletalAnimationTrack::StaticClass(), BindingGuid, NAME_None))
+		{
+			for (UMovieSceneSection* Section : Track ? Track->GetAllSections() : TArray<UMovieSceneSection*>())
+			{
+				if (auto* AnimationSection = Cast<UMovieSceneSkeletalAnimationSection>(Section))
+				{
+					if (auto* Animation = Cast<UAnimSequence>(AnimationSection->Params.Animation)) return Animation;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	// The skeletal mesh Sequencer instantiated for a root binding, or null.
+	USkeletalMesh* ControlRigSequencerBoundMesh(const FGuid& BindingGuid)
+	{
+		const FMovieSceneObjectBindingID ObjectBinding(
+			UE::MovieScene::FFixedObjectBindingID(BindingGuid, MovieSceneSequenceID::Root));
+		for (UObject* Bound : ULevelSequenceEditorBlueprintLibrary::GetBoundObjects(ObjectBinding))
+		{
+			USkeletalMeshComponent* Component = Cast<USkeletalMeshComponent>(Bound);
+			if (!Component)
+			{
+				if (AActor* Actor = Cast<AActor>(Bound)) Component = Actor->FindComponentByClass<USkeletalMeshComponent>();
+			}
+			if (Component && Component->GetSkeletalMeshAsset()) return Component->GetSkeletalMeshAsset();
+		}
+		return nullptr;
+	}
+
+	// Export one binding to a new AnimSequence with the given options. When the
+	// retarget source is asked for and the exporter left it unset, it is set here
+	// from the bound mesh, so the result never depends on the exporter doing it.
+	bool ControlRigSequencerExportBinding(
+		UAnimSequence* Output,
+		UAnimSeqExportOption* Options,
+		ULevelSequence* Sequence,
+		const FGuid& BindingGuid,
+		FString& OutError)
+	{
+		if (!UControlRigSequencerEditorLibrary::ExportAnimSequenceFromSequencer(
+				Output, Options, FMovieSceneBindingProxy(BindingGuid, Sequence), false))
+		{
+			OutError = TEXT("Unreal failed to export the binding to an AnimSequence");
+			return false;
+		}
+		if (Options->bSetRetargetSourceAsset && Output->GetRetargetSourceAsset().IsNull())
+		{
+			USkeletalMesh* Mesh = ControlRigSequencerBoundMesh(BindingGuid);
+			if (!Mesh)
+			{
+				OutError = TEXT("The export finished but the bound skeletal mesh could not be found to set as the retarget source");
+				return false;
+			}
+			Output->SetRetargetSourceAsset(Mesh);
+			Output->UpdateRetargetSourceAssetData();
+		}
+		return true;
+	}
+
+	// The fields both bakes report about the AnimSequence they wrote.
+	void ControlRigSequencerExportResultJson(const UAnimSequence* Output, const UAnimSeqExportOption& Options, const TSharedPtr<FJsonObject>& Result)
+	{
+		const TSoftObjectPtr<USkeletalMesh>& RetargetSource = Output->GetRetargetSourceAsset();
+		Result->SetStringField(TEXT("retargetSourceAsset"), RetargetSource.IsNull() ? FString() : RetargetSource.ToSoftObjectPath().ToString());
+		Result->SetStringField(TEXT("interpolation"), ControlRigSequencerInterpolationName(Output->Interpolation));
+		Result->SetBoolField(TEXT("recordInWorldSpace"), Options.bRecordInWorldSpace);
+		if (Options.bUseCustomTimeRange)
+		{
+			Result->SetNumberField(TEXT("startFrame"), Options.CustomStartFrame.Value);
+			Result->SetNumberField(TEXT("endFrame"), Options.CustomEndFrame.Value);
+		}
+	}
+
 	bool ControlRigSequencerReadVector(
 		const TSharedPtr<FJsonObject>& Parent,
 		const TCHAR* Field,
@@ -1940,6 +2139,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 	{
 		return MCPError(FString::Printf(TEXT("Control Rig edit sessions are limited to %d frames"), ControlRigSequencerMaxFrames));
 	}
+
 	const float SessionPlayRate = MCPControlRigStepSampling::SessionPlayRate(
 		RawTimelinePlayRate, SourceAnimation->Interpolation,
 		SourceAnimation->GetNumberOfSampledKeys(), EndFrameExclusive - StartFrame + 1);
@@ -2141,6 +2341,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 	Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMesh->GetPathName());
 	Result->SetStringField(TEXT("rigMode"), RigMode);
 	Result->SetBoolField(TEXT("layered"), bLayered);
+	Result->SetStringField(TEXT("sourceInterpolation"), ControlRigSequencerInterpolationName(SourceAnimation->Interpolation));
 	MCPSetCreated(Result);
 	MCPSetDeleteAssetRollback(Result, Sequence->GetPathName());
 	return MCPResult(Result);
@@ -4411,23 +4612,26 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 		return MCPError(TEXT("'createLink' is not supported because Unreal mutates both linked assets; bake with createLink=false"));
 	}
 
+	UAnimSeqExportOption* ExportOptions = NewObject<UAnimSeqExportOption>();
+	// The bake defaults to the interpolation of the clip the session began from,
+	// so a Step clip round-trips as Step (#1642).
+	const UAnimSequence* SessionSource = ControlRigSequencerSourceAnimation(Session.MovieScene, Session.BindingGuid);
+	if (!ControlRigSequencerReadExportOptions(Params, Session.MovieScene->GetDisplayRate(),
+			SessionSource ? SessionSource->Interpolation : EAnimInterpolationType::Linear, *ExportOptions, Error))
+	{
+		return MCPError(Error);
+	}
+	ExportOptions->bUseCustomFrameRate = true;
+	ExportOptions->CustomFrameRate = FrameRate;
+
 	auto Created = MCPCreateAssetIdempotentNewObject<UAnimSequence>(AssetName, PackagePath, TEXT("error"), TEXT("AnimSequence"));
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 	UAnimSequence* Output = Created.Asset;
-	UAnimSeqExportOption* ExportOptions = NewObject<UAnimSeqExportOption>();
-	ExportOptions->bUseCustomFrameRate = true;
-	ExportOptions->CustomFrameRate = FrameRate;
-	ExportOptions->bExportTransforms = true;
-	ExportOptions->bExportMorphTargets = true;
-	ExportOptions->bExportAttributeCurves = true;
-	ExportOptions->bExportMaterialCurves = true;
 
-	const bool bExported = UControlRigSequencerEditorLibrary::ExportAnimSequenceFromSequencer(
-		Output, ExportOptions, FMovieSceneBindingProxy(Session.BindingGuid, Session.Sequence), false);
-	if (!bExported)
+	if (!ControlRigSequencerExportBinding(Output, ExportOptions, Session.Sequence, Session.BindingGuid, Error))
 	{
 		UEditorAssetLibrary::DeleteAsset(PackagePath + TEXT("/") + AssetName);
-		return MCPError(TEXT("Unreal failed to export the Control Rig edit to an AnimSequence"));
+		return MCPError(Error);
 	}
 	Output->MarkPackageDirty();
 	FString OutputSaveError;
@@ -4448,6 +4652,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 	Result->SetNumberField(TEXT("durationSeconds"), Output->GetPlayLength());
 	Result->SetBoolField(TEXT("createdLink"), false);
 	Result->SetBoolField(TEXT("sourceAnimationModified"), false);
+	ControlRigSequencerExportResultJson(Output, *ExportOptions, Result);
 	MCPSetDeleteAssetRollback(Result, Output->GetPathName());
 	return MCPResult(Result);
 #endif
