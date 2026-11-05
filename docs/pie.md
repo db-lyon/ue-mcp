@@ -154,7 +154,7 @@ Steps in `sequence.json`:
 { "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
 ```
 
-`delay_ms` is cumulative from sequence start, scheduled against time since pawn attach plus `settle_ms`. Tape values are `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D) or `[0.1, 0.2, 0.3]` (Axis3D).
+`delay_ms` is cumulative from sequence start, scheduled against time since pawn attach plus `settle_ms`. Tape values are `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D) or `[0.1, 0.2, 0.3]` (Axis3D). Tape entries are spaced `1/sample_hz` apart on the PIE world clock, so a frame rate below `sample_hz` skips entries instead of stretching the tape.
 
 ### Analysis and comparison
 
@@ -259,7 +259,7 @@ With Run Under One Process off, every client is a separate process the editor ca
 }
 ```
 
-Step actions, each with `client`: `tape {action, values}`, `press {action, frames}`, `hold {action, value, ms}`, `inject {action, value}`, `console "cmd"`, `place {at, offset, face}` or `place {location, yaw}`, and `capture` (a label or `true`); plus `wait_ms`. `place` teleports the player's pawn on the server, to the nearest free spot within 360 units when the exact one is taken, and turns it on its own machine; the step fails if the client never confirms the turn. `capture` saves that player's view as a JPEG, embedded next to its step in `report.md`.
+Step actions, each with `client`: `tape {action, values, hz}` (`hz` default 60, entries spaced `1/hz` apart on the world clock), `press {action, frames}`, `hold {action, value, ms}`, `inject {action, value}`, `console "cmd"`, `place {at, offset, face}` or `place {location, yaw}`, and `capture` (a label or `true`); plus `wait_ms`. `place` teleports the player's pawn on the server, to the nearest free spot within 360 units when the exact one is taken, and turns it on its own machine; the step fails if the client never confirms the turn. `capture` saves that player's view as a JPEG, embedded next to its step in `report.md`.
 
 `expect` rules take `min` and `max` match counts, and `since: "run"` judges every line since PIE started instead of only the step's own lines. A step passes when every expectation is met and no `forbid` pattern matched in its window. It ends early once its expectations are met unless it forbids something, in which case it watches the whole window.
 

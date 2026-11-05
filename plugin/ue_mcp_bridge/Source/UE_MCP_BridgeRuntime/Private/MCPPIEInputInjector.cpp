@@ -29,6 +29,12 @@ namespace MCPPIE
 			TWeakObjectPtr<UEnhancedInputLocalPlayerSubsystem> Subsystem;
 			TArray<FVector> Values;
 			int32 Index = 0;
+			// Values are spaced 1/Hz apart on the player's world clock, so a
+			// slow frame skips ahead instead of stretching the tape (#1657).
+			// Hz <= 0 plays one value per frame.
+			int32 Hz = 0;
+			double StartTime = 0.0;
+			TWeakObjectPtr<UWorld> World;
 			FString ActionPath;
 			FString ActionName;
 		};
@@ -197,7 +203,15 @@ namespace MCPPIE
 					continue;
 				}
 
-				if (Tape.Index >= Tape.Values.Num())
+				// Per frame by default; at Hz, the entry due on the world clock.
+				int32 Next = Tape.Index;
+				if (Tape.Hz > 0)
+				{
+					const UWorld* World = Tape.World.Get();
+					Next = FPIEInputInjector::TapeIndexAt(
+						World ? World->GetTimeSeconds() - Tape.StartTime : 0.0, Tape.Hz);
+				}
+				if (Next >= Tape.Values.Num())
 				{
 					StopTapeEntry(Tape);
 					const FString FinishedId = It->Key;
@@ -205,12 +219,17 @@ namespace MCPPIE
 					GOnTapeFinished.Broadcast(FinishedId);
 					continue;
 				}
+				if (Next < Tape.Index)
+				{
+					// The entry already applied is still the one due.
+					continue;
+				}
 
 				const FInputActionValue Value = AxisFromVector(
-					Tape.Action->ValueType, Tape.Values[Tape.Index]);
+					Tape.Action->ValueType, Tape.Values[Next]);
 				Tape.Subsystem->UpdateValueOfContinuousInputInjectionForAction(
 					Tape.Action.Get(), Value);
-				Tape.Index++;
+				Tape.Index = Next + 1;
 			}
 
 			if (GHolds.Num() == 0 && GTapes.Num() == 0)
@@ -334,8 +353,14 @@ namespace MCPPIE
 		return true;
 	}
 
+	int32 FPIEInputInjector::TapeIndexAt(double ElapsedSeconds, int32 Hz)
+	{
+		if (Hz <= 0) return 0;
+		return FMath::FloorToInt(FMath::Max(0.0, ElapsedSeconds) * static_cast<double>(Hz) + 1e-6);
+	}
+
 	FString FPIEInputInjector::StartTape(UInputAction* Action, const TArray<FVector>& Values,
-		int32 /*Hz*/, const FString& DesiredId, FString& OutError, int32 ClientIndex,
+		int32 Hz, const FString& DesiredId, FString& OutError, int32 ClientIndex,
 		int32 PIEInstance, ULocalPlayer* ExactLocalPlayer)
 	{
 		if (!Action)
@@ -373,6 +398,16 @@ namespace MCPPIE
 		Entry.Subsystem = Subsystem;
 		Entry.Values = Values;
 		Entry.Index = 1;
+		Entry.Hz = Hz;
+		if (const ULocalPlayer* Owner = Subsystem->GetLocalPlayer())
+		{
+			Entry.World = Owner->GetWorld();
+		}
+		Entry.StartTime = Entry.World.IsValid() ? Entry.World->GetTimeSeconds() : 0.0;
+		if (!Entry.World.IsValid())
+		{
+			Entry.Hz = 0;
+		}
 		Entry.ActionPath = Action->GetPathName();
 		Entry.ActionName = Action->GetName();
 		const FInputActionValue FirstValue = AxisFromVector(Action->ValueType, Values[0]);

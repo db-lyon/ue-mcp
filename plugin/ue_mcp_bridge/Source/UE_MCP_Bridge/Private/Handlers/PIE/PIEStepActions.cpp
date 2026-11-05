@@ -110,6 +110,13 @@ namespace MCPPIE
 				return false;
 			}
 			for (const TSharedPtr<FJsonValue>& V : *Values) { Out.Values.Add(StepActionVector(V)); }
+			double Hz = 60;
+			if ((*Body)->TryGetNumberField(TEXT("hz"), Hz) && (Hz < 1 || Hz > 1000))
+			{
+				Err = FString::Printf(TEXT("a tape's hz must be 1 to 1000, not %g"), Hz);
+				return false;
+			}
+			Out.Hz = FMath::RoundToInt(Hz);
 			return true;
 		}
 		if (O->TryGetObjectField(TEXT("press"), Body))
@@ -259,7 +266,7 @@ namespace MCPPIE
 		{
 		case FStepAction::EKind::Tape:
 		{
-			const FString Id = FPIEInputInjector::StartTape(Input, A.Values, 60, FString(), Err);
+			const FString Id = FPIEInputInjector::StartTape(Input, A.Values, A.Hz, FString(), Err);
 			if (Id.IsEmpty())
 			{
 				return false;

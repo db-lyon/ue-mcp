@@ -27,6 +27,8 @@ namespace MCPPIE
 		int32 Client = 0;
 		FString ActionPath;
 		TArray<FVector> Values;
+		// Tape playback rate: entries are spaced 1/Hz apart on the world clock.
+		int32 Hz = 60;
 		FVector Value = FVector(1, 0, 0);
 		float Ms = 0.0f;
 		FString Command;
