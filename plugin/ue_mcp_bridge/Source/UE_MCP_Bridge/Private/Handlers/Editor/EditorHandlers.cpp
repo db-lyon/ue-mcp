@@ -3669,7 +3669,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 		return MCPResult(Result);
 	}
 
-	// ponytail: save/discard refuse during PIE because they act in this call so the result can name each package; lift when a deferred close can report back.
+	// save/discard act in this call so the result can name each package, which a
+	// close deferred until PIE ends cannot do.
 	if (bActOnDirty && bPIEWasActive)
 	{
 		Result->SetBoolField(TEXT("success"), false);
