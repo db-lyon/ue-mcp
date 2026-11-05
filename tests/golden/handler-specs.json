@@ -20299,6 +20299,13 @@
           "items": "string"
         },
         {
+          "name": "packages",
+          "type": "array",
+          "required": false,
+          "description": "External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages",
+          "items": "string"
+        },
+        {
           "name": "bounds",
           "type": "object",
           "required": false,
@@ -22291,6 +22298,13 @@
           "type": "array",
           "required": false,
           "description": "Exact actor GUIDs",
+          "items": "string"
+        },
+        {
+          "name": "packages",
+          "type": "array",
+          "required": false,
+          "description": "External actor package paths, full (/Game/__ExternalActors__/...) or their XX/YY/NAME tail; .uasset and backslashes accepted. Unmatched ones are returned as missingPackages",
           "items": "string"
         },
         {
