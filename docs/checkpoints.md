@@ -50,6 +50,7 @@ Changes still in memory at a checkpoint (an unsaved level edit, a dirty Blueprin
 | `editor(restore, checkpoint, paths?, force?)` | Put every path, or only `paths`, back to the checkpoint. Restoring a subset is a cherry pick: the rest of the turn stays. |
 | `editor(clear_checkpoints)` | Delete the history. |
 | `blueprint(diff, assetPath, against)` | The structural Blueprint diff from an earlier state of one Blueprint to the Blueprint as loaded now, unsaved edits included, keyed on node GUIDs. `against` is `checkpoint:<id>`, `revision:<rev>` (a source control revision: the provider's id, a unique prefix of 7 or more characters, its number, or `head`), or a bare id, tried as a checkpoint first. The result's `against` names the checkpoint (id, label, createdAt) or the revision (provider, revision, user, date, description). A checkpoint diff counts a save the recorder copied after the checkpoint, so it works before the next checkpoint is taken. |
+| `blueprint(focus_node, assetPath, nodeId, graphName?)` | Open the Blueprint editor on one node: its graph comes to the front, and the node is selected and framed. Takes the GUIDs `diff` reports. |
 
 ## Asset diffs
 

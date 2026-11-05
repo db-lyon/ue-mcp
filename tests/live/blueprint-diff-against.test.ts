@@ -1,12 +1,13 @@
 // @live-editor headless
 /**
- * blueprint(diff) against an earlier state of the same Blueprint (#1487),
- * through the shipped server.
+ * blueprint(diff) against an earlier state of the same Blueprint, and
+ * blueprint(focus_node) (#1487), through the shipped server.
  *
  * A Blueprint with a function graph is saved and checkpointed; a node is then
  * added inside the function graph. Diffing against the checkpoint, by
  * checkpoint:<id> and by the bare id, reports that node as added under its
- * GUID.
+ * GUID. focus_node then opens the Blueprint editor on it, and the editor reads
+ * back the function graph as focused and the node as selected.
  *
  * The source control revision form is covered with a provider in
  * tests/live/source-control-provider.test.ts.
@@ -93,7 +94,7 @@ afterAll(async () => {
   closeLiveBridges();
 }, 300_000);
 
-describe.sequential("blueprint(diff) against a checkpoint (#1487)", () => {
+describe.sequential("blueprint(diff) against a checkpoint, and focus_node (#1487)", () => {
   it("diffing against a checkpoint reports a node added after it, by GUID", async () => {
     checkpoint = String((await tool("editor", "checkpoint", { label: "before the print node" })).id);
     expect(checkpoint).toMatch(/^[0-9a-f]{40}$/);
@@ -128,4 +129,21 @@ describe.sequential("blueprint(diff) against a checkpoint (#1487)", () => {
     expect(ids).toContain(guid(printId));
     expect(ids).toContain(guid(unsaved.nodeId));
   }, 300_000);
+
+  it("focus_node opens the Blueprint on a node inside a function graph, focused and selected", async () => {
+    const focused = await tool("blueprint", "focus_node", { assetPath: BP, nodeId: printId });
+    expect(guid(focused.nodeId)).toBe(guid(printId));
+    expect(focused.graphName).toBe(FN);
+    expect(focused.focusedGraph).toBe(FN);
+    expect(focused.graphFocused).toBe(true);
+    expect(focused.selected).toBe(true);
+    const open = await call("get_open_asset_editors", {});
+    expect(JSON.stringify(open.editors)).toContain("BP_DiffAgainst");
+  }, 300_000);
+
+  it("focus_node refuses a node the Blueprint does not have", async () => {
+    const r = await server!.call("blueprint", { action: "focus_node", args: { assetPath: BP, nodeId: "00000000000000000000000000000001" } });
+    expect(r.isError, r.text).toBe(true);
+    expect(r.text).toContain("No node");
+  }, 120_000);
 });

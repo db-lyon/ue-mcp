@@ -1339,6 +1339,42 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "focus_blueprint_node": {
+    "category": "blueprint",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "graphName",
+        "type": "string",
+        "required": false,
+        "description": "Graph name or the selector list_graphs reports; narrows a node name. Default: every graph"
+      },
+      {
+        "name": "graphSelector",
+        "type": "string",
+        "required": false,
+        "description": "The exact selector list_graphs reports, which separates two graphs sharing a name. Wins over graphName"
+      },
+      {
+        "name": "nodeId",
+        "type": "string",
+        "required": true,
+        "description": "Node GUID, as get_connections and find_nodes report it, or the node name",
+        "aliases": [
+          "nodeName"
+        ]
+      }
+    ],
+    "contractExempt": "Opens the Blueprint editor and moves editor focus"
+  },
   "get_blueprint_component_property": {
     "category": "blueprint",
     "params": [
@@ -3269,6 +3305,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   export_nodes_t3d: "Params: assetPath (or path), graphName?, nodeIds?",
   flush_blueprint_component_templates: "Params: assetPath (or path)",
   flush_inheritable_component_handler: "Params: assetPath (or path)",
+  focus_blueprint_node: "Params: assetPath (or path), graphName?, graphSelector?, nodeId (or nodeName)",
   get_blueprint_component_property: "Params: assetPath (or path), componentName, propertyName",
   get_blueprint_connections: "Params: assetPath (or path), graphName?, graphSelector?, nodeId?, kind?, includeNestedGraphs?, cursor?, limit?",
   get_blueprint_dependencies: "Params: assetPath (or path), reverse?",
@@ -3334,7 +3371,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 export const schema: Record<string, z.ZodType> = {
   accessSpecifier: z.string().optional().describe("public, protected or private"),
   against: z.string().optional().describe("An earlier state of assetPath to diff from, with assetPath as it is now as the other side: checkpoint:<id> (an editor(checkpoint) id, resolved by the server), revision:<rev>, or a bare id, tried as a checkpoint and then as a source control revision. A revision is the provider's id, a unique prefix of 7 or more characters of it, its number, or head. Give this or otherPath"),
-  assetPath: z.string().optional().describe("Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint (add_component, add_custom_event, add_function_parameter, add_local_variable, add_node, add_timeline_track, add_variable, auto_layout_graph, cleanup_graph, compile_blueprint, connect_pins, connect_pins_batch, create_function, create_macro, delete_function, delete_graph, delete_macro, delete_node, delete_variable, disconnect_pins, edit_graph_parameters, edit_local_variable, export_nodes_t3d, flush_blueprint_component_templates, flush_inheritable_component_handler, get_blueprint_component_property, get_blueprint_connections, get_blueprint_dependencies, get_blueprint_execution_flow, get_blueprint_variable_default, get_blueprint_variable_metadata, import_nodes_t3d, list_blueprint_functions, list_blueprint_graphs, list_blueprint_interfaces, list_blueprint_variables, list_event_dispatchers, list_graph_parameters, list_local_variables, list_overridable_functions, override_function, read_blueprint, read_blueprint_graph, read_blueprint_graph_summary, read_component_properties, read_node_property, refresh_node, remove_blueprint_interface, remove_component, remove_event_dispatcher, rename_blueprint_variable, rename_function, reparent_blueprint, reparent_component, resolve_blueprint_graph, run_construction_script, search_blueprint_nodes, set_actor_tick_settings, set_blueprint_component_property, set_blueprint_variable_metadata, set_capsule_size, set_class_default, set_component_override_materials, set_function_properties, set_node_position, set_node_property, set_variable_default, set_variable_properties, validate_blueprint). Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away (create_blueprint). Full destination of the new Blueprint Interface (create_blueprint_interface). Base Blueprint (A) (diff_blueprint). UserDefinedStruct asset path (edit_struct_metadata, read_user_defined_struct, reorder_struct_fields, set_struct_field_default). Blueprint path, or a native class (/Script/MyGame.MyCharacter or MyCharacter) (get_component_collision). UserDefinedEnum asset path (read_user_defined_enum, reorder_enum_values, set_enum_metadata)"),
+  assetPath: z.string().optional().describe("Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint (add_component, add_custom_event, add_function_parameter, add_local_variable, add_node, add_timeline_track, add_variable, auto_layout_graph, cleanup_graph, compile_blueprint, connect_pins, connect_pins_batch, create_function, create_macro, delete_function, delete_graph, delete_macro, delete_node, delete_variable, disconnect_pins, edit_graph_parameters, edit_local_variable, export_nodes_t3d, flush_blueprint_component_templates, flush_inheritable_component_handler, focus_blueprint_node, get_blueprint_component_property, get_blueprint_connections, get_blueprint_dependencies, get_blueprint_execution_flow, get_blueprint_variable_default, get_blueprint_variable_metadata, import_nodes_t3d, list_blueprint_functions, list_blueprint_graphs, list_blueprint_interfaces, list_blueprint_variables, list_event_dispatchers, list_graph_parameters, list_local_variables, list_overridable_functions, override_function, read_blueprint, read_blueprint_graph, read_blueprint_graph_summary, read_component_properties, read_node_property, refresh_node, remove_blueprint_interface, remove_component, remove_event_dispatcher, rename_blueprint_variable, rename_function, reparent_blueprint, reparent_component, resolve_blueprint_graph, run_construction_script, search_blueprint_nodes, set_actor_tick_settings, set_blueprint_component_property, set_blueprint_variable_metadata, set_capsule_size, set_class_default, set_component_override_materials, set_function_properties, set_node_position, set_node_property, set_variable_default, set_variable_properties, validate_blueprint). Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away (create_blueprint). Full destination of the new Blueprint Interface (create_blueprint_interface). Base Blueprint (A) (diff_blueprint). UserDefinedStruct asset path (edit_struct_metadata, read_user_defined_struct, reorder_struct_fields, set_struct_field_default). Blueprint path, or a native class (/Script/MyGame.MyCharacter or MyCharacter) (get_component_collision). UserDefinedEnum asset path (read_user_defined_enum, reorder_enum_values, set_enum_metadata)"),
   assetPaths: z.array(z.string()).optional().describe("Blueprint asset paths; a World path resolves to its level script (audit_blueprint_dead_code, export_blueprint_batch). Blueprint asset paths to compile (compile_blueprints)"),
   authoredOnly: z.boolean().optional().describe("Leave out transient and generated compiler graphs (default true)"),
   bCanEverTick: z.boolean().optional().describe("PrimaryActorTick.bCanEverTick"),
@@ -3377,7 +3414,7 @@ export const schema: Record<string, z.ZodType> = {
   fromState: z.string().optional().describe("AnimBP: with toState, read the rule graph of the transition between these states; refused when more than one matches"),
   functionName: z.string().optional().describe("Function name (add_function_parameter, add_local_variable, create_function, delete_function, edit_local_variable, list_local_variables, override_function, set_function_properties). Function, macro or dispatcher signature to edit; name exactly one of functionName and eventName (edit_graph_parameters). The function owning a local variable; omit for a member variable (get_blueprint_variable_metadata, set_blueprint_variable_metadata). Function, macro or dispatcher signature to read; name exactly one of functionName and eventName (list_graph_parameters)"),
   functionNames: z.array(z.string()).optional().describe("Function names to find call sites for, max 50 per request"),
-  graphName: z.string().optional().describe("Graph name or the selector list_graphs reports (default EventGraph) (add_custom_event, add_node, auto_layout_graph, connect_pins, connect_pins_batch, delete_graph, delete_node, disconnect_pins, export_nodes_t3d, get_blueprint_connections, get_blueprint_execution_flow, import_nodes_t3d, read_blueprint_graph, read_blueprint_graph_summary, read_node_property, refresh_node, set_node_position, set_node_property). Graph to clean (default: every graph) (cleanup_graph). Narrows an eventName search to one graph (edit_graph_parameters, list_graph_parameters). Graph name to resolve (resolve_blueprint_graph)"),
+  graphName: z.string().optional().describe("Graph name or the selector list_graphs reports (default EventGraph) (add_custom_event, add_node, auto_layout_graph, connect_pins, connect_pins_batch, delete_graph, delete_node, disconnect_pins, export_nodes_t3d, get_blueprint_connections, get_blueprint_execution_flow, import_nodes_t3d, read_blueprint_graph, read_blueprint_graph_summary, read_node_property, refresh_node, set_node_position, set_node_property). Graph to clean (default: every graph) (cleanup_graph). Narrows an eventName search to one graph (edit_graph_parameters, list_graph_parameters). Graph name or the selector list_graphs reports; narrows a node name. Default: every graph (focus_blueprint_node). Graph name to resolve (resolve_blueprint_graph)"),
   graphSelector: z.string().optional().describe("The exact selector list_graphs reports, which separates two graphs sharing a name. Wins over graphName"),
   halfHeight: z.number().optional().describe("Capsule half height (unscaled)"),
   includeAllChannels: z.boolean().optional().describe("Include the unused GameTraceChannel slots (default false)"),
@@ -3423,7 +3460,7 @@ export const schema: Record<string, z.ZodType> = {
   newParent: z.string().optional().describe("New parent component name"),
   nodeClass: z.string().optional().describe("Node class or short alias such as CallFunction, CallParent or CustomEvent"),
   nodeClasses: z.array(z.string()).optional().describe("Exact node class names, such as K2Node_VariableGet"),
-  nodeId: z.string().optional().describe("Node GUID, as get_connections and find_nodes report it, or the node name (delete_node, disconnect_pins, read_node_property, refresh_node, set_node_position, set_node_property). Report only the edges into and out of this node (GUID or name) (get_blueprint_connections)"),
+  nodeId: z.string().optional().describe("Node GUID, as get_connections and find_nodes report it, or the node name (delete_node, disconnect_pins, focus_blueprint_node, read_node_property, refresh_node, set_node_position, set_node_property). Report only the edges into and out of this node (GUID or name) (get_blueprint_connections)"),
   nodeIds: z.array(z.string()).optional().describe("Node GUIDs or names to export (omit for the whole graph)"),
   nodeName: z.string().optional().describe("Alias for nodeId"),
   nodeParams: z.record(z.string(), z.unknown()).optional().describe("Node-specific settings, such as functionName and className for a CallFunction node"),

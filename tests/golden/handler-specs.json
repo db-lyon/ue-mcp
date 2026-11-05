@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1219,
+  "handlerCount": 1220,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -15105,6 +15105,42 @@
           ]
         }
       ]
+    },
+    "focus_blueprint_node": {
+      "category": "blueprint",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "graphName",
+          "type": "string",
+          "required": false,
+          "description": "Graph name or the selector list_graphs reports; narrows a node name. Default: every graph"
+        },
+        {
+          "name": "graphSelector",
+          "type": "string",
+          "required": false,
+          "description": "The exact selector list_graphs reports, which separates two graphs sharing a name. Wins over graphName"
+        },
+        {
+          "name": "nodeId",
+          "type": "string",
+          "required": true,
+          "description": "Node GUID, as get_connections and find_nodes report it, or the node name",
+          "aliases": [
+            "nodeName"
+          ]
+        }
+      ],
+      "contractExempt": "Opens the Blueprint editor and moves editor focus"
     },
     "focus_viewport_on_actor": {
       "category": "editor",
