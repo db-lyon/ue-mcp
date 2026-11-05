@@ -290,11 +290,16 @@ namespace MCPTrace
 		if (IgnoredActor) Query.AddIgnoredActor(IgnoredActor);
 		FHitResult Hit;
 		TArray<FHitResult> Hits;
-		const bool bMulti = bShape && OptionalBool(Params, TEXT("multi"), false);
-		const bool bHit = bShape
-			? (bMulti ? World->SweepMultiByChannel(Hits, Start, End, FQuat::Identity, Channel, Shape, Query)
-				: World->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, Channel, Shape, Query))
-			: World->LineTraceSingleByChannel(Hit, Start, End, Channel, Query);
+		// #1564: multi returns every overlap up to and including the first blocker,
+		// for lines as well as sweeps. hit stays the engine's blocking-hit result.
+		const bool bMulti = OptionalBool(Params, TEXT("multi"), false);
+		bool bHit = false;
+		if (bShape)
+			bHit = bMulti ? World->SweepMultiByChannel(Hits, Start, End, FQuat::Identity, Channel, Shape, Query)
+				: World->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, Channel, Shape, Query);
+		else
+			bHit = bMulti ? World->LineTraceMultiByChannel(Hits, Start, End, Channel, Query)
+				: World->LineTraceSingleByChannel(Hit, Start, End, Channel, Query);
 
 		auto Result = MCPSuccess();
 		Result->SetBoolField(TEXT("hit"), bHit);
@@ -344,7 +349,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LineTrace(const TSharedPtr<FJsonObject>& 
 {
 	MCPReadParamsAhead(Params, {
 		TEXT("start"), TEXT("end"), TEXT("direction"), TEXT("distance"), TEXT("traceComplex"), TEXT("channel"),
-		TEXT("ignoreActors"), TEXT("world"), TEXT("pieInstance"),
+		TEXT("ignoreActors"), TEXT("world"), TEXT("pieInstance"), TEXT("multi"),
 	});
 
 	TSharedPtr<FJsonValue> WorldError;

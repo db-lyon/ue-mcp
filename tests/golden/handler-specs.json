@@ -6889,6 +6889,12 @@
               "required": false,
               "description": "Actor labels to skip",
               "items": "string"
+            },
+            {
+              "name": "multi",
+              "type": "boolean",
+              "required": false,
+              "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
             }
           ]
         },
@@ -20336,6 +20342,12 @@
           "required": false,
           "description": "Actor labels to skip",
           "items": "string"
+        },
+        {
+          "name": "multi",
+          "type": "boolean",
+          "required": false,
+          "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
         },
         {
           "name": "world",

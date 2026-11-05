@@ -581,6 +581,12 @@ export const handlerSpecs: HandlerSpecs = {
             "required": false,
             "description": "Actor labels to skip",
             "items": "string"
+          },
+          {
+            "name": "multi",
+            "type": "boolean",
+            "required": false,
+            "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
           }
         ]
       },
@@ -1688,6 +1694,12 @@ export const handlerSpecs: HandlerSpecs = {
         "required": false,
         "description": "Actor labels to skip",
         "items": "string"
+      },
+      {
+        "name": "multi",
+        "type": "boolean",
+        "required": false,
+        "description": "Return overlaps and the first blocking hit, capped at 64 (default false)"
       },
       {
         "name": "world",
@@ -5161,7 +5173,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   get_world_outliner: "Params: classFilter?, exactClass?, nameFilter?, folderPath?, folderPathPrefix?, editorHidden?, includeStreaming?, world?, pieInstance?, cursor?, limit?",
   get_world_partition_settings: "Params: none",
   get_world_settings: "Params: none",
-  line_trace: "Params: start?, end?, direction?, distance?, traceComplex?, channel?, ignoreActors?, world?, pieInstance?",
+  line_trace: "Params: start?, end?, direction?, distance?, traceComplex?, channel?, ignoreActors?, multi?, world?, pieInstance?",
   list_actor_descs: "Params: filter?, className?, guids?, bounds?, loadedOnly?, unloadedOnly?, cursor?, limit?",
   list_actor_tags: "Params: actorLabel?, actorPath?, cursor?, limit?",
   list_levels: "Params: cursor?, limit?",
@@ -5445,7 +5457,7 @@ export const schema: Record<string, z.ZodType> = {
   topN: z.number().int().optional().describe("Only the N most common classes"),
   traceComplex: z.boolean().optional().describe("Trace per-triangle collision (default false)"),
   traceDistance: z.number().optional().describe("Maximum trace length"),
-  traces: z.array(z.object({ start: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Ray start"), end: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray end; pass end or direction and distance"), direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally"), distance: z.number().optional().describe("Ray length when direction is given (default 200000)"), traceComplex: z.boolean().optional().describe("Trace per-triangle collision (default false)"), channel: z.string().optional().describe("Collision channel (default Visibility)"), ignoreActors: z.array(z.string()).optional().describe("Actor labels to skip") })).optional().describe("Line traces, 1 to 256, each read the way line_trace reads its parameters"),
+  traces: z.array(z.object({ start: z.object({ x: z.number(), y: z.number(), z: z.number() }).describe("Ray start"), end: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray end; pass end or direction and distance"), direction: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Ray direction, normalised internally"), distance: z.number().optional().describe("Ray length when direction is given (default 200000)"), traceComplex: z.boolean().optional().describe("Trace per-triangle collision (default false)"), channel: z.string().optional().describe("Collision channel (default Visibility)"), ignoreActors: z.array(z.string()).optional().describe("Actor labels to skip"), multi: z.boolean().optional().describe("Return overlaps and the first blocking hit, capped at 64 (default false)") })).optional().describe("Line traces, 1 to 256, each read the way line_trace reads its parameters"),
   traceStartOffset: z.number().optional().describe("Height above each instance to begin the trace"),
   transactionLabel: z.string().optional().describe("Undo-stack entry name"),
   transform: z.object({ location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("World location"), rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("World rotation"), scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Actor scale") }).optional().describe("Spawn transform; location, rotation and scale given on their own win over its parts"),

@@ -276,4 +276,55 @@ bool FViewTraceGeometryTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("invalid player names parameter"), TraceTestRun(Registry, TEXT("pie_view_trace"), Params)->GetStringField(TEXT("error")).Contains(TEXT("playerIndex")));
 	return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLineTraceMultiTest, "UE.MCP.Level.LineTrace.Multi",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLineTraceMultiTest::RunTest(const FString& Parameters)
+{
+	FScopedTraceTestWorld Fixture;
+	FMCPHandlerRegistry Registry;
+	FLevelHandlers::RegisterHandlers(Registry);
+	UBoxComponent* Touch = Fixture.Box(FVector(100, 0, 0), ECR_Overlap);
+	UBoxComponent* Blocker = Fixture.Box(FVector(300, 0, 0));
+	Fixture.Box(FVector(500, 0, 0));
+	auto Params = Fixture.Request();
+	Params->RemoveField(TEXT("shape"));
+	Params->RemoveField(TEXT("radius"));
+	const auto Single = TraceTestRun(Registry, TEXT("line_trace"), Params);
+	TestTrue(TEXT("single trace blocks"), Single->GetBoolField(TEXT("hit")));
+	TestEqual(TEXT("single skips the overlap"), Single->GetStringField(TEXT("actorPath")), Blocker->GetOwner()->GetPathName());
+	TestFalse(TEXT("single has no hits array"), Single->HasField(TEXT("hits")));
+	Params->SetBoolField(TEXT("multi"), true);
+	const auto Multi = TraceTestRun(Registry, TEXT("line_trace"), Params);
+	TestTrue(TEXT("multi line succeeds"), Multi->GetBoolField(TEXT("success")));
+	TestTrue(TEXT("multi reports the blocker"), Multi->GetBoolField(TEXT("hit")));
+	const auto& Hits = Multi->GetArrayField(TEXT("hits"));
+	TestEqual(TEXT("overlap then blocker, nothing past it"), Hits.Num(), 2);
+	if (Hits.Num() == 2)
+	{
+		TestEqual(TEXT("first row is the overlap"), Hits[0]->AsObject()->GetStringField(TEXT("actorPath")), Touch->GetOwner()->GetPathName());
+		TestFalse(TEXT("overlap row is not blocking"), Hits[0]->AsObject()->GetBoolField(TEXT("blockingHit")));
+		TestEqual(TEXT("second row is the blocker"), Hits[1]->AsObject()->GetStringField(TEXT("actorPath")), Blocker->GetOwner()->GetPathName());
+		TestTrue(TEXT("blocker row is blocking"), Hits[1]->AsObject()->GetBoolField(TEXT("blockingHit")));
+		TestTrue(TEXT("blocker impact is on its near face"), FMath::IsNearlyEqual(
+			OptionalVec3(Hits[1]->AsObject(), TEXT("impactPoint")).X, 290.0, 0.5));
+	}
+	TestEqual(TEXT("totalHits matches"), static_cast<int32>(Multi->GetNumberField(TEXT("totalHits"))), 2);
+
+	auto Bulk = MakeShared<FJsonObject>();
+	Bulk->SetStringField(TEXT("world"), TEXT("pie"));
+	Bulk->SetNumberField(TEXT("pieInstance"), Fixture.Instance);
+	auto Item = MakeShared<FJsonObject>();
+	Item->SetObjectField(TEXT("start"), MCPVec3ToJsonObject(FVector::ZeroVector));
+	Item->SetObjectField(TEXT("end"), MCPVec3ToJsonObject(FVector(1000, 0, 0)));
+	Item->SetBoolField(TEXT("multi"), true);
+	Bulk->SetArrayField(TEXT("traces"), { MakeShared<FJsonValueObject>(Item) });
+	const auto BulkResult = TraceTestRun(Registry, TEXT("bulk_line_trace"), Bulk);
+	const auto& BulkRows = BulkResult->GetArrayField(TEXT("results"));
+	TestEqual(TEXT("bulk returns one result"), BulkRows.Num(), 1);
+	if (BulkRows.Num() == 1)
+		TestEqual(TEXT("bulk item honours multi"), BulkRows[0]->AsObject()->GetArrayField(TEXT("hits")).Num(), 2);
+	return true;
+}
+
 #endif

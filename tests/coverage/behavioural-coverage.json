@@ -2406,6 +2406,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelTraceWorldScopeTests.cpp",
           "test": "UE.MCP.Level.Trace.HonoursTheRequestedWorld"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/ViewShapeTraceTests.cpp",
+          "test": "UE.MCP.Level.LineTrace.Multi"
         }
       ]
     },
@@ -10107,6 +10112,11 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/LevelTraceWorldScopeTests.cpp",
           "test": "UE.MCP.Level.Trace.HonoursTheRequestedWorld"
+        },
+        {
+          "suite": "automation",
+          "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/ViewShapeTraceTests.cpp",
+          "test": "UE.MCP.Level.LineTrace.Multi"
         },
         {
           "suite": "automation",

@@ -58,4 +58,14 @@ describe("native view and shape traces", () => {
     expect(levelTool.schema.includeCollision.safeParse(1).success).toBe(false);
     expect(levelTool.schema.collisionChannel.safeParse(1).success).toBe(false);
   });
+
+  it("accepts multi on line traces and on each bulk item (#1564)", () => {
+    const start = { x: 0, y: 0, z: 1100 };
+    const end = { x: 0, y: 0, z: -500 };
+    expect(parseTraceParams(levelTool.actions.line_trace, { start, end, multi: true })).toEqual({ start, end, multi: true });
+    const bulk = { traces: [{ start, end, multi: true }, { start, end }], world: "editor" };
+    expect(parseTraceParams(levelTool.actions.bulk_line_trace, bulk)).toEqual(bulk);
+    expect(levelTool.schema.multi.safeParse("yes").success).toBe(false);
+  });
+
 });

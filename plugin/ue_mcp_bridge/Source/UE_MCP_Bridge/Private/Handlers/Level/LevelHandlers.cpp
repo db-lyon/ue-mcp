@@ -424,6 +424,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("traceComplex"), EType::Boolean, TEXT("Trace per-triangle collision (default false)")),
 		MCPParam::Optional(TEXT("channel"), EType::String, TEXT("Collision channel (default Visibility)")),
 		MCPParam::Optional(TEXT("ignoreActors"), EType::Array, TEXT("Actor labels to skip")).Items(EType::String),
+		MCPParam::Optional(TEXT("multi"), EType::Boolean, TEXT("Return overlaps and the first blocking hit, capped at 64 (default false)")),
 		SpecWorld, SpecPieInstance,
 	});
 	Registry.RegisterHandler(TEXT("bulk_line_trace"), &BulkLineTrace, {
@@ -435,6 +436,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 			MCPParam::OptionalField(TEXT("traceComplex"), EType::Boolean, TEXT("Trace per-triangle collision (default false)")),
 			MCPParam::OptionalField(TEXT("channel"), EType::String, TEXT("Collision channel (default Visibility)")),
 			MCPParam::OptionalField(TEXT("ignoreActors"), EType::Array, TEXT("Actor labels to skip")).Items(EType::String),
+			MCPParam::OptionalField(TEXT("multi"), EType::Boolean, TEXT("Return overlaps and the first blocking hit, capped at 64 (default false)")),
 		}),
 		SpecWorld, SpecPieInstance,
 	});
