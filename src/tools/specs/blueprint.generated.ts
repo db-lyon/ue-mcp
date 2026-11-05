@@ -2214,6 +2214,26 @@ export const handlerSpecs: HandlerSpecs = {
       }
     ]
   },
+  "remove_timeline": {
+    "category": "blueprint",
+    "params": [
+      {
+        "name": "assetPath",
+        "type": "string",
+        "required": true,
+        "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
+        "aliases": [
+          "path"
+        ]
+      },
+      {
+        "name": "timelineName",
+        "type": "string",
+        "required": true,
+        "description": "Timeline name, as add_timeline_track and the Timeline node show it"
+      }
+    ]
+  },
   "rename_blueprint_variable": {
     "category": "blueprint",
     "params": [
@@ -3293,6 +3313,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
   remove_blueprint_interface: "Params: assetPath (or blueprintPath), interfacePath, preserveFunctions?",
   remove_component: "Params: assetPath (or path), componentName",
   remove_event_dispatcher: "Params: assetPath (or blueprintPath), name",
+  remove_timeline: "Params: assetPath (or path), timelineName",
   rename_blueprint_variable: "Params: assetPath (or path), oldName, newName",
   rename_function: "Params: assetPath (or path), oldName, newName",
   reorder_enum_values: "Params: assetPath (or path), order",
@@ -3326,7 +3347,7 @@ export const paramsClauses: Readonly<Record<string, string>> = {
 /** Every key the spec'd blueprint handlers declare, aliases included. */
 export const schema: Record<string, z.ZodType> = {
   accessSpecifier: z.string().optional().describe("public, protected or private"),
-  assetPath: z.string().optional().describe("Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint (add_component, add_custom_event, add_function_parameter, add_local_variable, add_node, add_timeline_track, add_variable, auto_layout_graph, cleanup_graph, compile_blueprint, connect_pins, connect_pins_batch, create_function, create_macro, delete_function, delete_graph, delete_macro, delete_node, delete_variable, disconnect_pins, edit_graph_parameters, edit_local_variable, export_nodes_t3d, flush_blueprint_component_templates, flush_inheritable_component_handler, get_blueprint_component_property, get_blueprint_connections, get_blueprint_dependencies, get_blueprint_execution_flow, get_blueprint_variable_default, get_blueprint_variable_metadata, import_nodes_t3d, list_blueprint_functions, list_blueprint_graphs, list_blueprint_interfaces, list_blueprint_variables, list_event_dispatchers, list_graph_parameters, list_local_variables, list_overridable_functions, override_function, read_blueprint, read_blueprint_graph, read_blueprint_graph_summary, read_component_properties, read_node_property, refresh_node, remove_blueprint_interface, remove_component, remove_event_dispatcher, rename_blueprint_variable, rename_function, reparent_blueprint, reparent_component, resolve_blueprint_graph, run_construction_script, search_blueprint_nodes, set_actor_tick_settings, set_blueprint_component_property, set_blueprint_variable_metadata, set_capsule_size, set_class_default, set_component_override_materials, set_function_properties, set_node_position, set_node_property, set_variable_default, set_variable_properties, validate_blueprint). Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away (create_blueprint). Full destination of the new Blueprint Interface (create_blueprint_interface). Base Blueprint (A) (diff_blueprint). UserDefinedStruct asset path (edit_struct_metadata, read_user_defined_struct, reorder_struct_fields, set_struct_field_default). Blueprint path, or a native class (/Script/MyGame.MyCharacter or MyCharacter) (get_component_collision). UserDefinedEnum asset path (read_user_defined_enum, reorder_enum_values, set_enum_metadata)"),
+  assetPath: z.string().optional().describe("Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint (add_component, add_custom_event, add_function_parameter, add_local_variable, add_node, add_timeline_track, add_variable, auto_layout_graph, cleanup_graph, compile_blueprint, connect_pins, connect_pins_batch, create_function, create_macro, delete_function, delete_graph, delete_macro, delete_node, delete_variable, disconnect_pins, edit_graph_parameters, edit_local_variable, export_nodes_t3d, flush_blueprint_component_templates, flush_inheritable_component_handler, get_blueprint_component_property, get_blueprint_connections, get_blueprint_dependencies, get_blueprint_execution_flow, get_blueprint_variable_default, get_blueprint_variable_metadata, import_nodes_t3d, list_blueprint_functions, list_blueprint_graphs, list_blueprint_interfaces, list_blueprint_variables, list_event_dispatchers, list_graph_parameters, list_local_variables, list_overridable_functions, override_function, read_blueprint, read_blueprint_graph, read_blueprint_graph_summary, read_component_properties, read_node_property, refresh_node, remove_blueprint_interface, remove_component, remove_event_dispatcher, remove_timeline, rename_blueprint_variable, rename_function, reparent_blueprint, reparent_component, resolve_blueprint_graph, run_construction_script, search_blueprint_nodes, set_actor_tick_settings, set_blueprint_component_property, set_blueprint_variable_metadata, set_capsule_size, set_class_default, set_component_override_materials, set_function_properties, set_node_position, set_node_property, set_variable_default, set_variable_properties, validate_blueprint). Full destination, e.g. /Game/Blueprints/BP_Example. A .uasset suffix, an object suffix and backslashes are normalized away (create_blueprint). Full destination of the new Blueprint Interface (create_blueprint_interface). Base Blueprint (A) (diff_blueprint). UserDefinedStruct asset path (edit_struct_metadata, read_user_defined_struct, reorder_struct_fields, set_struct_field_default). Blueprint path, or a native class (/Script/MyGame.MyCharacter or MyCharacter) (get_component_collision). UserDefinedEnum asset path (read_user_defined_enum, reorder_enum_values, set_enum_metadata)"),
   assetPaths: z.array(z.string()).optional().describe("Blueprint asset paths; a World path resolves to its level script (audit_blueprint_dead_code, export_blueprint_batch). Blueprint asset paths to compile (compile_blueprints)"),
   authoredOnly: z.boolean().optional().describe("Leave out transient and generated compiler graphs (default true)"),
   bCanEverTick: z.boolean().optional().describe("PrimaryActorTick.bCanEverTick"),
@@ -3476,7 +3497,7 @@ export const schema: Record<string, z.ZodType> = {
   text: z.string().optional().describe("Alias for t3d"),
   threadSafe: z.boolean().optional().describe("Safe to call off the game thread"),
   TickInterval: z.number().optional().describe("PrimaryActorTick.TickInterval in seconds"),
-  timelineName: z.string().optional().describe("Timeline name"),
+  timelineName: z.string().optional().describe("Timeline name (add_timeline_track). Timeline name, as add_timeline_track and the Timeline node show it (remove_timeline)"),
   titleFilter: z.string().optional().describe("Case-insensitive substring match on node title"),
   titles: z.array(z.string()).optional().describe("Case-insensitive substrings matched against each node title"),
   tooltip: z.string().optional().describe("Tooltip"),

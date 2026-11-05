@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1222,
+  "handlerCount": 1223,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -31459,6 +31459,26 @@
           "type": "string",
           "required": true,
           "description": "Entry key"
+        }
+      ]
+    },
+    "remove_timeline": {
+      "category": "blueprint",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "Blueprint asset path. Read and graph actions also accept a World/umap path, resolved to that map's level script Blueprint",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "timelineName",
+          "type": "string",
+          "required": true,
+          "description": "Timeline name, as add_timeline_track and the Timeline node show it"
         }
       ]
     },
