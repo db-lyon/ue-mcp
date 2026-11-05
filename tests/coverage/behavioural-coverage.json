@@ -1056,6 +1056,21 @@
       "tests": [
         {
           "suite": "live",
+          "file": "tests/live/bcov-editor-sequence-skelanim.test.ts",
+          "test": "a second section keeps an explicit range and writes the end offset and play rate"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-sequence-skelanim.test.ts",
+          "test": "add_sequence_section sets the clip and start offset, and spans the clip after the offset"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-sequence-skelanim.test.ts",
+          "test": "refuses clip settings on another track type, a missing clip and a bad play rate, adding nothing"
+        },
+        {
+          "suite": "live",
           "file": "tests/live/bcov-editor-sequence.test.ts",
           "test": "set_sequence_keyframes writes keys get_sequence_channel_keys reads back"
         },
@@ -9135,6 +9150,21 @@
           "suite": "automation",
           "file": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Tests/SequencerHandlerTests.cpp",
           "test": "UE.MCP.Sequencer.GetSequenceInfo.TimingDetails"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-sequence-skelanim.test.ts",
+          "test": "a second section keeps an explicit range and writes the end offset and play rate"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-sequence-skelanim.test.ts",
+          "test": "add_sequence_section sets the clip and start offset, and spans the clip after the offset"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/bcov-editor-sequence-skelanim.test.ts",
+          "test": "refuses clip settings on another track type, a missing clip and a bad play rate, adding nothing"
         },
         {
           "suite": "live",

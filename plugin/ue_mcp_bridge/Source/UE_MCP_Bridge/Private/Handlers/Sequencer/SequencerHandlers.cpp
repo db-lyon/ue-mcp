@@ -19,6 +19,14 @@
 #include "Tracks/MovieSceneFloatTrack.h"
 #include "Tracks/MovieScene3DTransformTrack.h"
 #include "Tracks/MovieSceneSkeletalAnimationTrack.h"
+#include "Sections/MovieSceneSkeletalAnimationSection.h"
+#include "Animation/AnimSequenceBase.h"
+#if __has_include("Variants/MovieSceneTimeWarpVariant.h")
+#include "Variants/MovieSceneTimeWarpVariant.h"
+#define UE_MCP_SKELANIM_PLAYRATE_IS_TIMEWARP 1
+#else
+#define UE_MCP_SKELANIM_PLAYRATE_IS_TIMEWARP 0
+#endif
 #include "Tracks/MovieSceneCameraCutTrack.h"
 #include "Tracks/MovieScene3DAttachTrack.h"
 #include "Sections/MovieScene3DAttachSection.h"
@@ -135,6 +143,11 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Optional(TEXT("cameraActorLabel"), EType::String, TEXT("Camera actor to bind a CameraCut section to")),
 		MCPParam::Optional(TEXT("cameraActorPath"), EType::String, TEXT("Full object path of the camera actor. Wins over cameraActorLabel")),
 		MPCParam(),
+		// #1641: what a SkeletalAnimation section plays.
+		MCPParam::Optional(TEXT("animation"), EType::String, TEXT("AnimSequence, AnimComposite or AnimStreamable a SkeletalAnimation section plays. Without endSeconds the section spans the clip after offsets and play rate")),
+		MCPParam::Optional(TEXT("startFrameOffset"), EType::Integer, TEXT("SkeletalAnimation only: ticks (the sequence's tick resolution, 24000/s by default) trimmed from the clip's start. Half a display frame samples a Step-interpolated clip inside each key")),
+		MCPParam::Optional(TEXT("endFrameOffset"), EType::Integer, TEXT("SkeletalAnimation only: ticks trimmed from the clip's end")),
+		MCPParam::Optional(TEXT("playRate"), EType::Number, TEXT("SkeletalAnimation only: clip play rate, above 0 (default 1)")),
 	});
 	Registry.RegisterHandler(TEXT("set_sequence_keyframes"), &SetKeyframes, {
 		SequencePathParam(TEXT("Level Sequence asset path"), true),
@@ -241,6 +254,29 @@ namespace
 		OutGuid = MovieScene->AddPossessable(ActorLabel, TargetActor->GetClass());
 		Sequence->BindPossessableObject(OutGuid, *TargetActor, World);
 		return true;
+	}
+
+	// What a SkeletalAnimation section plays: clip, offsets in ticks and seconds,
+	// and play rate when it is a fixed number (#1641).
+	TSharedPtr<FJsonObject> SkeletalAnimationParamsJson(const UMovieSceneSkeletalAnimationSection& Section, const FFrameRate& TickResolution)
+	{
+		const FMovieSceneSkeletalAnimationParams& P = Section.Params;
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("animation"), P.Animation ? P.Animation->GetPathName() : FString());
+		if (P.Animation) Obj->SetNumberField(TEXT("animationLengthSeconds"), P.Animation->GetPlayLength());
+		Obj->SetNumberField(TEXT("startFrameOffset"), P.StartFrameOffset.Value);
+		Obj->SetNumberField(TEXT("endFrameOffset"), P.EndFrameOffset.Value);
+		Obj->SetNumberField(TEXT("startOffsetSeconds"), TickResolution.AsSeconds(FFrameTime(P.StartFrameOffset)));
+		Obj->SetNumberField(TEXT("endOffsetSeconds"), TickResolution.AsSeconds(FFrameTime(P.EndFrameOffset)));
+#if UE_MCP_SKELANIM_PLAYRATE_IS_TIMEWARP
+		if (P.PlayRate.GetType() == EMovieSceneTimeWarpType::FixedPlayRate)
+		{
+			Obj->SetNumberField(TEXT("playRate"), P.PlayRate.AsFixedPlayRate());
+		}
+#else
+		Obj->SetNumberField(TEXT("playRate"), P.PlayRate);
+#endif
+		return Obj;
 	}
 }
 
@@ -363,6 +399,10 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 				UEMCP::SequencerInfo::SetTimingRangeFields(*SObj, Section->GetTrueRange(), TickResolution, DisplayRate);
 				SObj->SetBoolField(TEXT("isActive"), Section->IsActive());
 				SObj->SetNumberField(TEXT("rowIndex"), Section->GetRowIndex());
+				if (const UMovieSceneSkeletalAnimationSection* AnimSection = Cast<UMovieSceneSkeletalAnimationSection>(Section))
+				{
+					SObj->SetObjectField(TEXT("animation"), SkeletalAnimationParamsJson(*AnimSection, TickResolution));
+				}
 				Summary.Add(MakeShared<FJsonValueObject>(SObj));
 			}
 			TrackObj->SetArrayField(TEXT("sections"), Summary);
@@ -402,6 +442,11 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 			}
 			SObj->SetBoolField(TEXT("isActive"), Section->IsActive());
 			SObj->SetNumberField(TEXT("rowIndex"), Section->GetRowIndex());
+
+			if (const UMovieSceneSkeletalAnimationSection* AnimSection = Cast<UMovieSceneSkeletalAnimationSection>(Section))
+			{
+				SObj->SetObjectField(TEXT("animation"), SkeletalAnimationParamsJson(*AnimSection, TickResolution));
+			}
 
 			if (UMovieScene3DAttachSection* Attach = Cast<UMovieScene3DAttachSection>(Section))
 			{
@@ -1259,6 +1304,13 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 	const bool bHasStart = TryGetNumberParam(Params, TEXT("startSeconds"), StartSeconds);
 	const bool bHasEnd = TryGetNumberParam(Params, TEXT("endSeconds"), EndSeconds);
 	const FString MPCPath = OptionalString(Params, TEXT("materialParameterCollection"));
+	// #1641: what a SkeletalAnimation section plays.
+	const FString AnimationPath = OptionalString(Params, TEXT("animation"));
+	double StartOffsetTicks = 0.0, EndOffsetTicks = 0.0, PlayRate = 1.0;
+	const bool bHasStartOffset = TryGetNumberParam(Params, TEXT("startFrameOffset"), StartOffsetTicks);
+	const bool bHasEndOffset = TryGetNumberParam(Params, TEXT("endFrameOffset"), EndOffsetTicks);
+	const bool bHasPlayRate = TryGetNumberParam(Params, TEXT("playRate"), PlayRate);
+	const bool bHasAnimParams = !AnimationPath.IsEmpty() || bHasStartOffset || bHasEndOffset || bHasPlayRate;
 
 	TSharedPtr<FJsonValue> LoadErr;
 	ULevelSequence* Sequence = UEMCP::SequencerTracks::LoadSequence(Path, bHasPath, LoadErr);
@@ -1269,6 +1321,38 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 	if (TrackTypeErr) return TrackTypeErr;
 	UClass* TrackClass = UEMCP::SequencerTracks::ResolveTrackClass(TrackType);
 	if (!TrackClass) return MCPError(FString::Printf(TEXT("Unknown track type: '%s'. Use %s."), *TrackType, *UEMCP::SequencerTracks::TrackTypeHelp()));
+
+	// Checked before any track or section exists, so a bad value creates nothing.
+	UAnimSequenceBase* Animation = nullptr;
+	double AnimSpanSeconds = 0.0;
+	if (bHasAnimParams)
+	{
+		if (!TrackClass->IsChildOf(UMovieSceneSkeletalAnimationTrack::StaticClass()))
+		{
+			return MCPError(TEXT("animation, startFrameOffset, endFrameOffset and playRate apply only to a SkeletalAnimation track"));
+		}
+		auto IsTickCount = [](double V) { return V >= 0.0 && V <= MAX_int32 && V == FMath::RoundToDouble(V); };
+		if (!IsTickCount(StartOffsetTicks) || !IsTickCount(EndOffsetTicks))
+		{
+			return MCPError(TEXT("startFrameOffset and endFrameOffset are whole tick counts of 0 or more"));
+		}
+		if (!(PlayRate > 0.0)) return MCPError(TEXT("playRate must be above 0"));
+		if (!AnimationPath.IsEmpty())
+		{
+			Animation = LoadAssetByPath<UAnimSequenceBase>(AnimationPath);
+			if (!Animation) return MCPAssetLoadError(AnimationPath, TEXT("AnimSequenceBase"));
+			const FFrameRate TickRate = MovieScene->GetTickResolution();
+			const double ClipSeconds = Animation->GetPlayLength()
+				- TickRate.AsSeconds(FFrameTime(FFrameNumber(static_cast<int32>(StartOffsetTicks))))
+				- TickRate.AsSeconds(FFrameTime(FFrameNumber(static_cast<int32>(EndOffsetTicks))));
+			if (!bHasEnd && ClipSeconds <= 0.0)
+			{
+				return MCPError(FString::Printf(TEXT("The offsets trim all of '%s' (%.4f s); pass smaller offsets or an explicit endSeconds"),
+					*AnimationPath, Animation->GetPlayLength()));
+			}
+			AnimSpanSeconds = ClipSeconds / PlayRate;
+		}
+	}
 
 	// An MPC track is identified by its collection as well as its class (#1407).
 	UMaterialParameterCollection* MPC = nullptr;
@@ -1352,11 +1436,24 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 		Track->AddSection(*Section);
 	}
 
-	const FFrameRate Tick = MovieScene->GetTickResolution();
-	if (bHasStart || bHasEnd)
+	UMovieSceneSkeletalAnimationSection* AnimSection = Cast<UMovieSceneSkeletalAnimationSection>(Section);
+	if (bHasAnimParams && AnimSection)
 	{
+		AnimSection->Modify();
+		if (Animation) AnimSection->Params.Animation = Animation;
+		if (bHasStartOffset) AnimSection->Params.StartFrameOffset = FFrameNumber(static_cast<int32>(StartOffsetTicks));
+		if (bHasEndOffset) AnimSection->Params.EndFrameOffset = FFrameNumber(static_cast<int32>(EndOffsetTicks));
+		// A float before the time-warp variant, a variant assignable from a number after.
+		if (bHasPlayRate) AnimSection->Params.PlayRate = static_cast<float>(PlayRate);
+	}
+
+	const FFrameRate Tick = MovieScene->GetTickResolution();
+	if (bHasStart || bHasEnd || Animation)
+	{
+		// Without endSeconds a clip section spans the clip after offsets and play rate.
+		const double DefaultSpan = Animation ? AnimSpanSeconds : 1.0;
 		const FFrameNumber Start = Tick.AsFrameNumber(StartSeconds);
-		const FFrameNumber End = Tick.AsFrameNumber(bHasEnd ? EndSeconds : StartSeconds + 1.0);
+		const FFrameNumber End = Tick.AsFrameNumber(bHasEnd ? EndSeconds : StartSeconds + DefaultSpan);
 		Section->SetRange(TRange<FFrameNumber>(Start, End));
 	}
 
@@ -1398,6 +1495,10 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 	TSharedPtr<FJsonObject> RangeObj = MakeShared<FJsonObject>();
 	UEMCP::SequencerInfo::SetTimingRangeFields(*RangeObj, Section->GetRange(), Tick, MovieScene->GetDisplayRate());
 	Result->SetObjectField(TEXT("range"), RangeObj);
+	if (AnimSection)
+	{
+		Result->SetObjectField(TEXT("animation"), SkeletalAnimationParamsJson(*AnimSection, Tick));
+	}
 
 	// Same reason as add_sequence_track: nothing in the bridge removes a
 	// MovieScene section, a track, or a possessable binding, and this call can
