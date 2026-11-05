@@ -42,6 +42,12 @@ export interface ElicitFn {
 
 export interface ElicitParams {
   message: string;
+  /**
+   * Machine-readable context for a client that renders the form as its own
+   * card, keyed by a namespaced name such as `ue-mcp/guard`. Optional; a
+   * client that ignores it still has the message and the form.
+   */
+  _meta?: Record<string, unknown>;
   requestedSchema: {
     type: "object";
     properties: Record<string, ElicitPrimitiveSchema>;
