@@ -230,4 +230,27 @@ describe("blueprint dispatchers, interfaces and timelines", () => {
     expect(again.alreadyExists).toBe(true);
     expect(again.existingTrackType).toBe("float");
   }, 120_000);
+
+  it("remove_timeline drops the template so the name builds a fresh timeline (#1654)", async () => {
+    const created = await call("add_timeline_track", {
+      assetPath: BP, timelineName: "BCovRemoved", trackName: "Alpha", trackType: "float",
+    });
+    expect(created.createdTimeline).toBe(true);
+    expect((created.rollback as Json | undefined)?.method).toBe("remove_timeline");
+
+    const removed = await call("remove_timeline", { assetPath: BP, timelineName: "BCovRemoved" });
+    expect(removed.removed).toBe(true);
+    expect(removed.templateRemoved).toBe(true);
+    expect(removed.timelines as string[]).not.toContain("BCovRemoved");
+
+    const again = await call("remove_timeline", { assetPath: BP, timelineName: "BCovRemoved" });
+    expect(again.alreadyRemoved).toBe(true);
+
+    // A template left behind would make this an existing track, not a new timeline.
+    const rebuilt = await call("add_timeline_track", {
+      assetPath: BP, timelineName: "BCovRemoved", trackName: "Alpha", trackType: "float",
+    });
+    expect(rebuilt.alreadyExists).toBeUndefined();
+    expect(rebuilt.createdTimeline).toBe(true);
+  }, 120_000);
 });

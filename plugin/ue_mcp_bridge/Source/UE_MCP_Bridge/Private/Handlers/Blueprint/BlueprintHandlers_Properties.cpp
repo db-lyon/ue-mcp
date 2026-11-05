@@ -36,6 +36,7 @@
 #include "Components/MeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/TimelineTemplate.h"
+#include "K2Node_Timeline.h"
 #include "Curves/CurveFloat.h"
 #include "Curves/CurveVector.h"
 #include "Curves/CurveLinearColor.h"
@@ -1801,6 +1802,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	{
 		if (T && T->GetVariableName() == TimelineFName) { Timeline = T; break; }
 	}
+	const bool bCreatedTimeline = (Timeline == nullptr);
 	if (!Timeline)
 	{
 		// The compiler requires the template outered to the generated class, which
@@ -1982,14 +1984,134 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	Result->SetNumberField(TEXT("keyCount"), Keys ? Keys->Num() : 0);
 	Result->SetNumberField(TEXT("timelineLength"), Timeline->TimelineLength);
 
-	// add_timeline_track is the only timeline action the bridge registers. There
-	// is no remove_timeline_track and no editor for a timeline's track list, so
-	// no inverse is named here rather than one that does not exist.
+	Result->SetBoolField(TEXT("createdTimeline"), bCreatedTimeline);
+
+	// A timeline this call created is undone whole by remove_timeline. No action
+	// removes a single track, so a track added to an existing timeline has none.
+	if (bCreatedTimeline)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("timelineName"), TimelineName);
+		MCPSetRollback(Result, TEXT("remove_timeline"), Payload);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT(
+			"No action removes a single timeline track. The timeline existed before this call, so remove_timeline "
+			"would remove its other tracks and its node too. The track, its generated curve object and any "
+			"TimelineLength this call raised all stay."));
+	}
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// remove_timeline: remove a timeline from a Blueprint the way the editor does
+// (#1654). Every K2Node_Timeline bound to it goes through
+// FBlueprintEditorUtils::RemoveNode, whose DestroyNode calls RemoveTimeline;
+// a template with no node left is removed with RemoveTimeline directly. The
+// compile then drops the generated TimelineComponent variable.
+// delete_node keeps the template on purpose so its rollback can paste the
+// curves back; this is the action that drops it.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveTimeline(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString TimelineName;
+	if (auto Err = RequireString(Params, TEXT("timelineName"), TimelineName)) return Err;
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+
+	const FName TimelineFName(*TimelineName);
+	UTimelineTemplate* Timeline = nullptr;
+	for (UTimelineTemplate* T : Blueprint->Timelines)
+	{
+		if (T && T->GetVariableName() == TimelineFName) { Timeline = T; break; }
+	}
+
+	// A node is bound by name; the guid also catches a node whose name drifted
+	// from its template.
+	TArray<UK2Node_Timeline*> AllTimelineNodes;
+	FBlueprintEditorUtils::GetAllNodesOfClass(Blueprint, AllTimelineNodes);
+	TArray<UK2Node_Timeline*> BoundNodes;
+	for (UK2Node_Timeline* Node : AllTimelineNodes)
+	{
+		if (!Node) continue;
+		if (Node->TimelineName == TimelineFName || (Timeline && Node->TimelineGuid == Timeline->TimelineGuid))
+		{
+			BoundNodes.Add(Node);
+		}
+	}
+
+	auto ListTimelines = [Blueprint]()
+	{
+		TArray<TSharedPtr<FJsonValue>> Names;
+		for (UTimelineTemplate* T : Blueprint->Timelines)
+		{
+			if (T) Names.Add(MakeShared<FJsonValueString>(T->GetVariableName().ToString()));
+		}
+		return Names;
+	};
+
+	if (!Timeline && BoundNodes.Num() == 0)
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("timelineName"), TimelineName);
+		Noop->SetBoolField(TEXT("alreadyRemoved"), true);
+		Noop->SetBoolField(TEXT("unchanged"), true);
+		Noop->SetArrayField(TEXT("timelines"), ListTimelines());
+		return MCPResult(Noop);
+	}
+
+	Blueprint->Modify();
+
+	TArray<TSharedPtr<FJsonValue>> RemovedNodes;
+	for (UK2Node_Timeline* Node : BoundNodes)
+	{
+		int32 LinkCount = 0;
+		for (const UEdGraphPin* Pin : Node->Pins)
+		{
+			if (Pin) LinkCount += Pin->LinkedTo.Num();
+		}
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+		Entry->SetStringField(TEXT("graphName"), Node->GetGraph() ? Node->GetGraph()->GetName() : FString());
+		Entry->SetNumberField(TEXT("brokenLinks"), LinkCount);
+		RemovedNodes.Add(MakeShared<FJsonValueObject>(Entry));
+		FBlueprintEditorUtils::RemoveNode(Blueprint, Node, /*bDontRecompile*/ true);
+	}
+
+	// The node's DestroyNode removes the template it resolves by name. One with
+	// no node, or one its node did not resolve, is removed here and renamed out
+	// of the generated class as DestroyNode does, so the name is free again.
+	if (Timeline && Blueprint->Timelines.Contains(Timeline))
+	{
+		FBlueprintEditorUtils::RemoveTimeline(Blueprint, Timeline, /*bDontRecompile*/ true);
+		Timeline->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Blueprint, SaveError);
+
+	auto Result = MCPSuccess();
+	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveError);
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("timelineName"), TimelineName);
+	Result->SetBoolField(TEXT("removed"), true);
+	Result->SetBoolField(TEXT("templateRemoved"), Timeline != nullptr);
+	Result->SetArrayField(TEXT("removedNodes"), RemovedNodes);
+	Result->SetNumberField(TEXT("removedNodeCount"), RemovedNodes.Num());
+	Result->SetArrayField(TEXT("timelines"), ListTimelines());
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"), TEXT(
-		"No action removes a timeline track: add_timeline_track is the only timeline action registered, so there is "
-		"nothing to name as an inverse. The track, its generated curve object and any TimelineLength this call "
-		"raised all stay."));
+		"The timeline template, its curve tracks and its nodes are gone. add_timeline_track can build a timeline "
+		"of the same name again, but the tracks, the node and its wiring have to be re-authored."));
 	return MCPResult(Result);
 }
 
