@@ -14574,6 +14574,16 @@
           "suite": "live",
           "file": "tests/live/bcov-gameplay-physics.test.ts",
           "test": "set_simulate_physics and set_physics_properties land on the component's BodyInstance"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/level-query-projection.test.ts",
+          "test": "filters on a dotted props path without a separate propertyNames entry"
+        },
+        {
+          "suite": "live",
+          "file": "tests/live/level-query-projection.test.ts",
+          "test": "returns one row per actor with its attach parent, dotted component paths and missing names"
         }
       ]
     },

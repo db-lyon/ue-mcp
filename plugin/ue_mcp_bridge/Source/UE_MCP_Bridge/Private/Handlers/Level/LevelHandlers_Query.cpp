@@ -422,13 +422,29 @@ namespace
 		// A predicate on `shadow.effectiveCastShadow` with `shadow` left out of
 		// `fields` would resolve to an absent field and match nothing, and a
 		// confident zero is the worst answer this action can give. So a path that
-		// names a field group turns that group on.
+		// names a field group turns that group on. props.X and actorProps.X
+		// likewise project X, so filtering on a property needs no second list.
 		{
-			auto EnableGroupNamedBy = [&Fields](const FString& Path)
+			auto EnableGroupNamedBy = [&Fields, &ProjectedProperties, &ProjectedActorProperties](const FString& Path)
 			{
 				FString Head;
 				FString Tail;
-				MCPQueryApplyFieldName(Path.Split(TEXT("."), &Head, &Tail) ? Head : Path, Fields);
+				if (!Path.Split(TEXT("."), &Head, &Tail))
+				{
+					MCPQueryApplyFieldName(Path, Fields);
+					return;
+				}
+				if (Head == TEXT("props"))
+				{
+					ProjectedProperties.AddUnique(Tail);
+					return;
+				}
+				if (Head == TEXT("actorProps"))
+				{
+					ProjectedActorProperties.AddUnique(Tail);
+					return;
+				}
+				MCPQueryApplyFieldName(Head, Fields);
 			};
 			for (const MCPQuery::FPredicate& Predicate : Predicates) EnableGroupNamedBy(Predicate.Field);
 			for (const FString& CountPath : CountByPaths) EnableGroupNamedBy(CountPath);
@@ -989,38 +1005,56 @@ namespace
 		}
 
 		// ── Requested UPROPERTY projection ──────────────────────────────
-		if (ProjectedProperties.Num() > 0)
+		// Both projections take dotted paths into structs and array elements
+		// (AttachEndTo.ComponentProperty, Items[2].Mesh). A name that resolves
+		// to nothing is listed with its reason rather than dropped, because an
+		// absent key otherwise reads like an unset value (#1530).
+		auto Project = [](UObject* Root, const TArray<FString>& Names,
+			TSharedPtr<FJsonObject>& OutValues, TSharedPtr<FJsonObject>& OutMissing)
 		{
-			TSharedPtr<FJsonObject> PropsObject = MakeShared<FJsonObject>();
-			for (const FString& PropertyName : ProjectedProperties)
-			{
-				FProperty* Property = Component->GetClass()->FindPropertyByName(FName(*PropertyName));
-				if (!Property)
-				{
-					continue;
-				}
-				PropsObject->SetField(PropertyName,
-					MCPQuery::PropertyToJson(Property, Property->ContainerPtrToValuePtr<void>(Component)));
-			}
-			Row->SetObjectField(TEXT("props"), PropsObject);
-		}
-
-		// ── #1303: owning actor projection, Blueprint variables included ─
-		if (Request.ProjectedActorProperties.Num() > 0)
-		{
-			TSharedPtr<FJsonObject> ActorPropsObject = MakeShared<FJsonObject>();
-			for (const FString& PropertyName : Request.ProjectedActorProperties)
+			OutValues = MakeShared<FJsonObject>();
+			for (const FString& PropertyName : Names)
 			{
 				FProperty* Property = nullptr;
 				void* ValueAddr = nullptr;
 				UObject* LeafOwner = nullptr;
 				FString PathError;
-				if (MCPJsonProperty::ResolveDottedPath(Actor, PropertyName, Property, ValueAddr, LeafOwner, PathError))
+				if (MCPJsonProperty::ResolveDottedPath(Root, PropertyName, Property, ValueAddr, LeafOwner, PathError))
 				{
-					ActorPropsObject->SetField(PropertyName, MCPQuery::PropertyToJson(Property, ValueAddr));
+					OutValues->SetField(PropertyName, MCPQuery::PropertyToJson(Property, ValueAddr));
+					continue;
 				}
+				if (!OutMissing.IsValid())
+				{
+					OutMissing = MakeShared<FJsonObject>();
+				}
+				OutMissing->SetStringField(PropertyName, PathError);
 			}
+		};
+
+		if (ProjectedProperties.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> PropsObject;
+			TSharedPtr<FJsonObject> MissingObject;
+			Project(Component, ProjectedProperties, PropsObject, MissingObject);
+			Row->SetObjectField(TEXT("props"), PropsObject);
+			if (MissingObject.IsValid())
+			{
+				Row->SetObjectField(TEXT("missingProps"), MissingObject);
+			}
+		}
+
+		// ── #1303: owning actor projection, Blueprint variables included ─
+		if (Request.ProjectedActorProperties.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> ActorPropsObject;
+			TSharedPtr<FJsonObject> MissingObject;
+			Project(Actor, Request.ProjectedActorProperties, ActorPropsObject, MissingObject);
 			Row->SetObjectField(TEXT("actorProps"), ActorPropsObject);
+			if (MissingObject.IsValid())
+			{
+				Row->SetObjectField(TEXT("missingActorProps"), MissingObject);
+			}
 		}
 
 		bOutHasTransform = bHasTransform;
