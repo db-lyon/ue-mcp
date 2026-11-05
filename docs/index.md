@@ -46,7 +46,7 @@ Start with **[Getting Started](getting-started.md)**. It assumes no Node.js, MCP
 | `dataflow` | Dataflow graph nodes, pins, variables, templates (UE 5.8+) |
 | `conversation` | Dialogue graph nodes, speakers, entry points (UE 5.8+) |
 | `epic` | The UE 5.8 AI Toolset Registry: discovery and direct calls |
-| `fab` | Fab login, owned-library sync and import |
+| `fab` | Fab login, owned-library sync, import, and opening the fab.com search page at a query |
 | `datasmith` | Inspect, import and reimport Datasmith scenes |
 | `metahuman` | Create, dress and assemble MetaHuman characters |
 | `source_control` | Status, checkout, add, revert, sync, diff and submit through the editor's provider |

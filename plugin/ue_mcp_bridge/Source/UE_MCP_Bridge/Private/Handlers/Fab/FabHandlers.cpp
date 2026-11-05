@@ -6,6 +6,7 @@
 #include "UObject/UObjectHash.h"
 #include "Misc/PackageName.h"
 #include "Engine/Engine.h"
+#include "HAL/PlatformProcess.h"
 
 #ifndef WITH_FAB_PLUGIN
 #define WITH_FAB_PLUGIN 0
@@ -52,6 +53,23 @@ static bool HasFabBrowserApiInstance()
 	TArray<UObject*> Instances;
 	GetObjectsOfClass(ApiClass, Instances, /*bIncludeDerivedClasses=*/true, RF_ClassDefaultObject);
 	return Instances.Num() > 0;
+}
+
+// Percent-encode one query string value as UTF-8, keeping only the RFC 3986
+// unreserved characters. Core has no URL encoder outside the HTTP module.
+static FString FabEncodeQueryValue(const FString& Value)
+{
+	FString Out;
+	const FTCHARToUTF8 Utf8(*Value);
+	for (int32 i = 0; i < Utf8.Length(); ++i)
+	{
+		const uint8 Byte = static_cast<uint8>(Utf8.Get()[i]);
+		const bool bUnreserved = (Byte >= 'A' && Byte <= 'Z') || (Byte >= 'a' && Byte <= 'z')
+			|| (Byte >= '0' && Byte <= '9') || Byte == '-' || Byte == '_' || Byte == '.' || Byte == '~';
+		if (bUnreserved) Out.AppendChar(static_cast<TCHAR>(Byte));
+		else Out += FString::Printf(TEXT("%%%02X"), Byte);
+	}
+	return Out;
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────
@@ -335,6 +353,49 @@ TSharedPtr<FJsonValue> FFabHandlers::ImportFile(const TSharedPtr<FJsonObject>& P
 #endif
 }
 
+FFabHandlers::FUrlLauncher FFabHandlers::UrlLauncherOverride;
+
+void FFabHandlers::SetUrlLauncherForTesting(FUrlLauncher Launcher)
+{
+	UrlLauncherOverride = MoveTemp(Launcher);
+}
+
+TSharedPtr<FJsonValue> FFabHandlers::OpenSearch(const TSharedPtr<FJsonObject>& Params)
+{
+	// Builds fab.com's own search page URL and hands it to the user's browser.
+	// No request goes to Fab and no listing data is read: Fab publishes no
+	// search API and its terms forbid automated access (#1485).
+	FString Query;
+	if (auto Err = RequireString(Params, TEXT("query"), Query)) return Err;
+	const FString ListingType = OptionalString(Params, TEXT("listingType"));
+	const FString AssetFormat = OptionalString(Params, TEXT("assetFormat"), TEXT("unreal-engine"));
+	const bool bFree = OptionalBool(Params, TEXT("free"), false);
+	const bool bOpen = OptionalBool(Params, TEXT("open"), true);
+
+	FString Url = FString::Printf(TEXT("https://www.fab.com/search?q=%s"), *FabEncodeQueryValue(Query));
+	if (!ListingType.IsEmpty()) Url += TEXT("&listing_types=") + FabEncodeQueryValue(ListingType);
+	if (!AssetFormat.IsEmpty()) Url += TEXT("&asset_formats=") + FabEncodeQueryValue(AssetFormat);
+	if (bFree) Url += TEXT("&is_free=1");
+
+	auto Res = MCPSuccess();
+	Res->SetStringField(TEXT("url"), Url);
+	if (!bOpen)
+	{
+		Res->SetBoolField(TEXT("opened"), false);
+		return MCPResult(Res);
+	}
+
+	FString LaunchError;
+	if (UrlLauncherOverride) UrlLauncherOverride(Url, LaunchError);
+	else FPlatformProcess::LaunchURL(*Url, nullptr, &LaunchError);
+	if (!LaunchError.IsEmpty())
+	{
+		return MCPError(FString::Printf(TEXT("Could not open %s in the default browser: %s"), *Url, *LaunchError));
+	}
+	Res->SetBoolField(TEXT("opened"), true);
+	return MCPResult(Res);
+}
+
 // ─── Registration ──────────────────────────────────────────────────────────
 
 void FFabHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
@@ -361,4 +422,11 @@ void FFabHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 		MCPParam::Required(TEXT("source"), EType::String, TEXT("Absolute path of the source file on disk")).Alias(TEXT("sourceFile")),
 		MCPParam::Required(TEXT("destination"), EType::String, TEXT("Destination content path, e.g. /Game/Fab/Imported")).Alias(TEXT("destPath")),
 	});
+	Registry.RegisterHandler(TEXT("fab_open_search"), &OpenSearch, {
+		MCPParam::Required(TEXT("query"), EType::String, TEXT("Search text")),
+		MCPParam::Optional(TEXT("listingType"), EType::String, TEXT("Listing type filter, e.g. 3d-model, material, tool-and-plugin")),
+		MCPParam::Optional(TEXT("assetFormat"), EType::String, TEXT("Asset format filter (default unreal-engine; empty string drops the filter)")),
+		MCPParam::Optional(TEXT("free"), EType::Boolean, TEXT("Only free listings (default false)")),
+		MCPParam::Optional(TEXT("open"), EType::Boolean, TEXT("Open the page in the default browser (default true); false only returns the URL")),
+	}, MCPSpec::ContractExempt(TEXT("Opens the fab.com search page in the default browser when called")));
 }
