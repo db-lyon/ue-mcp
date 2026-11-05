@@ -36,13 +36,16 @@ struct FVertex
 
 struct FCorner
 {
-	int32 Id;
-	int32 VertexId;
-	FVector3f Normal;
-	FVector3f Tangent;
-	float BinormalSign;
-	FVector4f Color;
+	int32 Id = 0;
+	int32 VertexId = 0;
+	FVector3f Normal = FVector3f::ZeroVector;
+	FVector3f Tangent = FVector3f::ZeroVector;
+	float BinormalSign = 0.0f;
+	FVector4f Color = FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
 	FVector2f UVs[MaxUVChannels];
+
+	// FVector4f's default constructor is explicit, so this cannot be an aggregate value-initialized with {}.
+	FCorner() { for (FVector2f& UV : UVs) UV = FVector2f::ZeroVector; }
 };
 
 struct FTriangle
@@ -81,7 +84,7 @@ struct FSnapshot
 // Only the game-thread handler accesses this cache. No UObjects or render pointers survive a call.
 TArray<TSharedPtr<FSnapshot>> Snapshots;
 
-TSharedPtr<FJsonValue> Error(const TCHAR* Reason, const FString& Message)
+TSharedPtr<FJsonValue> InspectionError(const TCHAR* Reason, const FString& Message)
 {
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), false);
@@ -100,7 +103,7 @@ bool FitsBudget(int64 Vertices, int64 Corners, int64 Triangles)
 
 TSharedPtr<FJsonValue> BudgetError()
 {
-	return Error(TEXT("snapshot_limit"), TEXT("Geometry exceeds the 1000000 elements per table or 128 MiB snapshot limit. Select a smaller LOD. Nothing was truncated."));
+	return InspectionError(TEXT("snapshot_limit"), TEXT("Geometry exceeds the 1000000 elements per table or 128 MiB snapshot limit. Select a smaller LOD. Nothing was truncated."));
 }
 
 template <typename T> bool FiniteVector(const T& V)
@@ -120,11 +123,11 @@ bool FiniteCorner(const FCorner& C, int32 UVChannels)
 TSharedPtr<FJsonValue> CaptureSource(const UStaticMesh* Mesh, FSnapshot& Out, TArray<TSharedPtr<FJsonValue>>& Groups)
 {
 	if (Out.LodIndex < 0 || Out.LodIndex >= Mesh->GetNumSourceModels())
-		return Error(TEXT("lod_out_of_range"), TEXT("lodIndex is outside the source-model array."));
+		return InspectionError(TEXT("lod_out_of_range"), TEXT("lodIndex is outside the source-model array."));
 	// The engine lazily loads/caches the description. This does not create, commit or dirty it.
 	const FMeshDescription* Description = Mesh->GetMeshDescription(Out.LodIndex);
 	if (!Description)
-		return Error(TEXT("source_unavailable"), TEXT("This LOD has no source MeshDescription. Generated/reduced LODs may have only render data; no fallback was substituted."));
+		return InspectionError(TEXT("source_unavailable"), TEXT("This LOD has no source MeshDescription. Generated/reduced LODs may have only render data; no fallback was substituted."));
 	if (!FitsBudget(Description->Vertices().Num(), Description->VertexInstances().Num(), Description->Triangles().Num())
 		|| Description->PolygonGroups().Num() > MaxMetadataEntries) return BudgetError();
 
@@ -138,10 +141,10 @@ TSharedPtr<FJsonValue> CaptureSource(const UStaticMesh* Mesh, FSnapshot& Out, TA
 	const auto SlotNames = Attributes.GetPolygonGroupMaterialSlotNames();
 	if (!Positions.IsValid() || !Normals.IsValid() || !Tangents.IsValid() || !Signs.IsValid()
 		|| !Colors.IsValid() || !UVs.IsValid() || !SlotNames.IsValid())
-		return Error(TEXT("attributes_unavailable"), TEXT("Source MeshDescription is missing a standard static-mesh attribute. No attributes were synthesized."));
+		return InspectionError(TEXT("attributes_unavailable"), TEXT("Source MeshDescription is missing a standard static-mesh attribute. No attributes were synthesized."));
 	Out.UVChannels = UVs.GetNumChannels();
 	if (Out.UVChannels > MaxUVChannels)
-		return Error(TEXT("uv_limit"), TEXT("More than 8 source UV channels are unsupported. No channels were truncated."));
+		return InspectionError(TEXT("uv_limit"), TEXT("More than 8 source UV channels are unsupported. No channels were truncated."));
 	Out.bHasColors = true;
 	Out.Vertices.Reserve(Description->Vertices().Num());
 	Out.Corners.Reserve(Description->VertexInstances().Num());
@@ -149,14 +152,14 @@ TSharedPtr<FJsonValue> CaptureSource(const UStaticMesh* Mesh, FSnapshot& Out, TA
 	for (FVertexID Id : Description->Vertices().GetElementIDs())
 	{
 		const FVector3f Position = Positions[Id];
-		if (!FiniteVector(Position)) return Error(TEXT("non_finite_geometry"), TEXT("A source position is not finite."));
+		if (!FiniteVector(Position)) return InspectionError(TEXT("non_finite_geometry"), TEXT("A source position is not finite."));
 		Out.Vertices.Add({ Id.GetValue(), Position });
 	}
 	for (FVertexInstanceID Id : Description->VertexInstances().GetElementIDs())
 	{
 		const FVertexID Vertex = Description->GetVertexInstanceVertex(Id);
-		if (!Description->IsVertexValid(Vertex)) return Error(TEXT("invalid_topology"), TEXT("A source corner references an invalid vertex."));
-		FCorner Corner{};
+		if (!Description->IsVertexValid(Vertex)) return InspectionError(TEXT("invalid_topology"), TEXT("A source corner references an invalid vertex."));
+		FCorner Corner;
 		Corner.Id = Id.GetValue();
 		Corner.VertexId = Vertex.GetValue();
 		Corner.Normal = Normals[Id];
@@ -164,7 +167,7 @@ TSharedPtr<FJsonValue> CaptureSource(const UStaticMesh* Mesh, FSnapshot& Out, TA
 		Corner.BinormalSign = Signs[Id];
 		Corner.Color = Colors[Id];
 		for (int32 Channel = 0; Channel < Out.UVChannels; ++Channel) Corner.UVs[Channel] = UVs.Get(Id, Channel);
-		if (!FiniteCorner(Corner, Out.UVChannels)) return Error(TEXT("non_finite_geometry"), TEXT("A source corner attribute is not finite."));
+		if (!FiniteCorner(Corner, Out.UVChannels)) return InspectionError(TEXT("non_finite_geometry"), TEXT("A source corner attribute is not finite."));
 		Out.Corners.Add(Corner);
 	}
 	for (FTriangleID Id : Description->Triangles().GetElementIDs())
@@ -172,14 +175,14 @@ TSharedPtr<FJsonValue> CaptureSource(const UStaticMesh* Mesh, FSnapshot& Out, TA
 		const auto Corners = Description->GetTriangleVertexInstances(Id);
 		const FPolygonGroupID Group = Description->GetTrianglePolygonGroup(Id);
 		if (Corners.Num() != 3 || !Description->IsPolygonGroupValid(Group))
-			return Error(TEXT("invalid_topology"), TEXT("A source triangle has invalid corners or polygon group."));
+			return InspectionError(TEXT("invalid_topology"), TEXT("A source triangle has invalid corners or polygon group."));
 		FTriangle Triangle{};
 		Triangle.Id = Id.GetValue();
 		Triangle.GroupId = Group.GetValue();
 		Triangle.PolygonId = Description->GetTrianglePolygon(Id).GetValue();
 		for (int32 Index = 0; Index < 3; ++Index)
 		{
-			if (!Description->IsVertexInstanceValid(Corners[Index])) return Error(TEXT("invalid_topology"), TEXT("A source triangle references an invalid corner."));
+			if (!Description->IsVertexInstanceValid(Corners[Index])) return InspectionError(TEXT("invalid_topology"), TEXT("A source triangle references an invalid corner."));
 			Triangle.Corners[Index] = Corners[Index].GetValue();
 		}
 		Out.Triangles.Add(Triangle);
@@ -197,7 +200,7 @@ TSharedPtr<FJsonValue> CaptureSource(const UStaticMesh* Mesh, FSnapshot& Out, TA
 			{
 				// Bound ambiguous mappings too: empty/duplicate slot names can otherwise
 				// multiply the metadata by group count times material count.
-				if (Matches.Num() >= 16) return Error(TEXT("metadata_limit"), TEXT("A source polygon group matches more than 16 material slots; the ambiguous mapping exceeds the metadata limit."));
+				if (Matches.Num() >= 16) return InspectionError(TEXT("metadata_limit"), TEXT("A source polygon group matches more than 16 material slots; the ambiguous mapping exceeds the metadata limit."));
 				Matches.Add(MakeShared<FJsonValueNumber>(Index));
 			}
 		Group->SetArrayField(TEXT("materialSlotMatches"), Matches);
@@ -209,25 +212,25 @@ TSharedPtr<FJsonValue> CaptureSource(const UStaticMesh* Mesh, FSnapshot& Out, TA
 TSharedPtr<FJsonValue> CaptureRender(const UStaticMesh* Mesh, FSnapshot& Out, TArray<TSharedPtr<FJsonValue>>& Groups)
 {
 	const FStaticMeshRenderData* Data = Mesh->GetRenderData();
-	if (!Data) return Error(TEXT("render_unavailable"), TEXT("The mesh has no built render data."));
-	if (!Data->LODResources.IsValidIndex(Out.LodIndex)) return Error(TEXT("lod_out_of_range"), TEXT("lodIndex is outside the render-LOD array."));
+	if (!Data) return InspectionError(TEXT("render_unavailable"), TEXT("The mesh has no built render data."));
+	if (!Data->LODResources.IsValidIndex(Out.LodIndex)) return InspectionError(TEXT("lod_out_of_range"), TEXT("lodIndex is outside the render-LOD array."));
 	const FStaticMeshLODResources& LOD = Data->LODResources[Out.LodIndex];
 	const auto& Positions = LOD.VertexBuffers.PositionVertexBuffer;
 	const auto& Attributes = LOD.VertexBuffers.StaticMeshVertexBuffer;
 	const auto& Colors = LOD.VertexBuffers.ColorVertexBuffer;
 	const uint32 Count = Positions.GetNumVertices();
 	const int32 IndexCount = LOD.IndexBuffer.GetNumIndices();
-	if (IndexCount % 3 != 0) return Error(TEXT("invalid_topology"), TEXT("The render index buffer is not a triangle list."));
+	if (IndexCount % 3 != 0) return InspectionError(TEXT("invalid_topology"), TEXT("The render index buffer is not a triangle list."));
 	if (!FitsBudget(Count, Count, IndexCount / 3) || LOD.Sections.Num() > MaxMetadataEntries) return BudgetError();
 	Out.UVChannels = Attributes.GetNumTexCoords();
-	if (Out.UVChannels > MaxUVChannels) return Error(TEXT("uv_limit"), TEXT("More than 8 render UV channels are unsupported. No channels were truncated."));
+	if (Out.UVChannels > MaxUVChannels) return InspectionError(TEXT("uv_limit"), TEXT("More than 8 render UV channels are unsupported. No channels were truncated."));
 	Out.RenderColorVertexCount = Colors.GetNumVertices();
 	Out.bHasColors = Out.RenderColorVertexCount != 0;
 	if ((Count && (!Positions.GetVertexData() || Attributes.GetNumVertices() != Count || !Attributes.GetTangentData()
 		|| (Out.UVChannels && !Attributes.GetTexCoordData())))
 		|| (Out.bHasColors && (Colors.GetNumVertices() != Count || !Colors.GetVertexData()))
 		|| (IndexCount && LOD.IndexBuffer.GetIndexDataSize() == 0))
-		return Error(TEXT("cpu_data_unavailable"), TEXT("A required render CPU buffer is absent or incomplete. No attributes were omitted or reconstructed."));
+		return InspectionError(TEXT("cpu_data_unavailable"), TEXT("A required render CPU buffer is absent or incomplete. No attributes were omitted or reconstructed."));
 
 	Out.Vertices.Reserve(Count);
 	Out.Corners.Reserve(Count);
@@ -235,9 +238,9 @@ TSharedPtr<FJsonValue> CaptureRender(const UStaticMesh* Mesh, FSnapshot& Out, TA
 	for (uint32 Id = 0; Id < Count; ++Id)
 	{
 		const FVector3f Position = Positions.VertexPosition(Id);
-		if (!FiniteVector(Position)) return Error(TEXT("non_finite_geometry"), TEXT("A render position is not finite."));
+		if (!FiniteVector(Position)) return InspectionError(TEXT("non_finite_geometry"), TEXT("A render position is not finite."));
 		Out.Vertices.Add({ static_cast<int32>(Id), Position });
-		FCorner Corner{};
+		FCorner Corner;
 		Corner.Id = Corner.VertexId = static_cast<int32>(Id);
 		const FVector4f Z = Attributes.VertexTangentZ(Id);
 		const FVector4f X = Attributes.VertexTangentX(Id);
@@ -252,7 +255,7 @@ TSharedPtr<FJsonValue> CaptureRender(const UStaticMesh* Mesh, FSnapshot& Out, TA
 			Corner.Color = FVector4f(Color.R / 255.0f, Color.G / 255.0f, Color.B / 255.0f, Color.A / 255.0f);
 		}
 		for (int32 Channel = 0; Channel < Out.UVChannels; ++Channel) Corner.UVs[Channel] = Attributes.GetVertexUV(Id, Channel);
-		if (!FiniteCorner(Corner, Out.UVChannels)) return Error(TEXT("non_finite_geometry"), TEXT("A render corner attribute is not finite."));
+		if (!FiniteCorner(Corner, Out.UVChannels)) return InspectionError(TEXT("non_finite_geometry"), TEXT("A render corner attribute is not finite."));
 		Out.Corners.Add(Corner);
 	}
 	// View rather than copy: it is consumed synchronously before returning to the editor.
@@ -264,7 +267,7 @@ TSharedPtr<FJsonValue> CaptureRender(const UStaticMesh* Mesh, FSnapshot& Out, TA
 		Triangle.GroupId = Triangle.PolygonId = INDEX_NONE;
 		for (int32 Corner = 0; Corner < 3; ++Corner)
 		{
-			if (Indices[Index + Corner] >= Count) return Error(TEXT("invalid_topology"), TEXT("A render triangle references an invalid vertex."));
+			if (Indices[Index + Corner] >= Count) return InspectionError(TEXT("invalid_topology"), TEXT("A render triangle references an invalid vertex."));
 			Triangle.Corners[Corner] = static_cast<int32>(Indices[Index + Corner]);
 		}
 		Out.Triangles.Add(Triangle);
@@ -273,10 +276,10 @@ TSharedPtr<FJsonValue> CaptureRender(const UStaticMesh* Mesh, FSnapshot& Out, TA
 	{
 		const FStaticMeshSection& Section = LOD.Sections[Index];
 		const uint64 EndIndex = static_cast<uint64>(Section.FirstIndex) + static_cast<uint64>(Section.NumTriangles) * 3;
-		if (Section.FirstIndex % 3 || EndIndex > static_cast<uint64>(IndexCount)) return Error(TEXT("invalid_topology"), TEXT("A render section has an invalid index range."));
+		if (Section.FirstIndex % 3 || EndIndex > static_cast<uint64>(IndexCount)) return InspectionError(TEXT("invalid_topology"), TEXT("A render section has an invalid index range."));
 		for (uint32 TriangleId = Section.FirstIndex / 3; TriangleId < EndIndex / 3; ++TriangleId)
 		{
-			if (Out.Triangles[TriangleId].GroupId != INDEX_NONE) return Error(TEXT("invalid_topology"), TEXT("Render sections overlap; material assignment would be ambiguous."));
+			if (Out.Triangles[TriangleId].GroupId != INDEX_NONE) return InspectionError(TEXT("invalid_topology"), TEXT("Render sections overlap; material assignment would be ambiguous."));
 			Out.Triangles[TriangleId].GroupId = Index;
 		}
 		auto Group = MakeShared<FJsonObject>();
@@ -291,9 +294,9 @@ TSharedPtr<FJsonValue> CaptureRender(const UStaticMesh* Mesh, FSnapshot& Out, TA
 	return nullptr;
 }
 
-TSharedPtr<FJsonValue> Capture(const UStaticMesh* Mesh, FSnapshot& Out)
+TSharedPtr<FJsonValue> CaptureSnapshot(const UStaticMesh* Mesh, FSnapshot& Out)
 {
-	if (Mesh->IsCompiling()) return Error(TEXT("mesh_compiling"), TEXT("The mesh is compiling. Retry after compilation finishes; this read will not force a build."));
+	if (Mesh->IsCompiling()) return InspectionError(TEXT("mesh_compiling"), TEXT("The mesh is compiling. Retry after compilation finishes; this read will not force a build."));
 	if (Mesh->GetStaticMaterials().Num() > MaxMetadataEntries) return BudgetError();
 	TArray<TSharedPtr<FJsonValue>> Groups;
 	if (auto Err = Out.Source == TEXT("sourceModel") ? CaptureSource(Mesh, Out, Groups) : CaptureRender(Mesh, Out, Groups)) return Err;
@@ -322,14 +325,14 @@ TSharedPtr<FJsonValue> Capture(const UStaticMesh* Mesh, FSnapshot& Out)
 	Metadata->SetNumberField(TEXT("lodForCollision"), Mesh->LODForCollision);
 	auto Nanite = MakeShared<FJsonObject>();
 	const FMeshNaniteSettings NaniteSettings = MCPGetNaniteSettings(Mesh);
-	if (!FJsonObjectConverter::UStructToJsonObject(FMeshNaniteSettings::StaticStruct(), &NaniteSettings, Nanite.ToSharedRef(), 0, 0))
-		return Error(TEXT("metadata_unavailable"), TEXT("Could not serialize Nanite settings."));
+	if (!FJsonObjectConverter::UStructToJsonObject(FMeshNaniteSettings::StaticStruct(), &NaniteSettings, Nanite, 0, 0))
+		return InspectionError(TEXT("metadata_unavailable"), TEXT("Could not serialize Nanite settings."));
 	Metadata->SetObjectField(TEXT("naniteSettings"), Nanite);
 	if (Out.LodIndex < Mesh->GetNumSourceModels())
 	{
 		auto Build = MakeShared<FJsonObject>();
-		if (!FJsonObjectConverter::UStructToJsonObject(FMeshBuildSettings::StaticStruct(), &Mesh->GetSourceModel(Out.LodIndex).BuildSettings, Build.ToSharedRef(), 0, 0))
-			return Error(TEXT("metadata_unavailable"), TEXT("Could not serialize source build settings."));
+		if (!FJsonObjectConverter::UStructToJsonObject(FMeshBuildSettings::StaticStruct(), &Mesh->GetSourceModel(Out.LodIndex).BuildSettings, Build, 0, 0))
+			return InspectionError(TEXT("metadata_unavailable"), TEXT("Could not serialize source build settings."));
 		Metadata->SetObjectField(TEXT("sourceBuildSettings"), Build);
 	}
 	else Metadata->SetField(TEXT("sourceBuildSettings"), MakeShared<FJsonValueNull>());
@@ -355,9 +358,9 @@ TSharedPtr<FJsonValue> Capture(const UStaticMesh* Mesh, FSnapshot& Out)
 		Materials.Add(MakeShared<FJsonValueObject>(Slot));
 	}
 	Metadata->SetArrayField(TEXT("materials"), Materials);
-	if (!FJsonSerializer::Serialize(Metadata.ToSharedRef(), TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out.MetadataJson)))
-		return Error(TEXT("metadata_unavailable"), TEXT("Could not serialize capture metadata."));
-	if (Out.MetadataJson.Len() > 256 * 1024) return Error(TEXT("metadata_limit"), TEXT("Capture metadata exceeds 256 Ki characters. No metadata was truncated."));
+	if (!FJsonSerializer::Serialize(Metadata, TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out.MetadataJson)))
+		return InspectionError(TEXT("metadata_unavailable"), TEXT("Could not serialize capture metadata."));
+	if (Out.MetadataJson.Len() > 256 * 1024) return InspectionError(TEXT("metadata_limit"), TEXT("Capture metadata exceeds 256 Ki characters. No metadata was truncated."));
 	if (Out.Bytes() > MaxSnapshotBytes) return BudgetError();
 
 	// Hash individual fields, never struct padding. This is a capture-content fingerprint,
@@ -389,12 +392,12 @@ TSharedPtr<FJsonValue> Capture(const UStaticMesh* Mesh, FSnapshot& Out)
 	return nullptr;
 }
 
-void Expire(double Now)
+void ExpireSnapshots(double Now)
 {
 	Snapshots.RemoveAll([Now](const TSharedPtr<FSnapshot>& S) { return Now - S->LastAccess >= IdleSeconds; });
 }
 
-bool ReadInteger(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, int32 Default, int32 Min, int32 Max, int32& Out)
+bool ReadInspectionInteger(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, int32 Default, int32 Min, int32 Max, int32& Out)
 {
 	const auto Value = TryGetParam(Params, Key);
 	Out = Default;
@@ -406,7 +409,7 @@ bool ReadInteger(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, int32 
 	return true;
 }
 
-TSharedPtr<FJsonObject> Row(const FSnapshot& S, const FString& Kind, int32 Index)
+TSharedPtr<FJsonObject> InspectionRow(const FSnapshot& S, const FString& Kind, int32 Index)
 {
 	auto Result = MakeShared<FJsonObject>();
 	if (Kind == TEXT("vertices"))
@@ -453,7 +456,7 @@ TSharedPtr<FJsonObject> Row(const FSnapshot& S, const FString& Kind, int32 Index
 	return Result;
 }
 
-TSharedPtr<FJsonObject> Summary(const FSnapshot& S, bool bFresh)
+TSharedPtr<FJsonObject> InspectionSummary(const FSnapshot& S, bool bFresh)
 {
 	auto Result = MCPSuccess();
 	Result->SetNumberField(TEXT("schemaVersion"), 1);
@@ -483,15 +486,15 @@ TSharedPtr<FJsonValue> ResolveExportPath(const FString& Requested, const FString
 	FText PathError;
 	if (Out.Len() > 4096 || !FPaths::CollapseRelativeDirectories(Out) || !FPaths::ValidatePath(Out, &PathError)
 		|| !FPaths::GetExtension(Out).Equals(TEXT("json"), ESearchCase::IgnoreCase))
-		return Error(TEXT("invalid_output_path"), TEXT("outputPath must be a valid .json file path of at most 4096 characters."));
+		return InspectionError(TEXT("invalid_output_path"), TEXT("outputPath must be a valid .json file path of at most 4096 characters."));
 #if PLATFORM_WINDOWS
 	// Reject alternate data streams. The only allowed colon belongs to an absolute drive prefix.
-	if (Out.Mid(2).Contains(TEXT(":"))) return Error(TEXT("invalid_output_path"), TEXT("outputPath cannot address a Windows alternate data stream."));
+	if (Out.Mid(2).Contains(TEXT(":"))) return InspectionError(TEXT("invalid_output_path"), TEXT("outputPath cannot address a Windows alternate data stream."));
 #endif
 	if (FPaths::IsRelative(Path) && !FPaths::IsUnderDirectory(Out, FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir())))
-		return Error(TEXT("invalid_output_path"), TEXT("Relative outputPath must remain under Saved/. Use an explicit absolute path for another destination."));
+		return InspectionError(TEXT("invalid_output_path"), TEXT("Relative outputPath must remain under Saved/. Use an explicit absolute path for another destination."));
 	if (IFileManager::Get().FileExists(*Out) || IFileManager::Get().DirectoryExists(*Out))
-		return Error(TEXT("output_exists"), TEXT("The export destination already exists. Choose a new outputPath; existing files are never replaced."));
+		return InspectionError(TEXT("output_exists"), TEXT("The export destination already exists. Choose a new outputPath; existing files are never replaced."));
 	return nullptr;
 }
 
@@ -550,22 +553,22 @@ bool PublishExportNoReplace(const FString& Stage, const FString& Output)
 TSharedPtr<FJsonValue> ExportSnapshot(const FSnapshot& S, const FString& Output, bool bFresh, int64 ByteLimit = MaxExportBytes)
 {
 	IPlatformFile& Files = FPlatformFileManager::Get().GetPlatformFile();
-	if (Files.FileExists(*Output) || Files.DirectoryExists(*Output)) return Error(TEXT("output_exists"), TEXT("Export destination exists; nothing was replaced."));
-	if (!Files.CreateDirectoryTree(*FPaths::GetPath(Output))) return Error(TEXT("export_open_failed"), TEXT("Could not create the export directory."));
+	if (Files.FileExists(*Output) || Files.DirectoryExists(*Output)) return InspectionError(TEXT("output_exists"), TEXT("Export destination exists; nothing was replaced."));
+	if (!Files.CreateDirectoryTree(*FPaths::GetPath(Output))) return InspectionError(TEXT("export_open_failed"), TEXT("Could not create the export directory."));
 	const FString Stage = Output + TEXT(".") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT(".partial");
-	if (Files.FileExists(*Stage) || Files.DirectoryExists(*Stage)) return Error(TEXT("export_open_failed"), TEXT("Unique export staging path is already occupied."));
+	if (Files.FileExists(*Stage) || Files.DirectoryExists(*Stage)) return InspectionError(TEXT("export_open_failed"), TEXT("Unique export staging path is already occupied."));
 	TUniquePtr<IFileHandle> Handle(Files.OpenWrite(*Stage));
-	if (!Handle) return Error(TEXT("export_open_failed"), TEXT("Could not create the export staging file."));
+	if (!Handle) return InspectionError(TEXT("export_open_failed"), TEXT("Could not create the export staging file."));
 	auto Fail = [&](const FString& Reason) -> TSharedPtr<FJsonValue>
 	{
 		Handle.Reset();
-		auto Failure = Error(*Reason, TEXT("The snapshot export did not complete. The destination was not published by this call."));
+		auto Failure = InspectionError(*Reason, TEXT("The snapshot export did not complete. The destination was not published by this call."));
 		if (!Files.DeleteFile(*Stage)) Failure->AsObject()->SetStringField(TEXT("partialOutputPath"), Stage);
 		return Failure;
 	};
 	FExportStream Stream(*Handle, ByteLimit);
 	const double Started = FPlatformTime::Seconds();
-	auto Header = Summary(S, bFresh);
+	auto Header = InspectionSummary(S, bFresh);
 	const FString ExportedUtc = FDateTime::UtcNow().ToIso8601();
 	Header->SetStringField(TEXT("exportedUtc"), ExportedUtc);
 	FString Text;
@@ -582,7 +585,7 @@ TSharedPtr<FJsonValue> ExportSnapshot(const FSnapshot& S, const FString& Output,
 		{
 			if ((Index % 512) == 0 && FPlatformTime::Seconds() - Started > 240.0) return Fail(TEXT("export_timeout"));
 			Text.Reset();
-			if (!FJsonSerializer::Serialize(Row(S, Table, Index).ToSharedRef(), TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text))
+			if (!FJsonSerializer::Serialize(InspectionRow(S, Table, Index).ToSharedRef(), TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text))
 				|| Text.Len() > MaxExportRecordChars) return Fail(TEXT("export_serialization_failed"));
 			if ((Index && !Stream.Write(TEXT(","))) || !Stream.Write(Text)) return Fail(Stream.Failure);
 		}
@@ -593,7 +596,7 @@ TSharedPtr<FJsonValue> ExportSnapshot(const FSnapshot& S, const FString& Output,
 	Handle.Reset();
 	if (!PublishExportNoReplace(Stage, Output))
 		return Fail(Files.FileExists(*Output) || Files.DirectoryExists(*Output) ? TEXT("output_exists") : TEXT("export_publish_failed"));
-	auto Receipt = Summary(S, bFresh);
+	auto Receipt = InspectionSummary(S, bFresh);
 	Receipt->SetBoolField(TEXT("dumpedToFile"), true);
 	Receipt->SetBoolField(TEXT("created"), true);
 	Receipt->SetBoolField(TEXT("exportComplete"), true);
@@ -603,20 +606,17 @@ TSharedPtr<FJsonValue> ExportSnapshot(const FSnapshot& S, const FString& Output,
 	if (Files.FileExists(*Stage) && !Files.DeleteFile(*Stage)) Receipt->SetStringField(TEXT("stagingCleanupWarning"), Stage);
 	return MCPResult(Receipt);
 }
-} // namespace MCPMeshInspection
-
-TSharedPtr<FJsonValue> FAssetGeometryHandlers::GetStaticMeshGeometry(const TSharedPtr<FJsonObject>& Params)
+TSharedPtr<FJsonValue> HandleGetStaticMeshGeometry(const TSharedPtr<FJsonObject>& Params)
 {
-	using namespace MCPMeshInspection;
 	FString AssetPath, Source;
 	// Read every declared parameter before validation (the bridge audits this contract).
 	const auto PathError = RequireString(Params, TEXT("assetPath"), AssetPath);
 	const auto SourceError = RequireString(Params, TEXT("geometrySource"), Source);
 	int32 LodIndex, Offset, PageSize;
-	const bool bValidLOD = ReadInteger(Params, TEXT("lodIndex"), 0, 0, MAX_int32, LodIndex);
+	const bool bValidLOD = ReadInspectionInteger(Params, TEXT("lodIndex"), 0, 0, MAX_int32, LodIndex);
 	const FString Kind = OptionalString(Params, TEXT("elementType"), TEXT("triangles"));
-	const bool bValidOffset = ReadInteger(Params, TEXT("elementOffset"), 0, 0, MaxElements, Offset);
-	const bool bValidSize = ReadInteger(Params, TEXT("pageSize"), 256, 1, 512, PageSize);
+	const bool bValidOffset = ReadInspectionInteger(Params, TEXT("elementOffset"), 0, 0, MaxElements, Offset);
+	const bool bValidSize = ReadInspectionInteger(Params, TEXT("pageSize"), 256, 1, 512, PageSize);
 	const FString SnapshotId = OptionalString(Params, TEXT("snapshotId"), TEXT(""));
 	const auto SnapshotValue = TryGetParam(Params, TEXT("snapshotId"));
 	const auto KindValue = TryGetParam(Params, TEXT("elementType"));
@@ -626,40 +626,40 @@ TSharedPtr<FJsonValue> FAssetGeometryHandlers::GetStaticMeshGeometry(const TShar
 	const auto OutputValue = TryGetParam(Params, TEXT("outputPath"));
 	if (PathError) return PathError;
 	if (SourceError) return SourceError;
-	if (Source != TEXT("sourceModel") && Source != TEXT("renderData")) return Error(TEXT("invalid_source"), TEXT("geometrySource must be sourceModel or renderData."));
-	if ((KindValue && KindValue->Type != EJson::String) || (Kind != TEXT("vertices") && Kind != TEXT("corners") && Kind != TEXT("triangles"))) return Error(TEXT("invalid_element_type"), TEXT("elementType must be vertices, corners or triangles."));
+	if (Source != TEXT("sourceModel") && Source != TEXT("renderData")) return InspectionError(TEXT("invalid_source"), TEXT("geometrySource must be sourceModel or renderData."));
+	if ((KindValue && KindValue->Type != EJson::String) || (Kind != TEXT("vertices") && Kind != TEXT("corners") && Kind != TEXT("triangles"))) return InspectionError(TEXT("invalid_element_type"), TEXT("elementType must be vertices, corners or triangles."));
 	if (SnapshotValue && (SnapshotValue->Type != EJson::String || SnapshotId.IsEmpty() || SnapshotId.Len() > 64))
-		return Error(TEXT("invalid_snapshot"), TEXT("snapshotId must be a nonempty ID returned by this action."));
+		return InspectionError(TEXT("invalid_snapshot"), TEXT("snapshotId must be a nonempty ID returned by this action."));
 	if (!bValidLOD || !bValidOffset || !bValidSize)
-		return Error(TEXT("invalid_page"), TEXT("Use lodIndex >= 0, elementOffset 0..1000000 and pageSize 1..512."));
+		return InspectionError(TEXT("invalid_page"), TEXT("Use lodIndex >= 0, elementOffset 0..1000000 and pageSize 1..512."));
 	if ((DumpValue && DumpValue->Type != EJson::Boolean) || (OutputValue && OutputValue->Type != EJson::String))
-		return Error(TEXT("invalid_export"), TEXT("dumpToFile must be a boolean and outputPath must be a string."));
+		return InspectionError(TEXT("invalid_export"), TEXT("dumpToFile must be a boolean and outputPath must be a string."));
 	if ((!bDump && OutputValue) || (bDump && (HasParam(Params, TEXT("elementType")) || HasParam(Params, TEXT("elementOffset")) || HasParam(Params, TEXT("pageSize")))))
-		return Error(TEXT("invalid_export"), TEXT("outputPath requires dumpToFile=true. A full export does not accept elementType, elementOffset or pageSize."));
-	if (!IsInGameThread()) return Error(TEXT("wrong_thread"), TEXT("Static mesh snapshots must be read on the game thread."));
+		return InspectionError(TEXT("invalid_export"), TEXT("outputPath requires dumpToFile=true. A full export does not accept elementType, elementOffset or pageSize."));
+	if (!IsInGameThread()) return InspectionError(TEXT("wrong_thread"), TEXT("Static mesh snapshots must be read on the game thread."));
 	const FString CaptureId = SnapshotId.IsEmpty() ? FGuid::NewGuid().ToString(EGuidFormats::Digits) : SnapshotId;
 	FString ExportPath;
 	if (bDump) if (auto Err = ResolveExportPath(OutputPath, CaptureId, ExportPath)) return Err;
 	const double Now = FPlatformTime::Seconds();
-	Expire(Now);
+	ExpireSnapshots(Now);
 	TSharedPtr<FSnapshot> Snapshot;
 	if (!SnapshotId.IsEmpty())
 	{
 		for (const auto& Candidate : Snapshots) if (Candidate->Id == SnapshotId) { Snapshot = Candidate; break; }
-		if (!Snapshot) return Error(TEXT("snapshot_unavailable"), TEXT("Snapshot expired, was evicted, or belongs to a previous editor process. Restart the capture at offset 0 without snapshotId; do not combine old and new pages."));
+		if (!Snapshot) return InspectionError(TEXT("snapshot_unavailable"), TEXT("Snapshot expired, was evicted, or belongs to a previous editor process. Restart the capture at offset 0 without snapshotId; do not combine old and new pages."));
 		if ((AssetPath != Snapshot->RequestedPath && AssetPath != Snapshot->AssetPath) || Source != Snapshot->Source || LodIndex != Snapshot->LodIndex)
-			return Error(TEXT("snapshot_mismatch"), TEXT("snapshotId belongs to a different assetPath, geometrySource or lodIndex."));
+			return InspectionError(TEXT("snapshot_mismatch"), TEXT("snapshotId belongs to a different assetPath, geometrySource or lodIndex."));
 	}
 	else
 	{
-		if (Offset != 0) return Error(TEXT("snapshot_required"), TEXT("Continuation requires snapshotId. Start a capture at elementOffset 0."));
+		if (Offset != 0) return InspectionError(TEXT("snapshot_required"), TEXT("Continuation requires snapshotId. Start a capture at elementOffset 0."));
 		UObject* Asset = LoadAssetByPath<UObject>(AssetPath);
-		if (!Asset) return Error(TEXT("asset_not_found"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
+		if (!Asset) return InspectionError(TEXT("asset_not_found"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 		const UStaticMesh* Mesh = Cast<UStaticMesh>(Asset);
-		if (!Mesh) return Error(TEXT("unsupported_asset"), TEXT("get_static_mesh_geometry requires a StaticMesh."));
+		if (!Mesh) return InspectionError(TEXT("unsupported_asset"), TEXT("get_static_mesh_geometry requires a StaticMesh."));
 		Snapshot = MakeShared<FSnapshot>();
 		Snapshot->RequestedPath = AssetPath; Snapshot->Source = Source; Snapshot->LodIndex = LodIndex;
-		if (auto Err = Capture(Mesh, *Snapshot)) return Err;
+		if (auto Err = CaptureSnapshot(Mesh, *Snapshot)) return Err;
 		Snapshot->Id = CaptureId;
 		int64 CachedBytes = 0;
 		for (const auto& Existing : Snapshots) CachedBytes += Existing->Bytes();
@@ -682,24 +682,30 @@ TSharedPtr<FJsonValue> FAssetGeometryHandlers::GetStaticMeshGeometry(const TShar
 		return Export;
 	}
 	const int32 Total = Kind == TEXT("vertices") ? Snapshot->Vertices.Num() : Kind == TEXT("corners") ? Snapshot->Corners.Num() : Snapshot->Triangles.Num();
-	if (Offset > Total) return Error(TEXT("offset_out_of_range"), TEXT("elementOffset is past the end of the selected snapshot table."));
+	if (Offset > Total) return InspectionError(TEXT("offset_out_of_range"), TEXT("elementOffset is past the end of the selected snapshot table."));
 	Snapshot->LastAccess = FPlatformTime::Seconds();
-	auto Result = Summary(*Snapshot, SnapshotId.IsEmpty());
+	auto Result = InspectionSummary(*Snapshot, SnapshotId.IsEmpty());
 	Result->SetStringField(TEXT("elementType"), Kind);
 	Result->SetNumberField(TEXT("elementOffset"), Offset);
 	Result->SetNumberField(TEXT("totalElements"), Total);
 	const int32 End = FMath::Min(Total, Offset + PageSize);
 	TArray<TSharedPtr<FJsonValue>> Elements;
-	for (int32 Index = Offset; Index < End; ++Index) Elements.Add(MakeShared<FJsonValueObject>(Row(*Snapshot, Kind, Index)));
+	for (int32 Index = Offset; Index < End; ++Index) Elements.Add(MakeShared<FJsonValueObject>(InspectionRow(*Snapshot, Kind, Index)));
 	Result->SetArrayField(TEXT("elements"), Elements);
 	Result->SetBoolField(TEXT("hasMore"), End < Total);
 	if (End < Total) Result->SetNumberField(TEXT("nextOffset"), End);
 	else Result->SetField(TEXT("nextOffset"), MakeShared<FJsonValueNull>());
 	TSharedPtr<FJsonObject> Metadata;
 	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Snapshot->MetadataJson), Metadata) || !Metadata)
-		return Error(TEXT("metadata_unavailable"), TEXT("Cached capture metadata could not be read. Start a new capture."));
+		return InspectionError(TEXT("metadata_unavailable"), TEXT("Cached capture metadata could not be read. Start a new capture."));
 	Result->SetObjectField(TEXT("metadata"), Metadata);
 	return MCPResult(Result);
+}
+} // namespace MCPMeshInspection
+
+TSharedPtr<FJsonValue> FAssetGeometryHandlers::GetStaticMeshGeometry(const TSharedPtr<FJsonObject>& Params)
+{
+	return MCPMeshInspection::HandleGetStaticMeshGeometry(Params);
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -712,21 +718,20 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMCPMeshInspectionBoundsTest,
 
 bool FMCPMeshInspectionBoundsTest::RunTest(const FString& Parameters)
 {
-	using namespace MCPMeshInspection;
-	TestTrue(TEXT("small capture fits"), FitsBudget(4, 7, 2));
-	TestFalse(TEXT("element count capped before allocation"), FitsBudget(MaxElements + 1ll, 0, 0));
-	TestFalse(TEXT("byte budget independent of count cap"), FitsBudget(MaxElements, MaxElements, MaxElements));
-	TestFalse(TEXT("negative counts rejected"), FitsBudget(-1, 0, 0));
+	TestTrue(TEXT("small capture fits"), MCPMeshInspection::FitsBudget(4, 7, 2));
+	TestFalse(TEXT("element count capped before allocation"), MCPMeshInspection::FitsBudget(MCPMeshInspection::MaxElements + 1ll, 0, 0));
+	TestFalse(TEXT("byte budget independent of count cap"), MCPMeshInspection::FitsBudget(MCPMeshInspection::MaxElements, MCPMeshInspection::MaxElements, MCPMeshInspection::MaxElements));
+	TestFalse(TEXT("negative counts rejected"), MCPMeshInspection::FitsBudget(-1, 0, 0));
 	// Preserve the live cache even if the suite is run after a user capture.
-	auto Previous = MoveTemp(Snapshots);
-	auto S = MakeShared<FSnapshot>();
+	auto Previous = MoveTemp(MCPMeshInspection::Snapshots);
+	auto S = MakeShared<MCPMeshInspection::FSnapshot>();
 	S->LastAccess = 10;
-	Snapshots.Add(S);
-	Expire(10 + IdleSeconds - 1);
-	TestEqual(TEXT("unexpired capture retained"), Snapshots.Num(), 1);
-	Expire(10 + IdleSeconds);
-	TestEqual(TEXT("idle deadline expires exactly"), Snapshots.Num(), 0);
-	Snapshots = MoveTemp(Previous);
+	MCPMeshInspection::Snapshots.Add(S);
+	MCPMeshInspection::ExpireSnapshots(10 + MCPMeshInspection::IdleSeconds - 1);
+	TestEqual(TEXT("unexpired capture retained"), MCPMeshInspection::Snapshots.Num(), 1);
+	MCPMeshInspection::ExpireSnapshots(10 + MCPMeshInspection::IdleSeconds);
+	TestEqual(TEXT("idle deadline expires exactly"), MCPMeshInspection::Snapshots.Num(), 0);
+	MCPMeshInspection::Snapshots = MoveTemp(Previous);
 	return true;
 }
 
@@ -735,15 +740,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMCPMeshInspectionExportFailureTest,
 
 bool FMCPMeshInspectionExportFailureTest::RunTest(const FString& Parameters)
 {
-	using namespace MCPMeshInspection;
 	const FMCPScopedTestMount Mount{ TEXT("/UEMCPMeshExportFailure/"), TEXT("UEMCPMeshExportFailure") };
-	FSnapshot S;
+	MCPMeshInspection::FSnapshot S;
 	S.Id = TEXT("bounded-fixture"); S.AssetPath = TEXT("/Temp/Fixture.Mesh"); S.Source = TEXT("sourceModel");
 	S.MetadataJson = TEXT("{\"groups\":[],\"materials\":[]}");
 	for (int32 Index = 0; Index < 3000; ++Index) S.Vertices.Add({ Index, FVector3f(Index, 0, 0) });
 	const FString FailedPath = FPaths::Combine(Mount.ContentPath, TEXT("too-large.json"));
 	// A deliberately small test limit reaches disk before refusing further bytes.
-	const auto Failed = ExportSnapshot(S, FailedPath, false, ExportBufferBytes + 1024)->AsObject();
+	const auto Failed = MCPMeshInspection::ExportSnapshot(S, FailedPath, false, MCPMeshInspection::ExportBufferBytes + 1024)->AsObject();
 	TestFalse(TEXT("oversized export fails"), Failed->GetBoolField(TEXT("success")));
 	TestEqual(TEXT("failure identifies byte bound"), Failed->GetStringField(TEXT("reason")), FString(TEXT("export_limit")));
 	TestFalse(TEXT("partial capture never published"), IFileManager::Get().FileExists(*FailedPath));
@@ -756,19 +760,19 @@ bool FMCPMeshInspectionExportFailureTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("test stage written"), FFileHelper::SaveStringToFile(TEXT("complete-new-file"), *Stage));
 	TestTrue(TEXT("test competing destination written"), FFileHelper::SaveStringToFile(TEXT("existing-file"), *Destination));
 	// Calls the final primitive directly, simulating a destination created after preflight.
-	TestFalse(TEXT("publication refuses racing destination"), PublishExportNoReplace(Stage, Destination));
+	TestFalse(TEXT("publication refuses racing destination"), MCPMeshInspection::PublishExportNoReplace(Stage, Destination));
 	FString Existing;
 	TestTrue(TEXT("existing destination readable"), FFileHelper::LoadFileToString(Existing, *Destination));
 	TestEqual(TEXT("existing bytes unchanged"), Existing, FString(TEXT("existing-file")));
 	TestTrue(TEXT("failed publication retains its stage for cleanup"), IFileManager::Get().FileExists(*Stage));
 	const FString NewDestination = FPaths::Combine(Mount.ContentPath, TEXT("published.json"));
-	TestTrue(TEXT("complete stage publishes once"), PublishExportNoReplace(Stage, NewDestination));
+	TestTrue(TEXT("complete stage publishes once"), MCPMeshInspection::PublishExportNoReplace(Stage, NewDestination));
 	TestTrue(TEXT("published file readable"), FFileHelper::LoadFileToString(Existing, *NewDestination));
 	TestEqual(TEXT("published bytes exact"), Existing, FString(TEXT("complete-new-file")));
 	FString Resolved;
-	TestTrue(TEXT("relative traversal refused"), ResolveExportPath(TEXT("../outside.json"), S.Id, Resolved).IsValid());
-	TestTrue(TEXT("wrong extension refused"), ResolveExportPath(TEXT("file.uasset"), S.Id, Resolved).IsValid());
-	TestFalse(TEXT("safe relative path resolves without writing"), ResolveExportPath(TEXT("UE_MCP/unique-inspection-test.json"), S.Id, Resolved).IsValid());
+	TestTrue(TEXT("relative traversal refused"), MCPMeshInspection::ResolveExportPath(TEXT("../outside.json"), S.Id, Resolved).IsValid());
+	TestTrue(TEXT("wrong extension refused"), MCPMeshInspection::ResolveExportPath(TEXT("file.uasset"), S.Id, Resolved).IsValid());
+	TestFalse(TEXT("safe relative path resolves without writing"), MCPMeshInspection::ResolveExportPath(TEXT("UE_MCP/unique-inspection-test.json"), S.Id, Resolved).IsValid());
 	TestTrue(TEXT("relative path confined to Saved"), FPaths::IsUnderDirectory(Resolved, FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir())));
 	return true;
 }
