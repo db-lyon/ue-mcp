@@ -4,6 +4,7 @@
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
 #include "HandlerSkinnedAsset.h"
+#include "LevelSpawnFinalize.h"
 #include "Handlers/VolumeHelpers_Internal.h"
 #include "EditorScriptingUtilities/Public/EditorLevelLibrary.h"
 #include "ScopedTransaction.h"
@@ -1268,6 +1269,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 			}
 		}
 	}
+
+	MCPSpawnFinalize::FinishEditorSpawn(NewActor);
 
 	const FString FinalLabel = NewActor->GetActorLabel();
 
