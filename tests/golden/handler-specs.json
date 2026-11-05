@@ -1,5 +1,5 @@
 {
-  "handlerCount": 1210,
+  "handlerCount": 1211,
   "handlers": {
     "add_ability_system_component": {
       "category": "gas",
@@ -35252,6 +35252,45 @@
           "aliases": [
             "levelPath"
           ]
+        }
+      ]
+    },
+    "set_curve_keys": {
+      "category": "asset",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string",
+          "required": true,
+          "description": "CurveFloat, CurveVector or CurveLinearColor asset path",
+          "aliases": [
+            "path"
+          ]
+        },
+        {
+          "name": "channel",
+          "type": "number",
+          "required": false,
+          "description": "Channel index to replace: 0 on a CurveFloat, 0-2 on a CurveVector, 0-3 on a CurveLinearColor (default 0)"
+        },
+        {
+          "name": "channelName",
+          "type": "string",
+          "required": false,
+          "description": "Channel to replace by name, instead of channel: Value, X/Y/Z or R/G/B/A"
+        },
+        {
+          "name": "keys",
+          "type": "array",
+          "required": true,
+          "description": "Replacement keys, [] to clear: [{time, value, interpMode? (cubic default, linear, constant, none), tangentMode? (auto|smartAuto|user|break|none), tangentWeightMode? (none|arrive|leave|both), arriveTangent?, leaveTangent?, arriveTangentWeight?, leaveTangentWeight?}]. A tangent given without tangentMode is kept as a user tangent",
+          "items": "object"
+        },
+        {
+          "name": "save",
+          "type": "boolean",
+          "required": false,
+          "description": "Save the package (default true); false leaves it dirty"
         }
       ]
     },
